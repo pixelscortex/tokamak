@@ -1,0 +1,57 @@
+spikes/tailwind-blitz/.gitignore
+  s_c8219783faf84f::t_e6b0a59b2265c6 1-3
+spikes/tailwind-blitz/Cargo.lock
+  s_c8219783faf84f::t_ecac3b5c2bab80 1-2357
+spikes/tailwind-blitz/Cargo.toml
+  s_c8219783faf84f::t_6419d2a84dae76 1-28
+spikes/tailwind-blitz/REPORT.md
+  s_c8219783faf84f::t_65af42d10b6eb7 1-181
+spikes/tailwind-blitz/build.log
+  s_c8219783faf84f::t_5754941dd64f94 1-2
+spikes/tailwind-blitz/build.release.log
+  s_c8219783faf84f::t_0697d20fcdecab 1-201
+spikes/tailwind-blitz/bun.lock
+  s_c8219783faf84f::t_0f633bd45a1012 1-144
+spikes/tailwind-blitz/evidence/SHA256SUMS
+  s_c8219783faf84f::t_43424ff00cee82 1-18
+spikes/tailwind-blitz/input.css
+  s_c8219783faf84f::t_fb74705e61c3b4 1-15
+spikes/tailwind-blitz/input.focus-fallback.css
+  s_c8219783faf84f::t_3155d0d8c874f1 1-4
+spikes/tailwind-blitz/output.css
+  s_c8219783faf84f::t_7abcef1bca41d2 1-375
+spikes/tailwind-blitz/output.focus-fallback.css
+  s_c8219783faf84f::t_61dfb6ab1f7181 1-2
+spikes/tailwind-blitz/output.optimized.css
+  s_c8219783faf84f::t_9483578d646c93 1-2
+spikes/tailwind-blitz/package.json
+  s_c8219783faf84f::t_724eef3d4c99d9 1-13
+spikes/tailwind-blitz/page.html
+  s_c8219783faf84f::t_8427027f8e5adf 1-33
+spikes/tailwind-blitz/probe.focus-fallback.log
+  s_c8219783faf84f::t_5d04f97e083404 1-71
+spikes/tailwind-blitz/probe.log
+  s_c8219783faf84f::t_b648e940998ea0 1-71
+spikes/tailwind-blitz/probe.optimized.log
+  s_c8219783faf84f::t_aafdf56e0cea31 1-71
+spikes/tailwind-blitz/run.sh
+  s_c8219783faf84f::t_a2b963a088d1a9 1-28
+spikes/tailwind-blitz/src/main.rs
+  s_c8219783faf84f::t_e16369e4de7bcf 1-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8761f734fb702157947a11ee786fcbc3894531c",
+  "prompts": {},
+  "sessions": {
+    "s_c8219783faf84f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2b7c455-6c5f-4798-bfd8-f657a0e96f4a",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
