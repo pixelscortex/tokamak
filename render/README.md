@@ -154,17 +154,16 @@ by `runtime`, not independently configured. All new native dependencies are loca
 `render/Cargo.toml`. Adding `render` to Bun workspaces lets future `ui/elements` use
 its types/renderer helpers through the real `@tokamak/render` package name.
 
-## Validation and evidence
+## Validation
 
 Actually run after implementation/cleanup:
 
 - `moon run render:check`: passes native JSX/runtime types, renderer formatting,
   `cargo check --locked --package render --all-targets --jobs 2`.
 - `moon run render:build`: passes, producing the stripped release demo.
-- Launched the real own macOS native window; retained selected own-window state logs
-  in [evidence/native-window.log](evidence/native-window.log). Scoped macOS key events
-  reached Tab, typing and paste. Mouse was refused by a topmost-own-window guard;
-  no interaction was sent to unrelated windows. System permissions/settings unchanged.
+- Launched the native macOS window. Scoped key events reached Tab, typing and paste;
+  these checks do not replace foreground acceptance. No interaction was sent to
+  unrelated windows, and system permissions/settings were unchanged.
 - Throwaway document probes (removed) verified production Solid reactivity, stale
   generation rejection, Enter/Space without repeat duplicates, disabled suppression,
   native input, explicit Apple-command deletion, readonly prevention, controlled
@@ -177,10 +176,9 @@ Actually run after implementation/cleanup:
   stale-generation queues were also exercised. A copied production bundler ran
   successfully under a real spaced path with an interface, generic payload type,
   and annotated TSX event parameter, using the same shared transform helper.
-- [evidence/solid-document-paint.png](evidence/solid-document-paint.png) is a final
-  production Solid `NativeDocument`, host event `{count:3}`, resolved at 680 × 820
-  and rasterized through Blitz/AnyRender CPU. It is **offscreen document paint**, not
-  a native-window screenshot or proof of an idle cross-thread wake by itself.
+- An offscreen production document paint check exercised Blitz/AnyRender CPU output;
+  it does not prove foreground input or an idle cross-thread wake. Generated logs
+  and captures stay local and are not committed.
 - `screencapture -l <own-window-id>` failed; screen-recording preflight was false.
   Native activation/raise was unavailable from this session. Physical click,
   Backspace, IME, candidate placement, and full foreground native interaction
