@@ -63,9 +63,11 @@ impl QuickJsContext {
     pub fn context(&self) -> &AsyncContext {
         &self.context
     }
+
     pub fn runtime(&self) -> &AsyncRuntime {
         &self.runtime
     }
+
     pub fn set_deadline(&self, deadline: Option<Instant>) {
         self.deadline.set(deadline);
     }

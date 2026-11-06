@@ -2,18 +2,20 @@
 // converts serde_json at the boundary and injects a bridge bound to ONE call.
 // The host must reject expired calls and query writes, and own transactions;
 // a feature must never obtain a process-global database capability.
-import type { Id, JsonObject, JsonValue } from './values';
-import { assertJson } from './values';
+import type { Id, JsonObject, JsonValue } from "./values";
+import { assertJson } from "./values";
 
 export type StoredDocument = JsonObject & { _id: Id; _creationTime: number };
+
 export interface EqualityClause {
   field: string;
   value: JsonValue;
 }
+
 export interface QueryRequest {
   table: string;
   where: EqualityClause[];
-  order: 'asc' | 'desc';
+  order: "asc" | "desc";
   limit: number | null;
 }
 
@@ -27,13 +29,14 @@ export interface QueryRequest {
  * Writes cannot supply system fields. No undefined/delete-field sentinel.
  */
 export interface HostOperations {
-  'db.get': { args: { id: string }; result: StoredDocument | null };
-  'db.insert': { args: { table: string; value: JsonObject }; result: Id };
-  'db.patch': { args: { id: string; value: JsonObject }; result: null };
-  'db.replace': { args: { id: string; value: JsonObject }; result: null };
-  'db.delete': { args: { id: string }; result: null };
-  'db.query': { args: QueryRequest; result: StoredDocument[] };
+  "db.get": { args: { id: string }; result: StoredDocument | null };
+  "db.insert": { args: { table: string; value: JsonObject }; result: Id };
+  "db.patch": { args: { id: string; value: JsonObject }; result: null };
+  "db.replace": { args: { id: string; value: JsonObject }; result: null };
+  "db.delete": { args: { id: string }; result: null };
+  "db.query": { args: QueryRequest; result: StoredDocument[] };
 }
+
 export type HostOperation = keyof HostOperations;
 
 export interface HostBridge {
@@ -45,10 +48,10 @@ export interface HostBridge {
 export async function callHost<K extends HostOperation>(
   host: HostBridge,
   name: K,
-  payload: HostOperations[K]['args'],
-): Promise<HostOperations[K]['result']> {
+  payload: HostOperations[K]["args"],
+): Promise<HostOperations[K]["result"]> {
   assertJson(payload, `${name} payload`);
   const result = await host.op(name, payload);
   assertJson(result, `${name} result`);
-  return result as HostOperations[K]['result'];
+  return result as HostOperations[K]["result"];
 }
