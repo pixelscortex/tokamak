@@ -1,0 +1,45 @@
+server/tests/README.md
+  s_da99a5898daff4::t_20ed4928fc6704 1-66
+server/tests/build-feature.mjs
+  s_da99a5898daff4::t_82bbff2a23fb47 1-57
+server/tests/build-feature.test.mjs
+  s_da99a5898daff4::t_efc9f526d98c3f 1-128
+server/tests/service.rs
+  s_da99a5898daff4::t_e95233a3b4569a 1-838
+Cargo.lock
+  s_c8219783faf84f::t_a53c99b7231954 4032-4033
+server/Cargo.toml
+  s_c8219783faf84f::t_f441aaef847452 13-14
+server/src/data/mod.rs
+  s_c8219783faf84f::t_7509aee4f98cfa 2,97-98
+server/src/lib.rs
+  s_c8219783faf84f::t_9f8ce07d92f1da 1-3,6-9
+server/tests/fixtures/feature/probe.ts
+  s_c8219783faf84f::t_6c4df4e1304c36 1-85
+server/tests/fixtures/feature/schema.ts
+  s_c8219783faf84f::t_b3f214f221b133 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5dfc46bd6dddcd411fc3d4f70772b5afb0b80798",
+  "prompts": {},
+  "sessions": {
+    "s_c8219783faf84f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2b7c455-6c5f-4798-bfd8-f657a0e96f4a",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_da99a5898daff4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b021-5286-7e43-8ee2-cc99682a2776",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
