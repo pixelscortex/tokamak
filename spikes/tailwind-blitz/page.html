@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Diagnostic fixtures, not UI elements. CSS is embedded by the Rust probe. -->
+<html><head><meta charset="utf-8"><title>TKM-6 Tailwind / Blitz</title>
+<style>/* COMPILED_CSS */</style></head>
+<body class="bg-slate-100 text-slate-900 font-sans p-8">
+<main class="flex flex-col gap-5">
+  <h1 class="text-2xl font-bold">Tailwind 4.3.4 / Blitz beta.4</h1>
+  <p>Real CPU paint. Top swatches: green, blue, pale blue, purple.</p>
+  <section class="grid grid-cols-4 gap-4">
+    <div id="layers" class="layer-probe bg-green-600 text-white p-4 border-4 border-green-900 rounded-xl">Layers: green wins</div>
+    <div id="oklch" class="bg-blue-500 text-white p-4 rounded-xl">OKLCH palette</div>
+    <div id="mix" class="bg-blue-500/50 p-4 rounded-xl">color-mix 50%</div>
+    <div id="vars" class="bg-[var(--probe-bg)] text-white p-4 rounded-xl" style="--probe-bg:oklch(0.55 0.23 300)">CSS variable</div>
+  </section>
+  <section class="grid grid-cols-3 gap-4">
+    <div id="property-initial" class="bg-[var(--probe-color)] text-white p-4 rounded-lg">@property initial: green</div>
+    <div style="--probe-color:red"><div id="property-inherits" class="bg-[var(--probe-color)] text-white p-4 rounded-lg">inherits:false: green</div></div>
+    <div id="property-invalid" class="bg-[var(--probe-color)] text-white p-4 rounded-lg" style="--probe-color:12px">invalid typed value: green</div>
+  </section>
+  <section id="flex" class="flex items-center justify-between gap-4 p-4 border-2 border-slate-400 rounded-2xl">
+    <div class="bg-amber-200 p-2">Flex A / padding 8</div>
+    <div class="bg-amber-300 px-6 py-3">Flex B / x24 y12</div>
+    <div class="bg-amber-400 p-4 rounded-full">Flex C / radius</div>
+  </section>
+  <section class="grid grid-cols-2 gap-4">
+    <div id="pressed" class="bg-slate-300 data-[pressed]:bg-emerald-600 data-[pressed]:text-white p-4 rounded-lg">data-pressed: gray to green</div>
+    <div id="pressed-value" data-state="on" class="bg-red-500 data-[state=on]:bg-emerald-600 text-white p-4 rounded-lg">data-state=on: green</div>
+    <div id="hover" tabindex="0" class="bg-slate-300 hover:bg-fuchsia-600 hover:text-white p-4 rounded-lg">hover: gray to magenta</div>
+    <button id="focus" class="bg-slate-300 focus-visible:bg-amber-300 focus-visible:outline-4 focus-visible:outline-blue-600 p-4 rounded-lg">focus-visible: amber + blue outline</button>
+  </section>
+  <p>States: baseline, data mutation, pointer hover, keyboard focus, cleared.</p>
+</main>
+</body></html>
