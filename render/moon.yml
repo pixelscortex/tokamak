@@ -1,3 +1,35 @@
-# Share Cargo tasks through moon's Rust toolchain inheritance.
+# Only render and its reachable runtime dependencies: never build the database.
 language: 'rust'
 layer: 'library'
+tasks:
+  bundle:
+    command: 'proto run bun -- tools/bundle.mjs'
+    env:
+      NODE_ENV: 'production'
+    outputs: ['dist/demo.js']
+    options:
+      cache: false
+  check:
+    deps: ['bundle']
+    command: 'sh tools/check.sh'
+    options:
+      mergeArgs: 'replace'
+  test:
+    deps: ['bundle']
+    command: 'sh tests/run.sh'
+    options:
+      mergeArgs: 'replace'
+  build:
+    deps: ['check']
+    command: 'cargo build --locked --release --package render --bin demo --jobs 2'
+    env:
+      RAYON_NUM_THREADS: '2'
+      CARGO_BUILD_JOBS: '2'
+    options:
+      mergeArgs: 'replace'
+  demo:
+    deps: ['build']
+    command: '../target/release/demo'
+    options:
+      cache: false
+      persistent: true

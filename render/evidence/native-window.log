@@ -1,0 +1,82 @@
+Temporary instrumentation, now removed. Own live window PID10915 / CGWindow4180.
+Actual native Winit input delivered by scoped CGEventPostToPid.
+These are document state logs, NOT a surface screenshot or physical typing.
+Initial postToPid mouse attempt did not produce pointer input; initial key events had root focus.
+Tab then reached increment and editor. Typing/paste reached native Input->Solid->native editor.
+Backspace arrived as KeyboardInput but did not delete: no Apple keybinding received in inactive session.
+
+PROBE host focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 1Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE host focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 2Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE host focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 3Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("a"), code: KeyA, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("a") }) focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 38Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("b"), code: KeyB, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("b") }) focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 38Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("c"), code: KeyC, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("c") }) focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 38Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Named(Backspace), code: Backspace, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("\u{8}") }) focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 39Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("v"), code: KeyV, modifiers: Modifiers(META), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("v") }) focus=Some(NodeId(3v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 39Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: none · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Named(Tab), code: Tab, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("\t") }) focus=Some(NodeId(16v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 58Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: increment · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Named(Tab), code: Tab, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("\t") }) focus=Some(NodeId(18v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 58Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: Focus: editor · last key: noneControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("a"), code: KeyA, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("a") }) focus=Some(NodeId(18v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 58Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: aFocus: editor · last key: aControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["a", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("b"), code: KeyB, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("b") }) focus=Some(NodeId(18v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 58Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: abFocus: editor · last key: bControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["ab", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("c"), code: KeyC, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("c") }) focus=Some(NodeId(18v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 59Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: abcFocus: editor · last key: cControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["abc", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Named(Backspace), code: Backspace, modifiers: Modifiers(0x0), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("\u{8}") }) focus=Some(NodeId(18v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 59Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: abcFocus: editor · last key: BackspaceControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["abc", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
+PROBE KeyDown(BlitzKeyEvent { key: Character("v"), code: KeyV, modifiers: Modifiers(META), location: Standard, is_auto_repeating: false, is_composing: false, state: Pressed, text: Some("v") }) focus=Some(NodeId(18v1)) text="Tokamak · native SolidHost ticks (no interaction needed): 59Button activations: 0Increment · click / Enter / SpacePlain text editorType, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.Value: abc pasted 日本語Focus: editor · last key: vControlled clearToggle disabled: falseToggle readonly: falseDisabled · must not activate"
+RECT increment Some(BoundingRect { x: 28.0, y: 149.5, width: 624.0, height: 46.0 })
+RECT editor Some(BoundingRect { x: 28.0, y: 235.5, width: 624.0, height: 46.40625 })
+EDITOR SplitString(["abc pasted 日本語", ""])
+RECT clear Some(BoundingRect { x: 28.0, y: 390.40625, width: 624.0, height: 46.0 })
