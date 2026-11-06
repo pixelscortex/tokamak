@@ -1,0 +1,41 @@
+bun.lock
+  s_c8219783faf84f::t_4ce28e7d20ab8b 8-18,29-76,80-135
+package.json
+  s_c8219783faf84f::t_c51bd65e993a76 7-8
+render/Cargo.toml
+  s_c8219783faf84f::t_87cf66d56638ea 7-19
+render/README.md
+  s_c8219783faf84f::t_b8a6f44d261ef3 1-204
+render/demo/shell.html
+  s_c8219783faf84f::t_125af0e0c2f3ea 1-15
+render/evidence/native-window.log
+  s_c8219783faf84f::t_13136957194bd7 1-82
+render/moon.yml
+  s_c8219783faf84f::t_ebfec0ee41e34e 1,4-35
+render/package.json
+  s_c8219783faf84f::t_97d1800b87f82e 1-9
+render/tests/run.sh
+  s_c8219783faf84f::t_73eeab2b0ede57 1-7
+render/tests/tsconfig.json
+  s_c8219783faf84f::t_88d03decd93455 1-4
+render/tools/check.sh
+  s_c8219783faf84f::t_43a057cdf1801d 1-7
+render/tsconfig.json
+  s_c8219783faf84f::t_878cbd26cb5ae5 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5951c79202feb078259a6073a8289a74102c8373",
+  "prompts": {},
+  "sessions": {
+    "s_c8219783faf84f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2b7c455-6c5f-4798-bfd8-f657a0e96f4a",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
