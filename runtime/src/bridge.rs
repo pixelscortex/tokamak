@@ -17,6 +17,7 @@ use std::{
 };
 
 type OpResult = Result<Json, String>;
+
 type OpFuture = Pin<Box<dyn Future<Output = OpResult> + Send>>;
 
 enum Op {
@@ -86,6 +87,7 @@ impl Invocation {
             deadline,
         }
     }
+
     pub fn retire(&self) {
         self.active.store(false, Ordering::Release);
     }

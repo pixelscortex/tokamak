@@ -673,6 +673,7 @@ fn malformed_source_map_is_rejected() {
 }
 
 struct DropNotice(Arc<AtomicUsize>);
+
 impl Drop for DropNotice {
     fn drop(&mut self) {
         self.0.fetch_add(1, Ordering::SeqCst);
