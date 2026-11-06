@@ -60,6 +60,7 @@ fn fields(entries: &[(&str, Value)]) -> Object {
 fn text(value: &str) -> Value {
     Value::String(value.into())
 }
+
 fn table(name: &str) -> Table {
     Table::new(name).unwrap()
 }

@@ -36,6 +36,7 @@ impl<'tx> Query<'tx> {
         self.order = order;
         self
     }
+
     pub fn limit(mut self, limit: u32) -> Self {
         self.limit = Some(limit);
         self

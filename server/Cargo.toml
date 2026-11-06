@@ -10,6 +10,8 @@ name = "tokamak"
 path = "src/main.rs"
 
 [dependencies]
+runtime = { path = "../runtime" }
+serde_json = "1.0.154"
 # The public SDK owns transaction routing; only our two embedded backends are
 # selected. This still brings the database core's substantial subsystems.
 surrealdb = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }

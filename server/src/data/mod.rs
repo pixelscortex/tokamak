@@ -1,5 +1,5 @@
 //! Embedded application storage: one fixed root namespace/database, no schema.
-//! All data operations require an explicit transaction so several future JS
+//! All data operations require an explicit transaction so separate JS
 //! host calls can commit atomically. Only this API publishes write footprints;
 //! there is deliberately no raw client, SQL entry point, or storage wiretap.
 
@@ -94,8 +94,8 @@ impl Database {
         }
     }
 
-    /// Snapshot isolation, not serializability: write skew is possible. A future
-    /// mutation runner must replay the WHOLE invocation on a typed conflict.
+    /// Snapshot isolation, not serializability: write skew is possible. The
+    /// feature service replays the WHOLE invocation on a typed conflict.
     pub async fn begin(&self) -> Result<Transaction> {
         let state = self.state()?;
         let tx = state.client.clone().begin().await?;

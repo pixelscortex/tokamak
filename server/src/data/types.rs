@@ -1,7 +1,7 @@
 //! Boundary types keep data separate from SQL syntax and storage metadata.
 //! The POC intentionally accepts a narrow, SDK-compatible ID spelling instead
 //! of parsing arbitrary SurrealQL record expressions. Values remain native
-//! SurrealDB values; JSON conversion belongs to the later runtime adapter.
+//! SurrealDB values; the feature service's host adapter owns JSON conversion.
 
 use std::{fmt, str::FromStr};
 use surrealdb::types::{Number, Object, QueryError, RecordId, RecordIdKey, Value};
@@ -74,6 +74,7 @@ impl Table {
         }
         Ok(Self(name))
     }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -98,12 +99,15 @@ impl Id {
         }
         Ok(Self { table, key })
     }
+
     pub fn table(&self) -> &Table {
         &self.table
     }
+
     pub(crate) fn record(&self) -> RecordId {
         RecordId::new(self.table.as_str(), self.key.as_str())
     }
+
     fn from_record(id: RecordId) -> Result<Self> {
         let RecordIdKey::String(key) = id.key else {
             return Err(Error::Invalid("stored record has a non-string key"));
@@ -117,8 +121,10 @@ impl fmt::Display for Id {
         write!(f, "{}:{}", self.table.as_str(), self.key)
     }
 }
+
 impl FromStr for Id {
     type Err = Error;
+
     fn from_str(text: &str) -> Result<Self> {
         let (table, key) = text
             .split_once(':')
@@ -135,7 +141,7 @@ pub enum Order {
 }
 
 /// Metadata is separate so callers cannot patch identity or creation time.
-/// The JS adapter will flatten these to `_id`, `_creationTime`, and the fields.
+/// The JS adapter flattens these to `_id`, `_creationTime`, and the fields.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub id: Id,

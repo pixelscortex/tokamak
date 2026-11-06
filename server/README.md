@@ -1,10 +1,92 @@
-# Embedded data layer (TKM-3)
+# Feature service (TKM-5) and embedded data
 
-`server::data` is the native storage boundary for future JS host calls. There
-is no transport, runtime dispatcher, schema, migration, index, plugin namespace,
-or application logic here. `main` stays empty until host composition is owned.
+`Server::load(Database, Arc<runtime::Pool>, Arc<runtime::Bundle>).await` loads
+one real SDK-generated bundle at startup. `descriptor()` returns its schema
+and function metadata; `functions()` lists `{name, kind, args}` values. The
+bundle's new callable `describe` returns its existing `schema` and `metadata`
+exports because Pool invokes functions only; there is no second manifest.
+Feature handlers still enter only through `invoke({name,args}, host)`.
+`main` remains empty; native application/transport composition is TKM-7.
 
-## API
+## Service API and delivery contract
+
+- `server.connect().await -> Session`; `session.sender() -> SessionSender` is
+  clonable admission only. One independent task owns `session.recv().await`.
+- Both handles offer `call(id, name, args)`, `subscribe(id, name, args)`, and
+  `unsubscribe(id)`. Success means **admitted**, not committed. IDs are u64 and
+  session-local. Use unique outstanding request IDs; reuse subscription IDs only
+  after consuming `Unsubscribed`. Subscriptions accept registered queries only.
+- `recv() -> Result<Option<Event>, Error>` is the **single ordered stream**:
+  `Response {id, result: Result<serde_json::Value,String>}`,
+  `Subscription {id, result}`, `Unsubscribed {id}`. Invalid registration emits
+  `Response::Err` without replacing an existing subscription. These are Rust
+  events, not a new JSON wire protocol; TKM-7 maps them to injected SDK transport.
+  It MUST forward this stream in order, not split replies and updates into
+  racing tasks. All affected subscription updates precede a mutation Response,
+  including the writer's own updates. Identical JSON outcomes are suppressed.
+- A deliberately serial coordinator owns every admitted invocation through
+  commit, notifications, refresh, and reply. Disconnect/cancel cannot cut this
+  lifecycle in half. This trades throughput/head-of-line latency for one small
+  correctness rule. Process/runtime loss, non-conflict commit errors, or a lost
+  stream after admission have **unknown outcomes**: do not blindly retry writes.
+- Queries use actual read-only snapshots. Mutations share one owned transaction
+  across awaits; errors (including caught host errors and abandoned in-flight
+  SDK requests) roll back the entire call. Only typed definite conflicts replay
+  the WHOLE handler in a fresh world/transaction, at most three total attempts.
+- Per-run get/table-query dependencies include absent/empty/zero-limit reads.
+  Subscriptions register before initial execution; new readsets install before
+  draining intervening events. Overrun causes full invalidation. Failed runs
+  conservatively watch all changed tables until recovery. One run at a time;
+  four consecutively invalidated snapshots end the subscription explicitly
+  rather than publishing a known-stale result or starving all commands.
+- Bounds: 64 queued commands, 32 queued outputs/session, 64 sessions, 128
+  subscriptions/session, existing 256-event DB ring. Admission returns
+  `Overloaded` immediately. Full output disconnects the whole session; buffered
+  events drain, then `recv` returns `SlowConsumer`. Its unacknowledged mutations
+  may have committed. Drop closes reception and wakes cleanup without needing
+  command-queue space; unsubscribe is ordered; `server.close().await` is the
+  graceful database shutdown barrier. Keep the host Tokio runtime alive through it.
+- SDK JSON is canonical. Native envelopes flatten to `_id`, `_creationTime`, and
+  user fields, including business `id`/`data`. SDK arbitrary top-level filter
+  keys, structural equality, safe-integer limits, and missing versus null require
+  filtering ordered snapshot rows in Rust, not interpreting names as SQL paths.
+  Native `data::Query` retains its narrower SQL-backed API below. No feature SQL.
+
+## TKM-5 research and evidence
+
+Firecrawl checked existing maintained releases, not a new framework/package:
+[Tokio 1.54.1 bounded admission/weak senders](https://docs.rs/tokio/1.54.1/tokio/sync/mpsc/struct.Sender.html),
+[broadcast lag](https://docs.rs/tokio/latest/tokio/sync/broadcast/index.html),
+[SurrealDB 4.0.0 value conversion](https://docs.rs/surrealdb-types/4.0.0/surrealdb_types/enum.Value.html).
+The cached public-SDK release source confirms `SurrealValue` for serde_json;
+reuse it rather than write another codec. Only direct dependencies added are the
+existing local runtime and already-locked serde_json 1.0.154. Surlvex functions,
+subscriptions, and their tests were read for failure modes, never copied.
+
+Temporary **real TS SDK-generated bundle** probes passed debug and release:
+query/mutation/subscription, writer update-before-response, flattening,
+structural equality on a dotted business key, limits above u32, rollback after
+throw/caught host failure/unawaited operation/timeout, unrelated-table silence,
+unsubscribe, close, and explicit slow-consumer disconnection. Debug memory and
+release memory/disk passed. Actual default Pool worker stack passed with boxed DB
+futures; no stack setting/runtime worker edit. Operations poll asynchronously on
+JS workers; DB initialization/background-task ownership stays on the host runtime
+(not the time-only workers). No detached DB operation tasks or blocking hostops.
+Run `moon run server:check server:build server:test` to check the service and run
+its independent acceptance suite. See [the service-test guide](tests/README.md)
+for the real SDK bundle setup and the behavior each test exercises.
+
+`moon run :size`: 286,080 bytes before/after (+0), **empty unlinked main only**.
+Temporary reachable release service consumer: 39,392,768 bytes (+39,106,688 over
+empty); it reaches actual bundle/QuickJS/service/both storage paths and includes probe
+assertions. This is not an isolated marginal library cost, nor directly comparable
+to the different TKM-3 probe workload. No claim that the service costs zero bytes.
+
+## Native data API (TKM-3)
+
+`server::data` is the native storage boundary used by the feature host adapter.
+There is no transport, schema enforcement, migration, index, plugin namespace,
+or application logic. The original data-layer details and measurements follow.
 
 ```rust
 use server::data::{Database, Storage, Table, Object, Order};
@@ -21,7 +103,7 @@ fields.insert("done", false);
 let id = tx.insert(&todos, fields).await?;
 let own_write = tx.get(&id).await?;
 let rows = tx.query(&todos).eq("done", false).order(Order::Desc).take(10).await?;
-// Separate future JS-driven calls retain this same tx; never a tx.client().
+// Separate JS-driven calls retain this same tx; never a tx.client().
 tx.commit().await?;
 let footprint = changes.recv().await?;
 db.close().await?;
@@ -33,7 +115,7 @@ db.close().await?;
   identity and creation time, and reject missing records. Delete is idempotent.
 - `query(&Table).eq(field, value)` combines equality filters with AND. Fields
   are single ASCII identifiers, not nested paths. Native `Value`/`Object` and
-  `SurrealValue` are re-exported; the future adapter owns JSON conversion.
+  `SurrealValue` are re-exported; the service host adapter owns JSON conversion.
 - Queries default to creation-time ascending, then identity ascending. Descending
   reverses both keys. `limit(u32)` bounds `collect()`; `take(u32)` sets that bound;
   `first()` adds a bound of one without widening `limit(0)`. `collect()` without
@@ -68,7 +150,7 @@ application error, even when no data operation failed. SDK drop rollback is a
 safety net that runs asynchronously only with a live Tokio runtime.
 
 `Error::is_retryable_conflict()` recognizes only the SDK's typed
-`QueryError::TransactionConflict`; this layer never retries. The future mutation
+`QueryError::TransactionConflict`; this layer never retries. The mutation
 runner must replay the entire invocation, not just its final write or commit.
 Other commit failures must not be blindly retried.
 
