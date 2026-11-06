@@ -1,0 +1,84 @@
+.gitignore
+  h_51b7a781d7f2c3 15,17
+.moon/workspace.yml
+  h_51b7a781d7f2c3 1,6-11
+Cargo.toml
+  h_51b7a781d7f2c3 3
+README.md
+  h_51b7a781d7f2c3 4-5,9-18,41-45,67-89
+app/README.md
+  h_51b7a781d7f2c3 1-9
+app/moon.yml
+  h_51b7a781d7f2c3 1,3-6
+bun.lock
+  h_51b7a781d7f2c3 8,21,25,121,123,125
+package.json
+  h_51b7a781d7f2c3 6-8
+packages/render/README.md
+  h_51b7a781d7f2c3 156,204
+packages/render/moon.yml
+  h_51b7a781d7f2c3 38
+packages/render/tests/production-build.ts
+  h_51b7a781d7f2c3 26,65
+packages/render/tests/task-graph.test.ts
+  h_51b7a781d7f2c3 21
+packages/render/tests/tsconfig.tools.json
+  h_51b7a781d7f2c3 2
+packages/render/tsconfig.json
+  h_51b7a781d7f2c3 2
+packages/render/tsconfig.tools.json
+  h_51b7a781d7f2c3 2
+packages/runtime/tests/fixtures/README.md
+  h_51b7a781d7f2c3 37-41
+packages/sdk/README.md
+  h_51b7a781d7f2c3 62,124,141,145
+packages/sdk/src/protocol.ts
+  h_51b7a781d7f2c3 2
+packages/sdk/tests/README.md
+  h_51b7a781d7f2c3 5,8,27
+packages/sdk/tests/acceptance.test.mjs
+  h_51b7a781d7f2c3 10,121
+packages/sdk/tools/bundle.mjs
+  h_51b7a781d7f2c3 111,177,179
+packages/sdk/tsconfig.json
+  h_51b7a781d7f2c3 2
+packages/sdk/tsconfig.runtime.json
+  h_51b7a781d7f2c3 2
+packages/server/README.md
+  h_51b7a781d7f2c3 37,65,68,70
+packages/server/demo/feature/tsconfig.json
+  h_51b7a781d7f2c3 2
+packages/server/src/bin/export-protocol.rs
+  h_51b7a781d7f2c3 10
+packages/server/tests/README.md
+  h_51b7a781d7f2c3 6-7,15,30
+packages/server/tests/build-feature.mjs
+  h_51b7a781d7f2c3 21
+packages/server/tests/data.rs
+  h_51b7a781d7f2c3 28
+packages/server/tests/service.rs
+  h_51b7a781d7f2c3 47,50-56
+packages/server/tests/tkm7.rs
+  h_51b7a781d7f2c3 33-34,61,112,172,194,351,417,479
+packages/ui/README.md
+  h_51b7a781d7f2c3 58
+packages/ui/tests/run.sh
+  h_51b7a781d7f2c3 8
+packages/ui/tests/tsconfig.json
+  h_51b7a781d7f2c3 2
+packages/ui/tsconfig.json
+  h_51b7a781d7f2c3 2
+packages/ui/tsconfig.tools.json
+  h_51b7a781d7f2c3 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a4c41c0aef8555a238d8b62da8c6a7305530f50",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
