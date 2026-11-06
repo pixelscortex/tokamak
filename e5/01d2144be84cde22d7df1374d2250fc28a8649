@@ -1,0 +1,86 @@
+.gitignore
+  h_51b7a781d7f2c3 2-8
+.moon/tasks/placeholders.yml
+  h_51b7a781d7f2c3 1-11
+.moon/tasks/rust.yml
+  h_51b7a781d7f2c3 1-14
+.moon/tasks/typescript.yml
+  h_51b7a781d7f2c3 1-17
+.moon/toolchains.yml
+  h_51b7a781d7f2c3 1-8
+.moon/workspace.yml
+  h_51b7a781d7f2c3 1-12,14-15
+.prototools
+  h_51b7a781d7f2c3 1,3-4
+Cargo.lock
+  h_51b7a781d7f2c3 1-15
+Cargo.toml
+  h_51b7a781d7f2c3 1-17
+README.md
+  h_51b7a781d7f2c3 1-60
+app/todos/README.md
+  h_51b7a781d7f2c3 1-4
+app/todos/moon.yml
+  h_51b7a781d7f2c3 1-4
+apps/desktop/README.md
+  h_51b7a781d7f2c3 1-4
+apps/desktop/moon.yml
+  h_51b7a781d7f2c3 1-4
+bun.lock
+  h_51b7a781d7f2c3 1-22
+moon.yml
+  h_51b7a781d7f2c3 1-28
+package.json
+  h_51b7a781d7f2c3 1-10
+render/Cargo.toml
+  h_51b7a781d7f2c3 1-6
+render/moon.yml
+  h_51b7a781d7f2c3 1-3
+render/src/lib.rs
+  h_51b7a781d7f2c3 1-2
+runtime/Cargo.toml
+  h_51b7a781d7f2c3 1-6
+runtime/moon.yml
+  h_51b7a781d7f2c3 1-3
+runtime/src/lib.rs
+  h_51b7a781d7f2c3 1-2
+rust-toolchain.toml
+  h_51b7a781d7f2c3 1-2
+sdk/moon.yml
+  h_51b7a781d7f2c3 1-3
+sdk/package.json
+  h_51b7a781d7f2c3 1-9
+sdk/src/index.ts
+  h_51b7a781d7f2c3 1-2
+sdk/tsconfig.json
+  h_51b7a781d7f2c3 1-9
+server/Cargo.toml
+  h_51b7a781d7f2c3 1-10
+server/moon.yml
+  h_51b7a781d7f2c3 1-3
+server/src/main.rs
+  h_51b7a781d7f2c3 1-4
+tests/compiler-selection.py
+  h_51b7a781d7f2c3 1-76
+tsconfig.json
+  h_51b7a781d7f2c3 1-12
+ui/moon.yml
+  h_51b7a781d7f2c3 1-3
+ui/package.json
+  h_51b7a781d7f2c3 1-9
+ui/src/index.ts
+  h_51b7a781d7f2c3 1-2
+ui/tsconfig.json
+  h_51b7a781d7f2c3 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e501d2144be84cde22d7df1374d2250fc28a8649",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
