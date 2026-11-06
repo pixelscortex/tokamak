@@ -1,0 +1,28 @@
+# Workspace-only operations; language tasks belong to the individual projects.
+language: 'unknown'
+layer: 'configuration'
+workspace:
+  inheritedTasks:
+    include: []
+tasks:
+  build-release:
+    command: 'cargo build --locked --release --package server --bin tokamak --target-dir target'
+    options:
+      cache: false
+      mutex: 'cargo'
+  size:
+    deps: ['build-release']
+    # stat fails on a missing artifact, unlike reporting an absent baseline as zero.
+    command:
+      - 'proto'
+      - 'run'
+      - 'bun'
+      - '--'
+      - '-e'
+      - >-
+        import { stat } from "node:fs/promises";
+        const path = "target/release/tokamak" + (process.platform === "win32" ? ".exe" : "");
+        const { size } = await stat(path);
+        console.log(path + ": " + size + " bytes");
+    options:
+      cache: false

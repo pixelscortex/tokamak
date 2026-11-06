@@ -1,0 +1,3 @@
+# Inherit the same Bun tasks for both TypeScript packages.
+language: 'typescript'
+layer: 'library'

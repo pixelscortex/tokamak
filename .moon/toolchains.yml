@@ -1,0 +1,8 @@
+# Built-ins read their versions from .prototools, including Rust via rustup.
+$schema: 'https://moonrepo.dev/schemas/toolchains.json'
+rust:
+  # Sync the inherited pin into rustup's project selection, not its user default.
+  syncToolchainConfig: true
+javascript:
+  packageManager: 'bun'
+bun: {}

@@ -1,0 +1,3 @@
+# Share Cargo tasks through moon's Rust toolchain inheritance.
+language: 'rust'
+layer: 'application'

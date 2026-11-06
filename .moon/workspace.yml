@@ -1,17 +1,16 @@
-# Configures all projects within the workspace to create a project graph.
-# Accepts a list of globs, a mapping of projects to relative file paths,
-# or both values.
-projects: ["packages/*"]
-
-# Configures the version control system (VCS). Also known as
-# source code management (SCM).
+# Explicit roots keep the singular feature app/ separate from native apps/.
+$schema: 'https://moonrepo.dev/schemas/workspace.json'
+versionConstraint: '2.5.6'
+projects:
+  workspace: '.'
+  server: 'server'
+  runtime: 'runtime'
+  render: 'render'
+  sdk: 'sdk'
+  ui: 'ui'
+  desktop: 'apps/desktop'
+  todos: 'app/todos'
 vcs:
-  # The default branch / base.
-  defaultBranch: "main"
-
-  # The upstream version control provider, where the repository
-  # source code is stored.
-  # @since 1.8.0
-  # @values "bitbucket" | "bitbucket-legacy" | "github" | "gitlab" | "other"
-  provider: "github"
+  defaultBranch: 'main'
+  provider: 'github'
 

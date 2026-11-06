@@ -1,0 +1,10 @@
+# Server is a host crate, not a TypeScript feature implementation.
+[package]
+name = "server"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "tokamak"
+path = "src/main.rs"

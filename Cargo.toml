@@ -1,0 +1,17 @@
+# Rust host crates share package metadata and one size-oriented release profile.
+[workspace]
+members = ["server", "runtime", "render"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[profile.release]
+# On aarch64-apple-darwin with Rust 1.97.0, the empty host measured
+# 286080 bytes with s versus 286096 with z. Remeasure as real code arrives.
+opt-level = "s"
+lto = true
+strip = "symbols"
+codegen-units = 1

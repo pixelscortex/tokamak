@@ -1,0 +1,10 @@
+{
+  "name": "tokamak",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "sdk",
+    "ui"
+  ],
+  "packageManager": "bun@1.4.4"
+}

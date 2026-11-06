@@ -1,4 +1,8 @@
 
-# moon
-.moon/cache
-.moon/docker
+# Local tool state and generated build output stay out of source control.
+.moon/cache/
+.moon/docker/
+.proto/
+target/
+node_modules/
+dist/

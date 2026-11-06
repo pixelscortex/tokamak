@@ -1,0 +1,22 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "tokamak",
+    },
+    "sdk": {
+      "name": "@tokamak/sdk",
+      "version": "0.1.0",
+    },
+    "ui": {
+      "name": "@tokamak/ui",
+      "version": "0.1.0",
+    },
+  },
+  "packages": {
+    "@tokamak/sdk": ["@tokamak/sdk@workspace:sdk"],
+
+    "@tokamak/ui": ["@tokamak/ui@workspace:ui"],
+  }
+}
