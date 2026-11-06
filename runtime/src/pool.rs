@@ -173,6 +173,7 @@ pub struct PendingCall(oneshot::Receiver<Result<Json, Error>>);
 
 impl Future for PendingCall {
     type Output = Result<Json, Error>;
+
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match Pin::new(&mut self.0).poll(cx) {
             Poll::Pending => Poll::Pending,
