@@ -1,0 +1,28 @@
+// Every marked line must produce a real compiler diagnostic, not an unused
+// suppression. The harness verifies diagnostic lines as well as nonzero exit.
+import { TokamakClient, createFunctions, type Id } from '@tokamak/sdk';
+import { api } from '../feature/_generated/api';
+import schema from '../feature/schema';
+declare const client: TokamakClient;
+declare const taskId: Id<'tasks'>;
+declare const projectId: Id<'projects'>;
+client.mutation(api.tasks.add, { title: 1, priority: 1 }); // reject
+client.mutation(api.tasks.add, { title: 'x' }); // reject
+client.mutation(api.tasks.add, { title: 'x', priority: 1, extra: true }); // reject
+client.query(api.tasks.add, { title: 'x', priority: 1 }); // reject
+client.mutation(api.tasks.get, { id: taskId }); // reject
+client.subscribe(api.tasks.add, { title: 'x', priority: 1 }, () => {}); // reject
+client.query(api.tasks.get, { id: projectId }); // reject
+const wrongResult: Promise<number> = client.mutation(api.tasks.add, { title: 'x', priority: 1 }); // reject
+api.tasks.constant; // reject
+api.tasks.missing; // reject
+const { query, mutation } = createFunctions(schema);
+query({ handler: ctx => ctx.db.insert('tasks', { title: 'x', done: false, priority: 1 }) }); // reject
+query({ handler: ctx => ctx.db.query('missing').collect() }); // reject
+query({ handler: ctx => ctx.db.query('tasks').where('done', '=', 'yes').collect() }); // reject
+query({ handler: ctx => ctx.db.query('tasks').where('absent', '=', 1).collect() }); // reject
+query({ handler: ctx => ctx.db.query('tasks').order('random').collect() }); // reject
+query({ handler: ctx => ctx.db.query('tasks').where('priority', '>', 1).collect() }); // reject
+mutation({ handler: ctx => ctx.db.insert('tasks', { title: 'x', done: false }) }); // reject
+mutation({ handler: ctx => ctx.db.patch(taskId, { done: 'yes' }) }); // reject
+mutation({ handler: ctx => ctx.db.replace(taskId, { title: 'x' }) }); // reject

@@ -1,3 +1,20 @@
-# Inherit the same Bun tasks for both TypeScript packages.
+# Runtime checking intentionally sees ES2022 only. Build tooling is separate
+# and may use Bun/Node; adding their ambient types to src would hide violations.
 language: 'typescript'
 layer: 'library'
+tasks:
+  check:
+    command: 'proto run bun -- tools/check.mjs'
+    options:
+      mergeArgs: 'replace'
+  build:
+    deps: ['sdk:check']
+    command: 'proto run bun -- build ./src/index.ts --target browser --format esm --reject-unresolved --sourcemap=linked --outdir dist'
+    outputs: ['dist']
+    options:
+      mergeArgs: 'replace'
+  bundle:
+    deps: ['sdk:check']
+    command: 'proto run bun -- tools/bundle.mjs'
+    options:
+      cache: false

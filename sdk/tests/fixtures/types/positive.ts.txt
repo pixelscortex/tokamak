@@ -1,0 +1,22 @@
+// Compile actual generated refs: exact result, argument, kind, and table inference
+// must survive module discovery, aliasing, optional fields, and async void.
+import { TokamakClient, type ArgsOf, type ResultOf, type FunctionReference, type Id, type Doc, type ModelFromSchema } from '@tokamak/sdk';
+import { api } from '../feature/_generated/api';
+import schema from '../feature/schema';
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+type Simplify<T> = { [K in keyof T]: T[K] };
+export type Kind = Assert<typeof api.tasks.add extends FunctionReference<'mutation', unknown, unknown> ? true : false>;
+export type InsertResult = Assert<Equal<ResultOf<typeof api.tasks.add>, Id<'tasks'>>>;
+export type VoidResult = Assert<Equal<ResultOf<typeof api.tasks.noResult>, null>>;
+export type ListResult = Assert<Equal<ResultOf<typeof api.nested.views.dashboard>['recent'], Doc<ModelFromSchema<typeof schema>, 'tasks'>[]>>;
+export type Input = Assert<Equal<Simplify<ArgsOf<typeof api.tasks.edit>>, { id: Id<'tasks'>; done: boolean }>>;
+export async function consume(client: TokamakClient) {
+  const id: Id<'tasks'> = await client.mutation(api.tasks.add, { title: 'Ship', priority: 2 });
+  await client.mutation(api.tasks.add, { title: 'Ship', priority: 2, note: 'soon' });
+  const task = await client.query(api.tasks.get, { id });
+  if (task) { const title: string = task.title; const note: string | undefined = task.note; return { title, note }; }
+  client.subscribe(api.nested.views.dashboard, { done: false, priority: 2 }, event => {
+    if ('value' in event) { const done: boolean | undefined = event.value.first?.done; void done; }
+  });
+}
