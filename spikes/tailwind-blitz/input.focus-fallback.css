@@ -1,4 +1,0 @@
-/* Native-only compatibility experiment, not a universal browser polyfill.
-   All focused controls get a ring, including mouse/programmatic focus. */
-@import "./input.css";
-@custom-variant focus-visible (&:focus);
