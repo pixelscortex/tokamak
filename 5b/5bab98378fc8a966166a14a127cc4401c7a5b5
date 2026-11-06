@@ -1,0 +1,65 @@
+Cargo.lock
+  s_f4eac1551c2f99::t_d46185629af4ac 265-313,1915,2499-2504,4088,4090,4093,4095-4097,4154-4163,5239-5247,5359,5427,5586-5608
+sdk/README.md
+  s_f4eac1551c2f99::t_4ca095b75983be 91,106-141
+sdk/src/index.ts
+  s_f4eac1551c2f99::t_9c99f58aadf44a 3-47
+sdk/src/protocol.ts
+  s_f4eac1551c2f99::t_d70c1d468d721e 1-7
+sdk/src/transport.ts
+  s_f4eac1551c2f99::t_36f17a55b31bcd 1-217
+server/Cargo.toml
+  s_f4eac1551c2f99::t_cd46f671a55571 12-19,21-29,34-35
+server/README.md
+  s_f4eac1551c2f99::t_b1dfd4c07c885b 1-181,189,203-204,384-385,389-390
+server/demo/client.ts
+  s_f4eac1551c2f99::t_fa38db00d4f837 1-49
+server/demo/feature/.gitignore
+  s_f4eac1551c2f99::t_ca040e6d54ff24 1-3
+server/demo/feature/todos.ts
+  s_f4eac1551c2f99::t_418ebf91b45282 1-12
+server/demo/feature/tsconfig.json
+  s_f4eac1551c2f99::t_118a68babb45a9 1-7
+server/moon.yml
+  s_f4eac1551c2f99::t_e0d3b5d141f575 10-13
+server/src/backend.rs
+  s_f4eac1551c2f99::t_0ea18c047d85a5 1-50
+server/src/bin/export-protocol.rs
+  s_f4eac1551c2f99::t_4564be8ccc02f3 1-23
+server/src/data/types.rs
+  s_f4eac1551c2f99::t_ec4d67b9ef8483 14,41
+server/src/lib.rs
+  s_f4eac1551c2f99::t_5a2c244a865982 1-4,6-9,12,14,16
+server/src/main.rs
+  s_f4eac1551c2f99::t_374fe101d650ec 1-2,4-77
+server/src/protocol.rs
+  s_f4eac1551c2f99::t_40e22f60c199ab 1-68
+server/src/service.rs
+  s_f4eac1551c2f99::t_37a63e84d93281 6-7,22,56-57,60,83,85,95,100,103,106,140-142,144-166,244,248-273,297-312,366-376,406,410-414,418-438,468-471,515-518,522-527,530-532
+server/src/websocket.rs
+  s_f4eac1551c2f99::t_91f27fcd34e1bf 1-202
+server/tests/README.md
+  s_f4eac1551c2f99::t_3664f2ceb2a676 1,33-82
+server/tests/fixtures/feature/shutdown.ts
+  s_f4eac1551c2f99::t_ddc56ad14bffb2 1-12
+server/tests/shutdown-driver.mjs
+  s_f4eac1551c2f99::t_286ff874cd445e 1-179
+server/tests/tkm7.rs
+  s_f4eac1551c2f99::t_343aded998a265 1-586
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b5bab98378fc8a966166a14a127cc4401c7a5b5",
+  "prompts": {},
+  "sessions": {
+    "s_f4eac1551c2f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b041-a6da-7202-997b-3fb709e31ae1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
