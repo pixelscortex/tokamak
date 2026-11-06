@@ -1,0 +1,23 @@
+.moon/workspace.yml
+  s_9edcc6c63f65d9::t_5f16312ee5f657 1-17
+.prototools
+  s_9edcc6c63f65d9::t_9c0d8546db7d01 1
+.gitignore
+  s_9edcc6c63f65d9::t_5f16312ee5f657 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f19c59d44d65b3d58d00e1757ad546771af0a3d7",
+  "prompts": {},
+  "sessions": {
+    "s_9edcc6c63f65d9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a613-4d6e-7da2-a652-662a02e64cc5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
