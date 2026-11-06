@@ -1,0 +1,64 @@
+Cargo.lock
+  h_51b7a781d7f2c3 5-378,383-412,416-476,481-766
+runtime/Cargo.toml
+  h_51b7a781d7f2c3 7-15
+runtime/README.md
+  h_51b7a781d7f2c3 1-185
+runtime/src/bridge.rs
+  h_51b7a781d7f2c3 1-180
+runtime/src/engine.rs
+  h_51b7a781d7f2c3 1-201
+runtime/src/lib.rs
+  h_51b7a781d7f2c3 1-18
+runtime/src/pool.rs
+  h_51b7a781d7f2c3 1-182
+runtime/src/source_map.rs
+  h_51b7a781d7f2c3 1-119
+runtime/src/types.rs
+  h_51b7a781d7f2c3 1-97
+runtime/tests/acceptance.rs
+  h_51b7a781d7f2c3 1-793
+runtime/tests/fixtures/README.md
+  h_51b7a781d7f2c3 1-46
+runtime/tests/fixtures/array-initializer.js
+  h_51b7a781d7f2c3 1-3
+runtime/tests/fixtures/array-initializer.js.map
+  h_51b7a781d7f2c3 1-10
+runtime/tests/fixtures/array-initializer.ts
+  h_51b7a781d7f2c3 1-5
+runtime/tests/fixtures/describe.ts
+  h_51b7a781d7f2c3 1-4
+runtime/tests/fixtures/first-token.js
+  h_51b7a781d7f2c3 1-3
+runtime/tests/fixtures/first-token.js.map
+  h_51b7a781d7f2c3 1-10
+runtime/tests/fixtures/first-token.ts
+  h_51b7a781d7f2c3 1-4
+runtime/tests/fixtures/mapped.js
+  h_51b7a781d7f2c3 1-16
+runtime/tests/fixtures/mapped.js.map
+  h_51b7a781d7f2c3 1-11
+runtime/tests/fixtures/mapped.min.js
+  h_51b7a781d7f2c3 1-3
+runtime/tests/fixtures/mapped.min.js.map
+  h_51b7a781d7f2c3 1-11
+runtime/tests/fixtures/mapped.ts
+  h_51b7a781d7f2c3 1-10
+runtime/tests/fixtures/startup.js
+  h_51b7a781d7f2c3 1-3
+runtime/tests/fixtures/startup.js.map
+  h_51b7a781d7f2c3 1-10
+runtime/tests/fixtures/startup.ts
+  h_51b7a781d7f2c3 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79cd96eb1e9d4db57f7433634aedb225bec142b7",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
