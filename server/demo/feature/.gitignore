@@ -1,0 +1,3 @@
+# Generated typed references and bundles are rebuilt with sdk:bundle.
+_generated/
+dist/

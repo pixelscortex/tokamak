@@ -7,16 +7,20 @@ mod query;
 mod transaction;
 mod types;
 
+// Internal ownership checks can inspect the supplied datastore without exposing
+// an untracked raw-write capability in the public or feature-facing API.
+#[cfg(test)]
+#[path = "../../tests/internal/datastore_owner.rs"]
+mod ownership_tests;
+
 pub use query::Query;
 pub use surrealdb::types::{Object, SurrealValue, Value};
 pub use transaction::Transaction;
 pub use types::{Document, Error, Id, Order, Result, Table};
 
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
-use surrealdb::{
-    Surreal,
-    engine::local::{Db, Mem, SurrealKv},
-};
+use surrealdb::{Surreal, engine::local::Db};
+use surrealdb_core::kvs::Datastore;
 use tokio::sync::{Mutex, broadcast};
 
 /// A filesystem path is not an endpoint string: it cannot select a remote engine.
@@ -54,25 +58,89 @@ enum Lifecycle {
 // The strong count therefore tells close whether an invocation still owns a tx.
 pub(super) struct DatabaseState {
     client: Surreal<Db>,
+    // Keep the explicit owner alongside the ONLY SDK attachment. Features never
+    // receive this raw handle: bypass writes would evade tracked invalidation.
+    datastore: Arc<Datastore>,
     changes: broadcast::Sender<ChangeEvent>,
 }
 
+fn startup_error(
+    error: impl std::fmt::Display,
+    cleanup: std::result::Result<(), impl std::fmt::Display>,
+) -> String {
+    match cleanup {
+        Ok(()) => error.to_string(),
+        Err(cleanup) => format!("{error}; startup cleanup failed: {cleanup}"),
+    }
+}
+
 impl Database {
-    pub async fn open(storage: Storage) -> Result<Self> {
-        let client = match storage {
-            Storage::Memory => Surreal::new::<Mem>(()).await?,
-            Storage::Disk(path) => {
-                let path = path
-                    .to_str()
-                    .ok_or(Error::Invalid("database path must be UTF-8"))?;
-                Surreal::new::<SurrealKv>(path).await?
+    /// Narrow crate-internal diagnostic access, not a feature capability or an
+    /// independently managed SDK attachment. Do not retain across close.
+    #[allow(dead_code)]
+    pub(crate) fn datastore(&self) -> Result<&Arc<Datastore>> {
+        Ok(&self.state()?.datastore)
+    }
+
+    /// Box the embedded engine's deep startup future at this ownership boundary.
+    /// Callers keep the same `.await` API without inheriting its enormous layout
+    /// or needing their own recursion-limit/stack configuration.
+    pub fn open(storage: Storage) -> Pin<Box<dyn Future<Output = Result<Self>> + Send>> {
+        Box::pin(Self::open_owned(storage))
+    }
+
+    async fn open_owned(storage: Storage) -> Result<Self> {
+        let path = match storage {
+            Storage::Memory => "memory".to_owned(),
+            Storage::Disk(path) => format!(
+                "surrealkv://{}",
+                path.to_str()
+                    .ok_or(Error::Invalid("database path must be UTF-8"))?
+            ),
+        };
+        // Version/bootstrap writes must precede background maintenance. The
+        // supplied-datastore SDK bridge deliberately does none of this setup.
+        let datastore = Box::pin(
+            Datastore::builder()
+                .without_maintenance_tasks()
+                .build_with_path(&path),
+        )
+        .await
+        .map_err(|e| Error::Startup(e.to_string()))?;
+        let startup = async {
+            Box::pin(datastore.check_version()).await?;
+            Box::pin(datastore.bootstrap()).await?;
+            Box::pin(datastore.start_maintenance_tasks_checked()).await
+        }
+        .await;
+        if let Err(error) = startup {
+            let cleanup = datastore.shutdown().await;
+            return Err(Error::Startup(startup_error(error, cleanup)));
+        }
+        let client = match Surreal::<Db>::unstable_from_datastore(datastore.clone(), None).await {
+            Ok(client) => client,
+            Err(error) => {
+                let cleanup = datastore.shutdown().await;
+                return Err(Error::Startup(startup_error(error, cleanup)));
             }
         };
-        client.use_ns("tokamak").use_db("tokamak").await?;
+        if let Err(error) = client.use_ns("tokamak").use_db("tokamak").await {
+            // After attachment the SDK owns shutdown, including its routing task.
+            let cleanup = client.shutdown().await;
+            return Err(Error::Startup(startup_error(error, cleanup)));
+        }
         let (changes, _) = broadcast::channel(256);
         Ok(Self {
-            state: Lifecycle::Open(Arc::new(DatabaseState { client, changes })),
+            state: Lifecycle::Open(Arc::new(DatabaseState {
+                client,
+                datastore,
+                changes,
+            })),
         })
+    }
+
+    pub(crate) fn has_transactions(&self) -> bool {
+        matches!(&self.state, Lifecycle::Open(state) if Arc::strong_count(state) != 1)
     }
 
     /// After close this returns an already-closed receiver, preserving the
@@ -124,7 +192,11 @@ impl Database {
                 std::mem::replace(&mut self.state, Lifecycle::Closed(Ok(())))
             {
                 self.state = Lifecycle::Closing(Mutex::new(Box::pin(async move {
-                    state.client.shutdown().await
+                    let result = state.client.shutdown().await;
+                    // Shutdown alone is not a disk-lock barrier while retained
+                    // Arc references still own the storage engine.
+                    drop(state);
+                    result
                 })));
             }
         }

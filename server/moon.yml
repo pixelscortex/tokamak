@@ -7,3 +7,7 @@ tasks:
   test:
     # Fixture isolation is part of normal validation, not an opt-in regression.
     deps: ['server:fixture-test']
+  protocol-check:
+    command: 'cargo run --locked --package server --features protocol-codegen --bin export-protocol -- --check'
+  check:
+    deps: ['server:protocol-check']

@@ -9,10 +9,27 @@ publish.workspace = true
 name = "tokamak"
 path = "src/main.rs"
 
+[[bin]]
+name = "export-protocol"
+path = "src/bin/export-protocol.rs"
+required-features = ["protocol-codegen"]
+
+[features]
+protocol-codegen = ["dep:ts-rs"]
+
 [dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["ws", "http1", "tokio"] }
+tower = { version = "0.5.3", default-features = false }
+# Already used by the embedded engine; its owned cancellation future wakes
+# accepted TCP I/O, including HTTP peers that never finish upgrade headers.
+tokio-util = { version = "0.7.20", default-features = false, features = ["rt"] }
+serde = { version = "1.0.228", features = ["derive"] }
+ts-rs = { version = "12.0.1", optional = true, features = ["serde-json-impl"] }
+# Exact SDK/core versions are required by the doc-hidden attachment bridge.
+surrealdb-core = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 runtime = { path = "../runtime" }
 serde_json = "1.0.154"
 # The public SDK owns transaction routing; only our two embedded backends are
 # selected. This still brings the database core's substantial subsystems.
-surrealdb = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
-tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "macros", "sync"] }
+surrealdb = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv", "unstable"] }
+tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "macros", "sync", "net", "signal", "time"] }

@@ -1,4 +1,4 @@
-# TKM5 service acceptance
+# Server acceptance
 
 Run from the workspace root:
 
@@ -29,6 +29,56 @@ concurrent child-process builds and independent cleanup, plus failure cleanup.
 Disk scenarios use unique directories under
 ignored `server/target/tkm5-databases` and remove them after awaited shutdown.
 There are no added dependencies or enlarged native stacks.
+
+## TKM7 transport and ownership acceptance
+
+`tkm7.rs` runs the same `TokamakClient` workflow in
+`sdk-transport-driver.mjs` through two real native sessions (a test-only stdio
+message bridge, no listener) and two real WebSockets connected to the shipped
+headless binary. It covers query/mutation kind enforcement, error correlation,
+whole-call rollback, writer update-before-reply, second-client live updates,
+unsubscribe, local-only CLI/library binding, failed-bundle cleanup, cancelled
+and concurrent/repeated shutdown, idle upgraded sockets at SIGTERM, persistence
+and immediate disk reopen. A counting wrapper around real QuickJS additionally
+proves that native owner drop and peer WebSocket close stop executing subscription
+queries; merely suppressing late UI callbacks would not satisfy that assertion.
+
+`shutdown-driver.mjs` adds real-CLI shutdown regressions. Its slow mutation
+awaits an insert, then occupies normal QuickJS synchronously for 1500ms. The
+saturation test sends it before 64 queued queries plus an overflow sentinel on
+one FIFO WebSocket; connection refusal before handler retirement is observable
+admission-pressure evidence. SIGTERM must still exit successfully and the row
+must survive reopening. A no-queue control uses the same handler and storage.
+The partial-upgrade test holds incomplete HTTP headers open, then completes a
+separate SDK upgrade/query as accept-loop progress evidence. Shutdown must finish
+within three seconds and allow reopening without first releasing the raw peer.
+An additional under-capacity CLI case sends one active slow mutation and one
+or eight queued fast mutations. A marked protocol Ping/Pong after their FIFO
+text frames proves adapter admission progress before the slow handler replies;
+SIGTERM must preserve all rows even when it exits successfully. A deterministic
+native counterpart gates real QuickJS after its first awaited write, obtains
+successful `SessionSender.request` admission for eight queued mutations, then
+compares retained-session and dropped-session shutdown. Disk reopen checks all
+nine writes rather than relying on replies whose receiver has disappeared.
+Both drivers clean up child processes, sockets, streams and owned storage on
+failure; neither changes production stack sizes or implementation code.
+
+`internal/datastore_owner.rs` is a **private child module** of `data`, enabled
+only for unit tests. It compares native reads/writes on the retained explicit
+Datastore with public adapter transactions, tests invisibility before commit and
+after rollback, native/SDK typed conflicts, and uses a weak owner reference to
+require actual ownership release at awaited close. Diagnostic native writes do
+not publish tracked events. No raw capability is exported to feature code and
+no second SDK attachment is made. Only this native SQL diagnostic follows the
+existing data-test enlarged-stack convention; all Backend/QuickJS tests retain
+normal production-sized host/worker stacks.
+
+The normal `server:check` dependency executes generated protocol drift checking.
+The native bridge serializes the actual Rust protocol events, so SDK/native/WS
+interoperability does not depend on a second hand-maintained test protocol.
+The driver requires Bun and, for headless shutdown coverage, Unix SIGTERM.
+All builds and data directories belong to the local worktree; no parent target
+or live application storage is modified.
 
 ## Deterministic concurrency evidence
 

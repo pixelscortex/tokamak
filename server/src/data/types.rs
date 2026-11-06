@@ -11,6 +11,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Database(surrealdb::Error),
+    Startup(String),
     Invalid(&'static str),
     ReadOnly,
     FailedTransaction,
@@ -37,6 +38,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(error) => error.fmt(f),
+            Self::Startup(message) => f.write_str(message),
             Self::Invalid(message) => f.write_str(message),
             Self::ReadOnly => f.write_str("read-only transactions cannot write"),
             Self::FailedTransaction => {
