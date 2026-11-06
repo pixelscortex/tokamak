@@ -6,7 +6,7 @@ import type { NativeEvent, NativeNode } from "@tokamak/render";
 import { Button, Input } from "@tokamak/ui/elements";
 
 function Fixture() {
-  const [policy, setPolicy] = createSignal({ disabled: false, invalid: false, cancel: false, cancelKey: false, renderCancel: true, renderStop: false, accept: false, pressed: false, value: "fixed", name: "editor", label: "Task", description: "One task", class: "custom", defaultValue: "seed" });
+  const [policy, setPolicy] = createSignal({ disabled: false, invalid: false, cancel: false, cancelKey: false, renderCancel: true, renderStop: false, renderThrowEmpty: false, accept: false, pressed: false, value: "fixed", name: "editor", label: "Task", description: "One task", class: "custom", defaultValue: "seed" });
   const [counts, setCounts] = createSignal<Record<string, number>>({});
   const [requested, setRequested] = createSignal("none");
   let wrappedEvent: NativeEvent | undefined;
@@ -45,6 +45,7 @@ function Fixture() {
           count("wrapped-render");
           if (policy().renderCancel) event.preventDefault();
           if (policy().renderStop) event.stopPropagation();
+          if (policy().renderThrowEmpty) throw "";
           props.onClick?.(event);
         }}>Wrapped activation</div>} />
     </section>

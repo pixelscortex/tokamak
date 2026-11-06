@@ -225,7 +225,7 @@ export function dispatchClick(node: NativeNode): void {
     cancelable: true,
     isComposing: false,
   });
-  if (result.error) throw new Error(result.error);
+  if (result.error !== null) throw new Error(result.error);
 }
 
 // Native calls these functions with JSON, never generated JavaScript source.

@@ -426,3 +426,49 @@ fn rendered_button_keyboard_preserves_final_wrapper_stop_propagation() {
     wrapped_activation_contract("Enter", false, true);
     wrapped_activation_contract(" ", false, true);
 }
+
+#[test]
+fn rendered_button_empty_string_click_throw_reports_error_flushes_and_recovers() {
+    // Regression: error:string|null must distinguish an empty thrown string
+    // from no error. Keyboard activation nests final click dispatch inside the
+    // native key turn; a truthiness guard silently drops this listener failure.
+    let mut doc = document();
+    policy(
+        &mut doc,
+        json!({"renderCancel":false,"renderThrowEmpty":true}),
+    );
+    focus(&mut doc, "wrapped");
+    key(&mut doc, "Enter", false, false);
+    assert!(
+        doc.take_error().is_some(),
+        "an empty-string listener throw must still report an error to the native turn"
+    );
+    assert_eq!(
+        count(&doc, "wrapped-render"),
+        1,
+        "valid signal writes before the throw must flush in the failing turn"
+    );
+    assert_eq!(count(&doc, "wrapped-owner"), 0);
+    assert_eq!(count(&doc, "wrapped-parent"), 0);
+    assert_eq!(
+        attr(&doc, "wrapped", "aria-pressed").as_deref(),
+        Some("false")
+    );
+    assert!(doc.take_error().is_none(), "taking the error consumes it");
+
+    // Listener exceptions are recoverable, unlike a rejected native mutation
+    // batch: the same document must accept host updates and another activation.
+    policy(&mut doc, json!({"renderThrowEmpty":false}));
+    key(&mut doc, "Enter", true, false);
+    key(&mut doc, "Enter", false, false);
+    key(&mut doc, "Enter", true, false);
+    assert_eq!(count(&doc, "wrapped-render"), 2);
+    assert_eq!(count(&doc, "wrapped-owner"), 1);
+    assert_eq!(count(&doc, "wrapped-parent"), 1);
+    assert_eq!(count(&doc, "wrapped-change"), 1);
+    assert_eq!(
+        attr(&doc, "wrapped", "aria-pressed").as_deref(),
+        Some("true")
+    );
+    assert!(doc.take_error().is_none());
+}
