@@ -1,4 +1,184 @@
-# Feature service (TKM-5) and embedded data
+# Backend runner, transports and embedded data
+
+## Library-first runner (TKM-7)
+
+`Backend::start(BackendConfig { storage, bundle, javascript: PoolConfig }).await`
+constructs storage and QuickJS workers together. Desktop calls `backend.connect()`
+without binding a port. `Backend::server()` exposes metadata and sessions, not raw
+storage. Worker counts/queue/heap/time limits reuse `runtime::PoolConfig`: they
+are budgets, **not reserved cores or hard per-subsystem process memory limits**.
+JIT stays off. There is no separate DB service, replication or global sync.
+
+`Database::open` is the coherent storage boundary. It constructs exactly one
+`Arc<surrealdb_core::kvs::Datastore>` with maintenance deferred, then awaits
+`check_version`, `bootstrap`, `start_maintenance_tasks_checked`, and attaches the
+existing transactional SDK through `Surreal::<Db>::unstable_from_datastore`.
+SDK and core are exact-pinned to 4.0.0 because this public doc-hidden bridge has
+no SemVer guarantee. QuickJS `ctx.db` still uses the same tracked adapter; no JS
+inside SurrealQL, raw feature DB handle, second SDK attachment, fork or Wiretap.
+The crate-private diagnostic datastore reference is not a feature capability.
+
+Partial startup errors await cleanup and retain the original error (plus any
+cleanup failure). The only SDK owner lives through all calls. Service close
+stops admission, drains accepted calls, awaits SDK shutdown and drops retained
+Datastore references before returning the disk-lock barrier. Close uses a separate
+bounded one-slot control lane, never application-queue capacity. Disconnect
+retires delivery/subscriptions, not already-admitted calls: queued mutations
+still finish after their Session owner drops. This is the same coordinator/Tower
+execution path, not another backend service or execution stack. Native active
+transactions still reject close recoverably; cancelled database close retains
+its owned shutdown future. Keep Tokio alive through awaited close; killing the
+process/runtime is not graceful shutdown. Do not independently attach another
+SDK client to the same datastore: session closure shuts the supplied store down.
+
+### Shared protocol and in-process transport
+
+`src/protocol.rs` is the only definition of Request and Event. Serde handles
+JSON; maintained `ts-rs` generates committed `sdk/src/protocol.ts`:
+
+```sh
+cargo run --locked -p server --features protocol-codegen --bin export-protocol
+cargo run --locked -p server --features protocol-codegen --bin export-protocol -- --check
+```
+
+The second command rejects drift. Code generation is a build-only opt-in, not a
+native runtime dependency. Wire IDs are nonnegative JavaScript safe integers;
+SDK IDs are monotonic and never reused. Requests are tagged `query`, `mutation`,
+`subscribe`, `unsubscribe`, with `{id,name,args}` (unsubscribe has only id).
+Events are tagged `response`, `subscription`, `unsubscribed`. The first two have
+`result: {Ok: value} | {Err: string}`: null success cannot be confused with error.
+A mismatched query/mutation kind is rejected without executing the function.
+
+`SessionSender` implements `tower::Service<Request, Response=()>`; this response
+acknowledges **admission only**. Desktop forwards SDK `MessageConnection.send`
+to this service and feeds the ONE `Session::recv` stream to its listener. The
+native host must dispose/drop Session when the connection closes, including on
+receive failure; retaining Session means retaining its subscriptions. No port,
+HTTP stack, or per-call reply channel is involved in this embedding path.
+`new TokamakClient(new InProcessTransport(nativeConnection))` and
+`new TokamakClient(new WebSocketTransport(openSocket))` share all SDK correlation,
+subscription, error, teardown and application code. No implicit retry/reconnect.
+
+### Headless executable
+
+```sh
+moon run sdk:bundle -- server/demo/feature
+moon run server:check server:build
+./target/debug/tokamak --data ./tokamak.db --listen 127.0.0.1:3000 \
+  --bundle server/demo/feature/dist/bundle.js --workers 2
+# In another terminal (two SDK clients, add/list/live update):
+proto run bun -- server/demo/client.ts ws://127.0.0.1:3000/ws
+```
+
+`--bundle` is required. Defaults: `--data tokamak.db`, `--listen 127.0.0.1:3000`.
+Additional budgets: `--queue`, `--heap-bytes`, `--call-ms`, `--load-ms`. The
+WebSocket endpoint is `/ws`; its adapter forwards Tower requests and ordered
+Events without another execution/data path. It limits connections to 64 and
+input messages/frames to 1 MiB. A slow send times out after 5 seconds. Malformed
+frames and admission overload close the connection rather than racing an
+out-of-order transport error ahead of prior updates. The SDK bounds outstanding
+calls/subscriptions to 128 and socket buffering to approximately 1 MiB. These
+are queue bounds, not maximum feature result sizes or hard memory guarantees.
+
+Ctrl-C/SIGTERM stops upgrades, cancels accepted socket I/O (including incomplete
+HTTP upgrade headers), waits for Axum's owned HTTP tasks and upgraded connection
+owners to finish, then awaits backend shutdown. Cancellation lives below HTTP
+parsing: a handler timeout cannot cover a peer that never finishes its headers.
+The outer serve future is still awaited, never abandoned to detach HTTP tasks. `websocket::serve` must be driven
+to completion before closing the backend; dropping its future is not that
+barrier. A lost stream can hide an already-committed mutation: never blindly
+retry. No authentication/TLS/multiuser/reconnect support. Non-loopback listen
+addresses are refused; **do not publicly expose this POC**.
+
+### Package decisions
+
+Firecrawl verified current upstream APIs and maintained releases on 2026-11-06:
+
+- [Axum 0.8.9](https://docs.rs/axum/0.8.9/axum/): Tokio-maintained Tower routing,
+  `WebSocketUpgrade`, `max_message_size`, `max_frame_size`, `send`/`recv`, and
+  `serve(...).with_graceful_shutdown`. Defaults disabled; only `ws/http1/tokio`.
+  It wraps the already-resolved tokio-tungstenite 0.29.0. Direct tungstenite was
+  considered; Axum avoids hand-rolling HTTP upgrade/routing and composes Tower.
+- [Tower 0.5.3](https://docs.rs/tower/0.5.3/tower/trait.Service.html): existing
+  resolved dependency, defaults disabled; only the standard admission trait.
+- [tokio-util 0.7.20](https://docs.rs/tokio-util/0.7.20/tokio_util/sync/struct.CancellationToken.html):
+  already on the dependency graph; direct `rt` feature enables its maintained
+  owned cancellation future. Firecrawl docs and pinned source verified wakeup/
+  cancellation behavior. Axum's pinned `Listener` contract and graceful task
+  completion source were checked before using the small cancellable TCP adapter.
+  No second HTTP service implementation or generic lifecycle framework was added.
+- [ts-rs 12.0.1](https://docs.rs/ts-rs/12.0.1/ts_rs/): maintained Rust/serde to TS
+  generation, `serde-json-impl`; no second handwritten union or schema framework.
+  Crates downloaded 76.5 KiB compressed for ts-rs + macros; this is not linked
+  binary size. Its warning for `deny_unknown_fields` is benign: that validation
+  affects serde admission, not the generated TypeScript shape.
+- [SurrealDB attachment source](https://docs.rs/crate/surrealdb/4.0.0/source/src/engine/local/native.rs)
+  and pinned local core/engine source verified exact initialization/shutdown.
+  Existing SDK stable constructors remain represented by the compatible
+  `Database::open(Storage)` API, but no longer hide datastore construction.
+
+Native size is measured with `moon run :size` against the reachable headless
+entry point now. Historical scaffold/probe measurements below are not marginal
+adapter costs. Independent test-writing/review follows implementation.
+
+### TKM-7 implementation evidence
+
+On aarch64-apple-darwin / Rust 1.97.0:
+
+- Exact `moon run server:check server:build` passed, including generated-protocol
+  drift checking. `moon run sdk:check sdk:build` and `moon run sdk:test` passed
+  (10 tests / 138 assertions). Existing `cargo test --locked -p server` passed
+  all 20 native + 9 service tests after building the real SDK fixture.
+- Real debug **and measured release** headless runners passed the two-client
+  SDK add/list/live-update demo, SIGTERM shutdown, immediate disk reopen and
+  persisted-data readback. Non-loopback binding was explicitly refused.
+- Removed temporary probes ran the actual SDK client inside QuickJS with an
+  injected native Session connection (no port): query/mutation/subscription and
+  writer update-before-mutation-reply passed. Cancelled pending Backend close
+  recovered through retry, and repeated close returned the settled result.
+- Removed native diagnostic probes confirmed supplied-core read visibility of
+  SDK commits, rollback, typed conflict, dropped Datastore weak-reference after
+  shutdown, cancelled pending database close recovery, and disk reopen. Failed
+  bundle startup preserved its error and released the disk for reopening.
+  The direct-core diagnostic probe used an 8 MiB libtest thread stack, matching
+  existing native data tests; default 2 MiB overflowed. No production thread
+  stack or runtime implementation was changed. Core version/bootstrap failures
+  were source-verified for awaited cleanup, not separately fault-injected.
+- Rustfmt (changed Rust files) and `git diff --check` passed. No final tests were
+  added and no render/runtime/ui or unrelated formatting was changed by TKM-7.
+  Full-workspace validation remains for integration.
+
+`moon run :size` after shutdown review fixes completed in 8m44s:
+**39,542,352 bytes**, actual reachable headless binary (**+48 bytes** versus the
+39,542,304-byte first implementation). Versus the inherited measured
+286,080-byte scaffold: **+39,256,272 bytes**. Before-change attempts timed out during dependency builds;
+the scaffold baseline is inherited, not a newly completed before-run. The prior
+39,392,768-byte service probe has a different entry point/assertions and is not
+a direct adapter-size comparison. Release binary SHA-256:
+`077503cabbc437f3986a2035fdbf8238b882f7a9159f4e327309e75f0dc9c75c`.
+
+Shutdown review follow-up probes passed against the measured release binary:
+held-open partial HTTP headers exited 0 in 91 ms; an active 1.5-second mutation
+with 64 queued queries exited 0 in 1,429 ms and persisted its row; eight queued
+mutations after that active call exited 0 in 1,451 ms and persisted all nine rows.
+Every case immediately reopened the same disk and read persisted state. Debug
+probes passed too. Removed native Tower probes confirmed exact successful
+admission, dropped-session queued writes, pending-close cancellation recovery,
+and repeated close with a saturated application queue. All existing 29 native/
+service tests passed; parent-owned independent regressions remain for integration.
+
+Cleanup removed the obsolete app-queue `Command::Close` variant, replaced the
+WebSocket-only watch signal with shared accepted-I/O cancellation, and removed
+redundant startup double boxing. Local and WebSocket adapters still use one
+Tower admission/function pipeline. The dedicated shutdown control lane and TCP
+I/O adapter remain because saturation and pre-header shutdown need them; neither
+is an alternate application execution path.
+
+Local compressed crate sizes: Axum 180,525 bytes; Tower 110,488 bytes; ts-rs +
+macros 78,316 bytes. These downloads are **not linked binary costs**. Debug links
+retain the existing Apple large `__eh_frame` warning; release linking passed.
+
+## Feature service (TKM-5)
 
 `Server::load(Database, Arc<runtime::Pool>, Arc<runtime::Bundle>).await` loads
 one real SDK-generated bundle at startup. `descriptor()` returns its schema
@@ -6,7 +186,7 @@ and function metadata; `functions()` lists `{name, kind, args}` values. The
 bundle's new callable `describe` returns its existing `schema` and `metadata`
 exports because Pool invokes functions only; there is no second manifest.
 Feature handlers still enter only through `invoke({name,args}, host)`.
-`main` remains empty; native application/transport composition is TKM-7.
+The TKM-7 runner above now composes this unchanged feature execution path.
 
 ## Service API and delivery contract
 
@@ -20,8 +200,8 @@ Feature handlers still enter only through `invoke({name,args}, host)`.
   `Response {id, result: Result<serde_json::Value,String>}`,
   `Subscription {id, result}`, `Unsubscribed {id}`. Invalid registration emits
   `Response::Err` without replacing an existing subscription. These are Rust
-  events, not a new JSON wire protocol; TKM-7 maps them to injected SDK transport.
-  It MUST forward this stream in order, not split replies and updates into
+  events, now also the generated JSON wire protocol. Adapters forward this
+  stream in order, never split replies and updates into
   racing tasks. All affected subscription updates precede a mutation Response,
   including the writer's own updates. Identical JSON outcomes are suppressed.
 - A deliberately serial coordinator owns every admitted invocation through
@@ -201,11 +381,13 @@ off. This disables the SDK's default remote WS/TLS selection, **not all database
 subsystems**. Cargo's active native feature graph still includes core API, files,
 search/fulltext/vector indexing, geometry, crypto, observability, encoding,
 collation, maintenance, and other function families through the embedded engine.
-No private/internal SurrealDB crate, fork, or patch is used to remove them.
+TKM-3 used no direct core dependency. TKM-7 adds exact-pinned core only for
+explicit datastore ownership; it does not remove these subsystems or fork them.
 
 Old Surlvex dataapi/schema/server-change code was read for failure modes and
 concepts only. This layer is written anew around the public SDK; it contains no
-schema plumbing, internal datastore API, call-token stack, or wiretap.
+schema plumbing, call-token stack, or wiretap. TKM-7 adds the explicit datastore
+startup/attachment boundary documented above.
 
 ## Size and temporary evidence
 

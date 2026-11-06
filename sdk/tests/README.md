@@ -1,4 +1,4 @@
-# TKM-4 acceptance tests
+# SDK acceptance tests
 
 Run `moon run sdk:check sdk:test sdk:build`. Tests use Bun's built-in runner and
 checker; there are no test dependencies. `acceptance.test.mjs` invokes the real
@@ -17,6 +17,14 @@ The ambient-isolation probe includes an actual `.ts` test with DOM declarations
 in the package checker, not an excluded JavaScript test. Subscription regression
 coverage requires acquiring and invoking transport cleanup before propagating a
 synchronous initial UI callback failure, then suppressing reentrant/late events.
+
+`transport.test.mjs` adds TKM7 failure-boundary checks for actual SDK message
+transports: out-of-order correlation, null success versus error, subscription
+registration/rerun failure, observer exceptions, idempotent teardown, capacity
+release, malformed WebSocket frames, and socket backpressure. Fake connections
+are used only to force these boundary failures; real native/WS/backend parity
+and two-client live updates run under `moon run server:test` using the identical
+public `TokamakClient` workflow in `server/tests/sdk-transport-driver.mjs`.
 
 The recording host deliberately does not implement storage or sort rows in JS.
 It verifies the canonical host operation names, JSON payloads, AND filters,

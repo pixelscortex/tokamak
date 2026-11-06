@@ -3,6 +3,8 @@
 //! but one owned lifecycle and no stale-run generations or writer fence to leak.
 //! A session has ONE ordered output stream; transports must preserve its order.
 
+pub use crate::protocol::Event;
+use crate::protocol::Request;
 use crate::{
     data::{ChangeEvent, Database, Table},
     host::{self, ReadSet},
@@ -17,7 +19,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-use tokio::sync::{Notify, broadcast, mpsc, oneshot};
+use tokio::sync::{Notify, broadcast, mpsc, oneshot, watch};
 
 const COMMANDS: usize = 64;
 const OUTPUTS: usize = 32;
@@ -46,30 +48,16 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Results and updates deliberately share a queue. A mutation Response is
-/// enqueued AFTER its subscribed writes, not on a racing oneshot reply path.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Event {
-    Response {
-        id: u64,
-        result: Result<Json, String>,
-    },
-    Subscription {
-        id: u64,
-        result: Result<Json, String>,
-    },
-    Unsubscribed {
-        id: u64,
-    },
-}
-
 /// Startup inspects the bundled SDK registry in a fresh QuickJS world. The
 /// caller owns the Tokio host runtime and must keep it alive through close;
 /// initialize embedded storage there, not on the time-only JS executors.
 pub struct Server {
     commands: mpsc::Sender<Command>,
+    // Shutdown must never compete for space with application calls.
+    closing: mpsc::Sender<oneshot::Sender<Result<(), Error>>>,
     descriptor: Json,
     cleanup: Arc<Notify>,
+    closed: watch::Receiver<Option<Result<(), Error>>>,
 }
 
 impl Server {
@@ -92,7 +80,9 @@ impl Server {
         };
         let changes = database.subscribe(); // Before any initial subscription run.
         let (commands, receiver) = mpsc::channel(COMMANDS);
+        let (closing, close_receiver) = mpsc::channel(1);
         let cleanup = Arc::new(Notify::new());
+        let (closed_sender, closed) = watch::channel(None);
         let actor = Coordinator {
             database,
             pool,
@@ -102,15 +92,18 @@ impl Server {
             sessions: BTreeMap::new(),
             next_session: 0,
             cleanup: cleanup.clone(),
+            closed: closed_sender,
         };
         // Owning the task, rather than a caller future, shields accepted calls
         // through COMMIT, invalidation, and ordered delivery. Client cancellation
         // does not abort finalization. Process/runtime failure remains unknown.
-        tokio::spawn(actor.run(receiver));
+        tokio::spawn(actor.run(receiver, close_receiver));
         Ok(Self {
             commands,
+            closing,
             descriptor,
             cleanup,
+            closed,
         })
     }
 
@@ -144,9 +137,33 @@ impl Server {
     /// cancelled. Busy (a native transaction still retained externally) keeps
     /// the service live so callers can finish that transaction and retry close.
     pub async fn close(&self) -> Result<(), Error> {
+        if let Some(result) = self.closed.borrow().clone() {
+            return result;
+        }
         let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::Close(reply))?;
-        wait.await.map_err(|_| Error::Closed)?
+        // The first request enters a dedicated one-slot control lane even when
+        // application admission is saturated. Once enqueued, cancellation cannot
+        // retract it. Concurrent close callers wait for control-lane capacity or
+        // the retained outcome; they cannot grow an unbounded shutdown queue.
+        if self.closing.send(reply).await.is_err() {
+            return self.await_closed().await;
+        }
+        match wait.await {
+            Ok(result) => result,
+            Err(_) => self.await_closed().await,
+        }
+    }
+
+    async fn await_closed(&self) -> Result<(), Error> {
+        // A cancelled close caller does not own the shutdown barrier. Retain its
+        // completed outcome so retries cannot report Closed before locks release.
+        let mut closed = self.closed.clone();
+        loop {
+            if let Some(result) = closed.borrow_and_update().clone() {
+                return result;
+            }
+            closed.changed().await.map_err(|_| Error::Closed)?;
+        }
     }
 }
 
@@ -224,7 +241,34 @@ impl SessionSender {
             id,
             name: name.into(),
             args,
+            mutation: None,
         })
+    }
+
+    /// Common admission path for both adapters. Kind validation happens inside
+    /// the ordered coordinator, so an invalid query cannot execute a mutation.
+    pub fn request(&self, request: Request) -> Result<(), Error> {
+        if request.id() > 9_007_199_254_740_991 {
+            return Err(Error::Invalid(
+                "request ID must be a JavaScript safe integer".into(),
+            ));
+        }
+        match request {
+            Request::Query { id, name, args } => self.send(Action::Call {
+                id,
+                name,
+                args,
+                mutation: Some(false),
+            }),
+            Request::Mutation { id, name, args } => self.send(Action::Call {
+                id,
+                name,
+                args,
+                mutation: Some(true),
+            }),
+            Request::Subscribe { id, name, args } => self.subscribe(id, name, args),
+            Request::Unsubscribe { id } => self.unsubscribe(id),
+        }
     }
 
     pub fn subscribe(&self, id: u64, name: impl Into<String>, args: Json) -> Result<(), Error> {
@@ -247,6 +291,22 @@ impl SessionSender {
             return Err(Error::Closed);
         }
         admit(&self.commands, Command::Action(self.id, action))
+    }
+}
+
+/// Tower is the common service boundary, not a second execution path. The
+/// response acknowledges bounded admission; application replies use Event only.
+impl tower::Service<Request> for SessionSender {
+    type Response = ();
+    type Error = Error;
+    type Future = std::future::Ready<Result<(), Error>>;
+
+    fn poll_ready(&mut self, _: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        std::future::ready(self.request(request))
     }
 }
 
@@ -300,12 +360,20 @@ type Connection = (
 enum Command {
     Connect(oneshot::Sender<Result<Connection, Error>>),
     Action(u64, Action),
-    Close(oneshot::Sender<Result<(), Error>>),
 }
 
 enum Action {
-    Call { id: u64, name: String, args: Json },
-    Subscribe { id: u64, name: String, args: Json },
+    Call {
+        id: u64,
+        name: String,
+        args: Json,
+        mutation: Option<bool>,
+    },
+    Subscribe {
+        id: u64,
+        name: String,
+        args: Json,
+    },
     Unsubscribe(u64),
 }
 
@@ -335,13 +403,39 @@ struct Coordinator {
     sessions: BTreeMap<u64, Client>,
     next_session: u64,
     cleanup: Arc<Notify>,
+    closed: watch::Sender<Option<Result<(), Error>>>,
 }
 
 impl Coordinator {
-    async fn run(mut self, mut commands: mpsc::Receiver<Command>) {
+    async fn run(
+        mut self,
+        mut commands: mpsc::Receiver<Command>,
+        mut closing: mpsc::Receiver<oneshot::Sender<Result<(), Error>>>,
+    ) {
         loop {
             self.sessions.retain(|_, client| !client.output.is_closed());
             tokio::select! {
+                Some(reply) = closing.recv() => {
+                    // Active native transactions remain finishable on Busy.
+                    // No database owner can create a new one behind our check.
+                    if self.database.has_transactions() {
+                        let _ = reply.send(Err(Error::Invalid(crate::data::Error::Busy.to_string())));
+                        continue;
+                    }
+                    commands.close();
+                    // Finish every accepted command before the SDK lock-release
+                    // barrier, even when the caller of close has disappeared.
+                    while let Some(command) = commands.recv().await {
+                        match command {
+                            Command::Action(session, action) => self.action(session, action).await,
+                            Command::Connect(reply) => { let _ = reply.send(Err(Error::Closed)); }
+                        }
+                    }
+                    let result = Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
+                    self.closed.send_replace(Some(result.clone()));
+                    let _ = reply.send(result);
+                    return;
+                }
                 _ = self.cleanup.notified() => {},
                 change = self.changes.recv() => {
                     match change {
@@ -365,19 +459,16 @@ impl Coordinator {
                         if reply.send(Ok((id, receiver, slow, alive))).is_err() { self.sessions.remove(&id); }
                     }
                     Some(Command::Action(session, action)) => self.action(session, action).await,
-                    Some(Command::Close(reply)) => {
-                        let result = Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
-                        let done = result.is_ok();
-                        let _ = reply.send(result);
-                        if done { return; }
-                    }
                     None => break,
                 }
             }
         }
         // Last-handle drop is also graceful: no invocation is abandoned at an
         // await point by a disappearing client/server handle.
-        let _ = Box::pin(self.database.close()).await;
+        let result = Box::pin(self.database.close())
+            .await
+            .map_err(|e| Error::Invalid(e.to_string()));
+        self.closed.send_replace(Some(result));
     }
 
     fn emit(&mut self, session: u64, event: Event) {
@@ -421,13 +512,24 @@ impl Coordinator {
     }
 
     async fn action(&mut self, session: u64, action: Action) {
-        if !self.sessions.contains_key(&session) {
+        // Admission transfers call ownership to the coordinator. Disconnect
+        // retires subscriptions and delivery, not accepted mutations waiting in
+        // the command queue. Shutdown must drain those calls too.
+        if !self.sessions.contains_key(&session) && !matches!(&action, Action::Call { .. }) {
             return;
         }
         match action {
-            Action::Call { id, name, args } => {
+            Action::Call {
+                id,
+                name,
+                args,
+                mutation: expected,
+            } => {
                 let result = match self.kinds.get(&name).copied() {
                     None => Err(format!("unknown function: {name}")),
+                    Some(mutation) if expected.is_some_and(|expected| expected != mutation) => {
+                        Err("function kind does not match request".into())
+                    }
                     Some(mutation) => {
                         let mut result = Err("mutation conflict retry limit exceeded".into());
                         for attempt in 0..ATTEMPTS {

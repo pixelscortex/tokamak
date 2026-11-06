@@ -88,7 +88,7 @@ because checking the references also checks the backend source types.
 ```ts
 import { TokamakClient } from '@tokamak/sdk';
 import { api } from './_generated/api';
-const client = new TokamakClient(transport); // implement ClientTransport
+const client = new TokamakClient(transport); // see concrete transports below
 const rows = await client.query(api.todos.list, { done: false });
 const id = await client.mutation(api.todos.add, { text: 'Read this' });
 const stop = client.subscribe(api.todos.list, { done: false }, (event) => {
@@ -103,8 +103,42 @@ argument/result types, and suppresses events after an idempotent unsubscribe.
 An observer throwing during synchronous initial delivery deactivates the listener;
 the SDK captures and calls the transport disposer before rethrowing that error.
 If the transport's registration itself throws, the transport owns cleanup because
-it has not returned a disposer. The SDK does not prescribe a WebSocket wire
-protocol or implement reconnect/retry.
+it has not returned a disposer. There is no reconnect/retry.
+
+### Concrete transports (TKM-7)
+
+```ts
+import { TokamakClient, InProcessTransport, WebSocketTransport } from '@tokamak/sdk';
+// Native host owns a server Session and implements MessageConnection: send a
+// generated Request through Tower, feed its ordered Event stream to listen,
+// and drop Session when close/dispose runs. No port is opened.
+const embedded = new TokamakClient(new InProcessTransport(nativeConnection));
+// Browser/Bun caller creates and awaits OPEN on a WebSocket itself. The SDK
+// receives this structural capability rather than importing environment globals.
+const remoteTransport = new WebSocketTransport(openSocket);
+const remote = new TokamakClient(remoteTransport);
+// All query/mutation/subscribe application code is identical for embedded/remote.
+remoteTransport.close();
+```
+
+`Request` and `Event` are generated from `server/src/protocol.rs` with `ts-rs`;
+never edit `src/protocol.ts` manually. Regenerate/check from workspace root:
+
+```sh
+cargo run --locked -p server --features protocol-codegen --bin export-protocol
+cargo run --locked -p server --features protocol-codegen --bin export-protocol -- --check
+```
+
+The WebSocket route is `/ws` on the headless runner's **loopback** listen address.
+It preserves one stream for updates and call replies. Outstanding calls and
+subscriptions are bounded at 128 each; safe-integer IDs are never reused.
+Protocol/frame/admission/queue failures close the connection, reject all calls,
+and report errors to subscriptions. A closed stream can hide a committed
+mutation: never automatically retry it. Unsubscribe is idempotent; late events
+are ignored. A throwing async observer is isolated so it cannot strand the
+mutation reply behind its update; observers should handle their own failures.
+There is no socket-open buffering, auth, TLS, reconnect or multiuser support.
+Do not expose the POC publicly. See `server/demo` for the two-client live demo.
 
 ## Native host integration contract
 

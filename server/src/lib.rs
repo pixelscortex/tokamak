@@ -1,9 +1,17 @@
-//! Native feature hosting without transport or application logic. The service
-//! runs SDK bundles against call-owned storage transactions across awaits,
-//! without exposing SQL or an auto-committing client escape hatch.
+//! Combined backend library: embedded storage, feature workers, and one bounded
+//! Tower service. Desktop embeds sessions; WebSocket is an outer adapter only.
+//! Application functions remain SDK bundles using call-owned tracked transactions,
+//! without SQL or an auto-committing feature capability.
 
+// Embedded datastore startup contains deeply nested engine futures.
+#![recursion_limit = "256"]
+
+mod backend;
 pub mod data;
 mod host;
+pub mod protocol;
 mod service;
+pub mod websocket;
 
+pub use backend::{Backend, BackendConfig};
 pub use service::{Error, Event, Server, Session, SessionSender};
