@@ -1,0 +1,197 @@
+//! Boundary types keep data separate from SQL syntax and storage metadata.
+//! The POC intentionally accepts a narrow, SDK-compatible ID spelling instead
+//! of parsing arbitrary SurrealQL record expressions. Values remain native
+//! SurrealDB values; JSON conversion belongs to the later runtime adapter.
+
+use std::{fmt, str::FromStr};
+use surrealdb::types::{Number, Object, QueryError, RecordId, RecordIdKey, Value};
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+    Database(surrealdb::Error),
+    Invalid(&'static str),
+    ReadOnly,
+    FailedTransaction,
+    MissingRecord,
+    Busy,
+    Closed,
+}
+
+impl Error {
+    /// No message matching and no automatic retries of arbitrary commit errors.
+    pub fn is_retryable_conflict(&self) -> bool {
+        matches!(self, Self::Database(error)
+            if error.query_details() == Some(&QueryError::TransactionConflict))
+    }
+}
+
+impl From<surrealdb::Error> for Error {
+    fn from(error: surrealdb::Error) -> Self {
+        Self::Database(error)
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Database(error) => error.fmt(f),
+            Self::Invalid(message) => f.write_str(message),
+            Self::ReadOnly => f.write_str("read-only transactions cannot write"),
+            Self::FailedTransaction => {
+                f.write_str("an earlier operation failed; roll back this transaction")
+            }
+            Self::MissingRecord => f.write_str("the record does not exist"),
+            Self::Busy => {
+                f.write_str("active transactions must finish before closing the database")
+            }
+            Self::Closed => f.write_str("the database is closed"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Database(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+/// ASCII table names match the SDK, but are still bound, never SQL fragments.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Table(String);
+
+impl Table {
+    pub fn new(name: impl Into<String>) -> Result<Self> {
+        let name = name.into();
+        if !name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+            || !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        {
+            return Err(Error::Invalid("table must match [A-Za-z][A-Za-z0-9_]*"));
+        }
+        Ok(Self(name))
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Keys are opaque strings, including all-digit keys; never parsed as SQL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Id {
+    table: Table,
+    key: String,
+}
+
+impl Id {
+    pub fn new(table: Table, key: impl Into<String>) -> Result<Self> {
+        let key = key.into();
+        if key.is_empty()
+            || !key
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+        {
+            return Err(Error::Invalid("record key must match [A-Za-z0-9_-]+"));
+        }
+        Ok(Self { table, key })
+    }
+    pub fn table(&self) -> &Table {
+        &self.table
+    }
+    pub(crate) fn record(&self) -> RecordId {
+        RecordId::new(self.table.as_str(), self.key.as_str())
+    }
+    fn from_record(id: RecordId) -> Result<Self> {
+        let RecordIdKey::String(key) = id.key else {
+            return Err(Error::Invalid("stored record has a non-string key"));
+        };
+        Self::new(Table::new(id.table.as_str())?, key)
+    }
+}
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.table.as_str(), self.key)
+    }
+}
+impl FromStr for Id {
+    type Err = Error;
+    fn from_str(text: &str) -> Result<Self> {
+        let (table, key) = text
+            .split_once(':')
+            .ok_or(Error::Invalid("id must be table:key"))?;
+        Self::new(Table::new(table)?, key)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum Order {
+    #[default]
+    Asc,
+    Desc,
+}
+
+/// Metadata is separate so callers cannot patch identity or creation time.
+/// The JS adapter will flatten these to `_id`, `_creationTime`, and the fields.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Document {
+    pub id: Id,
+    pub creation_time: i64,
+    pub fields: Object,
+}
+
+impl Document {
+    pub(crate) fn decode(value: Value) -> Result<Self> {
+        let Value::Object(mut fields) = value else {
+            return Err(Error::Invalid("stored document is not an object"));
+        };
+        let Some(Value::RecordId(id)) = fields.remove("id") else {
+            return Err(Error::Invalid("stored document has no record id"));
+        };
+        let Some(Value::Number(Number::Int(creation_time))) = fields.remove("_creationTime") else {
+            return Err(Error::Invalid(
+                "stored document has no integer creation time",
+            ));
+        };
+        // User fields live under `data`, so ordinary business fields named
+        // `id` or `data` never collide with SurrealDB's native record identity.
+        let Some(Value::Object(fields)) = fields.remove("data") else {
+            return Err(Error::Invalid("stored document has no data object"));
+        };
+        Ok(Self {
+            id: Id::from_record(id)?,
+            creation_time,
+            fields,
+        })
+    }
+}
+
+pub(crate) fn check_fields(fields: &Object) -> Result<()> {
+    // These are the SDK's reserved metadata names, not SurrealDB's names.
+    if ["_id", "_creationTime"]
+        .iter()
+        .any(|key| fields.contains_key(*key))
+    {
+        return Err(Error::Invalid("document system fields cannot be written"));
+    }
+    Ok(())
+}
+
+pub(crate) fn check_field(field: &str) -> Result<()> {
+    if !field
+        .as_bytes()
+        .first()
+        .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+        || !field
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    {
+        return Err(Error::Invalid(
+            "filter field must be a single ASCII identifier",
+        ));
+    }
+    Ok(())
+}

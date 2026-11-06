@@ -8,3 +8,9 @@ publish.workspace = true
 [[bin]]
 name = "tokamak"
 path = "src/main.rs"
+
+[dependencies]
+# The public SDK owns transaction routing; only our two embedded backends are
+# selected. This still brings the database core's substantial subsystems.
+surrealdb = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
+tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "macros", "sync"] }
