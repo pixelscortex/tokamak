@@ -20,7 +20,8 @@ tasks:
     options:
       mergeArgs: "replace"
   test:
-    deps: ["bundle", "styles"]
+    # Native UI fixtures load the compiled element CSS even when ui:test is not run.
+    deps: ["bundle", "styles", "ui:build"]
     command: "sh tests/run.sh"
     options:
       mergeArgs: "replace"

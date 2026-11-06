@@ -344,3 +344,85 @@ fn shipped_showcase_runs_real_elements_and_native_input() {
     assert_eq!(editor(&doc, "editor"), "");
     assert!(doc.take_error().is_none());
 }
+
+fn wrapped_activation_contract(activation: &str, cancel: bool, stop: bool) {
+    // Composition regression: native and swapped elements must dispatch the
+    // final rendered click handler, not call Button's earlier props directly.
+    // A click remains a bubbling click after preventDefault; stopPropagation is
+    // independent. The same event object must reach wrapper, owner and ancestor.
+    let mut doc = document();
+    policy(&mut doc, json!({"renderCancel":cancel,"renderStop":stop}));
+    pointer(&mut doc, "wrapped");
+    assert_wrapped_clicks(&doc, 1, cancel, stop);
+    focus(&mut doc, "wrapped");
+    key(&mut doc, activation, false, false);
+    key(&mut doc, activation, false, true);
+    if activation == " " {
+        assert_wrapped_clicks(&doc, 1, cancel, stop);
+    }
+    key(&mut doc, activation, true, false);
+    key(&mut doc, activation, true, false);
+    assert_wrapped_clicks(&doc, 2, cancel, stop);
+    assert!(doc.take_error().is_none());
+}
+
+fn assert_wrapped_clicks(doc: &render::NativeDocument, clicks: u64, cancel: bool, stop: bool) {
+    assert_eq!(
+        count(doc, "wrapped-render"),
+        clicks,
+        "every activation must reach the final render wrapper"
+    );
+    assert_eq!(count(doc, "wrapped-owner"), clicks);
+    assert_eq!(
+        count(doc, "wrapped-owner-click"),
+        clicks,
+        "activation must deliver a click, not reuse a keyboard event"
+    );
+    assert_eq!(count(doc, "wrapped-owner-identity"), clicks);
+    let bubbles = if stop { 0 } else { clicks };
+    assert_eq!(
+        count(doc, "wrapped-parent"),
+        bubbles,
+        "click ancestor must observe the same pointer/keyboard bubbling policy"
+    );
+    assert_eq!(count(doc, "wrapped-parent-click"), bubbles);
+    assert_eq!(count(doc, "wrapped-parent-identity"), bubbles);
+    assert_eq!(
+        count(doc, "wrapped-parent-prevented"),
+        if cancel { bubbles } else { 0 }
+    );
+    assert_eq!(
+        count(doc, "wrapped-change"),
+        if cancel { 0 } else { clicks }
+    );
+    assert_eq!(
+        attr(doc, "wrapped", "aria-pressed").as_deref(),
+        Some(if !cancel && clicks % 2 == 1 {
+            "true"
+        } else {
+            "false"
+        })
+    );
+}
+
+#[test]
+fn rendered_button_enter_obeys_final_click_wrapper_cancellation() {
+    wrapped_activation_contract("Enter", true, false);
+}
+#[test]
+fn rendered_button_space_obeys_final_click_wrapper_cancellation() {
+    wrapped_activation_contract(" ", true, false);
+}
+#[test]
+fn rendered_button_enter_click_bubbles_once_through_final_wrapper() {
+    wrapped_activation_contract("Enter", false, false);
+}
+#[test]
+fn rendered_button_space_click_bubbles_once_through_final_wrapper() {
+    wrapped_activation_contract(" ", false, false);
+}
+#[test]
+fn rendered_button_keyboard_preserves_final_wrapper_stop_propagation() {
+    wrapped_activation_contract("Enter", false, true);
+    wrapped_activation_contract(" ", false, true);
+}

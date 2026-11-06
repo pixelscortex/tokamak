@@ -184,11 +184,12 @@ Actually run after implementation/cleanup:
 - `screencapture -l <own-window-id>` failed; screen-recording preflight was false.
   Native activation/raise was unavailable from this session. Physical click,
   Backspace, IME, candidate placement, and full foreground native interaction
-  remain the owner/manual gate above. No final tests or root test suite were written/run.
-- `moon run :size` was attempted here but interrupted before completing the inherited
-  database build. Parent separately reported root `:size` **286,080 B** unchanged;
-  that empty host does not link this renderer. No duplicate database release build
-  was pursued solely for this measurement.
+  remain the owner/manual gate above. Independent renderer and UI tests now exercise
+  the real QuickJS/Blitz path, and full workspace checks, tests and builds passed
+  during integration; neither replaces foreground acceptance.
+- `moon run :size` measures the separate reachable headless backend, currently
+  **39,542,352 B**. Use the native demo measurement below for renderer size; the
+  historical 286,080-byte empty host excluded both subsystems.
 
 ### Honest size
 

@@ -1,2 +1,2 @@
-// Keep the existing Rust regression entry stable; assertions/tooling are typed.
-import "./production-build.ts";
+// Keep the existing native regression entry stable; assertions live in typed tooling.
+await import("./production-build.ts");

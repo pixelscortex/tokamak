@@ -5,7 +5,8 @@ import {
   mergeProps,
   splitProps,
 } from "solid-js";
-import type { JSX, NativeEvent } from "@tokamak/render";
+import { dispatchClick } from "@tokamak/render";
+import type { JSX, NativeEvent, NativeNode } from "@tokamak/render";
 
 export interface ButtonState {
   readonly pressed: boolean;
@@ -47,6 +48,7 @@ export function Button(props: ButtonProps): JSX.Element {
     "onKeyDown",
     "onKeyUp",
     "tabindex",
+    "ref",
   ]);
   const [pressed, setPressed] = createSignal(local.defaultPressed ?? false);
   const [focused, setFocused] = createSignal(false);
@@ -64,6 +66,7 @@ export function Button(props: ButtonProps): JSX.Element {
     },
   };
   const native = () => local.nativeButton !== false;
+  let node: NativeNode | undefined;
   let spaceArmed = false;
   createRenderEffect(() => {
     if (state.disabled) spaceArmed = false;
@@ -79,7 +82,16 @@ export function Button(props: ButtonProps): JSX.Element {
     if (local.pressed === undefined) setPressed(next);
     local.onPressedChange?.(next, event);
   }
+  function click() {
+    if (!node)
+      throw new Error("Button render must forward ref to its native element");
+    dispatchClick(node);
+  }
   const element = mergeProps(rest, {
+    ref(control: NativeNode) {
+      node = control;
+      local.ref?.(control);
+    },
     get type() {
       return native() ? ("button" as const) : undefined;
     },
@@ -122,8 +134,8 @@ export function Button(props: ButtonProps): JSX.Element {
         return;
       }
       if (event.key === "Enter") {
-        if (!event.repeat) activate(event);
         event.preventDefault();
+        if (!event.repeat) click();
       } else if (event.key === " ") {
         event.preventDefault();
         if (!event.repeat) spaceArmed = true;
@@ -141,8 +153,8 @@ export function Button(props: ButtonProps): JSX.Element {
         !event.isComposing &&
         event.target === event.currentTarget
       ) {
-        activate(event);
         event.preventDefault();
+        click();
       }
     },
     onFocus(event: NativeEvent) {

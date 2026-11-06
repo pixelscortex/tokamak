@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": { "types": ["node"], "skipLibCheck": true },
-  "include": ["production-build.ts", "source-maps.ts"]
+  "include": ["production-build.ts", "source-maps.ts", "task-graph.test.ts"]
 }
