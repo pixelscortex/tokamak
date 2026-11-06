@@ -1,0 +1,6 @@
+# One composition root, with no pretend build/check/test until source exists.
+language: 'unknown'
+layer: 'application'
+workspace:
+  inheritedTasks:
+    include: []

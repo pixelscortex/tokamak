@@ -5,7 +5,7 @@
     "": {
       "name": "tokamak",
     },
-    "render": {
+    "packages/render": {
       "name": "@tokamak/render",
       "version": "0.1.0",
       "dependencies": {
@@ -18,11 +18,11 @@
         "vite-plugin-solid": "2.11.15",
       },
     },
-    "sdk": {
+    "packages/sdk": {
       "name": "@tokamak/sdk",
       "version": "0.1.0",
     },
-    "ui": {
+    "packages/ui": {
       "name": "@tokamak/ui",
       "version": "0.1.0",
       "dependencies": {
@@ -118,11 +118,11 @@
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
-    "@tokamak/render": ["@tokamak/render@workspace:render"],
+    "@tokamak/render": ["@tokamak/render@workspace:packages/render"],
 
-    "@tokamak/sdk": ["@tokamak/sdk@workspace:sdk"],
+    "@tokamak/sdk": ["@tokamak/sdk@workspace:packages/sdk"],
 
-    "@tokamak/ui": ["@tokamak/ui@workspace:ui"],
+    "@tokamak/ui": ["@tokamak/ui@workspace:packages/ui"],
 
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 
