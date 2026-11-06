@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "sources": ["first-token.ts"],
+  "sourcesContent": [
+    "// Startup global missing at runtime.\ndeclare const 初始化: () => void;\n初始化();\nexport function invoke() { return null; }\n"
+  ],
+  "mappings": "AAEA,IAAI,EACG,SAAS,CAAM,EAAG,CAAE,OAAO",
+  "debugId": "8304815E7A9C42E164756E2164756E21",
+  "names": []
+}

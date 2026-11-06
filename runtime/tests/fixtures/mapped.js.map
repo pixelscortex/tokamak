@@ -1,0 +1,11 @@
+{
+  "version": 3,
+  "sources": ["describe.ts", "mapped.ts"],
+  "sourcesContent": [
+    "// Keep multibyte UTF-8 and a surrogate pair before the minified throw location.\nexport function describe(id: number): string {\n  return `作業 🧪 ${id}`;\n}\n",
+    "// A realistic bundled feature imports a helper and throws after an async boundary.\nimport { describe } from \"./describe\";\n\ntype Request = { id: number };\n\nexport async function invoke(request: Request): Promise<never> {\n  const label = describe(request.id);\n  await Promise.resolve(label);\n  throw new Error(`missing todo: ${label}`);\n}\n"
+  ],
+  "mappings": ";AACO,SAAS,QAAQ,CAAC,IAAoB;AAAA,EAC3C,OAAO,mBAAS;AAAA;;;ACGX,eAAe,MAAM,CAAC,SAAkC;AAAA,EAC7D,MAAM,QAAQ,SAAS,QAAQ,EAAE;AAAA,EACjC,MAAM,QAAQ,QAAQ,KAAK;AAAA,EAC3B,MAAM,IAAI,MAAM,iBAAiB,OAAO;AAAA;",
+  "debugId": "5559B7E6D3B1C8CB64756E2164756E21",
+  "names": []
+}

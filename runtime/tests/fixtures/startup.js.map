@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "sources": ["startup.ts"],
+  "sourcesContent": [
+    "declare const 初始化:()=>unknown;\nexport const result =\n  初始化();\nexport function invoke(){return null;}\n"
+  ],
+  "mappings": "AACO,IAAM,EACX,IAAI,EACC,SAAS,CAAM,EAAE,CAAC,OAAO",
+  "debugId": "24F1C7B78610620364756E2164756E21",
+  "names": []
+}

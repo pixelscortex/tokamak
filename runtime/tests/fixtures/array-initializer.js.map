@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "sources": ["array-initializer.ts"],
+  "sourcesContent": [
+    "declare const x:unknown;\nexport const result=[\n  x\n];\nexport function invoke(){return null;}\n"
+  ],
+  "mappings": "AACO,IAAM,EAAO,CAClB,CACF,EACO,SAAS,CAAM,EAAE,CAAC,OAAO",
+  "debugId": "EE9E59A3EAA17C5C64756E2164756E21",
+  "names": []
+}
