@@ -1,0 +1,43 @@
+sdk/src/api.ts
+  s_c8219783faf84f::t_3afa3d31d8c6ed 3-7,13,21-24,36-37,39
+sdk/src/client.ts
+  s_c8219783faf84f::t_03eac21d2cb43b 4-7,10,28-30,35,40,42,47,56,58,60,70,74
+sdk/src/database.ts
+  s_c8219783faf84f::t_b38be9ed8e5285 4-8,11,16,20,23,28,33-34,36,41-43,45-46,51-54,63,66,72,74,77,79-82,86,90-91,96,124,127,140,149,153,158,162,167-168
+sdk/src/functions.ts
+  s_c8219783faf84f::t_b714c485e3446b 3-12,15,17,21,25-27,46,51,62,64,66,75,82-83,87-88,90,94-95,101,127
+sdk/src/host.ts
+  s_c8219783faf84f::t_f71105340940d0 5-6,9,14,18,32-37,39,51-52,56
+sdk/src/schema.ts
+  s_c8219783faf84f::t_b28be30d614319 4-6,12,19,21,25-26
+sdk/src/validators.ts
+  s_c8219783faf84f::t_904f876baefd35 4-5,8-14,21,23,25,29,36-40,43,58-62,64-67,71,74,78,84,88,98,105,110,113-114,116-117,119-120,122-123,125,128,135,138-140,142-143,146,156,165
+sdk/src/values.ts
+  s_c8219783faf84f::t_a069a3ed9d441f 4-10,12,18,23,27,31-32,40,43-44,46,52,56,60,63,70,81
+sdk/tests/fixtures/feature/nested/views.ts
+  s_c8219783faf84f::t_3cb1b4b757f937 2
+sdk/tests/fixtures/feature/schema.ts
+  s_c8219783faf84f::t_c642af4e045db5 2-3,5-10
+sdk/tests/fixtures/feature/tasks.ts
+  s_c8219783faf84f::t_f9273acf26c3ac 2-5,7,10-16,18,20,23,25,28-35,39-40,42-45,50,52
+sdk/tools/bundle.mjs
+  s_c8219783faf84f::t_d77c405f9bfdf8 5-7,9,11,17,21-22,24,31,33,37,39-40,48-49,53,57-59,63,70,73,76,84,86-87,92-93,95-102,104-105,109-111,117,122,127-130,132,135-136,138-142,146,149,155-159,161,165,167-168,176,179
+sdk/tools/check.mjs
+  s_c8219783faf84f::t_efddc5f5edc4a4 5-7,9-10,16-20,23,34,36-38,42,46-48,51-52,54,66,68-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8149bffda38d9237b9f66c90ea44e9dadca3da74",
+  "prompts": {},
+  "sessions": {
+    "s_c8219783faf84f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2b7c455-6c5f-4798-bfd8-f657a0e96f4a",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
