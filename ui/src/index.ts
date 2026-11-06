@@ -1,2 +1,2 @@
-// Public UI entry point; elements and components are added with the renderer.
-export {};
+/** Prefer @tokamak/ui/elements for the native element contract. */
+export * from "./elements";

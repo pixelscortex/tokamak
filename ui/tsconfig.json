@@ -1,9 +1,9 @@
 {
   "extends": "../tsconfig.json",
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "tests/**/*.ts",
-    "tests/**/*.tsx"
-  ]
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "@tokamak/render",
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/fixture.tsx", "tests/native-types.ts"]
 }

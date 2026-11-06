@@ -1,7 +1,8 @@
-/** A real Solid component: idle host ticks and native input share the same
- * reactive graph. Nothing in the native engine knows these counters exist. */
+/** TKM-9 native showcase consumes @tokamak/ui/elements with live Solid state.
+ * The renderer still owns native editing, focus and native-button activation. */
 import { createSignal } from "solid-js";
 import { mount, onHostEvent } from "@tokamak/render";
+import { Button, Input } from "@tokamak/ui/elements";
 
 function Demo() {
   const [host, setHost] = createSignal(0);
@@ -16,52 +17,77 @@ function Demo() {
 
   return (
     <main class="panel">
-      <h1>Tokamak · native Solid</h1>
+      <h1>Tokamak · Button + Input</h1>
       <p id="host">Host ticks (no interaction needed): {host()}</p>
       <p>Button activations: {clicks()}</p>
-      <button
+      <Button
         id="increment"
-        type="button"
         aria-label="Increment counter"
-        aria-pressed={clicks() % 2 === 1}
-        data-pressed={clicks() % 2 === 1}
+        defaultPressed={false}
         onFocus={() => setFocus("increment")}
         onClick={() => setClicks((n) => n + 1)}
       >
         Increment · click / Enter / Space
-      </button>
-      <label id="editor-label">Plain text editor</label>
-      <input
+      </Button>
+      <Input
+        label="Controlled text editor"
+        description="Type, Backspace, paste, Tab. Focus includes pointer focus."
         id="editor"
         type="text"
         value={value()}
         disabled={disabled()}
         readonly={readonly()}
-        aria-label="Plain text editor"
-        aria-describedby="help"
-        aria-invalid={false}
-        onInput={(event) => setValue(event.value ?? "")}
+        invalid={value().length > 24}
+        onValueChange={setValue}
         onFocus={() => setFocus("editor")}
         onBlur={() => setFocus("none")}
         onKeyDown={(event) => setKey(event.key ?? "none")}
       />
-      <p id="help">Type, Backspace, paste, Tab. Focus uses :focus, not :focus-visible.</p>
+      <p id="help">
+        More than 24 characters marks the controlled input invalid.
+      </p>
       <p>Value: {value()}</p>
       <p>
         Focus: {focus()} · last key: {key()}
       </p>
-      <button id="clear" type="button" onClick={() => setValue("")}>
+      <Button id="clear" onClick={() => setValue("")}>
         Controlled clear
-      </button>
-      <button type="button" aria-pressed={disabled()} onClick={() => setDisabled((v) => !v)}>
-        Toggle disabled: {String(disabled())}
-      </button>
-      <button type="button" aria-pressed={readonly()} onClick={() => setReadonly((v) => !v)}>
-        Toggle readonly: {String(readonly())}
-      </button>
-      <button disabled type="button" onClick={() => setClicks((n) => n + 1000)}>
-        Disabled · must not activate
-      </button>
+      </Button>
+      <div class="row">
+        <Button pressed={disabled()} onPressedChange={setDisabled}>
+          Toggle disabled: {String(disabled())}
+        </Button>
+        <Button pressed={readonly()} onPressedChange={setReadonly}>
+          Toggle readonly: {String(readonly())}
+        </Button>
+        <Button disabled onClick={() => setClicks((n) => n + 1000)}>
+          Disabled · must not activate
+        </Button>
+      </div>
+      <div class="row">
+        <Button defaultPressed>Initially pressed</Button>
+        <Button
+          nativeButton={false}
+          defaultPressed={false}
+          render={(props) => <div {...props} />}
+        >
+          Swapped div · Enter / Space
+        </Button>
+      </div>
+      <div class="row">
+        <Input
+          label="Uncontrolled"
+          defaultValue="Buy milk"
+          description="Value is owned by Input."
+        />
+        <Input label="Disabled" defaultValue="Not editable" disabled />
+        <Input
+          label="Invalid"
+          defaultValue=""
+          invalid
+          description="A task title is required."
+        />
+      </div>
     </main>
   );
 }

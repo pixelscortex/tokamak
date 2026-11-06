@@ -4,6 +4,20 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./elements": "./src/elements/index.ts",
+    "./components": "./src/components/index.ts",
+    "./theme.css": "./src/theme.css",
+    "./styles.css": "./src/styles.css"
+  },
+  "dependencies": {
+    "@tokamak/render": "workspace:*",
+    "solid-js": "1.9.18"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "tailwindcss": "4.3.4",
+    "vite": "8.3.6",
+    "vite-plugin-solid": "2.11.15"
   }
 }

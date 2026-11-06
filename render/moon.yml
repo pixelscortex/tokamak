@@ -1,35 +1,40 @@
 # Only render and its reachable runtime dependencies: never build the database.
-language: 'rust'
-layer: 'library'
+language: "rust"
+layer: "library"
 tasks:
   bundle:
-    command: 'proto run bun -- tools/bundle.mjs'
+    command: "proto run bun -- tools/bundle.mjs"
     env:
-      NODE_ENV: 'production'
-    outputs: ['dist/demo.js']
+      NODE_ENV: "production"
+    outputs: ["dist/demo.js", "dist/demo.js.map"]
+    options:
+      cache: false
+  styles:
+    command: "proto run bun -- tools/bundle-shell.ts"
+    outputs: ["dist/shell.html"]
     options:
       cache: false
   check:
-    deps: ['bundle']
-    command: 'sh tools/check.sh'
+    deps: ["bundle", "styles"]
+    command: "sh tools/check.sh"
     options:
-      mergeArgs: 'replace'
+      mergeArgs: "replace"
   test:
-    deps: ['bundle']
-    command: 'sh tests/run.sh'
+    deps: ["bundle", "styles"]
+    command: "sh tests/run.sh"
     options:
-      mergeArgs: 'replace'
+      mergeArgs: "replace"
   build:
-    deps: ['check']
-    command: 'cargo build --locked --release --package render --bin demo --jobs 2'
+    deps: ["check"]
+    command: "cargo build --locked --release --package render --bin demo --jobs 2"
     env:
-      RAYON_NUM_THREADS: '2'
-      CARGO_BUILD_JOBS: '2'
+      RAYON_NUM_THREADS: "2"
+      CARGO_BUILD_JOBS: "2"
     options:
-      mergeArgs: 'replace'
+      mergeArgs: "replace"
   demo:
-    deps: ['build']
-    command: '../target/release/demo'
+    deps: ["build"]
+    command: "../target/release/demo"
     options:
       cache: false
       persistent: true
