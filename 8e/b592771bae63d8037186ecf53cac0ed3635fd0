@@ -1,0 +1,21 @@
+render/moon.yml
+  s_f4eac1551c2f99::t_75530ee656f982 23-24
+ui/src/elements/button.tsx
+  s_f4eac1551c2f99::t_040aaa36c968b4 8-9,51,69,85-89,91-94,138,157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8eb592771bae63d8037186ecf53cac0ed3635fd0",
+  "prompts": {},
+  "sessions": {
+    "s_f4eac1551c2f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b041-a6da-7202-997b-3fb709e31ae1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
