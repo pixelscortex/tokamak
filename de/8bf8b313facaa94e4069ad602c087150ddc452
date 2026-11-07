@@ -1,0 +1,18 @@
+app/src/connection.rs
+  h_51b7a781d7f2c3 53,60-109,136-140,148,158-168,173,178,181-182,192,207,212-217,226
+app/tests/native.rs
+  h_51b7a781d7f2c3 1076-1353
+packages/render/src/mailbox.rs
+  h_51b7a781d7f2c3 58-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "de8bf8b313facaa94e4069ad602c087150ddc452",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
