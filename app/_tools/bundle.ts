@@ -1,4 +1,4 @@
-/** Bun owns app preparation; existing SDK/Vite/theme tools own their formats.
+ /** Bun owns app preparation; existing SDK/Vite/theme tools own their formats.
  * Underscore directories keep frontend and tooling out of function discovery. */
 import { bundleFeature } from "../../packages/sdk/tools/bundle.mjs";
 import { compileCss } from "../../packages/ui/tools/css.ts";
