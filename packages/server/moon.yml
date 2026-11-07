@@ -1,6 +1,6 @@
 # Share Cargo tasks through moon's Rust toolchain inheritance.
 language: 'rust'
-layer: 'application'
+layer: 'library'
 tasks:
   fixture-test:
     command: 'proto run bun -- test tests/build-feature.test.mjs'

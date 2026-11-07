@@ -1,6 +1,29 @@
-# One composition root, with no pretend build/check/test until source exists.
-language: 'unknown'
+# App preparation is shared by build/check; final independent tests follow TKM-10.
+language: 'rust'
 layer: 'application'
 workspace:
   inheritedTasks:
     include: []
+tasks:
+  bundle:
+    command: 'proto run bun -- _tools/bundle.ts'
+    options:
+      cache: false
+  check:
+    deps: ['bundle']
+    command: 'sh _tools/check.sh'
+    options:
+      cache: false
+      mutex: 'cargo'
+  build:
+    deps: ['bundle']
+    command: 'cargo build --locked --release --package tokamak-app --bin tokamak-desktop --jobs 2'
+    options:
+      cache: false
+      mutex: 'cargo'
+  test:
+    deps: ['bundle']
+    command: 'sh tests/run.sh'
+    options:
+      cache: false
+      mutex: 'cargo'

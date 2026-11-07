@@ -11,7 +11,7 @@ tasks:
       cache: false
       mutex: 'cargo'
   size:
-    deps: ['build-release']
+    deps: ['build-release', 'app:build']
     # stat fails on a missing artifact, unlike reporting an absent baseline as zero.
     command:
       - 'proto'
@@ -21,8 +21,10 @@ tasks:
       - '-e'
       - >-
         import { stat } from "node:fs/promises";
-        const path = "target/release/tokamak" + (process.platform === "win32" ? ".exe" : "");
-        const { size } = await stat(path);
-        console.log(path + ": " + size + " bytes");
+        for (const binary of ["tokamak", "tokamak-desktop"]) {
+          const path = "target/release/" + binary + (process.platform === "win32" ? ".exe" : "");
+          const { size } = await stat(path);
+          console.log(path + ": " + size + " bytes");
+        }
     options:
       cache: false

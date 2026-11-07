@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
+    "app",
     "packages/sdk",
     "packages/ui",
     "packages/render"

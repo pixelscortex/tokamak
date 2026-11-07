@@ -5,6 +5,19 @@
     "": {
       "name": "tokamak",
     },
+    "app": {
+      "name": "@tokamak/app",
+      "dependencies": {
+        "@tokamak/render": "workspace:*",
+        "@tokamak/sdk": "workspace:*",
+        "@tokamak/ui": "workspace:*",
+        "solid-js": "1.9.18",
+      },
+      "devDependencies": {
+        "@types/node": "26.6.6",
+        "vite": "8.3.6",
+      },
+    },
     "packages/render": {
       "name": "@tokamak/render",
       "version": "0.1.0",
@@ -21,6 +34,12 @@
     "packages/sdk": {
       "name": "@tokamak/sdk",
       "version": "0.1.0",
+      "peerDependencies": {
+        "solid-js": "1.9.18",
+      },
+      "optionalPeers": [
+        "solid-js",
+      ],
     },
     "packages/ui": {
       "name": "@tokamak/ui",
@@ -117,6 +136,8 @@
     "@rolldown/binding-win32-x64-msvc": ["@rolldown/binding-win32-x64-msvc@1.2.16", "", { "os": "win32", "cpu": "x64" }, "sha512-1lv1KvX0Z871zfk7vw+dnXMMnHNyDwMzWG8Kv3HxDXMOhzCX4SHc7HK319fInP0i+0p9D8brkfzL7pJOaGl+tw=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
+
+    "@tokamak/app": ["@tokamak/app@workspace:app"],
 
     "@tokamak/render": ["@tokamak/render@workspace:packages/render"],
 

@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./solid": "./solid.ts"
+  },
+  "peerDependencies": {
+    "solid-js": "1.9.18"
+  },
+  "peerDependenciesMeta": {
+    "solid-js": { "optional": true }
   }
 }

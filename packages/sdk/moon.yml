@@ -3,7 +3,11 @@
 language: 'typescript'
 layer: 'library'
 tasks:
+  solid-check:
+    # Optional UI entry has a separate graph from the portable backend source.
+    command: 'proto run bun -- check --no-script --project tsconfig.solid.json'
   check:
+    deps: ['solid-check']
     command: 'proto run bun -- tools/check.mjs'
     options:
       mergeArgs: 'replace'
