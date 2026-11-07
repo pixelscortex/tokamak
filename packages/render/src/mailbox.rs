@@ -56,6 +56,17 @@ impl HostSender {
     }
 
     pub fn send<T: Serialize>(&self, topic: &str, payload: T) -> Result<()> {
+        self.enqueue(topic, payload, false)
+    }
+
+    /// Reserve one terminal envelope outside normal capacity. Already queued
+    /// events stay ordered before it; future sends fail. A stalled producer can
+    /// therefore reject UI promises even when the normal mailbox is saturated.
+    pub fn finish<T: Serialize>(&self, topic: &str, payload: T) -> Result<()> {
+        self.enqueue(topic, payload, true)
+    }
+
+    fn enqueue<T: Serialize>(&self, topic: &str, payload: T, terminal: bool) -> Result<()> {
         if !self.0.alive.load(Ordering::Acquire) {
             return Err(Error("Document is closed or retired".into()));
         }
@@ -73,13 +84,16 @@ impl HostSender {
             if queue.closed || !self.0.alive.load(Ordering::Acquire) {
                 return Err(Error("Document mailbox is closed".into()));
             }
-            if queue.events.len() >= MAX_EVENTS || queue.bytes + json.len() > MAX_BYTES {
+            if !terminal
+                && (queue.events.len() >= MAX_EVENTS || queue.bytes + json.len() > MAX_BYTES)
+            {
                 return Err(Error(
                     "Host event queue overloaded (256 events / 1 MiB)".into(),
                 ));
             }
             queue.bytes += json.len();
             queue.events.push_back(json);
+            queue.closed = terminal;
         }
         (self.0.wake)();
         Ok(())

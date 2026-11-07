@@ -11,11 +11,32 @@ use std::time::{Duration, Instant};
 pub(crate) struct Js(QuickJsContext);
 
 impl Js {
-    pub fn new(bundle: &str) -> Result<Self> {
+    pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {
         let world =
             block_on(QuickJsContext::new(64 * 1024 * 1024)).map_err(|e| Error(e.to_string()))?;
         world.set_deadline(Some(Instant::now() + Duration::from_secs(2)));
         block_on(world.context().async_with(async |ctx| {
+            // Install before evaluating: initial Solid subscriptions must have
+            // a valid destination, not wait for window creation or first input.
+            if let Some(send) = send {
+                ctx.globals()
+                    .set(
+                        "__tokamakSend",
+                        Function::new(
+                            ctx.clone(),
+                            move |callback_ctx: runtime::rquickjs::Ctx<'_>, message: String| {
+                                send(message).map_err(|error| {
+                                    runtime::rquickjs::Exception::throw_message(
+                                        &callback_ctx,
+                                        &error.0,
+                                    )
+                                })
+                            },
+                        )
+                        .map_err(|e| Error(e.to_string()))?,
+                    )
+                    .map_err(|e| Error(e.to_string()))?;
+            }
             ctx.eval::<(), _>(bundle)
                 .map_err(|e| Error(CaughtError::from_error(&ctx, e).to_string()))?;
             let api: Object = ctx

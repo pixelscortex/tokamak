@@ -1,0 +1,19 @@
+/* Compile the shared design tokens and element rules into the native shell. */
+@import "../../packages/ui/src/styles.css";
+
+body {
+  @apply bg-canvas text-foreground font-sans;
+  margin: 0;
+  font-size: 16px;
+}
+main {
+  @apply p-6;
+}
+h1 { font-size: 26px; margin: 0 0 12px; }
+h2 { font-size: 20px; margin: 0; }
+p { margin: 6px 0; }
+.panels { @apply flex gap-4; align-items: flex-start; }
+.panel { @apply flex flex-col gap-3 p-4; flex: 1; min-width: 0; }
+.tasks { @apply flex flex-col gap-3; }
+.task { @apply flex gap-2; align-items: center; }
+.toggle { flex: 1; min-width: 0; }

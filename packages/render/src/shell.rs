@@ -27,7 +27,19 @@ pub fn launch(
     title: &str,
     connect: impl FnOnce(HostSender),
 ) -> Result<()> {
-    let document = NativeDocument::new(shell, bundle)?;
+    launch_connected(shell, bundle, title, None, connect)
+}
+
+/// Same CPU shell with optional outward message admission installed before mount.
+/// The caller owns backend shutdown after this function returns, including errors.
+pub fn launch_connected(
+    shell: &str,
+    bundle: &str,
+    title: &str,
+    send: Option<crate::MessageSender>,
+    connect: impl FnOnce(HostSender),
+) -> Result<()> {
+    let document = NativeDocument::new_connected(shell, bundle, send)?;
     let event_loop = winit::event_loop::EventLoop::builder()
         .build()
         .map_err(|e| Error(e.to_string()))?;

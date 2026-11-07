@@ -84,7 +84,15 @@ export class InProcessTransport implements ClientTransport {
       if (!active) return;
       active = false;
       this.subscriptions.delete(id);
-      if (!this.closed) this.send({ type: "unsubscribe", id });
+      if (!this.closed) {
+        try {
+          this.send({ type: "unsubscribe", id });
+        } catch {
+          // send already failed/closed the stream and rejected pending calls.
+          // Disposal must remain safe when native retirement races this send,
+          // otherwise one cleanup failure can strand other Solid subscriptions.
+        }
+      }
     };
   }
 

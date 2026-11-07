@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./js/index.ts",
+    "./connection": "./js/connection.ts",
     "./jsx-runtime": "./js/jsx-runtime.ts"
   },
   "dependencies": {

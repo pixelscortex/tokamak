@@ -12,7 +12,7 @@ use keyboard_types::{Key, Modifiers, NamedKey};
 pub use mailbox::{HostMailbox, HostSender};
 use serde::Deserialize;
 use serde_json::{Value, json};
-pub use shell::launch;
+pub use shell::{launch, launch_connected};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -31,6 +31,10 @@ impl std::error::Error for Error {}
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Thread-safe admission of owned messages only. Called synchronously on the UI
+/// owner; implementations must be nonblocking and bound both bytes and count.
+pub type MessageSender = Box<dyn Fn(String) -> Result<()> + Send + Sync>;
+
 static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 /// One independent document generation. Its JS heap and detached nodes are
@@ -44,13 +48,17 @@ pub struct NativeDocument {
 
 impl NativeDocument {
     pub fn new(shell: &str, bundle: &str) -> Result<Self> {
+        Self::new_connected(shell, bundle, None)
+    }
+
+    pub fn new_connected(shell: &str, bundle: &str, send: Option<MessageSender>) -> Result<Self> {
         let mut html = HtmlDocument::from_html(shell, Default::default());
         let root = html
             .get_element_by_id("app")
             .ok_or_else(|| Error("Shell needs #app".into()))?;
         let alive = Arc::new(AtomicBool::new(true));
         let mut bridge = Bridge {
-            js: js::Js::new(bundle)?,
+            js: js::Js::new(bundle, send)?,
             tree: wire::Tree::new(root),
             alive: alive.clone(),
             composition: Composition::Idle,
