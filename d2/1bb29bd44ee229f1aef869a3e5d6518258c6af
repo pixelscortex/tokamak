@@ -1,0 +1,32 @@
+app/README.md
+  h_51b7a781d7f2c3 32-47,60-61,63-70
+app/_host/connection.rs
+  h_51b7a781d7f2c3 4,24-64,74-76,78-122,124-134,136-159,164-165,167-168
+app/_limits.ts
+  h_51b7a781d7f2c3 1-20
+app/_view/main.tsx
+  h_51b7a781d7f2c3 11,50
+app/tests/bridge.tsx
+  h_51b7a781d7f2c3 7,12-17,24-30,43-63
+app/tests/fairness.tsx
+  h_51b7a781d7f2c3 1-42
+app/tests/native.rs
+  h_51b7a781d7f2c3 59-61,82-85,531-566,599,601-602,607,609-610,648,657-660,674,681,697-720,723-735,754-1075
+app/tests/run.ts
+  h_51b7a781d7f2c3 9-18
+app/todo.ts
+  h_51b7a781d7f2c3 4,10-14,22-31
+packages/server/src/service.rs
+  h_51b7a781d7f2c3 130,234,238-246,262,277,284-288,293-316,319-320,324,331-344
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d21bb29bd44ee229f1aef869a3e5d6518258c6af",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
