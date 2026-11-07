@@ -1,6 +1,6 @@
 # Rust host crates share package metadata and one size-oriented release profile.
 [workspace]
-members = ["server", "runtime", "render"]
+members = ["packages/server", "packages/runtime", "packages/render"]
 resolver = "3"
 
 [workspace.package]

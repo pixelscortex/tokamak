@@ -1,15 +1,14 @@
-# Explicit roots keep the singular feature app/ separate from native apps/.
+# Reusable packages and the single desktop composition have explicit roots.
 $schema: 'https://moonrepo.dev/schemas/workspace.json'
 versionConstraint: '2.5.6'
 projects:
   workspace: '.'
-  server: 'server'
-  runtime: 'runtime'
-  render: 'render'
-  sdk: 'sdk'
-  ui: 'ui'
-  desktop: 'apps/desktop'
-  todos: 'app/todos'
+  server: 'packages/server'
+  runtime: 'packages/runtime'
+  render: 'packages/render'
+  sdk: 'packages/sdk'
+  ui: 'packages/ui'
+  app: 'app'
 vcs:
   defaultBranch: 'main'
   provider: 'github'

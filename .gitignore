@@ -12,5 +12,7 @@ dist/
 
 # Generated logs, renderer captures, and local code indexes are not source.
 *.log
+# Keep captures from pre-layout checkouts ignored as well.
 /render/evidence/
+/packages/render/evidence/
 /.codegraph/

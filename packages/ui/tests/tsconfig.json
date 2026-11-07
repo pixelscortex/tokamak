@@ -1,0 +1,5 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "types": ["node"], "skipLibCheck": true },
+  "include": ["build.ts", "contracts.test.ts", "../../render/tests/source-maps.ts"]
+}
