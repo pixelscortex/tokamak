@@ -1,0 +1,14 @@
+app/_tools/bundle.ts
+  h_51b7a781d7f2c3 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d0f006a07eeda1966e9a66151a4a6f50575c691",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
