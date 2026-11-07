@@ -1,0 +1,14 @@
+app/tests/e2e.rs
+  h_51b7a781d7f2c3 33-39,60-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eec71fa45d7d8e513418cfc7542f02bb732c1bc0",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
