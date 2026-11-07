@@ -7,7 +7,7 @@ publish.workspace = true
 
 [[bin]]
 name = "tokamak-desktop"
-path = "_host/main.rs"
+path = "src/main.rs"
 
 [dependencies]
 server = { path = "../packages/server" }

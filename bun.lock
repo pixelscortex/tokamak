@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "tokamak",
+      "devDependencies": {
+        "vite": "8.3.6",
+      },
     },
     "app": {
       "name": "@tokamak/app",
@@ -14,8 +17,22 @@
         "solid-js": "1.9.18",
       },
       "devDependencies": {
+        "@tokamak/build": "workspace:*",
         "@types/node": "26.6.6",
         "vite": "8.3.6",
+      },
+    },
+    "packages/build": {
+      "name": "@tokamak/build",
+      "version": "0.1.0",
+      "dependencies": {
+        "@tokamak/sdk": "workspace:*",
+        "tailwindcss": "4.3.4",
+        "vite": "8.3.6",
+        "vite-plugin-solid": "2.11.15",
+      },
+      "devDependencies": {
+        "@types/node": "26.6.6",
       },
     },
     "packages/render": {
@@ -25,6 +42,7 @@
         "solid-js": "1.9.18",
       },
       "devDependencies": {
+        "@tokamak/build": "workspace:*",
         "@tokamak/ui": "workspace:*",
         "@types/node": "26.6.6",
         "vite": "8.3.6",
@@ -49,6 +67,7 @@
         "solid-js": "1.9.18",
       },
       "devDependencies": {
+        "@tokamak/build": "workspace:*",
         "@types/node": "26.6.6",
         "tailwindcss": "4.3.4",
         "vite": "8.3.6",
@@ -138,6 +157,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
     "@tokamak/app": ["@tokamak/app@workspace:app"],
+
+    "@tokamak/build": ["@tokamak/build@workspace:packages/build"],
 
     "@tokamak/render": ["@tokamak/render@workspace:packages/render"],
 

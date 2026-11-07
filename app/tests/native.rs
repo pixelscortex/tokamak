@@ -1,7 +1,7 @@
 //! TKM-10 production bundle → native input → SDK → Tower → QuickJS → SurrealKV
 //! → ordered mailbox → native UI. These tests do not prove physical macOS IME,
 //! foreground-window presentation, or GPU output; the renderer is explicitly CPU.
-#[path = "../_host/connection.rs"]
+#[path = "../src/connection.rs"]
 mod connection;
 #[allow(dead_code)]
 #[path = "../../packages/render/tests/support/mod.rs"]

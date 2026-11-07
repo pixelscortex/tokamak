@@ -1,7 +1,7 @@
 /** Build native ESM without duplicating the consumer's Solid or host runtime. */
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
-import { nativeSolid } from "../render/tools/native-build";
+import { nativeSolid } from "@tokamak/build/native";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 export default defineConfig({

@@ -8,6 +8,7 @@ projects:
   render: 'packages/render'
   sdk: 'packages/sdk'
   ui: 'packages/ui'
+  build: 'packages/build'
   app: 'app'
 vcs:
   defaultBranch: 'main'

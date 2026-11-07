@@ -1,4 +1,4 @@
-# App preparation is shared by build/check; final independent tests follow TKM-10.
+# Vite's internal integration prepares the sole application for Cargo and checks.
 language: 'rust'
 layer: 'application'
 workspace:
@@ -6,12 +6,12 @@ workspace:
     include: []
 tasks:
   bundle:
-    command: 'proto run bun -- _tools/bundle.ts'
+    command: 'proto run bun -- x --no-install vite build'
     options:
       cache: false
   check:
     deps: ['bundle']
-    command: 'sh _tools/check.sh'
+    command: 'proto run bun -- ../packages/build/src/check-app.ts'
     options:
       cache: false
       mutex: 'cargo'
@@ -21,6 +21,12 @@ tasks:
     options:
       cache: false
       mutex: 'cargo'
+  run:
+    deps: ['build']
+    command: '../target/release/tokamak-desktop'
+    options:
+      cache: false
+      persistent: true
   test:
     deps: ['bundle']
     command: 'sh tests/run.sh'

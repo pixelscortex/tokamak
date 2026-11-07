@@ -1,14 +1,13 @@
-/** One native screen, two independent live subscriptions, one SDK connection.
- * Private frontend modules are excluded from backend discovery by the SDK. */
+/** Core Todo screen: two independent live subscriptions, one SDK connection.
+ * Only backend/ is discovered as feature code; this page never registers handlers. */
 import { For, createSignal, onCleanup } from "solid-js";
-import { mount } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { Event, Request } from "@tokamak/sdk";
 import { useQuery } from "@tokamak/sdk/solid";
 import { Button, Input } from "@tokamak/ui/elements";
-import { api } from "../_generated/api";
-import { MAX_TITLE_UNITS } from "../_limits";
+import { api } from "../../backend/_generated/api";
+import { MAX_TITLE_UNITS } from "../../backend/_limits";
 
 function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
   const todos = useQuery(props.client, api.todo.list, () => ({}));
@@ -98,7 +97,7 @@ function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
   );
 }
 
-function App() {
+export default function Todos() {
   const transport = new InProcessTransport(createMessageConnection<Request, Event>());
   const client = new TokamakClient(transport);
   onCleanup(() => transport.close());
@@ -113,5 +112,3 @@ function App() {
     </main>
   );
 }
-
-mount(App);
