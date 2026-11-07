@@ -1,0 +1,9 @@
+{
+  "name": "@tokamak/render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./js/index.ts", "./jsx-runtime": "./js/jsx-runtime.ts" },
+  "dependencies": { "solid-js": "1.9.18" },
+  "devDependencies": { "@babel/core": "7.29.0", "babel-preset-solid": "1.9.16" }
+}

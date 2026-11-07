@@ -9,3 +9,8 @@ dist/
 
 # Local investigation artifacts are not part of the product source or PR.
 /spikes/
+
+# Generated logs, renderer captures, and local code indexes are not source.
+*.log
+/render/evidence/
+/.codegraph/
