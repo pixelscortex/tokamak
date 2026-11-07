@@ -1,6 +1,11 @@
-# TKM-8 — native Solid renderer
+# Native Solid renderer — TKM-8 / TKM-19
 
-**Implementation ready for independent tests/review; native manual acceptance is still pending.**
+Native product windows now use upstream **GPU Vello/wgpu**, not CPU Vello/Softbuffer.
+Both the demo and composed desktop use the same shell. Metal adapter selection
+and the demo's repeated render/present path have been verified; the remaining
+foreground/manual gates are listed below.
+
+**Historical TKM-8 interaction notes (CPU backend, not GPU foreground acceptance).**
 A real macOS window opened and host ticks updated its Solid document while idle.
 Scoped macOS keyboard events reached Tab focus, typing and paste. The validation session
 could not activate/raise its own window, so mouse interaction, real Apple Backspace,
@@ -40,8 +45,8 @@ Manual gate:
 - [`NativeDocument`](src/lib.rs) owns a Blitz document and a single
   `runtime::QuickJsContext`. QuickJS and Blitz stay on the event-loop thread;
   there is no second engine, worker-side JS handle, webview, or Node runtime.
-- [`launch(shell, bundle, title, connect)`](src/shell.rs) opens a native CPU-rendered
-  Vello/Softbuffer window. `connect` receives a cloneable `HostSender`. Move that
+- [`launch(shell, bundle, title, connect)`](src/shell.rs) opens a native GPU-rendered
+  Vello/wgpu window. `connect` receives a cloneable `HostSender`. Move that
   sender into a Rust host worker and call `send(topic, serializable_payload)`.
   Serialization creates owned JSON before the queue crossing. Successful send means
   queued, not delivered. Drop closes the generation; stale queued events are discarded.
@@ -146,7 +151,7 @@ source inspection verified mutation, event-driver, shell wake and IME APIs.
 | `vite` | 8.3.6, TypeScript build configuration, production bundling and composed maps | [TypeScript support](https://vite.dev/guide/features.html#typescript); build only |
 | `vite-plugin-solid` | 2.11.15, maintained universal Solid compiler integration; Babel is internal to the plugin | [plugin options](https://github.com/solidjs/vite-plugin-solid#optionssolid); build only |
 | `blitz-dom/html/traits/shell` | 0.3.0-beta.4, current published upstream, no fork | [Blitz](https://github.com/DioxusLabs/blitz), [shell](https://docs.rs/blitz-shell/0.3.0-beta.4/blitz_shell/); dom/shell crate archives 279,453 / 39,167 B |
-| `anyrender_vello_cpu` | 0.18.0, current; supported native Softbuffer window backend, avoids a GPU/WebGPU stack for this small demo | [AnyRender](https://github.com/DioxusLabs/anyrender), [crate](https://crates.io/crates/anyrender_vello_cpu/0.18.0); archive 23,874 B |
+| `anyrender_vello` | 0.15.0; maintained upstream GPU window backend, using AnyRender 0.14.0, Vello 0.11.0, wgpu 30.0.1 and wgpu_context 0.10.0 | [AnyRender](https://github.com/DioxusLabs/anyrender), [published source](https://docs.rs/crate/anyrender_vello/0.15.0/source/src/window_renderer.rs) |
 | `winit` | 0.31.0-beta.3, required exact pin by Blitz (current beta.4 cannot be substituted independently) | [crate](https://crates.io/crates/winit/0.31.0-beta.3) |
 | `keyboard-types` | 0.8.0, matches the verified spike; current compatible patch is 0.8.3 | [crate](https://crates.io/crates/keyboard-types/0.8.0) |
 | `futures-lite` | 2.6.1, current small local `block_on`; no new multithread executor | [crate](https://crates.io/crates/futures-lite/2.6.1); archive 46,095 B |
@@ -156,7 +161,7 @@ by `runtime`, not independently configured. All new native dependencies are loca
 `packages/render/Cargo.toml`. Bun workspace membership lets `@tokamak/ui/elements` use
 its types/renderer helpers through the real `@tokamak/render` package name.
 
-## Validation
+## TKM-8 validation (historical CPU presentation)
 
 Actually run after implementation/cleanup:
 
@@ -191,15 +196,148 @@ Actually run after implementation/cleanup:
   **39,542,352 B**. Use the native demo measurement below for renderer size; the
   historical 286,080-byte empty host excluded both subsystems.
 
-### Honest size
+### Historical CPU size
 
 `target/release/demo`: **8,617,216 bytes** (review fixes: +16 bytes from 8,617,200), reachable native window + Blitz layout/paint
 + CPU presentation + QuickJS/runtime + embedded Solid/demo JS. The former render
 placeholder had no executable, so there is **no comparable pre-change renderer
 binary delta**. Do not subtract the unlinked 286,080-byte host and label the result
 renderer cost. System fonts and OS libraries remain external. No embedded database,
-GPU stack, capture encoder or temporary probe is included in this final binary.
+GPU stack, capture encoder or temporary probe was included in that CPU baseline.
 
 The renderer's native and JavaScript dependencies are configured locally in
 `packages/render/`, with root Bun workspace membership and shared lockfile entries.
 Full-workspace integration is a separate validation step from these renderer checks.
+
+## TKM-19 GPU presentation
+
+Published crate manifests/source were inspected before changing dependencies:
+Blitz shell beta.4 requires AnyRender 0.14.0 and exact Winit beta.3;
+AnyRender Vello 0.15.0 implements that same `WindowRenderer` trait. No Blitz,
+Winit, layout, JS runtime or event-driver upgrade is needed. The dependency lock
+replaces the CPU/Softbuffer backend with the upstream GPU stack, including Naga
+shader compilation and platform wgpu backends. OS GPU drivers remain external.
+
+Upstream `VelloWindowRenderer` records a Vello scene, dispatches GPU compute
+(`use_cpu: false`), renders to a GPU texture, then GPU-blits/presents to the
+native surface. There is no frame readback or Softbuffer presentation. No JS
+`navigator.gpu` or canvas APIs are installed. CPU layout/scene preparation and
+QuickJS still run on the UI thread; GPU rendering is not a latency guarantee.
+
+Blitz retains ownership of surface creation, suspend/resume, first paint,
+resize and DPI propagation. Upstream wgpu_context reconfigures/reacquires once
+for Lost/Outdated surfaces and skips unavailable frames; it does not implement
+automatic device-loss recovery. The shell completes upstream renderer init
+before its first paint to reject CPU adapters and report the actual selected
+adapter/backend. Device loss emits a restart-required diagnostic, not a claim
+of recovery. Initialization/render failures retain upstream fatal error behavior;
+check GPU drivers and `WGPU_BACKEND`/`WGPU_ADAPTER_NAME` when selection fails.
+There is no silent CPU fallback. Upstream AutoVsync, maximum queued-frame hint
+of one, and GPU completion wait are retained, not replaced by a custom scheduler.
+
+### Opt-in presentation diagnostics
+
+Build the demo with upstream timing output enabled:
+
+```sh
+cargo build --locked --release --package render --bin demo --features gpu-diagnostics --jobs 2
+./target/release/demo
+```
+
+The `gpu-diagnostics` feature forwards only to
+`anyrender_vello/log_frame_times` and is **off by default**. Upstream emits each
+`vello: ... (cmd: ..., render: ..., present: ..., wait: ...)` line only after
+`maybe_blit_and_present` succeeds and the device completion wait returns
+successfully. Together with the adapter diagnostic, this is evidence that the
+selected adapter completed the upstream render/present path, unlike the adapter
+line alone, which is emitted before first paint. It is not proof that pixels were
+visibly displayed, physical input was accepted, or a window closed gracefully.
+The timings describe renderer CPU-side stages/waits, not input-to-photon latency.
+Logging can perturb performance; do not use diagnostic builds for default-product
+size or idle-performance comparisons. No timing logs are tracked.
+
+### Implementation-phase checks (2026-11-07)
+
+- Ran exact `moon run render:check render:build render:test`, plus
+  `ui:check ui:build ui:test` and `app:test`. Existing tests passed.
+  Document tests do not prove GPU presentation.
+- `app:check` initially failed on the pre-existing compile-time
+  `app/tests/e2e.rs` include of missing `app/dist/tests/bridge.js`.
+  That test-only dependency was corrected separately by loading the fixture
+  at execution time; clean `app:check` then passed without `dist/tests`.
+- Launched the actual release demo and desktop: both reported
+  **Apple M4 Pro (Metal, IntegratedGpu)**. Before launching desktop, inspected
+  directories/dirs-sys source to verify `HOME` selection; the child-only HOME
+  was a scratch directory and its actual store files were confirmed there.
+  Only these own child processes were terminated; no real user store was used.
+- Demo CPU time at 3/8/13 seconds was 0.19/0.22/0.23 seconds; sampled CPU
+  was 0% at 8/13 seconds with its one-second host tick producer running.
+  Desktop CPU time was 0.29/0.50/0.77 seconds at the same offsets.
+  These short `ps` samples are not GPU utilization or input/frame latency.
+- A scratch-only launcher reused the production library/demo bundle with CSS
+  keyframe animation, 200 overflow rows and host events every 16 ms. It launched
+  on the same Metal adapter without GPU validation errors; CPU time at 3/8/13
+  seconds was 0.47/2.20/3.85 seconds. This verifies adapter initialization and
+  workload execution without reported errors, not successful presentation,
+  visual animation correctness, scrolling input, frame rate or latency.
+- No physical input/IME, candidate placement, scrolling interaction, resize/DPI
+  interaction, suspend/resume, or injected surface/device-loss acceptance was
+  verified in this implementation pass. No screenshots/logs/probes are tracked.
+  Final integration validation is recorded below.
+
+### Measured native release sizes
+
+Same isolated source baseline `bf304bc1`, aarch64 macOS / Rust 1.97.0,
+workspace release profile. Measured with `moon run :size render:build` before,
+and `moon run :size` plus `render:build` after; demo sizes use `stat -f %z`.
+
+| Binary | Own CPU baseline (bytes) | GPU (bytes) | Delta (bytes) |
+| --- | ---: | ---: | ---: |
+| headless `tokamak` | 39,542,368 | 39,542,368 | 0 |
+| `tokamak-desktop` | 46,191,600 | 49,055,088 | +2,863,488 |
+| renderer `demo` | 8,633,872 | 11,563,696 | +2,929,824 |
+
+The supplied earlier demo baseline was 8,617,216 bytes; it is **not** the locally
+rebuilt baseline. The parent's later close-diagnostic fix is not in these
+measurements; remeasure after integration rather than attributing that separate
+change to GPU presentation. These are complete binaries, not isolated GPU
+dependency archive sizes, memory measurements, or cross-platform guarantees.
+
+### Final integration validation
+
+Separate implementation, test-writing and fresh review passes are complete.
+Review corrected the resume comment and the smoke supervisor's SIGTERM cleanup;
+the final source and test delta have no remaining blocking review findings.
+
+The integration owner ran:
+
+- `CARGO_BUILD_JOBS=2 moon run :check :test`: **20 tasks passed**, including
+  15 native renderer, 16 UI, three launch-construction failure, and 15 application
+  integration cases, plus compiler/type/lifecycle and backend suites.
+- `CARGO_BUILD_JOBS=2 moon run :build :size :e2e`: **16 tasks passed**, including
+  release builds and all five Todo POC scenarios.
+- `python3 packages/render/tests/gpu_smoke_supervision_test.py -v`: **three passed**,
+  including missing-marker cleanup, uncooperative-child escalation and SIGTERM
+  sent to the supervisor without leaking its owned child.
+- Exact `moon run render:gpu-smoke`: **passed**, selecting Apple M4 Pro /
+  Metal / IntegratedGpu and completing seven upstream render/present paths.
+  Earlier one/two-frame deadline failures were not counted as passes. The final
+  run retained the same thresholds and required a visible, unoccluded window.
+- The default release desktop independently selected the same Metal adapter
+  without frame diagnostics. Its child-only `HOME` and actual store path were
+  verified isolated before/after launch. Bounded SIGTERM/reaping was used,
+  not a physical window-close or graceful-backend-shutdown acceptance test.
+- `git diff --check`: passed. Existing macOS debug linker unwind-table warnings
+  remain; no GitHub CI result is claimed.
+
+Final default release measurements are **39,542,368 B** for the headless server,
+**49,055,088 B** for the desktop, and **11,563,696 B** for the native demo.
+Against the integration owner's preceding close-fix desktop at 46,208,112 B,
+the measured desktop delta is **+2,846,976 B**; the headless size is unchanged.
+The earlier implementation table uses its own CPU baseline and is not substituted
+for this comparison.
+
+These checks establish hardware adapter selection and execution of the upstream
+render/present path, not compositor-visible pixel correctness, physical
+mouse/IME behavior, resize/DPI interaction, suspend/loss recovery, frame rate
+or input-to-photon latency. Those foreground/manual gates remain open.

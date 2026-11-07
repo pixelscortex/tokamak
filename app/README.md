@@ -1,7 +1,7 @@
 # Desktop application
 
 The single desktop entry is `src/main.rs`, producing `tokamak-desktop` (not
-the headless `tokamak`). It embeds the real backend and CPU native renderer in
+the headless `tokamak`). It embeds the real backend and GPU native renderer in
 one process. There is no local HTTP/WebSocket listener, routing, plugin loader,
 or Rust Todo implementation.
 

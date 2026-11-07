@@ -1,4 +1,4 @@
-//! The only desktop entry: start embedded storage/workers, then run the CPU
+//! The only desktop entry: start embedded storage/workers, then run the GPU
 //! native shell on the main thread. Feature code is bundled TypeScript only.
 mod connection;
 

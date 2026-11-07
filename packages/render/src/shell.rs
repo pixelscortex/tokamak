@@ -1,8 +1,9 @@
 //! Winit/Blitz shell integration. Wakeups service the bounded host mailbox;
 //! requesting a redraw alone does not run JS or flush mutations in Blitz beta.4.
 use crate::{Error, HostMailbox, HostSender, NativeDocument, Result};
-use anyrender_vello_cpu::VelloCpuWindowRenderer;
-use blitz_shell::{BlitzApplication, BlitzShellProxy, WindowConfig};
+use anyrender::WindowRenderer;
+use anyrender_vello::{VelloWindowRenderer, wgpu};
+use blitz_shell::{BlitzApplication, BlitzShellEvent, BlitzShellProxy, WindowConfig};
 use blitz_traits::shell::{ClipboardError, ShellProvider};
 use std::{
     sync::Arc,
@@ -30,7 +31,7 @@ pub fn launch(
     launch_connected(shell, bundle, title, None, connect)
 }
 
-/// Same CPU shell with optional outward message admission installed before mount.
+/// Same GPU shell with optional outward message admission installed before mount.
 /// The caller owns backend shutdown after this function returns, including errors.
 pub fn launch_connected(
     shell: &str,
@@ -50,7 +51,7 @@ pub fn launch_connected(
     let mut app = BlitzApplication::new(proxy, events);
     app.add_window(WindowConfig::with_attributes(
         Box::new(document),
-        VelloCpuWindowRenderer::new(),
+        VelloWindowRenderer::new(),
         WindowAttributes::default()
             .with_title(title)
             .with_surface_size(LogicalSize::new(680, 820)),
@@ -61,7 +62,7 @@ pub fn launch_connected(
         .map_err(|e| Error(e.to_string()))
 }
 
-struct Host(BlitzApplication<VelloCpuWindowRenderer>, HostMailbox);
+struct Host(BlitzApplication<VelloWindowRenderer>, HostMailbox);
 
 impl ApplicationHandler for Host {
     fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
@@ -106,6 +107,38 @@ impl ApplicationHandler for Host {
             let Ok(event) = self.0.event_queue.try_recv() else {
                 break;
             };
+            if let BlitzShellEvent::ResumeReady { window_id } = &event
+                && let Some(view) = self.0.windows.get_mut(window_id)
+                && view.renderer.complete_resume()
+            {
+                // Complete upstream initialization before its first paint so a
+                // software adapter cannot silently become product presentation.
+                // Renderer completion is idempotent; View::complete_resume still
+                // owns the size resync, first paint and waker installation below.
+                let handle = view
+                    .renderer
+                    .current_device_handle()
+                    .expect("active GPU renderer must expose its device");
+                let info = handle.adapter.get_info();
+                assert!(
+                    info.device_type != wgpu::DeviceType::Cpu,
+                    "Tokamak requires a hardware GPU; selected software adapter {:?}. \
+                     Check graphics drivers and WGPU_BACKEND/WGPU_ADAPTER_NAME.",
+                    info.name
+                );
+                eprintln!(
+                    "Tokamak GPU: {} ({:?}, {:?})",
+                    info.name, info.backend, info.device_type
+                );
+                handle.device.set_device_lost_callback(|reason, message| {
+                    if reason != wgpu::DeviceLostReason::Destroyed {
+                        eprintln!(
+                            "Tokamak GPU device lost ({reason:?}): {message}. \
+                             Restart the application; no CPU fallback is available."
+                        );
+                    }
+                });
+            }
             self.0.handle_blitz_shell_event(event_loop, event);
             if index == 31 {
                 self.0.proxy.wake_up();
