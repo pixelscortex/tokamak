@@ -1,0 +1,34 @@
+Cargo.lock
+  h_51b7a781d7f2c3 181-182,184,188,191-196,297-305,513-527,839,850,1000-1010,1544-1552,1637,1951-1961,2125,2181-2182,2184,2186,2188,2197-2231,2250,2349-2350,3040-3056,3183-3188,3444-3481,3808-3819,3829,3831,3916-3924,4277,4281-4286,4365-4370,4398-4403,4484,4506,4661-4666,4682-4693,4826-4827,4840-4845,5170-5175,5200,5414,5684,5734,5756-5764,5909,6708,6745,6790-6795,6906,7479-7484,7566-7567,7569,7572,7576-7577,7579-7581,7585-7586,7588,7591-7607,7758,7771,7793,7926-8108,8412,8554,8623,8685,8721-8726
+app/README.md
+  h_51b7a781d7f2c3 4
+app/src/main.rs
+  h_51b7a781d7f2c3 1
+packages/render/Cargo.toml
+  h_51b7a781d7f2c3 8-11,18-19
+packages/render/README.md
+  h_51b7a781d7f2c3 1,3-8,48-49,154,164,199,206,211-343
+packages/render/moon.yml
+  h_51b7a781d7f2c3 42-47
+packages/render/src/shell.rs
+  h_51b7a781d7f2c3 4-6,34,54,65,110-141
+packages/render/tests/GPU_SMOKE.md
+  h_51b7a781d7f2c3 1-56
+packages/render/tests/gpu-smoke.py
+  h_51b7a781d7f2c3 1-186
+packages/render/tests/gpu_smoke_supervision_test.py
+  h_51b7a781d7f2c3 1-132
+packages/render/tests/launch_failure.rs
+  h_51b7a781d7f2c3 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "204d4ce9b2f950fac471f735135c8043f5e39c61",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
