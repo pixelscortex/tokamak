@@ -1,0 +1,35 @@
+Cargo.lock
+  s_afca289c1b96c3::t_507e14d2acb3be 1421-1441,3813-3818,4627-4636,6993-7008
+Cargo.toml
+  s_afca289c1b96c3::t_08c525db669112 3
+app/Cargo.toml
+  s_afca289c1b96c3::t_d9a9da8d8a64a6 1-25
+app/moon.yml
+  s_afca289c1b96c3::t_45d4d595deeb1d 1-2,7-29
+app/tests/query-lifecycle.ts
+  s_afca289c1b96c3::t_d8e4bff542fda1 1-97
+app/tests/run.sh
+  s_afca289c1b96c3::t_aef054e17029ac 1-8
+app/tests/tsconfig.json
+  s_afca289c1b96c3::t_141289ceff11f8 1-10
+moon.yml
+  s_afca289c1b96c3::t_b5dc0f426a3120 14,24-28
+package.json
+  s_afca289c1b96c3::t_b063be6ce4fd68 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af424e216d8226e40290ac4bc4d72f5f9649e675",
+  "prompts": {},
+  "sessions": {
+    "s_afca289c1b96c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a8d77fdb-d204-4a86-aab3-ddf98ecd7ea2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
