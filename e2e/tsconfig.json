@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "typeRoots": ["../app/node_modules/@types"],
+    "paths": { "@tokamak/sdk": ["../packages/sdk/src/index.ts"] },
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "allowJs": true
+  },
+  "include": ["run.ts", "feature/*.ts"]
+}

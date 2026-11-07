@@ -5,6 +5,12 @@ workspace:
   inheritedTasks:
     include: []
 tasks:
+  e2e:
+    deps: ['app:test']
+    command: 'proto run bun -- e2e/run.ts'
+    options:
+      cache: false
+      mutex: 'cargo'
   build-release:
     command: 'cargo build --locked --release --package server --bin tokamak --target-dir target'
     options:
