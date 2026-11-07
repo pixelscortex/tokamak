@@ -1,0 +1,26 @@
+app/tests/e2e.rs
+  h_51b7a781d7f2c3 1-174
+e2e/README.md
+  h_51b7a781d7f2c3 1-38
+e2e/feature/budget.ts
+  h_51b7a781d7f2c3 1-11
+e2e/run.ts
+  h_51b7a781d7f2c3 1-181
+e2e/tsconfig.json
+  h_51b7a781d7f2c3 1-12
+moon.yml
+  h_51b7a781d7f2c3 8-13
+package.json
+  h_51b7a781d7f2c3 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf304bc1d769b71fcaa9d0196aeae19fa6728a80",
+  "prompts": {},
+  "humans": {
+    "h_51b7a781d7f2c3": {
+      "author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
