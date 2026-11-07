@@ -50,17 +50,63 @@ impl Completion {
     }
 }
 
-fn finish(output: HostSender, reason: &str) {
+fn terminal_reason(reason: &str) -> String {
     // Parser/validation errors can quote almost the entire 64 KiB request.
     // At most 1024 Unicode scalars need <=6144 JSON bytes even when escaped;
     // this terminal diagnostic always fits its reserved mailbox envelope.
     const SUFFIX: &str = "; native connection closed; mutation outcomes may be unknown";
     let mut diagnostic: String = reason.chars().take(1024 - SUFFIX.len()).collect();
     diagnostic.push_str(SUFFIX);
-    if let Err(error) = output.finish("connection:close", diagnostic) {
-        // A retired document cannot receive anything. Do not hide a terminal
-        // delivery failure while still proceeding to the backend drain.
-        eprintln!("Native terminal delivery failed: {error}");
+    diagnostic
+}
+
+fn finish(output: HostSender, diagnostic: String) {
+    // UI teardown retires the generation before its queued close/stop controls
+    // can reach this worker. There is no live owner to notify in that interval.
+    if output.is_document_retired() {
+        return;
+    }
+    if output.finish("connection:close", diagnostic).is_err() {
+        // Retirement can race the send itself. A still-live generation with a
+        // failed terminal delivery is a real failure, not an expected close.
+        if !output.is_document_retired() {
+            eprintln!("Native terminal delivery failed: live mailbox rejected terminal event");
+        }
+    }
+}
+
+enum Failure {
+    Backend,
+    Admission,
+    Delivery,
+    Protocol {
+        category: serde_json::error::Category,
+        line: usize,
+        column: usize,
+    },
+}
+
+fn fail(output: Option<HostSender>, failure: Failure, reason: &str) {
+    // Preserve the original backend/protocol failure even if the owner retires
+    // later, but never persist its text: parser/backend errors can echo private
+    // request values. Only typed categories and parser positions go to stderr.
+    match failure {
+        Failure::Backend => eprintln!("Native connection failed: backend"),
+        Failure::Admission => eprintln!("Native connection failed: admission"),
+        Failure::Delivery => eprintln!("Native connection failed: event delivery"),
+        Failure::Protocol {
+            category,
+            line,
+            column,
+        } => {
+            eprintln!(
+                "Native connection failed: protocol ({category:?}, line {line}, column {column})"
+            );
+        }
+    }
+    if let Some(output) = output {
+        // Detail remains bounded and private to the connection's live UI owner.
+        finish(output, terminal_reason(reason));
     }
 }
 
@@ -87,6 +133,11 @@ pub async fn serve(
     let mut acknowledged = false;
     let mut receiving = true;
     loop {
+        if output.as_ref().is_some_and(HostSender::is_document_retired) {
+            output = None;
+            closing = true;
+            requests.close();
+        }
         if admission.is_none() && acknowledged {
             awaiting = None;
             acknowledged = false;
@@ -94,6 +145,7 @@ pub async fn serve(
         tokio::select! {
             biased;
             _ = &mut stopped, if !closing => {
+                output = None;
                 closing = true;
                 requests.close();
             },
@@ -103,24 +155,31 @@ pub async fn serve(
                         if awaiting.as_ref().is_some_and(|expected| expected.matches(&event)) {
                             acknowledged = true;
                         }
-                        output.as_ref().and_then(|output|
-                            output.send("connection:event", event).err().map(|e| e.to_string()))
+                        let delivered = output.as_ref().map(|output|
+                            output.send("connection:event", event));
+                        if output.as_ref().is_some_and(HostSender::is_document_retired) {
+                            output = None;
+                            closing = true;
+                            requests.close();
+                            None
+                        } else {
+                            delivered.and_then(Result::err)
+                                .map(|e| (Failure::Delivery, e.to_string()))
+                        }
                     },
                     Ok(None) => {
                         receiving = false;
                         awaiting = None;
-                        Some("Backend session closed".into())
+                        Some((Failure::Backend, "Backend session closed".into()))
                     },
                     Err(error) => {
                         receiving = false;
                         awaiting = None;
-                        Some(error.to_string())
+                        Some((Failure::Backend, error.to_string()))
                     },
                 };
-                if let Some(failure) = failure {
-                    if let Some(output) = output.take() {
-                        finish(output, &failure);
-                    }
+                if let Some((failure, reason)) = failure {
+                    fail(output.take(), failure, &reason);
                     closing = true;
                     requests.close();
                 }
@@ -130,9 +189,7 @@ pub async fn serve(
                 if let Err(error) = result {
                     awaiting = None;
                     acknowledged = false;
-                    if let Some(output) = output.take() {
-                        finish(output, &error.to_string());
-                    }
+                    fail(output.take(), Failure::Admission, &error.to_string());
                     closing = true;
                     requests.close();
                 }
@@ -147,13 +204,17 @@ pub async fn serve(
                         admission = Some(Service::call(&mut sender, request));
                     },
                     Ok(None) => {
+                        output = None;
                         closing = true;
                         requests.close();
                     },
                     Err(error) => {
-                        if let Some(output) = output.take() {
-                            finish(output, &error.to_string());
-                        }
+                        let failure = Failure::Protocol {
+                            category: error.classify(),
+                            line: error.line(),
+                            column: error.column(),
+                        };
+                        fail(output.take(), failure, &error.to_string());
                         closing = true;
                         requests.close();
                     },
@@ -162,7 +223,7 @@ pub async fn serve(
         }
     }
     if let Some(output) = output {
-        finish(output, "Native connection closed");
+        finish(output, terminal_reason("Native connection closed"));
     }
     // Every buffered request has now passed admission and completion, even on
     // window close. Retiring subscriptions precedes the final disk-lock barrier.
