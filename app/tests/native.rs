@@ -56,6 +56,9 @@ impl App {
         Self::with_ui(path, include_str!("../dist/ui.js"))
     }
     fn with_ui(path: &Path, ui: &str) -> Self {
+        Self::with_queued_ui(path, ui, Vec::new())
+    }
+    fn with_queued_ui(path: &Path, ui: &str, queued: Vec<String>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
@@ -76,6 +79,10 @@ impl App {
             .unwrap();
         let session = rt.block_on(backend.connect()).unwrap();
         let (send, receive) = connection::admission();
+        // Before spawning serve, establish actual accepted native backlog.
+        for request in queued {
+            send(request).expect("prequeued native admission");
+        }
         let admit = Arc::new(send);
         let send = admit.clone();
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -521,6 +528,42 @@ fn near_limit_malformed_native_request_notifies_both_query_owners() {
         4,
         "both owners receive one bounded failure"
     );
+    let reasons: Vec<String> =
+        serde_json::from_str(&support::text(app.doc(), "failure-reasons")).unwrap();
+    assert_eq!(reasons.len(), 2);
+    assert!(
+        reasons
+            .iter()
+            .all(|reason| !reason.is_empty() && reason.chars().count() <= 1024),
+        "terminal reason exceeded the documented Unicode scalar budget"
+    );
+}
+
+// Regression: terminal normalization must respect Unicode scalar boundaries,
+// not slice UTF-8 midway through a non-ASCII parser diagnostic and panic or
+// produce an invalid envelope. The bound applies to each SDK observer's reason.
+#[test]
+fn unicode_near_limit_malformed_request_delivers_bounded_terminal_reasons() {
+    let store = Store::new();
+    let mut app = bridge(&store);
+    let malformed = serde_json::json!({ "type": "🧪".repeat(16_360) }).to_string();
+    assert!(malformed.len() < 64 * 1024);
+    (app.admit)(malformed).unwrap();
+    app.wait(|doc| {
+        trace(doc)
+            .iter()
+            .filter(|event| event.starts_with("error:"))
+            .count()
+            == 2
+    });
+    let reasons: Vec<String> =
+        serde_json::from_str(&support::text(app.doc(), "failure-reasons")).unwrap();
+    assert_eq!(reasons.len(), 2);
+    assert!(
+        reasons
+            .iter()
+            .all(|reason| !reason.is_empty() && reason.chars().count() <= 1024)
+    );
 }
 
 // Regression: native admission has already accepted these writes before quit.
@@ -553,18 +596,18 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
     let pressure_sender = pressure.sender();
     for id in 1..=64 {
         pressure_sender
-            .request(Request::Query {
+            .request(Request::Mutation {
                 id,
-                name: "todo:list".into(),
-                args: serde_json::json!({}),
+                name: "todo:add".into(),
+                args: serde_json::json!({ "title": format!("Tower queued write {id:02}") }),
             })
             .unwrap();
     }
     assert_eq!(
-        pressure_sender.request(Request::Query {
+        pressure_sender.request(Request::Mutation {
             id: 65,
-            name: "todo:list".into(),
-            args: serde_json::json!({}),
+            name: "todo:add".into(),
+            args: serde_json::json!({ "title": "Not admitted" }),
         }),
         Err(server::Error::Overloaded),
         "Tower queue was not actually saturated"
@@ -602,7 +645,7 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
     let mut reopened = App::open(&store.0);
     reopened.ready();
     assert!(
-        both(reopened.doc(), "64 tasks"),
+        both(reopened.doc(), "128 tasks"),
         "lost admitted writes after saturated shutdown: {}",
         support::text(reopened.doc(), "first")
     );
@@ -610,6 +653,10 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
         assert!(both(
             reopened.doc(),
             &format!("Accepted queued write {index:02}")
+        ));
+        assert!(both(
+            reopened.doc(),
+            &format!("Tower queued write {:02}", index + 1)
         ));
     }
 }
@@ -624,13 +671,14 @@ fn accepted_large_sdk_titles_never_break_live_or_reopened_app() {
         .unwrap();
     let mut app = App::with_ui(&store.0, &ui);
     app.wait(|doc| trace(doc).len() == 2);
+    let mut accepted = Vec::new();
     for (index, title) in ["a".repeat(40_000), "b".repeat(40_000)]
         .into_iter()
         .enumerate()
     {
         let generation = app.host.generation();
         app.doc_mut()
-            .host_event(generation, "write:title", Value::String(title))
+            .host_event(generation, "write:title", Value::String(title.clone()))
             .unwrap();
         app.wait(|doc| {
             trace(doc)
@@ -646,8 +694,45 @@ fn accepted_large_sdk_titles_never_break_live_or_reopened_app() {
             "valid SDK title disconnected live query owners: {:?}",
             trace(app.doc())
         );
+        let receipt = trace(app.doc())
+            .into_iter()
+            .filter(|event| event.starts_with("title:"))
+            .last()
+            .unwrap();
+        if receipt == "title:accepted" {
+            accepted.push(title);
+        } else {
+            assert!(
+                receipt.starts_with("title:rejected:") && receipt.len() > "title:rejected:".len(),
+                "rejection must include an observable reason"
+            );
+        }
+        accepted.sort();
+        for panel in ["first", "second"] {
+            let mut actual: Vec<String> =
+                serde_json::from_str(&support::text(app.doc(), &format!("{panel}-titles")))
+                    .unwrap();
+            actual.sort();
+            assert!(
+                actual == accepted,
+                "accepted title was truncated or a rejected write changed {panel}"
+            );
+        }
     }
     drop(app);
+    let mut readback = App::with_ui(&store.0, &ui);
+    readback.wait(|doc| trace(doc).len() == 2);
+    for panel in ["first", "second"] {
+        let mut actual: Vec<String> =
+            serde_json::from_str(&support::text(readback.doc(), &format!("{panel}-titles")))
+                .unwrap();
+        actual.sort();
+        assert!(
+            actual == accepted,
+            "persisted state differs from accepted SDK results"
+        );
+    }
+    drop(readback);
     let mut reopened = App::open(&store.0);
     reopened.ready();
     assert!(
@@ -665,4 +750,326 @@ fn accepted_large_sdk_titles_never_break_live_or_reopened_app() {
             == 2
     );
     reopened.add("first", "Still usable");
+}
+
+fn bridge(store: &Store) -> App {
+    let ui = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/dist/tests/bridge.js"))
+        .unwrap();
+    let mut app = App::with_ui(&store.0, &ui);
+    app.wait(|doc| trace(doc).len() == 2);
+    app
+}
+
+fn bridge_action(app: &mut App, topic: &str, payload: Value, prefix: &str) -> String {
+    let before = trace(app.doc())
+        .iter()
+        .filter(|event| event.starts_with(prefix))
+        .count();
+    let generation = app.host.generation();
+    app.doc_mut()
+        .host_event(generation, topic, payload)
+        .unwrap();
+    app.wait(|doc| {
+        trace(doc)
+            .iter()
+            .filter(|event| event.starts_with(prefix))
+            .count()
+            > before
+    });
+    let events = trace(app.doc());
+    assert!(
+        !events.iter().any(|event| event.starts_with("error:")),
+        "policy operation retired a live query: {events:?}"
+    );
+    events
+        .into_iter()
+        .filter(|event| event.starts_with(prefix))
+        .last()
+        .unwrap()
+}
+
+fn bridge_rows(app: &App, element: &str) -> Vec<Value> {
+    let mut rows: Vec<Value> = serde_json::from_str(&support::text(app.doc(), element)).unwrap();
+    rows.sort_by(|a, b| a["_id"].as_str().cmp(&b["_id"].as_str()));
+    rows
+}
+
+fn normalized_list_bytes(rows: &[Value]) -> usize {
+    let mut rows = rows.to_vec();
+    for row in &mut rows {
+        row["done"] = Value::Bool(false);
+    }
+    serde_json::to_vec(&rows).unwrap().len()
+}
+
+fn assert_bridge_rows(app: &App, expected: &[Value]) {
+    for panel in ["first-rows", "second-rows"] {
+        assert!(
+            bridge_rows(app, panel) == expected,
+            "live snapshot {panel} omitted, truncated or unexpectedly changed a row"
+        );
+    }
+    assert!(
+        normalized_list_bytes(expected) <= 48 * 1024,
+        "accepted list exceeds documented escaped UTF-8 JSON budget"
+    );
+}
+
+// App policy acceptance: length is measured AFTER trim in UTF-16 code units,
+// not Rust UTF-8 bytes or Unicode scalar count. Escaping must not truncate text;
+// a rejected write must leave both exact live snapshots and disk unchanged.
+#[test]
+fn title_policy_handles_trim_ascii_surrogates_escaping_and_unicode_exactly() {
+    let store = Store::new();
+    let mut app = bridge(&store);
+    let mut expected_titles = Vec::new();
+    let cases = [
+        ("a".repeat(200), true),
+        ("b".repeat(201), false),
+        (format!("  {} \n", "t".repeat(200)), true),
+        ("🧪".repeat(100), true),
+        ("🧪".repeat(101), false),
+        (format!("{}x", "🧪".repeat(99)), true),
+        (format!("{}x🧪", "🧪".repeat(99)), false),
+        ("é".repeat(200), true),
+        ("é".repeat(201), false),
+        ("\u{0001}".repeat(200), true),
+        ("\u{0001}".repeat(201), false),
+        ("\"\\\n\t🧪".repeat(30), true),
+        (" \t\n ".to_owned(), false),
+    ];
+    for (title, allowed) in cases {
+        let result = bridge_action(
+            &mut app,
+            "write:title",
+            Value::String(title.clone()),
+            "title:",
+        );
+        if allowed {
+            assert_eq!(result, "title:accepted");
+            expected_titles.push(title.trim().to_owned());
+        } else {
+            assert!(
+                result.starts_with("title:rejected:Error:") && result.len() > 22,
+                "over-limit/empty title did not return a clear error: {result}"
+            );
+        }
+        expected_titles.sort();
+        let rows = bridge_rows(&app, "first-rows");
+        let mut actual_titles: Vec<_> = rows
+            .iter()
+            .map(|row| row["title"].as_str().unwrap().to_owned())
+            .collect();
+        actual_titles.sort();
+        assert!(
+            actual_titles == expected_titles,
+            "length policy changed accepted content"
+        );
+        assert_bridge_rows(&app, &rows);
+    }
+    let expected = bridge_rows(&app, "first-rows");
+    assert_eq!(
+        bridge_action(&mut app, "read", Value::Null, "query:"),
+        "query:reply"
+    );
+    assert!(
+        bridge_rows(&app, "readback") == expected,
+        "rejected title changed stored rows"
+    );
+    drop(app);
+    let reopened = bridge(&store);
+    assert_bridge_rows(&reopened, &expected);
+}
+
+// Error wording is not a wire contract: "storage limit reached" is as clear as
+// "budget exceeded". Require an explicit application-limit rejection, not one
+// particular noun, while exact snapshots below prove that rejection rolled back.
+fn assert_aggregate_rejection(result: &str) {
+    let message = result.to_lowercase();
+    assert!(
+        result.starts_with("title:rejected:Error:")
+            && ["budget", "limit", "full"]
+                .iter()
+                .any(|word| message.contains(word)),
+        "unclear aggregate rejection: {result}"
+    );
+}
+
+// App policy acceptance: enforce the aggregate escaped UTF-8 JSON budget,
+// including IDs/timestamps, rather than a fixed task count. Rollback must retain
+// every accepted row exactly. Normalize done:false so toggles cannot overfill a
+// state admitted while the smaller true spelling was present.
+#[test]
+fn aggregate_budget_rejects_atomically_without_truncation_and_survives_toggle_reopen() {
+    for escaped in [false, true] {
+        let store = Store::new();
+        let mut app = bridge(&store);
+        let mut expected = Vec::new();
+        let mut rejected = false;
+        let mut largest_row = 0;
+        for index in 0..512 {
+            let title = if escaped {
+                format!("{index:04}{}", "\"\\\u{0001}🧪".repeat(39))
+            } else {
+                format!("{index:04}{}", "a".repeat(196))
+            };
+            // Both corpora are valid <=200 UTF-16-unit titles, but their actual
+            // JSON/UTF-8 costs differ substantially.
+            assert!(title.encode_utf16().count() <= 200);
+            let previous = bridge_rows(&app, "first-rows");
+            let result = bridge_action(&mut app, "write:title", Value::String(title), "title:");
+            if result == "title:accepted" {
+                expected = bridge_rows(&app, "first-rows");
+                assert_eq!(expected.len(), previous.len() + 1);
+                largest_row = largest_row.max(
+                    expected
+                        .iter()
+                        .map(|row| serde_json::to_vec(row).unwrap().len() + 1)
+                        .max()
+                        .unwrap(),
+                );
+                assert_bridge_rows(&app, &expected);
+            } else {
+                assert_aggregate_rejection(&result);
+                assert_bridge_rows(&app, &previous);
+                assert!(
+                    normalized_list_bytes(&previous) + largest_row > 48 * 1024,
+                    "rejected below the byte budget (possible arbitrary count cap)"
+                );
+                rejected = true;
+                break;
+            }
+        }
+        assert!(
+            rejected,
+            "did not enforce aggregate budget within bounded test input"
+        );
+        assert!(!expected.is_empty());
+        // Use remaining space with the smallest valid title. This reaches the
+        // actual byte edge, not merely the edge for a large candidate title.
+        let mut small_rejected = false;
+        for _ in 0..64 {
+            let result =
+                bridge_action(&mut app, "write:title", Value::String("x".into()), "title:");
+            if result != "title:accepted" {
+                assert_aggregate_rejection(&result);
+                small_rejected = true;
+                break;
+            }
+            expected = bridge_rows(&app, "first-rows");
+            assert_bridge_rows(&app, &expected);
+        }
+        assert!(
+            small_rejected,
+            "small-title fill did not reach a bounded aggregate edge"
+        );
+        for row in &expected {
+            assert_eq!(
+                bridge_action(&mut app, "toggle:id", row["_id"].clone(), "toggle:"),
+                "toggle:accepted"
+            );
+        }
+        let completed = bridge_rows(&app, "first-rows");
+        assert!(completed.iter().all(|row| row["done"] == true));
+        assert_bridge_rows(&app, &completed);
+        // Completion saves one byte per row on the wire but cannot grant more
+        // insertion budget: every accepted task must remain toggleable to false.
+        let result = bridge_action(&mut app, "write:title", Value::String("x".into()), "title:");
+        assert_aggregate_rejection(&result);
+        assert_bridge_rows(&app, &completed);
+        for row in &completed {
+            assert_eq!(
+                bridge_action(&mut app, "toggle:id", row["_id"].clone(), "toggle:"),
+                "toggle:accepted"
+            );
+        }
+        let final_rows = bridge_rows(&app, "first-rows");
+        assert_eq!(final_rows.len(), expected.len());
+        assert!(final_rows.iter().all(|row| row["done"] == false));
+        assert_bridge_rows(&app, &final_rows);
+        assert_eq!(
+            bridge_action(&mut app, "read", Value::Null, "query:"),
+            "query:reply"
+        );
+        assert!(
+            bridge_rows(&app, "readback") == final_rows,
+            "over-budget rejection committed data"
+        );
+        drop(app);
+        let reopened = bridge(&store);
+        assert_bridge_rows(&reopened, &final_rows);
+    }
+}
+
+// Regression: cheap admitted requests may all be immediately ready. Forwarding
+// them must give the same session's recv stream service before its 32 outputs
+// overflow. The native queue holds only its legal 64 entries; the UI is healthy,
+// mailbox initially empty, and no host event flood or oversized payload occurs.
+#[test]
+fn prequeued_cheap_native_requests_keep_stream_healthy_for_subsequent_feature_calls() {
+    let ui = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/dist/tests/fairness.js"
+    ))
+    .unwrap();
+    for _ in 0..8 {
+        let store = Store::new();
+        let queued = (1001..=1064)
+            .map(|id| {
+                serde_json::json!({
+                    "type": "unsubscribe", "id": id,
+                })
+                .to_string()
+            })
+            .collect();
+        let mut app = App::with_queued_ui(&store.0, &ui, queued);
+        app.wait(|doc| {
+            let events = trace(doc);
+            events
+                .iter()
+                .filter(|event| event.starts_with("ack:"))
+                .count()
+                == 64
+                || events.iter().any(|event| event.starts_with("closed:"))
+        });
+        let events = trace(app.doc());
+        assert!(
+            !events.iter().any(|event| event.starts_with("closed:")),
+            "legal prequeued cheap requests prematurely closed healthy native stream: {events:?}"
+        );
+        assert_eq!(
+            events,
+            (1001..=1064)
+                .map(|id| format!("ack:{id}"))
+                .collect::<Vec<_>>(),
+            "missing or reordered native unsubscribe acknowledgments"
+        );
+        let generation = app.host.generation();
+        app.doc_mut()
+            .host_event(generation, "begin", Value::Null)
+            .unwrap();
+        app.wait(|doc| {
+            let events = trace(doc);
+            events.contains(&"query:reply".to_owned())
+                || events
+                    .iter()
+                    .any(|event| event.starts_with("failed:") || event.starts_with("closed:"))
+        });
+        let events = trace(app.doc());
+        assert!(
+            events.contains(&"mutation:accepted".to_owned())
+                && events.contains(&"query:reply".to_owned()),
+            "connection failed subsequent normal SDK mutation/read: {events:?}"
+        );
+        let titles: Vec<String> =
+            serde_json::from_str(&support::text(app.doc(), "fairness-data")).unwrap();
+        assert_eq!(titles, ["Healthy after cheap native requests"]);
+        drop(app);
+        let mut reopened = App::open(&store.0);
+        reopened.ready();
+        assert!(
+            both(reopened.doc(), "Healthy after cheap native requests"),
+            "accepted post-burst write did not persist"
+        );
+    }
 }

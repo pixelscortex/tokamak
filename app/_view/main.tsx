@@ -8,6 +8,7 @@ import type { Event, Request } from "@tokamak/sdk";
 import { useQuery } from "@tokamak/sdk/solid";
 import { Button, Input } from "@tokamak/ui/elements";
 import { api } from "../_generated/api";
+import { MAX_TITLE_UNITS } from "../_limits";
 
 function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
   const todos = useQuery(props.client, api.todo.list, () => ({}));
@@ -46,6 +47,7 @@ function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
       <Input
         id={`${props.id}-title`}
         label="New task"
+        description={`Up to ${MAX_TITLE_UNITS} UTF-16 code units per title; saved lists have a 48 KiB budget.`}
         value={title()}
         disabled={pending()}
         onValueChange={setTitle}
