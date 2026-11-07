@@ -93,17 +93,19 @@ function Counter() {
 mount(Counter);
 ```
 
-Future `ui/elements` can type Button/Input props against the exported native JSX
+`@tokamak/ui/elements` types Button/Input props against the exported native JSX
 interfaces without importing DOM globals. The renderer has no Todo/backend knowledge.
 
 ## Upstream beta policies
 
-- Solid JSX uses `babel-preset-solid` **universal**, not web/DOM generation. The moon
-  task explicitly sets `NODE_ENV=production`; Bun otherwise selected `dist/dev.js`
-  even with minification. The build inspects actual resolved inputs and requires
-  `solid-js/dist/solid.js`, rejecting SSR/DOM sources. Final bundle: **16,660 bytes**.
-  Build tools share `tools/transform.mjs`: Babel parses TypeScript+JSX, Solid lowers
-  universal JSX, then Bun erases types. File URLs are decoded before native path use.
+- Vite builds the UI through a TypeScript configuration and the maintained Solid
+  plugin, configured for **universal** rather than web/DOM generation. The plugin
+  still uses Babel internally for Solid JSX; there is no custom Babel transform.
+  Shared native build configuration selects `solid-js/dist/solid.js` and rejects
+  SSR/DOM, HMR and development-runtime leakage. Vite composes maps back to original
+  TSX. Explicit type checks cover runtime source and build tools separately because
+  Vite transpiles TypeScript without checking it. Build dependencies do not ship
+  inside QuickJS or the native runtime.
 - Button Enter/Space activation is missing upstream. The bridge owns it once:
   nonrepeating Enter down / armed Space up, respecting disabled, cancellation,
   focus changes and composition. It never adds a second pointer click path.
@@ -141,8 +143,8 @@ source inspection verified mutation, event-driver, shell wake and IME APIs.
 | Package | Selected / reason | Research link / size context |
 | --- | --- | --- |
 | `solid-js` | 1.9.18, current, fine-grained client runtime + universal host | [npm](https://www.npmjs.com/package/solid-js), [universal docs](https://github.com/solidjs/solid/tree/main/packages/solid/universal); 1,078,147 B unpacked package, not shipped bundle size |
-| `babel-preset-solid` | 1.9.16, current official universal compiler | [npm](https://www.npmjs.com/package/babel-preset-solid); 3,399 B unpacked; build only |
-| `@babel/core` | 7.29.0, compatible Babel 7 line for Solid's preset (current major is 8.1.0) | [npm](https://www.npmjs.com/package/@babel/core); 799,525 B unpacked; build only |
+| `vite` | 8.3.6, TypeScript build configuration, production bundling and composed maps | [TypeScript support](https://vite.dev/guide/features.html#typescript); build only |
+| `vite-plugin-solid` | 2.11.15, maintained universal Solid compiler integration; Babel is internal to the plugin | [plugin options](https://github.com/solidjs/vite-plugin-solid#optionssolid); build only |
 | `blitz-dom/html/traits/shell` | 0.3.0-beta.4, current published upstream, no fork | [Blitz](https://github.com/DioxusLabs/blitz), [shell](https://docs.rs/blitz-shell/0.3.0-beta.4/blitz_shell/); dom/shell crate archives 279,453 / 39,167 B |
 | `anyrender_vello_cpu` | 0.18.0, current; supported native Softbuffer window backend, avoids a GPU/WebGPU stack for this small demo | [AnyRender](https://github.com/DioxusLabs/anyrender), [crate](https://crates.io/crates/anyrender_vello_cpu/0.18.0); archive 23,874 B |
 | `winit` | 0.31.0-beta.3, required exact pin by Blitz (current beta.4 cannot be substituted independently) | [crate](https://crates.io/crates/winit/0.31.0-beta.3) |
@@ -175,18 +177,19 @@ Actually run after implementation/cleanup:
   one drain serviced at most 32 and re-woke the rest. Byte/event caps, closure and
   stale-generation queues were also exercised. A copied production bundler ran
   successfully under a real spaced path with an interface, generic payload type,
-  and annotated TSX event parameter, using the same shared transform helper.
+  and annotated TSX event parameter, using the same production build configuration.
 - An offscreen production document paint check exercised Blitz/AnyRender CPU output;
   it does not prove foreground input or an idle cross-thread wake. Generated logs
   and captures stay local and are not committed.
 - `screencapture -l <own-window-id>` failed; screen-recording preflight was false.
   Native activation/raise was unavailable from this session. Physical click,
   Backspace, IME, candidate placement, and full foreground native interaction
-  remain the owner/manual gate above. No final tests or root test suite were written/run.
-- `moon run :size` was attempted here but interrupted before completing the inherited
-  database build. Parent separately reported root `:size` **286,080 B** unchanged;
-  that empty host does not link this renderer. No duplicate database release build
-  was pursued solely for this measurement.
+  remain the owner/manual gate above. Independent renderer and UI tests now exercise
+  the real QuickJS/Blitz path, and full workspace checks, tests and builds passed
+  during integration; neither replaces foreground acceptance.
+- `moon run :size` measures the separate reachable headless backend, currently
+  **39,542,352 B**. Use the native demo measurement below for renderer size; the
+  historical 286,080-byte empty host excluded both subsystems.
 
 ### Honest size
 

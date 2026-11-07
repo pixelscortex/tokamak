@@ -31,6 +31,7 @@ nodes.set(0, root);
 let next = 1;
 let pending: Mutation[] = [];
 let dispose: (() => void) | undefined;
+let disposed = false;
 
 const subscriptions = new Map<string, Set<(value: unknown) => void>>();
 
@@ -166,6 +167,67 @@ interface Dispatch {
   shiftKey?: boolean;
 }
 
+function dispatch(data: Dispatch) {
+  let prevented = false,
+    stopped = false,
+    error: string | null = null;
+  const event: NativeEvent = {
+    ...data,
+    currentTarget: data.target,
+    get defaultPrevented() {
+      return prevented;
+    },
+    preventDefault() {
+      if (data.cancelable) prevented = true;
+    },
+    stopPropagation() {
+      stopped = true;
+    },
+  };
+  for (const id of data.chain) {
+    event.currentTarget = id;
+    try {
+      nodes.get(id)?.handlers.get(data.type)?.(event);
+    } catch (cause) {
+      error = String(cause);
+      stopped = true;
+    }
+    if (stopped || !data.bubbles) break;
+  }
+  return { prevented, stopped, error };
+}
+
+/** Dispatch a bubbling, cancelable click through the final rendered handlers.
+ * Nonnative button keyboard behavior uses this instead of calling its internal
+ * onClick directly. Native buttons already receive clicks from the Rust host.
+ * Throws for foreign, disposed or detached nodes; no event crosses a document
+ * lifetime. Listener failures propagate to the enclosing native turn, which
+ * still flushes preceding valid mutations before reporting the error.
+ */
+export function dispatchClick(node: NativeNode): void {
+  if (disposed) throw new Error("Cannot dispatch click after native document disposal");
+  const chain: number[] = [];
+  let current: NativeNode | undefined = node;
+  while (current) {
+    if (nodes.get(current.id) !== current || chain.length >= nodes.size) {
+      throw new Error("Cannot dispatch click through a stale or invalid native tree");
+    }
+    chain.push(current.id);
+    if (current === root) break;
+    current = current.parent;
+  }
+  if (current !== root) throw new Error("Cannot dispatch click to a detached native node");
+  const result = dispatch({
+    type: "click",
+    target: node.id,
+    chain,
+    bubbles: true,
+    cancelable: true,
+    isComposing: false,
+  });
+  if (result.error !== null) throw new Error(result.error);
+}
+
 // Native calls these functions with JSON, never generated JavaScript source.
 // Catching here preserves cancellation and already-queued mutations when a user
 // handler throws. Rust reports the error after applying the valid mutation batch.
@@ -173,40 +235,15 @@ Object.defineProperty(globalThis, "__tokamak", {
   value: Object.freeze({
     drain,
     dispatch(json: string): string {
-      const data = JSON.parse(json) as Dispatch;
-      let prevented = false,
-        stopped = false,
-        error: string | null = null;
-      const event: NativeEvent = {
-        ...data,
-        currentTarget: data.target,
-        get defaultPrevented() {
-          return prevented;
-        },
-        preventDefault() {
-          if (data.cancelable) prevented = true;
-        },
-        stopPropagation() {
-          stopped = true;
-        },
-      };
-      for (const id of data.chain) {
-        event.currentTarget = id;
-        try {
-          nodes.get(id)?.handlers.get(data.type)?.(event);
-        } catch (cause) {
-          error = String(cause);
-          stopped = true;
-        }
-        if (stopped || !data.bubbles) break;
-      }
-      return JSON.stringify({ prevented, stopped, error });
+      return JSON.stringify(dispatch(JSON.parse(json) as Dispatch));
     },
     host(json: string): void {
       const { topic, payload } = JSON.parse(json) as { topic: string; payload: unknown };
       for (const handler of [...(subscriptions.get(topic) ?? [])]) handler(payload);
     },
     dispose(): void {
+      // Cleanup callbacks must not reactivate the document being retired.
+      disposed = true;
       try {
         dispose?.();
       } finally {

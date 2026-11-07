@@ -1,5 +1,5 @@
-//! Standalone native acceptance surface. The worker owns only a typed sender;
-//! its idle ticks must update Solid without keyboard/mouse/redraw polling hacks.
+//! Native element showcase embeds Vite JS and the generated Tailwind shell.
+//! The worker's typed ticks must update Solid without input/redraw polling hacks.
 use serde::Serialize;
 use std::{thread, time::Duration};
 
@@ -10,7 +10,7 @@ struct Tick {
 
 fn main() -> render::Result<()> {
     render::launch(
-        include_str!("../../demo/shell.html"),
+        include_str!("../../dist/shell.html"),
         include_str!("../../dist/demo.js"),
         "Tokamak TKM-8",
         |sender| {
