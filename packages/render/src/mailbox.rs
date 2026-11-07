@@ -55,6 +55,13 @@ impl HostSender {
         self.0.generation
     }
 
+    /// Point-in-time observation of document-generation retirement, including
+    /// document drop. This does not inspect mailbox closure or promise delivery:
+    /// the generation can retire immediately after a false result.
+    pub fn is_document_retired(&self) -> bool {
+        !self.0.alive.load(Ordering::Acquire)
+    }
+
     pub fn send<T: Serialize>(&self, topic: &str, payload: T) -> Result<()> {
         self.enqueue(topic, payload, false)
     }

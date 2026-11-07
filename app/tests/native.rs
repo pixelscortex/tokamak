@@ -1073,3 +1073,281 @@ fn prequeued_cheap_native_requests_keep_stream_healthy_for_subsequent_feature_ca
         );
     }
 }
+
+fn wait_for_connection_exit(app: &App) {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while !app.worker.as_ref().unwrap().is_finished() {
+        assert!(
+            Instant::now() < deadline,
+            "native connection did not finish without another UI event"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+fn accepted_close_write(app: &mut App) {
+    app.input("first", "Accepted at diagnostic close");
+    support::pointer(app.doc_mut(), "first-add");
+    assert!(
+        app.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request["type"] == "mutation" && request["name"] == "todo:add"),
+        "close scenario did not admit a real UI mutation"
+    );
+}
+
+fn assert_live_failure_reasons(app: &mut App) -> Vec<String> {
+    app.wait(|doc| {
+        trace(doc)
+            .iter()
+            .filter(|event| event.starts_with("error:"))
+            .count()
+            == 2
+    });
+    let reasons: Vec<String> =
+        serde_json::from_str(&support::text(app.doc(), "failure-reasons")).unwrap();
+    assert_eq!(
+        reasons.len(),
+        2,
+        "live owners must each receive terminal failure once"
+    );
+    assert!(
+        reasons
+            .iter()
+            .all(|reason| !reason.is_empty() && reason.chars().count() <= 1024)
+    );
+    assert!(
+        !app.host.is_document_retired(),
+        "notification test retired its owner"
+    );
+    reasons
+}
+
+const PRIVATE_REQUEST_SENTINEL: &str = "PRIVATE_TOKEN_DO_NOT_LOG_π_🧪";
+
+// Each child actually executes this contract; no extra no-op child test or
+// production logging hook is needed. Subprocess isolation captures real Rust
+// stderr without a process-global redirect racing other native tests.
+fn close_diagnostic_child(case: &str, path: &Path) {
+    std::fs::create_dir_all(path).unwrap();
+    if matches!(case, "stop-live" | "null-live" | "drop-before-stop") {
+        let mut app = App::open(path);
+        app.ready();
+        accepted_close_write(&mut app);
+        match case {
+            "stop-live" => {
+                app.join();
+                assert!(!app.host.is_document_retired());
+            }
+            "null-live" => {
+                (app.admit)("null".into()).unwrap();
+                // Do not send stop until the actual null sentinel has finished
+                // the connection: otherwise stop could mask a broken null path.
+                wait_for_connection_exit(&app);
+                assert!(!app.host.is_document_retired());
+                app.join();
+            }
+            "drop-before-stop" => {
+                app.retire();
+                assert!(app.host.is_document_retired());
+                // Document cleanup's queued null must finish without a manual
+                // stop masking the retired-generation delivery race.
+                wait_for_connection_exit(&app);
+                app.join();
+            }
+            _ => unreachable!(),
+        }
+        drop(app);
+        let mut reopened = App::open(path);
+        reopened.ready();
+        assert!(
+            both(reopened.doc(), "Accepted at diagnostic close"),
+            "diagnostic suppression lost an admitted write"
+        );
+        drop(reopened);
+    } else {
+        let ui =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/dist/tests/bridge.js"))
+                .unwrap();
+        let mut app = App::with_ui(path, &ui);
+        app.wait(|doc| trace(doc).len() == 2);
+        assert!(!app.host.is_document_retired());
+        match case {
+            "live-malformed" => {
+                // Parser errors can echo arbitrary values, including escaped
+                // controls and non-ASCII tokens. Detail belongs only to this UI.
+                let private_type = format!("{PRIVATE_REQUEST_SENTINEL}\n\t\u{0001}");
+                (app.admit)(serde_json::json!({ "type": private_type }).to_string()).unwrap();
+                let reasons = assert_live_failure_reasons(&mut app);
+                assert!(
+                    reasons
+                        .iter()
+                        .all(|reason| reason.contains(PRIVATE_REQUEST_SENTINEL)),
+                    "redaction incorrectly stripped the owning UI's bounded failure detail"
+                );
+            }
+            "live-overload" | "live-mailbox-closed" => {
+                if case == "live-overload" {
+                    for _ in 0..256 {
+                        app.host.send("unused", Value::Null).unwrap();
+                    }
+                    assert!(app.host.send("unused", Value::Null).is_err());
+                } else {
+                    drop(app.mailbox.take());
+                    assert!(
+                        !app.host.is_document_retired(),
+                        "mailbox closure is not document retirement"
+                    );
+                }
+                let generation = app.host.generation();
+                app.doc_mut()
+                    .host_event(generation, "write", Value::Null)
+                    .unwrap();
+                // No drain until the failure is produced: overload is staged,
+                // not inferred from scheduler timing or an arbitrary sleep.
+                wait_for_connection_exit(&app);
+                assert!(!app.host.is_document_retired());
+                if case == "live-overload" {
+                    let reasons = assert_live_failure_reasons(&mut app);
+                    assert!(
+                        reasons
+                            .iter()
+                            .all(|reason| reason.contains("Host event queue overloaded")),
+                        "owning UI lost the actual overload cause"
+                    );
+                }
+            }
+            _ => panic!("unknown diagnostic child case: {case}"),
+        }
+        app.join();
+    }
+    println!("PASS executed close diagnostic case: {case}");
+}
+
+// Regression: ordinary stop/null/document retirement must not print a terminal
+// delivery warning, yet suppressing all diagnostics is also wrong. Real LIVE
+// malformed/overloaded streams must still notify both SDK owners with bounded
+// reasons, and an unavailable mailbox on a live document remains reportable.
+// Persistent stderr must identify failure categories without recording payloads.
+#[test]
+fn native_close_diagnostics_distinguish_retirement_from_live_failure() {
+    use std::process::{Command, Stdio};
+
+    const CHILD_CASE: &str = "TOKAMAK_TEST_CLOSE_DIAGNOSTIC_CASE";
+    const CHILD_STORE: &str = "TOKAMAK_TEST_CLOSE_DIAGNOSTIC_STORE";
+    if let Some(case) = std::env::var_os(CHILD_CASE) {
+        let path = PathBuf::from(std::env::var_os(CHILD_STORE).expect("child store path"));
+        close_diagnostic_child(case.to_str().unwrap(), &path);
+        return;
+    }
+
+    // Kill/reap on timeout or assertion failure before deleting isolated files.
+    struct Child(std::process::Child);
+    impl Drop for Child {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    for case in [
+        "stop-live",
+        "null-live",
+        "drop-before-stop",
+        "live-malformed",
+        "live-overload",
+        "live-mailbox-closed",
+    ] {
+        let scratch = Store::new();
+        let stdout_path = scratch.0.join("stdout");
+        let stderr_path = scratch.0.join("stderr");
+        let mut child = Child(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "native_close_diagnostics_distinguish_retirement_from_live_failure",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                // Set only this child's environment; never mutate HOME or the test
+                // runner's global environment or touch application data.
+                .env(CHILD_CASE, case)
+                .env(CHILD_STORE, scratch.0.join("data"))
+                .stdin(Stdio::null())
+                .stdout(std::fs::File::create(&stdout_path).unwrap())
+                .stderr(std::fs::File::create(&stderr_path).unwrap())
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(45);
+        let status = loop {
+            if let Some(status) = child.0.try_wait().unwrap() {
+                break status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "close diagnostic child timed out: {case}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        for path in [&stdout_path, &stderr_path] {
+            assert!(
+                std::fs::metadata(path).unwrap().len() <= 128 * 1024,
+                "unexpected unbounded diagnostic output for {case}"
+            );
+        }
+        let stdout = std::fs::read_to_string(stdout_path).unwrap();
+        let stderr = std::fs::read_to_string(stderr_path).unwrap();
+        assert!(
+            status.success(),
+            "close child {case} failed\n{stdout}\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("PASS executed close diagnostic case: {case}")),
+            "child test filter skipped its scenario: {stdout}"
+        );
+        if matches!(case, "stop-live" | "null-live" | "drop-before-stop") {
+            assert!(
+                !stderr.contains("Native terminal delivery failed")
+                    && !stderr.contains("Native connection failed"),
+                "expected close reported as a backend/terminal failure ({case}): {stderr}"
+            );
+        } else {
+            assert!(
+                stderr.contains("Native connection failed:"),
+                "live protocol/backend failure was silenced ({case}): {stderr}"
+            );
+            if case == "live-malformed" {
+                assert!(
+                    !stderr.contains("PRIVATE_TOKEN_DO_NOT_LOG")
+                        && !stderr.contains('π')
+                        && !stderr.contains('🧪'),
+                    "persistent diagnostic leaked a private request value: {stderr}"
+                );
+                let diagnostic = stderr
+                    .lines()
+                    .find(|line| line.starts_with("Native connection failed:"))
+                    .expect("protocol failure category");
+                let column = diagnostic
+                    .strip_prefix("Native connection failed: protocol (Data, line 1, column ")
+                    .and_then(|value| value.strip_suffix(')'))
+                    .and_then(|value| value.parse::<usize>().ok());
+                assert!(
+                    column.is_some_and(|column| column > 0),
+                    "malformed request lost safe parser category/position: {stderr}"
+                );
+            } else {
+                assert!(
+                    stderr.contains("Native connection failed: event delivery"),
+                    "live delivery failure lost its payload-free category ({case}): {stderr}"
+                );
+            }
+            assert_eq!(
+                stderr.contains("Native terminal delivery failed"),
+                case == "live-mailbox-closed",
+                "delivery diagnostic did not distinguish a live unavailable mailbox from retirement: {stderr}"
+            );
+        }
+    }
+}
