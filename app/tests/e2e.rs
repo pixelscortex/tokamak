@@ -30,6 +30,13 @@ impl Drop for Scratch {
 }
 
 fn native_roundtrip(root: &Path, write: bool) -> Value {
+    // app:check compiles test targets before app:test prepares this fixture.
+    // Read it only for execution, and fail before opening storage if absent.
+    let bridge =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"))
+            .expect(
+                "native E2E requires the SDK bridge fixture; run moon run :e2e or app:test first",
+            );
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -50,12 +57,9 @@ fn native_roundtrip(root: &Path, write: bool) -> Value {
         .unwrap();
     let session = rt.block_on(backend.connect()).unwrap();
     let (send, receive) = connection::admission();
-    let mut doc = NativeDocument::new_connected(
-        include_str!("../dist/shell.html"),
-        include_str!("../dist/tests/bridge.js"),
-        Some(send),
-    )
-    .unwrap();
+    let mut doc =
+        NativeDocument::new_connected(include_str!("../dist/shell.html"), &bridge, Some(send))
+            .unwrap();
     let (host, mut mailbox) = HostMailbox::new(&doc, || {});
     let (ready, receiver) = oneshot::channel();
     assert!(ready.send(host).is_ok());
