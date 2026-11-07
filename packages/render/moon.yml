@@ -39,3 +39,9 @@ tasks:
     options:
       cache: false
       persistent: true
+  gpu-smoke:
+    # Explicit GUI acceptance only; never a prerequisite of normal headless tests.
+    deps: ["bundle", "styles"]
+    command: "python3 tests/gpu-smoke.py --run"
+    options:
+      cache: false
