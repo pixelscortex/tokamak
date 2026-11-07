@@ -1,6 +1,6 @@
 # Desktop application
 
-The single desktop entry is `_host/main.rs`, producing `tokamak-desktop` (not
+The single desktop entry is `src/main.rs`, producing `tokamak-desktop` (not
 the headless `tokamak`). It embeds the real backend and CPU native renderer in
 one process. There is no local HTTP/WebSocket listener, routing, plugin loader,
 or Rust Todo implementation.
@@ -11,6 +11,9 @@ or Rust Todo implementation.
 CARGO_BUILD_JOBS=2 moon run app:build
 target/release/tokamak-desktop
 ```
+
+`bun run build` builds the same executable, and `bun run app` builds and launches
+it. These are aliases for Moon, not a browser development server or HMR.
 
 Add a task in either panel, toggle its completion Button, then remove it. Both
 panels subscribe independently through `useQuery` and update from the same
@@ -27,6 +30,10 @@ document tests. The latter drive real Input/Button events through the SDK,
 in-process backend, QuickJS and isolated SurrealKV storage under ignored
 `dist/tests/`. They check two-panel synchronization, disabled/pressed controls,
 quit/reopen persistence, cleanup, accepted-write shutdown and terminal errors.
+Compiler regressions also run the zero-option Vite config from workspace and app
+working directories in an isolated checkout with spaces. They check generated
+HTML/CSS, original frontend/backend maps, missing-input and build failures,
+SSR/DOM guards, and the separation of runtime and build-tool ambient types.
 These automated checks do not replace the physical foreground-window/IME gate.
 
 ## Bounded POC data policy
@@ -47,14 +54,19 @@ revisited with a shared transactional guard if feature handlers become concurren
 
 ## Boundaries and lifetime
 
-- `schema.ts` and `todo.ts` are portable SDK backend modules. SDK bundling owns
-  function discovery, registry generation, validation, and generated API types.
-- `_view/` contains the Solid screen and themed native shell. Its private prefix
-  keeps frontend code out of backend function discovery. Frontend code imports
-  generated API references, never the backend's schema or handlers at runtime.
-- `_tools/` reuses the SDK bundler, guarded Vite universal configuration, and UI
-  Tailwind compiler. Generated references and `dist/` are not source artifacts.
-- `_host/connection.rs` feeds owned JSON requests to one Tower session. Its
+- `backend/` is the explicit SDK discovery root: schema, Todo functions, and the
+  private data-budget helper. Feature IDs remain `todo:list`, `todo:add`,
+  `todo:toggle`, and `todo:remove`. The generated API lives in
+  `backend/_generated/`; the SDK still owns validation and registry generation.
+- `src/` contains Rust hosting and the Solid frontend. `src/main.tsx` mounts the
+  core Todo screen from `src/pages/todos.tsx`, without routing or plugin packaging.
+  Frontend code imports generated references, never schema or handler values.
+- Root `vite.config.ts` installs the zero-options internal `@tokamak/build/vite`
+  integration. It reuses SDK bundling, the shared guarded Solid universal compiler,
+  and the shared Tailwind compiler. Minimal HTML, the mount point, and compiled
+  CSS are generated into `dist/shell.html`; no app-specific HTML is maintained.
+  Backend maps are rebased when copied from `backend/dist/` into `dist/`.
+- `src/connection.rs` feeds owned JSON requests to one Tower session. Its
   64-entry request queue has a 64 KiB per-message limit. Session events remain
   ordered through the renderer's bounded generation-scoped mailbox; a reserved
   terminal envelope rejects pending promises on failure even at capacity. Error

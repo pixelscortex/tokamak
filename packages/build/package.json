@@ -1,0 +1,20 @@
+{
+  "name": "@tokamak/build",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./vite": "./src/vite.ts",
+    "./native": "./src/native.ts",
+    "./css": "./src/css.ts"
+  },
+  "dependencies": {
+    "@tokamak/sdk": "workspace:*",
+    "tailwindcss": "4.3.4",
+    "vite": "8.3.6",
+    "vite-plugin-solid": "2.11.15"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6"
+  }
+}

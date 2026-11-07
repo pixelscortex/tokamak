@@ -1,0 +1,11 @@
+# Internal source-only build tooling; no published compiler or product CLI.
+language: 'typescript'
+layer: 'library'
+workspace:
+  inheritedTasks:
+    include: ['check']
+tasks:
+  check:
+    command: 'proto run bun -- check --no-script --project tsconfig.json'
+    options:
+      mergeArgs: 'replace'
