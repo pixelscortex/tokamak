@@ -3,7 +3,7 @@
 
 use crate::{
     Error, Server, Session,
-    data::{Database, Storage},
+    data::{DataSpace, Database, Storage},
 };
 use engine::{Bundle, Pool, PoolConfig};
 use std::sync::Arc;
@@ -21,6 +21,10 @@ pub struct Backend {
 
 impl Backend {
     pub async fn start(config: BackendConfig) -> Result<Self, Error> {
+        Self::start_in_space(config, DataSpace::default()).await
+    }
+
+    pub async fn start_in_space(config: BackendConfig, space: DataSpace) -> Result<Self, Error> {
         // Validate/spawn workers before opening storage, so pool startup errors
         // cannot leave a live datastore behind. Server::load cleans failed bundles.
         let pool =
@@ -28,7 +32,7 @@ impl Backend {
         let database = Database::open(config.storage)
             .await
             .map_err(|e| Error::Invalid(e.to_string()))?;
-        let server = Server::load(database, pool, config.bundle).await?;
+        let server = Server::load_in_space(database, pool, config.bundle, space).await?;
         Ok(Self {
             server: Arc::new(server),
         })

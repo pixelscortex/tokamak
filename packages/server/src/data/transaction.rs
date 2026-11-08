@@ -4,7 +4,8 @@
 //! synchronously before returning. Rollback and failed commits publish nothing.
 
 use super::{
-    ChangeEvent, DatabaseState, Document, Error, Id, Query, Result, Table, types::check_fields,
+    ChangeEvent, DatabaseState, Document, Error, Id, Query, RecordChange, Result, Table,
+    changes::encoded_size, types::check_fields,
 };
 use std::{
     collections::BTreeSet,
@@ -23,6 +24,8 @@ pub struct Transaction {
     // Unlike a borrowed sender, this fits a 'static runtime callback safely.
     state: Arc<DatabaseState>,
     written: BTreeSet<Table>,
+    changes: Option<Vec<RecordChange>>,
+    change_bytes: usize,
     read_only: bool,
     failed: bool,
 }
@@ -37,9 +40,39 @@ impl Transaction {
             inner,
             state,
             written: BTreeSet::new(),
+            changes: Some(Vec::new()),
+            change_bytes: 0,
             read_only,
             failed: false,
         }
+    }
+
+    fn record(&mut self, before: Option<&Document>, after: Option<&Document>) {
+        let Some(changes) = &mut self.changes else {
+            return;
+        };
+        if changes.len() >= 64 {
+            self.changes = None;
+            return;
+        }
+        let before = before.cloned().map(Document::into_json);
+        let after = after.cloned().map(Document::into_json);
+        let Some(bytes) = encoded_size(
+            &(&before, &after),
+            32768usize.saturating_sub(self.change_bytes),
+        ) else {
+            self.changes = None;
+            return;
+        };
+        let id = after
+            .as_ref()
+            .or(before.as_ref())
+            .and_then(|v| v["_id"].as_str())
+            .expect("change has a before or after image")
+            .parse()
+            .expect("native record id");
+        changes.push(RecordChange { id, before, after });
+        self.change_bytes += bytes;
     }
 
     pub(crate) fn ready(&self, write: bool) -> Result<()> {
@@ -126,6 +159,7 @@ impl Transaction {
                 .pop()
                 .ok_or(Error::Invalid("insert returned no document"))?;
             self.written.insert(table.clone());
+            self.record(None, Some(&row));
             Ok(row.id)
         }
         .await;
@@ -176,6 +210,7 @@ impl Transaction {
             // not our pre-storage payload, decides whether observers changed.
             if persisted.fields != old.fields {
                 self.written.insert(id.table().clone());
+                self.record(Some(&old), Some(&persisted));
             }
             Ok(())
         }
@@ -187,9 +222,9 @@ impl Transaction {
     pub async fn delete(&mut self, id: &Id) -> Result<()> {
         let result = async {
             self.ready(true)?;
-            if self.get(id).await?.is_none() {
+            let Some(old) = self.get(id).await? else {
                 return Ok(());
-            }
+            };
             let mut bindings = Object::new();
             bindings.insert("id", id.record());
             let rows = self
@@ -197,6 +232,7 @@ impl Transaction {
                 .await?;
             if !rows.is_empty() {
                 self.written.insert(id.table().clone());
+                self.record(Some(&old), None);
             }
             Ok(())
         }
@@ -220,6 +256,7 @@ impl Transaction {
             // No receivers is normal before live subscriptions are installed.
             let _ = self.state.changes.send(ChangeEvent {
                 tables: self.written.into_iter().collect(),
+                records: self.changes,
             });
         }
         Ok(())

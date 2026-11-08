@@ -83,3 +83,12 @@ export const timeout = mutation({
     await new Promise<never>(() => {});
   },
 });
+
+export const caughtForeign = mutation({
+  args: { id: v.string() },
+  handler: async ({ db }, { id }) => {
+    await db.insert('items', { value: 'must roll back after denied access' });
+    try { await db.get(id as Id); } catch {}
+    return 'caught';
+  },
+});

@@ -3,7 +3,9 @@
 //! host calls can commit atomically. Only this API publishes write footprints;
 //! there is deliberately no raw client, SQL entry point, or storage wiretap.
 
+mod changes;
 mod query;
+mod space;
 mod transaction;
 mod types;
 
@@ -13,7 +15,9 @@ mod types;
 #[path = "../../tests/internal/datastore_owner.rs"]
 mod ownership_tests;
 
+pub use changes::{ReadSet, RecordChange, json_equal};
 pub use query::Query;
+pub use space::{DataSpace, json_object};
 pub use surrealdb::types::{Object, SurrealValue, Value};
 pub use transaction::Transaction;
 pub use types::{Document, Error, Id, Order, Result, Table};
@@ -35,6 +39,9 @@ pub enum Storage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeEvent {
     pub tables: Vec<Table>,
+    /// None means conservatively invalidate the whole listed tables. Retained
+    /// record images are bounded; this remains an ephemeral notification.
+    pub records: Option<Vec<RecordChange>>,
 }
 
 /// The database owner. Transactions retain shared state rather than borrowing

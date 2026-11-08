@@ -14,6 +14,7 @@ pub enum Error {
     Startup(String),
     Invalid(&'static str),
     ReadOnly,
+    AccessDenied,
     FailedTransaction,
     MissingRecord,
     Busy,
@@ -41,6 +42,7 @@ impl fmt::Display for Error {
             Self::Startup(message) => f.write_str(message),
             Self::Invalid(message) => f.write_str(message),
             Self::ReadOnly => f.write_str("read-only transactions cannot write"),
+            Self::AccessDenied => f.write_str("plugin data space does not own that record"),
             Self::FailedTransaction => {
                 f.write_str("an earlier operation failed; roll back this transaction")
             }
@@ -104,6 +106,10 @@ impl Id {
 
     pub fn table(&self) -> &Table {
         &self.table
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
     }
 
     pub(crate) fn record(&self) -> RecordId {

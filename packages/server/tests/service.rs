@@ -6,7 +6,7 @@ use engine::{Bundle, Engine, Json, Limits, OpRegistry, Pool, PoolConfig, QuickJs
 use serde_json::json;
 use server::{
     Error, Event, Server, Session,
-    data::{Database, Id, Object, Storage, Table, Value},
+    data::{DataSpace, Database, Id, Object, Storage, Table, Value},
 };
 use std::{
     collections::VecDeque,
@@ -217,6 +217,169 @@ impl Engine for Observed {
             .await;
         result
     }
+}
+
+#[test]
+fn equality_dependencies_skip_other_threads_and_track_moves_deletes_and_empty_reads() {
+    run(async {
+        let db = Database::open(Storage::Memory).await.unwrap();
+        let probe = Probe::default();
+        let server = Server::load(db, probe.pool(), bundle()).await.unwrap();
+        let mut reader = server.connect().await.unwrap();
+        let mut writer = server.connect().await.unwrap();
+        for (id, thread) in [(1, "A"), (2, "B")] {
+            reader
+                .subscribe(
+                    id,
+                    "probe:filtered",
+                    json!({
+                        "field":"thread","value":thread,"descending":false,"limit":10
+                    }),
+                )
+                .unwrap();
+            assert_eq!(update(&mut reader, id).await, json!([]));
+        }
+        assert_eq!(probe.count("filtered"), 2);
+        let id = call(
+            &mut writer,
+            10,
+            "insert",
+            json!({"table":"items","value":{"thread":"A"}}),
+        )
+        .await;
+        assert_eq!(
+            probe.count("filtered"),
+            3,
+            "B must not execute for A's insert"
+        );
+        assert_eq!(update(&mut reader, 1).await.as_array().unwrap().len(), 1);
+        call(
+            &mut writer,
+            11,
+            "patch",
+            json!({"id":id,"value":{"thread":"B"}}),
+        )
+        .await;
+        assert_eq!(
+            probe.count("filtered"),
+            5,
+            "a move affects both old and new keys"
+        );
+        assert_eq!(update(&mut reader, 1).await, json!([]));
+        assert_eq!(update(&mut reader, 2).await.as_array().unwrap().len(), 1);
+        call(
+            &mut writer,
+            12,
+            "insert",
+            json!({"table":"items","value":{"thread":"C"}}),
+        )
+        .await;
+        assert_eq!(
+            probe.count("filtered"),
+            5,
+            "neither A nor B should execute for C"
+        );
+        call(&mut writer, 13, "remove", json!({"id":id})).await;
+        assert_eq!(probe.count("filtered"), 6);
+        assert_eq!(update(&mut reader, 2).await, json!([]));
+        writer
+            .call(14, "probe:rollback", json!({"caught":false}))
+            .unwrap();
+        assert!(response(&mut writer, 14).await.is_err());
+        assert_eq!(
+            probe.count("filtered"),
+            6,
+            "rolled-back writes cannot invalidate"
+        );
+        call(
+            &mut writer,
+            15,
+            "insert",
+            json!({"table":"items","value":{
+                "thread":"C","body":"x".repeat(40000)
+            }}),
+        )
+        .await;
+        assert_eq!(
+            probe.count("filtered"),
+            8,
+            "oversized footprints safely fall back to whole table"
+        );
+        drop(reader);
+        drop(writer);
+        server.close().await.unwrap();
+    });
+}
+
+#[test]
+fn plugin_spaces_are_collision_free_and_caught_cross_space_access_rolls_back() {
+    run(async {
+        let db = Database::open(Storage::Memory).await.unwrap();
+        let a = DataSpace::plugin("acme.notes").unwrap();
+        let b = DataSpace::plugin("acme_notes").unwrap();
+        let items = Table::new("items").unwrap();
+        assert_ne!(a.table(&items).unwrap(), b.table(&items).unwrap());
+        let mut seed = db.begin().await.unwrap();
+        let foreign = seed
+            .insert(&b.table(&items).unwrap(), Object::new())
+            .await
+            .unwrap();
+        seed.commit().await.unwrap();
+        let foreign = b.present_id(&foreign).unwrap();
+        assert!(matches!(
+            a.id(&foreign),
+            Err(server::data::Error::AccessDenied)
+        ));
+        let probe = Probe::default();
+        let server = Server::load_in_space(db, probe.pool(), bundle(), a)
+            .await
+            .unwrap();
+        let mut session = server.connect().await.unwrap();
+        let id = call(
+            &mut session,
+            1,
+            "insert",
+            json!({"table":"items","value":{"text":"private"}}),
+        )
+        .await;
+        assert!(id.as_str().unwrap().starts_with("acme.notes/items:"));
+        assert_eq!(
+            call(&mut session, 2, "get", json!({"id":id})).await["_id"],
+            id
+        );
+        session.call(3, "probe:get", json!({"id":foreign})).unwrap();
+        assert!(
+            response(&mut session, 3)
+                .await
+                .unwrap_err()
+                .contains("does not own")
+        );
+        session
+            .call(4, "probe:caughtForeign", json!({"id":foreign}))
+            .unwrap();
+        assert!(
+            response(&mut session, 4)
+                .await
+                .unwrap_err()
+                .contains("does not own")
+        );
+        let rows = call(&mut session, 5, "list", json!({"table":"items"})).await;
+        assert_eq!(
+            rows.as_array().unwrap().len(),
+            1,
+            "denied operation poisons the entire mutation"
+        );
+        let physical = DataSpace::plugin("acme_notes")
+            .unwrap()
+            .table(&items)
+            .unwrap();
+        assert_eq!(
+            call(&mut session, 6, "list", json!({"table":physical.as_str()})).await,
+            json!([])
+        );
+        drop(session);
+        server.close().await.unwrap();
+    });
 }
 
 async fn next(session: &mut Session) -> Event {
@@ -463,9 +626,8 @@ fn subscription_invalidation_dedup_and_writer_barrier() {
         assert_eq!(update(&mut s, 101).await, json!(1));
         let id = response(&mut s, 2).await.unwrap();
         assert_eq!(rows[0]["_id"], id);
-        // Missing get has a table-level dependency too: another ID's write
-        // reruns it even though its unchanged null must not be resent.
-        assert_eq!(probe.count("get"), 2);
+        // Missing gets retain a dependency on their exact ID, not every row.
+        assert_eq!(probe.count("get"), 1);
         // Same table, different row/field: rerun count, but don't resend its 1.
         s.call(3, "probe:patch", json!({"id":id,"value":{"value":2}}))
             .unwrap();

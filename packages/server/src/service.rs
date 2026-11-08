@@ -6,7 +6,7 @@
 pub use crate::protocol::Event;
 use crate::protocol::Request;
 use crate::{
-    data::{ChangeEvent, Database, Table},
+    data::{ChangeEvent, DataSpace, Database},
     host::{self, ReadSet},
 };
 use engine::{Bundle, OpRegistry, Pool};
@@ -62,9 +62,19 @@ pub struct Server {
 
 impl Server {
     pub async fn load(
+        database: Database,
+        pool: Arc<Pool>,
+        bundle: Arc<Bundle>,
+    ) -> Result<Self, Error> {
+        Self::load_in_space(database, pool, bundle, DataSpace::default()).await
+    }
+
+    /// Kernel-selected plugin space. Callers cannot select it in request payloads.
+    pub async fn load_in_space(
         mut database: Database,
         pool: Arc<Pool>,
         bundle: Arc<Bundle>,
+        space: DataSpace,
     ) -> Result<Self, Error> {
         let inspected = inspect(&pool, bundle.clone()).await;
         let (descriptor, kinds) = match inspected {
@@ -88,6 +98,7 @@ impl Server {
             pool,
             bundle,
             kinds,
+            space,
             changes,
             sessions: BTreeMap::new(),
             next_session: 0,
@@ -434,6 +445,7 @@ struct Coordinator {
     pool: Arc<Pool>,
     bundle: Arc<Bundle>,
     kinds: BTreeMap<String, bool>,
+    space: DataSpace,
     changes: broadcast::Receiver<ChangeEvent>,
     sessions: BTreeMap<u64, Client>,
     next_session: u64,
@@ -474,7 +486,7 @@ impl Coordinator {
                 _ = self.cleanup.notified() => {},
                 change = self.changes.recv() => {
                     match change {
-                        Ok(change) => self.invalidate(Some(&change.tables)),
+                        Ok(change) => self.invalidate(Some(&change)),
                         Err(broadcast::error::RecvError::Lagged(_)) => self.invalidate(None),
                         Err(broadcast::error::RecvError::Closed) => break,
                     }
@@ -520,13 +532,10 @@ impl Coordinator {
         }
     }
 
-    fn invalidate(&mut self, tables: Option<&[Table]>) {
+    fn invalidate(&mut self, change: Option<&ChangeEvent>) {
         for client in self.sessions.values_mut() {
             for sub in client.subscriptions.values_mut() {
-                if sub.uncertain
-                    || tables
-                        .is_none_or(|tables| tables.iter().any(|table| sub.reads.contains(table)))
-                {
+                if sub.uncertain || change.is_none_or(|change| sub.reads.affected(change)) {
                     sub.dirty = true;
                 }
             }
@@ -538,7 +547,7 @@ impl Coordinator {
         // invalidates everything; no growing table/event history is retained.
         for _ in 0..256 {
             match self.changes.try_recv() {
-                Ok(change) => self.invalidate(Some(&change.tables)),
+                Ok(change) => self.invalidate(Some(&change)),
                 Err(broadcast::error::TryRecvError::Lagged(_)) => self.invalidate(None),
                 Err(_) => return,
             }
@@ -575,6 +584,7 @@ impl Coordinator {
                                 &name,
                                 args.clone(),
                                 mutation,
+                                &self.space,
                             )
                             .await;
                             if mutation && call.conflict {
@@ -671,6 +681,7 @@ impl Coordinator {
                 &name,
                 args,
                 false,
+                &self.space,
             )
             .await;
             let sub = self

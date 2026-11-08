@@ -2,13 +2,13 @@
 //! reaches JavaScript. Futures are boxed at the database boundary to keep the
 //! embedded engine's large debug futures off the QuickJS worker's native stack.
 
-use crate::data::{self, Document, Id, Object, Order, SurrealValue, Table, Transaction, Value};
+use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
 use engine::{Bundle, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
-use std::{collections::BTreeSet, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub(crate) type ReadSet = BTreeSet<Table>;
+pub(crate) use crate::data::ReadSet;
 
 type SharedTransaction = Arc<Mutex<Option<Transaction>>>;
 
@@ -51,6 +51,7 @@ pub(crate) async fn invoke(
     name: &str,
     args: Json,
     mutation: bool,
+    space: &DataSpace,
 ) -> Call {
     let tx = if mutation {
         Box::pin(db.begin()).await
@@ -80,9 +81,11 @@ pub(crate) async fn invoke(
     ] {
         let shared = shared.clone();
         let observations = observations.clone();
+        let space = space.clone();
         ops.register_async(operation, move |payload| {
             let shared = shared.clone();
             let observations = observations.clone();
+            let space = space.clone();
             // This future is polled directly, never detached on another executor.
             // Runtime retirement drops it before replying; taking the Option below
             // revokes even retained callbacks before commit/rollback can start.
@@ -100,6 +103,7 @@ pub(crate) async fn invoke(
                 let result = Box::pin(operation_call(
                     tx,
                     &mut lease.observed.reads,
+                    &space,
                     operation,
                     payload,
                 ))
@@ -176,69 +180,55 @@ fn text<'a>(payload: &'a Json, key: &str) -> data::Result<&'a str> {
     ))
 }
 
-fn object(value: &Json) -> data::Result<Object> {
-    match value.clone().into_value() {
-        Value::Object(object) => Ok(object),
-        _ => Err(data::Error::Invalid("document must be a JSON object")),
-    }
-}
-
-fn document(doc: Document) -> Json {
-    let mut value = Value::Object(doc.fields).into_json_value();
-    let fields = value
-        .as_object_mut()
-        .expect("native object converts to JSON object");
-    fields.insert("_id".into(), json!(doc.id.to_string()));
-    fields.insert("_creationTime".into(), json!(doc.creation_time));
-    value
-}
-
-// JavaScript has one numeric type: serde_json distinguishes 1 and 1.0, while
-// SDK structural equality must not. The subscription results themselves have
-// already crossed JSON.stringify in QuickJS and can use ordinary Value equality.
-fn json_equal(a: &Json, b: &Json) -> bool {
-    match (a, b) {
-        (Json::Number(a), Json::Number(b)) => a.as_f64() == b.as_f64(),
-        (Json::Array(a), Json::Array(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| json_equal(a, b))
-        }
-        (Json::Object(a), Json::Object(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .all(|(k, a)| b.get(k).is_some_and(|b| json_equal(a, b)))
-        }
-        _ => a == b,
-    }
-}
-
 async fn operation_call(
     tx: &mut Transaction,
     reads: &mut ReadSet,
+    space: &DataSpace,
     op: &str,
     payload: Json,
 ) -> data::Result<Json> {
     match op {
         "db.get" => {
-            let id: Id = text(&payload, "id")?.parse()?;
-            reads.insert(id.table().clone()); // Missing records are dependencies too.
-            Ok(Box::pin(tx.get(&id))
+            let id = space.id(text(&payload, "id")?)?;
+            reads.record(id.clone()); // Missing records are dependencies too.
+            Box::pin(tx.get(&id))
                 .await?
-                .map(document)
-                .unwrap_or(Json::Null))
+                .map(|doc| space.document(doc))
+                .transpose()
+                .map(|doc| doc.unwrap_or(Json::Null))
         }
         "db.query" => {
-            let table = Table::new(text(&payload, "table")?)?;
-            reads.insert(table.clone()); // Includes empty results and limit zero.
+            let table = space.table(&Table::new(text(&payload, "table")?)?)?;
             let mut clauses = Vec::new();
+            let mut record_dependency = None;
             for clause in field(&payload, "where")?
                 .as_array()
                 .ok_or(data::Error::Invalid("where must be an array"))?
             {
-                let name = text(clause, "field")?;
+                let name = text(clause, "field")?.to_owned();
                 if name.is_empty() {
                     return Err(data::Error::Invalid("filter field must be nonempty"));
                 }
-                clauses.push((name, field(clause, "value")?));
+                let mut value = field(clause, "value")?.clone();
+                if name == "_id" {
+                    if let Some(raw) = value.as_str() {
+                        match space.id(raw) {
+                            Ok(id) => {
+                                value = space.present_id(&id)?.into();
+                                record_dependency = Some(id);
+                            }
+                            Err(data::Error::AccessDenied) => {
+                                return Err(data::Error::AccessDenied);
+                            }
+                            Err(_) => {} // Invalid ID equality is an empty read, not a SQL expression.
+                        }
+                    }
+                }
+                clauses.push((name, value));
+            }
+            match record_dependency {
+                Some(id) => reads.record(id),
+                None => reads.filter(table.clone(), clauses.clone()),
             }
             let query = tx.query(&table).order(match text(&payload, "order")? {
                 "asc" => Order::Asc,
@@ -262,12 +252,15 @@ async fn operation_call(
             // same snapshot in storage order, then apply SDK JSON equality and
             // limit here, rather than interpreting dotted keys or SQL NONE/null.
             let rows = Box::pin(query.collect()).await?;
+            let rows = rows
+                .into_iter()
+                .map(|doc| space.document(doc))
+                .collect::<data::Result<Vec<_>>>()?;
             Ok(Json::Array(
                 rows.into_iter()
-                    .map(document)
                     .filter(|doc| {
                         clauses.iter().all(|(key, expected)| {
-                            doc.get(*key)
+                            doc.get(key)
                                 .is_some_and(|actual| json_equal(actual, expected))
                         })
                     })
@@ -276,16 +269,18 @@ async fn operation_call(
             ))
         }
         "db.insert" => {
-            let table = Table::new(text(&payload, "table")?)?;
-            let value = object(field(&payload, "value")?)?;
-            Ok(json!(Box::pin(tx.insert(&table, value)).await?.to_string()))
+            let table = space.table(&Table::new(text(&payload, "table")?)?)?;
+            let value = json_object(field(&payload, "value")?)?;
+            Ok(json!(
+                space.present_id(&Box::pin(tx.insert(&table, value)).await?)?
+            ))
         }
         "db.patch" | "db.replace" | "db.delete" => {
-            let id: Id = text(&payload, "id")?.parse()?;
+            let id = space.id(text(&payload, "id")?)?;
             if op == "db.delete" {
                 Box::pin(tx.delete(&id)).await?;
             } else {
-                let value = object(field(&payload, "value")?)?;
+                let value = json_object(field(&payload, "value")?)?;
                 if op == "db.patch" {
                     Box::pin(tx.patch(&id, value)).await?;
                 } else {

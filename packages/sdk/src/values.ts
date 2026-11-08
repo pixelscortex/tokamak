@@ -19,10 +19,11 @@ export function assertTable(table: string): void {
 }
 
 export function assertId(value: unknown, table?: string): asserts value is Id {
+  const logical = typeof value === "string" ? value.slice(value.indexOf("/") + 1) : "";
   if (
     typeof value !== "string" ||
-    !/^[A-Za-z][A-Za-z0-9_]*:[A-Za-z0-9_-]+$/.test(value) ||
-    (table !== undefined && !value.startsWith(`${table}:`))
+    !/^(?:[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\/)?[A-Za-z][A-Za-z0-9_]*:[A-Za-z0-9_-]+$/.test(value) ||
+    (table !== undefined && !logical.startsWith(`${table}:`))
   ) {
     throw new Error(`Expected ${table ?? "table"}:key record id`);
   }
