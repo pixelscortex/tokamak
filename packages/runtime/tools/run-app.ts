@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 import { ensure, localDirectory, status, stop } from "./local-server";
 
 const [command = "app", profile = "release"] = process.argv.slice(2);
@@ -9,7 +10,10 @@ if (!["app", "start", "stop", "status"].includes(command) || !["debug", "release
 }
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const suffix = process.platform === "win32" ? ".exe" : "";
-const binary = resolve(root, `target/${profile}/tokamak${suffix}`);
+let binary = resolve(root, `target/${profile}/tokamak${suffix}`);
+if (!existsSync(binary) && ["stop", "status"].includes(command)) {
+  binary = resolve(root, `target/${profile === "debug" ? "release" : "debug"}/tokamak${suffix}`);
+}
 const directory = localDirectory(binary, root);
 if (command === "stop") {
   await stop(directory);

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const result = spawnSync(process.execPath, ["x", "--no-install", "vite", "build"], {
+const result = spawnSync(process.execPath, [
+  fileURLToPath(new URL("../../packages/build/src/build.ts", import.meta.url)),
+], {
   cwd: fileURLToPath(new URL("./fixtures/todo/", import.meta.url)),
   stdio: "inherit", timeout: 30_000,
 });

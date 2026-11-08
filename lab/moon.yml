@@ -5,7 +5,7 @@ workspace:
     include: []
 tasks:
   bundle:
-    command: 'proto run bun -- x --no-install vite build'
+    command: 'proto run bun -- ../packages/build/src/build.ts'
     options:
       cache: false
   check:

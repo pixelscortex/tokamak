@@ -1,6 +1,7 @@
 /* No preflight: native text editing keeps Blitz's own input defaults.
  * True state is attribute presence; focus indication deliberately includes mouse
  * focus until TKM-14 provides native focus-visible modality. */
+@import "tailwindcss/theme.css";
 @import "tailwindcss/utilities";
 @import "./theme.css";
 

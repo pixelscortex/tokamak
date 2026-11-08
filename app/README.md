@@ -8,7 +8,8 @@ There is no product router, plugin loader or invented Core schema yet.
 ## Commands (repository root)
 
 ```sh
-bun run app            # build/start or reuse server, then launch desktop
+bun run app            # debug build/start or reuse server, then launch desktop
+bun run app:dev        # same development path
 bun run build          # explicit release server + desktop
 bun run ui:lab         # independent native UI, no backend/storage
 bun run server:start
@@ -17,10 +18,12 @@ bun run server:stop
 ```
 
 `runtime::client` owns native execution, local WebSocket discovery and bounded
-client disposal. Main declares only title, geometry and assets. The server
+client disposal. Main consumes a generated context; `app.config.json` declares
+title and geometry. The server
 survives desktop quit/crash. Explicit stop awaits backend/storage shutdown.
-Fast debug/incremental asset publication and generated context wiring remain
-TKM-41, not this Todo retirement step.
+The shared artifact builder preserves no-op embed mtimes, and Cargo's build
+helper validates the artifact and generates context into OUT_DIR.
+Release/full-LTO builds remain explicit, not part of the development loop.
 
 ## Local service
 

@@ -12,6 +12,9 @@ path = "src/main.rs"
 [dependencies]
 runtime = { path = "../packages/runtime", features = ["client"] }
 
+[build-dependencies]
+tokamak-build = { path = "../packages/build" }
+
 # Native document tests drive the same Blitz controls as the desktop shell.
 [dev-dependencies]
 server = { path = "../packages/server" }

@@ -6,7 +6,7 @@ workspace:
     include: []
 tasks:
   bundle:
-    command: 'proto run bun -- x --no-install vite build'
+    command: 'proto run bun -- ../packages/build/src/build.ts'
     options:
       cache: false
   check:
@@ -26,16 +26,22 @@ tasks:
       cache: false
       mutex: 'cargo'
   run:
-    deps: ['build']
-    command: 'proto run bun -- ../packages/runtime/tools/run-app.ts app'
+    deps: ['dev-build']
+    command: 'proto run bun -- ../packages/runtime/tools/run-app.ts app debug'
     options:
       cache: false
       persistent: true
   server-start:
-    deps: ['build']
-    command: 'proto run bun -- ../packages/runtime/tools/run-app.ts start'
+    deps: ['dev-build']
+    command: 'proto run bun -- ../packages/runtime/tools/run-app.ts start debug'
     options:
       cache: false
+  dev-build:
+    deps: ['bundle']
+    command: 'cargo build --locked --package tokamak-app --package server --bins --jobs 2'
+    options:
+      cache: false
+      mutex: 'cargo'
   test:
     deps: ['bundle']
     command: 'sh tests/run.sh'

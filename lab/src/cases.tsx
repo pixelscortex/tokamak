@@ -62,7 +62,7 @@ const cases = [
 export default function ComponentLab() {
   const [category, setCategory] = createSignal("All");
   const [revision, setRevision] = createSignal(1);
-  return <main id="lab" class="lab">
+  return <main id="lab" class="p-[18px] min-[681px]:p-7 max-w-[1500px] mx-auto">
     <header class="header"><span>Tokamak / UI</span><span class="eyebrow">NATIVE COMPONENT LAB</span></header>
     <div class="intro">
       <div><p class="eyebrow">BUILDING BLOCKS, IN CONTEXT</p><h1>Component lab</h1>
@@ -75,7 +75,7 @@ export default function ComponentLab() {
       }</For>
     </nav>
     <Show when={revision()} keyed>{(_revision: number) =>
-      <div class="grid">
+      <div class="grid grid-cols-1 min-[681px]:grid-cols-2 min-[1001px]:grid-cols-3 gap-5 items-start">
         <For each={cases}>{entry =>
           <Show when={category() === "All" || category() === entry.category}>
             <section class="card" id={`lab-case-${entry.id}`}>

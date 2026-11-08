@@ -18,10 +18,12 @@
     "test": "moon run :test",
     "e2e": "moon run :e2e",
     "app": "moon run app:run",
+    "app:dev": "moon run app:run",
+    "plugin:build": "proto run bun -- packages/build/src/build.ts",
     "ui:lab": "moon run lab:run",
     "server:start": "moon run app:server-start",
-    "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop",
-    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status"
+    "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop debug",
+    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug"
   },
   "devDependencies": {
     "vite": "8.3.6"

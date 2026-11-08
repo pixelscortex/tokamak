@@ -81,6 +81,22 @@ fn cards_fit_wide_and_narrow_native_viewports() {
             ..Default::default()
         });
         doc.inner_mut().resolve(0.0);
+        let rects = ["inputs", "actions", "settings"].map(|name| {
+            doc.inner()
+                .get_client_bounding_rect(support::id(&doc, &format!("lab-case-{name}")))
+                .unwrap()
+        });
+        if width > 1000 {
+            assert_eq!(rects[0].y, rects[2].y, "three columns");
+        } else if width > 680 {
+            assert_eq!(rects[0].y, rects[1].y, "two columns");
+            assert!(rects[2].y > rects[0].y);
+        } else {
+            assert!(
+                rects[0].y < rects[1].y && rects[1].y < rects[2].y,
+                "one column"
+            );
+        }
         for name in ["inputs", "actions", "settings", "foundations"] {
             let id = support::id(&doc, &format!("lab-case-{name}"));
             let rect = doc.inner().get_client_bounding_rect(id).unwrap();

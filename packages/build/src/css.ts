@@ -1,23 +1,19 @@
 /** Build-time Tailwind only: QuickJS receives CSS, never a compiler/scanner. */
-import { compile } from "tailwindcss";
+import { compile } from "@tailwindcss/node";
+import { Scanner } from "@tailwindcss/oxide";
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 
 export async function compileCss(path: string): Promise<string> {
   const compiler = await compile(await readFile(path, "utf8"), {
     base: dirname(path),
-    async loadStylesheet(id, base) {
-      const file = id.startsWith(".")
-        ? resolve(base, id)
-        : createRequire(resolve(base, "package.json")).resolve(id);
-      return {
-        path: file,
-        base: dirname(file),
-        content: await readFile(file, "utf8"),
-      };
-    },
+    from: path,
+    onDependency() {},
   });
-  // All POC rules use @apply. No homegrown source scanner or dynamic candidates.
-  return compiler.build([]);
+  const automatic = compiler.root === "none" ? [] : [{
+    ...(compiler.root ?? { base: dirname(path), pattern: "**/*" }), negated: false,
+  }];
+  // The maintained scanner owns extraction, ignores and @source semantics.
+  const scanner = new Scanner({ sources: [...automatic, ...compiler.sources] });
+  return compiler.build(scanner.scan());
 }

@@ -17,7 +17,7 @@ tasks:
       cache: false
       mutex: 'cargo'
   size:
-    deps: ['build-release', 'app:build']
+    deps: ['app:build']
     # stat fails on a missing artifact, unlike reporting an absent baseline as zero.
     command:
       - 'proto'

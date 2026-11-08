@@ -1,6 +1,8 @@
 // Public portable SDK. Build-time helpers stay in tools/ and are not exported,
 // so importing the SDK in QuickJS cannot load Bun or Node tooling.
 export { v, validate } from "./validators";
+export { definePlugin } from "./plugin";
+export type { PluginDefinition } from "./plugin";
 export type { Validator, ValidatorDescription, Fields, Infer, ObjectValue } from "./validators";
 
 export { defineSchema, defineTable } from "./schema";

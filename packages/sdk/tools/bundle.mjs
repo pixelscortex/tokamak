@@ -132,7 +132,7 @@ export async function bundleFeature(folder) {
     if (check.exitCode !== 0)
       throw new Error("Feature type check failed (only ES2022 globals are allowed)");
     const built = await Bun.build({
-      entrypoints: [entry],
+      entrypoints: ["tokamak-feature:entry"],
       target: "browser",
       format: "esm",
       splitting: false,
@@ -143,6 +143,17 @@ export async function bundleFeature(folder) {
       env: "disable",
       allowUnresolved: [],
       plugins: [
+        {
+          name: "stable-feature-entry",
+          setup(build) {
+            build.onResolve({ filter: /^tokamak-feature:entry$/ }, () => ({
+              path: "entry", namespace: "tokamak-feature",
+            }));
+            build.onLoad({ filter: /.*/, namespace: "tokamak-feature" }, () => ({
+              contents: source, loader: "ts", resolveDir: root,
+            }));
+          },
+        },
         {
           name: "portable-sdk",
           setup(build) {
@@ -177,5 +188,8 @@ if (import.meta.main) {
   if (process.argv.length !== 3) throw new Error("sdk:bundle expects exactly one feature folder");
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
   // from either the repository root or the feature's own moon configuration.
-  await bundleFeature(resolve(sdkRoot, "../..", process.argv[2]));
+  const feature = resolve(sdkRoot, "../..", process.argv[2]);
+  // Bun's generated module comments/debug IDs must not depend on caller cwd.
+  process.chdir(feature);
+  await bundleFeature(feature);
 }

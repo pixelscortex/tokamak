@@ -2,7 +2,7 @@
  * config in a disposable spaced checkout; never edit production build sources.
  * NativeDocument tests separately execute the actual generated app artifacts. */
 import assert from "node:assert/strict";
-import { copyFile, cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -31,7 +31,7 @@ function command(args: string[], cwd = fixture) {
 }
 function build(fromRoot = false) {
   return command(
-    ["x", "--no-install", "vite", "build", ...(fromRoot ? ["--config", "app/vite.config.ts"] : [])],
+    [join(repository, "packages/build/src/build.ts"), ...(fromRoot ? ["--config", "app/vite.config.ts"] : [])],
     fromRoot ? workspace : fixture,
   );
 }
@@ -82,9 +82,48 @@ try {
   // Acceptance: use the ACTUAL zero-options config from both CLI entry points.
   // A space in the checkout path catches incorrect cwd resolution/quoting.
   const config = await readFile(join(fixture, "vite.config.ts"), "utf8");
-  assert.match(config, /plugins:\s*\[\s*tokamak\(\)\s*\]/);
+  assert.match(config, /plugins:\s*\[\s*tokamak\(/);
   succeeds(build(true), "workspace-cwd zero-option Vite build");
   succeeds(build(), "app-cwd zero-option Vite build");
+
+  const assets = ["ui.js", "ui.js.map", "shell.html", "bundle.js", "bundle.js.map",
+    "styles.css", "manifest.json", "api.ts"];
+  const before = await Promise.all(assets.map(async name => ({
+    name, bytes: await readFile(join(fixture, "dist", name)),
+    time: (await stat(join(fixture, "dist", name), { bigint: true })).mtimeNs,
+  })));
+  const artifact = JSON.parse(before[6]!.bytes.toString());
+  assert.equal(artifact.formatVersion, 1);
+  assert.deepEqual(artifact.plugin, { id: "tokamak.app", version: "0.1.0" });
+  assert.equal(artifact.entries.backend.code, "bundle.js");
+  assert.equal(artifact.entries.ui.css, "styles.css");
+  succeeds(build(true), "deterministic no-op workspace build");
+  succeeds(build(), "deterministic no-op target build");
+  for (const { name, bytes, time } of before) {
+    assert.deepEqual(await readFile(join(fixture, "dist", name)), bytes, name);
+    assert.equal((await stat(join(fixture, "dist", name), { bigint: true })).mtimeNs, time, name);
+  }
+  await writeFile(join(fixture, "dist/shell.html"), "corrupt output");
+  succeeds(build(), "repair corrupt output");
+  assert.deepEqual(await readFile(join(fixture, "dist/shell.html")), before[2]!.bytes);
+  await rm(join(fixture, "dist/ui.js"));
+  succeeds(build(), "restore missing output");
+  assert.deepEqual(await readFile(join(fixture, "dist/ui.js")), before[0]!.bytes);
+  const uiTime = (await stat(join(fixture, "dist/ui.js"), { bigint: true })).mtimeNs;
+  const originalBackend = await readFile(backend, "utf8");
+  await changed(backend, originalBackend.replace("Enter a task title", "Enter a valid task title"), () => {
+    succeeds(build(), "backend-only edit");
+  });
+  assert.equal((await stat(join(fixture, "dist/ui.js"), { bigint: true })).mtimeNs, uiTime);
+  assert.notDeepEqual(await readFile(join(fixture, "dist/bundle.js")), before[3]!.bytes);
+  succeeds(build(), "restore backend");
+  const originalFrontend = await readFile(frontend, "utf8");
+  const originalMap = await readFile(join(fixture, "dist/ui.js.map"), "utf8");
+  await changed(frontend, `// Map-only edit\n${originalFrontend}`, () => succeeds(build(), "map-only edit"));
+  assert.deepEqual(await readFile(join(fixture, "dist/ui.js")), before[0]!.bytes);
+  assert.notEqual(await readFile(join(fixture, "dist/ui.js.map"), "utf8"), originalMap);
+  assert.equal((await stat(join(fixture, "dist/ui.js"), { bigint: true })).mtimeNs, uiTime);
+  succeeds(build(), "restore frontend map");
 
   // Acceptance: no maintained HTML is necessary. CSS and the single native
   // mount point come from the production integration, not a test-written shell.
@@ -113,6 +152,15 @@ try {
   const backendMap = JSON.parse(await readFile(join(fixture, "dist/bundle.js.map"), "utf8"));
   assert(backendMap.sources.some((source: string) => source === "../backend/todo.ts"),
     "final backend map must resolve from app/dist back to original backend source");
+  await writeFile(join(fixture, "artifact-consumer.ts"), `
+    import { api } from "./dist/api";
+    import type { ArgsOf } from "@tokamak/sdk";
+    const args: ArgsOf<typeof api.todo.add> = { title: "Typed packaged API" };
+  `);
+  await writeFile(join(fixture, "artifact-consumer.json"), JSON.stringify({
+    extends: "./tsconfig.json", files: ["artifact-consumer.ts"], include: [], exclude: [],
+  }));
+  succeeds(command(["check", "--no-script", "--project", "artifact-consumer.json"]), "packaged API consumer");
 
   // Failure mode: a previous successful dist must never disguise a missing
   // frontend, missing backend root, missing CSS, TSX parse or module error.
@@ -159,8 +207,33 @@ try {
     () => rejects(build(), /Expected Solid production client runtime|Browser\/dev runtime leaked/,
       "browser DOM runtime guard"));
 
+  const configPath = join(fixture, "vite.config.ts");
+  await changed(configPath,
+    'import {tokamak} from "@tokamak/build/vite"; export default {plugins:[tokamak({ui:false})]};',
+    async () => {
+      await rm(join(fixture, "dist"), { recursive: true });
+      succeeds(build(), "backend-only artifact");
+      const manifest = JSON.parse(await readFile(join(fixture, "dist/manifest.json"), "utf8"));
+      assert(manifest.entries.backend);
+      assert.equal(manifest.entries.ui, undefined);
+      assert(!((await readdir(join(fixture, "dist"))).includes("ui.js")));
+    });
+  await changed(configPath,
+    'import {tokamak} from "@tokamak/build/vite"; export default {plugins:[tokamak({backend:false})]};',
+    async () => {
+      await changed(frontend, 'import {mount} from "@tokamak/render"; mount(() => <p>UI only</p>);',
+        async () => {
+          await rm(join(fixture, "dist"), { recursive: true });
+          await missing(join(fixture, "backend"), () => succeeds(build(), "UI-only with no backend directory"));
+          const manifest = JSON.parse(await readFile(join(fixture, "dist/manifest.json"), "utf8"));
+          assert(manifest.entries.ui);
+          assert.equal(manifest.entries.backend, undefined);
+          assert(!((await readdir(join(fixture, "dist"))).includes("bundle.js")));
+        });
+    });
+  await missing(configPath, () => succeeds(build(), "convention build without a Vite config"));
   succeeds(build(), "restored zero-option production build");
-  console.log("PASS zero-option compiler: root/app/spaced cwd, generated shell/CSS, maps, errors, guards and ambient types");
+  console.log("PASS artifact build: stable bytes/mtimes, root/spaced cwd, repair, partial edits, optional entries, maps, guards and types");
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }

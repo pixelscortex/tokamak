@@ -7108,9 +7108,18 @@ dependencies = [
  "runtime",
  "serde_json",
  "server",
+ "tokamak-build",
  "tokio",
  "tokio-tungstenite",
  "tower",
+]
+
+[[package]]
+name = "tokamak-build"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7123,6 +7132,7 @@ dependencies = [
  "render",
  "runtime",
  "serde_json",
+ "tokamak-build",
 ]
 
 [[package]]
