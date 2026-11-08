@@ -1,0 +1,73 @@
+Cargo.lock
+  s_549dee89b200e8::t_0f8dd2965869df 5516-5517
+packages/build/src/vite.ts
+  s_549dee89b200e8::t_1fa96845aaf92f 11,65,104-114
+packages/engine/src/bridge.rs
+  s_549dee89b200e8::t_9f0806b597f096 7,14,26-68,108-118,164-181,202-278
+packages/engine/src/engine.rs
+  s_549dee89b200e8::t_9eb0c20272fb6c 181-190,205
+packages/engine/src/lib.rs
+  s_549dee89b200e8::t_c2c33a343d4c02 12
+packages/engine/src/source_map.rs
+  s_549dee89b200e8::t_fca817fa437bf7 6,14
+packages/engine/tests/modules.rs
+  s_549dee89b200e8::t_3ec35be3625e64 1-57
+packages/sdk/src/api.ts
+  s_549dee89b200e8::t_d0c10a8119ef0d 31,37
+packages/sdk/src/functions.ts
+  s_549dee89b200e8::t_2bba2cf8b96bd0 11-12,20-25,28-29,34-35,79-82,85-86,88,98-114
+packages/sdk/src/host.ts
+  s_549dee89b200e8::t_b3ace5d3568b9a 38-39
+packages/sdk/src/plugin.ts
+  s_549dee89b200e8::t_98cbe4306d4f24 2-3,7-16,33,39-42,47-81
+packages/sdk/tests/plugin.test.mjs
+  s_549dee89b200e8::t_40a22f82254362 18,31-55
+packages/sdk/tools/bundle.mjs
+  s_549dee89b200e8::t_0d13fe9f20d331 45,80,188-190,196
+packages/server/Cargo.toml
+  s_549dee89b200e8::t_85b50539bf608f 23-24
+packages/server/README.md
+  s_549dee89b200e8::t_27f3826fc02263 5-8,101-102
+packages/server/src/backend.rs
+  s_549dee89b200e8::t_d619865d93c63d 23-37
+packages/server/src/host.rs
+  s_549dee89b200e8::t_90c2d741bc4536 6,14,51,56,58-77,95-156,169,174,182,189-200,215-230,232-265,267-269,271
+packages/server/src/lib.rs
+  s_549dee89b200e8::t_bfc6a8e2151400 12
+packages/server/src/main.rs
+  s_549dee89b200e8::t_629f475ca4fa62 39-109,115,120-122,129,140,156-159,162,175-192
+packages/server/src/websocket.rs
+  s_549dee89b200e8::t_1f0fabee638e2f 8,87-89,159-204
+packages/server/tests/fixtures/plugins/.gitignore
+  s_549dee89b200e8::t_1c369fc65578b0 1
+packages/server/tests/fixtures/plugins/a/backend/ops.ts
+  s_549dee89b200e8::t_e5d57713e017f2 1-20
+packages/server/tests/fixtures/plugins/a/backend/tsconfig.json
+  s_549dee89b200e8::t_0c162e4b99e9f6 1-6
+packages/server/tests/fixtures/plugins/a/package.json
+  s_549dee89b200e8::t_11f0a7df7301bf 1
+packages/server/tests/fixtures/plugins/a/vite.config.ts
+  s_549dee89b200e8::t_1eede1a12a2b6e 1-4
+packages/server/tests/fixtures/plugins/b/backend/tsconfig.json
+  s_549dee89b200e8::t_4e974d75f2ff3f 1-6
+packages/server/tests/fixtures/plugins/b/package.json
+  s_549dee89b200e8::t_99a898be76cc2b 1
+packages/server/tests/fixtures/plugins/b/vite.config.ts
+  s_549dee89b200e8::t_00918b12345ad4 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c259f726daad1bff5c75a3a39f24a6419bc3fca1",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
