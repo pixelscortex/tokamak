@@ -1,5 +1,4 @@
-/** The sole native frontend entry mounts the core Todo screen, without routing. */
+/** Minimal product shell; Core/plugin contracts are the next milestone. */
 import { mount } from "@tokamak/render";
-import Todos from "./pages/todos";
 
-mount(Todos);
+mount(() => <main><h1>Tokamak</h1><p>Ready for Core and plugins.</p></main>);

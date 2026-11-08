@@ -7114,6 +7114,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokamak-lab"
+version = "0.1.0"
+dependencies = [
+ "blitz-dom",
+ "blitz-traits",
+ "keyboard-types",
+ "render",
+ "runtime",
+ "serde_json",
+]
+
+[[package]]
 name = "tokio"
 version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

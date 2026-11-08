@@ -4,6 +4,7 @@
   "type": "module",
   "workspaces": [
     "app",
+    "lab",
     "packages/build",
     "packages/sdk",
     "packages/runtime",
@@ -17,6 +18,7 @@
     "test": "moon run :test",
     "e2e": "moon run :e2e",
     "app": "moon run app:run",
+    "ui:lab": "moon run lab:run",
     "server:start": "moon run app:server-start",
     "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop",
     "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status"

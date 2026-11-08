@@ -47,8 +47,8 @@ fn native_roundtrip(root: &Path, write: bool) -> Value {
             storage: Storage::Disk(root.join("store")),
             bundle: Arc::new(
                 Bundle::new(
-                    include_str!("../dist/bundle.js"),
-                    Some(include_str!("../dist/bundle.js.map")),
+                    include_str!("fixtures/todo/dist/bundle.js"),
+                    Some(include_str!("fixtures/todo/dist/bundle.js.map")),
                 )
                 .unwrap(),
             ),
@@ -57,9 +57,12 @@ fn native_roundtrip(root: &Path, write: bool) -> Value {
         .unwrap();
     let session = rt.block_on(backend.connect()).unwrap();
     let (send, receive) = connection::admission();
-    let mut doc =
-        NativeDocument::new_connected(include_str!("../dist/shell.html"), &bridge, Some(send))
-            .unwrap();
+    let mut doc = NativeDocument::new_connected(
+        include_str!("fixtures/todo/dist/shell.html"),
+        &bridge,
+        Some(send),
+    )
+    .unwrap();
     let (host, mut mailbox) = HostMailbox::new(&doc, || {});
     let (ready, receiver) = oneshot::channel();
     assert!(ready.send(host).is_ok());

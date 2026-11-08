@@ -2,7 +2,7 @@
 // Bun's parser scans module exports without executing feature code on the build
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,6 +44,7 @@ function apiType(modules) {
 /** Called only by moon; there is no installable binary or SDK CLI. */
 export async function bundleFeature(folder) {
   const root = resolve(folder);
+  if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const files = [];
   const scanner = new Bun.Transpiler({ loader: "ts" });
   for await (const file of new Bun.Glob("**/*.ts").scan({
@@ -67,7 +68,7 @@ export async function bundleFeature(folder) {
     files.push(file);
   }
   files.sort();
-  if (files.length === 0) throw new Error(`No feature TypeScript modules in ${root}`);
+  // An explicit empty product backend is valid; a missing root still fails.
   const modules = files.map((file) => file.slice(0, -3));
   const type = apiType(modules);
   const generated = join(root, "_generated");

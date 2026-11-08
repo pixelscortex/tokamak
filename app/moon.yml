@@ -10,11 +10,15 @@ tasks:
     options:
       cache: false
   check:
-    deps: ['bundle']
+    deps: ['bundle', 'fixture-bundle']
     command: 'proto run bun -- ../packages/build/src/check-app.ts'
     options:
       cache: false
       mutex: 'cargo'
+  fixture-bundle:
+    command: 'proto run bun -- tests/build-todo.ts'
+    options:
+      cache: false
   build:
     deps: ['bundle']
     command: 'cargo build --locked --release --package tokamak-app --package server --bins --jobs 2'

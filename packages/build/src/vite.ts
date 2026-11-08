@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { compileCss } from "./css.ts";
 import { nativeConfig, nativePlugins } from "./native.ts";
 
-export function tokamak(): PluginOption {
+export function tokamak(options: { backend?: false } = {}): PluginOption {
   let root: string;
   return [
     ...nativePlugins(),
@@ -38,25 +38,27 @@ export function tokamak(): PluginOption {
         return { ...native, root };
       },
       async buildStart() {
-        // SDK discovery/checking is Bun-only. Invoke its existing pinned entry
-        // even if Vite itself was launched through Node's standard CLI.
-        const bundled = spawnSync("proto", [
-          "run", "bun", "--",
-          fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
-          resolve(root, "backend"),
-        ], { stdio: "inherit" });
-        if (bundled.error) throw bundled.error;
-        if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
-        const bundle = resolve(root, "backend/dist/bundle.js");
-        const source = await readFile(bundle, "utf8");
-        const map = JSON.parse(await readFile(`${bundle}.map`, "utf8"));
-        // SDK maps are relative to backend/dist. Rebase source names when the
-        // unchanged bundle is packaged into app/dist; retain original contents.
-        map.sources = map.sources.map((source: string) =>
-          relative(resolve(root, "dist"), resolve(dirname(bundle), source)).split(sep).join("/"),
-        );
-        this.emitFile({ type: "asset", fileName: "bundle.js", source });
-        this.emitFile({ type: "asset", fileName: "bundle.js.map", source: JSON.stringify(map) });
+        if (options.backend !== false) {
+          // SDK discovery/checking is Bun-only. Invoke its existing pinned entry
+          // even if Vite itself was launched through Node's standard CLI.
+          const bundled = spawnSync("proto", [
+            "run", "bun", "--",
+            fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
+            resolve(root, "backend"),
+          ], { stdio: "inherit" });
+          if (bundled.error) throw bundled.error;
+          if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
+          const bundle = resolve(root, "backend/dist/bundle.js");
+          const source = await readFile(bundle, "utf8");
+          const map = JSON.parse(await readFile(`${bundle}.map`, "utf8"));
+          // SDK maps are relative to backend/dist. Rebase source names when the
+          // unchanged bundle is packaged into app/dist; retain original contents.
+          map.sources = map.sources.map((source: string) =>
+            relative(resolve(root, "dist"), resolve(dirname(bundle), source)).split(sep).join("/"),
+          );
+          this.emitFile({ type: "asset", fileName: "bundle.js", source });
+          this.emitFile({ type: "asset", fileName: "bundle.js.map", source: JSON.stringify(map) });
+        }
         const css = await compileCss(resolve(root, "src/styles.css"));
         this.emitFile({
           type: "asset",

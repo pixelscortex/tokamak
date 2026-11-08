@@ -11,6 +11,7 @@ projects:
   ui: 'packages/ui'
   build: 'packages/build'
   app: 'app'
+  lab: 'lab'
 vcs:
   defaultBranch: 'main'
   provider: 'github'

@@ -58,11 +58,16 @@ async function missing(path: string, check: () => void) {
 }
 
 try {
+  assert.doesNotMatch(await readFile(join(app, "backend/_generated/api.ts"), "utf8"), /readonly "todo"/,
+    "retired Todo must not be registered by the product backend");
   await mkdir(fixture, { recursive: true });
-  await cp(join(app, "src"), join(fixture, "src"), { recursive: true });
+  // Keep the original end-to-end compiler regressions against retired Todo,
+  // but use the actual product's zero-option build configuration.
+  await cp(join(app, "tests/fixtures/todo/src"), join(fixture, "src"), { recursive: true });
   await mkdir(join(fixture, "backend"));
   for (const name of ["schema.ts", "todo.ts", "_limits.ts", "tsconfig.json"]) {
-    await copyFile(join(app, "backend", name), join(fixture, "backend", name));
+    await copyFile(join(app, name === "tsconfig.json" ? "backend" : "tests/fixtures/todo/backend", name),
+      join(fixture, "backend", name));
   }
   for (const name of ["package.json", "vite.config.ts", "tsconfig.json", "tsconfig.tools.json"]) {
     await copyFile(join(app, name), join(fixture, name));
@@ -99,7 +104,7 @@ try {
 
   // Acceptance: shared compiler composition retains ORIGINAL TSX and backend
   // mappings, including the backend map's relocation into final app/dist.
-  await assertOriginalMapping(join(fixture, "dist/ui.js"), join(fixture, "src/pages/todos.tsx"), [
+  await assertOriginalMapping(join(fixture, "dist/ui.js"), join(fixture, "src/todos.tsx"), [
     ["First view", 'name="First view"'], ["New task", 'label="New task"'],
   ]);
   await assertOriginalMapping(join(fixture, "dist/bundle.js"), backend, [

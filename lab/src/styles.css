@@ -1,0 +1,42 @@
+@import "@tokamak/ui/styles.css";
+
+:root {
+  --color-canvas: #0c0c0d;
+  --color-surface: #181819;
+  --color-foreground: #ededee;
+  --color-muted: #a0a0a5;
+  --color-border: #39393d;
+  --color-accent: #303034;
+  --color-focus: #d4d4df;
+  --color-invalid: #f18b8b;
+}
+* { box-sizing: border-box; }
+body { @apply bg-canvas text-foreground font-sans; margin: 0; font-size: 15px; }
+p, h1, h2 { margin: 0; }
+p, footer { color: var(--color-muted); line-height: 1.6; }
+h1 { font-size: 34px; margin: 8px 0; }
+h2 { font-size: 18px; font-weight: 500; }
+.lab { max-width: 1500px; margin: 0 auto; padding: 28px; }
+.header, .intro { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.header { padding-bottom: 28px; border-bottom: 1px solid var(--color-border); font-size: 18px; }
+.intro { padding: 32px 0 24px; }
+.eyebrow { color: var(--color-muted); font-size: 11px; letter-spacing: 1px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.card { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; overflow: hidden; }
+.card-header { display: flex; flex-direction: column; gap: 9px; padding: 22px; border-bottom: 1px solid var(--color-border); }
+.card-body { padding: 22px; }
+.stack { display: flex; flex-direction: column; gap: 18px; }
+.token { display: flex; align-items: center; gap: 12px; }
+.swatch { width: 28px; height: 28px; border: 1px solid var(--color-border); border-radius: 8px; }
+.swatch-canvas { background: var(--color-canvas); }
+.swatch-surface { background: var(--color-surface); }
+.swatch-foreground { background: var(--color-foreground); }
+.swatch-accent { background: var(--color-accent); }
+footer { margin-top: 28px; padding: 20px 0; border-top: 1px solid var(--color-border); font-size: 13px; }
+@media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .lab { padding: 18px; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .intro { flex-direction: column; align-items: start; }
+}

@@ -23,6 +23,19 @@
         "vite": "8.3.6",
       },
     },
+    "lab": {
+      "name": "@tokamak/lab",
+      "dependencies": {
+        "@tokamak/ui": "workspace:*",
+        "solid-js": "1.9.18",
+      },
+      "devDependencies": {
+        "@tokamak/build": "workspace:*",
+        "@tokamak/render": "workspace:*",
+        "@types/node": "26.6.6",
+        "vite": "8.3.6",
+      },
+    },
     "packages/build": {
       "name": "@tokamak/build",
       "version": "0.1.0",
@@ -169,6 +182,8 @@
     "@tokamak/app": ["@tokamak/app@workspace:app"],
 
     "@tokamak/build": ["@tokamak/build@workspace:packages/build"],
+
+    "@tokamak/lab": ["@tokamak/lab@workspace:lab"],
 
     "@tokamak/render": ["@tokamak/render@workspace:packages/render"],
 

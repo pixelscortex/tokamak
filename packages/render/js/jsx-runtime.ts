@@ -77,6 +77,9 @@ export namespace JSX {
     p: Attributes;
     main: Attributes;
     section: Attributes;
+    header: Attributes;
+    nav: Attributes;
+    footer: Attributes;
     h1: Attributes;
     h2: Attributes;
     label: Attributes;

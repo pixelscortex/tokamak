@@ -13,6 +13,8 @@ function dependencies(args: string[]) {
 const client = dependencies(["--package", "tokamak-app"]);
 assert(!/^(server |surrealdb)/m.test(client), "desktop must not own a database/backend");
 assert(/^engine /m.test(client), "client uses the common JavaScript engine");
+assert(!/^(server |surrealdb)/m.test(dependencies(["--package", "tokamak-lab"])),
+  "UI lab must not depend on a datastore");
 const server = dependencies(["--package", "runtime", "--no-default-features", "--features", "server"]);
 assert(!/^(render |blitz-|wgpu|winit |anyrender|vello)/m.test(server), "server-only runtime must not pull in GUI");
 assert(/^server /m.test(server));

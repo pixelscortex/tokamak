@@ -14,11 +14,12 @@ sources in `app/src/` and SDK backend functions in `app/backend/`.
 | `packages/sdk/` | TypeScript feature API, `@tokamak/sdk` |
 | `packages/ui/` | TypeScript UI library, `@tokamak/ui` |
 | `packages/build/` | Private shared Vite/Solid/theme build integration |
-| `app/` | Single desktop composition root and core Todo screen |
+| `app/` | Thin product shell, reserved for Core and plugins |
+| `lab/` | Independent native UI component catalog and interaction checks |
 
 Root `plugins/` is reserved for future first-class plugins; it is not scaffolded.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
-names and Moon IDs for real packages are unchanged; the sole app project is `app`.
+names remain unchanged; `app` and `lab` are separate application projects.
 
 ## Commands
 
@@ -38,6 +39,10 @@ Moon/Cargo orchestration, not browser HMR or an unpinned installer.
 The desktop connects to an independent local server. `bun run app` starts or
 reuses it; desktop exit does not stop it. `bun run server:status`,
 `bun run server:stop` and `bun run server:start` control the local service.
+
+`bun run ui:lab` opens the component catalog without starting a server or
+touching user storage. Todo is retired from the product and retained only in
+`app/tests/fixtures/todo` for the native, compiler and five E2E regressions.
 
 `.prototools` pins moon, Bun, and Rust. Moon's built-in toolchains read those
 pins and manage their tool caches and dependency installation; no custom proto
