@@ -4,7 +4,27 @@
 use engine::{Bundle, PoolConfig};
 use server::{Backend, BackendConfig, data::Storage, websocket};
 use sha2::{Digest, Sha256};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    fs::File,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
+
+fn local_ownership(directory: &Path) -> Result<File, Box<dyn std::error::Error>> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options.open(directory.join("server-owner.lock"))?;
+    file.try_lock()
+        .map_err(|error| format!("Cannot acquire local server ownership: {error}"))?;
+    Ok(file)
+}
 
 fn local_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(std::env::var_os("TOKAMAK_SERVER_DIR")
@@ -81,6 +101,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
+    // Keep ownership until AFTER ready-file removal. The database lock alone
+    // releases during close(): a replacement could otherwise publish readiness
+    // in that gap and have this process remove the replacement's descriptor.
+    let _local_owner = local.as_deref().map(local_ownership).transpose()?;
     let bundle = Arc::new(Bundle::new(source, None)?);
     // Bind first: an unavailable address must not open storage or JS workers.
     let listener = tokio::net::TcpListener::bind(listen).await?;
@@ -147,5 +171,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Err(error), Ok(())) => Err(error.into()),
         (Ok(()), Err(error)) => Err(error.into()),
         (Err(error), Err(close)) => Err(format!("{error}; shutdown failed: {close}").into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn local_owner_covers_database_close_and_discovery_cleanup() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("dist/tests/local-owner-{}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        let owner = local_ownership(&path).unwrap();
+        // Model the phase after the datastore lock has been released but the
+        // old process has not yet removed its discovery file.
+        assert!(local_ownership(&path).is_err());
+        drop(owner);
+        let replacement = local_ownership(&path).unwrap();
+        drop(replacement);
+        std::fs::remove_dir_all(path).unwrap();
     }
 }

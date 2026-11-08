@@ -1,5 +1,6 @@
 /** Real local launcher/process checks, always using isolated ignored storage. */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,13 @@ try {
     ensure(binary, bundle, directory), ensure(binary, bundle, directory),
   ]);
   assert.deepEqual(second, first, "concurrent launchers must reuse one ready server");
+  const duplicate = spawnSync(binary, ["--local-dir", directory, "--bundle", bundle], {
+    encoding: "utf8", timeout: 5000,
+  });
+  assert.ifError(duplicate.error);
+  assert.notEqual(duplicate.status, 0);
+  assert.match(duplicate.stderr, /Cannot acquire local server ownership/);
+  assert.deepEqual(await status(directory), first, "another process cannot replace readiness");
   const capability = await readFile(resolve(directory, "server.token"), "utf8");
   if (process.platform !== "win32") {
     assert.equal((await stat(resolve(directory, "server.token"))).mode & 0o077, 0);

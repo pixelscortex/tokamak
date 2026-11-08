@@ -13,6 +13,9 @@ port and publishes `server.json` after backend startup. Capability-protected
 the loaded bundle hash; the launcher refuses to reuse a different revision.
 The capability is never included in discovery, URLs or command arguments.
 Shutdown removes discovery only after storage has closed.
+An OS-held `server-owner.lock` spans startup through final discovery cleanup.
+It is released by the OS on process failure; do not delete the lock file to
+try to steal ownership. This closes the datastore-close/readiness-removal race.
 
 `tokamak --local-path` discovers the standard application directory without
 opening storage. Desktop and server retain the existing application store.
