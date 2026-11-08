@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 for (const [command, ...args] of [
+  [process.execPath, "check", "--no-script", "--project", "tsconfig.json"],
   [process.execPath, "check", "--no-script", "--project", "tools/tsconfig.json"],
   ["cargo", "fmt", "--package", "runtime", "--", "--check"],
   ["cargo", "check", "--locked", "--package", "runtime", "--all-features", "--all-targets", "--jobs", "2"],

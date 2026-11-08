@@ -2,10 +2,15 @@
   "name": "@tokamak/runtime",
   "private": true,
   "type": "module",
+  "exports": {
+    "./router": "./js/router.ts"
+  },
   "devDependencies": {
     "@types/node": "26.6.6"
   },
   "dependencies": {
-    "@tokamak/render": "workspace:*"
+    "@tokamak/render": "workspace:*",
+    "@tanstack/history": "1.162.5",
+    "solid-js": "1.9.18"
   }
 }

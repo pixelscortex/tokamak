@@ -7,6 +7,6 @@ tasks:
     options:
       mergeArgs: 'replace'
   test:
-    command: 'cargo test --locked --package runtime --all-features --lib --jobs 2'
+    command: 'sh tests/run.sh'
     options:
       mergeArgs: 'replace'
