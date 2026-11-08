@@ -1,5 +1,5 @@
 //! Combined backend library: embedded storage, feature workers, and one bounded
-//! Tower service. Desktop embeds sessions; WebSocket is an outer adapter only.
+//! Tower service. Desktop uses WebSocket; in-process sessions remain a library API.
 //! Application functions remain SDK bundles using call-owned tracked transactions,
 //! without SQL or an auto-committing feature capability.
 

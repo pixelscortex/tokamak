@@ -1,4 +1,4 @@
-//! App-owned wiring of the renderer MessageConnection to the ONE Tower session.
+//! Retained in-process regression harness, not the desktop's production transport.
 //! Requests and replies are owned/bounded; JS callbacks never leave the UI thread.
 use render::HostSender;
 use server::{Backend, Event, Session, SessionSender, protocol::Request};

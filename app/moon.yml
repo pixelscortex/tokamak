@@ -17,16 +17,21 @@ tasks:
       mutex: 'cargo'
   build:
     deps: ['bundle']
-    command: 'cargo build --locked --release --package tokamak-app --bin tokamak-desktop --jobs 2'
+    command: 'cargo build --locked --release --package tokamak-app --package server --bins --jobs 2'
     options:
       cache: false
       mutex: 'cargo'
   run:
     deps: ['build']
-    command: '../target/release/tokamak-desktop'
+    command: 'proto run bun -- ../packages/build/src/run-app.ts app'
     options:
       cache: false
       persistent: true
+  server-start:
+    deps: ['build']
+    command: 'proto run bun -- ../packages/build/src/run-app.ts start'
+    options:
+      cache: false
   test:
     deps: ['bundle']
     command: 'sh tests/run.sh'

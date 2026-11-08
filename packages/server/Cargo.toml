@@ -18,6 +18,8 @@ required-features = ["protocol-codegen"]
 protocol-codegen = ["dep:ts-rs"]
 
 [dependencies]
+directories = "=6.0.0"
+sha2 = "0.10.9"
 axum = { version = "0.8.9", default-features = false, features = ["ws", "http1", "tokio"] }
 tower = { version = "0.5.3", default-features = false }
 # Already used by the embedded engine; its owned cancellation future wakes

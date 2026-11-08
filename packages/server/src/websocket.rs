@@ -8,9 +8,10 @@ use axum::{
         State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use std::{
     future::Future,
@@ -37,6 +38,14 @@ struct Adapter {
     server: Arc<Server>,
     stopping: CancellationToken,
     connections: Arc<Semaphore>,
+    access: Option<LocalAccess>,
+}
+
+/// Local desktop capability. Never place the token in discovery, URLs or logs.
+#[derive(Clone)]
+pub struct LocalAccess {
+    pub token: String,
+    pub identity: serde_json::Value,
 }
 
 /// Own and await this future until completion, then close the backend. Shutdown
@@ -46,6 +55,15 @@ pub async fn serve(
     listener: TcpListener,
     server: Arc<Server>,
     shutdown: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    serve_with_access(listener, server, shutdown, None).await
+}
+
+pub async fn serve_with_access(
+    listener: TcpListener,
+    server: Arc<Server>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+    access: Option<LocalAccess>,
 ) -> std::io::Result<()> {
     if !listener.local_addr()?.ip().is_loopback() {
         return Err(std::io::Error::new(
@@ -59,8 +77,16 @@ pub async fn serve(
         server,
         stopping: stopping.clone(),
         connections: connections.clone(),
+        access: access.clone(),
     };
-    let app = Router::new().route("/ws", get(upgrade)).with_state(adapter);
+    let mut app = Router::new().route("/ws", get(upgrade));
+    if let Some(access) = access {
+        app = app
+            .route("/health", get(health))
+            .route("/shutdown", post(stop))
+            .layer(middleware::from_fn_with_state(access, authorize));
+    }
+    let app = app.with_state(adapter);
     // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
@@ -72,7 +98,10 @@ pub async fn serve(
     let trigger = stopping.clone();
     let result = axum::serve(listener, app)
         .with_graceful_shutdown(async move {
-            shutdown.await;
+            tokio::select! {
+                _ = shutdown => {},
+                _ = trigger.cancelled() => {},
+            }
             trigger.cancel();
         })
         .await;
@@ -81,6 +110,47 @@ pub async fn serve(
     // handshake, so none can escape this barrier and outlive storage shutdown.
     let _all = connections.acquire_many(CONNECTIONS).await;
     result
+}
+
+async fn authorize(
+    State(access): State<LocalAccess>,
+    headers: HeaderMap,
+    request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    // Native clients send the capability explicitly; browser contexts are not
+    // allowed even if a user accidentally gives a site the local token.
+    if headers.contains_key("origin") {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let expected = format!("Bearer {}", access.token);
+    let actual = headers
+        .get("authorization")
+        .map(|v| v.as_bytes())
+        .unwrap_or_default();
+    let mismatch = actual.len() != expected.len()
+        || actual
+            .iter()
+            .zip(expected.as_bytes())
+            .fold(0u8, |a, (x, y)| a | (x ^ y))
+            != 0;
+    if mismatch {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    next.run(request).await
+}
+
+async fn health(State(adapter): State<Adapter>) -> Response {
+    (
+        [("content-type", "application/json")],
+        adapter.access.expect("local route").identity.to_string(),
+    )
+        .into_response()
+}
+
+async fn stop(State(adapter): State<Adapter>) -> StatusCode {
+    adapter.stopping.cancel();
+    StatusCode::ACCEPTED
 }
 
 async fn upgrade(State(adapter): State<Adapter>, ws: WebSocketUpgrade) -> Response {

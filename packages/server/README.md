@@ -1,10 +1,31 @@
 # Backend runner, transports and embedded data
 
+## Independent desktop service
+
+The desktop now uses this standalone server over authenticated loopback
+WebSocket, not an embedded Backend. `bun run app` starts/reuses it.
+`bun run server:status` and `bun run server:stop` do not build anything.
+
+`tokamak --local-dir <directory> --bundle <path>` opens `<directory>/store`,
+reads a private 64-hex-character `server.token`, binds an ephemeral loopback
+port and publishes `server.json` after backend startup. Capability-protected
+`/health`, `/shutdown` and `/ws` reject browser Origins. Discovery includes
+the loaded bundle hash; the launcher refuses to reuse a different revision.
+The capability is never included in discovery, URLs or command arguments.
+Shutdown removes discovery only after storage has closed.
+
+`tokamak --local-path` discovers the standard application directory without
+opening storage. Desktop and server retain the existing application store.
+Normal desktop exit/crash does not stop the server. There is no automatic
+reconnect, mutation replay, crash supervisor or account-level remote access.
+The original unauthenticated loopback CLI/library mode below remains for
+existing tests and manual demonstrations. Do not expose it publicly.
+
 ## Library-first runner (TKM-7)
 
 `Backend::start(BackendConfig { storage, bundle, javascript: PoolConfig }).await`
-constructs storage and QuickJS workers together. Desktop calls `backend.connect()`
-without binding a port. `Backend::server()` exposes metadata and sessions, not raw
+constructs storage and QuickJS workers together. Library tests can call
+`backend.connect()` without a port. `Backend::server()` exposes metadata and sessions, not raw
 storage. Worker counts/queue/heap/time limits reuse `runtime::PoolConfig`: they
 are budgets, **not reserved cores or hard per-subsystem process memory limits**.
 JIT stays off. There is no separate DB service, replication or global sync.

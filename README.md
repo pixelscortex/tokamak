@@ -30,9 +30,13 @@ moon run :build
 moon run :size
 ```
 
-Root Bun aliases are `bun run build` (desktop release), `bun run check`,
+Root Bun aliases are `bun run build` (server + desktop release), `bun run check`,
 `bun run test`, and `bun run app` (build and launch). They invoke the existing
 Moon/Cargo orchestration, not browser HMR or an unpinned installer.
+
+The desktop connects to an independent local server. `bun run app` starts or
+reuses it; desktop exit does not stop it. `bun run server:status`,
+`bun run server:stop` and `bun run server:start` control the local service.
 
 `.prototools` pins moon, Bun, and Rust. Moon's built-in toolchains read those
 pins and manage their tool caches and dependency installation; no custom proto

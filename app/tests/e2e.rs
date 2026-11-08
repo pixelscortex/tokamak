@@ -1,7 +1,7 @@
 //! TKM-11 native SDK write → awaited close → reopen → snapshot for headless.
 //! Reuses the small SDK bridge fixture and production connection, not a second
 //! copy of the app's input harness. Existing native.rs covers real UI controls.
-#[path = "../src/connection.rs"]
+#[path = "support/embedded.rs"]
 mod connection;
 #[allow(dead_code)]
 #[path = "../../packages/render/tests/support/mod.rs"]

@@ -5497,9 +5497,11 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "directories",
  "runtime",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "surrealdb",
  "surrealdb-core",
  "tokio",
@@ -7086,12 +7088,14 @@ dependencies = [
  "blitz-dom",
  "blitz-traits",
  "directories",
+ "futures-util",
  "keyboard-types",
  "render",
  "runtime",
  "serde_json",
  "server",
  "tokio",
+ "tokio-tungstenite",
  "tower",
 ]
 

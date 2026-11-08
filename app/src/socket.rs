@@ -1,0 +1,241 @@
+//! Bounded native client transport. The independent server owns accepted writes.
+use futures_util::{SinkExt, StreamExt};
+use render::HostSender;
+use serde_json::Value;
+use std::{net::IpAddr, path::Path, time::Duration};
+use tokio::{
+    net::TcpStream,
+    sync::{mpsc, oneshot},
+    time::Instant,
+};
+use tokio_tungstenite::{
+    MaybeTlsStream, WebSocketStream,
+    tungstenite::{Message, client::IntoClientRequest, protocol::WebSocketConfig},
+};
+
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+pub async fn connect(directory: &Path) -> Result<Socket, Error> {
+    let descriptor: Value = serde_json::from_str(
+        &std::fs::read_to_string(directory.join("server.json"))
+            .map_err(|_| "Local server is not running; use `bun run app`")?,
+    )?;
+    let mut request = descriptor["url"]
+        .as_str()
+        .ok_or("Invalid server discovery")?
+        .into_client_request()?;
+    let uri = request.uri();
+    let host = uri
+        .host()
+        .ok_or("Missing local host")?
+        .trim_matches(['[', ']']);
+    if uri.scheme_str() != Some("ws")
+        || !host.parse::<IpAddr>()?.is_loopback()
+        || uri.path() != "/ws"
+        || uri.query().is_some()
+    {
+        return Err("Only loopback ws:// endpoints are supported".into());
+    }
+    let path = directory.join("server.token");
+    let metadata = std::fs::symlink_metadata(&path)?;
+    if !metadata.is_file() {
+        return Err("Capability must be a regular file".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err("Capability must be private (chmod 600)".into());
+        }
+    }
+    let token = std::fs::read_to_string(path)?;
+    if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("Invalid local capability".into());
+    }
+    let mut authorization =
+        format!("Bearer {token}").parse::<tokio_tungstenite::tungstenite::http::HeaderValue>()?;
+    authorization.set_sensitive(true);
+    request.headers_mut().insert("authorization", authorization);
+    let config = WebSocketConfig::default()
+        .write_buffer_size(0)
+        .max_write_buffer_size(128 * 1024)
+        .max_message_size(Some(64 * 1024))
+        .max_frame_size(Some(64 * 1024));
+    let (socket, _) = tokio::time::timeout(
+        Duration::from_secs(5),
+        tokio_tungstenite::connect_async_with_config(request, Some(config), true),
+    )
+    .await??;
+    Ok(socket)
+}
+
+pub fn admission() -> (render::MessageSender, mpsc::Receiver<String>) {
+    let (requests, receiver) = mpsc::channel(64);
+    (
+        Box::new(move |message: String| {
+            if message.len() > 64 * 1024 {
+                return Err(render::Error("Native request exceeds 64 KiB".into()));
+            }
+            requests
+                .try_send(message)
+                .map_err(|_| render::Error("Native request not admitted".into()))
+        }),
+        receiver,
+    )
+}
+
+fn header(value: &Value, event: bool) -> Option<(&str, u64)> {
+    let kind = value["type"].as_str()?;
+    let id = value["id"]
+        .as_u64()
+        .filter(|id| *id <= 9_007_199_254_740_991)?;
+    if event {
+        match kind {
+            "unsubscribed" => {}
+            "response" | "subscription" => {
+                let result = value["result"].as_object()?;
+                if result.len() != 1
+                    || !(result.contains_key("Ok")
+                        || result.get("Err").is_some_and(Value::is_string))
+                {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    } else {
+        match kind {
+            "query" | "mutation" | "subscribe" => {
+                value["name"].as_str()?;
+                value.as_object()?.get("args")?;
+            }
+            "unsubscribe" => {}
+            _ => return None,
+        }
+    }
+    Some((kind, id))
+}
+
+fn complete(expected: &Option<(String, u64)>, event: &Value) -> bool {
+    let Some((kind, id)) = header(event, true) else {
+        return false;
+    };
+    expected.as_ref().is_some_and(|(want, expected)| {
+        *expected == id && (want == kind || (want == "subscription" && kind == "response"))
+    })
+}
+
+pub async fn serve(
+    mut socket: Socket,
+    mut requests: mpsc::Receiver<String>,
+    mut host: oneshot::Receiver<HostSender>,
+    mut stopped: oneshot::Receiver<()>,
+) {
+    let mut output = tokio::select! {
+        host = &mut host => host.ok(),
+        _ = &mut stopped => None,
+    };
+    let mut closing = output.is_none();
+    let mut deadline = Instant::now() + Duration::from_secs(5);
+    let mut awaiting: Option<(String, u64)> = None;
+    if closing {
+        requests.close();
+    }
+    loop {
+        tokio::select! {
+            biased;
+            _ = &mut stopped, if !closing => {
+                output = None;
+                closing = true;
+                requests.close();
+                deadline = Instant::now() + Duration::from_secs(5);
+            },
+            _ = tokio::time::sleep_until(deadline), if closing => break,
+            event = socket.next() => {
+                match event {
+                    Some(Ok(Message::Text(text))) => {
+                        let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
+                        if header(&value, true).is_none() { break; }
+                        if complete(&awaiting, &value) { awaiting = None; }
+                        if let Some(sender) = &output {
+                            if sender.is_document_retired() {
+                                output = None;
+                                closing = true;
+                                requests.close();
+                                deadline = Instant::now() + Duration::from_secs(5);
+                            } else if sender.send("connection:event", value).is_err() { break; }
+                        }
+                    },
+                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => {},
+                    _ => break,
+                }
+            },
+            message = requests.recv(), if awaiting.is_none() => {
+                let Some(message) = message else { break };
+                let Ok(request) = serde_json::from_str::<Value>(&message) else { break };
+                if request.is_null() {
+                    output = None;
+                    closing = true;
+                    requests.close();
+                    deadline = Instant::now() + Duration::from_secs(5);
+                    continue;
+                }
+                let Some((kind, id)) = header(&request, false) else { break };
+                awaiting = Some((match kind {
+                    "subscribe" => "subscription", "unsubscribe" => "unsubscribed", _ => "response",
+                }.into(), id));
+                if !matches!(tokio::time::timeout(Duration::from_secs(5),
+                    socket.send(Message::Text(message.into()))).await, Ok(Ok(()))) { break; }
+            }
+        }
+    }
+    if let Some(sender) = output {
+        if !sender.is_document_retired() {
+            let _ = sender.finish(
+                "connection:close",
+                "Local server connection closed; mutation outcomes may be unknown",
+            );
+        }
+    }
+    // Never retry a mutation or shut down the server when a window disappears.
+    let _ = tokio::time::timeout(Duration::from_secs(1), socket.close(None)).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn completion_headers_validate_network_events_before_acknowledging() {
+        for value in [
+            json!({"type":"response","id":1,"result":{"Ok":null}}),
+            json!({"type":"response","id":1,"result":{"Err":"denied"}}),
+            json!({"type":"subscription","id":1,"result":{"Ok":[]}}),
+            json!({"type":"unsubscribed","id":1}),
+        ] {
+            assert!(serde_json::from_value::<server::Event>(value.clone()).is_ok());
+            assert!(header(&value, true).is_some());
+        }
+        for value in [
+            json!({"type":"response","id":1}),
+            json!({"type":"response","id":1,"result":{"Err":null}}),
+            json!({"type":"response","id":1,"result":{"Ok":null,"Err":"bad"}}),
+            json!({"type":"response","id":1.5,"result":{"Ok":null}}),
+            json!({"type":"response","id":-1,"result":{"Ok":null}}),
+            json!({"type":"unknown","id":1,"result":{"Ok":null}}),
+        ] {
+            assert!(serde_json::from_value::<server::Event>(value.clone()).is_err());
+            assert!(header(&value, true).is_none());
+        }
+        assert!(
+            header(
+                &json!({"type":"response","id":9_007_199_254_740_992u64,
+            "result":{"Ok":null}}),
+                true
+            )
+            .is_none()
+        );
+    }
+}
