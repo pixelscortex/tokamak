@@ -1,0 +1,23 @@
+app/tests/local-server.ts
+  s_549dee89b200e8::t_008ec378afb27c 3,40-46
+packages/server/README.md
+  s_549dee89b200e8::t_ece51195608bf0 16-18
+packages/server/src/main.rs
+  s_549dee89b200e8::t_1fa21dde671163 7-27,104-107,176-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a3c50a4e0d6c23742eaee0f266165b6902789a6",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
