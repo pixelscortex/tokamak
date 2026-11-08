@@ -1,0 +1,47 @@
+Cargo.lock
+  s_549dee89b200e8::t_d6423765b61898 5147
+bun.lock
+  s_549dee89b200e8::t_8ebc4a191a0d95 72,74,215-216
+packages/runtime/Cargo.toml
+  s_549dee89b200e8::t_1394a8cbfc7d1c 25-30
+packages/runtime/ROUTING.md
+  s_549dee89b200e8::t_01b4685dbf3a92 1-95
+packages/runtime/js/router.ts
+  s_549dee89b200e8::t_18c3e23cc00068 1-92
+packages/runtime/moon.yml
+  s_549dee89b200e8::t_01baa3a114f373 10
+packages/runtime/package.json
+  s_549dee89b200e8::t_f7aa01788d7a54 5-7,12-14
+packages/runtime/tests/build-router.ts
+  s_549dee89b200e8::t_1a9c2e170829f1 1-11
+packages/runtime/tests/router.rs
+  s_549dee89b200e8::t_1adc2a69baf502 1-51
+packages/runtime/tests/router.test.mjs
+  s_549dee89b200e8::t_ec7f5d5ee1b729 1-48
+packages/runtime/tests/router.tsx
+  s_549dee89b200e8::t_b4dbfd24ea1750 1-15
+packages/runtime/tests/run.sh
+  s_549dee89b200e8::t_723bf71079aa90 1-4
+packages/runtime/tools/check.ts
+  s_549dee89b200e8::t_e07e29c5f28a2f 4
+packages/runtime/tools/tsconfig.json
+  s_549dee89b200e8::t_fe9ed98b3fec99 8
+packages/runtime/tsconfig.json
+  s_549dee89b200e8::t_3cac3147a02cd7 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5f3b3be43487f058f96332d7c461448556574ebf",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
