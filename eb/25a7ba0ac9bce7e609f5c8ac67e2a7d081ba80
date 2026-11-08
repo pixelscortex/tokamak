@@ -1,0 +1,105 @@
+Cargo.lock
+  s_549dee89b200e8::t_3d0becb9f13a48 7111,7117-7124,7135
+Cargo.toml
+  s_549dee89b200e8::t_1948861700bd73 3
+README.md
+  s_549dee89b200e8::t_b998008e4a6161 36,39-42
+app/Cargo.toml
+  s_549dee89b200e8::t_a033edad80b0c9 15-17
+app/README.md
+  s_549dee89b200e8::t_6b9ce5f5df1825 11-12,21-22,24-26
+app/app.config.json
+  s_549dee89b200e8::t_e59eada7ae79ce 1-5
+app/build.rs
+  s_549dee89b200e8::t_ad1b2aeeefafb6 1-3
+app/moon.yml
+  s_549dee89b200e8::t_7f077b6db791cc 9,29-30,35-36,39-44
+app/src/main.rs
+  s_549dee89b200e8::t_336cf364978387 3
+app/src/styles.css
+  s_549dee89b200e8::t_8516424a1e19b2 2
+app/tests/build-todo.ts
+  s_549dee89b200e8::t_0832f44a92ffd0 6-8
+app/tests/compiler.ts
+  s_549dee89b200e8::t_8763e3f04fefdb 5,34,85,89-127,155-163,210-234,236
+app/vite.config.ts
+  s_549dee89b200e8::t_ab30c994509f73 4,6-8
+bun.lock
+  s_549dee89b200e8::t_cb67696f4f5d94 35,44-45,185-212,257-258,269-270,275-276,309-310,343-344,359-370
+lab/Cargo.toml
+  s_549dee89b200e8::t_03798580656132 10-12
+lab/README.md
+  s_549dee89b200e8::t_ed844c693ac27d 10-11,22-26
+lab/app.config.json
+  s_549dee89b200e8::t_45a3d8de0ec6f5 1-5
+lab/build.rs
+  s_549dee89b200e8::t_1a9660a7cc1317 1-3
+lab/moon.yml
+  s_549dee89b200e8::t_037760c352df46 8
+lab/package.json
+  s_549dee89b200e8::t_08a215f3b8c743 10
+lab/src/cases.tsx
+  s_549dee89b200e8::t_d83685d512c22b 65,78
+lab/src/main.rs
+  s_549dee89b200e8::t_b0229220a1f16f 3
+lab/src/styles.css
+  s_549dee89b200e8::t_dd8bd781a9f1a2 2
+lab/tests/native.rs
+  s_549dee89b200e8::t_b0957026817134 84-99
+lab/vite.config.ts
+  s_549dee89b200e8::t_f9280bbce73752 3-7
+moon.yml
+  s_549dee89b200e8::t_94238ae870fc35 20
+package.json
+  s_549dee89b200e8::t_7f1bad513fa5e3 21-22,25-26
+packages/build/Cargo.toml
+  s_549dee89b200e8::t_f7d3cc3f31f949 1-9
+packages/build/README.md
+  s_549dee89b200e8::t_e8dc2ffc08fd5b 1,3-5,7-19,23,26-76,79-103
+packages/build/moon.yml
+  s_549dee89b200e8::t_aad575964140b9 12-17
+packages/build/package.json
+  s_549dee89b200e8::t_8591616795d1b6 13-14
+packages/build/src/build.ts
+  s_549dee89b200e8::t_3441cd6e1ebbe0 1-57
+packages/build/src/css.ts
+  s_549dee89b200e8::t_0079325e8653f6 2-3,5,10-11,13-18
+packages/build/src/lib.rs
+  s_549dee89b200e8::t_520f73f737338a 1-200
+packages/build/src/vite.ts
+  s_549dee89b200e8::t_93855cedaac538 5,14,16,18,23,31-34,46-49,51-56,77-92,96-97,100-102
+packages/build/tests/css.test.ts
+  s_549dee89b200e8::t_88abc644ec00db 1-41
+packages/build/tests/run.sh
+  s_549dee89b200e8::t_00e8fe0e46caa8 1-5
+packages/runtime/src/lib.rs
+  s_549dee89b200e8::t_a20e6ea6481faf 5-13
+packages/runtime/tools/run-app.ts
+  s_549dee89b200e8::t_05c9644436689d 4,13-16
+packages/sdk/src/index.ts
+  s_549dee89b200e8::t_4a582342070ea6 4-5
+packages/sdk/src/plugin.ts
+  s_549dee89b200e8::t_bb8c812f565e44 1-33
+packages/sdk/tests/plugin.test.mjs
+  s_549dee89b200e8::t_16dbda8fa36e79 1-19
+packages/sdk/tools/bundle.mjs
+  s_549dee89b200e8::t_4f1ba1b4af977e 135,146-156,191-194
+packages/ui/src/styles.css
+  s_549dee89b200e8::t_71b34fb1d34463 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb25a7ba0ac9bce7e609f5c8ac67e2a7d081ba80",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
