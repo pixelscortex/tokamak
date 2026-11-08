@@ -88,6 +88,72 @@ impl Server {
                 };
             }
         };
+        Ok(Self::start(
+            database,
+            pool,
+            Some(bundle),
+            space,
+            descriptor,
+            kinds,
+            None,
+            None,
+        ))
+    }
+
+    /// All static manifests resolve before any plugin module is evaluated.
+    pub async fn load_plugins(
+        mut database: Database,
+        pool: Arc<Pool>,
+        root: &std::path::Path,
+    ) -> Result<Self, Error> {
+        let loaded = match crate::plugins::Catalog::read(root) {
+            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
+            Err(error) => Err(error),
+        };
+        let loaded = match loaded {
+            Ok(loaded) => Box::pin(loaded.record_grants(&database))
+                .await
+                .map(|()| loaded),
+            Err(error) => Err(error),
+        };
+        let loaded = match loaded {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                return match Box::pin(database.close()).await {
+                    Ok(()) => Err(error),
+                    Err(close) => Err(Error::Invalid(format!(
+                        "{error}; startup cleanup failed: {close}"
+                    ))),
+                };
+            }
+        };
+        let kinds = loaded
+            .targets
+            .iter()
+            .map(|(name, target)| (name.clone(), target.mutation))
+            .collect();
+        Ok(Self::start(
+            database,
+            pool,
+            None,
+            DataSpace::default(),
+            loaded.descriptor.clone(),
+            kinds,
+            Some(loaded),
+            Some(root.to_owned()),
+        ))
+    }
+
+    fn start(
+        database: Database,
+        pool: Arc<Pool>,
+        bundle: Option<Arc<Bundle>>,
+        space: DataSpace,
+        descriptor: Json,
+        kinds: BTreeMap<String, bool>,
+        plugins: Option<Arc<crate::plugins::Loaded>>,
+        plugin_root: Option<std::path::PathBuf>,
+    ) -> Self {
         let changes = database.subscribe(); // Before any initial subscription run.
         let (commands, receiver) = mpsc::channel(COMMANDS);
         let (closing, close_receiver) = mpsc::channel(1);
@@ -99,6 +165,8 @@ impl Server {
             bundle,
             kinds,
             space,
+            plugins,
+            plugin_root,
             changes,
             sessions: BTreeMap::new(),
             next_session: 0,
@@ -109,17 +177,41 @@ impl Server {
         // through COMMIT, invalidation, and ordered delivery. Client cancellation
         // does not abort finalization. Process/runtime failure remains unknown.
         tokio::spawn(actor.run(receiver, close_receiver));
-        Ok(Self {
+        Self {
             commands,
             closing,
             descriptor,
             cleanup,
             closed,
-        })
+        }
     }
 
     pub fn descriptor(&self) -> &Json {
         &self.descriptor
+    }
+
+    /// Ordered live metadata. descriptor() remains the legacy startup snapshot.
+    pub async fn plugins(&self) -> Result<Json, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::Plugins(reply))?;
+        wait.await.map_err(|_| Error::Closed)?
+    }
+
+    /// Replaces the complete installation generation, including dependent callers.
+    pub async fn reload_plugin(&self, id: String) -> Result<Json, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::Reload(id, reply))?;
+        wait.await.map_err(|_| Error::Closed)?
+    }
+
+    pub async fn plugin_asset(
+        &self,
+        id: String,
+        name: String,
+    ) -> Result<Option<Arc<Vec<u8>>>, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::Asset(id, name, reply))?;
+        wait.await.map_err(|_| Error::Closed)?
     }
 
     pub fn functions(&self) -> &[Json] {
@@ -179,7 +271,7 @@ impl Server {
     }
 }
 
-async fn inspect(
+pub(crate) async fn inspect(
     pool: &Pool,
     bundle: Arc<Bundle>,
 ) -> Result<(Json, BTreeMap<String, bool>), Error> {
@@ -406,6 +498,13 @@ type Connection = (
 enum Command {
     Connect(oneshot::Sender<Result<Connection, Error>>),
     Action(u64, Action),
+    Plugins(oneshot::Sender<Result<Json, Error>>),
+    Reload(String, oneshot::Sender<Result<Json, Error>>),
+    Asset(
+        String,
+        String,
+        oneshot::Sender<Result<Option<Arc<Vec<u8>>>, Error>>,
+    ),
 }
 
 enum Action {
@@ -443,9 +542,11 @@ struct Client {
 struct Coordinator {
     database: Database,
     pool: Arc<Pool>,
-    bundle: Arc<Bundle>,
+    bundle: Option<Arc<Bundle>>,
     kinds: BTreeMap<String, bool>,
     space: DataSpace,
+    plugins: Option<Arc<crate::plugins::Loaded>>,
+    plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
     sessions: BTreeMap<u64, Client>,
     next_session: u64,
@@ -454,6 +555,71 @@ struct Coordinator {
 }
 
 impl Coordinator {
+    fn metadata(&self) -> Result<Json, Error> {
+        let plugins = self.plugins.as_ref().ok_or_else(|| {
+            Error::Invalid("Server uses a legacy bundle, not a plugin installation".into())
+        })?;
+        let mut metadata = plugins.catalog.metadata();
+        metadata["functions"] = plugins.descriptor["functions"].clone();
+        Ok(metadata)
+    }
+
+    async fn control(&mut self, command: Command) {
+        match command {
+            Command::Plugins(reply) => {
+                let _ = reply.send(self.metadata());
+            }
+            Command::Asset(id, name, reply) => {
+                let result = self
+                    .plugins
+                    .as_ref()
+                    .ok_or_else(|| Error::Invalid("No plugin installation".into()))
+                    .map(|loaded| {
+                        loaded
+                            .catalog
+                            .plugins
+                            .get(&id)
+                            .and_then(|plugin| plugin.ui_asset(&name))
+                    });
+                let _ = reply.send(result);
+            }
+            Command::Reload(id, reply) => {
+                let result = self.reload(&id).await;
+                let _ = reply.send(result);
+            }
+            _ => unreachable!("application commands have their own admission path"),
+        }
+    }
+
+    async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+        let root = self
+            .plugin_root
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let catalog = crate::plugins::Catalog::read(root)?;
+        if !catalog.plugins.contains_key(id)
+            && !self
+                .plugins
+                .as_ref()
+                .is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
+        {
+            return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
+        }
+        let candidate = crate::plugins::Loaded::load(catalog, &self.pool).await?;
+        Box::pin(candidate.record_grants(&self.database)).await?;
+        // This command follows every previously accepted invocation's complete
+        // commit/rollback. Nothing below can fail before the generation swap.
+        self.kinds = candidate
+            .targets
+            .iter()
+            .map(|(name, target)| (name.clone(), target.mutation))
+            .collect();
+        self.plugins = Some(candidate);
+        self.invalidate(None);
+        self.refresh().await;
+        self.metadata()
+    }
+
     async fn run(
         mut self,
         mut commands: mpsc::Receiver<Command>,
@@ -476,6 +642,7 @@ impl Coordinator {
                         match command {
                             Command::Action(session, action) => self.action(session, action).await,
                             Command::Connect(reply) => { let _ = reply.send(Err(Error::Closed)); }
+                            command => self.control(command).await,
                         }
                     }
                     let result = Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
@@ -506,6 +673,7 @@ impl Coordinator {
                         if reply.send(Ok((id, receiver, slow, alive))).is_err() { self.sessions.remove(&id); }
                     }
                     Some(Command::Action(session, action)) => self.action(session, action).await,
+                    Some(command) => self.control(command).await,
                     None => break,
                 }
             }
@@ -585,6 +753,7 @@ impl Coordinator {
                                 args.clone(),
                                 mutation,
                                 &self.space,
+                                self.plugins.clone(),
                             )
                             .await;
                             if mutation && call.conflict {
@@ -674,16 +843,27 @@ impl Coordinator {
                 .get_mut(&id)
                 .unwrap()
                 .dirty = false;
-            let call = host::invoke(
-                &self.database,
-                &self.pool,
-                self.bundle.clone(),
-                &name,
-                args,
-                false,
-                &self.space,
-            )
-            .await;
+            let call = if self.kinds.get(&name) == Some(&false) {
+                host::invoke(
+                    &self.database,
+                    &self.pool,
+                    self.bundle.clone(),
+                    &name,
+                    args,
+                    false,
+                    &self.space,
+                    self.plugins.clone(),
+                )
+                .await
+            } else {
+                host::Call {
+                    result: Err(
+                        "Subscription query is not registered in this plugin generation".into(),
+                    ),
+                    reads: ReadSet::new(),
+                    conflict: false,
+                }
+            };
             let sub = self
                 .sessions
                 .get_mut(&owner)

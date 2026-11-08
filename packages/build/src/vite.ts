@@ -8,6 +8,7 @@ import { dirname, relative, resolve, sep } from "node:path";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { compileCss } from "./css.ts";
 import { nativeConfig, nativePlugins } from "./native.ts";
 
@@ -61,6 +62,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
             "run", "bun", "--",
             fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
             resolve(root, "backend"),
+            ...(options.plugin ? ["--plugin", plugin.id] : []),
           ], { stdio: "inherit" });
           if (bundled.error) throw bundled.error;
           if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
@@ -99,6 +101,17 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
       },
       generateBundle(_options, bundle) {
         if (options.ui === false) delete bundle["ui.js"];
+        // Commit the hashes of final emitted bytes, not intermediate compiler
+        // inputs. A loader snapshots and verifies these before evaluating code.
+        const manifest = bundle["manifest.json"];
+        if (!manifest || manifest.type !== "asset") throw new Error("Missing artifact manifest");
+        const hashes: Record<string, string> = {};
+        for (const [name, file] of Object.entries(bundle)) {
+          if (name === "manifest.json") continue;
+          hashes[name] = createHash("sha256").update(file.type === "chunk" ? file.code : file.source).digest("hex");
+        }
+        const metadata = JSON.parse(String(manifest.source));
+        manifest.source = JSON.stringify({ ...metadata, hashes }, null, 2) + "\n";
       },
     },
   ];

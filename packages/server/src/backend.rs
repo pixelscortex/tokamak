@@ -20,6 +20,21 @@ pub struct Backend {
 }
 
 impl Backend {
+    pub async fn start_plugins(
+        storage: Storage,
+        javascript: PoolConfig,
+        root: &std::path::Path,
+    ) -> Result<Self, Error> {
+        let pool = Arc::new(Pool::new(javascript).map_err(|e| Error::Invalid(e.to_string()))?);
+        let database = Database::open(storage)
+            .await
+            .map_err(|e| Error::Invalid(e.to_string()))?;
+        let server = Server::load_plugins(database, pool, root).await?;
+        Ok(Self {
+            server: Arc::new(server),
+        })
+    }
+
     pub async fn start(config: BackendConfig) -> Result<Self, Error> {
         Self::start_in_space(config, DataSpace::default()).await
     }

@@ -23,6 +23,7 @@ export type {
   FunctionRegistry,
   QueryContext,
   MutationContext,
+  PluginCalls,
   WireResult,
 } from "./functions";
 

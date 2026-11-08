@@ -1,7 +1,19 @@
 /** Portable packaging identity. Loading/lifecycle/capabilities are host concerns. */
+import { jsonSnapshot, type JsonValue } from "./values";
+
 export interface PluginDefinition {
   readonly id: string;
   readonly version: string;
+  readonly api?: string;
+  readonly depends?: Readonly<Record<string, string>>;
+  readonly optional?: Readonly<Record<string, string>>;
+  readonly breaks?: Readonly<Record<string, string>>;
+  readonly provides?: readonly string[];
+  readonly consumes?: readonly string[];
+  readonly permissions?: readonly string[];
+  readonly placement?: "hub" | "runner" | "hybrid";
+  readonly contributes?: Readonly<Record<string, readonly JsonValue[]>>;
+  readonly exports?: string;
 }
 
 function versionSyntax(version: string): boolean {
@@ -18,16 +30,53 @@ function versionSyntax(version: string): boolean {
 }
 
 export function definePlugin(definition: PluginDefinition): Readonly<PluginDefinition> {
+  definition = jsonSnapshot(definition, "plugin descriptor") as unknown as PluginDefinition;
   if (!definition || typeof definition.id !== "string"
     || !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(definition.id)
     || definition.id.length > 128) {
     throw new Error("Plugin id must be a stable lowercase identifier");
   }
-  if (Object.keys(definition).some(key => key !== "id" && key !== "version")) {
-    throw new Error("Unsupported plugin descriptor field; this format currently declares identity only");
+  const fields = ["id", "version", "api", "depends", "optional", "breaks", "provides",
+    "consumes", "permissions", "placement", "contributes", "exports"];
+  if (Object.keys(definition).some(key => !fields.includes(key))) {
+    throw new Error("Unsupported plugin descriptor field");
   }
   if (typeof definition.version !== "string" || !versionSyntax(definition.version)) {
     throw new Error("Plugin version must be a semantic version");
   }
-  return Object.freeze({ id: definition.id, version: definition.version });
+  for (const key of ["depends", "optional", "breaks"] as const) {
+    const map = definition[key];
+    if (map === undefined) continue;
+    if (!map || typeof map !== "object" || Array.isArray(map)
+      || Object.entries(map).some(([id, range]) => !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id)
+        || typeof range !== "string" || !range || range.length > 256)) {
+      throw new Error(`Invalid plugin ${key} requirements`);
+    }
+  }
+  for (const key of ["provides", "consumes", "permissions"] as const) {
+    const list = definition[key];
+    if (list !== undefined && (!Array.isArray(list) || list.length > 256
+      || list.some(value => typeof value !== "string" || !value || value.length > 256)
+      || new Set(list).size !== list.length)) throw new Error(`Invalid plugin ${key}`);
+  }
+  if (definition.api !== undefined && (typeof definition.api !== "string"
+    || !definition.api.startsWith("tokamak@") || definition.api.length > 128)) {
+    throw new Error("Invalid host API requirement");
+  }
+  if (definition.placement !== undefined && !["hub", "runner", "hybrid"].includes(definition.placement)) {
+    throw new Error("Invalid plugin placement");
+  }
+  if (definition.exports !== undefined && typeof definition.exports !== "string") throw new Error("Invalid plugin exports path");
+  if (definition.contributes !== undefined && (!definition.contributes || typeof definition.contributes !== "object"
+    || Array.isArray(definition.contributes) || Object.values(definition.contributes).some(value => !Array.isArray(value)))) {
+    throw new Error("Plugin contributions must be static arrays");
+  }
+  function freeze(value: unknown): void {
+    if (value && typeof value === "object") {
+      for (const child of Object.values(value)) freeze(child);
+      Object.freeze(value);
+    }
+  }
+  freeze(definition);
+  return definition;
 }

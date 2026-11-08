@@ -178,6 +178,16 @@ async fn timed<T>(
 }
 
 fn js_error(ctx: &Ctx<'_>, error: rquickjs::Error, bundle: &Bundle, parser: bool) -> Error {
+    js_error_named(ctx, error, bundle, parser, source_map::BUNDLE_NAME)
+}
+
+pub(crate) fn js_error_named(
+    ctx: &Ctx<'_>,
+    error: rquickjs::Error,
+    bundle: &Bundle,
+    parser: bool,
+    name: &str,
+) -> Error {
     if !error.is_exception() {
         return Error::Engine(error.to_string());
     }
@@ -192,7 +202,7 @@ fn js_error(ctx: &Ctx<'_>, error: rquickjs::Error, bundle: &Bundle, parser: bool
         .and_then(|o| o.get::<_, String>("stack").ok())
         .map(|s| {
             let bounded: String = s.chars().take(32 * 1024).collect();
-            source_map::remap(&bounded, bundle, parser)
+            source_map::remap_named(&bounded, bundle, parser, name)
         });
     // Error properties may be hostile getters; keep the same interrupt budget
     // while reading them and do not leak their exceptions into later operations.

@@ -9,7 +9,7 @@ mod pool;
 mod source_map;
 mod types;
 
-pub use bridge::{Invocation, OpRegistry, install_ops};
+pub use bridge::{Invocation, ModuleCall, OpRegistry, install_ops};
 pub use engine::{Engine, QuickJsContext, QuickJsEngine};
 pub use pool::{PendingCall, Pool, PoolConfig};
 pub use types::{Bundle, Error, Limits};

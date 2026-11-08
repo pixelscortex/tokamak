@@ -5,7 +5,7 @@ use crate::{Server, protocol::Request};
 use axum::{
     Router,
     extract::{
-        State, WebSocketUpgrade,
+        Path, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::{HeaderMap, StatusCode},
@@ -84,6 +84,9 @@ pub async fn serve_with_access(
         app = app
             .route("/health", get(health))
             .route("/shutdown", post(stop))
+            .route("/plugins", get(plugins))
+            .route("/plugins/{id}/reload", post(reload_plugin))
+            .route("/plugins/{id}/assets/{*name}", get(plugin_asset))
             .layer(middleware::from_fn_with_state(access, authorize));
     }
     let app = app.with_state(adapter);
@@ -151,6 +154,52 @@ async fn health(State(adapter): State<Adapter>) -> Response {
 async fn stop(State(adapter): State<Adapter>) -> StatusCode {
     adapter.stopping.cancel();
     StatusCode::ACCEPTED
+}
+
+fn plugin_result(result: Result<serde_json::Value, crate::Error>) -> Response {
+    match result {
+        Ok(value) => ([("content-type", "application/json")], value.to_string()).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            [("content-type", "application/json")],
+            serde_json::json!({"error":error.to_string()}).to_string(),
+        )
+            .into_response(),
+    }
+}
+async fn plugins(State(adapter): State<Adapter>) -> Response {
+    plugin_result(adapter.server.plugins().await)
+}
+async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
+    plugin_result(adapter.server.reload_plugin(id).await)
+}
+async fn plugin_asset(
+    State(adapter): State<Adapter>,
+    Path((id, name)): Path<(String, String)>,
+) -> Response {
+    match adapter.server.plugin_asset(id, name.clone()).await {
+        Ok(Some(bytes)) => {
+            let content_type = if name.ends_with(".js") {
+                "text/javascript"
+            } else if name.ends_with(".css") {
+                "text/css"
+            } else if name.ends_with(".html") {
+                "text/html"
+            } else {
+                "application/json"
+            };
+            (
+                [
+                    ("content-type", content_type),
+                    ("cache-control", "no-store"),
+                ],
+                bytes.as_ref().clone(),
+            )
+                .into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => plugin_result(Err(error)),
+    }
 }
 
 async fn upgrade(State(adapter): State<Adapter>, ws: WebSocketUpgrade) -> Response {

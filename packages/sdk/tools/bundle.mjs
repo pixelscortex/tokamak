@@ -42,7 +42,7 @@ function apiType(modules) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder) {
+export async function bundleFeature(folder, namespace) {
   const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const files = [];
@@ -77,7 +77,7 @@ export async function bundleFeature(folder) {
     join(generated, "api.ts"),
     header +
       'import { createApi, type ApiFromModule } from "@tokamak/sdk";\n' +
-      `export const api = createApi<${type}>();\n`,
+      `export const api = createApi<${type}>(${namespace ? JSON.stringify(namespace) : ""});\n`,
   );
 
   // Temporary entry/config live together and are always removed. They must
@@ -185,11 +185,13 @@ export async function bundleFeature(folder) {
 }
 
 if (import.meta.main) {
-  if (process.argv.length !== 3) throw new Error("sdk:bundle expects exactly one feature folder");
+  if (process.argv.length !== 3 && !(process.argv.length === 5 && process.argv[3] === "--plugin")) {
+    throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
+  }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
   // from either the repository root or the feature's own moon configuration.
   const feature = resolve(sdkRoot, "../..", process.argv[2]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature);
+  await bundleFeature(feature, process.argv[4]);
 }

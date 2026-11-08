@@ -2,6 +2,10 @@
 
 ## Independent desktop service
 
+For multi-plugin loading, typed cross-plugin calls and reload, see
+[the M1.2 plugin contract](PLUGINS.md). The app launcher still uses the legacy
+application bundle until the client-plugin loader is integrated.
+
 The desktop now uses this standalone server over authenticated loopback
 WebSocket, not an embedded Backend. `bun run app` starts/reuses it.
 `bun run server:status` and `bun run server:stop` do not build anything.
@@ -94,7 +98,8 @@ moon run server:check server:build
 proto run bun -- packages/server/demo/client.ts ws://127.0.0.1:3000/ws
 ```
 
-`--bundle` is required. Defaults: `--data tokamak.db`, `--listen 127.0.0.1:3000`.
+Exactly one of `--bundle` or `--plugins` is required. Defaults:
+`--data tokamak.db`, `--listen 127.0.0.1:3000`.
 Additional budgets: `--queue`, `--heap-bytes`, `--call-ms`, `--load-ms`. The
 WebSocket endpoint is `/ws`; its adapter forwards Tower requests and ordered
 Events without another execution/data path. It limits connections to 64 and

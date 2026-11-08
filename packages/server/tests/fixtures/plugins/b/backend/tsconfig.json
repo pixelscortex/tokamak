@@ -1,0 +1,6 @@
+{
+  "extends": "../../../../../../../tsconfig.json",
+  "compilerOptions": {
+    "paths": { "@tokamak/sdk": ["../../../../../../sdk/src/index.ts"] }
+  }
+}

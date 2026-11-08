@@ -9,6 +9,7 @@
 mod backend;
 pub mod data;
 mod host;
+pub mod plugins;
 pub mod protocol;
 mod service;
 pub mod websocket;

@@ -30,6 +30,28 @@ pub struct Transaction {
     failed: bool,
 }
 
+#[cfg(test)]
+mod keyed_tests {
+    use super::*;
+    use crate::data::{Database, Storage};
+
+    #[tokio::test]
+    async fn kernel_keyed_create_is_not_an_upsert_and_duplicates_poison_the_transaction() {
+        let mut database = Database::open(Storage::Memory).await.unwrap();
+        let id = Id::new(Table::new("kernel_metadata").unwrap(), "stable").unwrap();
+        let mut tx = database.begin().await.unwrap();
+        assert_eq!(tx.insert_keyed(&id, Object::new()).await.unwrap(), id);
+        tx.commit().await.unwrap();
+        let mut tx = database.begin().await.unwrap();
+        assert!(tx.insert_keyed(&id, Object::new()).await.is_err());
+        assert!(tx.commit().await.is_err());
+        let mut tx = database.read_only().await.unwrap();
+        assert!(tx.get(&id).await.unwrap().is_some());
+        tx.commit().await.unwrap();
+        database.close().await.unwrap();
+    }
+}
+
 impl Transaction {
     pub(super) fn new(
         inner: surrealdb::method::Transaction<Db>,
@@ -133,6 +155,17 @@ impl Transaction {
     }
 
     pub async fn insert(&mut self, table: &Table, value: Object) -> Result<Id> {
+        self.create(table, None, value).await
+    }
+
+    /// Kernel metadata uses deterministic keys for direct lookup. This is not a
+    /// JavaScript capability; CREATE still rejects duplicates and poisons the
+    /// transaction rather than silently replacing existing data.
+    pub(crate) async fn insert_keyed(&mut self, id: &Id, value: Object) -> Result<Id> {
+        self.create(id.table(), Some(id), value).await
+    }
+
+    async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Id> {
         let result = async {
             self.ready(true)?;
             check_fields(&value)?;
@@ -147,14 +180,16 @@ impl Transaction {
             stored.insert("_creationTime", millis);
             stored.insert("data", value);
             let mut bindings = Object::new();
-            bindings.insert("table", table.as_str());
+            let statement = if let Some(id) = id {
+                bindings.insert("id", id.record());
+                "CREATE $id CONTENT $value RETURN AFTER"
+            } else {
+                bindings.insert("table", table.as_str());
+                "CREATE type::table($table) CONTENT $value RETURN AFTER"
+            };
             bindings.insert("value", stored);
             let row = self
-                .rows(
-                    "CREATE type::table($table) CONTENT $value RETURN AFTER".into(),
-                    bindings,
-                    true,
-                )
+                .rows(statement.into(), bindings, true)
                 .await?
                 .pop()
                 .ok_or(Error::Invalid("insert returned no document"))?;

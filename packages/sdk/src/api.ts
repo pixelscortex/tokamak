@@ -28,13 +28,13 @@ export type ResultOf<R> = R extends FunctionReference<FunctionKind, unknown, inf
  * importing feature code into a UI just to discover a function's wire name.
  * A reference must be at least module.export; folders add module path segments.
  */
-export function createApi<T>(): T {
+export function createApi<T>(namespace?: string): T {
   const path = (parts: string[]): unknown =>
     new Proxy(Object.create(null) as object, {
       get(_target, key) {
         if (key === functionName) {
           if (parts.length < 2) throw new Error("Expected api.module.export reference");
-          return `${parts.slice(0, -1).join("/")}:${parts[parts.length - 1]}`;
+          return `${namespace ? `${namespace}/` : ""}${parts.slice(0, -1).join("/")}:${parts[parts.length - 1]}`;
         }
         if (typeof key === "string") return path([...parts, key]);
         return undefined;

@@ -3,7 +3,7 @@
 
 pub(crate) const BUNDLE_NAME: &str = "tokamak-bundle.js";
 
-pub(crate) fn remap(stack: &str, bundle: &crate::Bundle, parser: bool) -> String {
+pub(crate) fn remap_named(stack: &str, bundle: &crate::Bundle, parser: bool, name: &str) -> String {
     stack
         .lines()
         .take(64)
@@ -11,7 +11,7 @@ pub(crate) fn remap(stack: &str, bundle: &crate::Bundle, parser: bool) -> String
             let Some(map) = bundle.map.as_ref() else {
                 return frame.to_owned();
             };
-            let Some((prefix, rest)) = frame.split_once(&format!("{BUNDLE_NAME}:")) else {
+            let Some((prefix, rest)) = frame.split_once(&format!("{name}:")) else {
                 return frame.to_owned();
             };
             if !prefix.is_empty() && !prefix.ends_with(['(', ' ', '\t']) {
