@@ -1,0 +1,41 @@
+packages/sdk/src/values.ts
+  s_549dee89b200e8::t_6c3254ffa7b1d7 22,25-26
+packages/sdk/tests/plugin.test.mjs
+  s_549dee89b200e8::t_e81586e59bd76a 2,20-30
+packages/server/src/backend.rs
+  s_549dee89b200e8::t_1294dbd46b444f 6,24-27,35
+packages/server/src/data/README.md
+  s_549dee89b200e8::t_9794330eac9f23 1-41
+packages/server/src/data/changes.rs
+  s_549dee89b200e8::t_3e6e68e348685f 1-212
+packages/server/src/data/mod.rs
+  s_549dee89b200e8::t_ff8a9f0a153c9c 6,8,18,20,42-44
+packages/server/src/data/space.rs
+  s_549dee89b200e8::t_5d9fbe2e0a523d 1-82
+packages/server/src/data/transaction.rs
+  s_549dee89b200e8::t_2fd0eca94f8af2 7-8,27-28,43-44,50-77,162,213,225,227,235,259
+packages/server/src/data/types.rs
+  s_549dee89b200e8::t_9f8a58c305cb2f 17,45,111-114
+packages/server/src/host.rs
+  s_549dee89b200e8::t_d408f8968fc702 5,8,11,54,84,88,106,186,192-194,196-198,201,203,208,212-231,255-258,263,272-276,279,283
+packages/server/src/service.rs
+  s_549dee89b200e8::t_62e9d2e769229c 9,65-73,77,101,448,489,535,538,550,587,684
+packages/server/tests/fixtures/feature/probe.ts
+  s_549dee89b200e8::t_ac7dde42a073c4 86-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0856a5caf8715697d8ab0d27b9f52c000b23a9a8",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
