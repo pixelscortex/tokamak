@@ -1,0 +1,53 @@
+Cargo.lock
+  s_549dee89b200e8::t_d8e82c40d017fb 5500,5504,7091,7098
+README.md
+  s_549dee89b200e8::t_cd2d87b0b468ea 33,37-40
+app/Cargo.toml
+  s_549dee89b200e8::t_c9d2277252b14d 16-18,22-24
+app/moon.yml
+  s_549dee89b200e8::t_029e88cb2e4587 20,26,30-34
+app/src/main.rs
+  s_549dee89b200e8::t_614bfac60589fa 1-2,4-11,16-20,31
+app/src/socket.rs
+  s_549dee89b200e8::t_81eec6982fc3f8 1-241
+app/tests/local-server.ts
+  s_549dee89b200e8::t_0b2f544b79143c 1-78
+app/tests/run.sh
+  s_549dee89b200e8::t_b706fdf9f5fc2f 9-11
+app/tests/socket.rs
+  s_549dee89b200e8::t_b35438774aaf2c 1-182
+app/tsconfig.tools.json
+  s_549dee89b200e8::t_051e4cdfb978fe 9
+package.json
+  s_549dee89b200e8::t_cca5f47f5b0780 18-21
+packages/build/src/local-server.ts
+  s_549dee89b200e8::t_ff2a83c7d791c0 1-151
+packages/build/src/run-app.ts
+  s_549dee89b200e8::t_35df3c0b2c868d 1-30
+packages/server/Cargo.toml
+  s_549dee89b200e8::t_1545def9d1ae16 21-22
+packages/server/README.md
+  s_549dee89b200e8::t_06e71e304e84ad 3-23,27-28
+packages/server/src/lib.rs
+  s_549dee89b200e8::t_5a7cd72303805b 2
+packages/server/src/main.rs
+  s_549dee89b200e8::t_9629b276b8e1d1 2,6,9-18,24,28-31,34,45-48,61-83,96-108,110-117,119-135,138-143
+packages/server/src/websocket.rs
+  s_549dee89b200e8::t_345e9f2fd76cd8 11-12,14,41-48,58-66,80,82-89,101-104,115-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56b0934c59a2928adad3f3b453f09319c3959b01",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
