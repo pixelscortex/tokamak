@@ -7,8 +7,8 @@ mod connection;
 #[path = "../../packages/render/tests/support/mod.rs"]
 mod support;
 
+use engine::{Bundle, PoolConfig};
 use render::{HostMailbox, NativeDocument};
-use runtime::{Bundle, PoolConfig};
 use serde_json::{Value, json};
 use server::{Backend, BackendConfig, data::Storage};
 use std::{

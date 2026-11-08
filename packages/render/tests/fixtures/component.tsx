@@ -1,5 +1,5 @@
 /** Acceptance fixture compiled as universal JSX, then executed only by the
- * renderer's real runtime::QuickJsContext. No browser globals or test JS engine. */
+ * renderer's real engine::QuickJsContext. No browser globals or test JS engine. */
 import { createSignal, For, Show } from "solid-js";
 import { mount, onHostEvent } from "@tokamak/render";
 

@@ -1,7 +1,7 @@
 //! TKM-2 acceptance tests exercise public APIs with real QuickJS, not an engine mock.
 //! Gates establish concurrency ordering; a subprocess watchdog contains runaway JS.
 
-use runtime::{
+use engine::{
     Bundle, Engine, Error, Invocation, Json, Limits, OpRegistry, Pool, PoolConfig, QuickJsContext,
     QuickJsEngine, install_ops,
 };
@@ -354,8 +354,8 @@ fn stale_async_continuation_is_refused_before_repolling_host() {
                 ctx.globals()
                     .set("old", install_ops(&ctx, Arc::new(registry), &old).unwrap())
                     .unwrap();
-                let promise: runtime::rquickjs::Promise = ctx.eval("old.op('wait', null)").unwrap();
-                let mut result = Box::pin(promise.into_future::<runtime::rquickjs::Value>());
+                let promise: engine::rquickjs::Promise = ctx.eval("old.op('wait', null)").unwrap();
+                let mut result = Box::pin(promise.into_future::<engine::rquickjs::Value>());
                 // Yield to the context's job scheduler until the host actually polls;
                 // merely polling a JS Promise once does not start Rust host futures.
                 std::future::poll_fn(|cx| {

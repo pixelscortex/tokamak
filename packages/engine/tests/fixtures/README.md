@@ -34,11 +34,11 @@ impossible exactness assertion is imposed on other shorthand cases.
 The checked-in JavaScript and Source Map v3 files were produced by **Bun 1.4.4**:
 
 ```sh
-bun build packages/runtime/tests/fixtures/mapped.ts --target=browser --format=esm --sourcemap=external --outdir=packages/runtime/tests/fixtures
-bun build packages/runtime/tests/fixtures/mapped.ts --target=browser --format=esm --sourcemap=external --minify --entry-naming='[name].min.[ext]' --outdir=packages/runtime/tests/fixtures
-bun build packages/runtime/tests/fixtures/first-token.ts --target=browser --format=esm --sourcemap=external --minify --outdir=packages/runtime/tests/fixtures
-bun build packages/runtime/tests/fixtures/startup.ts --target=browser --format=esm --sourcemap=external --minify --outdir=packages/runtime/tests/fixtures
-bun build packages/runtime/tests/fixtures/array-initializer.ts --target=browser --format=esm --sourcemap=external --minify --outdir=packages/runtime/tests/fixtures
+bun build packages/engine/tests/fixtures/mapped.ts --target=browser --format=esm --sourcemap=external --outdir=packages/engine/tests/fixtures
+bun build packages/engine/tests/fixtures/mapped.ts --target=browser --format=esm --sourcemap=external --minify --entry-naming='[name].min.[ext]' --outdir=packages/engine/tests/fixtures
+bun build packages/engine/tests/fixtures/first-token.ts --target=browser --format=esm --sourcemap=external --minify --outdir=packages/engine/tests/fixtures
+bun build packages/engine/tests/fixtures/startup.ts --target=browser --format=esm --sourcemap=external --minify --outdir=packages/engine/tests/fixtures
+bun build packages/engine/tests/fixtures/array-initializer.ts --target=browser --format=esm --sourcemap=external --minify --outdir=packages/engine/tests/fixtures
 ```
 
 Run these from the repository root to regenerate. Do not hand-edit mappings or

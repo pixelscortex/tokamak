@@ -1,5 +1,5 @@
 //! Exercise the production Rust socket bridge against the actual server process.
-#[path = "../src/socket.rs"]
+#[path = "../../packages/runtime/src/client/connection.rs"]
 mod socket;
 use futures_util::{SinkExt, StreamExt};
 use render::{HostMailbox, NativeDocument};

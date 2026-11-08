@@ -1,11 +1,11 @@
-//! UI engine adapter around runtime's reusable thread-affine primitive. Every
+//! UI engine adapter around engine's reusable thread-affine primitive. Every
 //! entry is synchronous on the event-loop thread; only owned JSON leaves it.
 use crate::{Error, Result};
-use futures_lite::future::block_on;
-use runtime::{
+use engine::{
     QuickJsContext,
     rquickjs::{CaughtError, Function, Object},
 };
+use futures_lite::future::block_on;
 use std::time::{Duration, Instant};
 
 pub(crate) struct Js(QuickJsContext);
@@ -24,9 +24,9 @@ impl Js {
                         "__tokamakSend",
                         Function::new(
                             ctx.clone(),
-                            move |callback_ctx: runtime::rquickjs::Ctx<'_>, message: String| {
+                            move |callback_ctx: engine::rquickjs::Ctx<'_>, message: String| {
                                 send(message).map_err(|error| {
-                                    runtime::rquickjs::Exception::throw_message(
+                                    engine::rquickjs::Exception::throw_message(
                                         &callback_ctx,
                                         &error.0,
                                     )
@@ -70,7 +70,7 @@ impl Js {
                     Err(error) => {
                         return Err(block_on(error.0.async_with(async |ctx| {
                             Error(
-                                CaughtError::from_error(&ctx, runtime::rquickjs::Error::Exception)
+                                CaughtError::from_error(&ctx, engine::rquickjs::Error::Exception)
                                     .to_string(),
                             )
                         })));
@@ -87,7 +87,7 @@ impl Js {
         self.0
             .set_deadline(Some(Instant::now() + Duration::from_millis(250)));
         let result = block_on(self.0.context().async_with(async |ctx| {
-            let call = || -> runtime::rquickjs::Result<Option<String>> {
+            let call = || -> engine::rquickjs::Result<Option<String>> {
                 let api: Object = ctx.globals().get("__tokamak")?;
                 let function: Function = api.get(method)?;
                 match method {

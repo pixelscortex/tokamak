@@ -10,17 +10,17 @@ name = "tokamak-desktop"
 path = "src/main.rs"
 
 [dependencies]
-render = { path = "../packages/render" }
-directories = "=6.0.0"
-serde_json = "1.0.154"
-tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "sync", "macros", "net", "time"] }
-tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["connect", "handshake"] }
-futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+runtime = { path = "../packages/runtime", features = ["client"] }
 
 # Native document tests drive the same Blitz controls as the desktop shell.
 [dev-dependencies]
 server = { path = "../packages/server" }
-runtime = { path = "../packages/runtime" }
+engine = { path = "../packages/engine" }
+render = { path = "../packages/render" }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "sync", "macros", "net", "time"] }
+tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["connect", "handshake"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 tower = { version = "0.5.3", default-features = false }
 blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts"] }
 blitz-traits = "=0.3.0-beta.4"

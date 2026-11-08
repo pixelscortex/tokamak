@@ -1,0 +1,12 @@
+# Low-level JavaScript execution, independent of UI/server composition.
+[package]
+name = "engine"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+rquickjs = { version = "=0.14.0", features = ["futures"] }
+serde_json = "1.0.154"
+sourcemap = { version = "9.3.2", default-features = false }
+tokio = { version = "1.54.1", features = ["rt", "time", "sync"] }

@@ -1,3 +1,12 @@
 # Share Cargo tasks through moon's Rust toolchain inheritance.
 language: 'rust'
 layer: 'library'
+tasks:
+  check:
+    command: 'proto run bun -- tools/check.ts'
+    options:
+      mergeArgs: 'replace'
+  test:
+    command: 'cargo test --locked --package runtime --all-features --lib --jobs 2'
+    options:
+      mergeArgs: 'replace'

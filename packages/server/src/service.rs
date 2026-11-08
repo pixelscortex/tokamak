@@ -9,7 +9,7 @@ use crate::{
     data::{ChangeEvent, Database, Table},
     host::{self, ReadSet},
 };
-use runtime::{Bundle, OpRegistry, Pool};
+use engine::{Bundle, OpRegistry, Pool};
 use serde_json::Value as Json;
 use std::{
     collections::BTreeMap,

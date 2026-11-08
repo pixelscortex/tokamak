@@ -3,7 +3,7 @@
 //! embedded engine's large debug futures off the QuickJS worker's native stack.
 
 use crate::data::{self, Document, Id, Object, Order, SurrealValue, Table, Transaction, Value};
-use runtime::{Bundle, OpRegistry, Pool};
+use engine::{Bundle, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::Mutex;

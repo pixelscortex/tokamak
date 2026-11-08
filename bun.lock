@@ -18,6 +18,7 @@
       },
       "devDependencies": {
         "@tokamak/build": "workspace:*",
+        "@tokamak/render": "workspace:*",
         "@types/node": "26.6.6",
         "vite": "8.3.6",
       },
@@ -47,6 +48,15 @@
         "@types/node": "26.6.6",
         "vite": "8.3.6",
         "vite-plugin-solid": "2.11.15",
+      },
+    },
+    "packages/runtime": {
+      "name": "@tokamak/runtime",
+      "dependencies": {
+        "@tokamak/render": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "26.6.6",
       },
     },
     "packages/sdk": {
@@ -161,6 +171,8 @@
     "@tokamak/build": ["@tokamak/build@workspace:packages/build"],
 
     "@tokamak/render": ["@tokamak/render@workspace:packages/render"],
+
+    "@tokamak/runtime": ["@tokamak/runtime@workspace:packages/runtime"],
 
     "@tokamak/sdk": ["@tokamak/sdk@workspace:packages/sdk"],
 

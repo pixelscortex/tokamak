@@ -5,6 +5,7 @@ projects:
   workspace: '.'
   server: 'packages/server'
   runtime: 'packages/runtime'
+  engine: 'packages/engine'
   render: 'packages/render'
   sdk: 'packages/sdk'
   ui: 'packages/ui'

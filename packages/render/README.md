@@ -43,7 +43,7 @@ Manual gate:
 ## Boundaries and API
 
 - [`NativeDocument`](src/lib.rs) owns a Blitz document and a single
-  `runtime::QuickJsContext`. QuickJS and Blitz stay on the event-loop thread;
+  `engine::QuickJsContext`. QuickJS and Blitz stay on the event-loop thread;
   there is no second engine, worker-side JS handle, webview, or Node runtime.
 - [`launch(shell, bundle, title, connect)`](src/shell.rs) opens a native GPU-rendered
   Vello/wgpu window. `connect` receives a cloneable `HostSender`. Move that

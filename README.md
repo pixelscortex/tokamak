@@ -8,7 +8,8 @@ sources in `app/src/` and SDK backend functions in `app/backend/`.
 | Directory | Purpose |
 | --- | --- |
 | `packages/server/` | Native host crate; builds the `tokamak` executable |
-| `packages/runtime/` | Shared JavaScript host runtime crate |
+| `packages/engine/` | Shared QuickJS engine, budgets and worker pool |
+| `packages/runtime/` | Feature-gated client/server hosts and local process lifecycle |
 | `packages/render/` | Native UI renderer crate |
 | `packages/sdk/` | TypeScript feature API, `@tokamak/sdk` |
 | `packages/ui/` | TypeScript UI library, `@tokamak/ui` |

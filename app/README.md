@@ -77,7 +77,9 @@ revisited with a shared transactional guard if feature handlers become concurren
   and the shared Tailwind compiler. Minimal HTML, the mount point, and compiled
   CSS are generated into `dist/shell.html`; no app-specific HTML is maintained.
   Backend maps are rebased when copied from `backend/dist/` into `dist/`.
-- `src/socket.rs` feeds owned JSON requests to one server WebSocket session. Its
+- `runtime::client` owns discovery, executor, WebSocket and window disposal;
+  `src/main.rs` only declares assets and configuration. Its connection feeds owned
+  JSON requests to one server WebSocket session. Its
   64-entry request queue has a 64 KiB per-message limit. Session events remain
   ordered through the renderer's bounded generation-scoped mailbox; a reserved
   terminal envelope rejects pending promises on failure even at capacity. Error

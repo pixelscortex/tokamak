@@ -215,7 +215,7 @@ mod tests {
             json!({"type":"subscription","id":1,"result":{"Ok":[]}}),
             json!({"type":"unsubscribed","id":1}),
         ] {
-            assert!(serde_json::from_value::<server::Event>(value.clone()).is_ok());
+            assert!(serde_json::from_value::<::server::Event>(value.clone()).is_ok());
             assert!(header(&value, true).is_some());
         }
         for value in [
@@ -226,7 +226,7 @@ mod tests {
             json!({"type":"response","id":-1,"result":{"Ok":null}}),
             json!({"type":"unknown","id":1,"result":{"Ok":null}}),
         ] {
-            assert!(serde_json::from_value::<server::Event>(value.clone()).is_err());
+            assert!(serde_json::from_value::<::server::Event>(value.clone()).is_err());
             assert!(header(&value, true).is_none());
         }
         assert!(

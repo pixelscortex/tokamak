@@ -40,6 +40,18 @@ pub fn launch_connected(
     send: Option<crate::MessageSender>,
     connect: impl FnOnce(HostSender),
 ) -> Result<()> {
+    launch_window(shell, bundle, title, (680, 820), send, connect)
+}
+
+/// Configurable native surface used by the reusable runtime host.
+pub fn launch_window(
+    shell: &str,
+    bundle: &str,
+    title: &str,
+    window_size: (u32, u32),
+    send: Option<crate::MessageSender>,
+    connect: impl FnOnce(HostSender),
+) -> Result<()> {
     let document = NativeDocument::new_connected(shell, bundle, send)?;
     let event_loop = winit::event_loop::EventLoop::builder()
         .build()
@@ -54,7 +66,7 @@ pub fn launch_connected(
         VelloWindowRenderer::new(),
         WindowAttributes::default()
             .with_title(title)
-            .with_surface_size(LogicalSize::new(680, 820)),
+            .with_surface_size(LogicalSize::new(window_size.0, window_size.1)),
     ));
     connect(sender);
     event_loop

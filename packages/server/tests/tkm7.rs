@@ -1,7 +1,7 @@
 //! TKM7 acceptance uses the actual SDK client and real backend, not a second
 //! client implementation. The native bridge opens no listener; the headless
 //! driver launches the shipped executable and two independent WebSockets.
-use runtime::{Bundle, Engine, Json, OpRegistry, Pool, PoolConfig, QuickJsEngine};
+use engine::{Bundle, Engine, Json, OpRegistry, Pool, PoolConfig, QuickJsEngine};
 use serde_json::{Value, json};
 use server::{
     Backend, BackendConfig, Server,
@@ -287,7 +287,7 @@ impl Engine for CountQueries {
         export: &str,
         args: Json,
         ops: Arc<OpRegistry>,
-    ) -> Result<Json, runtime::Error> {
+    ) -> Result<Json, engine::Error> {
         if args["name"] == "probe:list" {
             self.lists.fetch_add(1, Ordering::SeqCst);
         }
@@ -449,7 +449,7 @@ impl Engine for PauseFirstInsert {
         export: &str,
         args: Json,
         ops: Arc<OpRegistry>,
-    ) -> Result<Json, runtime::Error> {
+    ) -> Result<Json, engine::Error> {
         let insert = args["name"] == "probe:insert";
         let result = self.engine.invoke(bundle, export, args, ops).await;
         let gate = if insert {

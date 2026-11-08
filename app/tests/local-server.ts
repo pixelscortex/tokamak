@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensure, status, stop } from "../../packages/build/src/local-server";
+import { ensure, status, stop } from "../../packages/runtime/tools/local-server";
 import { WebSocketTransport } from "../../packages/sdk/src/transport";
 import { TokamakClient } from "../../packages/sdk/src/client";
 import { api } from "../backend/_generated/api";

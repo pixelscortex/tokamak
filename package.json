@@ -6,6 +6,7 @@
     "app",
     "packages/build",
     "packages/sdk",
+    "packages/runtime",
     "packages/ui",
     "packages/render"
   ],
@@ -17,8 +18,8 @@
     "e2e": "moon run :e2e",
     "app": "moon run app:run",
     "server:start": "moon run app:server-start",
-    "server:stop": "proto run bun -- packages/build/src/run-app.ts stop",
-    "server:status": "proto run bun -- packages/build/src/run-app.ts status"
+    "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop",
+    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status"
   },
   "devDependencies": {
     "vite": "8.3.6"

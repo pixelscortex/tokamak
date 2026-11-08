@@ -26,7 +26,7 @@ existing tests and manual demonstrations. Do not expose it publicly.
 `Backend::start(BackendConfig { storage, bundle, javascript: PoolConfig }).await`
 constructs storage and QuickJS workers together. Library tests can call
 `backend.connect()` without a port. `Backend::server()` exposes metadata and sessions, not raw
-storage. Worker counts/queue/heap/time limits reuse `runtime::PoolConfig`: they
+storage. Worker counts/queue/heap/time limits reuse `engine::PoolConfig`: they
 are budgets, **not reserved cores or hard per-subsystem process memory limits**.
 JIT stays off. There is no separate DB service, replication or global sync.
 
@@ -201,7 +201,7 @@ retain the existing Apple large `__eh_frame` warning; release linking passed.
 
 ## Feature service (TKM-5)
 
-`Server::load(Database, Arc<runtime::Pool>, Arc<runtime::Bundle>).await` loads
+`Server::load(Database, Arc<engine::Pool>, Arc<engine::Bundle>).await` loads
 one real SDK-generated bundle at startup. `descriptor()` returns its schema
 and function metadata; `functions()` lists `{name, kind, args}` values. The
 bundle's new callable `describe` returns its existing `schema` and `metadata`

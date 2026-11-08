@@ -2,7 +2,7 @@
 //! Engine instrumentation pauses before real JS execution or after retirement;
 //! it never substitutes results, operations, conflicts, change events or storage.
 
-use runtime::{Bundle, Engine, Json, Limits, OpRegistry, Pool, PoolConfig, QuickJsEngine};
+use engine::{Bundle, Engine, Json, Limits, OpRegistry, Pool, PoolConfig, QuickJsEngine};
 use serde_json::json;
 use server::{
     Error, Event, Server, Session,
@@ -207,7 +207,7 @@ impl Engine for Observed {
         export: &str,
         args: Json,
         ops: Arc<OpRegistry>,
-    ) -> Result<Json, runtime::Error> {
+    ) -> Result<Json, engine::Error> {
         let name = args["name"].as_str().unwrap_or(export).to_owned();
         self.probe.calls.lock().unwrap().push(name.clone());
         self.probe.checkpoint(&name, true, Ok(Json::Null)).await;

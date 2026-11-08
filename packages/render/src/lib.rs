@@ -12,7 +12,7 @@ use keyboard_types::{Key, Modifiers, NamedKey};
 pub use mailbox::{HostMailbox, HostSender};
 use serde::Deserialize;
 use serde_json::{Value, json};
-pub use shell::{launch, launch_connected};
+pub use shell::{launch, launch_connected, launch_window};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},

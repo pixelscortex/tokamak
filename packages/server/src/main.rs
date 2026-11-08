@@ -1,7 +1,7 @@
 //! Headless composition only: configuration and process signals live here, not
 //! in storage/features. Local desktop mode uses an authenticated independent server.
 
-use runtime::{Bundle, PoolConfig};
+use engine::{Bundle, PoolConfig};
 use server::{Backend, BackendConfig, data::Storage, websocket};
 use sha2::{Digest, Sha256};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
