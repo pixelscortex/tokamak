@@ -98,8 +98,11 @@ pub fn focus(doc: &mut NativeDocument, name: &str) {
     panic!("Tab could not focus {name}");
 }
 pub fn pointer(doc: &mut NativeDocument, name: &str) {
+    pointer_node(doc, id(doc, name));
+}
+pub fn pointer_node(doc: &mut NativeDocument, target: NodeId) {
     doc.inner_mut().resolve(0.0);
-    let rect = doc.inner().get_client_bounding_rect(id(doc, name)).unwrap();
+    let rect = doc.inner().get_client_bounding_rect(target).unwrap();
     assert!(rect.width > 0.0 && rect.height > 0.0);
     let (x, y) = (
         (rect.x + rect.width / 2.0) as f32,
