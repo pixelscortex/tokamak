@@ -1,0 +1,32 @@
+packages/render/js/index.ts
+  s_f88e5fe8eb54c5::t_b5aaefacba1068 309
+  s_f88e5fe8eb54c5::t_8265ec2495abf3 17,54,56,307-308,310-312,329
+packages/render/src/js.rs
+  s_f88e5fe8eb54c5::t_b5aaefacba1068 9-13,32-37,39-43,50-55,61-64,75-77,79-80,83-86,89-94,105-106,210-213
+  s_f88e5fe8eb54c5::t_68b180b00faf8c 6,15-19,21-31,38,44-49,56-60,65-74,78,81-82,87-88,95-97,103-104,107,121-125,133-135,175,205,209,235
+  s_95b003709671b2::t_eb45e23b687afb 14,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14c03440e85b13af7926785db8cc1312947043c1",
+  "prompts": {},
+  "sessions": {
+    "s_95b003709671b2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c03a-e299-7292-b03c-dc8deab9dd08",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_f88e5fe8eb54c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c040-d814-7ef2-a3d6-0289069a9547",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
