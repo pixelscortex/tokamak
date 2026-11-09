@@ -1,0 +1,67 @@
+packages/sdk/tests/plugin.test.mjs
+  s_b3cea945e3de73::t_7e4dca49b86f22 10
+packages/server/Cargo.toml
+  s_b3cea945e3de73::t_2015aea4dd8d9a 21
+  s_b3cea945e3de73::t_ed1809f6ca3434 22
+packages/runtime/PLUGINS.md
+  s_b3cea945e3de73::t_7084fa28c18297 59-64,68-75
+  s_b3cea945e3de73::t_c8fa773b6a5f60 65-66
+  s_b3cea945e3de73::t_d31a033d06ebe0 93-95
+  s_b3cea945e3de73::t_ed1809f6ca3434 67
+packages/server/src/service.rs
+  s_b3cea945e3de73::t_40532272199417 604-605,608-610,622,898
+  s_b3cea945e3de73::t_fe128e77ee5ee1 211,529,658-659,668-670
+  s_b3cea945e3de73::t_a158a8f3fda8b1 114,671
+  s_b3cea945e3de73::t_d31a033d06ebe0 812-820
+packages/server/src/websocket.rs
+  s_b3cea945e3de73::t_fe128e77ee5ee1 191-201
+  s_b3cea945e3de73::t_40532272199417 207
+packages/server/PLUGINS.md
+  s_b3cea945e3de73::t_7084fa28c18297 46-49,51-69,85-86
+  s_b3cea945e3de73::t_c8fa773b6a5f60 70-71
+  s_b3cea945e3de73::t_11acdab8af2535 79-84
+packages/sdk/src/transport.ts
+  s_b3cea945e3de73::t_2015aea4dd8d9a 70-71,82,85,87,100,106-107,109
+  s_b3cea945e3de73::t_7084fa28c18297 19-21,145-147
+  s_b3cea945e3de73::t_ed1809f6ca3434 57-58,129-130
+packages/sdk/src/plugin.ts
+  s_b3cea945e3de73::t_2015aea4dd8d9a 21,35,51,57-58,62
+packages/server/src/plugins.rs
+  s_b3cea945e3de73::t_fe128e77ee5ee1 193-197,206-213,257-259,342-344,348-351,358-367,379-381,394,396,415-419,433,435-437,443-447,451,453-456,475,478-479,490-493,538,569-570,572,579-582,587-589,592-594,659-661,883-887
+  s_b3cea945e3de73::t_7e4dca49b86f22 434
+  s_b3cea945e3de73::t_8721b6b37ccc89 769-770,773,775-782,786-790,800-801
+  s_b3cea945e3de73::t_11acdab8af2535 12,306-307,310-339,347,420,424-432,458-462,470-474,476-477,583-586,657
+  s_b3cea945e3de73::t_6d3647f471bbcc 783-785,791-799
+  s_b3cea945e3de73::t_2015aea4dd8d9a 1,10-11,87,303-305,308-309,340-341,345-346,352-357,368-372,374-377,382,387,438-442,452,457,463-464,469,480,484-486,563,590-591,613,625-627,656,658,662-663
+  s_b3cea945e3de73::t_a158a8f3fda8b1 117-121,136-140
+  s_b3cea945e3de73::t_8716fb57651d7f 88-90,96,599-601,606-608,678-686,691,698,701-702,705,708,711,714-717,721,725-726
+  s_b3cea945e3de73::t_a72c04583f5ec9 373,378,383-386,395,421-423,448-450,564-568,571
+  s_b3cea945e3de73::t_40532272199417 105-106,191-192,200,214-219,250-253
+packages/runtime/js/plugins.ts
+  s_b3cea945e3de73::t_8721b6b37ccc89 3,42-43,48-60
+  s_b3cea945e3de73::t_d31a033d06ebe0 131-140
+packages/runtime/js/modules.ts
+  s_b3cea945e3de73::t_8716fb57651d7f 7,48-49,104
+  s_b3cea945e3de73::t_8721b6b37ccc89 118-129
+packages/render/src/js.rs
+  s_b3cea945e3de73::t_c8fa773b6a5f60 119-121,124
+  s_b3cea945e3de73::t_c2b66baa34cf13 122-123
+Cargo.lock
+  s_b3cea945e3de73::t_b474060fd7b450 5517,5525
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "db0e526538b303effb4be5b09430cfcff22a3aaa",
+  "prompts": {},
+  "sessions": {
+    "s_b3cea945e3de73": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c062-e4b5-7ed2-90ec-e88faa8c2376",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
