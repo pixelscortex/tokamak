@@ -5,6 +5,7 @@ use crate::{Error, Json, OpRegistry};
 use serde_json::json;
 use std::{
     collections::BTreeMap,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -49,12 +50,21 @@ impl Resources {
 /// abort wakes I/O even while another operation holds the response reader.
 pub struct WebHost {
     resources: Arc<Mutex<Resources>>,
-    permissions: Arc<Vec<String>>,
+    permissions: Vec<String>,
     client: reqwest::Client,
 }
 impl WebHost {
     pub fn new(permissions: Vec<String>) -> std::result::Result<Self, Error> {
+        let permissions = permissions
+            .iter()
+            .filter_map(|p| p.strip_prefix("net:"))
+            .map(canonical_host)
+            .collect::<Result<Vec<_>>>()
+            .map_err(Error::InvalidInput)?;
         let client = reqwest::Client::builder()
+            // Ambient proxies would resolve/connect outside our address filter.
+            .no_proxy()
+            .dns_resolver(Arc::new(PublicResolver))
             // JS follows redirects by opening another checked request. Disabling
             // implicit redirects prevents an allowed host lending its authority.
             .redirect(reqwest::redirect::Policy::none())
@@ -62,7 +72,7 @@ impl WebHost {
             .map_err(|e| Error::Engine(e.to_string()))?;
         Ok(Self {
             resources: Arc::default(),
-            permissions: Arc::new(permissions),
+            permissions,
             client,
         })
     }
@@ -86,8 +96,8 @@ impl WebHost {
             .map_err(|_| "web resource lock poisoned")?;
         match text(&p, "op")? {
             "open" => {
-                let url = Url::parse(text(&p, "url")?).map_err(|e| e.to_string())?;
-                self.permit(&url)?;
+                let mut url = Url::parse(text(&p, "url")?).map_err(|e| e.to_string())?;
+                self.permit(&mut url)?;
                 r.capacity()?;
                 let id = r.id();
                 let (upload, receiver) = if p["stream"].as_bool() == Some(true) {
@@ -231,17 +241,20 @@ impl WebHost {
         }
     }
 
-    fn permit(&self, url: &Url) -> Result<()> {
+    fn permit(&self, url: &mut Url) -> Result<()> {
         if !matches!(url.scheme(), "http" | "https")
             || !url.username().is_empty()
             || url.password().is_some()
         {
             return Err("fetch requires an http(s) URL without credentials".into());
         }
-        let host = url.host_str().ok_or("fetch URL has no host")?;
-        if !self.permissions.iter().any(|p| p == &format!("net:{host}")) {
+        let host = canonical_host(url.host_str().ok_or("fetch URL has no host")?)?;
+        if !self.permissions.contains(&host) {
             return Err(format!("fetch permission denied: requires net:{host}"));
         }
+        // Use the same canonical host for authority and transport, including
+        // mapped IPv6 and WHATWG's alternate IPv4 spellings.
+        url.set_host(Some(&host)).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -286,8 +299,8 @@ impl WebHost {
             result = async {
                 match operation {
                     "send" => {
-                        let url = Url::parse(text(&p,"url")?).map_err(|e|e.to_string())?;
-                        self.permit(&url)?;
+                        let mut url = Url::parse(text(&p,"url")?).map_err(|e|e.to_string())?;
+                        self.permit(&mut url)?;
                         let method = reqwest::Method::from_bytes(text(&p,"method")?.as_bytes()).map_err(|e|e.to_string())?;
                         let mut request = self.client.request(method,url);
                         for pair in p["headers"].as_array().ok_or("invalid headers")? {
@@ -335,6 +348,94 @@ impl WebHost {
                     _ => Err("unsupported async web operation".into()),
                 }
             } => result
+        }
+    }
+}
+
+// Parse grants as hosts, never as URLs: credentials, ports and URL delimiters
+// must not lend authority to a different host. url supplies IDNA and IPv4 parsing.
+fn canonical_host(raw: &str) -> Result<String> {
+    if raw.is_empty()
+        || raw
+            .chars()
+            .any(|c| c.is_whitespace() || "/\\@?#".contains(c))
+    {
+        return Err("invalid network permission host".into());
+    }
+    let host = if let Ok(ip) = raw.parse::<IpAddr>() {
+        match ip {
+            IpAddr::V4(ip) => url::Host::Ipv4(ip),
+            IpAddr::V6(ip) => url::Host::Ipv6(ip),
+        }
+    } else {
+        url::Host::parse(raw).map_err(|e| e.to_string())?
+    };
+    Ok(match host {
+        url::Host::Domain(name) => name.trim_end_matches('.').to_ascii_lowercase(),
+        url::Host::Ipv4(ip) => ip.to_string(),
+        url::Host::Ipv6(ip) => match ip.to_ipv4_mapped() {
+            Some(ip) => ip.to_string(),
+            None => format!("[{ip}]"),
+        },
+    })
+}
+
+struct PublicResolver;
+impl reqwest::dns::Resolve for PublicResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_owned();
+        Box::pin(async move {
+            // localhost is the sole name with local authority; do not trust
+            // hosts-file/DNS overrides to turn that grant into another network.
+            let addresses: Vec<_> = if host == "localhost" {
+                vec![
+                    (IpAddr::V4(Ipv4Addr::LOCALHOST), 0).into(),
+                    (IpAddr::V6(Ipv6Addr::LOCALHOST), 0).into(),
+                ]
+            } else {
+                tokio::net::lookup_host((host.as_str(), 0))
+                    .await?
+                    .filter(|address| public_address(address.ip()))
+                    .collect()
+            };
+            if addresses.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "network hostname resolved to no permitted public addresses",
+                )
+                .into());
+            }
+            // reqwest connects directly to this iterator. There is no second
+            // DNS lookup between validating an address and opening its socket.
+            Ok(Box::new(addresses.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+fn public_address(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            !matches!(a, 0 | 10 | 127 | 224..=255)
+                && !(a == 100 && (64..=127).contains(&b))
+                && !(a == 169 && b == 254)
+                && !(a == 172 && (16..=31).contains(&b))
+                && !(a == 192
+                    && (b == 168 || (b == 0 && matches!(c, 0 | 2)) || (b == 88 && c == 99)))
+                && !(a == 198 && (matches!(b, 18 | 19) || (b == 51 && c == 100)))
+                && !(a == 203 && b == 0 && c == 113)
+        }
+        IpAddr::V6(ip) => {
+            if let Some(ip) = ip.to_ipv4_mapped() {
+                return public_address(IpAddr::V4(ip));
+            }
+            let s = ip.segments();
+            // Conservatively allow global unicast only, excluding protocol,
+            // documentation and transition ranges (including embedded IPv4).
+            s[0] & 0xe000 == 0x2000
+                && !(s[0] == 0x2001 && (s[1] < 0x200 || s[1] == 0xdb8))
+                && s[0] != 0x2002
+                && !(s[0] == 0x3fff && s[1] < 0x1000)
         }
     }
 }

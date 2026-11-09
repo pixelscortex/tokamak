@@ -19,6 +19,29 @@ JSON and byte chunks through `OpRegistry`, so they do not depend on QuickJS.
 | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` | Tokio timers, numeric handles, function callbacks only. Cancel wakes the pending timer; no timer thread/task is detached. |
 | `crypto.randomUUID`, `crypto.getRandomValues` | OS randomness through getrandom. UUID v4, integer typed arrays, 65,536-byte quota. No `crypto.subtle`. |
 
+## Network authority
+
+Grants are exact `net:<host>` entries, independent of port. Both grants and
+request hosts use URL/IDNA canonicalization: lowercase ASCII/punycode, no trailing
+dot, canonical IPv4 (including integer/hex/short forms), and bracketed IPv6.
+IPv4-mapped IPv6 normalizes to IPv4. Userinfo, ports and URL delimiters are not
+valid in grants; request URL credentials are rejected.
+
+A hostname grant authorizes only public destination addresses. A custom reqwest
+resolver filters the actual address iterator used to connect, on every request
+and redirect; there is no separate check followed by another DNS resolution.
+Mixed answers retain only public addresses. Private, loopback, link-local, CGNAT,
+unspecified, multicast, reserved/documentation and transition ranges are excluded;
+IPv6 is conservatively limited to global unicast outside special-purpose ranges.
+This includes `169.254.169.254` and `fd00:ec2::254` metadata endpoints. Ambient
+HTTP proxies are disabled so they cannot bypass this resolver.
+
+Non-public access requires an explicit IP grant, e.g. `net:127.0.0.1`,
+`net:192.168.1.10` or `net:[::1]`. `net:localhost` is a convenience for local
+servers such as Ollama: it connects only to `127.0.0.1`/`::1`, without DNS or
+hosts-file overrides. These grants do not authorize other hostnames that happen
+to resolve to the same IP. No private-range or wildcard grants are supported.
+
 The native resource table has a shared maximum of 64 HTTP exchanges, pending
 timers and active incremental decoders per invocation. Returning or throwing
 retires the lease and drops the world and its native futures. Readers apply
