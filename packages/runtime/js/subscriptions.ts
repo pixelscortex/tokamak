@@ -22,13 +22,21 @@ export function retainSubscriptions(transport: ClientTransport): ClientTransport
         }
         entry = { observers: new Set(), stop: () => {} };
         const current = entry;
-        entry.stop = transport.subscribe(name, args, event => {
-          current.last = event;
-          for (const notify of current.observers) {
-            try { notify(event); } catch { /* isolate contribution observers */ }
-          }
-        });
         entries.set(key, entry);
+        try {
+          entry.stop = transport.subscribe(name, args, event => {
+            current.last = event;
+            // Terminal responses release the wire observer. Keep the failure
+            // for existing owners, but a remount must open a fresh subscription.
+            if ("error" in event && event.terminal && entries.get(key) === current) entries.delete(key);
+            for (const notify of current.observers) {
+              try { notify(event); } catch { /* isolate contribution observers */ }
+            }
+          });
+        } catch (error) {
+          if (entries.get(key) === current) entries.delete(key);
+          throw error;
+        }
       }
       entry.observers.add(observer);
       try { if (entry.last) observer(entry.last); }

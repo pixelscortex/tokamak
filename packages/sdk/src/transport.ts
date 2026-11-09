@@ -184,7 +184,7 @@ export class InProcessTransport implements ClientTransport {
       if (event.type === "response") this.subscriptions.delete(event.id);
       this.notify(
         observer,
-        "Ok" in result ? { value: result.Ok } : { error: new Error(result.Err) },
+        "Ok" in result ? { value: result.Ok } : { error: new Error(result.Err), terminal: event.type === "response" },
       );
     }
   }
@@ -212,7 +212,7 @@ export class InProcessTransport implements ClientTransport {
     try {
       this.connection.close();
     } finally {
-      for (const observer of observers) this.notify(observer, { error });
+      for (const observer of observers) this.notify(observer, { error, terminal: true });
     }
   }
 

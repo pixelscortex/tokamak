@@ -6,7 +6,7 @@ import type { FunctionReference } from "./api";
 import type { JsonValue } from "./values";
 import { assertJson, jsonSnapshot } from "./values";
 
-export type SubscriptionEvent<T> = { value: T } | { error: Error };
+export type SubscriptionEvent<T> = { value: T } | { error: Error; terminal?: boolean };
 
 export interface ClientTransport {
   query(name: string, args: JsonValue): Promise<JsonValue>;
