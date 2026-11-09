@@ -1,0 +1,23 @@
+app/tests/parts-host.tsx
+  s_ff6a4e1bf09ffb::t_1fdb575b37493e 27-30
+app/tests/plugin-fixtures.mjs
+  s_ff6a4e1bf09ffb::t_0db04fb2f06cb8 313-315,317-319,325,328-335,339-342,344
+app/tests/plugins.rs
+  s_ff6a4e1bf09ffb::t_5e15ba2a088e6d 906-910,912,915,917-922,924,933-935
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6073d533de39a8057f42eae3aabe6d798a1c26da",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
