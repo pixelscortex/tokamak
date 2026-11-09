@@ -1,0 +1,19 @@
+app/tests/plugins.rs
+  s_ff6a4e1bf09ffb::t_bae531763dba2d 338-341,388-390,432-434,516-518,603-606,627,656,687-688,733,755,808,872-878,916
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "afd023932e3ff4928032f1647fb123b60269a20d",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
