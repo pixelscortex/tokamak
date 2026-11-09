@@ -1,0 +1,23 @@
+packages/build/src/contributions.ts
+  s_4b707c4a248406::t_f6255424230704 33-37,44,70-76
+app/README.md
+  s_4b707c4a248406::t_f2e591fa8529bf 3-6,35-37,52
+packages/build/src/lib.rs
+  s_4b707c4a248406::t_554c237ef941c5 90-92,94,96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9db3dd66136c1e19f0a39215ead3504c530ede38",
+  "prompts": {},
+  "sessions": {
+    "s_4b707c4a248406": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfb6-a3db-7a91-aae7-c146ae7a257e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
