@@ -114,3 +114,72 @@ checks rollback after timeout, committed footprints matching storage, and
 unchanged storage across subsequent command/lifecycle barriers; it does not
 mistake missing JavaScript `await` syntax for evidence that an operation was
 still pending.
+
+## TKM-45 action regressions
+
+`actions.rs` builds isolated plugin artifacts with the public builder through
+`build-actions.mjs`, then runs `actions-driver.ts` over the same real SDK native
+session bridge pattern as TKM7. The contract and same-connection lane tests
+also run through the real loopback WebSocket adapter/SDK transport. The driver is checked against the builder's
+fresh generated API before being bundled. No JavaScript executes in Bun except
+build tooling, the transport client, and the local mock; handlers run in QuickJS.
+The pinned AI SDK test dependencies are build/test-only root dev dependencies.
+
+Run `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test actions`. Its ten
+regressions cover:
+
+| Spec | Runnable test(s) in `actions.rs` |
+| --- | --- |
+| 1. Action kind, separate transactions, short budget, typed client | `action_kind_and_independent_transactions_outlive_normal_budget` |
+| 2. Same-connection progress while an action awaits a timer | `pending_action_does_not_block_same_connection_transactions` |
+| 3. Effect/permission checks, incremental bodies, redirect checks | `fetch_checks_effects_permissions_streaming_and_redirects` |
+| 4. Native disconnect on abort | `abort_disconnects_http_before_action_returns` |
+| 5. Advancing action time, frozen nested time, unseeded randomness | `action_clock_advances_but_nested_transactions_freeze_time`, `action_random_ignores_transaction_replay_seed` |
+| 6. Private cross-plugin queries and mutations | `actions_enforce_cross_plugin_exports` |
+| 7. Pinned AI SDK against local OpenAI-compatible SSE | `pinned_ai_sdk_streams_multiple_deltas_offline`, `pinned_ai_sdk_abort_disconnects_mid_stream` |
+| 8. Unsupported API error | `missing_web_api_fails_loudly` |
+
+HTTP mocks bind `127.0.0.1:0`. Each response chunk/delta waits for a consumer
+acknowledgement before the next is sent, so buffering the entire body cannot
+pass. Abort tests keep the action alive on another request until the mock sees
+the original HTTP disconnect; teardown cannot substitute for cancellation.
+The mock uses a literal placeholder credential and never contacts a provider.
+A fixed public replay input tests that fresh action worlds do not seed
+`Math.random`; nested transaction tests separately require a frozen clock.
+Two nested queries bracket a committed mutation and must see different snapshots.
+The normal call budget is 150 ms, compared with a 600 ms action await. A
+1,000 ms timer bounds the same-connection ordering check. All waits have outer
+bounds and child processes/artifacts/sockets have failure cleanup.
+
+Fails-without verification (2026-11-09): every new test failed under a relevant
+temporary product mutation. All 15 targeted mutation/test runs exited 101 with
+`test result: FAILED`; all product sources were then restored byte for byte.
+No mutation is part of the committed tests.
+
+| Temporary disabled behaviour | Regression/failure observed |
+| --- | --- |
+| Arm a 150 ms action deadline | Contract: 600 ms action rejected with `runtime call exceeded its wall-clock budget` |
+| Expose a database on the action context | Contract: `noDb` was `false`, expected `true` |
+| Await an action on the serialized coordinator | Lane: `query and mutation must finish before the action timer`; actual settled `true` |
+| Remove the native network permission gate | Fetch: `denied fetches must send no request`; actual `['/denied']`, expected `[]` |
+| Disable the transactional web-effects guard | Fetch: expected `fetch is forbidden in queries and mutations`, received a generic missing-response error |
+| Skip the redirected hostname by retaining the granted host | Fetch: missing expected `net:localhost` rejection |
+| Omit native HTTP cancellation from abort | Both direct and AI SDK abort tests: observed `timeout: HTTP disconnect while action is still alive`, expected `disconnected` |
+| Install deterministic transaction inputs in actions | Clock: before/after remained equal; random: identical eight-draw sequences with the same replay seed |
+| Omit transaction determinism | Nested clock: before/after differed by 23 ms |
+| Remove cross-plugin export enforcement | Exports: missing expected `privateRead is not exported by b` rejection |
+| Close each response body after its first chunk | Fetch: only `first`; AI SDK: only `one`, instead of three ordered chunks/deltas |
+| Replace unsupported API errors with constructor stubs | Missing API: generic JSON-result error instead of the named unsupported `WebSocket` error |
+
+Final validation on top of `fccfe96e3e7ad346106756a832f635e42affc149`:
+
+| Command/environment | Result |
+| --- | --- |
+| `CARGO_BUILD_JOBS=2 moon run :check :test :e2e` | 28 tasks completed, 3m 28s |
+| Same command with `CLAUDECODE=1 AI_AGENT=1` | 28 tasks completed, 2m 45s |
+| `cargo fmt --all -- --check` and `git diff --check` | Passed |
+
+The injected `NODE_REPL_TOOL_OVERRIDES` value contained invalid UTF-8. It was
+unset for the runs because proto/Cargo build scripts cannot read that entry.
+No environment workaround is shipped. No product bug was exposed, and no
+product code changes remain.

@@ -27,6 +27,10 @@
     "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "4.0.111",
+    "@types/json-schema": "7.0.15",
+    "@types/node": "26.6.6",
+    "ai": "7.0.166",
     "vite": "8.3.6"
   }
 }
