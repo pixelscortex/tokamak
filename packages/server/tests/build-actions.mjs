@@ -23,7 +23,7 @@ import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vit
 export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
       id, version: "1.0.0", ...(id === "a"
         ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1"] }
-        : { exports: "./api.ts" }),
+        : { exports: "./api.ts", permissions: ["net:localhost", "net:loopback.tkm.test", "net:private.tkm.test", "net:metadata.tkm.test", "net:mapped.tkm.test"] }),
     })} })] };
 `);
     const child = Bun.spawn([process.execPath, join(workspace, "packages/build/src/build.ts"), path], {

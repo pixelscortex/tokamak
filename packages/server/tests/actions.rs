@@ -88,11 +88,14 @@ fn acceptance_over(scenario: &str, websocket: bool) {
     let installation = Installation::new();
     tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
         .block_on(async {
-            tokio::time::timeout(Duration::from_secs(20), async {
+            tokio::time::timeout(Duration::from_secs(30), async {
                 let pool = Arc::new(Pool::new(PoolConfig {
                     workers: 1,
                     limits: Limits {
-                        call_timeout: Duration::from_millis(150),
+                        // Only the contract probe asserts the deliberately short
+                        // budget; other scenarios retain the normal transaction
+                        // budget under concurrent regression-test load.
+                        call_timeout: if scenario == "contract" { Duration::from_millis(150) } else { Limits::default().call_timeout },
                         load_timeout: Duration::from_secs(5),
                         ..Limits::default()
                     }, ..PoolConfig::default()
@@ -220,4 +223,220 @@ fn action_random_ignores_transaction_replay_seed() {
                 assert!((0.0..1.0).contains(&value.as_f64().unwrap()));
             }
         });
+}
+
+// Cancellation/error paths must recycle native slots within the same action.
+// Readable cancellation must release an active incremental decoder.
+#[test]
+fn web_fix_decoder_readable_cancel_releases_slots() {
+    acceptance("slots-decoders-cancel");
+}
+// Writable abort must release an active incremental decoder.
+#[test]
+fn web_fix_decoder_writable_abort_releases_slots() {
+    acceptance("slots-decoders-abort");
+}
+// Fatal transform errors must release decoder state.
+#[test]
+fn web_fix_decoder_transform_error_releases_slots() {
+    acceptance("slots-decoders-error");
+}
+// Invalid streaming input must reset previously allocated decoder state.
+#[test]
+fn web_fix_decoder_invalid_input_releases_slots() {
+    acceptance("slots-decoders-invalid");
+}
+// Clears, thrown coercion and fired timeout signals must recycle capacity.
+#[test]
+fn web_fix_timer_clear_error_and_timeout_release_slots() {
+    acceptance("slots-timers");
+}
+
+// Prevent silent body replay and detached retained URLSearchParams references.
+// Body ownership must include POST transfer and direct-reader disturbance.
+#[test]
+fn web_fix_request_and_response_bodies_cannot_be_reused() {
+    acceptance("bodies");
+}
+// Saved params must stay linked after replacing search or href.
+#[test]
+fn web_fix_retained_search_params_remain_live() {
+    acceptance("params");
+}
+
+// Observe native sockets before another job can accidentally drive teardown.
+// Abort must close native I/O without another JS promise poll.
+#[test]
+fn web_fix_abort_disconnects_while_javascript_is_busy() {
+    acceptance("abort-busy");
+}
+// Successful retirement must close unused bodies without another job.
+#[test]
+fn web_fix_return_disconnects_with_worker_idle() {
+    acceptance("abandoned-return");
+}
+// Exceptional retirement must close unused bodies without another job.
+#[test]
+fn web_fix_throw_disconnects_with_worker_idle() {
+    acceptance("abandoned-throw");
+}
+// More than 64 exchanges must fit sequentially in one invocation.
+// Cancelling a fetch reader must recycle its native exchange.
+#[test]
+fn web_fix_cancelled_body_readers_release_slots() {
+    acceptance("slots-readers-cancel");
+}
+// A truncated fetch body must recycle its native exchange.
+#[test]
+fn web_fix_errored_body_readers_release_slots() {
+    acceptance("slots-readers-error");
+}
+// Permission failure must cancel the transferred native upload source.
+#[test]
+fn web_fix_denied_upload_cancels_native_source() {
+    acceptance("slots-uploads-denied");
+}
+// A pre-aborted request must cancel the transferred native upload source.
+#[test]
+fn web_fix_preaborted_upload_cancels_native_source() {
+    acceptance("slots-uploads-abort");
+}
+// An early response must cancel an upload still waiting on source bytes.
+#[test]
+fn web_fix_early_response_cancels_native_upload_source() {
+    acceptance("slots-uploads-early");
+}
+
+// Scope the deterministic OS resolver override to a child test process. This
+// reaches reqwest's actual resolver/connector without internet or /etc changes.
+#[cfg(unix)]
+#[test]
+fn web_fix_network_checks_resolved_addresses_and_canonical_hosts() {
+    if std::env::var_os("TKM45_TEST_DNS").is_some() {
+        use std::net::ToSocketAddrs;
+        // A missing shim/DNS failure must never masquerade as a blocked address.
+        for (host, ip) in [
+            ("loopback", "127.0.0.1"),
+            ("private", "10.1.2.3"),
+            ("metadata", "169.254.169.254"),
+            ("mapped", "::ffff:127.0.0.1"),
+        ] {
+            let addresses: Vec<_> = (format!("{host}.tkm.test"), 0)
+                .to_socket_addrs()
+                .unwrap()
+                .collect();
+            assert!(!addresses.is_empty());
+            assert!(
+                addresses
+                    .iter()
+                    .all(|address| address.ip() == ip.parse::<std::net::IpAddr>().unwrap())
+            );
+        }
+        let attempts = std::env::var_os("TKM45_TEST_CONNECT_LOG").unwrap();
+        std::fs::write(&attempts, "").unwrap();
+        acceptance("network-boundary");
+        assert_eq!(
+            std::fs::read_to_string(attempts).unwrap(),
+            "",
+            "hostname grants must reject private/metadata answers before attempting a connection"
+        );
+        return;
+    }
+    let installation = Installation::new();
+    let library = installation.0.join("resolver.dylib");
+    let mut compile = Command::new("cc");
+    if cfg!(target_os = "macos") {
+        compile.arg("-dynamiclib");
+    } else {
+        compile.args(["-shared", "-fPIC"]);
+    }
+    let output = compile
+        .arg(root().join("packages/server/tests/fixtures/actions/resolver.c"))
+        .arg("-o")
+        .arg(&library)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "DNS shim compile: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "web_fix_network_checks_resolved_addresses_and_canonical_hosts",
+            "--nocapture",
+        ])
+        .env("TKM45_TEST_DNS", "1")
+        .env("TKM45_TEST_CONNECT_LOG", installation.0.join("connect.log"))
+        .env(
+            if cfg!(target_os = "macos") {
+                "DYLD_INSERT_LIBRARIES"
+            } else {
+                "LD_PRELOAD"
+            },
+            library,
+        )
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "DNS/HTTP acceptance:\n{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+// Keep the cancelled pool allocated but idle: dropping the pool/runtime must
+// not be what finally closes a response abandoned without JS cleanup.
+#[test]
+fn web_fix_cancel_disconnects_with_worker_idle() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let bundle = Arc::new(Bundle::new(artifacts()["a/bundle.js"].clone(), None).unwrap());
+    tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap().block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}/hold", listener.local_addr().unwrap());
+            let (ready, ready_rx) = tokio::sync::oneshot::channel();
+            let (closed, closed_rx) = tokio::sync::oneshot::channel();
+            let mock = tokio::spawn(async move {
+                let mut ready = Some(ready);
+                let mut closed = Some(closed);
+                let mut peers = Vec::new();
+                for _ in 0..2 {
+                    let (mut peer, _) = listener.accept().await.unwrap();
+                    let mut headers = Vec::new();
+                    while !headers.ends_with(b"\r\n\r\n") {
+                        headers.push(peer.read_u8().await.unwrap());
+                        assert!(headers.len() < 8192);
+                    }
+                    if headers.starts_with(b"GET /ready ") {
+                        peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").await.unwrap();
+                        ready.take().unwrap().send(()).unwrap();
+                    } else {
+                        peer.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nfirst\r\n").await.unwrap();
+                        let closed = closed.take().unwrap();
+                        peers.push(tokio::spawn(async move {
+                            let mut byte = [0];
+                            let result = peer.read(&mut byte).await;
+                            assert!(matches!(result, Ok(0) | Err(_)), "expected disconnect, got {result:?}");
+                            closed.send(()).unwrap();
+                        }));
+                    }
+                }
+                for peer in peers { peer.await.unwrap(); }
+            });
+            let pool = Pool::new_actions(PoolConfig { workers: 1, ..PoolConfig::default() }).unwrap();
+            let mut ops = OpRegistry::new();
+            ops.set_network_permissions(vec!["net:127.0.0.1".into()]);
+            let pending = pool.submit(bundle, "invoke", json!({"name":"web:abandoned", "args":{"url":url,"mode":"cancel"}}), Arc::new(ops)).unwrap();
+            ready_rx.await.unwrap();
+            pool.cancel_actions();
+            assert_eq!(pending.await.unwrap_err(), engine::Error::Closed);
+            tokio::time::timeout(Duration::from_secs(2), closed_rx).await
+                .expect("HTTP stayed open after cancellation while worker idle").unwrap();
+            mock.await.unwrap();
+            drop(pool);
+        }).await.expect("cancelled action regression timeout");
+    });
 }

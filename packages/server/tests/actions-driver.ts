@@ -42,11 +42,24 @@ const disconnected = deferred();
 let stream: ServerResponse | undefined;
 let advance: (() => void) | undefined;
 let holdClosed = false;
+let closedAt = 0;
+const held = new Set<ServerResponse>();
+let lastClosed: Promise<void> = Promise.resolve();
+let broken: ServerResponse | undefined;
 const mock = createServer(async (req, res) => {
   const path = new URL(req.url!, "http://127.0.0.1").pathname;
   hits.push(path);
-  if (path === "/started") { res.end("started"); started.resolve(); }
-  else if (path === "/redirect") {
+  if (path === "/echo") {
+    if (req.method === "POST") { for await (const chunk of req) res.write(chunk); res.end(); }
+    else res.end("response bytes");
+  } else if (path === "/early") { req.resume(); res.writeHead(204); res.end(); }
+  else if (path === "/broken") {
+    broken = res; res.writeHead(200, { "content-length": "100" }); res.write("first");
+  } else if (path === "/break") { broken!.destroy(); res.end("broken"); }
+  else if (path === "/started") { res.end("started"); started.resolve(); }
+  else if (path === "/redirect-loopback") {
+    res.writeHead(302, { location: `${base}/forbidden` }); res.end();
+  } else if (path === "/redirect") {
     res.writeHead(302, { location: `${base.replace("127.0.0.1", "localhost")}/forbidden` }); res.end();
   } else if (path === "/chunks") {
     res.writeHead(200, { "content-type": "text/plain" });
@@ -57,8 +70,9 @@ const mock = createServer(async (req, res) => {
     advance();
   } else if (path === "/hold" || path === "/v1/chat/completions") {
     stream = res;
-    req.resume();
-    res.on("close", () => { holdClosed = true; disconnected.resolve(); });
+    req.resume(); held.add(res);
+    lastClosed = new Promise<void>(resolve => res.once("close", () => resolve()));
+    res.on("close", () => { held.delete(res); holdClosed = true; closedAt = Date.now(); disconnected.resolve(); });
     if (path === "/hold") {
       res.writeHead(200, { "content-type": "text/plain" }); res.write("first");
     } else {
@@ -158,6 +172,63 @@ try {
       aborted: abort, observed: abort ? "disconnected" : "complete" });
     assert.equal(hits.filter(path => path === "/v1/chat/completions").length, 1);
     if (abort) assert.equal(holdClosed, true);
+  } else if (scenario === "network-boundary") {
+    // The Rust harness verifies each shim answer before starting this driver.
+    for (const host of ["loopback", "private", "metadata", "mapped"]) {
+      await assert.rejects(within(client.action(b.ops.deniedFetch, {
+        url: `http://${host}.tkm.test:${address.port}/boundary-${host}`,
+      }), `${host} address rejection`), /error sending request/);
+    }
+    assert.deepEqual(hits, [], "hostname grants must not reach non-public connected addresses");
+    // Explicit local grants still work; redirects must recheck their destination.
+    assert.equal(await client.action(b.ops.deniedFetch, { url: `${base.replace("127.0.0.1", "localhost")}/local` }), "unexpected request");
+    await assert.rejects(client.action(b.ops.deniedFetch, {
+      url: `${base.replace("127.0.0.1", "localhost")}/redirect-loopback`,
+    }), /requires net:127\.0\.0\.1/);
+    for (const host of ["2130706433", "0x7f.1", "127.1", "[::ffff:127.0.0.1]"]) {
+      const url: string = `http://${host}:${address.port}/alternate`;
+      await assert.rejects(client.action(b.ops.deniedFetch, { url }), /requires net:127\.0\.0\.1/);
+      assert.equal(await client.action(api.ops.fetchText, { url }), "unexpected request");
+    }
+    assert.deepEqual(hits, ["/local", "/redirect-loopback", ...Array(4).fill("/alternate")]);
+  } else if (scenario === "abort-busy") {
+    // Disconnect must precede the end of synchronous JS, with no later job.
+    const ended = await client.action(api.web.abortBusy, { url: `${base}/hold`, ack: `${base}/ack` });
+    await within(disconnected.promise, "abort while JS busy");
+    assert.ok(closedAt < ended, `HTTP closed at ${closedAt}, JS ended at ${ended}`);
+  } else if (scenario === "abandoned-return" || scenario === "abandoned-throw") {
+    // Keep the server/pool alive and submit no next action before observing EOF.
+    for (let i = 0; i < 130; i++) {
+      const pending: Promise<unknown> = client.action(api.web.abandoned, { url: `${base}/hold`, mode: scenario.slice("abandoned-".length) });
+      if (scenario === "abandoned-throw") await assert.rejects(pending, /abandon sentinel/);
+      else assert.equal(await pending, "abandoned");
+      await within(lastClosed, `HTTP disconnect after retirement ${i} with idle worker`);
+      assert.equal(held.size, 0);
+    }
+    assert.equal(await client.action(api.web.timers, {}), "healthy");
+  } else if (scenario.startsWith("slots-readers-")) {
+    const mode = scenario.slice("slots-readers-".length);
+    assert.equal(await client.action(api.web.readers, { url: `${base}/${mode === "cancel" ? "hold" : "broken"}`, ack: `${base}/break`, mode }), "healthy");
+  } else if (scenario.startsWith("slots-uploads-")) {
+    const mode = scenario.slice("slots-uploads-".length);
+    assert.equal(await client.action(api.web.uploads, { source: `${base}/hold`,
+      target: mode === "denied" ? `${base.replace("127.0.0.1", "localhost")}/denied` : `${base}/early`, mode }), "healthy");
+    assert.equal(hits.filter(path => path === "/hold").length, 130);
+    await within(Promise.all([...held].map(response => new Promise<void>(resolve => response.once("close", () => resolve())))), "upload source disconnects");
+    assert.equal(held.size, 0, "all transferred fetch upload sources must disconnect");
+  } else if (scenario === "bodies") {
+    // Reuse must fail before another HTTP request reaches the mock.
+    assert.equal(await client.action(api.web.bodies, { url: `${base}/echo` }), "bodies preserved");
+    assert.deepEqual(hits, ["/echo", "/echo", "/echo"]);
+  } else if (scenario === "params") {
+    // Test retained object identity and observable URL bytes in QuickJS.
+    assert.equal(await client.action(api.web.params, {}), "params live");
+  } else if (scenario.startsWith("slots-decoders-")) {
+    // A completed action alone cannot prove per-resource slot release.
+    assert.equal(await client.action(api.web.decoders, { mode: scenario.slice("slots-decoders-".length) }), "healthy");
+  } else if (scenario === "slots-timers") {
+    // Every cycle must release capacity before the next allocation.
+    assert.equal(await client.action(api.web.timers, {}), "healthy");
   } else if (scenario === "missing") {
     // Prevent unsupported APIs silently returning a plausible but unusable value.
     await assert.rejects(client.action(api.ops.missing, {}), /WebSocket.*not supported by Tokamak web APIs/);
@@ -166,6 +237,8 @@ try {
 } finally {
   transport.close();
   stream?.destroy();
+  broken?.destroy();
+  for (const response of held) response.destroy();
   mock.closeAllConnections();
   await new Promise<void>(resolve => mock.close(() => resolve()));
   lines.close();

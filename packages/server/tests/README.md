@@ -147,7 +147,7 @@ The mock uses a literal placeholder credential and never contacts a provider.
 A fixed public replay input tests that fresh action worlds do not seed
 `Math.random`; nested transaction tests separately require a frozen clock.
 Two nested queries bracket a committed mutation and must see different snapshots.
-The normal call budget is 150 ms, compared with a 600 ms action await. A
+The contract scenario's normal call budget is 150 ms, compared with a 600 ms action await. A
 1,000 ms timer bounds the same-connection ordering check. All waits have outer
 bounds and child processes/artifacts/sockets have failure cleanup.
 
@@ -183,3 +183,75 @@ The injected `NODE_REPL_TOOL_OVERRIDES` value contained invalid UTF-8. It was
 unset for the runs because proto/Cargo build scripts cannot read that entry.
 No environment workaround is shipped. No product bug was exposed, and no
 product code changes remain.
+
+## TKM-45 fix regressions
+
+The `web_fix_*` tests in `actions.rs` extend the same isolated public-builder,
+real engine/server and SDK transport harness. `fixtures/actions/a/backend/web.ts`
+contains the action probes, and `actions-driver.ts` owns the loopback HTTP peers.
+Run the focused suite with:
+
+```sh
+CARGO_BUILD_JOBS=2 cargo test --locked -p server --test actions web_fix_
+```
+
+| Review finding | Regression coverage |
+| --- | --- |
+| 1. Connected-address network authority | `web_fix_network_checks_resolved_addresses_and_canonical_hosts`: granted names resolving to loopback, private, metadata and IPv4-mapped IPv6; redirected loopback denial; explicit localhost/IP access; integer, hex, shortened and mapped address spellings. |
+| 2. Prompt native disconnect | `web_fix_abort_disconnects_while_javascript_is_busy`, `web_fix_{return,throw,cancel}_disconnects_with_worker_idle`: the peer observes EOF while the pool remains allocated, before any next job can drive teardown. |
+| 3. Native slot reclamation | `web_fix_decoder_{readable_cancel,writable_abort,transform_error,invalid_input}_releases_slots`, `web_fix_timer_clear_error_and_timeout_release_slots`, `web_fix_{cancelled,errored}_body_readers_release_slots`, `web_fix_{denied,preaborted}_upload_cancels_native_source`, `web_fix_early_response_cancels_native_upload_source`: 130 cycles per path within one action, followed by working timers and decoders. Return/throw retirement also repeats 130 times with abandoned readers, incremental decoders, timers and timeout signals. |
+| 4. Body ownership | `web_fix_request_and_response_bodies_cannot_be_reused`: POST Request consumption/TypeError, direct-reader disturbance after releasing the lock, rejected reads/clones and preserved pre-read request/response clones. |
+| 5. Live search parameters | `web_fix_retained_search_params_remain_live`: retained identity, duplicate values, search/href replacement, reverse edits, empty search and form encoding. |
+
+The network regression compiles `fixtures/actions/resolver.c` into an owned test
+artifact and interposes OS name lookup only in its child process (macOS/Linux).
+The child verifies the numeric answers before running acceptance. This exercises
+the resolver actually used by reqwest, needs no external DNS/internet and changes
+no system files. A connect observer records and blocks attempts to the private
+and metadata test addresses, preventing generic connection errors from passing
+the rejection assertions or sending packets outside the machine. The log must
+stay empty. All other names/connections behave normally. The existing native compiler
+is used; no package/dependency or runtime hook is added.
+
+HTTP waits are bounded by four seconds. The busy-JS abort probe occupies JS for
+500ms; its peer must record disconnect before that interval ends. Cancellation
+uses the public action pool lifecycle and keeps the cancelled pool alive until
+EOF, independently of pool/runtime destruction. Reader-error tests gate a
+truncated HTTP body on a second request. Upload tests transfer a real open fetch
+body into denied, pre-aborted and early-completed POSTs, then observe all source
+connections closing. Each mock/artifact/process is owned by the current test.
+
+Fails-without evidence for the seven review fixes (all targeted runs exited 101):
+
+| Temporarily reversed runtime fix | Failing regression/output |
+| --- | --- |
+| `f6d6917` resolved-address gate | Network: `AssertionError: Missing expected rejection` for the granted loopback-resolving hostname. |
+| `e4ffb90` native retirement/background driver | Return and throw: `timeout: HTTP disconnect after retirement 0 with idle worker`; cancellation: `HTTP stayed open after cancellation while worker idle`. All three tests failed. |
+| `6c40823` slot cleanup | All four decoder tests and the timer test: `web resource limit exceeded (64)`. |
+| `e4b1d58` body disturbance/transfer | Bodies: `fetch did not consume original Request`. |
+| `154e93a` retained search parameters | Params: `search replaced params identity`. |
+| `95c1ce6` upload source cleanup | All three upload tests: `web resource limit exceeded (64)`. |
+| `d900054` independently driven native I/O | Busy abort: `HTTP closed at 1794221673519, JS ended at 1794221673519`; disconnect failed to precede the end of JS. |
+
+The two reader tests are additional controls for behaviour already present
+before these fixes: they still passed with `6c40823` reversed. To prove they
+also bite, that reversal plus temporarily omitting the JS native `cancel` call
+made **both** fail with `web resource limit exceeded (64)`. This distinguishes
+existing JS cleanup from the added independent native error cleanup rather than
+claiming the fix introduced both paths. All temporary product changes were
+restored; none belongs to the test commit. No product bug was exposed.
+
+The expanded suite runs 27 tests concurrently. Only the deadline contract
+scenario uses the artificial 150ms transaction budget; other scenarios use the
+normal one-second budget so contention does not turn the nested-clock probe
+into an unrelated deadline test. The first full run exposed that harness
+contention (26/27 passed, all 17 new tests passed); no product bug was found.
+
+Validation base: `d900054c43b271e7edb63b5c68d44a5edfb1d5f7`.
+The normal `CARGO_BUILD_JOBS=2 moon run :check :test :e2e` run completed all
+28 tasks in 9m 29s (including first-run native dependency checking). The actions
+binary passed all 27 tests, including these 17 new regressions. The invalid-UTF-8
+`NODE_REPL_TOOL_OVERRIDES` entry was unset for validation, as in prior runs.
+The same command with `CLAUDECODE=1 AI_AGENT=1` completed all 28 tasks in
+3m 23s; all 27 action tests passed again. `cargo fmt --all -- --check`,
+`git diff --check`, and a zero product-source diff also passed.
