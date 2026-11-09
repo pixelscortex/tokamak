@@ -16,3 +16,8 @@ dist/
 /render/evidence/
 /packages/render/evidence/
 /.codegraph/
+
+# Local secrets (API keys) never leave this machine.
+.env
+.env.*
+!.env.example
