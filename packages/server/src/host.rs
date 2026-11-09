@@ -3,7 +3,7 @@
 //! embedded engine's large debug futures off the QuickJS worker's native stack.
 
 use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
-use engine::{Bundle, ModuleCall, OpRegistry, Pool};
+use engine::{Bundle, Determinism, ModuleCall, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -54,6 +54,7 @@ pub(crate) async fn invoke(
     mutation: bool,
     space: &DataSpace,
     plugins: Option<Arc<crate::plugins::Loaded>>,
+    determinism: Determinism,
 ) -> Call {
     let (bundle, name, space, graph) = if let Some(plugins) = plugins {
         let target = plugins
@@ -100,6 +101,7 @@ pub(crate) async fn invoke(
         space,
         mutation,
         graph,
+        Some(determinism),
     );
     let result = match pool.submit(bundle, "invoke", json!({"name":name,"args":args}), ops) {
         Ok(pending) => pending.await.map_err(|e| e.to_string()),
@@ -153,8 +155,12 @@ fn operations(
     space: DataSpace,
     writable: bool,
     graph: Graph,
+    determinism: Option<Determinism>,
 ) -> Arc<OpRegistry> {
     let mut ops = OpRegistry::new();
+    if let Some(inputs) = determinism {
+        ops.set_determinism(inputs);
+    }
     for operation in [
         "db.get",
         "db.query",
@@ -249,6 +255,7 @@ fn operations(
                     target.space,
                     target.mutation,
                     Some((plugins.clone(), target.owner, child_path)),
+                    None,
                 );
                 let failed = failure.clone();
                 Ok(ModuleCall::new(

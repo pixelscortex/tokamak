@@ -94,6 +94,7 @@ impl Engine for QuickJsEngine {
         args: Json,
         ops: Arc<OpRegistry>,
     ) -> Result<Json, Error> {
+        let determinism = ops.1.unwrap_or_default();
         let load_end = Instant::now() + self.limits.load_timeout;
         let world = timed(
             load_end,
@@ -106,6 +107,8 @@ impl Engine for QuickJsEngine {
             load_end,
             "load",
             world.context.async_with(async |ctx| {
+                ctx.eval::<(), _>(determinism.bootstrap())
+                    .map_err(|e| js_error(&ctx, e, bundle, false))?;
                 let module = Module::declare(
                     ctx.clone(),
                     source_map::BUNDLE_NAME,
@@ -125,7 +128,8 @@ impl Engine for QuickJsEngine {
 
         let call_end = Instant::now() + self.limits.call_timeout;
         world.set_deadline(Some(call_end));
-        let invocation = Invocation::new(call_end);
+        let mut invocation = Invocation::new(call_end);
+        invocation.determinism = Some(determinism);
         let result = timed(
             call_end,
             "call",

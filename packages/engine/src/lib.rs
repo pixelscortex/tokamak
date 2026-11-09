@@ -4,12 +4,14 @@
 //! a `QuickJsContext` on its event-loop thread. Neither API installs web APIs.
 
 mod bridge;
+mod determinism;
 mod engine;
 mod pool;
 mod source_map;
 mod types;
 
 pub use bridge::{Invocation, ModuleCall, OpRegistry, install_ops};
+pub use determinism::Determinism;
 pub use engine::{Engine, QuickJsContext, QuickJsEngine};
 pub use pool::{PendingCall, Pool, PoolConfig};
 pub use types::{Bundle, Error, Limits};

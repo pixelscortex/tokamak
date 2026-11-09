@@ -744,6 +744,7 @@ impl Coordinator {
                     }
                     Some(mutation) => {
                         let mut result = Err("mutation conflict retry limit exceeded".into());
+                        let determinism = engine::Determinism::default();
                         for attempt in 0..ATTEMPTS {
                             let call = host::invoke(
                                 &self.database,
@@ -754,6 +755,7 @@ impl Coordinator {
                                 mutation,
                                 &self.space,
                                 self.plugins.clone(),
+                                determinism,
                             )
                             .await;
                             if mutation && call.conflict {
@@ -853,6 +855,7 @@ impl Coordinator {
                     false,
                     &self.space,
                     self.plugins.clone(),
+                    engine::Determinism::default(),
                 )
                 .await
             } else {

@@ -3,7 +3,7 @@
 //! A saved JS closure retains its original token. Retiring that token is final:
 //! installing a bridge for another call cannot lend authority to old work.
 
-use crate::Json;
+use crate::{Determinism, Json};
 use rquickjs::{Ctx, Exception, Function, Module, Object, Promise, Value, promise::MaybePromise};
 use std::{
     collections::BTreeMap,
@@ -71,11 +71,16 @@ impl Drop for ModuleCall {
 /// Construct before sharing. Per-call registries can capture the server's
 /// transaction/readset without making the runtime aware of database semantics.
 #[derive(Default)]
-pub struct OpRegistry(BTreeMap<String, Op>);
+pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>);
 
 impl OpRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Reuse these host-selected inputs when replaying the same logical call.
+    pub fn set_determinism(&mut self, inputs: Determinism) {
+        self.1 = Some(inputs);
     }
 
     /// Sync ops must be short and nonblocking: JS interrupts cannot preempt Rust.
@@ -132,6 +137,7 @@ impl OpRegistry {
 pub struct Invocation {
     active: Arc<AtomicBool>,
     deadline: Instant,
+    pub(crate) determinism: Option<Determinism>,
 }
 
 impl Invocation {
@@ -139,6 +145,7 @@ impl Invocation {
         Self {
             active: Arc::new(AtomicBool::new(true)),
             deadline,
+            determinism: None,
         }
     }
 
@@ -168,6 +175,7 @@ pub fn install_ops<'js>(
         invocation.deadline,
         Arc::new(AtomicU64::new(0)),
         0,
+        invocation.determinism,
     )
 }
 
@@ -178,6 +186,7 @@ fn install_leased<'js>(
     deadline: Instant,
     modules: Arc<AtomicU64>,
     depth: u8,
+    determinism: Option<Determinism>,
 ) -> rquickjs::Result<Object<'js>> {
     let host = Object::new(ctx.clone())?;
     host.set(
@@ -217,12 +226,15 @@ fn install_leased<'js>(
                         let future_ctx = ctx.clone();
                         Ok(Promise::wrap_future(&ctx, async move {
                             let name = format!("tokamak-module-{number}.js");
+                            let child = determinism.map(|inputs| inputs.child(number));
+                            let source =
+                                child.map(|inputs| inputs.module_source(&call.bundle.source));
                             let result = async {
                                 check(&future_ctx, &active, deadline)?;
                                 let module = Module::declare(
                                     future_ctx.clone(),
                                     name.as_str(),
-                                    call.bundle.source.as_bytes(),
+                                    source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
                                 )
                                 .map_err(|error| {
                                     let error = crate::engine::js_error_named(
@@ -247,6 +259,7 @@ fn install_leased<'js>(
                                     deadline,
                                     modules,
                                     depth + 1,
+                                    child,
                                 )?;
                                 let pending: MaybePromise = function.call((args, host))?;
                                 let result: Value = pending.into_future().await?;

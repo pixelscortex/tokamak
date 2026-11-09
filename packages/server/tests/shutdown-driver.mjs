@@ -68,6 +68,20 @@ async function fixture(binary, scenario) {
   }
 }
 
+// Keep the real worker occupied without allowing backend code to read live time.
+// Dry runs calibrate the same bounded loop without leaving extra database rows.
+async function occupancy(client) {
+  let iterations = 1_000_000;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const start = performance.now();
+    await client.mutation(api.shutdown.slowInsert, { iterations, dryRun: true });
+    const elapsed = performance.now() - start;
+    if (elapsed >= 1300 && elapsed <= 2000) return iterations;
+    iterations = Math.max(1, Math.floor(iterations * 1500 / Math.max(elapsed, 1)));
+  }
+  throw new Error("Cannot calibrate deterministic shutdown worker occupancy");
+}
+
 async function saturated(binary) {
   // The no-queue control establishes the same worker/bundle/disk path succeeds.
   // The saturated run then requires socket closure as admission failure evidence,
@@ -76,8 +90,9 @@ async function saturated(binary) {
     const url = await start();
     const writer = await open(url);
     await writer.client.query(api.probe.count, {}); // full server/SDK readiness barrier
+    const iterations = await occupancy(writer.client);
     let completed = false;
-    const mutation = writer.client.mutation(api.shutdown.slowInsert, {}).then(
+    const mutation = writer.client.mutation(api.shutdown.slowInsert, { iterations }).then(
       value => { completed = true; return { value }; }, error => ({ error: error.message }));
     if (queued === 0) {
       // Control has no competing queue: wait for its real reply, not a timer.
@@ -89,7 +104,7 @@ async function saturated(binary) {
       // request. SDK capacity is 128, larger than this entire workload.
       const requests = Array.from({ length: queued + 1 }, () =>
         writer.client.query(api.probe.count, {}).then(value => ({ value }), error => ({ error: error.message })));
-      await deadline(closed, 1000, "queue overflow must be observed before 1500ms handler retirement");
+      await deadline(closed, 1000, "queue overflow must be observed before calibrated handler retirement");
       assert.equal(completed, false, "mutation already replied; saturation did not hold accepted work");
       assert.ok((await mutation).error?.includes("closed"), "overflow must fail the connection explicitly");
       // All requests have rejection handlers; do not await retirement before SIGTERM.
@@ -138,8 +153,9 @@ async function queuedMutations(binary) {
   for (const queued of [1, 8]) await fixture(binary, async ({ start, stop, open }) => {
     const wire = await open(await start());
     await wire.client.query(api.probe.count, {});
+    const iterations = await occupancy(wire.client);
     let replies = 0;
-    const pending = [wire.client.mutation(api.shutdown.slowInsert, {}).then(
+    const pending = [wire.client.mutation(api.shutdown.slowInsert, { iterations }).then(
       value => { replies++; return { value }; }, error => ({ error: error.message }))];
     for (let i = 1; i <= queued; i++) pending.push(wire.client.mutation(api.probe.insert,
       { table: "items", value: { value: `queued-${i}` } }).then(

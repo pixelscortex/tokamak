@@ -79,6 +79,14 @@ Native failures poison the whole transaction even if plugin code catches them.
 Queries cannot call mutations, including queries invoked within a mutation.
 Read dependencies accumulate transitively for subscription invalidation.
 
+Backend queries and mutations fix one host timestamp and random seed per logical
+invocation, before any conflict retries. `Date.now()`, `new Date()` and `Date()`
+use that time; explicit date arguments still work. `Math.random()` uses a seeded
+PRNG. Retries reuse both inputs, and nested calls share the timestamp with random
+streams derived deterministically from their call order. The UI runtime keeps its
+live clock and randomness. Clock-dependent queries do not automatically refresh
+as time passes; subscriptions rerun when their data dependencies change.
+
 Delegation evaluates self-contained modules in the same invocation world, heap
 and time budget; it never awaits a second worker from a bounded worker pool.
 One-worker operation is tested. Results cross as JSON-compatible values, not
