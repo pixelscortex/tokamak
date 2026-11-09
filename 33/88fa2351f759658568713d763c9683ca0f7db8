@@ -1,0 +1,19 @@
+packages/runtime/PLUGINS.md
+  s_f190b446980e88::t_c7befdf4ae5439 22-26,50-52,76-78,105-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3388fa2351f759658568713d763c9683ca0f7db8",
+  "prompts": {},
+  "sessions": {
+    "s_f190b446980e88": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bff9-07ad-7df2-baef-8b9191983be6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
