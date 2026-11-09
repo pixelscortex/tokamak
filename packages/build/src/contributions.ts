@@ -5,7 +5,7 @@ import ts from "typescript";
 import { resolve } from "node:path";
 
 const fields = { view: "route", itemRenderer: "type", toolbar: "label", command: "title", entityCard: "table" } as const;
-export function uiContributions(root: string) {
+export function uiContributions(root: string, runtimeExports?: ReadonlySet<string>) {
   const entry = resolve(root, "src/main.tsx");
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
@@ -20,6 +20,10 @@ export function uiContributions(root: string) {
   const module = checker.getSymbolAtLocation(source);
   const contributes: Record<string, { id: string; [key: string]: string }[]> = {};
   for (const exported of module ? checker.getExportsOfModule(module) : []) {
+    // TS resolves type-only aliases back to values too. Public contribution
+    // names must actually be present in the emitted runtime export table.
+    if (runtimeExports && !runtimeExports.has(exported.name)) continue;
+    if (exported.declarations?.some(d => ts.isExportSpecifier(d) && (d.isTypeOnly || (ts.isExportDeclaration(d.parent.parent) && d.parent.parent.isTypeOnly)))) continue;
     const symbol = original(exported);
     const declaration = symbol.valueDeclaration;
     if (!declaration) continue;

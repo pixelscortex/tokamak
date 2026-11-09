@@ -124,6 +124,11 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           const modules = [...this.getModuleIds()];
           if (modules.some(id => /\/solid-js\/|\/render\/js\//.test(id))) throw new Error("Shared runtime leaked into plugin UI");
           if (/document\.|window\.|solid-js\/web/.test(ui.code)) throw new Error("Browser runtime leaked into plugin UI");
+          const metadataAsset = bundle["manifest.json"];
+          if (!metadataAsset || metadataAsset.type !== "asset") throw new Error("Missing artifact manifest");
+          const metadata = JSON.parse(String(metadataAsset.source));
+          metadata.plugin.contributes = uiContributions(root, new Set(ui.exports)).contributes;
+          metadataAsset.source = JSON.stringify(metadata);
           const deps = ui.imports;
           ui.code = `globalThis.__tokamakModules.register(${JSON.stringify(`@plugins/${plugin.id}/ui`)},${JSON.stringify(deps)},function(require,exports,module){\n${ui.code}\n});\n`;
           const map = bundle["ui.js.map"];
