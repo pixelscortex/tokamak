@@ -1,0 +1,21 @@
+packages/server/tests/fixtures/feature/shutdown.ts
+  s_aa06e9f4f56641::t_fbbd60fd8e2cda 3,6-13
+packages/server/tests/shutdown-driver.mjs
+  s_aa06e9f4f56641::t_d9867599eb2a58 71-84,93,95,107,156,158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "acf3c297e511a1075bb052d3add3730e51e9659a",
+  "prompts": {},
+  "sessions": {
+    "s_aa06e9f4f56641": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf07-8a7e-7b52-84dc-c04376147eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
