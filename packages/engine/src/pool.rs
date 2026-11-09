@@ -45,7 +45,8 @@ struct Job {
 }
 
 /// Owns its worker threads. Share with Arc; dropping the last owner closes
-/// admission, refuses queued jobs, and joins running workers after their budget.
+/// admission and refuses queued jobs. Transaction workers join after their budget;
+/// action workers are cancelled and detached so teardown never blocks the caller.
 /// Host callbacks must obey the cooperative/nonblocking rules on OpRegistry.
 pub struct Pool {
     sender: Option<mpsc::SyncSender<Job>>,
@@ -122,6 +123,7 @@ impl Pool {
             // blocks between invocations; current-thread runtimes freeze it.
             let executor = tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(1)
+                .max_blocking_threads(4)
                 .enable_all()
                 .build()
                 .map_err(|e| Error::Engine(format!("cannot start JS executor: {e}")))?;
@@ -158,6 +160,10 @@ impl Pool {
                         });
                         let _ = job.reply.send(result);
                     }
+                    // Aborting an async task cannot stop a running spawn_blocking
+                    // callback (notably getaddrinfo). Never join those callbacks.
+                    // They own their inputs and may finish after this worker exits.
+                    executor.shutdown_background();
                 })
                 .map_err(|e| Error::Engine(format!("cannot start JS worker: {e}")))?;
             pool.threads.push(worker);
@@ -207,7 +213,12 @@ impl Drop for Pool {
         self.closing.store(true, Ordering::Release);
         self.sender.take();
         for thread in self.threads.drain(..) {
-            let _ = thread.join();
+            if self.shutdown.is_none() {
+                let _ = thread.join();
+            }
+            // Action workers own their engines, runtimes and shared queue. Drop
+            // their handles to detach cleanup, including on coordinator reload
+            // and shutdown paths. No worker borrows from the dropped Pool.
         }
     }
 }

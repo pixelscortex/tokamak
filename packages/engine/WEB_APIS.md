@@ -36,6 +36,19 @@ IPv6 is conservatively limited to global unicast outside special-purpose ranges.
 This includes `169.254.169.254` and `fd00:ec2::254` metadata endpoints. Ambient
 HTTP proxies are disabled so they cannot bypass this resolver.
 
+Hostname resolution has a 10-second timeout, including waiting for resolver
+capacity. A timeout rejects that fetch with a `TypeError` whose message includes
+`DNS resolution timed out after 10 seconds`; it does not end the action or impose
+a deadline on response streaming. There are at most 16 native DNS jobs across
+all worker generations, and each worker runtime permits at most four blocking
+threads. Cancellation/timeout aborts queued jobs, but a running OS `getaddrinfo`
+cannot be interrupted: it retains its capacity slot until it returns. If all
+slots are stuck, later hostname fetches time out while waiting for capacity.
+These jobs own only host/address data and a capacity permit, so late completion
+cannot access retired invocations or JS state. Action pool drop cancels and
+detaches its workers; workers shut their runtimes down in the background without
+waiting for blocking work. Plugin reload and shutdown never join that work.
+
 Non-public access requires an explicit IP grant, e.g. `net:127.0.0.1`,
 `net:192.168.1.10` or `net:[::1]`. `net:localhost` is a convenience for local
 servers such as Ollama: it connects only to `127.0.0.1`/`::1`, without DNS or

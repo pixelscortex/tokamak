@@ -5,16 +5,20 @@ use crate::{Error, Json, OpRegistry};
 use serde_json::json;
 use std::{
     collections::BTreeMap,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs},
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::sync::{Mutex as AsyncMutex, mpsc};
+use tokio::sync::{Mutex as AsyncMutex, Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
 const CHUNK: usize = 64 * 1024;
 const RESOURCES: usize = 64;
+const DNS_TIMEOUT: Duration = Duration::from_secs(10);
+// Process-wide, including retired worker generations. A timed-out/cancelled
+// lookup keeps its permit until getaddrinfo actually returns, bounding orphans.
+static DNS_LOOKUPS: Semaphore = Semaphore::const_new(16);
 type Result<T> = std::result::Result<T, String>;
 
 struct Exchange {
@@ -65,8 +69,9 @@ impl Drop for WebLease {
     }
 }
 
-/// Every world owns one resource table. No detached task can outlive its lease;
-/// abort wakes I/O even while another operation holds the response reader.
+/// Every world owns one resource table; abort wakes I/O even while another
+/// operation holds the response reader. OS DNS jobs may outlive the world, but
+/// retain only owned host/address data and their process-wide capacity permit.
 pub struct WebHost {
     resources: Arc<Mutex<Resources>>,
     permissions: Vec<String>,
@@ -352,7 +357,7 @@ impl WebHost {
                             let stream = futures_util::stream::unfold(receiver, |mut receiver| async { receiver.recv().await.map(|b| (Ok::<_,std::io::Error>(b),receiver)) });
                             request = request.body(reqwest::Body::wrap_stream(stream));
                         }
-                        let res = request.send().await.map_err(|e|e.to_string())?;
+                        let res = request.send().await.map_err(fetch_error)?;
                         let headers: Vec<_> = res.headers().iter().map(|(k,v)| vec![k.as_str().to_owned(),String::from_utf8_lossy(v.as_bytes()).into_owned()]).collect();
                         let result = json!({"status":res.status().as_u16(),"statusText":res.status().canonical_reason().unwrap_or(""),"headers":headers,"url":res.url().as_str()});
                         *response.lock().await = Some(res);
@@ -451,8 +456,31 @@ impl reqwest::dns::Resolve for PublicResolver {
                     (IpAddr::V6(Ipv6Addr::LOCALHOST), 0).into(),
                 ]
             } else {
-                tokio::net::lookup_host((host.as_str(), 0))
-                    .await?
+                let addresses = tokio::time::timeout(DNS_TIMEOUT, async move {
+                    let permit = DNS_LOOKUPS.acquire().await.map_err(std::io::Error::other)?;
+                    let task = tokio_util::task::AbortOnDropHandle::new(
+                        tokio::task::spawn_blocking(move || {
+                            // Only owned host/address data crosses this boundary;
+                            // no invocation, resource table or JS state is retained.
+                            let _permit = permit;
+                            (host.as_str(), 0)
+                                .to_socket_addrs()
+                                .map(|addresses| addresses.collect::<Vec<_>>())
+                        }),
+                    );
+                    // Abort queued work on timeout/cancellation. Running OS
+                    // lookups cannot be interrupted and retain their permits.
+                    task.await.map_err(std::io::Error::other)?
+                })
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "DNS resolution timed out after 10 seconds",
+                    )
+                })??;
+                addresses
+                    .into_iter()
                     .filter(|address| public_address(address.ip()))
                     .collect()
             };
@@ -468,6 +496,19 @@ impl reqwest::dns::Resolve for PublicResolver {
             Ok(Box::new(addresses.into_iter()) as reqwest::dns::Addrs)
         })
     }
+}
+
+// reqwest's Display omits DNS causes. Keep the chain so JS receives the
+// resolver's timeout/permission diagnostic instead of only a request URL.
+fn fetch_error(error: reqwest::Error) -> String {
+    let mut message = error.to_string();
+    let mut cause = std::error::Error::source(&error);
+    while let Some(error) = cause {
+        message.push_str(": ");
+        message.push_str(&error.to_string());
+        cause = error.source();
+    }
+    message
 }
 
 fn public_address(ip: IpAddr) -> bool {

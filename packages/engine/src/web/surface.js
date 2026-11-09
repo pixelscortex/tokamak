@@ -325,7 +325,7 @@
       })();
       pump.catch(()=>{});
       try {
-        const info = await send;
+        const info = await send.catch(error => { throw new TypeError(error.message); });
         // Do not wait for the upload: servers may respond before consuming it.
         const headers = new Headers(info.headers);
         if ([301,302,303,307,308].includes(info.status) && headers.has("location") && request.redirect !== "manual") {
