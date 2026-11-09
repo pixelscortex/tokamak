@@ -1,0 +1,65 @@
+packages/build/src/vite.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 12,59,101
+  s_aa06e9f4f56641::t_f3cf0711fb9a11 67
+bun.lock
+  s_aa06e9f4f56641::t_eae04a00271652 48,352-353
+packages/server/PLUGINS.md
+  s_aa06e9f4f56641::t_295738cd3825a4 69-72
+  s_aa06e9f4f56641::t_eaa381bad30b23 82-89
+packages/server/tests/fixtures/plugins/a/api.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 1
+packages/server/tests/fixtures/plugins/a/vite.config.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 3
+packages/server/src/plugins.rs
+  s_aa06e9f4f56641::t_295738cd3825a4 77-78,182-188,236-244
+  s_aa06e9f4f56641::t_c5b010828c5ccc 245
+packages/server/tests/fixtures/plugins/b/api.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 1
+packages/build/package.json
+  s_aa06e9f4f56641::t_6f8b79c8f10e05 14,16
+packages/server/tests/fixtures/plugins/b/vite.config.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 3
+packages/build/src/exports.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 1-39,63-64,66-71
+packages/server/src/host.rs
+  s_549dee89b200e8::t_90c2d741bc4536 6
+  s_aa06e9f4f56641::t_0951db2c48c6e2 57,104,158,161-163,258
+packages/engine/src/engine.rs
+  h_51b7a781d7f2c3 131-132
+  s_aa06e9f4f56641::t_c0d0390fdb03ec 97,110-111
+packages/engine/src/bridge.rs
+  s_549dee89b200e8::t_9f0806b597f096 237
+  h_51b7a781d7f2c3 6,74
+  s_aa06e9f4f56641::t_76f03071027094 81-85,140,148,178,189,229-231,262
+packages/engine/src/determinism.rs
+  s_aa06e9f4f56641::t_9ff03a0df3751d 28-33
+  s_aa06e9f4f56641::t_b64cfcbfba0731 1-27,34-75
+packages/engine/src/lib.rs
+  s_aa06e9f4f56641::t_60e586f5c60965 7,14
+packages/server/src/service.rs
+  s_aa06e9f4f56641::t_61f89ad0516ed0 747,758,858
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56fab6d588adb9bf6928974813039dfed6535c9d",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_aa06e9f4f56641": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf07-8a7e-7b52-84dc-c04376147eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
