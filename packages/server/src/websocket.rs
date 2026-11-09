@@ -31,7 +31,7 @@ use tokio::{
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 const CONNECTIONS: u32 = 64;
-const MESSAGE_BYTES: usize = 1024 * 1024;
+const MESSAGE_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
 
 #[derive(Clone)]
 struct Adapter {

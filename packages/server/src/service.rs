@@ -773,12 +773,12 @@ impl Coordinator {
 
     fn emit(&mut self, session: u64, mut event: Event) {
         // Count serialized bytes without allocating an unbounded transport buffer.
-        // Leave room for the native topic/payload envelope as well as the wire JSON.
+        // Native routing envelopes are accounted for separately by the mailbox.
         struct Limit(usize);
         impl std::io::Write for Limit {
             fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
                 self.0 += bytes.len();
-                if self.0 > 1024 * 1024 - 64 {
+                if self.0 > engine::MAX_WIRE_MESSAGE_BYTES {
                     return Err(std::io::Error::other("result too large"));
                 }
                 Ok(bytes.len())

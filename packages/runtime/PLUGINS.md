@@ -115,7 +115,9 @@ test can return the anonymous parent box at an inline button's centre. Flex give
 the Reload button a separate box while keeping the existing card classes.
 
 Requests and individual events share the WebSocket's 1 MiB UTF-8 limit. The
-native event queue still holds at most 256 events / 1 MiB in total. Oversized
+native event queue holds at most 256 events / 1 MiB of wire payloads, plus
+bounded topic/routing envelopes (at most 1560 bytes per event). The inclusive
+1 MiB boundary applies to serialized wire JSON, excluding native envelopes. Oversized
 results become a correlated `result too large` error; an oversized subscription
 ends only that subscription. Oversized requests are rejected before admission,
 so unrelated calls and the window connection remain usable.

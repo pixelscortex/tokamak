@@ -18,3 +18,7 @@ pub use types::{Bundle, Error, Limits};
 
 pub use rquickjs;
 pub use serde_json::Value as Json;
+
+/// Maximum serialized UTF-8 request/event payload shared by native and WebSocket
+/// hosts. Native routing envelopes are separate, bounded mailbox overhead.
+pub const MAX_WIRE_MESSAGE_BYTES: usize = 1024 * 1024;

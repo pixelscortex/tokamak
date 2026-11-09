@@ -3,6 +3,7 @@
 // this module installs no browser/Node globals and performs no automatic retry.
 import type { ClientTransport, SubscriptionEvent } from "./client";
 import type { Event, Request } from "./protocol";
+import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
 import type { JsonValue } from "./values";
 import { assertJson } from "./values";
 
@@ -106,7 +107,7 @@ export class InProcessTransport implements ClientTransport {
       const code = char.codePointAt(0)!;
       bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
     }
-    if (bytes > 1024 * 1024) {
+    if (bytes > MAX_WIRE_MESSAGE_BYTES) {
       const error = new Error("request too large (1 MiB limit)");
       this.pending.get(request.id)?.reject(error);
       this.pending.delete(request.id);

@@ -13,20 +13,14 @@ use std::{
 };
 
 const MAX_EVENTS: usize = 256;
-const MAX_BYTES: usize = 1024 * 1024;
-// Match the wire message limit; total queued bytes remain independently bounded.
-const MAX_EVENT_BYTES: usize = 1024 * 1024;
+// Count wire payload bytes, excluding the bounded topic/routing envelope. This
+// admits one full-size wire event even in the native mailbox.
+const MAX_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
 const EVENTS_PER_WAKE: usize = 32;
 const TIME_PER_WAKE: Duration = Duration::from_millis(8);
 
-#[derive(Serialize)]
-struct Envelope<'a, T> {
-    topic: &'a str,
-    payload: T,
-}
-
 struct Queue {
-    events: VecDeque<String>,
+    events: VecDeque<(String, usize)>,
     bytes: usize,
     closed: bool,
 }
@@ -83,9 +77,14 @@ impl HostSender {
         }
         // Bound serialization too: a single oversized producer must not first
         // allocate an arbitrary-size Value/string merely to discover its size.
-        let mut bytes = EventBytes(Vec::new());
-        serde_json::to_writer(&mut bytes, &Envelope { topic, payload })
-            .map_err(|e| Error(e.to_string()))?;
+        // A topic is at most 256 UTF-8 bytes (1538 serialized bytes, including
+        // quotes). Its envelope is bounded separately from the wire payload.
+        let prefix = format!("{{\"topic\":{},\"payload\":", serde_json::to_string(topic).unwrap());
+        let offset = prefix.len();
+        let mut bytes = EventBytes(prefix.into_bytes(), offset + engine::MAX_WIRE_MESSAGE_BYTES);
+        serde_json::to_writer(&mut bytes, &payload).map_err(|e| Error(e.to_string()))?;
+        let payload_bytes = bytes.0.len() - offset;
+        bytes.0.push(b'}');
         let json = String::from_utf8(bytes.0).map_err(|e| Error(e.to_string()))?;
         {
             let mut queue = self.0.queue.lock().unwrap();
@@ -93,14 +92,14 @@ impl HostSender {
                 return Err(Error("Document mailbox is closed".into()));
             }
             if !terminal
-                && (queue.events.len() >= MAX_EVENTS || queue.bytes + json.len() > MAX_BYTES)
+                && (queue.events.len() >= MAX_EVENTS || queue.bytes + payload_bytes > MAX_BYTES)
             {
                 return Err(Error(
                     "Host event queue overloaded (256 events / 1 MiB)".into(),
                 ));
             }
-            queue.bytes += json.len();
-            queue.events.push_back(json);
+            queue.bytes += payload_bytes;
+            queue.events.push_back((json, payload_bytes));
             queue.closed = terminal;
         }
         (self.0.wake)();
@@ -109,11 +108,11 @@ impl HostSender {
 }
 
 // This writer only owns a small buffer; it performs no external IO.
-struct EventBytes(Vec<u8>);
+struct EventBytes(Vec<u8>, usize);
 
 impl Write for EventBytes {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        if bytes.len() > MAX_EVENT_BYTES - self.0.len() {
+        if bytes.len() > self.1 - self.0.len() {
             return Err(std::io::Error::other(
                 "result too large (1 MiB host event limit)",
             ));
@@ -169,10 +168,10 @@ impl HostMailbox {
             {
                 let json = {
                     let mut queue = self.0.queue.lock().unwrap();
-                    let Some(json) = queue.events.pop_front() else {
+                    let Some((json, payload_bytes)) = queue.events.pop_front() else {
                         break;
                     };
-                    queue.bytes -= json.len();
+                    queue.bytes -= payload_bytes;
                     json
                 };
                 document.host_json(self.0.generation, &json)?;

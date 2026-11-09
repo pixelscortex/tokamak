@@ -57,7 +57,9 @@ Manual gate:
   headless embedders; a proxy wake runs JS and flushes changes, not just a redraw.
   `HostMailbox::new(&document, wake)` returns a sender and receiver; `drain(&mut document)`
   services one wake budget, and `pending()` reports queued messages. Queues permit
-  at most 256 messages / 1 MiB, with a 64 KiB serialized envelope cap. Overload is an
+  at most 256 messages / 1 MiB of serialized payloads, with a 1 MiB payload cap
+  per message. Native topic/routing envelopes are additional bounded overhead
+  (at most 1560 bytes per message; topics are limited to 256 UTF-8 bytes). Overload is an
   explicit error. Each drain processes at most 32 messages, checking an 8 ms budget
   between messages, then re-wakes remaining work and returns to the event loop.
   One callback can still consume its bounded JS deadline; 8 ms is not preemption.
