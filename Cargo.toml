@@ -15,3 +15,10 @@ opt-level = "s"
 lto = true
 strip = "symbols"
 codegen-units = 1
+
+# Vendored QuickJS bindings with one upstream bug fix (Array.prototype.find*
+# double-free when the deadline interrupt fires mid-loop). Remove this patch
+# once a released rquickjs-sys bundles quickjs-ng with commit e22ce4de.
+# Details and the exact diff: vendor/rquickjs-sys/TOKAMAK_PATCHES.md
+[patch.crates-io]
+rquickjs-sys = { path = "vendor/rquickjs-sys" }
