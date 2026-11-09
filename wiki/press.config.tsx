@@ -3,6 +3,7 @@ import { metaSchema, pageSchema } from "fumapress/schema";
 import { defineDocs } from "fumadocs-mdx/macro";
 import { applyMdxPreset } from "fumadocs-mdx/config";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
+import { remarkSourceLinks } from "./src/lib/remark-source-links";
 import { remarkApiDeclaration } from "./src/lib/remark-api-declaration";
 
 // Reads the SDK's TypeScript source at build time, so the API reference always
@@ -10,7 +11,7 @@ import { remarkApiDeclaration } from "./src/lib/remark-api-declaration";
 const generator = createGenerator();
 
 const docs = defineDocs({
-  dir: "content/docs",
+  dir: ".generated/docs",
   docs: {
     async: true,
     schema: pageSchema,
@@ -23,6 +24,7 @@ const docs = defineDocs({
       // Declarations become code blocks before the defaults run, so the
       // Markdown output and search see them like any other code block.
       remarkPlugins: (plugins) => [
+        remarkSourceLinks,
         [remarkApiDeclaration, { generator }],
         ...plugins,
         [remarkAutoTypeTable, { generator }],

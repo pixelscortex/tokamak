@@ -30,7 +30,7 @@ const pillars = [
 ];
 
 export default async function Home() {
-  const { nav, links, githubUrl, searchToggle } = await getPressContext<typeof app>().getLayoutProps({});
+  const { nav, links, githubUrl, searchToggle } = await getPressContext<typeof app>().getLayoutProps({ lang: undefined });
 
   return (
     <HomeLayout nav={nav} links={links} githubUrl={githubUrl} searchToggle={searchToggle} themeSwitch={{ enabled: false }}>

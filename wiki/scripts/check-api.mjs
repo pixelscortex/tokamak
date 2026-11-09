@@ -8,11 +8,12 @@ const root = new URL("..", import.meta.url).pathname;
 const sdk = join(root, "../packages/sdk");
 const pages = join(root, "content/docs/api");
 
+/** @param {string} source */
 function exportsOf(source) {
   const names = new Set();
   // export { a, b as c } from "…" and export type { … } from "…"
   for (const [, list] of source.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
-    for (const item of list.split(",")) {
+    for (const item of (list ?? "").split(",")) {
       const name = item.trim().split(/\s+as\s+/).pop();
       if (name) names.add(name.replace(/^type\s+/, ""));
     }

@@ -4,8 +4,8 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
-    "dev": "proto run node -- node_modules/fumapress/cli.js dev",
-    "build": "proto run node -- scripts/check-api.mjs && proto run node -- node_modules/fumapress/cli.js build",
+    "dev": "bun scripts/sync-content.mjs && proto run node -- node_modules/fumapress/cli.js dev",
+    "build": "bun scripts/sync-content.mjs && bun scripts/check-api.mjs && proto run node -- node_modules/fumapress/cli.js build",
     "start": "proto run node -- node_modules/fumapress/cli.js start",
     "types:check": "tsc --noEmit"
   },
@@ -27,7 +27,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "tailwindcss": "4.3.5",
-    "typescript": "7.0.2",
+    "typescript": "5.9.3",
     "vite": "8.3.6"
   }
 }

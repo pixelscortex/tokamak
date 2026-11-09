@@ -189,7 +189,7 @@ export function remarkApiDeclaration({ generator }: Options) {
         // Turn the JSX element into a code block in place. Its position stays,
         // so the Markdown output (llms.txt, .md routes) can be given the same text.
         const { position } = node as { position?: unknown };
-        for (const key of Object.keys(node)) delete (node as Record<string, unknown>)[key];
+        for (const key of Object.keys(node)) delete (node as unknown as Record<string, unknown>)[key];
         Object.assign(node, { type: "code", lang: "ts", value, position });
         replaceSource(file, node as Parameters<typeof replaceSource>[1], `\`\`\`ts\n${value}\n\`\`\``);
       }),
