@@ -200,7 +200,10 @@
   }
   const bodyStream = (body, headers) => {
     if (body == null) return null;
-    if (body instanceof ReadableStream) return body;
+    if (body instanceof ReadableStream) {
+      if (body.locked || body._disturbed) throw new TypeError("Body has already been consumed");
+      return body;
+    }
     let bytes;
     if (typeof body === "string" || body instanceof URLSearchParams) {
       if (!headers.has("content-type")) headers.set("content-type", body instanceof URLSearchParams ? "application/x-www-form-urlencoded;charset=UTF-8" : "text/plain;charset=UTF-8");
@@ -211,11 +214,14 @@
     return new ReadableStream({ pull(c) { if (offset >= bytes.length) { c.close(); return; } c.enqueue(bytes.slice(offset,offset+chunkSize)); offset += chunkSize; } });
   };
   class Body {
-    bodyUsed = false;
     constructor(body, headers) { this.headers = new Headers(headers); this.body = bodyStream(body,this.headers); }
+    // The pinned streams polyfill owns disturbance tracking, including direct
+    // readers, cancellation, tee, piping and async iteration. Do not duplicate
+    // that state only in the convenience body readers or the fetch pump.
+    get bodyUsed() { return !!this.body && (this.body.locked || this.body._disturbed); }
     async bytes() {
       if (this.bodyUsed || this.body?.locked) throw new TypeError("Body has already been consumed");
-      this.bodyUsed = true; if (!this.body) return new Uint8Array();
+      if (!this.body) return new Uint8Array();
       const reader = this.body.getReader(); const chunks = []; let length = 0;
       try { while (true) { const {done,value} = await reader.read(); if (done) break; const b = byteView(value); chunks.push(b); length += b.length; } } finally { reader.releaseLock(); }
       const bytes = new Uint8Array(length); let offset = 0; for (const b of chunks) { bytes.set(b,offset); offset += b.length; } return bytes;
@@ -230,7 +236,8 @@
   class Request extends Body {
     constructor(input, init = {}) {
       const source = input instanceof Request ? input : null;
-      super(init.body !== undefined ? init.body : source?.body,init.headers ?? source?.headers);
+      const sourceBody = init.body == null ? source?.body : null;
+      super(init.body ?? sourceBody,init.headers ?? source?.headers);
       this.url = new URL(source ? source.url : String(input)).href;
       this.method = String(init.method ?? source?.method ?? "GET").toUpperCase();
       if (!/^[A-Z]+$/.test(this.method) || ["CONNECT","TRACE","TRACK"].includes(this.method)) throw new TypeError("Unsupported request method");
@@ -241,6 +248,9 @@
       if (!["follow","manual","error"].includes(this.redirect)) throw new TypeError("Invalid redirect mode");
       for (const key of Object.keys(init)) if (!["method","headers","body","signal","redirect","duplex"].includes(key)) unsupported(`Request.${key}`);
       if (init.duplex !== undefined && init.duplex !== "half") unsupported("Request.duplex");
+      // Transfer through a proxy stream: constructing from a Request makes its
+      // original body unusable immediately, even before fetch starts the upload.
+      if (sourceBody) this.body = sourceBody.pipeThrough(new TransformStream());
     }
     clone() { return new Request(this,{body:this._cloneBody()}); }
   }
@@ -278,7 +288,7 @@
       const send = asyncOp("send", {id,url:request.url,method:request.method,headers:[...request.headers]});
       const pump = (async () => {
         if (!request.body) return;
-        request.bodyUsed = true; reader = request.body.getReader();
+        reader = request.body.getReader();
         try {
           while (true) {
             const {done,value} = await reader.read(); if (done) break;

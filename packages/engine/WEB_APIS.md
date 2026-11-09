@@ -67,6 +67,13 @@ check each hop and credential-header stripping on origin changes. Replaying a
 stream body across a preserving redirect is rejected; 301/302 POST and 303
 switch to GET. `manual` and `error` redirect modes are supported.
 
+Body state comes from the pinned streams polyfill's disturbance tracking, so
+direct readers, piping, cancellation and iteration participate in body reuse
+checks. Locked or disturbed bodies report `bodyUsed` and reject reads/clones
+with `TypeError`. Constructing/fetching from a Request transfers its body through
+a proxy stream, making the original unusable immediately. Cloning tees an unused
+body; null bodies remain reusable.
+
 This is a server-side API subset, not browser conformance. Header storage
 combines repeated values; `getSetCookie` cannot preserve individual repeated
 Set-Cookie values. The minimal event classes do not implement DOM propagation,
