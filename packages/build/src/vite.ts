@@ -179,6 +179,8 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           lazy(source);
           metadata.plugin.optional = optional;
           metadata.plugin.contributes = uiContributions(root).contributes;
+          // Inferred names obey the same manifest rules as explicit names.
+          metadata.plugin = definePlugin(metadata.plugin);
           metadataAsset.source = JSON.stringify(metadata);
           const deps = ui.imports;
           ui.code = `globalThis.__tokamakModules.register(${JSON.stringify(`@plugins/${plugin.id}/ui`)},${JSON.stringify(deps)},function(require,exports,module){\n${ui.code}\n});\n`;
