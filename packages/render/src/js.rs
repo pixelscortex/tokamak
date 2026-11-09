@@ -15,7 +15,18 @@ use std::{
 #[derive(Default)]
 struct HookState {
     active: Cell<bool>,
+    deadline: Cell<Option<Instant>>,
+    interrupted: Cell<bool>,
     errors: RefCell<Vec<String>>,
+}
+
+impl HookState {
+    fn expired(&self) -> bool {
+        if self.deadline.get().is_some_and(|end| Instant::now() >= end) {
+            self.interrupted.set(true);
+        }
+        self.interrupted.get()
+    }
 }
 
 // This state owns only Rust data, with no JavaScript handles or borrowed lifetimes.
@@ -32,9 +43,10 @@ fn promise_callback<'js>(
     let Some(state) = ctx.userdata::<Rc<HookState>>() else {
         return;
     };
-    if state.active.replace(true) {
+    if state.active.get() || state.expired() {
         return;
     }
+    state.active.set(true);
     struct Active<'a>(&'a Cell<bool>);
     impl Drop for Active<'_> {
         fn drop(&mut self) {
@@ -55,7 +67,12 @@ fn promise_callback<'js>(
         }
         Ok(())
     })();
-    if let Err(error) = result {
+    // A void C hook cannot return the callback's interrupt. Latch the expired
+    // budget, skip all later callbacks in this turn, and fail the native entry.
+    // The engine's interrupt handler remains armed for the outer JS execution.
+    if let Err(error) = result
+        && !state.expired()
+    {
         let caught = CaughtError::from_error(ctx, error);
         let message = format!("{method}: {caught}");
         // Error properties can themselves be hostile getters.
@@ -69,16 +86,17 @@ fn promise_callback<'js>(
         };
         // Prefer the promise's captured owner. Reporting is guarded too: a
         // broken reporter cannot leak another pending exception into QuickJS.
-        let reported = cause.is_some_and(|cause| {
-            (|| -> engine::rquickjs::Result<bool> {
-                let api: Object = ctx.globals().get("__tokamak")?;
-                let Some(report) = api.get::<_, Option<Function>>("promiseHookError")? else {
-                    return Ok(false);
-                };
-                report.call((promise, cause))
-            })()
-            .unwrap_or(false)
-        });
+        let reported = !state.expired()
+            && cause.is_some_and(|cause| {
+                (|| -> engine::rquickjs::Result<bool> {
+                    let api: Object = ctx.globals().get("__tokamak")?;
+                    let Some(report) = api.get::<_, Option<Function>>("promiseHookError")? else {
+                        return Ok(false);
+                    };
+                    report.call((promise, cause))
+                })()
+                .unwrap_or(false)
+            });
         if !reported && state.errors.borrow().len() < 16 {
             state
                 .errors
@@ -136,7 +154,9 @@ impl Js {
                     },
                 ))),
         );
-        world.set_deadline(Some(Instant::now() + Duration::from_secs(2)));
+        let end = Instant::now() + Duration::from_secs(2);
+        hooks.deadline.set(Some(end));
+        world.set_deadline(Some(end));
         block_on(world.context().async_with(async |ctx| {
             // Install before evaluating: initial Solid subscriptions must have
             // a valid destination, not wait for window creation or first input.
@@ -171,8 +191,15 @@ impl Js {
             }
             Ok(())
         }))?;
+        let expired = hooks.expired();
         world.set_deadline(None);
-        Ok(Self(world, hooks))
+        hooks.deadline.set(None);
+        let js = Self(world, hooks);
+        js.report_hook_errors();
+        if expired {
+            return Err(Error("UI initialization deadline exceeded".into()));
+        }
+        Ok(js)
     }
 
     /// Run ready promise continuations before draining mutations. There are no
@@ -180,7 +207,7 @@ impl Js {
     /// Both time and job count are bounded so a promise chain cannot starve paint.
     pub fn settle(&self) -> Result<()> {
         let end = Instant::now() + Duration::from_millis(250);
-        self.0.set_deadline(Some(end));
+        self.arm(Some(end));
         let result = (|| {
             for _ in 0..1024 {
                 if Instant::now() >= end {
@@ -201,9 +228,24 @@ impl Js {
             }
             Err(Error("UI microtask budget exceeded".into()))
         })();
-        self.0.set_deadline(None);
+        self.finish_turn(result)
+    }
+
+    fn arm(&self, deadline: Option<Instant>) {
+        self.1.interrupted.set(false);
+        self.1.deadline.set(deadline);
+        self.0.set_deadline(deadline);
+    }
+
+    fn finish_turn<T>(&self, result: Result<T>) -> Result<T> {
+        let expired = self.1.expired();
+        self.arm(None);
         self.report_hook_errors();
-        result
+        if expired {
+            Err(Error("UI JavaScript deadline exceeded".into()))
+        } else {
+            result
+        }
     }
 
     fn report_hook_errors(&self) {
@@ -213,11 +255,15 @@ impl Js {
     }
 
     pub fn call(&self, method: &str, json: Option<&str>) -> Result<Option<String>> {
-        self.0
-            .set_deadline(Some(Instant::now() + Duration::from_millis(250)));
+        self.arm(Some(Instant::now() + Duration::from_millis(250)));
         let result = block_on(self.0.context().async_with(async |ctx| {
             let call = || -> engine::rquickjs::Result<Option<String>> {
                 let api: Object = ctx.globals().get("__tokamak")?;
+                // A deadline may have interrupted BEFORE/AFTER between scope
+                // writes. No hook frame spans a native turn; retire that state.
+                if let Some(reset) = api.get::<_, Option<Function>>("resetPromiseScope")? {
+                    reset.call::<_, ()>(())?;
+                }
                 let function: Function = api.get(method)?;
                 match method {
                     "drain" => function.call::<_, String>(()).map(Some),
@@ -231,9 +277,7 @@ impl Js {
             };
             call().map_err(|e| Error(CaughtError::from_error(&ctx, e).to_string()))
         }));
-        self.0.set_deadline(None);
-        self.report_hook_errors();
-        result
+        self.finish_turn(result)
     }
 }
 

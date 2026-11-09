@@ -288,6 +288,10 @@ export function dispatchClick(node: NativeNode): void {
 Object.defineProperty(globalThis, "__tokamak", {
   value: Object.freeze({
     drain,
+    resetPromiseScope() {
+      asyncScope = undefined;
+      scopeStack.length = 0;
+    },
     promiseHook(kind: string, promise: object, parent: object) {
       if (kind === "init") {
         const scope = currentScope() ?? promiseScopes.get(parent);
