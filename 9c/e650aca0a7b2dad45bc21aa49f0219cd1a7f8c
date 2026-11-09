@@ -1,0 +1,58 @@
+package.json
+  s_a41830f8568769::t_dc775633490f54 32
+  s_a41830f8568769::t_d1c1e562df5dfc 30-31,33
+packages/server/tests/actions-driver.ts
+  s_a41830f8568769::t_5e90bbad883b02 99,103-105,108
+  s_a41830f8568769::t_7e3d8522864084 6,26,30-37,167
+  s_a41830f8568769::t_200d5d5cc387ae 107
+  s_a41830f8568769::t_56f8a84a8d00e5 123-124,126
+  s_a41830f8568769::t_41bfcbf5d1ef56 1-5,7-25,27-28,38-92,97-98,100-102,106,109-122,125,127-166,168-173
+  s_a41830f8568769::t_869f68cae123a2 93-96
+  s_a41830f8568769::t_4b009325ee47bf 29
+packages/server/tests/fixtures/actions/a/backend/ai.ts
+  s_a41830f8568769::t_63ca96cc28917f 1-29
+packages/server/tests/fixtures/actions/b/api.ts
+  s_a41830f8568769::t_63ca96cc28917f 1
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_a41830f8568769::t_63ca96cc28917f 1-9
+packages/server/tests/build-actions.mjs
+  s_a41830f8568769::t_6c5002ff614b7c 40-41
+  s_a41830f8568769::t_41bfcbf5d1ef56 1-12,15-39,42-52
+  s_a41830f8568769::t_dc775633490f54 13-14
+packages/server/tests/fixtures/actions/b/package.json
+  s_a41830f8568769::t_63ca96cc28917f 1
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_a41830f8568769::t_5e90bbad883b02 23-25
+  s_a41830f8568769::t_41bfcbf5d1ef56 32-34
+  s_a41830f8568769::t_63ca96cc28917f 1-22,26-31,35-94
+packages/server/tests/actions.rs
+  s_a41830f8568769::t_7e3d8522864084 81-87,101-108,111,139-142
+  s_a41830f8568769::t_dc775633490f54 1-4,9-13,18-20,24-27,43-50,56-63,69-71,78-80,88-100,109-110,112-138,143-148,185-190,223
+  s_a41830f8568769::t_82367191bf01a5 5-8,14-17,21-23,28-42,51-55,64-68,72-77,149-184,191-222
+packages/server/tests/fixtures/actions/a/package.json
+  s_a41830f8568769::t_63ca96cc28917f 1
+packages/server/tests/README.md
+  s_a41830f8568769::t_7e3d8522864084 122-123
+  s_a41830f8568769::t_56f8a84a8d00e5 117-121,124-148,150-152
+  s_a41830f8568769::t_5e90bbad883b02 149
+  s_a41830f8568769::t_b937d5039d5a96 153-160,162-172
+  s_a41830f8568769::t_572472c938b2ed 161,173-185
+bun.lock
+  s_a41830f8568769::t_ed67d10d77deb4 8-11,136-143,320-321,408-409,468-469,504-505,542-543,648-649,726-727,1028-1029,1090-1091
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ce650aca0a7b2dad45bc21aa49f0219cd1a7f8c",
+  "prompts": {},
+  "sessions": {
+    "s_a41830f8568769": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf81-ffd7-7870-b190-f9144e5b5de4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

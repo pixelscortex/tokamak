@@ -1,0 +1,24 @@
+packages/engine/WEB_APIS.md
+  s_823c0d6f2944a8::t_4d5979011e673d 55-61
+  s_823c0d6f2944a8::t_3c4cac9a1f2517 62-63
+packages/engine/src/web/mod.rs
+  s_823c0d6f2944a8::t_4d5979011e673d 326,381-396,398
+packages/engine/src/web/surface.js
+  s_823c0d6f2944a8::t_4d5979011e673d 95,103-105,107,109-111,116,119-120,129-132,134,239,330,332,338,341
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee609096d5225755158d9b2241277fcc6cdbba73",
+  "prompts": {},
+  "sessions": {
+    "s_823c0d6f2944a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfaf-03fa-7490-ab98-69133c30ac30",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
