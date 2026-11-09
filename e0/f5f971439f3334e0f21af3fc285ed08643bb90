@@ -1,0 +1,19 @@
+packages/build/tests/plugins.test.mjs
+  s_ff6a4e1bf09ffb::t_6fabbf12e4e5f8 2,142-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0f5f971439f3334e0f21af3fc285ed08643bb90",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
