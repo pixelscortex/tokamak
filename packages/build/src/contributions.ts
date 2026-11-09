@@ -67,26 +67,5 @@ export function uiContributions(root: string, runtimeExports?: ReadonlySet<strin
     }
     (contributes[kind] ??= []).push({ id: exported.name, ...values });
   }
-  const depends = new Set<string>();
-  for (const file of program.getSourceFiles()) {
-    if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
-    function visit(node: ts.Node) {
-      if (ts.isImportDeclaration(node)) {
-        const clause = node.importClause;
-        if (clause?.isTypeOnly || (clause && !clause.name && clause.namedBindings
-          && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.every(e => e.isTypeOnly))) return;
-      }
-      if (ts.isExportDeclaration(node) && (node.isTypeOnly || (node.exportClause
-        && ts.isNamedExports(node.exportClause) && node.exportClause.elements.every(e => e.isTypeOnly)))) return;
-      const specifier = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier
-        : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
-      if (specifier && ts.isStringLiteral(specifier)) {
-        const match = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(specifier.text);
-        if (match) depends.add(match[1]!);
-      }
-      ts.forEachChild(node, visit);
-    }
-    visit(file);
-  }
-  return { contributes, depends: [...depends].sort() };
+  return { contributes };
 }

@@ -65,9 +65,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
         });
         if (options.ui !== false && !options.standalone) {
           const ui = uiContributions(root);
-          const depends = { ...plugin.depends };
-          for (const id of ui.depends) depends[id] ??= "*";
-          plugin = definePlugin({ ...plugin, depends, contributes: ui.contributes });
+          plugin = definePlugin({ ...plugin, contributes: ui.contributes });
         }
         const entries: Record<string, unknown> = {};
         if (options.backend === false && plugin.exports !== undefined) throw new Error("Plugin exports require a backend");
@@ -127,6 +125,14 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           const metadataAsset = bundle["manifest.json"];
           if (!metadataAsset || metadataAsset.type !== "asset") throw new Error("Missing artifact manifest");
           const metadata = JSON.parse(String(metadataAsset.source));
+          // The emitted chunk's imports are authoritative. The type-checker
+          // graph also contains files reachable only through erased type edges.
+          const depends = { ...plugin.depends };
+          for (const specifier of ui.imports) {
+            const match = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(specifier);
+            if (match) depends[match[1]!] ??= "*";
+          }
+          metadata.plugin.depends = depends;
           metadata.plugin.contributes = uiContributions(root, new Set(ui.exports)).contributes;
           metadataAsset.source = JSON.stringify(metadata);
           const deps = ui.imports;
