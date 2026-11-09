@@ -1,0 +1,32 @@
+{
+  "name": "@tokamak/wiki",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "dev": "fumapress dev",
+    "build": "fumapress build",
+    "start": "fumapress start",
+    "types:check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "fumadocs-core": "16.18.4",
+    "fumadocs-mdx": "15.5.3",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.18.4",
+    "fumapress": "2.0.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "waku": "1.0.0-rc.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@types/mdx": "2.0.14",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.5",
+    "typescript": "7.0.2",
+    "vite": "8.3.6"
+  }
+}
