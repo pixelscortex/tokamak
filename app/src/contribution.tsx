@@ -11,7 +11,9 @@ export function Contribution(props: {
   componentProps?: Record<string, unknown>;
 }) {
   return <Show keyed when={`${props.contribution.plugin}:${props.contribution.id}:${props.loader.version(props.contribution.plugin)}`}>
-    {(_generation: string) => <ErrorBoundary fallback={(_cause: unknown) => <div class="plugin-error" role="alert">
+    {(_generation: string) => <ErrorBoundary fallback={(_cause: unknown) => <div class="plugin-error" role="alert" style="display:flex;align-items:center">
+      {/* Blitz can hit the anonymous inline formatting box instead of an inline
+          button. Flex gives Reload its own hit-test box without changing CSS. */}
       <span>{props.contribution.plugin} failed · </span>
       <button onClick={() => props.loader.reload(props.contribution.plugin)}>Reload</button>
     </div>}>
