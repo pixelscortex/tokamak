@@ -87,9 +87,8 @@ eviction policy or persisted navigation state.
 
 These are headless native-document tests, **not physical two-window UI testing**.
 
-Remaining TKM-44 work: share a single Solid/renderer/SDK-context instance across
-shell and plugin bundles; evaluate plugins behind scoped lifecycle/error
-boundaries; consume authenticated server UI assets/reload notifications; define
-and mount contribution slots; route workspace contributions; implement grants
-and their UI; and prove edited-plugin reload in an open native window. The
-application does not use this router until that shell integration is implemented.
+The application now owns one history in `app/src/shell.tsx`, with shared
+`RouterContext`/`useRouter()` for plugin components. Routes cover `/chat`,
+`/chat/:thread`, and plugin-local views beneath `/p/<plugin>`. See
+[PLUGINS.md](PLUGINS.md) for lazy modules, contribution slots and reload lifetime.
+Declared permissions remain auto-granted by the server; no grant UI is planned.

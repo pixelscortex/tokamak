@@ -1,6 +1,6 @@
 /** Per-window navigation. No URL, DOM, browser history or global router. */
 import { createMemoryHistory } from "@tanstack/history";
-import { createSignal, getOwner, onCleanup, type Accessor } from "solid-js";
+import { createContext, useContext, createSignal, getOwner, onCleanup, type Accessor } from "solid-js";
 
 export interface RouteLocation {
   readonly href: string;
@@ -89,4 +89,14 @@ export function createMemoryRouter(initial = "/"): MemoryRouter {
     match: (pattern: string) => matchRoute(pattern,location().pathname),
     dispose,
   });
+}
+
+
+/** Navigation is owned by the shell, shared through the same Solid context as
+ * plugin components. A plugin never needs to construct a second history. */
+export const RouterContext = createContext<MemoryRouter>();
+export function useRouter(): MemoryRouter {
+  const router = useContext(RouterContext);
+  if (!router) throw new Error("Plugin UI requires the shell router");
+  return router;
 }

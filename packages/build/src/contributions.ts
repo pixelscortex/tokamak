@@ -8,7 +8,9 @@ const fields = { view: "route", itemRenderer: "type", toolbar: "label", command:
 export function uiContributions(root: string) {
   const entry = resolve(root, "src/main.tsx");
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
-  const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
+  const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
+  if (configResult.error) throw new Error(ts.flattenDiagnosticMessageText(configResult.error.messageText, "\n"));
+  const config = configResult.config;
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
   const program = ts.createProgram([entry], { ...parsed.options, noEmit: true });
   const checker = program.getTypeChecker();
@@ -43,14 +45,29 @@ export function uiContributions(root: string) {
       values[key] = (p.initializer as ts.StringLiteral).text;
     }
     if (!values[fields[kind]]) fail();
-    if (kind === "view" && (!values.route!.startsWith("/") || values.route!.startsWith("//"))) fail();
+    if (kind === "view") {
+      const route = values.route!;
+      if (!route.startsWith("/") || route.startsWith("//") || /[\\\x00-\x20\x7f?#]/.test(route)) fail();
+      const names = new Set<string>();
+      const segments = route.slice(1).split("/");
+      for (const [index, part] of segments.entries()) {
+        if (!part.startsWith(":") && !part.startsWith("*")) continue;
+        const name = part.slice(1);
+        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || names.has(name)
+          || (part.startsWith("*") && index !== segments.length - 1)) fail();
+        names.add(name);
+      }
+    }
     (contributes[kind] ??= []).push({ id: exported.name, ...values });
   }
   const depends = new Set<string>();
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
     function visit(node: ts.Node) {
-      const specifier = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier : undefined;
+      if ((ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)
+        || (ts.isExportDeclaration(node) && node.isTypeOnly)) return;
+      const specifier = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier
+        : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
       if (specifier && ts.isStringLiteral(specifier)) {
         const match = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(specifier.text);
         if (match) depends.add(match[1]!);

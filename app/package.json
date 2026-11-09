@@ -6,7 +6,8 @@
     "@tokamak/render": "workspace:*",
     "@tokamak/sdk": "workspace:*",
     "@tokamak/ui": "workspace:*",
-    "solid-js": "1.9.18"
+    "solid-js": "1.9.18",
+    "@tokamak/runtime": "workspace:*"
   },
   "devDependencies": {
     "@tokamak/build": "workspace:*",

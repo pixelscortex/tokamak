@@ -12,6 +12,7 @@
       "name": "@tokamak/app",
       "dependencies": {
         "@tokamak/render": "workspace:*",
+        "@tokamak/runtime": "workspace:*",
         "@tokamak/sdk": "workspace:*",
         "@tokamak/ui": "workspace:*",
         "solid-js": "1.9.18",
@@ -72,6 +73,7 @@
       "dependencies": {
         "@tanstack/history": "1.162.5",
         "@tokamak/render": "workspace:*",
+        "@tokamak/sdk": "workspace:*",
         "solid-js": "1.9.18",
       },
       "devDependencies": {
@@ -101,6 +103,19 @@
         "tailwindcss": "4.3.4",
         "vite": "8.3.6",
         "vite-plugin-solid": "2.11.15",
+      },
+    },
+    "plugins/todo": {
+      "name": "todo",
+      "version": "0.1.0",
+      "dependencies": {
+        "@tokamak/render": "workspace:*",
+        "@tokamak/sdk": "workspace:*",
+        "@tokamak/ui": "workspace:*",
+        "solid-js": "1.9.18",
+      },
+      "devDependencies": {
+        "@tokamak/build": "workspace:*",
       },
     },
   },
@@ -348,6 +363,8 @@
     "tapable": ["tapable@2.3.3", "", {}, "sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A=="],
 
     "tinyglobby": ["tinyglobby@0.2.17", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g=="],
+
+    "todo": ["todo@workspace:plugins/todo"],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 

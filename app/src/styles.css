@@ -3,3 +3,15 @@
 
 body { @apply bg-canvas text-foreground font-sans; margin: 0; }
 main { padding: 28px; }
+
+/* Plain frame tokens are deliberately local to the presentation surface. */
+.shell-frame { --shell-gap: 16px; --shell-line: #ddd; display: flex; min-height: 100vh; }
+.shell-rail { display: flex; flex-direction: column; gap: 8px; width: 144px; padding: var(--shell-gap); border-right: 1px solid var(--shell-line); }
+.shell-rail [aria-current="page"] { font-weight: 700; }
+.shell-workspace { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.shell-navigation { display: flex; gap: 8px; align-items: center; padding: var(--shell-gap); border-bottom: 1px solid var(--shell-line); }
+.shell-content { display: flex; flex: 1; min-width: 0; }
+.shell-stage { flex: 1; min-width: 0; padding: var(--shell-gap); }
+.shell-sidebar:empty { display: none; }
+.shell-thread { width: 180px; padding: var(--shell-gap); border-left: 1px solid var(--shell-line); }
+.plugin-error { padding: var(--shell-gap); border: 1px solid var(--shell-line); }

@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./router": "./js/router.ts"
+    "./router": "./js/router.ts",
+    "./plugins": "./js/plugins.ts",
+    "./modules": "./js/modules.ts",
+    "./subscriptions": "./js/subscriptions.ts"
   },
   "devDependencies": {
     "@types/node": "26.6.6"
@@ -11,6 +14,7 @@
   "dependencies": {
     "@tokamak/render": "workspace:*",
     "@tanstack/history": "1.162.5",
-    "solid-js": "1.9.18"
+    "solid-js": "1.9.18",
+    "@tokamak/sdk": "workspace:*"
   }
 }

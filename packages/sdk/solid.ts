@@ -1,7 +1,7 @@
 /** Optional Solid integration lives outside portable src, so backend bundles and
  * their checked ES2022-only type graph never depend on a UI runtime.
  * Each reactive argument change owns exactly one live subscription. */
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createContext, useContext, createEffect, createSignal, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { FunctionReference } from "./src/api";
 import type { TokamakClient } from "./src/client";
@@ -43,4 +43,13 @@ export function useQuery<A, R>(
     }
   });
   return { data, loading, error };
+}
+
+
+/** The shell supplies its already-connected client; plugins never own sockets. */
+export const ClientContext = createContext<TokamakClient>();
+export function useClient(): TokamakClient {
+  const client = useContext(ClientContext);
+  if (!client) throw new Error("Plugin UI requires the shell client");
+  return client;
 }

@@ -5,6 +5,7 @@ import type { InlineConfig, PluginOption } from "vite";
 import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 import { createRequire } from "node:module";
 import { dirname, relative, resolve, sep } from "node:path";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -49,7 +50,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
         return { ...native, root, build: { ...native.build,
           lib: { entry: resolve(root, "src/main.tsx"), formats: ["cjs"], fileName: () => "ui.js" },
           rollupOptions: { external: id => /^(solid-js(?:$|\/)|@tokamak\/|@plugins\/)/.test(id),
-            output: { exports: "named" } },
+            output: { exports: "named", codeSplitting: false } },
         } };
       },
       resolveId(id) {
@@ -99,7 +100,8 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
         }
         if (options.ui !== false) {
-          const css = await compileCss(resolve(root, "src/styles.css"));
+          const cssPath = resolve(root, "src/styles.css");
+          const css = !options.standalone && !existsSync(cssPath) ? "" : await compileCss(cssPath);
           this.emitFile({ type: "asset", fileName: "styles.css", source: css });
           this.emitFile({
             type: "asset",

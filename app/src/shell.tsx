@@ -1,0 +1,48 @@
+import { For, Show, createSignal, onCleanup, type Accessor } from "solid-js";
+import { createMessageConnection } from "@tokamak/render/connection";
+import { InProcessTransport, TokamakClient, type Event, type Request } from "@tokamak/sdk";
+import { ClientContext } from "@tokamak/sdk/solid";
+import { RouterContext, createMemoryRouter, matchRoute } from "@tokamak/runtime/router";
+import { createPluginLoader, type SlotContribution } from "@tokamak/runtime/plugins";
+import { retainSubscriptions } from "@tokamak/runtime/subscriptions";
+import type { ModuleRegistry } from "@tokamak/runtime/modules";
+import { Contribution } from "./contribution";
+import { ShellFrame } from "./shell-frame";
+
+export function Shell(props: { modules: ModuleRegistry }) {
+  const transport = new InProcessTransport(createMessageConnection<Request, Event>());
+  const subscriptions = retainSubscriptions(transport);
+  const client = new TokamakClient(subscriptions);
+  const router = createMemoryRouter("/chat");
+  const loader = createPluginLoader(props.modules, transport);
+  const [error, setError] = createSignal<string>();
+  void loader.connect().catch(cause => setError(String(cause)));
+  onCleanup(() => { loader.dispose(); subscriptions.dispose(); transport.close(); });
+
+  const href = (view: SlotContribution) => `/p/${view.plugin}${view.options.route === "/" ? "" : view.options.route}`;
+  const active = () => loader.contributions("view").find(view => matchRoute(href(view), router.location().pathname));
+  return <ClientContext.Provider value={client}><RouterContext.Provider value={router}>
+    <For each={Object.entries(loader.styles())}>{([id, css]) => <style data-plugin={id}>{css}</style>}</For>
+    <ShellFrame
+      rail={<>
+        <button aria-current={router.match("/chat") || router.match("/chat/:thread") ? "page" : undefined} onClick={() => router.navigate("/chat")}>Chat</button>
+        <For each={loader.contributions("view")}>{view => <button
+          data-plugin-view={`${view.plugin}/${view.id}`}
+          aria-current={active()?.id === view.id && active()?.plugin === view.plugin ? "page" : undefined}
+          onClick={() => router.navigate(href(view))}>{view.id}</button>}</For>
+      </>}
+      navigation={<>
+        <button aria-label="Go back" onClick={() => router.back()}>Back</button>
+        <button aria-label="Go forward" onClick={() => router.forward()}>Forward</button>
+        <span>{router.location().pathname}</span>
+      </>}
+      stage={<>
+        <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
+        <Show keyed when={active()} fallback={<p>{router.match("/chat") || router.match("/chat/:thread") ? "Chat" : "View not found"}</p>}>
+          {(view: SlotContribution) => <Contribution loader={loader} contribution={view} componentProps={{ router }} />}
+        </Show>
+      </>}
+      thread={<p>Thread panel</p>}
+    />
+  </RouterContext.Provider></ClientContext.Provider>;
+}
