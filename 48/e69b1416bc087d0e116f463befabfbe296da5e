@@ -1,0 +1,19 @@
+app/tests/plugin-fixtures.mjs
+  s_ff6a4e1bf09ffb::t_b9cf6178241927 323,328-329,332,335-344,350
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "48e69b1416bc087d0e116f463befabfbe296da5e",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
