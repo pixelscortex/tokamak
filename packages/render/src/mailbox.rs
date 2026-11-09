@@ -14,7 +14,8 @@ use std::{
 
 const MAX_EVENTS: usize = 256;
 const MAX_BYTES: usize = 1024 * 1024;
-const MAX_EVENT_BYTES: usize = 64 * 1024;
+// Match the wire message limit; total queued bytes remain independently bounded.
+const MAX_EVENT_BYTES: usize = 1024 * 1024;
 const EVENTS_PER_WAKE: usize = 32;
 const TIME_PER_WAKE: Duration = Duration::from_millis(8);
 
@@ -113,7 +114,9 @@ struct EventBytes(Vec<u8>);
 impl Write for EventBytes {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         if bytes.len() > MAX_EVENT_BYTES - self.0.len() {
-            return Err(std::io::Error::other("Host event exceeds 64 KiB"));
+            return Err(std::io::Error::other(
+                "result too large (1 MiB host event limit)",
+            ));
         }
         self.0.extend_from_slice(bytes);
         Ok(bytes.len())

@@ -37,6 +37,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
   const pending = new Map<string, Promise<ModuleExports>>();
   let disposed = false;
   let changes = 0;
+  const invalidations = new Set<string>();
   const version = (id: string) => versions()[id] ?? 0;
   const manifest = (id: string) => metadata().plugins.find(p => p.plugin.id === id);
 
@@ -117,7 +118,22 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
 
   const stop = assets.onPluginsChanged(event => {
     changes++;
-    invalidate(event.plugins, catalog(event.catalog));
+    for (const id of event.plugins) invalidations.add(id);
+    const publish = (next: JsonValue) => {
+      invalidate([...invalidations], catalog(next));
+      invalidations.clear();
+    };
+    const value = event.catalog as unknown as { paged?: boolean };
+    if (value.paged) {
+      const change = changes;
+      // Multiple reloads can race a paged fetch. Accumulate every changed id
+      // until the latest complete catalog arrives, so none escapes retirement.
+      void assets.plugins().then(next => {
+        if (!disposed && change === changes) publish(next);
+      }).catch(error => {
+        if (!disposed && change === changes) for (const id of invalidations) registry.notifyError(moduleName(id), error);
+      });
+    } else publish(event.catalog);
   });
   return {
     metadata, version, styles, load,

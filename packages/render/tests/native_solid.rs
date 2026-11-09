@@ -705,7 +705,7 @@ fn actual_host_mailbox_rejects_oversized_envelopes_and_aggregate_byte_overload()
     // without involving the system clipboard, a window, or arbitrary JS handles.
     let doc = document();
     let (sender, mailbox) = render::HostMailbox::new(&doc, || {});
-    assert!(sender.send("unused", "x".repeat(64 * 1024 + 1)).is_err());
+    assert!(sender.send("unused", "x".repeat(1024 * 1024 + 1)).is_err());
     assert_eq!(
         mailbox.pending(),
         0,

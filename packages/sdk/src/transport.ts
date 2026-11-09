@@ -43,7 +43,23 @@ export class InProcessTransport implements ClientTransport {
     return this.call("mutation", name, args);
   }
 
-  plugins(): Promise<JsonValue> { return this.control(id => ({ type: "plugins", id })); }
+  async plugins(): Promise<JsonValue> {
+    let value = await this.control(id => ({ type: "plugins", id }));
+    let text = "", offset = 0;
+    for (;;) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid catalog page");
+      // Accept older hosts and structural test transports with a full catalog.
+      if (Array.isArray(value.plugins)) return value;
+      if (typeof value.text !== "string" || typeof value.revision !== "string" || typeof value.done !== "boolean"
+        || typeof value.next !== "number" || !Number.isSafeInteger(value.next) || value.next < offset
+        || (!value.done && value.next === offset) || value.next > 64 * 1024 * 1024) throw new Error("Invalid catalog page");
+      text += value.text;
+      if (value.done) return JSON.parse(text) as JsonValue;
+      offset = value.next;
+      const revision = value.revision;
+      value = await this.control(id => ({ type: "pluginspage", id, revision, offset }));
+    }
+  }
 
   async pluginAsset(plugin: string, name: string, revision: string): Promise<string> {
     let offset = 0;
@@ -82,6 +98,21 @@ export class InProcessTransport implements ClientTransport {
 
   private send(request: Request): void {
     if (this.closed) throw this.closed;
+    // Reject only this operation before admission. UTF-8, not JS code units,
+    // determines the native/WebSocket message size (QuickJS has no TextEncoder).
+    const text = JSON.stringify(request);
+    let bytes = 0;
+    for (const char of text) {
+      const code = char.codePointAt(0)!;
+      bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
+    }
+    if (bytes > 1024 * 1024) {
+      const error = new Error("request too large (1 MiB limit)");
+      this.pending.get(request.id)?.reject(error);
+      this.pending.delete(request.id);
+      this.subscriptions.delete(request.id);
+      throw error;
+    }
     try {
       this.connection.send(request);
     } catch (error) {

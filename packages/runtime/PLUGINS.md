@@ -50,18 +50,20 @@ for the desktop, lab and old raw-bundle regression harnesses.
 
 ## Stream and lifecycle
 
-The shell sends `{type:"plugins",id}` on its connected session. The response is
-only a catalog: `{revision,plugins,functions}`. No UI assets are fetched at
+The shell sends `{type:"plugins",id}` on its connected session. The response is an 8192-byte UTF-8 JSON text page: `{revision,text,next,done}`.
+Continue with `{type:"pluginspage",id,revision,offset:next}` until `done`; the SDK
+assembles `{revision,plugins,functions}` and rejects mixed revisions. No UI assets are fetched at
 connect. A contribution's first render calls the loader. Code/CSS requests are
 `{type:"pluginasset",id,plugin,name,revision,offset}`; responses are
 `{text,next,done}` in the usual `response.result.Ok` envelope. Offsets count
 UTF-8 bytes. Chunks are at most 8192 bytes before JSON encoding, keeping even
-escaped text inside the native 64 KiB event limit. The server refuses a stale
+escaped text inside the native 1 MiB event limit. The server refuses a stale
 catalog revision, undeclared files and invalid offsets.
 
 After an atomic server reload, every connected session receives
-`{type:"pluginchanged",plugins:[changedIds],catalog}` on the same ordered stream
-as data updates. The server compares the entire old/new catalogs, so one reload
+`{type:"pluginchanged",plugins:[changedIds],catalog:{revision,paged:true}}` on the same ordered stream
+as data updates. The loader fetches the new catalog in bounded pages before
+retiring affected owners, accumulating ids if reloads race. The server compares the entire old/new catalogs, so one reload
 also reports other edited/added/removed artifacts in that installation. The
 loader retires affected modules plus transitive importers, including in-flight
 loads. Unrelated completed modules remain live. Version checks prevent stale
@@ -91,3 +93,9 @@ thread panel is a placeholder. Navigation buttons use real back/forward.
 `contributions(kind)` enumerates all five slot kinds without fetching modules.
 Views mount in the stage now; future item, toolbar, entity and command surfaces
 can select descriptors and reuse the same boundary/lifecycle plumbing.
+
+Requests and individual events share the WebSocket's 1 MiB UTF-8 limit. The
+native event queue still holds at most 256 events / 1 MiB in total. Oversized
+results become a correlated `result too large` error; an oversized subscription
+ends only that subscription. Oversized requests are rejected before admission,
+so unrelated calls and the window connection remain usable.

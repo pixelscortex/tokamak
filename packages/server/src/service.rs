@@ -415,6 +415,15 @@ fn request_action(request: Request) -> Result<Action, Error> {
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),
         Request::Plugins { id } => Action::Plugins(id),
+        Request::PluginsPage {
+            id,
+            revision,
+            offset,
+        } => Action::PluginsPage {
+            id,
+            revision,
+            offset,
+        },
         Request::PluginAsset {
             id,
             plugin,
@@ -523,6 +532,11 @@ enum Command {
 
 enum Action {
     Plugins(u64),
+    PluginsPage {
+        id: u64,
+        revision: String,
+        offset: u64,
+    },
     PluginAsset {
         id: u64,
         plugin: String,
@@ -584,6 +598,27 @@ impl Coordinator {
         let mut metadata = plugins.catalog.metadata();
         metadata["functions"] = plugins.descriptor["functions"].clone();
         Ok(metadata)
+    }
+
+    fn catalog_page(&self, revision: Option<&str>, offset: u64) -> Result<Json, String> {
+        let metadata = self.metadata().map_err(|e| e.to_string())?;
+        if revision.is_some_and(|r| metadata["revision"].as_str() != Some(r)) {
+            return Err("Plugin generation changed".into());
+        }
+        let text = serde_json::to_string(&metadata).map_err(|e| e.to_string())?;
+        let start = usize::try_from(offset).map_err(|_| "Invalid catalog offset")?;
+        if start > text.len() || !text.is_char_boundary(start) {
+            return Err("Invalid catalog offset".into());
+        }
+        // Byte pages also bound a single unusually large manifest. Escaping can
+        // expand 8 KiB at most sixfold, safely below either transport's cap.
+        let mut end = (start + 8192).min(text.len());
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        Ok(
+            serde_json::json!({"revision":metadata["revision"], "text":&text[start..end], "next":end,"done":end == text.len()}),
+        )
     }
 
     async fn control(&mut self, command: Command) {
@@ -661,7 +696,7 @@ impl Coordinator {
                 session,
                 Event::PluginChanged {
                     plugins: changed.iter().cloned().collect(),
-                    catalog: catalog.clone(),
+                    catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
                 },
             );
         }
@@ -736,7 +771,36 @@ impl Coordinator {
         self.closed.send_replace(Some(result));
     }
 
-    fn emit(&mut self, session: u64, event: Event) {
+    fn emit(&mut self, session: u64, mut event: Event) {
+        // Count serialized bytes without allocating an unbounded transport buffer.
+        // Leave room for the native topic/payload envelope as well as the wire JSON.
+        struct Limit(usize);
+        impl std::io::Write for Limit {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0 += bytes.len();
+                if self.0 > 1024 * 1024 - 64 {
+                    return Err(std::io::Error::other("result too large"));
+                }
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        if serde_json::to_writer(&mut Limit(0), &event).is_err() {
+            match &mut event {
+                Event::Response { result, .. } => {
+                    *result = Err("result too large (1 MiB limit)".into())
+                }
+                Event::Subscription { id, result } => {
+                    if let Some(client) = self.sessions.get_mut(&session) {
+                        client.subscriptions.remove(id);
+                    }
+                    *result = Err("result too large (1 MiB limit); subscription ended".into());
+                }
+                _ => return,
+            }
+        }
         let Some(client) = self.sessions.get(&session) else {
             return;
         };
@@ -782,7 +846,15 @@ impl Coordinator {
         }
         match action {
             Action::Plugins(id) => {
-                let result = self.metadata().map_err(|e| e.to_string());
+                let result = self.catalog_page(None, 0);
+                self.emit(session, Event::Response { id, result });
+            }
+            Action::PluginsPage {
+                id,
+                revision,
+                offset,
+            } => {
+                let result = self.catalog_page(Some(&revision), offset);
                 self.emit(session, Event::Response { id, result });
             }
             Action::PluginAsset {

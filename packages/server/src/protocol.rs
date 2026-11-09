@@ -32,6 +32,13 @@ pub enum Request {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
     },
+    PluginsPage {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        revision: String,
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        offset: u64,
+    },
     PluginAsset {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
@@ -55,6 +62,7 @@ impl Request {
             | Self::Subscribe { id, .. }
             | Self::Unsubscribe { id }
             | Self::Plugins { id }
+            | Self::PluginsPage { id, .. }
             | Self::PluginAsset { id, .. } => *id,
         }
     }

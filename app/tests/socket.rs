@@ -66,9 +66,9 @@ fn start() -> Service {
 #[test]
 fn socket_admission_bounds_messages_count_and_retired_receiver() {
     let (send, mut receiver) = socket::admission();
-    assert!(send("x".repeat(65537)).is_err());
-    send("x".repeat(65536)).unwrap();
-    assert_eq!(receiver.try_recv().unwrap().len(), 65536);
+    assert!(send("x".repeat(1048577)).is_err());
+    send("x".repeat(1048576)).unwrap();
+    assert_eq!(receiver.try_recv().unwrap().len(), 1048576);
     for n in 0..64 {
         send(n.to_string()).unwrap();
     }

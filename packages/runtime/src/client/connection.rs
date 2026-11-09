@@ -59,7 +59,7 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
     request.headers_mut().insert("authorization", authorization);
     let config = WebSocketConfig::default()
         .write_buffer_size(0)
-        .max_write_buffer_size(128 * 1024)
+        .max_write_buffer_size(2 * 1024 * 1024)
         .max_message_size(Some(1024 * 1024))
         .max_frame_size(Some(1024 * 1024));
     let (socket, _) = tokio::time::timeout(
@@ -74,8 +74,8 @@ pub fn admission() -> (render::MessageSender, mpsc::Receiver<String>) {
     let (requests, receiver) = mpsc::channel(64);
     (
         Box::new(move |message: String| {
-            if message.len() > 64 * 1024 {
-                return Err(render::Error("Native request exceeds 64 KiB".into()));
+            if message.len() > 1024 * 1024 {
+                return Err(render::Error("request too large (1 MiB limit)".into()));
             }
             requests
                 .try_send(message)
@@ -120,6 +120,10 @@ fn header(value: &Value, event: bool) -> Option<(&str, u64)> {
                 value.as_object()?.get("args")?;
             }
             "unsubscribe" | "plugins" => {}
+            "pluginspage" => {
+                value["revision"].as_str()?;
+                value["offset"].as_u64()?;
+            }
             "pluginasset" => {
                 value["plugin"].as_str()?;
                 value["name"].as_str()?;
@@ -179,7 +183,15 @@ pub async fn serve(
                                 closing = true;
                                 requests.close();
                                 deadline = Instant::now() + Duration::from_secs(5);
-                            } else if sender.send("connection:event", value).is_err() { break; }
+                            } else if let Err(error) = sender.send("connection:event", &value) {
+                                // Size is a per-operation failure, never a transport failure.
+                                if error.to_string().contains("result too large") {
+                                    let kind = value["type"].as_str().unwrap_or("response");
+                                    let failure = serde_json::json!({"type":kind,"id":value["id"],
+                                        "result":{"Err":"result too large (1 MiB limit)"}});
+                                    if sender.send("connection:event", failure).is_err() { break; }
+                                } else { break; }
+                            }
                         }
                     },
                     Some(Ok(Message::Ping(_) | Message::Pong(_))) => {},

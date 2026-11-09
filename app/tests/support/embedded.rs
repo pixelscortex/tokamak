@@ -36,6 +36,7 @@ impl Completion {
             Request::Query { id, .. }
             | Request::Mutation { id, .. }
             | Request::Plugins { id }
+            | Request::PluginsPage { id, .. }
             | Request::PluginAsset { id, .. } => Self::Response(*id),
             Request::Subscribe { id, .. } => Self::Subscription(*id),
             Request::Unsubscribe { id } => Self::Unsubscribed(*id),
