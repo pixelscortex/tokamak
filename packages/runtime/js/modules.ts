@@ -74,7 +74,9 @@ export class ModuleRegistry {
       try {
         // The globalThis spelling supports existing artifacts, but its facade
         // has the same scoped capability, never the host's global object.
-        new Function("globalThis", "__tokamakModules", code)(Object.freeze({ __tokamakModules: api }), api);
+        const globals = Object.create(globalThis);
+        Object.defineProperties(globals, { __tokamakModules: { value: api }, globalThis: { value: globals } });
+        new Function("globalThis", "__tokamakModules", code)(Object.freeze(globals), api);
       } finally { registering = false; }
       if (!this.definitions.has(name)) throw new Error(`UI did not register ${name}`);
     } catch (error) {
