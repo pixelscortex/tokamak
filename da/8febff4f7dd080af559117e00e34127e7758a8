@@ -1,0 +1,19 @@
+packages/build/src/vite.ts
+  s_aa06e9f4f56641::t_f3cf0711fb9a11 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da8febff4f7dd080af559117e00e34127e7758a8",
+  "prompts": {},
+  "sessions": {
+    "s_aa06e9f4f56641": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf07-8a7e-7b52-84dc-c04376147eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
