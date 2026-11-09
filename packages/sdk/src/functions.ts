@@ -139,7 +139,7 @@ export function createFunctions<S extends SchemaDefinition>(
   mutation: FunctionBuilder<"mutation", ModelFromSchema<S>>;
   action: FunctionBuilder<"action", ModelFromSchema<S>>;
 } {
-  return { query: builder("query"), mutation: builder("mutation"), action: builder("action") };
+  return { query: builder("query"), mutation: builder("mutation"), action: builder<"action", ModelFromSchema<S>>("action") };
 }
 
 export type FunctionRegistry = Readonly<Record<string, FunctionDefinition>>;

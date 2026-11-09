@@ -121,6 +121,13 @@ wraps evaluation in a timeout; this includes module initialization. Both load an
 call time budgets are ignored on the action lane. Queries and mutations retain
 their existing budgets and cannot obtain network authority.
 
+Deterministic time and `Math.random` are opt-in through `OpRegistry`. The server
+opts in for queries and mutations, including `runQuery`/`runMutation` from an
+action, and reuses those inputs across conflict retries. Nested transactional
+plugin calls retain the fixed clock and derived random streams. Actions keep the
+real clock, native `Math.random`, and OS-backed crypto randomness; timers advance
+normally. Inspection and other engine calls do not opt in automatically.
+
 Explicit shutdown/reload uses a cancellation token, independent of time limits.
 It wakes idle I/O/timers and interrupts busy JS, retires capabilities and drops
 the world before joining workers. Reload cancels the old pool before publishing

@@ -71,7 +71,11 @@ impl Drop for ModuleCall {
 /// Construct before sharing. Per-call registries can capture the server's
 /// transaction/readset without making the runtime aware of database semantics.
 #[derive(Default)]
-pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>, Vec<String>);
+pub struct OpRegistry(
+    BTreeMap<String, Op>,
+    pub(crate) Option<Determinism>,
+    Vec<String>,
+);
 
 impl OpRegistry {
     pub fn new() -> Self {

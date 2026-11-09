@@ -676,6 +676,7 @@ impl Coordinator {
             Ok(()) => {
                 let mutation = call.kind == FunctionKind::Mutation;
                 let mut result = Err("mutation conflict retry limit exceeded".into());
+                let determinism = engine::Determinism::default();
                 for attempt in 0..ATTEMPTS {
                     let nested = host::invoke(
                         &self.database,
@@ -686,6 +687,7 @@ impl Coordinator {
                         mutation,
                         &self.space,
                         self.plugins.clone(),
+                        determinism,
                     )
                     .await;
                     if mutation && nested.conflict {
