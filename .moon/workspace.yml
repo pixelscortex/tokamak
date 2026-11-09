@@ -12,6 +12,7 @@ projects:
   build: 'packages/build'
   app: 'app'
   lab: 'lab'
+  wiki: 'wiki'
 vcs:
   defaultBranch: 'main'
   provider: 'github'

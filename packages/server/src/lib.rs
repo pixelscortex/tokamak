@@ -6,6 +6,7 @@
 // Embedded datastore startup contains deeply nested engine futures.
 #![recursion_limit = "256"]
 
+mod actions;
 mod backend;
 pub mod data;
 mod host;

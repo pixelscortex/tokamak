@@ -1,0 +1,33 @@
+{
+  "name": "@tokamak/wiki",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "dev": "bun scripts/sync-content.mjs && proto run node -- node_modules/fumapress/cli.js dev",
+    "build": "bun scripts/sync-content.mjs && bun scripts/check-api.mjs && proto run node -- node_modules/fumapress/cli.js build",
+    "start": "proto run node -- node_modules/fumapress/cli.js start",
+    "types:check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "fumadocs-core": "16.18.4",
+    "fumadocs-mdx": "15.5.3",
+    "fumadocs-typescript": "5.6.0",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.18.4",
+    "fumapress": "2.0.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "waku": "1.0.0-rc.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@types/mdx": "2.0.14",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.6"
+  }
+}

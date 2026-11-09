@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumapress/css/preset.css";
+
+/* The wiki's own styles. Nothing here is shared with the app's @tokamak/ui theme. */
+
+@theme {
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --default-font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Light only, with one ember accent. */
+:root {
+  --color-fd-primary: #e8590c;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: #e8590c;
+}
+
+.tk-mono {
+  font-family: var(--font-mono);
+}
+
+/* A faint engineering grid behind the landing page, fading out at the edges. */
+.tk-landing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--color-fd-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-fd-border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, black, transparent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.tk-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 9999px;
+  background: var(--color-fd-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-fd-primary) 20%, transparent);
+  vertical-align: middle;
+}

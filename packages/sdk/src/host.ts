@@ -35,6 +35,8 @@ export interface HostOperations {
   "db.replace": { args: { id: string; value: JsonObject }; result: null };
   "db.delete": { args: { id: string }; result: null };
   "db.query": { args: QueryRequest; result: StoredDocument[] };
+  "action.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
+  "action.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
   "plugin.call": { args: { name: string; args: JsonValue }; result: JsonValue };
   "plugin.providers": { args: { interface: string }; result: string[] };
 }

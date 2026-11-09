@@ -132,12 +132,16 @@ Grant records use deterministic native record keys, so version lookup does not
 scan the ledger or execute SurrealQL predicates. The internal keyed CREATE is
 not an upsert and is not exposed through the JavaScript database API.
 
-**Network execution is not implemented in M1.2.** A `net:host` declaration is
-metadata, not a working fetch API. Actions, actual network capability enforcement
-and denied/allowed fetch tests belong to M2.1; queries and mutations must not
-gain external effects that could repeat during transaction retries. No Node/Bun
-runtime, plugin grant prompt, marketplace, signing, Wasm or untrusted sandbox ships
-here.
+**Network access belongs to actions only.** A `net:<host>` declaration is an
+exact-host grant for `fetch` inside `action` functions; there is no `net:*`
+wildcard (see `packages/engine/WEB_APIS.md`). Actions run on a separate worker
+lane and reach data only through `ctx.runQuery` / `ctx.runMutation`, which apply
+the same dependency, interface and export checks as nested calls. Queries and
+mutations cannot call actions or `fetch`, so they gain no external effects that
+could repeat during transaction retries. Reload cancels old-generation actions.
+An action result is one wire response under the same inclusive 1 MiB limit: an
+oversized result fails only that call. No Node/Bun runtime, plugin grant prompt,
+marketplace, signing, Wasm or untrusted sandbox ships here.
 
 ## Evidence
 

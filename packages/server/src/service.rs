@@ -1,6 +1,6 @@
 //! Bounded, transport-independent feature service. One coordinator linearizes
-//! calls and subscription refreshes: less throughput than concurrent scheduling,
-//! but one owned lifecycle and no stale-run generations or writer fence to leak.
+//! transactions and subscription refreshes; actions use separate workers and
+//! rejoin that coordinator only for nested query/mutation calls.
 //! A session has ONE ordered output stream; transports must preserve its order.
 
 pub use crate::protocol::Event;
@@ -9,7 +9,7 @@ use crate::{
     data::{ChangeEvent, DataSpace, Database},
     host::{self, ReadSet},
 };
-use engine::{Bundle, OpRegistry, Pool};
+use engine::{Bundle, OpRegistry, Pool, PoolConfig};
 use serde_json::Value as Json;
 use std::{
     collections::BTreeMap,
@@ -21,11 +21,19 @@ use std::{
 };
 use tokio::sync::{Notify, broadcast, mpsc, oneshot, watch};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FunctionKind {
+    Query,
+    Mutation,
+    Action,
+}
+
 const COMMANDS: usize = 64;
 const OUTPUTS: usize = 32;
 const SESSIONS: usize = 64;
 const SUBSCRIPTIONS: usize = 128;
 const ATTEMPTS: usize = 3;
+const ACTIONS: usize = 34; // Two workers plus their bounded admission queue.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -50,7 +58,7 @@ impl std::error::Error for Error {}
 
 /// Startup inspects the bundled SDK registry in a fresh QuickJS world. The
 /// caller owns the Tokio host runtime and must keep it alive through close;
-/// initialize embedded storage there, not on the time-only JS executors.
+/// initialize embedded storage there, not on the JS executors.
 pub struct Server {
     commands: mpsc::Sender<Command>,
     // Shutdown must never compete for space with application calls.
@@ -88,7 +96,7 @@ impl Server {
                 };
             }
         };
-        Ok(Self::start(
+        Self::start(
             database,
             pool,
             Some(bundle),
@@ -97,7 +105,8 @@ impl Server {
             kinds,
             None,
             None,
-        ))
+        )
+        .await
     }
 
     /// All static manifests resolve before any plugin module is evaluated.
@@ -130,9 +139,9 @@ impl Server {
         let kinds = loaded
             .targets
             .iter()
-            .map(|(name, target)| (name.clone(), target.mutation))
+            .map(|(name, target)| (name.clone(), target.kind))
             .collect();
-        Ok(Self::start(
+        Self::start(
             database,
             pool,
             None,
@@ -141,19 +150,32 @@ impl Server {
             kinds,
             Some(loaded),
             Some(root.to_owned()),
-        ))
+        )
+        .await
     }
 
-    fn start(
-        database: Database,
+    async fn start(
+        mut database: Database,
         pool: Arc<Pool>,
         bundle: Option<Arc<Bundle>>,
         space: DataSpace,
         descriptor: Json,
-        kinds: BTreeMap<String, bool>,
+        kinds: BTreeMap<String, FunctionKind>,
         plugins: Option<Arc<crate::plugins::Loaded>>,
         plugin_root: Option<std::path::PathBuf>,
-    ) -> Self {
+    ) -> Result<Self, Error> {
+        let action_pool = match Pool::new_actions(PoolConfig {
+            limits: pool.limits().clone(),
+            ..PoolConfig::default()
+        }) {
+            Ok(pool) => Arc::new(pool),
+            Err(error) => {
+                Box::pin(database.close())
+                    .await
+                    .map_err(|e| Error::Invalid(format!("{error}; startup cleanup failed: {e}")))?;
+                return Err(Error::Invalid(error.to_string()));
+            }
+        };
         let changes = database.subscribe(); // Before any initial subscription run.
         let (commands, receiver) = mpsc::channel(COMMANDS);
         let (closing, close_receiver) = mpsc::channel(1);
@@ -168,6 +190,9 @@ impl Server {
             plugins,
             plugin_root,
             changes,
+            action_pool,
+            action_jobs: tokio::task::JoinSet::new(),
+            commands: commands.downgrade(),
             sessions: BTreeMap::new(),
             next_session: 0,
             cleanup: cleanup.clone(),
@@ -177,13 +202,13 @@ impl Server {
         // through COMMIT, invalidation, and ordered delivery. Client cancellation
         // does not abort finalization. Process/runtime failure remains unknown.
         tokio::spawn(actor.run(receiver, close_receiver));
-        Self {
+        Ok(Self {
             commands,
             closing,
             descriptor,
             cleanup,
             closed,
-        }
+        })
     }
 
     pub fn descriptor(&self) -> &Json {
@@ -274,7 +299,7 @@ impl Server {
 pub(crate) async fn inspect(
     pool: &Pool,
     bundle: Arc<Bundle>,
-) -> Result<(Json, BTreeMap<String, bool>), Error> {
+) -> Result<(Json, BTreeMap<String, FunctionKind>), Error> {
     let descriptor = pool
         .submit(
             bundle.clone(),
@@ -296,11 +321,12 @@ pub(crate) async fn inspect(
             .and_then(Json::as_str)
             .ok_or_else(|| Error::Invalid("invalid function name".into()))?;
         let mutation = match function.get("kind").and_then(Json::as_str) {
-            Some("query") => false,
-            Some("mutation") => true,
+            Some("query") => FunctionKind::Query,
+            Some("mutation") => FunctionKind::Mutation,
+            Some("action") => FunctionKind::Action,
             _ => {
                 return Err(Error::Invalid(
-                    "function kind must be query or mutation".into(),
+                    "function kind must be query, mutation or action".into(),
                 ));
             }
         };
@@ -355,7 +381,7 @@ impl SessionSender {
             id,
             name: name.into(),
             args,
-            mutation: None,
+            kind: None,
         })
     }
 
@@ -404,13 +430,19 @@ fn request_action(request: Request) -> Result<Action, Error> {
             id,
             name,
             args,
-            mutation: Some(false),
+            kind: Some(FunctionKind::Query),
         },
         Request::Mutation { id, name, args } => Action::Call {
             id,
             name,
             args,
-            mutation: Some(true),
+            kind: Some(FunctionKind::Mutation),
+        },
+        Request::Action { id, name, args } => Action::Call {
+            id,
+            name,
+            args,
+            kind: Some(FunctionKind::Action),
         },
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),
@@ -518,11 +550,12 @@ type Connection = (
     mpsc::WeakSender<Event>,
 );
 
-enum Command {
+pub(crate) enum Command {
     Connect(oneshot::Sender<Result<Connection, Error>>),
     Action(u64, Action),
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
+    RunFunction(crate::actions::NestedCall),
     Asset(
         String,
         String,
@@ -530,7 +563,7 @@ enum Command {
     ),
 }
 
-enum Action {
+pub(crate) enum Action {
     Plugins(u64),
     PluginsPage {
         id: u64,
@@ -548,7 +581,7 @@ enum Action {
         id: u64,
         name: String,
         args: Json,
-        mutation: Option<bool>,
+        kind: Option<FunctionKind>,
     },
     Subscribe {
         id: u64,
@@ -579,11 +612,14 @@ struct Coordinator {
     database: Database,
     pool: Arc<Pool>,
     bundle: Option<Arc<Bundle>>,
-    kinds: BTreeMap<String, bool>,
+    kinds: BTreeMap<String, FunctionKind>,
     space: DataSpace,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
+    action_pool: Arc<Pool>,
+    action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
+    commands: mpsc::WeakSender<Command>,
     sessions: BTreeMap<u64, Client>,
     next_session: u64,
     cleanup: Arc<Notify>,
@@ -591,6 +627,122 @@ struct Coordinator {
 }
 
 impl Coordinator {
+    fn start_action(&mut self, session: u64, id: u64, name: String, args: Json) {
+        if self.action_jobs.len() >= ACTIONS {
+            self.emit(
+                session,
+                Event::Response {
+                    id,
+                    result: Err("action capacity exceeded".into()),
+                },
+            );
+            return;
+        }
+        let (bundle, local_name, owner) = if let Some(loaded) = &self.plugins {
+            let target = &loaded.targets[&name];
+            (
+                target.bundle.clone(),
+                target.local_name.clone(),
+                Some(target.owner.clone()),
+            )
+        } else {
+            (self.bundle.clone().expect("legacy bundle"), name, None)
+        };
+        let pending =
+            crate::actions::operations(self.commands.clone(), self.plugins.clone(), owner)
+                .and_then(|ops| {
+                    self.action_pool.submit(
+                        bundle,
+                        "invoke",
+                        serde_json::json!({"name":local_name,"args":args}),
+                        ops,
+                    )
+                });
+        match pending {
+            Ok(pending) => {
+                self.action_jobs
+                    .spawn(async move { (session, id, pending.await.map_err(|e| e.to_string())) });
+            }
+            Err(error) => self.emit(
+                session,
+                Event::Response {
+                    id,
+                    result: Err(error.to_string()),
+                },
+            ),
+        }
+    }
+
+    async fn stop_actions(&mut self) {
+        self.action_pool.cancel_actions();
+        while let Some(completion) = self.action_jobs.join_next().await {
+            if let Ok((session, id, result)) = completion {
+                self.emit(session, Event::Response { id, result });
+            }
+        }
+    }
+
+    async fn run_function(&mut self, call: crate::actions::NestedCall) {
+        let valid = (|| {
+            match (&self.plugins, &call.generation, &call.owner) {
+                (Some(current), Some(generation), Some(owner))
+                    if Arc::ptr_eq(current, generation) =>
+                {
+                    let target = current.target(
+                        owner,
+                        &call.name,
+                        call.kind == FunctionKind::Mutation,
+                        &[],
+                    )?;
+                    if target.kind != call.kind {
+                        return Err("nested function kind does not match request".to_owned());
+                    }
+                }
+                (None, None, None) => {
+                    if self.kinds.get(&call.name) != Some(&call.kind) {
+                        return Err("nested function kind does not match request".to_owned());
+                    }
+                }
+                _ => return Err("action belongs to a retired plugin generation".to_owned()),
+            }
+            Ok(())
+        })();
+        let result = match valid {
+            Err(error) => Err(error),
+            Ok(()) => {
+                let mutation = call.kind == FunctionKind::Mutation;
+                let mut result = Err("mutation conflict retry limit exceeded".into());
+                let determinism = engine::Determinism::default();
+                for attempt in 0..ATTEMPTS {
+                    let nested = host::invoke(
+                        &self.database,
+                        &self.pool,
+                        self.bundle.clone(),
+                        &call.name,
+                        call.args.clone(),
+                        mutation,
+                        &self.space,
+                        self.plugins.clone(),
+                        determinism,
+                    )
+                    .await;
+                    if mutation && nested.conflict {
+                        if attempt + 1 == ATTEMPTS {
+                            break;
+                        }
+                        continue;
+                    }
+                    result = nested.result;
+                    break;
+                }
+                self.drain_changes();
+                self.refresh().await;
+                result
+            }
+        };
+        let _ = call.reply.send(result);
+    }
+
     fn metadata(&self) -> Result<Json, Error> {
         let plugins = self.plugins.as_ref().ok_or_else(|| {
             Error::Invalid("Server uses a legacy bundle, not a plugin installation".into())
@@ -625,6 +777,7 @@ impl Coordinator {
 
     async fn control(&mut self, command: Command) {
         match command {
+            Command::RunFunction(call) => self.run_function(call).await,
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
@@ -668,13 +821,26 @@ impl Coordinator {
         let candidate =
             crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
                 .await?;
+        // Each generation gets a fresh action lane; build it before the swap so
+        // a pool failure leaves the current generation fully intact.
+        let action_pool = Arc::new(
+            Pool::new_actions(PoolConfig {
+                limits: self.pool.limits().clone(),
+                ..PoolConfig::default()
+            })
+            .map_err(|e| Error::Invalid(e.to_string()))?,
+        );
         Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
+        // Cancel old-generation actions so a reload cannot leave revoked network
+        // grants running in old worlds; the old pool tears down detached.
+        self.action_pool.cancel_actions();
+        self.action_pool = action_pool;
         self.kinds = candidate
             .targets
             .iter()
-            .map(|(name, target)| (name.clone(), target.mutation))
+            .map(|(name, target)| (name.clone(), target.kind))
             .collect();
         let mut changed = std::collections::BTreeSet::new();
         if let Some(previous) = &self.plugins {
@@ -735,10 +901,16 @@ impl Coordinator {
                             command => self.control(command).await,
                         }
                     }
+                    self.stop_actions().await;
                     let result = Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
                     self.closed.send_replace(Some(result.clone()));
                     let _ = reply.send(result);
                     return;
+                }
+                Some(completion) = self.action_jobs.join_next() => {
+                    if let Ok((session,id,result)) = completion {
+                        self.emit(session, Event::Response { id, result });
+                    }
                 }
                 _ = self.cleanup.notified() => {},
                 change = self.changes.recv() => {
@@ -770,6 +942,7 @@ impl Coordinator {
         }
         // Last-handle drop is also graceful: no invocation is abandoned at an
         // await point by a disappearing client/server handle.
+        self.stop_actions().await;
         let result = Box::pin(self.database.close())
             .await
             .map_err(|e| Error::Invalid(e.to_string()));
@@ -903,14 +1076,19 @@ impl Coordinator {
                 id,
                 name,
                 args,
-                mutation: expected,
+                kind: expected,
             } => {
                 let result = match self.kinds.get(&name).copied() {
                     None => Err(format!("unknown function: {name}")),
-                    Some(mutation) if expected.is_some_and(|expected| expected != mutation) => {
+                    Some(kind) if expected.is_some_and(|expected| expected != kind) => {
                         Err("function kind does not match request".into())
                     }
-                    Some(mutation) => {
+                    Some(FunctionKind::Action) => {
+                        self.start_action(session, id, name, args);
+                        return;
+                    }
+                    Some(kind) => {
+                        let mutation = kind == FunctionKind::Mutation;
                         let mut result = Err("mutation conflict retry limit exceeded".into());
                         let determinism = engine::Determinism::default();
                         for attempt in 0..ATTEMPTS {
@@ -944,7 +1122,7 @@ impl Coordinator {
             }
             Action::Subscribe { id, name, args } => {
                 let client = self.sessions.get_mut(&session).expect("checked session");
-                let error = if self.kinds.get(&name) != Some(&false) {
+                let error = if self.kinds.get(&name) != Some(&FunctionKind::Query) {
                     Some("subscriptions require a registered query")
                 } else if client.subscriptions.contains_key(&id) {
                     Some("subscription ID already in use")
@@ -1013,7 +1191,7 @@ impl Coordinator {
                 .get_mut(&id)
                 .unwrap()
                 .dirty = false;
-            let call = if self.kinds.get(&name) == Some(&false) {
+            let call = if self.kinds.get(&name) == Some(&FunctionKind::Query) {
                 host::invoke(
                     &self.database,
                     &self.pool,

@@ -1,0 +1,12 @@
+{
+  "title": "Docs",
+  "root": true,
+  "pages": [
+    "index",
+    "how-it-works",
+    "architecture",
+    "server",
+    "runtime",
+    "api"
+  ]
+}

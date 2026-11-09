@@ -15,6 +15,7 @@ use std::{
     thread,
 };
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug)]
 pub struct PoolConfig {
@@ -44,18 +45,48 @@ struct Job {
 }
 
 /// Owns its worker threads. Share with Arc; dropping the last owner closes
-/// admission, refuses queued jobs, and joins running workers after their budget.
+/// admission and refuses queued jobs. Transaction workers join after their budget;
+/// action workers are cancelled and detached so teardown never blocks the caller.
 /// Host callbacks must obey the cooperative/nonblocking rules on OpRegistry.
 pub struct Pool {
     sender: Option<mpsc::SyncSender<Job>>,
     closing: Arc<AtomicBool>,
     threads: Vec<thread::JoinHandle<()>>,
+    shutdown: Option<CancellationToken>,
+    limits: Limits,
 }
 
 impl Pool {
     pub fn new(config: PoolConfig) -> Result<Self, Error> {
         let limits = config.limits.clone();
         Self::with_engine(config, move || QuickJsEngine::new(limits.clone()))
+    }
+
+    /// Allocate a physically separate lane. Actions keep real time/randomness
+    /// and have no deadline; explicit shutdown still interrupts busy JS and I/O.
+    pub fn new_actions(mut config: PoolConfig) -> Result<Self, Error> {
+        let heap_bytes = config.limits.heap_bytes;
+        config.limits = Limits {
+            heap_bytes,
+            ..Limits::default()
+        };
+        let limits = config.limits.clone();
+        let shutdown = CancellationToken::new();
+        let stopped = shutdown.clone();
+        let mut pool = Self::with_engine(config, move || {
+            crate::ActionEngine::cancellable(limits.clone(), stopped.clone())
+        })?;
+        pool.shutdown = Some(shutdown);
+        Ok(pool)
+    }
+
+    /// Shutdown is a lifecycle event, not an action wall-clock budget. Already
+    /// accepted transactional operations on another lane finish independently.
+    pub fn cancel_actions(&self) {
+        if let Some(shutdown) = &self.shutdown {
+            self.closing.store(true, Ordering::Release);
+            shutdown.cancel();
+        }
     }
 
     /// Engine construction happens on each worker, so neither engines nor
@@ -78,6 +109,8 @@ impl Pool {
             sender: Some(sender),
             closing: Arc::new(AtomicBool::new(false)),
             threads: Vec::new(),
+            shutdown: None,
+            limits: config.limits.clone(),
         };
         for id in 0..config.workers {
             let receiver = receiver.clone();
@@ -85,8 +118,13 @@ impl Pool {
             let factory = factory.clone();
             // Build the fallible executor here so startup errors reach the
             // caller, instead of returning a pool of silently dead workers.
-            let executor = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
+            // QuickJS remains on this worker's block_on thread. A separate
+            // Tokio driver keeps HTTP connection teardown running while recv()
+            // blocks between invocations; current-thread runtimes freeze it.
+            let executor = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .max_blocking_threads(4)
+                .enable_all()
                 .build()
                 .map_err(|e| Error::Engine(format!("cannot start JS executor: {e}")))?;
             let worker = thread::Builder::new()
@@ -122,11 +160,19 @@ impl Pool {
                         });
                         let _ = job.reply.send(result);
                     }
+                    // Aborting an async task cannot stop a running spawn_blocking
+                    // callback (notably getaddrinfo). Never join those callbacks.
+                    // They own their inputs and may finish after this worker exits.
+                    executor.shutdown_background();
                 })
                 .map_err(|e| Error::Engine(format!("cannot start JS worker: {e}")))?;
             pool.threads.push(worker);
         }
         Ok(pool)
+    }
+
+    pub fn limits(&self) -> &Limits {
+        &self.limits
     }
 
     /// Immediate bounded admission. Budget starts when execution begins, not
@@ -138,6 +184,9 @@ impl Pool {
         args: Json,
         ops: Arc<OpRegistry>,
     ) -> Result<PendingCall, Error> {
+        if self.closing.load(Ordering::Acquire) {
+            return Err(Error::Closed);
+        }
         let (reply, receiver) = oneshot::channel();
         let job = Job {
             bundle,
@@ -160,10 +209,16 @@ impl Pool {
 
 impl Drop for Pool {
     fn drop(&mut self) {
+        self.cancel_actions();
         self.closing.store(true, Ordering::Release);
         self.sender.take();
         for thread in self.threads.drain(..) {
-            let _ = thread.join();
+            if self.shutdown.is_none() {
+                let _ = thread.join();
+            }
+            // Action workers own their engines, runtimes and shared queue. Drop
+            // their handles to detach cleanup, including on coordinator reload
+            // and shutdown paths. No worker borrows from the dropped Pool.
         }
     }
 }

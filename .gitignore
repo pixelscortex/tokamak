@@ -24,3 +24,6 @@ dist/
 
 # Plugin references are regenerated before builds and checks.
 /plugins/*/backend/_generated/
+
+# Delta app workspace state (worktrees, clones, settings) is local tooling, not source.
+/.delta/

@@ -1,0 +1,3 @@
+# Node for the docs site only. Node 26 breaks @hono/node-server 2.1.6 (used by
+# Waku) on dev-server API routes such as search; Node 24 LTS does not.
+node = "24.21.0"

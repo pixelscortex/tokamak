@@ -1,0 +1,17 @@
+---
+title: Values
+description: The JSON value types and branded record IDs shared by the SDK.
+---
+
+The SDK has one value language: lossless JSON. Values are `null`, booleans,
+strings, finite numbers, dense arrays and plain objects. There is no `Date`,
+`bigint`, `undefined`, function or cycle, and lossy conversions are rejected.
+
+IDs are branded strings in the form `table:key`. Table names match
+`[A-Za-z][A-Za-z0-9_]*` and keys match `[A-Za-z0-9_-]+`.
+
+<api-declaration path="../../../../packages/sdk/src/values.ts" name="JsonValue" />
+
+<api-declaration path="../../../../packages/sdk/src/values.ts" name="JsonObject" />
+
+<api-declaration path="../../../../packages/sdk/src/values.ts" name="Id" />

@@ -35,6 +35,7 @@ impl Completion {
         match request {
             Request::Query { id, .. }
             | Request::Mutation { id, .. }
+            | Request::Action { id, .. }
             | Request::Plugins { id }
             | Request::PluginsPage { id, .. }
             | Request::PluginAsset { id, .. } => Self::Response(*id),

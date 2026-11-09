@@ -2,7 +2,7 @@
 use futures_util::{SinkExt, StreamExt};
 use render::HostSender;
 use serde_json::Value;
-use std::{net::IpAddr, path::Path, time::Duration};
+use std::{collections::BTreeSet, net::IpAddr, path::Path, time::Duration};
 use tokio::{
     net::TcpStream,
     sync::{mpsc, oneshot},
@@ -115,7 +115,7 @@ fn header(value: &Value, event: bool) -> Option<(&str, u64)> {
         }
     } else {
         match kind {
-            "query" | "mutation" | "subscribe" => {
+            "query" | "mutation" | "action" | "subscribe" => {
                 value["name"].as_str()?;
                 value.as_object()?.get("args")?;
             }
@@ -158,6 +158,9 @@ pub async fn serve(
     let mut closing = output.is_none();
     let mut deadline = Instant::now() + Duration::from_secs(5);
     let mut awaiting: Option<(String, u64)> = None;
+    // Long actions must not prevent the same client from sending the queries
+    // and mutations that remain on the ordered lane. Bound outstanding IDs.
+    let mut actions = BTreeSet::new();
     if closing {
         requests.close();
     }
@@ -177,6 +180,7 @@ pub async fn serve(
                         let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
                         if header(&value, true).is_none() { break; }
                         if complete(&awaiting, &value) { awaiting = None; }
+                        if value["type"] == "response" { if let Some(id) = value["id"].as_u64() { actions.remove(&id); } }
                         if let Some(sender) = &output {
                             if sender.is_document_retired() {
                                 output = None;
@@ -209,9 +213,24 @@ pub async fn serve(
                     continue;
                 }
                 let Some((kind, id)) = header(&request, false) else { break };
-                awaiting = Some((match kind {
-                    "subscribe" => "subscription", "unsubscribe" => "unsubscribed", _ => "response",
-                }.into(), id));
+                if kind == "action" {
+                    if actions.len() >= 34 {
+                        // Refuse before sending rather than letting a saturated
+                        // action lane hold unrelated query/mutation messages.
+                        if let Some(sender) = &output {
+                            if sender.send("connection:event", serde_json::json!({
+                                "type":"response", "id":id,
+                                "result":{"Err":"native action capacity exceeded; request was not admitted"}
+                            })).is_err() { break; }
+                        }
+                        continue;
+                    }
+                    actions.insert(id);
+                } else {
+                    awaiting = Some((match kind {
+                        "subscribe" => "subscription", "unsubscribe" => "unsubscribed", _ => "response",
+                    }.into(), id));
+                }
                 if !matches!(tokio::time::timeout(Duration::from_secs(5),
                     socket.send(Message::Text(message.into()))).await, Ok(Ok(()))) { break; }
             }

@@ -103,13 +103,14 @@ pub(crate) struct Loaded {
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
     pub catalog_text: String,
-    inspected: BTreeMap<String, (Value, BTreeMap<String, bool>)>,
+    inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 #[derive(Clone)]
 pub(crate) struct Target {
     pub owner: String,
     pub local_name: String,
     pub mutation: bool,
+    pub kind: crate::service::FunctionKind,
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,
 }
@@ -224,14 +225,15 @@ impl Loaded {
                     )));
                 }
             }
-            for (local_name, mutation) in kinds {
+            for (local_name, kind) in kinds {
                 let name = format!("{id}/{local_name}");
                 targets.insert(
                     name,
                     Target {
                         owner: id.clone(),
                         local_name,
-                        mutation,
+                        mutation: kind == crate::service::FunctionKind::Mutation,
+                        kind,
                         bundle: bundle.clone(),
                         space: DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?,
                     },
@@ -286,6 +288,9 @@ impl Loaded {
                 "{} is not exported by {}",
                 target.local_name, target.owner
             ));
+        }
+        if target.kind == crate::service::FunctionKind::Action {
+            return Err("Queries and mutations cannot call actions".into());
         }
         if target.mutation && !writable {
             return Err("Queries cannot call mutations".into());
@@ -722,8 +727,9 @@ impl Catalog {
     }
     pub fn permits_network(&self, plugin: &str, host: &str) -> bool {
         self.plugins.get(plugin).is_some_and(|artifact| {
+            // Exact canonical-host grants only (WEB_APIS.md): TKM-45 removed the
+            // `net:*` wildcard; the set is TKM-44's precomputed manifest view.
             artifact.permissions.contains(&format!("net:{host}"))
-                || artifact.permissions.contains("net:*")
         })
     }
 }

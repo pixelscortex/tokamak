@@ -1,7 +1,7 @@
 // Correlation and subscription lifecycle are shared by both transports. Hosts
 // provide an ordered native message connection or an already-open WebSocket;
 // this module installs no browser/Node globals. Only immutable catalog transfers
-// may restart; queries and mutations are never automatically retried.
+// may restart; queries, mutations and actions are never automatically retried.
 import type { ClientTransport, SubscriptionEvent } from "./client";
 import type { Event, Request } from "./protocol";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
@@ -49,6 +49,10 @@ export class InProcessTransport implements ClientTransport {
 
   mutation(name: string, args: JsonValue): Promise<JsonValue> {
     return this.call("mutation", name, args);
+  }
+
+  action(name: string, args: JsonValue): Promise<JsonValue> {
+    return this.call("action", name, args);
   }
 
   async plugins(): Promise<JsonValue> {
@@ -161,7 +165,7 @@ export class InProcessTransport implements ClientTransport {
     }
   }
 
-  private call(type: "query" | "mutation", name: string, args: JsonValue): Promise<JsonValue> {
+  private call(type: "query" | "mutation" | "action", name: string, args: JsonValue): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();

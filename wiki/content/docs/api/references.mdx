@@ -1,0 +1,32 @@
+---
+title: References
+description: createApi and the typed function references that the UI calls.
+---
+
+The build writes `_generated/api.ts` for each backend: typed references with
+names and argument and result types, never handlers. A UI imports backend
+modules only in type positions, so feature code never ships to the client.
+
+```ts
+import { api } from "./_generated/api";
+const rows = await client.query(api.todos.list, { done: false });
+```
+
+## createApi
+
+<api-declaration path="../../../../packages/sdk/src/api.ts" name="createApi" />
+
+A reference is at least `api.module.export`; folders add path segments. Its
+wire name is `module/path:export`, prefixed by the plugin namespace if given.
+
+<api-declaration path="../../../../packages/sdk/src/api.ts" name="functionName" />
+
+## Types
+
+<api-declaration path="../../../../packages/sdk/src/api.ts" name="FunctionReference" />
+
+<api-declaration path="../../../../packages/sdk/src/api.ts" name="ApiFromModule" />
+
+<api-declaration path="../../../../packages/sdk/src/api.ts" name="ArgsOf" />
+
+<api-declaration path="../../../../packages/sdk/src/api.ts" name="ResultOf" />

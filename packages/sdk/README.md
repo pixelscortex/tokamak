@@ -7,7 +7,7 @@ not in QuickJS. There is no SDK CLI and no runtime dependency.
 ## Author a feature
 
 A feature folder contains `schema.ts` (default schema export, optional) and
-TypeScript modules exporting query/mutation definitions. Bind builders to the
+TypeScript modules exporting query, mutation or action definitions. Bind builders to the
 schema for table, document and filter types:
 
 ```ts
@@ -47,10 +47,56 @@ null (other writes). `get(id)` returns a document or null. Query builders are
 immutable, use repeated `.where(field, '=', value)` for equality AND, order by
 creation time with `.order('asc' | 'desc')` (default asc), and execute only with
 `take(n)`, `first()` or `collect()`. There is no `.index()`, SQL expression,
-pagination, implicit thenable, action, internal function or nested call API.
+pagination, implicit thenable or internal function API.
 
 Schemas describe types and metadata, not enforced persistence constraints.
 Schema enforcement/migrations are outside this POC.
+
+## Actions
+
+`action({...})` (also returned by `createFunctions`) runs on a separate worker
+lane, with a heap cap and no load/call deadline. Actions keep the real clock and
+randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
+call rejoins the serialized coordinator and owns its own transaction. The action
+itself is never retried; external effects and earlier mutations remain after a
+later failure. Queries and mutations cannot call actions or fetch.
+
+```ts
+import type {} from '@tokamak/sdk/web';
+import { action } from '@tokamak/sdk';
+import { api } from './_generated/api';
+
+export const sync = action({
+  handler: async ctx => {
+    const response = await fetch('https://example.com/data');
+    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
+    return ctx.runMutation(api.records.save, { value: await response.json() });
+  },
+});
+// From a client: await client.action(api.jobs.sync, {});
+```
+
+Declare `permissions: ['net:example.com']` in the plugin definition. Grants use
+the canonical URL hostname, omit the port, and are checked on every request and
+redirect. Legacy bundles receive no network grants. `ctx.providers` remains
+available to actions; nested cross-plugin calls use the existing dependency,
+interface and export checks. Reload cancels old-generation actions, and explicit
+server shutdown cancels busy JS, pending timers and HTTP I/O. Disconnect alone
+does not retract an accepted action; its outcome can be unknown.
+
+The optional **type-only** `@tokamak/sdk/web` entry supplies standard web
+authoring declarations for action code and browser-targeted dependencies. It
+installs no globals and does not alter the SDK's ES2022-only source checker.
+Only the runtime subset in [WEB_APIS.md](../engine/WEB_APIS.md) is implemented.
+The AI SDK's published declarations additionally reference Node HTTP/Buffer and
+JSON Schema types: consumers can install `@types/node` and `@types/json-schema`
+as build-only dependencies, with a type-reference to Node declarations. These
+types do not add a Node runtime; bundle with the browser target.
+
+Generated `api.*` references infer the action kind and argument/result types.
+Both bundled transports implement the `action` wire request. The optional
+`ClientTransport.action` preserves existing custom transports; `client.action`
+throws clearly when a custom transport has not implemented it.
 
 ## Build and consume typed references
 

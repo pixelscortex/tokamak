@@ -1,0 +1,54 @@
+---
+title: Client
+description: TokamakClient and the in-process and WebSocket transports.
+---
+
+`TokamakClient` is a typed adapter over a transport, not a connection
+manager. In-process and WebSocket transports share the same correlation and
+subscription code, so application code is identical in both. Nothing retries
+or reconnects: a closed stream can hide a committed mutation.
+
+```ts
+import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
+
+const client = new TokamakClient(new WebSocketTransport(openSocket));
+const id = await client.mutation(api.todos.add, { text: "Read this" });
+const stop = client.subscribe(api.todos.list, { done: false }, (event) => {
+  // event is { value } or { error }
+});
+stop();
+```
+
+## TokamakClient
+
+<api-declaration path="../../../../packages/sdk/src/client.ts" name="TokamakClient" />
+
+<api-declaration path="../../../../packages/sdk/src/client.ts" name="SubscriptionEvent" />
+
+## Transports
+
+<api-declaration path="../../../../packages/sdk/src/client.ts" name="ClientTransport" />
+
+`InProcessTransport` talks to a native host through an ordered message
+connection; no port is opened. It bounds outstanding calls and subscriptions
+at 128 each.
+
+<api-declaration path="../../../../packages/sdk/src/transport.ts" name="InProcessTransport" />
+
+<api-declaration path="../../../../packages/sdk/src/transport.ts" name="MessageConnection" />
+
+`WebSocketTransport` takes a socket that is already open. The caller creates
+the connection; the SDK reads no environment globals.
+
+<api-declaration path="../../../../packages/sdk/src/transport.ts" name="WebSocketTransport" />
+
+<api-declaration path="../../../../packages/sdk/src/transport.ts" name="ClientWebSocket" />
+
+## Wire protocol
+
+`Request` and `Event` are generated from `packages/server/src/protocol.rs`
+with `ts-rs`. Don't edit `protocol.ts` by hand.
+
+<api-declaration path="../../../../packages/sdk/src/protocol.ts" name="Request" />
+
+<api-declaration path="../../../../packages/sdk/src/protocol.ts" name="Event" />

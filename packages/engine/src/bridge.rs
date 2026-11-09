@@ -71,16 +71,30 @@ impl Drop for ModuleCall {
 /// Construct before sharing. Per-call registries can capture the server's
 /// transaction/readset without making the runtime aware of database semantics.
 #[derive(Default)]
-pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>);
+pub struct OpRegistry(
+    BTreeMap<String, Op>,
+    pub(crate) Option<Determinism>,
+    Vec<String>,
+);
 
 impl OpRegistry {
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Reuse these host-selected inputs when replaying the same logical call.
+    /// Opt into replayable time and randomness for a query or mutation.
     pub fn set_determinism(&mut self, inputs: Determinism) {
         self.1 = Some(inputs);
+    }
+
+    /// Only the action engine consumes these kernel-selected grants. Grants
+    /// never enable external effects in the query/mutation engine.
+    pub fn set_network_permissions(&mut self, permissions: Vec<String>) {
+        self.2 = permissions;
+    }
+
+    pub(crate) fn network_permissions(&self) -> Vec<String> {
+        self.2.clone()
     }
 
     /// Sync ops must be short and nonblocking: JS interrupts cannot preempt Rust.
@@ -136,7 +150,7 @@ impl OpRegistry {
 /// Drop the owner (or explicitly retire) before publishing a call's result.
 pub struct Invocation {
     active: Arc<AtomicBool>,
-    deadline: Instant,
+    deadline: Option<Instant>,
     pub(crate) determinism: Option<Determinism>,
 }
 
@@ -144,7 +158,15 @@ impl Invocation {
     pub fn new(deadline: Instant) -> Self {
         Self {
             active: Arc::new(AtomicBool::new(true)),
-            deadline,
+            deadline: Some(deadline),
+            determinism: None,
+        }
+    }
+
+    pub fn unbounded() -> Self {
+        Self {
+            active: Arc::new(AtomicBool::new(true)),
+            deadline: None,
             determinism: None,
         }
     }
@@ -183,7 +205,7 @@ fn install_leased<'js>(
     ctx: &Ctx<'js>,
     registry: Arc<OpRegistry>,
     active: Arc<AtomicBool>,
-    deadline: Instant,
+    deadline: Option<Instant>,
     modules: Arc<AtomicU64>,
     depth: u8,
     determinism: Option<Determinism>,
@@ -318,8 +340,8 @@ fn install_leased<'js>(
     Ok(host)
 }
 
-fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Instant) -> rquickjs::Result<()> {
-    if !active.load(Ordering::Acquire) || Instant::now() >= deadline {
+fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Option<Instant>) -> rquickjs::Result<()> {
+    if !active.load(Ordering::Acquire) || deadline.is_some_and(|end| Instant::now() >= end) {
         return Err(Exception::throw_message(
             ctx,
             "stale invocation: host operation refused",

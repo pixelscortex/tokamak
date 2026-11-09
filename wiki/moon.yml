@@ -1,0 +1,20 @@
+# Docs site (Fumapress on Waku). It is outside the default :check/:test
+# pipeline: the product does not depend on it, and its build is self-contained.
+language: 'typescript'
+layer: 'application'
+workspace:
+  inheritedTasks:
+    include: []
+tasks:
+  dev:
+    command: 'proto run bun -- run dev'
+    options:
+      cache: false
+      persistent: true
+      runInCI: false
+  build:
+    # Static output: everything a host needs is in dist/public.
+    command: 'proto run bun -- run build'
+    outputs: ['dist']
+    options:
+      cache: false

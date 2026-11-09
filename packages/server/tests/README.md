@@ -114,3 +114,144 @@ checks rollback after timeout, committed footprints matching storage, and
 unchanged storage across subsequent command/lifecycle barriers; it does not
 mistake missing JavaScript `await` syntax for evidence that an operation was
 still pending.
+
+## TKM-45 action regressions
+
+`actions.rs` builds isolated plugin artifacts with the public builder through
+`build-actions.mjs`, then runs `actions-driver.ts` over the same real SDK native
+session bridge pattern as TKM7. The contract and same-connection lane tests
+also run through the real loopback WebSocket adapter/SDK transport. The driver is checked against the builder's
+fresh generated API before being bundled. No JavaScript executes in Bun except
+build tooling, the transport client, and the local mock; handlers run in QuickJS.
+The pinned AI SDK test dependencies are build/test-only root dev dependencies.
+
+Run `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test actions`. Its ten
+regressions cover:
+
+| Spec | Runnable test(s) in `actions.rs` |
+| --- | --- |
+| 1. Action kind, separate transactions, short budget, typed client | `action_kind_and_independent_transactions_outlive_normal_budget` |
+| 2. Same-connection progress while an action awaits a timer | `pending_action_does_not_block_same_connection_transactions` |
+| 3. Effect/permission checks, incremental bodies, redirect checks | `fetch_checks_effects_permissions_streaming_and_redirects` |
+| 4. Native disconnect on abort | `abort_disconnects_http_before_action_returns` |
+| 5. Advancing action time, frozen nested time, unseeded randomness | `action_clock_advances_but_nested_transactions_freeze_time`, `action_random_ignores_transaction_replay_seed` |
+| 6. Private cross-plugin queries and mutations | `actions_enforce_cross_plugin_exports` |
+| 7. Pinned AI SDK against local OpenAI-compatible SSE | `pinned_ai_sdk_streams_multiple_deltas_offline`, `pinned_ai_sdk_abort_disconnects_mid_stream` |
+| 8. Unsupported API error | `missing_web_api_fails_loudly` |
+
+HTTP mocks bind `127.0.0.1:0`. Each response chunk/delta waits for a consumer
+acknowledgement before the next is sent, so buffering the entire body cannot
+pass. Abort tests keep the action alive on another request until the mock sees
+the original HTTP disconnect; teardown cannot substitute for cancellation.
+The mock uses a literal placeholder credential and never contacts a provider.
+A fixed public replay input tests that fresh action worlds do not seed
+`Math.random`; nested transaction tests separately require a frozen clock.
+Two nested queries bracket a committed mutation and must see different snapshots.
+The contract scenario's normal call budget is 150 ms, compared with a 600 ms action await. A
+1,000 ms timer bounds the same-connection ordering check. All waits have outer
+bounds and child processes/artifacts/sockets have failure cleanup.
+
+Fails-without verification (2026-11-09): every new test failed under a relevant
+temporary product mutation. All 15 targeted mutation/test runs exited 101 with
+`test result: FAILED`; all product sources were then restored byte for byte.
+No mutation is part of the committed tests.
+
+| Temporary disabled behaviour | Regression/failure observed |
+| --- | --- |
+| Arm a 150 ms action deadline | Contract: 600 ms action rejected with `runtime call exceeded its wall-clock budget` |
+| Expose a database on the action context | Contract: `noDb` was `false`, expected `true` |
+| Await an action on the serialized coordinator | Lane: `query and mutation must finish before the action timer`; actual settled `true` |
+| Remove the native network permission gate | Fetch: `denied fetches must send no request`; actual `['/denied']`, expected `[]` |
+| Disable the transactional web-effects guard | Fetch: expected `fetch is forbidden in queries and mutations`, received a generic missing-response error |
+| Skip the redirected hostname by retaining the granted host | Fetch: missing expected `net:localhost` rejection |
+| Omit native HTTP cancellation from abort | Both direct and AI SDK abort tests: observed `timeout: HTTP disconnect while action is still alive`, expected `disconnected` |
+| Install deterministic transaction inputs in actions | Clock: before/after remained equal; random: identical eight-draw sequences with the same replay seed |
+| Omit transaction determinism | Nested clock: before/after differed by 23 ms |
+| Remove cross-plugin export enforcement | Exports: missing expected `privateRead is not exported by b` rejection |
+| Close each response body after its first chunk | Fetch: only `first`; AI SDK: only `one`, instead of three ordered chunks/deltas |
+| Replace unsupported API errors with constructor stubs | Missing API: generic JSON-result error instead of the named unsupported `WebSocket` error |
+
+Final validation on top of `fccfe96e3e7ad346106756a832f635e42affc149`:
+
+| Command/environment | Result |
+| --- | --- |
+| `CARGO_BUILD_JOBS=2 moon run :check :test :e2e` | 28 tasks completed, 3m 28s |
+| Same command with `CLAUDECODE=1 AI_AGENT=1` | 28 tasks completed, 2m 45s |
+| `cargo fmt --all -- --check` and `git diff --check` | Passed |
+
+The injected `NODE_REPL_TOOL_OVERRIDES` value contained invalid UTF-8. It was
+unset for the runs because proto/Cargo build scripts cannot read that entry.
+No environment workaround is shipped. No product bug was exposed, and no
+product code changes remain.
+
+## TKM-45 fix regressions
+
+The `web_fix_*` tests in `actions.rs` extend the same isolated public-builder,
+real engine/server and SDK transport harness. `fixtures/actions/a/backend/web.ts`
+contains the action probes, and `actions-driver.ts` owns the loopback HTTP peers.
+Run the focused suite with:
+
+```sh
+CARGO_BUILD_JOBS=2 cargo test --locked -p server --test actions web_fix_
+```
+
+| Review finding | Regression coverage |
+| --- | --- |
+| 1. Connected-address network authority | `web_fix_network_checks_resolved_addresses_and_canonical_hosts`: granted names resolving to loopback, private, metadata and IPv4-mapped IPv6; redirected loopback denial; explicit localhost/IP access; integer, hex, shortened and mapped address spellings. |
+| 2. Prompt native disconnect | `web_fix_abort_disconnects_while_javascript_is_busy`, `web_fix_{return,throw,cancel}_disconnects_with_worker_idle`: the peer observes EOF while the pool remains allocated, before any next job can drive teardown. |
+| 3. Native slot reclamation | `web_fix_decoder_{readable_cancel,writable_abort,transform_error,invalid_input}_releases_slots`, `web_fix_timer_clear_error_and_timeout_release_slots`, `web_fix_{cancelled,errored}_body_readers_release_slots`, `web_fix_{denied,preaborted}_upload_cancels_native_source`, `web_fix_early_response_cancels_native_upload_source`: 130 cycles per path within one action, followed by working timers and decoders. Return/throw retirement also repeats 130 times with abandoned readers, incremental decoders, timers and timeout signals. |
+| 4. Body ownership | `web_fix_request_and_response_bodies_cannot_be_reused`: POST Request consumption/TypeError, direct-reader disturbance after releasing the lock, rejected reads/clones and preserved pre-read request/response clones. |
+| 5. Live search parameters | `web_fix_retained_search_params_remain_live`: retained identity, duplicate values, search/href replacement, reverse edits, empty search and form encoding. |
+
+The network regression compiles `fixtures/actions/resolver.c` into an owned test
+artifact and interposes OS name lookup only in its child process (macOS/Linux).
+The child verifies the numeric answers before running acceptance. This exercises
+the resolver actually used by reqwest, needs no external DNS/internet and changes
+no system files. A connect observer records and blocks attempts to the private
+and metadata test addresses, preventing generic connection errors from passing
+the rejection assertions or sending packets outside the machine. The log must
+stay empty. All other names/connections behave normally. The existing native compiler
+is used; no package/dependency or runtime hook is added.
+
+HTTP waits are bounded by four seconds. The busy-JS abort probe occupies JS for
+500ms; its peer must record disconnect before that interval ends. Cancellation
+uses the public action pool lifecycle and keeps the cancelled pool alive until
+EOF, independently of pool/runtime destruction. Reader-error tests gate a
+truncated HTTP body on a second request. Upload tests transfer a real open fetch
+body into denied, pre-aborted and early-completed POSTs, then observe all source
+connections closing. Each mock/artifact/process is owned by the current test.
+
+Fails-without evidence for the seven review fixes (all targeted runs exited 101):
+
+| Temporarily reversed runtime fix | Failing regression/output |
+| --- | --- |
+| `f6d6917` resolved-address gate | Network: `AssertionError: Missing expected rejection` for the granted loopback-resolving hostname. |
+| `e4ffb90` native retirement/background driver | Return and throw: `timeout: HTTP disconnect after retirement 0 with idle worker`; cancellation: `HTTP stayed open after cancellation while worker idle`. All three tests failed. |
+| `6c40823` slot cleanup | All four decoder tests and the timer test: `web resource limit exceeded (64)`. |
+| `e4b1d58` body disturbance/transfer | Bodies: `fetch did not consume original Request`. |
+| `154e93a` retained search parameters | Params: `search replaced params identity`. |
+| `95c1ce6` upload source cleanup | All three upload tests: `web resource limit exceeded (64)`. |
+| `d900054` independently driven native I/O | Busy abort: `HTTP closed at 1794221673519, JS ended at 1794221673519`; disconnect failed to precede the end of JS. |
+
+The two reader tests are additional controls for behaviour already present
+before these fixes: they still passed with `6c40823` reversed. To prove they
+also bite, that reversal plus temporarily omitting the JS native `cancel` call
+made **both** fail with `web resource limit exceeded (64)`. This distinguishes
+existing JS cleanup from the added independent native error cleanup rather than
+claiming the fix introduced both paths. All temporary product changes were
+restored; none belongs to the test commit. No product bug was exposed.
+
+The expanded suite runs 27 tests concurrently. Only the deadline contract
+scenario uses the artificial 150ms transaction budget; other scenarios use the
+normal one-second budget so contention does not turn the nested-clock probe
+into an unrelated deadline test. The first full run exposed that harness
+contention (26/27 passed, all 17 new tests passed); no product bug was found.
+
+Validation base: `d900054c43b271e7edb63b5c68d44a5edfb1d5f7`.
+The normal `CARGO_BUILD_JOBS=2 moon run :check :test :e2e` run completed all
+28 tasks in 9m 29s (including first-run native dependency checking). The actions
+binary passed all 27 tests, including these 17 new regressions. The invalid-UTF-8
+`NODE_REPL_TOOL_OVERRIDES` entry was unset for validation, as in prior runs.
+The same command with `CLAUDECODE=1 AI_AGENT=1` completed all 28 tasks in
+3m 23s; all 27 action tests passed again. `cargo fmt --all -- --check`,
+`git diff --check`, and a zero product-source diff also passed.

@@ -1,0 +1,57 @@
+---
+title: Functions
+description: query and mutation, the handler context, and typed calls into other plugins.
+---
+
+A backend is a set of exported `query` and `mutation` definitions. Queries
+get a read-only `ctx.db`, at the type level and at run time. Mutations can
+also write, and everything one mutation writes commits together. Arguments are
+validated before the handler runs.
+
+```ts title="todos.ts"
+import { createFunctions, v } from "@tokamak/sdk";
+import schema from "./schema";
+const { query, mutation } = createFunctions(schema);
+
+export const list = query({
+  args: { done: v.boolean() },
+  handler: (ctx, { done }) =>
+    ctx.db.query("todos").where("done", "=", done).order("desc").collect(),
+});
+export const add = mutation({
+  args: { text: v.string() },
+  handler: (ctx, { text }) => ctx.db.insert("todos", { text, done: false }),
+});
+```
+
+## Builders
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="query" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="mutation" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="createFunctions" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="FunctionBuilder" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="FunctionKind" />
+
+## Handler context
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="QueryContext" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="MutationContext" />
+
+`ctx.use(api)` binds another plugin's generated references to calls through
+the host. A query can only call queries. `ctx.providers(name)` lists the
+installed plugins that provide an interface.
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="PluginCalls" />
+
+## Definitions and results
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="FunctionDefinition" />
+
+A handler that returns nothing sends `null` over the wire.
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="WireResult" />
