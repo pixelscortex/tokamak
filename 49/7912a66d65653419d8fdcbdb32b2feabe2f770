@@ -1,0 +1,66 @@
+app/src/styles.css
+  s_4b707c4a248406::t_e0519d3e33d564 6-17
+packages/runtime/package.json
+  s_4b707c4a248406::t_79d138b934dad4 6-9,17-18
+packages/runtime/ROUTING.md
+  s_4b707c4a248406::t_758e1fd228d9b1 90-94
+app/src/shell-frame.tsx
+  s_4b707c4a248406::t_e0519d3e33d564 1-23
+app/src/shell.tsx
+  s_4b707c4a248406::t_e0519d3e33d564 2-4,6-23,25-39,41,43-46,48
+  s_4b707c4a248406::t_454b71d417a3ca 1,40,42
+  s_4b707c4a248406::t_f73f4648e08b26 5,24,47
+app/src/main.tsx
+  s_4b707c4a248406::t_e0519d3e33d564 1-12,14-28
+app/package.json
+  s_4b707c4a248406::t_79d138b934dad4 9-10
+packages/build/src/contributions.ts
+  s_4b707c4a248406::t_9253c744b37137 11-13,48-60,67-70
+packages/build/src/vite.ts
+  s_4b707c4a248406::t_9253c744b37137 53
+  s_4b707c4a248406::t_b90b22538d7462 8,103-104
+packages/runtime/js/plugins.ts
+  s_4b707c4a248406::t_79d138b934dad4 1-61,63-102,108-138
+  s_4b707c4a248406::t_82b174df1a48b0 62,103-107
+packages/runtime/js/modules.ts
+  s_4b707c4a248406::t_7d14ff0b70fd78 1-62,64-82,86-88
+  s_4b707c4a248406::t_f85710c25c15dc 63,83-85
+packages/runtime/PLUGINS.md
+  s_4b707c4a248406::t_758e1fd228d9b1 1-93
+app/src/contribution.tsx
+  s_4b707c4a248406::t_f72592a2ffbe92 3,23-38
+  s_4b707c4a248406::t_6f3486b685d364 14
+  s_4b707c4a248406::t_66f07dfb713b0e 42-44,48-57,63-69
+  s_4b707c4a248406::t_7e60ef8820853e 58-62,70
+  s_4b707c4a248406::t_e0519d3e33d564 1-2,4,6-13,15-22,40-41,45-47,71
+  s_4b707c4a248406::t_454b71d417a3ca 5,39
+packages/runtime/js/subscriptions.ts
+  s_4b707c4a248406::t_79d138b934dad4 1-43
+packages/sdk/solid.ts
+  s_4b707c4a248406::t_7d14ff0b70fd78 4,47-54
+  s_4b707c4a248406::t_18bb3dbed43fc3 55
+packages/render/js/jsx-runtime.ts
+  s_4b707c4a248406::t_454b71d417a3ca 82-83
+bun.lock
+  s_4b707c4a248406::t_7c3acd747c7a44 15,76,108-120,367-368
+lab/vite.config.ts
+  s_4b707c4a248406::t_6d9a8e2a12baf4 4
+packages/runtime/js/router.ts
+  s_4b707c4a248406::t_b4664c83340b71 3,93-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "497912a66d65653419d8fdcbdb32b2feabe2f770",
+  "prompts": {},
+  "sessions": {
+    "s_4b707c4a248406": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfb6-a3db-7a91-aae7-c146ae7a257e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
