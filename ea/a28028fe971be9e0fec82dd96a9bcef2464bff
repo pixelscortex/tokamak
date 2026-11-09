@@ -1,0 +1,23 @@
+packages/sdk/src/client.ts
+  s_f88e5fe8eb54c5::t_58dc74b3907c76 9
+packages/runtime/js/subscriptions.ts
+  s_f88e5fe8eb54c5::t_58dc74b3907c76 26-39
+packages/sdk/src/transport.ts
+  s_f88e5fe8eb54c5::t_58dc74b3907c76 187,215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eaa28028fe971be9e0fec82dd96a9bcef2464bff",
+  "prompts": {},
+  "sessions": {
+    "s_f88e5fe8eb54c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c040-d814-7ef2-a3d6-0289069a9547",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
