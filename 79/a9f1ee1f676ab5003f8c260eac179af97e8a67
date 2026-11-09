@@ -1,0 +1,23 @@
+packages/runtime/src/client/connection.rs
+  s_f88e5fe8eb54c5::t_b106d473beafd2 62-64,77
+packages/sdk/src/transport.ts
+  s_f88e5fe8eb54c5::t_b106d473beafd2 301
+packages/render/src/lib.rs
+  s_f88e5fe8eb54c5::t_79dcaaee34bc27 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79a9f1ee1f676ab5003f8c260eac179af97e8a67",
+  "prompts": {},
+  "sessions": {
+    "s_f88e5fe8eb54c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c040-d814-7ef2-a3d6-0289069a9547",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
