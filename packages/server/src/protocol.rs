@@ -28,6 +28,19 @@ pub enum Request {
         name: String,
         args: Json,
     },
+    Plugins {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+    },
+    PluginAsset {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        plugin: String,
+        name: String,
+        revision: String,
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        offset: u64,
+    },
     Unsubscribe {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
@@ -40,7 +53,9 @@ impl Request {
             Self::Query { id, .. }
             | Self::Mutation { id, .. }
             | Self::Subscribe { id, .. }
-            | Self::Unsubscribe { id } => *id,
+            | Self::Unsubscribe { id }
+            | Self::Plugins { id }
+            | Self::PluginAsset { id, .. } => *id,
         }
     }
 }
@@ -51,6 +66,10 @@ impl Request {
 #[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Event {
+    PluginChanged {
+        plugins: Vec<String>,
+        catalog: Json,
+    },
     Response {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,

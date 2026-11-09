@@ -33,7 +33,10 @@ enum Completion {
 impl Completion {
     fn for_request(request: &Request) -> Self {
         match request {
-            Request::Query { id, .. } | Request::Mutation { id, .. } => Self::Response(*id),
+            Request::Query { id, .. }
+            | Request::Mutation { id, .. }
+            | Request::Plugins { id }
+            | Request::PluginAsset { id, .. } => Self::Response(*id),
             Request::Subscribe { id, .. } => Self::Subscription(*id),
             Request::Unsubscribe { id } => Self::Unsubscribed(*id),
         }

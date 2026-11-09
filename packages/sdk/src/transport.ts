@@ -21,6 +21,7 @@ export class InProcessTransport implements ClientTransport {
   private closed: Error | undefined;
   private readonly pending = new Map<number, Pending>();
   private readonly subscriptions = new Map<number, Observer>();
+  private readonly pluginListeners = new Set<(event: Extract<Event, { type: "pluginchanged" }>) => void>();
   private unlisten: () => void = () => {};
 
   constructor(private readonly connection: MessageConnection) {
@@ -40,6 +41,37 @@ export class InProcessTransport implements ClientTransport {
 
   mutation(name: string, args: JsonValue): Promise<JsonValue> {
     return this.call("mutation", name, args);
+  }
+
+  plugins(): Promise<JsonValue> { return this.control(id => ({ type: "plugins", id })); }
+
+  async pluginAsset(plugin: string, name: string, revision: string): Promise<string> {
+    let offset = 0;
+    let source = "";
+    for (;;) {
+      const value = await this.control(id => ({ type: "pluginasset", id, plugin, name, revision, offset }));
+      if (!value || typeof value !== "object" || Array.isArray(value)
+        || typeof value.text !== "string" || typeof value.next !== "number"
+        || typeof value.done !== "boolean" || !Number.isSafeInteger(value.next)
+        || value.next < offset || (!value.done && value.next === offset) || value.next > 8 * 1024 * 1024) throw new Error("Invalid plugin asset chunk");
+      source += value.text;
+      offset = value.next;
+      if (value.done) return source;
+    }
+  }
+
+  onPluginsChanged(listener: (event: Extract<Event, { type: "pluginchanged" }>) => void): () => void {
+    this.pluginListeners.add(listener);
+    return () => { this.pluginListeners.delete(listener); };
+  }
+
+  private control(request: (id: number) => Request): Promise<JsonValue> {
+    return new Promise((resolve, reject) => {
+      if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
+      const id = this.id();
+      this.pending.set(id, { resolve, reject });
+      this.send(request(id));
+    });
   }
 
   private id(): number {
@@ -98,6 +130,12 @@ export class InProcessTransport implements ClientTransport {
 
   private receive(event: Event): void {
     if (this.closed) return;
+    if (event.type === "pluginchanged") {
+      for (const listener of this.pluginListeners) {
+        try { listener(event); } catch { /* isolate window/plugin observers */ }
+      }
+      return;
+    }
     if (event.type === "unsubscribed") return;
     const result = event.result;
     if (event.type === "response") {
@@ -135,6 +173,7 @@ export class InProcessTransport implements ClientTransport {
     if (this.closed) return;
     this.closed = error;
     this.unlisten();
+    this.pluginListeners.clear();
     const observers = [...this.subscriptions.values()];
     this.subscriptions.clear();
     for (const pending of this.pending.values()) pending.reject(error);
@@ -169,6 +208,11 @@ function decode(data: unknown): Event {
   const event: unknown = JSON.parse(data);
   assertJson(event, "server event");
   if (!event || typeof event !== "object" || Array.isArray(event)) throw new Error("invalid event");
+  if (event.type === "pluginchanged") {
+    if (!Array.isArray(event.plugins) || event.plugins.some(id => typeof id !== "string")
+      || !event.catalog || typeof event.catalog !== "object" || Array.isArray(event.catalog)) throw new Error("invalid plugin change");
+    return event as Event;
+  }
   const { type, id, result } = event;
   if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0)
     throw new Error("invalid event ID");

@@ -60,8 +60,8 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
     let config = WebSocketConfig::default()
         .write_buffer_size(0)
         .max_write_buffer_size(128 * 1024)
-        .max_message_size(Some(64 * 1024))
-        .max_frame_size(Some(64 * 1024));
+        .max_message_size(Some(1024 * 1024))
+        .max_frame_size(Some(1024 * 1024));
     let (socket, _) = tokio::time::timeout(
         Duration::from_secs(5),
         tokio_tungstenite::connect_async_with_config(request, Some(config), true),
@@ -87,6 +87,15 @@ pub fn admission() -> (render::MessageSender, mpsc::Receiver<String>) {
 
 fn header(value: &Value, event: bool) -> Option<(&str, u64)> {
     let kind = value["type"].as_str()?;
+    if event && kind == "pluginchanged" {
+        value["plugins"]
+            .as_array()?
+            .iter()
+            .all(Value::is_string)
+            .then_some(())?;
+        value["catalog"].as_object()?;
+        return Some((kind, 0));
+    }
     let id = value["id"]
         .as_u64()
         .filter(|id| *id <= 9_007_199_254_740_991)?;
@@ -110,7 +119,13 @@ fn header(value: &Value, event: bool) -> Option<(&str, u64)> {
                 value["name"].as_str()?;
                 value.as_object()?.get("args")?;
             }
-            "unsubscribe" => {}
+            "unsubscribe" | "plugins" => {}
+            "pluginasset" => {
+                value["plugin"].as_str()?;
+                value["name"].as_str()?;
+                value["revision"].as_str()?;
+                value["offset"].as_u64()?;
+            }
             _ => return None,
         }
     }

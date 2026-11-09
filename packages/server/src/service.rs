@@ -414,6 +414,20 @@ fn request_action(request: Request) -> Result<Action, Error> {
         },
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),
+        Request::Plugins { id } => Action::Plugins(id),
+        Request::PluginAsset {
+            id,
+            plugin,
+            name,
+            revision,
+            offset,
+        } => Action::PluginAsset {
+            id,
+            plugin,
+            name,
+            revision,
+            offset,
+        },
     })
 }
 
@@ -508,6 +522,14 @@ enum Command {
 }
 
 enum Action {
+    Plugins(u64),
+    PluginAsset {
+        id: u64,
+        plugin: String,
+        name: String,
+        revision: String,
+        offset: u64,
+    },
     Call {
         id: u64,
         name: String,
@@ -614,7 +636,35 @@ impl Coordinator {
             .iter()
             .map(|(name, target)| (name.clone(), target.mutation))
             .collect();
+        let mut changed = std::collections::BTreeSet::new();
+        if let Some(previous) = &self.plugins {
+            for (id, artifact) in &previous.catalog.plugins {
+                if candidate.catalog.plugins.get(id).is_none_or(|next| {
+                    serde_json::to_value(&artifact.manifest).ok()
+                        != serde_json::to_value(&next.manifest).ok()
+                }) {
+                    changed.insert(id.clone());
+                }
+            }
+            for id in candidate.catalog.plugins.keys() {
+                if !previous.catalog.plugins.contains_key(id) {
+                    changed.insert(id.clone());
+                }
+            }
+        }
         self.plugins = Some(candidate);
+        let catalog = self.metadata()?;
+        // Use the same bounded ordered stream as data updates. A stale asset
+        // request carries its catalog revision and cannot mix generations.
+        for session in self.sessions.keys().copied().collect::<Vec<_>>() {
+            self.emit(
+                session,
+                Event::PluginChanged {
+                    plugins: changed.iter().cloned().collect(),
+                    catalog: catalog.clone(),
+                },
+            );
+        }
         self.invalidate(None);
         self.refresh().await;
         self.metadata()
@@ -731,6 +781,44 @@ impl Coordinator {
             return;
         }
         match action {
+            Action::Plugins(id) => {
+                let result = self.metadata().map_err(|e| e.to_string());
+                self.emit(session, Event::Response { id, result });
+            }
+            Action::PluginAsset {
+                id,
+                plugin,
+                name,
+                revision,
+                offset,
+            } => {
+                let result = (|| {
+                    let loaded = self.plugins.as_ref().ok_or("No plugin installation")?;
+                    if loaded.catalog.revision != revision {
+                        return Err("Plugin generation changed".to_owned());
+                    }
+                    let bytes = loaded
+                        .catalog
+                        .plugins
+                        .get(&plugin)
+                        .and_then(|p| p.ui_asset(&name))
+                        .ok_or("Unknown plugin UI asset")?;
+                    let text =
+                        std::str::from_utf8(&bytes).map_err(|_| "Plugin UI asset is not UTF-8")?;
+                    let start = usize::try_from(offset).map_err(|_| "Invalid asset offset")?;
+                    if start > text.len() || !text.is_char_boundary(start) {
+                        return Err("Invalid asset offset".to_owned());
+                    }
+                    let mut end = (start + 8192).min(text.len());
+                    while !text.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    Ok(
+                        serde_json::json!({"text": &text[start..end], "next": end, "done": end == text.len()}),
+                    )
+                })();
+                self.emit(session, Event::Response { id, result });
+            }
             Action::Call {
                 id,
                 name,
