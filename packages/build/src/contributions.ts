@@ -30,15 +30,18 @@ export function uiContributions(root: string) {
     const fail = (): never => { throw new Error(`Invalid UI contribution ${exported.name}: use a contribution helper with static literal options`); };
     if (!kindType.isStringLiteral() || !(kindType.value in fields)) fail();
     const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
-    if (!ts.isVariableDeclaration(declaration) || !declaration.initializer || !ts.isCallExpression(declaration.initializer)) fail();
-    const call = (declaration as ts.VariableDeclaration).initializer as ts.CallExpression;
+    let initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer
+      : ts.isExportAssignment(declaration) ? declaration.expression : undefined;
+    while (initializer && (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer) || ts.isParenthesizedExpression(initializer))) initializer = initializer.expression;
+    if (!initializer || !ts.isCallExpression(initializer)) fail();
+    const call = initializer as ts.CallExpression;
     let options = call.arguments[0];
     while (options && (ts.isAsExpression(options) || ts.isSatisfiesExpression(options) || ts.isParenthesizedExpression(options))) options = options.expression;
     if (!options || !ts.isObjectLiteralExpression(options)) fail();
     const values: Record<string, string> = {};
     for (const property of (options as ts.ObjectLiteralExpression).properties) {
       if (!ts.isPropertyAssignment(property) || !property.name || (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))
-        || !ts.isStringLiteral(property.initializer)) fail();
+        || !ts.isStringLiteralLike(property.initializer)) fail();
       const p = property as ts.PropertyAssignment;
       const key = (p.name as ts.Identifier).text;
       if (key !== fields[kind] || key in values) fail();
@@ -64,8 +67,13 @@ export function uiContributions(root: string) {
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
     function visit(node: ts.Node) {
-      if ((ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)
-        || (ts.isExportDeclaration(node) && node.isTypeOnly)) return;
+      if (ts.isImportDeclaration(node)) {
+        const clause = node.importClause;
+        if (clause?.isTypeOnly || (clause && !clause.name && clause.namedBindings
+          && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.every(e => e.isTypeOnly))) return;
+      }
+      if (ts.isExportDeclaration(node) && (node.isTypeOnly || (node.exportClause
+        && ts.isNamedExports(node.exportClause) && node.exportClause.elements.every(e => e.isTypeOnly)))) return;
       const specifier = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier
         : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
       if (specifier && ts.isStringLiteral(specifier)) {

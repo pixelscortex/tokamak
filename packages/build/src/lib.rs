@@ -87,9 +87,13 @@ mod tests {
         }
     }
     fn scratch() -> Scratch {
+        // macOS clock precision can give parallel tests the same timestamp.
+        // A process-local sequence keeps their destructive fixtures isolated.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-            "dist/context-{}-{}",
+            "dist/context-{}-{}-{}",
             std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()

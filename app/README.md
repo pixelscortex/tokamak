@@ -1,9 +1,9 @@
 # Product shell
 
-This is the thin native client, ready for deliberate Core/plugin contracts.
-The backend is currently an empty registry. Todo is retired and retained only
-as the real plugin `../plugins/todo`; the independent component catalog is root `lab/`.
-There is no product router, plugin loader or invented Core schema yet.
+This native client hosts one shared Solid/renderer/SDK runtime and a memory
+router. It discovers installed plugin manifests and loads UI modules on demand.
+Todo lives at `../plugins/todo`; the component catalog remains root `lab/`.
+The app's own backend registry is empty; installed plugins own feature schemas.
 
 ## Commands (repository root)
 
@@ -32,8 +32,9 @@ The existing macOS store is unchanged:
 No data deletion or migration occurs. Do not open that store in two processes.
 
 The directory also holds private `server.token`, public discovery `server.json`
-and `server.log`. The launcher verifies readiness and the loaded bundle hash
-before reuse. A different bundle requires explicit stop/restart. Native server
+and `server.log`. The launcher verifies readiness and the canonical plugin installation root
+before reuse. Plugin edits use `tokamak plugin reload <id>`. Legacy bundle
+regressions still verify the loaded bundle hash. Native server
 code changes likewise require restart. Capability authentication is local-only,
 not account authentication, remote deployment, TLS or crash supervision.
 
@@ -48,7 +49,7 @@ or reconnect is provided.
 
 ## Validation
 
-`moon run app:test` builds the retired fixture, exercises compiler/Solid lifecycle
+`moon run app:test` builds a standalone compatibility host from Todo, exercises compiler/Solid lifecycle
 regressions, the original real native controls and data policy, the production
 socket bridge and actual standalone server ownership/auth/persistence.
 `tests/support/embedded.rs` exists only for in-process regressions.
