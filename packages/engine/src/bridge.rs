@@ -71,16 +71,26 @@ impl Drop for ModuleCall {
 /// Construct before sharing. Per-call registries can capture the server's
 /// transaction/readset without making the runtime aware of database semantics.
 #[derive(Default)]
-pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>);
+pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>, Vec<String>);
 
 impl OpRegistry {
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Reuse these host-selected inputs when replaying the same logical call.
+    /// Opt into replayable time and randomness for a query or mutation.
     pub fn set_determinism(&mut self, inputs: Determinism) {
         self.1 = Some(inputs);
+    }
+
+    /// Only the action engine consumes these kernel-selected grants. Grants
+    /// never enable external effects in the query/mutation engine.
+    pub fn set_network_permissions(&mut self, permissions: Vec<String>) {
+        self.2 = permissions;
+    }
+
+    pub(crate) fn network_permissions(&self) -> Vec<String> {
+        self.2.clone()
     }
 
     /// Sync ops must be short and nonblocking: JS interrupts cannot preempt Rust.

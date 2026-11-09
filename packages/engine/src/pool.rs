@@ -15,6 +15,7 @@ use std::{
     thread,
 };
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug)]
 pub struct PoolConfig {
@@ -50,12 +51,40 @@ pub struct Pool {
     sender: Option<mpsc::SyncSender<Job>>,
     closing: Arc<AtomicBool>,
     threads: Vec<thread::JoinHandle<()>>,
+    shutdown: Option<CancellationToken>,
 }
 
 impl Pool {
     pub fn new(config: PoolConfig) -> Result<Self, Error> {
         let limits = config.limits.clone();
         Self::with_engine(config, move || QuickJsEngine::new(limits.clone()))
+    }
+
+    /// Allocate a physically separate lane. Actions keep real time/randomness
+    /// and have no deadline; explicit shutdown still interrupts busy JS and I/O.
+    pub fn new_actions(mut config: PoolConfig) -> Result<Self, Error> {
+        let heap_bytes = config.limits.heap_bytes;
+        config.limits = Limits {
+            heap_bytes,
+            ..Limits::default()
+        };
+        let limits = config.limits.clone();
+        let shutdown = CancellationToken::new();
+        let stopped = shutdown.clone();
+        let mut pool = Self::with_engine(config, move || {
+            crate::ActionEngine::cancellable(limits.clone(), stopped.clone())
+        })?;
+        pool.shutdown = Some(shutdown);
+        Ok(pool)
+    }
+
+    /// Shutdown is a lifecycle event, not an action wall-clock budget. Already
+    /// accepted transactional operations on another lane finish independently.
+    pub fn cancel_actions(&self) {
+        if let Some(shutdown) = &self.shutdown {
+            self.closing.store(true, Ordering::Release);
+            shutdown.cancel();
+        }
     }
 
     /// Engine construction happens on each worker, so neither engines nor
@@ -78,6 +107,7 @@ impl Pool {
             sender: Some(sender),
             closing: Arc::new(AtomicBool::new(false)),
             threads: Vec::new(),
+            shutdown: None,
         };
         for id in 0..config.workers {
             let receiver = receiver.clone();
@@ -86,7 +116,7 @@ impl Pool {
             // Build the fallible executor here so startup errors reach the
             // caller, instead of returning a pool of silently dead workers.
             let executor = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
+                .enable_all()
                 .build()
                 .map_err(|e| Error::Engine(format!("cannot start JS executor: {e}")))?;
             let worker = thread::Builder::new()
@@ -138,6 +168,9 @@ impl Pool {
         args: Json,
         ops: Arc<OpRegistry>,
     ) -> Result<PendingCall, Error> {
+        if self.closing.load(Ordering::Acquire) {
+            return Err(Error::Closed);
+        }
         let (reply, receiver) = oneshot::channel();
         let job = Job {
             bundle,
@@ -160,6 +193,7 @@ impl Pool {
 
 impl Drop for Pool {
     fn drop(&mut self) {
+        self.cancel_actions();
         self.closing.store(true, Ordering::Release);
         self.sender.take();
         for thread in self.threads.drain(..) {
