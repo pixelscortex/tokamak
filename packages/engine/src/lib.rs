@@ -9,6 +9,7 @@ mod engine;
 mod pool;
 mod source_map;
 mod types;
+pub mod web;
 
 pub use bridge::{Invocation, ModuleCall, OpRegistry, install_ops};
 pub use determinism::Determinism;

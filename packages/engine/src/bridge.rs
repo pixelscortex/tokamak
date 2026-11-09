@@ -136,7 +136,7 @@ impl OpRegistry {
 /// Drop the owner (or explicitly retire) before publishing a call's result.
 pub struct Invocation {
     active: Arc<AtomicBool>,
-    deadline: Instant,
+    deadline: Option<Instant>,
     pub(crate) determinism: Option<Determinism>,
 }
 
@@ -144,7 +144,15 @@ impl Invocation {
     pub fn new(deadline: Instant) -> Self {
         Self {
             active: Arc::new(AtomicBool::new(true)),
-            deadline,
+            deadline: Some(deadline),
+            determinism: None,
+        }
+    }
+
+    pub fn unbounded() -> Self {
+        Self {
+            active: Arc::new(AtomicBool::new(true)),
+            deadline: None,
             determinism: None,
         }
     }
@@ -183,7 +191,7 @@ fn install_leased<'js>(
     ctx: &Ctx<'js>,
     registry: Arc<OpRegistry>,
     active: Arc<AtomicBool>,
-    deadline: Instant,
+    deadline: Option<Instant>,
     modules: Arc<AtomicU64>,
     depth: u8,
     determinism: Option<Determinism>,
@@ -318,8 +326,8 @@ fn install_leased<'js>(
     Ok(host)
 }
 
-fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Instant) -> rquickjs::Result<()> {
-    if !active.load(Ordering::Acquire) || Instant::now() >= deadline {
+fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Option<Instant>) -> rquickjs::Result<()> {
+    if !active.load(Ordering::Acquire) || deadline.is_some_and(|end| Instant::now() >= end) {
         return Err(Exception::throw_message(
             ctx,
             "stale invocation: host operation refused",
