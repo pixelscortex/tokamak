@@ -1,20 +1,20 @@
 //! Public builder -> manifest resolver -> real SDK/QuickJS -> one DB transaction.
-use engine::{Pool, PoolConfig};
+use engine::{Bundle, Engine, Json, Limits, OpRegistry, Pool, PoolConfig, QuickJsEngine};
 use serde_json::{Value, json};
 use server::{
     Event, Server, Session,
-    data::{Database, Storage},
+    data::{DataSpace, Database, Id, Storage, Table, json_object},
 };
 use sha2::{Digest, Sha256};
 use std::{
     path::PathBuf,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 
 struct Installation(PathBuf);
 impl Installation {
-    fn new() -> Self {
+    fn empty() -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
             "target/plugin-test-{}-{}",
@@ -22,6 +22,11 @@ impl Installation {
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&path).unwrap();
+        Self(path)
+    }
+    fn new() -> Self {
+        let installation = Self::empty();
+        let path = &installation.0;
         let source = built();
         for id in ["a", "b"] {
             let target = path.join(id);
@@ -30,7 +35,7 @@ impl Installation {
                 std::fs::copy(source.join(id).join("dist").join(file), target.join(file)).unwrap();
             }
         }
-        Self(path)
+        installation
     }
     fn change(&self, id: &str, edit: impl FnOnce(&mut Value)) {
         let path = self.0.join(id).join("manifest.json");
@@ -398,4 +403,439 @@ fn standalone_binary_exposes_only_authenticated_plugin_controls_and_cli() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(!local.join("server.json").exists());
+}
+
+// Dependency and interface capabilities must not bypass exports. Even a caught
+// denial must poison the transaction, including writes preceding the call.
+#[tokio::test]
+async fn private_plugin_calls_are_denied_and_caught_writes_roll_back() {
+    let installation = Installation::new();
+    let database = Database::open(Storage::Memory).await.unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(database, pool, &installation.0)
+        .await
+        .unwrap();
+    let mut session = server.connect().await.unwrap();
+    for provider in [false, true] {
+        let error = call(
+            &mut session,
+            1,
+            "b/ops:denied",
+            json!({"provider":provider}),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error.contains("ops:privateWrite is not exported by a"),
+            "{error}"
+        );
+        for name in ["a/ops:list", "b/ops:list"] {
+            assert_eq!(
+                call(&mut session, 2, name, json!({})).await.unwrap(),
+                json!([])
+            );
+        }
+    }
+    // The same private function is legal from a client; self-calls are legal too.
+    call(&mut session, 3, "a/ops:privateWrite", json!({}))
+        .await
+        .unwrap();
+    call(&mut session, 4, "b/ops:ownPrivate", json!({}))
+        .await
+        .unwrap();
+    call(&mut session, 5, "a/ops:both", json!({"fail":false}))
+        .await
+        .unwrap();
+    assert_eq!(
+        call(&mut session, 6, "a/ops:list", json!({}))
+            .await
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        call(&mut session, 7, "b/ops:list", json!({}))
+            .await
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        call(&mut session, 8, "b/ops:providerList", json!({}))
+            .await
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    server.close().await.unwrap();
+}
+
+// Omitting exports must close the cross-plugin surface, even if an artifact
+// previously listed public functions; clients and self-calls retain access.
+#[tokio::test]
+async fn plugin_without_exports_exposes_nothing_to_other_plugins() {
+    let installation = Installation::new();
+    installation.change("b", |manifest| {
+        manifest["plugin"]
+            .as_object_mut()
+            .unwrap()
+            .remove("exports");
+    });
+    let database = Database::open(Storage::Memory).await.unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(database, pool, &installation.0)
+        .await
+        .unwrap();
+    let mut session = server.connect().await.unwrap();
+    let error = call(&mut session, 1, "a/ops:both", json!({"fail":false}))
+        .await
+        .unwrap_err();
+    assert!(error.contains("ops:add is not exported by b"), "{error}");
+    for name in ["a/ops:list", "b/ops:list"] {
+        assert_eq!(
+            call(&mut session, 2, name, json!({})).await.unwrap(),
+            json!([])
+        );
+    }
+    call(&mut session, 3, "b/ops:add", json!({"fail":false}))
+        .await
+        .unwrap();
+    call(&mut session, 4, "b/ops:ownPrivate", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        call(&mut session, 5, "b/ops:list", json!({}))
+            .await
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    server.close().await.unwrap();
+}
+
+fn build_source(installation: &Installation, plugin: Option<Value>) -> PathBuf {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    let source = installation.0.join("source");
+    std::fs::create_dir_all(source.join("backend")).unwrap();
+    std::fs::create_dir_all(source.join("node_modules/@tokamak")).unwrap();
+    std::os::unix::fs::symlink(
+        root.join("packages/sdk"),
+        source.join("node_modules/@tokamak/sdk"),
+    )
+    .unwrap();
+    std::fs::write(
+        source.join("package.json"),
+        r#"{"name":"@regression/inferred","version":"1.0.0","type":"module"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        source.join("backend/ops.ts"),
+        "import { query } from '@tokamak/sdk'; export const answer = query({handler: () => 42});\n",
+    )
+    .unwrap();
+    std::fs::write(
+        source.join("backend/tsconfig.json"),
+        json!({
+            "extends":root.join("tsconfig.json"),
+            "compilerOptions":{"paths":{"@tokamak/sdk":[root.join("packages/sdk/src/index.ts")]}}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let options = plugin.map_or(
+        json!({"ui":false}),
+        |plugin| json!({"ui":false,"plugin":plugin}),
+    );
+    std::fs::write(
+        source.join("vite.config.ts"),
+        format!(
+            "import {{tokamak}} from {}; export default {{plugins:[tokamak({options})]}};",
+            json!(root.join("packages/build/src/vite.ts"))
+        ),
+    )
+    .unwrap();
+    source
+}
+fn build_artifact(source: &std::path::Path) -> (bool, String) {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = std::process::Command::new("proto")
+        .args(["run", "bun", "--", "packages/build/src/build.ts"])
+        .arg(source.canonicalize().unwrap())
+        .current_dir(root)
+        .output()
+        .unwrap();
+    (
+        output.status.success(),
+        format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+    )
+}
+
+// Invalid export declarations must fail at the public build boundary, before
+// publishing an artifact that could silently expose the wrong backend surface.
+#[test]
+fn builder_rejects_missing_exports_file_and_nonexistent_reexport() {
+    let installation = Installation::empty();
+    let source = build_source(
+        &installation,
+        Some(json!({"id":"exports.invalid","version":"1.0.0","exports":"./api.ts"})),
+    );
+    let (success, output) = build_artifact(&source);
+    assert!(!success, "missing exports file accepted: {output}");
+    assert!(
+        output.contains("Invalid plugin exports ./api.ts: file does not exist"),
+        "{output}"
+    );
+    std::fs::write(
+        source.join("api.ts"),
+        "export { nonexistent } from './backend/ops';\n",
+    )
+    .unwrap();
+    let (success, output) = build_artifact(&source);
+    assert!(!success, "nonexistent re-export accepted: {output}");
+    assert!(
+        output.contains("Invalid plugin exports ./api.ts") && output.contains("nonexistent"),
+        "{output}"
+    );
+    assert!(!source.join("dist/manifest.json").exists());
+}
+
+// Generated runtime references must use package-inferred identity too; a
+// syntactically valid unqualified reference otherwise fails only after install.
+#[tokio::test]
+async fn inferred_plugin_references_resolve_after_installation() {
+    let installation = Installation::empty();
+    let source = build_source(&installation, None);
+    let (success, output) = build_artifact(&source);
+    assert!(success, "{output}");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    let output = std::process::Command::new("proto").args(["run", "bun", "--", "-e"])
+        .arg(format!("import {{api}} from {}; import {{functionName}} from {}; console.log(api.ops.answer[functionName]);",
+            json!(source.canonicalize().unwrap().join("dist/api.ts")), json!(root.join("packages/sdk/src/index.ts"))))
+        .current_dir(root).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let name = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+    assert_eq!(name, "regression.inferred/ops:answer");
+    let database = Database::open(Storage::Memory).await.unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(database, pool, &installation.0)
+        .await
+        .unwrap();
+    let mut session = server.connect().await.unwrap();
+    assert_eq!(call(&mut session, 1, &name, json!({})).await.unwrap(), 42);
+    server.close().await.unwrap();
+}
+
+struct ReplayPause {
+    arrived: tokio::sync::oneshot::Sender<Value>,
+    resume: tokio::sync::oneshot::Receiver<()>,
+}
+struct ReplayEngine {
+    engine: QuickJsEngine,
+    pause: Arc<Mutex<Option<ReplayPause>>>,
+    attempts: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl Engine for ReplayEngine {
+    async fn invoke(
+        &mut self,
+        bundle: &Bundle,
+        export: &str,
+        args: Json,
+        ops: Arc<OpRegistry>,
+    ) -> Result<Json, engine::Error> {
+        let observed = args["name"] == "determinism:write";
+        let result = self.engine.invoke(bundle, export, args, ops).await;
+        if observed {
+            self.attempts
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let pause = self.pause.lock().unwrap().take();
+            if let Some(pause) = pause {
+                pause.arrived.send(result.clone().unwrap()).unwrap();
+                tokio::time::timeout(Duration::from_secs(10), pause.resume)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            }
+        }
+        result
+    }
+}
+fn assert_snapshot(value: &Value) {
+    let now = &value["before"]["now"];
+    let streams = [
+        &value["before"],
+        &value["first"]["before"],
+        &value["second"]["before"],
+    ];
+    for sample in [
+        &value["before"],
+        &value["after"],
+        &value["first"]["before"],
+        &value["first"]["after"],
+        &value["second"]["before"],
+        &value["second"]["after"],
+    ] {
+        for key in ["now", "later", "constructed"] {
+            assert_eq!(&sample[key], now, "invocation clock drifted: {value}");
+        }
+        assert_eq!(sample["text"], value["before"]["text"]);
+        assert_eq!(sample["explicit"], 1234);
+        for random in sample["random"].as_array().unwrap() {
+            let random = random.as_f64().unwrap();
+            assert!((0.0..1.0).contains(&random));
+        }
+    }
+    for i in 0..streams.len() {
+        for j in i + 1..streams.len() {
+            assert_ne!(
+                streams[i]["random"], streams[j]["random"],
+                "nested calls reused a random stream"
+            );
+        }
+    }
+    assert_ne!(
+        value["before"]["random"], value["after"]["random"],
+        "parent random stream restarted after delegation"
+    );
+}
+
+// A real native write conflict must replay the entire invocation's clock and
+// random streams (including children), while separate calls get fresh seeds.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_writes() {
+    let installation = Installation::new();
+    let database = Database::open(Storage::Memory).await.unwrap();
+    let items = DataSpace::plugin("a")
+        .unwrap()
+        .table(&Table::new("items").unwrap())
+        .unwrap();
+    let mut seed = database.begin().await.unwrap();
+    let id: Id = seed
+        .insert(&items, json_object(&json!({"value":0})).unwrap())
+        .await
+        .unwrap();
+    seed.commit().await.unwrap();
+    let presented_id = DataSpace::plugin("a").unwrap().present_id(&id).unwrap();
+    let mut winner = database.begin().await.unwrap();
+    winner
+        .patch(&id, json_object(&json!({"value":10})).unwrap())
+        .await
+        .unwrap();
+    let (arrived, wait) = tokio::sync::oneshot::channel();
+    let (resume, release) = tokio::sync::oneshot::channel();
+    let pause = Arc::new(Mutex::new(Some(ReplayPause {
+        arrived,
+        resume: release,
+    })));
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed = attempts.clone();
+    let pool = Arc::new(
+        Pool::with_engine(
+            PoolConfig {
+                workers: 1,
+                ..Default::default()
+            },
+            move || {
+                Ok(ReplayEngine {
+                    engine: QuickJsEngine::new(Limits::default())?,
+                    pause: pause.clone(),
+                    attempts: observed.clone(),
+                })
+            },
+        )
+        .unwrap(),
+    );
+    let server = Server::load_plugins(database, pool, &installation.0)
+        .await
+        .unwrap();
+    let mut session = server.connect().await.unwrap();
+    let query = call(&mut session, 1, "a/determinism:read", json!({}))
+        .await
+        .unwrap();
+    assert_snapshot(&query);
+    let second_query = call(&mut session, 2, "a/determinism:read", json!({}))
+        .await
+        .unwrap();
+    assert_snapshot(&second_query);
+    assert_ne!(
+        query["before"]["random"], second_query["before"]["random"],
+        "separate queries reused a seed"
+    );
+    session
+        .call(3, "a/determinism:write", json!({"id":presented_id}))
+        .unwrap();
+    let first = tokio::time::timeout(Duration::from_secs(10), wait)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_snapshot(&first);
+    winner.commit().await.unwrap();
+    resume.send(()).unwrap();
+    let replayed = match next(&mut session).await {
+        Event::Response { id: 3, result } => result.unwrap(),
+        event => panic!("{event:?}"),
+    };
+    assert_eq!(
+        attempts.load(std::sync::atomic::Ordering::Relaxed),
+        2,
+        "test did not force a whole-handler retry"
+    );
+    assert_eq!(replayed, first, "retry changed time or random sequences");
+    let row = call(
+        &mut session,
+        4,
+        "a/determinism:get",
+        json!({"id":presented_id}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        row["value"], 11,
+        "retry did not read the winner's committed snapshot"
+    );
+    assert_eq!(row["replay"], first);
+    let audit = call(&mut session, 5, "a/determinism:audit", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        audit.as_array().unwrap().len(),
+        1,
+        "losing attempt leaked a write"
+    );
+    assert_eq!(audit[0]["replay"], first);
+    let second_mutation = call(
+        &mut session,
+        6,
+        "a/determinism:write",
+        json!({"id":presented_id}),
+    )
+    .await
+    .unwrap();
+    assert_snapshot(&second_mutation);
+    assert_ne!(
+        first["before"]["random"], second_mutation["before"]["random"],
+        "separate mutations reused a seed"
+    );
+    server.close().await.unwrap();
 }

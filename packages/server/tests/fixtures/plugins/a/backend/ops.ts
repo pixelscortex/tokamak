@@ -18,3 +18,9 @@ export const illegal = query({ handler: async ctx => {
   return ctx.use(b).ops.add({ fail: false });
 } });
 export const cycle = query({ handler: async (ctx): Promise<null> => ctx.use(b).ops.cycle({}) });
+
+// Private writes must remain available to clients and the owning plugin only.
+export const privateWrite = mutation({ handler: async ctx => {
+  await ctx.db.insert("items", { source: "private a" });
+  return null;
+} });

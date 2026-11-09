@@ -10,10 +10,10 @@ const sdk = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspace = resolve(sdk, "../..");
 const feature = join(sdk, "tests/fixtures/feature");
 
-function run(command, cwd = workspace) {
+function run(command, cwd = workspace, env = {}) {
   // Force compiler diagnostics to stay plain even in Bun's agent environment.
   if (command[1] === "check") command = [...command.slice(0, 2), "--no-pretty", ...command.slice(2)];
-  const result = Bun.spawnSync(command, { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(command, { cwd, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
   return { code: result.exitCode, output: result.stdout.toString() + result.stderr.toString() };
 }
 
@@ -607,5 +607,48 @@ test("SDK source checker rejects Node, Bun, browser and external runtime imports
       expect(result.code, result.output).not.toBe(0);
       expect(result.output).toContain(diagnostic);
     }
+  });
+}, 120000);
+
+// Agent environment auto-formatting must not hide negative fixture locations;
+// every rejected API misuse still needs a stable, machine-readable diagnostic.
+test("negative type diagnostics retain all source locations in agent environments", async () => {
+  await temporary(async (root) => {
+    await cp(feature, join(root, "feature"), { recursive: true });
+    succeeds(run(["moon", "run", "sdk:bundle", "--", relative(workspace, join(root, "feature"))]));
+    await mkdir(join(root, "types"));
+    const negative = await readFile(join(sdk, "tests/fixtures/types/negative.ts.txt"), "utf8");
+    await writeFile(join(root, "types/negative.ts"), negative);
+    await writeFile(join(root, "negative.json"), JSON.stringify({
+      extends: join(workspace, "tsconfig.json"),
+      compilerOptions: { paths: { "@tokamak/sdk": [join(sdk, "src/index.ts")] } },
+      files: ["types/negative.ts"], include: [],
+    }));
+    const result = run([process.execPath, "check", "--no-script", "--project", join(root, "negative.json")], workspace,
+      { CLAUDECODE: "1", AI_AGENT: "1", CLAUDE_CODE_ENTRYPOINT: "cli" });
+    expect(result.code, result.output).not.toBe(0);
+    for (const [index, line] of negative.split("\n").entries()) {
+      if (line.includes("// reject"))
+        expect(result.output, result.output).toMatch(new RegExp(`negative\\.ts[(:]${index + 1}[,:]`));
+    }
+  });
+}, 120000);
+
+// The shipped SDK checker must also keep stable diagnostics when an agent
+// launches it; the test helper's compiler flags cannot repair this subprocess.
+test("SDK checker reports plain source diagnostics in agent environments", async () => {
+  await temporary(async (root) => {
+    await cp(join(sdk, "src"), join(root, "src"), { recursive: true });
+    await cp(join(sdk, "tools"), join(root, "tools"), { recursive: true });
+    for (const name of ["tsconfig.json", "tsconfig.runtime.json"]) {
+      const config = JSON.parse(await readFile(join(sdk, name), "utf8"));
+      config.extends = join(workspace, "tsconfig.json");
+      await writeFile(join(root, name), JSON.stringify(config));
+    }
+    await writeFile(join(root, "src/diagnostic-probe.ts"), "export const value: string = 42;\n");
+    const result = run([process.execPath, join(root, "tools/check.mjs")], root,
+      { CLAUDECODE: "1", AI_AGENT: "1", CLAUDE_CODE_ENTRYPOINT: "cli" });
+    expect(result.code, result.output).not.toBe(0);
+    expect(result.output, result.output).toMatch(/diagnostic-probe\.ts[(:]1[,:].*TS2322/);
   });
 }, 120000);

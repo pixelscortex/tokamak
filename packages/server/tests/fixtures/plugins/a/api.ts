@@ -1,1 +1,1 @@
-export { cycle } from "./backend/ops";
+export { cycle, list } from "./backend/ops";
