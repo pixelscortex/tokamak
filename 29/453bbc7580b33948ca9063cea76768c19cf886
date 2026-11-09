@@ -1,0 +1,96 @@
+packages/ui/src/elements/checkable.tsx
+  s_a12dad2461e009::t_f4706ec9618fa9 1-81
+packages/ui/src/components/chip.tsx
+  s_a12dad2461e009::t_af622f52128f71 1-55
+packages/ui/src/components/list-row.tsx
+  s_a12dad2461e009::t_87a8c1382e6854 1-42
+app/src/thread.tsx
+  s_a12dad2461e009::t_080925ea65eb4d 1-13,15-16,18,20-21
+  s_a12dad2461e009::t_4821d76b129f7f 14,17,19
+packages/ui/src/elements/toggle.tsx
+  s_a12dad2461e009::t_c573081d4cdd3c 1-24
+packages/render/fonts/HostGrotesk-OFL.txt
+  s_a12dad2461e009::t_33aa3583516818 1-93
+app/src/contribution.tsx
+  s_a12dad2461e009::t_243a7d1895f2c8 23-31
+  s_a12dad2461e009::t_62c6fb2d1555cf 7-15
+  s_a12dad2461e009::t_fe538651633828 53
+packages/ui/src/theme.css
+  s_a12dad2461e009::t_61bcc6c2ec6e57 1-85,87-124,126-128
+plugins/todo/src/todos.tsx
+  s_a12dad2461e009::t_2cdc8d2c8f6912 1-13,17,21-23,54-86,88-122,124-136,141-142,145-150,152-162
+packages/render/tools/subset-fonts.py
+  s_a12dad2461e009::t_ea4083e8ab3bcd 1-16,21,30-35,37-39
+  s_a12dad2461e009::t_33aa3583516818 17-20,22-29,36,40-41
+packages/render/Cargo.toml
+  s_a12dad2461e009::t_b14bb07a4d8b30 19
+  s_a12dad2461e009::t_9428180150939e 18
+packages/ui/src/elements/index.ts
+  s_a12dad2461e009::t_08bf023a8fb563 1-2,5-6
+app/src/styles.css
+  s_a12dad2461e009::t_f1cdbb302d494d 4-64,66-69,71-108,110-112,114-319
+  s_a12dad2461e009::t_96ca8a250e0765 65,70,109,113
+packages/ui/src/components/index.ts
+  s_a12dad2461e009::t_76a32ae7e39b5b 1-9
+packages/ui/src/styles.css
+  s_a12dad2461e009::t_b61a280a5b38f2 2-6,11-41,44,47-58,61-64,67-70,73-87,92-96,99-498,500-508,510
+packages/ui/tests/contracts.test.ts
+  s_a12dad2461e009::t_06aceb0d25e4a4 7,10-16,38
+lab/src/styles.css
+  s_a12dad2461e009::t_ce6244e4fd132f 4-5,7-14,16-18,20,22-35,37-46
+app/src/shell.tsx
+  s_a12dad2461e009::t_c1c38b8201efac 9-10,13-25,34-37,42-50,54-58,60-64,66-72,74-79,81-96,99
+plugins/todo/src/main.tsx
+  s_a12dad2461e009::t_47a5183b583421 2,4
+app/src/chat.tsx
+  s_a12dad2461e009::t_c098a3f257de81 1-74
+packages/ui/src/components/rail.tsx
+  s_a12dad2461e009::t_bb102f5a3840a2 1-49
+packages/render/fonts/GeistMono-OFL.txt
+  s_a12dad2461e009::t_33aa3583516818 1-93
+app/src/shell-frame.tsx
+  s_a12dad2461e009::t_4de3d3128b606c 1-11,21-22,24-28,30
+packages/ui/src/components/setting-row.tsx
+  s_a12dad2461e009::t_22d83f27ba09b3 1-29
+packages/render/src/lib.rs
+  s_a12dad2461e009::t_59e51429c3a05a 84-88
+  s_a12dad2461e009::t_6af688cf02b70c 40-68
+app/src/settings.tsx
+  s_a12dad2461e009::t_d83592b7a486b5 101,120,122
+  s_a12dad2461e009::t_b3c52ad8154807 74,141
+  s_a12dad2461e009::t_8c2dd19b56b4c4 1-73,75-100,102-119,121,123-140,142-148
+packages/ui/src/components/states.tsx
+  s_a12dad2461e009::t_fe07d6087080e5 1-73
+app/app.config.json
+  s_a12dad2461e009::t_9959a7304537f1 3-4
+packages/ui/src/components/icon.tsx
+  s_a12dad2461e009::t_54da0f8ba1d167 1-63
+packages/ui/src/components/pane.tsx
+  s_a12dad2461e009::t_b61187e4acf2e7 1-50
+packages/ui/src/elements/checkbox.tsx
+  s_a12dad2461e009::t_48a63921824231 1-30
+plugins/todo/src/styles.css
+  s_a12dad2461e009::t_479f54bdd07947 1-16,18-52,54-63,65-76
+lab/src/cases.tsx
+  s_a12dad2461e009::t_a43b00a880aae0 53-54,56-159,168-173
+  s_a12dad2461e009::t_862daeeeef94ea 3-4,52,187
+  s_a12dad2461e009::t_9fd3d964636d78 55
+Cargo.lock
+  s_a12dad2461e009::t_57d1b2df7ae2a1 4845
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29453bbc7580b33948ca9063cea76768c19cf886",
+  "prompts": {},
+  "sessions": {
+    "s_a12dad2461e009": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7bb46b7a-2d91-42ed-97a5-b44b8e6470e7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
