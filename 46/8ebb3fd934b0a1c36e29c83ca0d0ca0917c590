@@ -1,0 +1,23 @@
+packages/runtime/tests/run.sh
+  s_ff6a4e1bf09ffb::t_544d7038faac79 3
+packages/sdk/tests/catalog.test.mjs
+  s_ff6a4e1bf09ffb::t_b921599aad1e3d 1-108
+packages/runtime/tests/plugins.test.mjs
+  s_ff6a4e1bf09ffb::t_eb8b381db0079c 1-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "468ebb3fd934b0a1c36e29c83ca0d0ca0917c590",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
