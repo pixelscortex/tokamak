@@ -9,10 +9,11 @@
     "./css": "./src/css.ts"
   },
   "dependencies": {
-    "@tokamak/sdk": "workspace:*",
     "@tailwindcss/node": "4.3.4",
     "@tailwindcss/oxide": "4.3.4",
+    "@tokamak/sdk": "workspace:*",
     "tailwindcss": "4.3.4",
+    "typescript": "5.9.3",
     "vite": "8.3.6",
     "vite-plugin-solid": "2.11.15"
   },

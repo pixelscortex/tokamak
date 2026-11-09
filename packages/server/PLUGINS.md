@@ -66,6 +66,10 @@ Generated API references for explicitly declared plugins carry names such as
 `acme.notes/notes:list`; references never import server handlers into the client.
 Inside a handler, `ctx.use(otherApi).notes.list({})` invokes the host. A caller
 must declare the target as a dependency, or consume an interface it provides.
+Declare `exports: "./api.ts"` and re-export public backend definitions from that
+module. The build records their backend names in the artifact; undeclared functions
+are private to other plugins. Omitting `exports` exposes nothing. This check also
+applies to calls through provider references; own calls and client calls are unchanged.
 `ctx.providers<ProviderApi>("interface")` enumerates all matching installed
 implementations, whose references can then be bound with `ctx.use`.
 

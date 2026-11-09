@@ -1,0 +1,71 @@
+/** Resolve public aliases with the compiler so re-exports never execute plugin code. */
+import ts from "typescript";
+import { relative, resolve, sep } from "node:path";
+
+export function publicFunctions(root: string, entry: string | undefined): string[] {
+  if (entry === undefined) return [];
+  const path = resolve(root, entry);
+  const fail = (message: string): never => { throw new Error(`Invalid plugin exports ${entry}: ${message}`); };
+  if (!ts.sys.fileExists(path)) fail("file does not exist");
+  const configPath = ts.findConfigFile(resolve(root, "backend"), ts.sys.fileExists);
+  const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
+  if (config.error) fail(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, configPath ? resolve(configPath, "..") : root);
+  const program = ts.createProgram([path, resolve(root, "backend/_generated/api.ts")], { ...parsed.options, noEmit: true });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  if (diagnostics.length) fail(diagnostics.map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n")).join("\n"));
+  const checker = program.getTypeChecker();
+  const source = program.getSourceFile(path)!;
+  const module = checker.getSymbolAtLocation(source);
+  if (!module) fail("expected a module re-exporting backend functions");
+  const original = (symbol: ts.Symbol): ts.Symbol => symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+  const names = new Map<ts.Symbol, string[]>();
+  for (const file of program.getSourceFiles()) {
+    const local = relative(resolve(root, "backend"), file.fileName).split(sep).join("/");
+    if (!local.endsWith(".ts") || local === "schema.ts" || /\.(d|test|spec)\.ts$/.test(local)
+      || local.split("/").some(part => part.startsWith("_") || part.startsWith(".") || ["node_modules", "dist", "tests"].includes(part))) continue;
+    const symbol = checker.getSymbolAtLocation(file);
+    if (!symbol) continue;
+    for (const exported of checker.getExportsOfModule(symbol)) {
+      const target = original(exported);
+      const type = checker.getTypeOfSymbolAtLocation(target, file);
+      // Match the SDK's unique definition brand, rather than accepting helpers
+      // that happen to have a query-like name or an invoke method.
+      if (!type.getProperties().some(property => property.getName().startsWith("__@definitionBrand@"))) continue;
+      const list = names.get(target) ?? [];
+      list.push(`${local.slice(0, -3)}:${exported.getName()}`);
+      names.set(target, list);
+    }
+  }
+  function runtimeExports(module: ts.Symbol, seen = new Set<ts.Symbol>()): Set<string> {
+    if (seen.has(module)) return new Set();
+    seen.add(module);
+    const file = module.declarations?.find(ts.isSourceFile);
+    if (!file) return new Set();
+    const names = new Set(checker.getExportsOfModule(module)
+      .filter(symbol => (symbol.flags & ts.SymbolFlags.Value)
+        && symbol.declarations?.some(declaration => declaration.getSourceFile() === file))
+      .map(symbol => symbol.getName()));
+    for (const statement of file.statements) {
+      if (!ts.isExportDeclaration(statement) || statement.isTypeOnly) continue;
+      if (statement.exportClause) {
+        if (ts.isNamedExports(statement.exportClause)) {
+          for (const item of statement.exportClause.elements) if (!item.isTypeOnly) names.add(item.name.text);
+        } else names.add(statement.exportClause.name.text);
+      } else if (statement.moduleSpecifier) {
+        const target = checker.getSymbolAtLocation(statement.moduleSpecifier);
+        if (target) for (const name of runtimeExports(target, new Set(seen))) if (name !== "default") names.add(name);
+      }
+    }
+    return names;
+  }
+  const runtime = runtimeExports(module!);
+  const result = new Set<string>();
+  for (const exported of checker.getExportsOfModule(module!)) {
+    if (!runtime.has(exported.getName())) continue;
+    const targets = names.get(original(exported));
+    if (!targets) fail(`${exported.getName()} does not re-export a backend function`);
+    for (const target of targets!) result.add(target);
+  }
+  return [...result].sort();
+}

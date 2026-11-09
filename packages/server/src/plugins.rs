@@ -74,6 +74,8 @@ pub struct Manifest {
     pub format_version: u32,
     pub plugin: Definition,
     pub entries: Entries,
+    #[serde(default)]
+    pub public_functions: BTreeSet<String>,
     pub hashes: BTreeMap<String, String>,
 }
 
@@ -177,6 +179,13 @@ impl Loaded {
                 continue;
             };
             let (descriptor, kinds) = crate::service::inspect(pool, bundle.clone()).await?;
+            for name in &artifact.manifest.public_functions {
+                if !kinds.contains_key(name) {
+                    return Err(invalid(format!(
+                        "Exported function {name} is not a backend function of {id}"
+                    )));
+                }
+            }
             for (local_name, mutation) in kinds {
                 let name = format!("{id}/{local_name}");
                 targets.insert(
@@ -222,6 +231,16 @@ impl Loaded {
             return Err(format!(
                 "{caller} does not declare access to {}",
                 target.owner
+            ));
+        }
+        let manifest = &self.catalog.plugins[&target.owner].manifest;
+        if caller != target.owner
+            && (manifest.plugin.exports.is_none()
+                || !manifest.public_functions.contains(&target.local_name))
+        {
+            return Err(format!(
+                "{} is not exported by {}",
+                target.local_name, target.owner
             ));
         }
         if target.mutation && !writable {

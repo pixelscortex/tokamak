@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { publicFunctions } from "./exports.ts";
 import { compileCss } from "./css.ts";
 import { nativeConfig, nativePlugins } from "./native.ts";
 
@@ -55,6 +56,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           version: manifest.version ?? "0.1.0",
         });
         const entries: Record<string, unknown> = {};
+        if (options.backend === false && plugin.exports !== undefined) throw new Error("Plugin exports require a backend");
         if (options.backend !== false) {
           // SDK discovery/checking is Bun-only. Invoke its existing pinned entry
           // even if Vite itself was launched through Node's standard CLI.
@@ -96,7 +98,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
         this.emitFile({
           type: "asset",
           fileName: "manifest.json",
-          source: JSON.stringify({ formatVersion: 1, plugin, entries }, null, 2) + "\n",
+          source: JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: publicFunctions(root, plugin.exports) }, null, 2) + "\n",
         });
       },
       generateBundle(_options, bundle) {
