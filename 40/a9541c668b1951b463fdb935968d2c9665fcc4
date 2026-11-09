@@ -1,0 +1,27 @@
+packages/engine/src/pool.rs
+  s_05724a98d85571::t_8070f269669048 48-49,126,163-166,216-221
+packages/engine/src/web/surface.js
+  s_05724a98d85571::t_8070f269669048 328
+packages/engine/WEB_APIS.md
+  s_05724a98d85571::t_8070f269669048 39-51
+packages/engine/src/web/mod.rs
+  s_05724a98d85571::t_ccedfe5050e7c3 72-74
+  s_05724a98d85571::t_8070f269669048 8,12,18-21,360,459-483,501-511
+  s_05724a98d85571::t_56a97947d6e01e 512-513
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "40a9541c668b1951b463fdb935968d2c9665fcc4",
+  "prompts": {},
+  "sessions": {
+    "s_05724a98d85571": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c00e-799b-77e3-a333-60db47895891",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
