@@ -18,7 +18,7 @@ export interface PluginDefinition {
 
 function versionSyntax(version: string): boolean {
   const [head, build, ...extra] = version.split("+");
-  if (extra.length || version.length > 256) return false;
+  if (extra.length) return false;
   const separator = head!.indexOf("-");
   const core = separator < 0 ? head! : head!.slice(0, separator);
   const prerelease = separator < 0 ? undefined : head!.slice(separator + 1);
@@ -32,8 +32,7 @@ function versionSyntax(version: string): boolean {
 export function definePlugin(definition: PluginDefinition): Readonly<PluginDefinition> {
   definition = jsonSnapshot(definition, "plugin descriptor") as unknown as PluginDefinition;
   if (!definition || typeof definition.id !== "string"
-    || !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(definition.id)
-    || definition.id.length > 128) {
+    || !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(definition.id)) {
     throw new Error("Plugin id must be a stable lowercase identifier");
   }
   const fields = ["id", "version", "api", "depends", "optional", "breaks", "provides",
@@ -49,18 +48,18 @@ export function definePlugin(definition: PluginDefinition): Readonly<PluginDefin
     if (map === undefined) continue;
     if (!map || typeof map !== "object" || Array.isArray(map)
       || Object.entries(map).some(([id, range]) => !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id)
-        || typeof range !== "string" || !range || range.length > 256)) {
+        || typeof range !== "string" || !range)) {
       throw new Error(`Invalid plugin ${key} requirements`);
     }
   }
   for (const key of ["provides", "consumes", "permissions"] as const) {
     const list = definition[key];
-    if (list !== undefined && (!Array.isArray(list) || list.length > 256
-      || list.some(value => typeof value !== "string" || !value || value.length > 256)
+    if (list !== undefined && (!Array.isArray(list)
+      || list.some(value => typeof value !== "string" || !value)
       || new Set(list).size !== list.length)) throw new Error(`Invalid plugin ${key}`);
   }
   if (definition.api !== undefined && (typeof definition.api !== "string"
-    || !definition.api.startsWith("tokamak@") || definition.api.length > 128)) {
+    || !definition.api.startsWith("tokamak@"))) {
     throw new Error("Invalid host API requirement");
   }
   if (definition.placement !== undefined && !["hub", "runner", "hybrid"].includes(definition.placement)) {

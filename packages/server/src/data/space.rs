@@ -19,7 +19,6 @@ impl DataSpace {
     /// Plugin loading must use this constructor, never an author-supplied prefix.
     pub fn plugin(id: &str) -> Result<Self> {
         if id.is_empty()
-            || id.len() > 128
             || !id.as_bytes()[0].is_ascii_lowercase()
             || !id.bytes().all(|c| {
                 c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'_' | b'-')

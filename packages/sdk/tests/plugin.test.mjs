@@ -7,7 +7,7 @@ test("plugin descriptors snapshot valid stable identities and reject malformed o
   source.id = "changed";
   expect(plugin).toEqual({ id: "acme.notes", version: "0.1.0" });
   expect(Object.isFrozen(plugin)).toBe(true);
-  for (const id of ["", "../escape", "Uppercase", "a/b", "a..b", "a".repeat(129)]) {
+  for (const id of ["", "../escape", "Uppercase", "a/b", "a..b"]) {
     expect(() => definePlugin({ id, version: "0.1.0" })).toThrow();
   }
   for (const version of ["", "latest", "1", "^1.0.0", "01.0.0", "1.0.0-01", "1.0.0-..", "1.0.0+"]) {

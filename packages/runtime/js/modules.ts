@@ -4,7 +4,7 @@ import { catchError, createRoot } from "solid-js";
 
 export type ModuleExports = Record<string, unknown>;
 type Factory = (require: (name: string) => ModuleExports, exports: ModuleExports, module: { exports: ModuleExports }) => void;
-interface Definition { dependencies: readonly string[]; factory: Factory; lazy: Set<string> }
+interface Definition { dependencies: readonly string[]; allowed: ReadonlySet<string>; factory: Factory; lazy: Set<string> }
 const canonical = (name: string) => /^@plugins\/[^/]+$/.test(name) ? `${name}/ui` : name;
 
 export class ModuleRegistry {
@@ -45,7 +45,8 @@ export class ModuleRegistry {
   register(name: string, dependencies: string[], factory: Factory): void {
     if (name !== this.accepting || this.definitions.has(name)) throw new Error(`Unexpected plugin registration: ${name}`);
     if (!Array.isArray(dependencies) || dependencies.some(value => typeof value !== "string") || typeof factory !== "function") throw new Error("Invalid UI registration");
-    this.definitions.set(name, { dependencies: dependencies.map(canonical), factory, lazy: new Set() });
+    const names = dependencies.map(canonical);
+    this.definitions.set(name, { dependencies: names, allowed: new Set(names), factory, lazy: new Set() });
   }
 
   evaluate(name: string, code: string): void {
@@ -100,7 +101,7 @@ export class ModuleRegistry {
       catchError(() => createRoot(dispose => {
         this.disposers.set(name, dispose);
         definition.factory(dependency => {
-          if (!definition.dependencies.includes(canonical(dependency))) throw new Error(`Undeclared module dependency: ${dependency}`);
+          if (!definition.allowed.has(canonical(dependency))) throw new Error(`Undeclared module dependency: ${dependency}`);
           return this.require(dependency);
         }, module.exports, module);
       }), cause => this.fail(name, cause));
@@ -114,13 +115,18 @@ export class ModuleRegistry {
    * retires Solid owners first, so no old component can recreate stale state. */
   affected(names: Iterable<string>): Set<string> {
     const affected = new Set([...names].map(canonical));
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const [name, definition] of this.definitions) {
-        if (!affected.has(name) && [...definition.dependencies, ...definition.lazy].some(dep => affected.has(dep))) {
-          affected.add(name); changed = true;
-        }
+    const importers = new Map<string, Set<string>>();
+    for (const [name, definition] of this.definitions) {
+      for (const dependency of [...definition.dependencies, ...definition.lazy]) {
+        let names = importers.get(dependency);
+        if (!names) importers.set(dependency, names = new Set());
+        names.add(name);
+      }
+    }
+    const queue = [...affected];
+    for (let index = 0; index < queue.length; index++) {
+      for (const name of importers.get(queue[index]!) ?? []) {
+        if (!affected.has(name)) { affected.add(name); queue.push(name); }
       }
     }
     return affected;

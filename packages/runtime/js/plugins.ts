@@ -1,6 +1,6 @@
 /** Manifest-first loading and generation retirement. No UI asset is requested
  * until load() is called by a contribution or a cross-plugin import. */
-import { batch, createSignal } from "solid-js";
+import { batch, createMemo, createSignal } from "solid-js";
 import type { ContributionKind, JsonValue } from "@tokamak/sdk";
 import { ModuleRegistry, type ModuleExports } from "./modules";
 
@@ -39,18 +39,25 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
   let changes = 0;
   const invalidations = new Set<string>();
   const version = (id: string) => versions()[id] ?? 0;
-  const manifest = (id: string) => metadata().plugins.find(p => p.plugin.id === id);
+  const manifests = createMemo(() => new Map(metadata().plugins.map(p => [p.plugin.id, p])));
+  const manifest = (id: string) => manifests().get(id);
 
   function invalidate(ids: readonly string[], next = metadata()) {
     const affected = registry.affected(ids.map(moduleName));
     // Include not-yet-evaluated importers using the static dependency graph.
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const p of [...metadata().plugins, ...next.plugins]) {
-        if (!affected.has(moduleName(p.plugin.id)) && Object.keys(p.plugin.depends ?? {}).some(id => affected.has(moduleName(id)))) {
-          affected.add(moduleName(p.plugin.id)); grew = true;
-        }
+    const importers = new Map<string, Set<string>>();
+    for (const p of [...metadata().plugins, ...next.plugins]) {
+      for (const id of Object.keys(p.plugin.depends ?? {})) {
+        const dependency = moduleName(id);
+        let names = importers.get(dependency);
+        if (!names) importers.set(dependency, names = new Set());
+        names.add(moduleName(p.plugin.id));
+      }
+    }
+    const queue = [...affected];
+    for (let index = 0; index < queue.length; index++) {
+      for (const name of importers.get(queue[index]!) ?? []) {
+        if (!affected.has(name)) { affected.add(name); queue.push(name); }
       }
     }
     for (const id of pending.keys()) affected.add(moduleName(id));
@@ -121,7 +128,16 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     changes++;
     for (const id of event.plugins) invalidations.add(id);
     const publish = (next: JsonValue) => {
-      invalidate([...invalidations], catalog(next));
+      const parsed = catalog(next);
+      const nextManifests = new Map(parsed.plugins.map(p => [p.plugin.id, p]));
+      // Very large change-id lists are omitted from the bounded notification.
+      // Diff the complete paged catalog too, so no installed-count ceiling can
+      // silently prevent a module from retiring (including added/removed ids).
+      for (const [id, previous] of manifests()) {
+        if (JSON.stringify(previous) !== JSON.stringify(nextManifests.get(id))) invalidations.add(id);
+      }
+      for (const id of nextManifests.keys()) if (!manifests().has(id)) invalidations.add(id);
+      invalidate([...invalidations], parsed);
       invalidations.clear();
     };
     const value = event.catalog as unknown as { paged?: boolean };

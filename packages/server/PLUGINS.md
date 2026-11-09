@@ -43,11 +43,32 @@ module**. Rust's maintained `semver` implements range semantics. A `depends`
 target must exist; an absent `optional` target is fine, but a present incompatible
 version is an error.
 
+Tokamak has **no product limits**: installed plugins, dependencies, contributions,
+capabilities, labels and artifact totals have no count or size quotas. Large
+catalogs are paged and large UI assets are streamed, rather than refused.
+
 Artifact SHA-256 hashes detect incomplete builds. Paths and asset symlinks cannot
-escape the artifact directory. Files are bounded, verified and retained in memory
-as an immutable generation. These are corruption/mixed-build checks, not signatures.
-The loader allows at most 64 plugins and 64 MiB of retained artifact bytes;
-this is not a hard RSS limit (QuickJS worlds and decoded code allocate separately).
+escape the artifact directory. Declared files are hashed/copied with a 64 KiB
+buffer into private temporary files, owned by the immutable generation and deleted
+when its last reference retires. Snapshots consume disk rather than retaining all
+artifact bytes or open file descriptors in RAM. HTTP UI downloads stream 64 KiB
+chunks; native/WebSocket UI downloads use UTF-8-safe pages of at most 8 KiB.
+Neither transfer has a total-size ceiling. These are corruption/mixed-build
+checks, not signatures. Manifests are parsed through a buffered reader, with no
+128 KiB manifest limit. Catalog JSON is serialized once per generation and served
+in 8 KiB pages, with no aggregate catalog ceiling. Metadata and evaluated modules
+still require memory proportional to their contents; there is no fixed RSS promise.
+
+**Backend engineering exception:** QuickJS must compile the whole backend module;
+its API cannot stream compilation across independent chunks. Source maps likewise
+build a complete in-memory index. Backend code and its source map each have a
+512 MiB input safety bound, with a diagnostic explaining how to split the backend
+into plugins. Other declared files (including backend API declarations and all UI
+assets) have no per-file bound. The engine's configurable per-invocation heap and
+time budgets still apply (`--heap-bytes`, `--load-ms`, `--call-ms`); large backends
+may require raising them. Streaming UI transport does not make JavaScript
+compilation itself incremental in the desktop engine. Desktop windows have no
+fixed heap quota; the former 64 MiB window ceiling does not limit UI bundles.
 
 Reload is serialized with admitted calls: old calls finish their commit/rollback
 first. The full candidate installation resolves and is inspected before one
@@ -55,6 +76,14 @@ generation swap. Failed reload leaves old code, subscriptions and data usable.
 Successful reload dirties all subscriptions; removed or changed-kind queries
 produce explicit subscription errors. The named ID must be present in the old or
 new installation; dependent callers reload together. This is not stateful HMR.
+On Unix, unchanged files reuse verified snapshots only when canonical path,
+device/inode, size, mtime and ctime still match. Changed files are rehashed, so an
+unchanged manifest cannot conceal an in-place write or atomic replacement.
+Platforms without reliable change/identity metadata conservatively rehash all
+files. This fast path trusts local filesystem metadata, not hostile build tools
+with kernel-level ability to forge ctime. Unchanged parsed backend bundles, inspection results
+and already validated permission grants are reused. Dependency ordering uses an
+iterative graph walk, avoiding native stack depth proportional to plugin count.
 Discovery's `bundleHash` identifies startup; `/plugins` reports the live revision.
 Legacy `Server::descriptor()` is a startup snapshot; use `Server::plugins()` for
 ordered live plugin metadata.

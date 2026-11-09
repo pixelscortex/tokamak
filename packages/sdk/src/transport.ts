@@ -16,6 +16,9 @@ export interface MessageConnection {
 
 type Pending = { resolve(value: JsonValue): void; reject(error: Error): void };
 type Observer = (event: SubscriptionEvent<JsonValue>) => void;
+// Per-connection admission budget, not a catalog/plugin quota. Correlation and
+// live observers must remain resident until settlement; paging their state
+// would lose ordered outcomes. Catalog/assets use one sequential call per page.
 const CAPACITY = 128;
 class CatalogRevisionChanged extends Error {
   constructor() { super("Plugin generation changed during catalog transfer"); }
@@ -51,6 +54,8 @@ export class InProcessTransport implements ClientTransport {
   async plugins(): Promise<JsonValue> {
     // A reload may retire any page already in flight. Discard the whole partial
     // transfer and pin a fresh first page, with bounded retries under churn.
+    // Pages from different snapshots cannot be combined; endless churn must
+    // surface as a transient generation error rather than spin forever.
     for (let attempt = 0; ; attempt++) {
       try { return await this.catalog(); }
       catch (error) {
@@ -62,7 +67,8 @@ export class InProcessTransport implements ClientTransport {
 
   private async catalog(): Promise<JsonValue> {
     let value = await this.control(id => ({ type: "plugins", id }));
-    let text = "", offset = 0;
+    const chunks: string[] = [];
+    let offset = 0;
     let revision: string | undefined;
     for (;;) {
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid catalog page");
@@ -73,12 +79,12 @@ export class InProcessTransport implements ClientTransport {
       }
       if (typeof value.text !== "string" || typeof value.revision !== "string" || typeof value.done !== "boolean"
         || typeof value.next !== "number" || !Number.isSafeInteger(value.next) || value.next < offset
-        || (!value.done && value.next === offset) || value.next > 64 * 1024 * 1024) throw new Error("Invalid catalog page");
+        || (!value.done && value.next === offset)) throw new Error("Invalid catalog page");
       if (revision === undefined) revision = value.revision;
       else if (value.revision !== revision) throw new CatalogRevisionChanged();
-      text += value.text;
+      chunks.push(value.text);
       if (value.done) {
-        const assembled = JSON.parse(text) as JsonValue;
+        const assembled = JSON.parse(chunks.join("")) as JsonValue;
         if (!assembled || typeof assembled !== "object" || Array.isArray(assembled)
           || assembled.revision !== revision) throw new CatalogRevisionChanged();
         return assembled;
@@ -91,16 +97,16 @@ export class InProcessTransport implements ClientTransport {
 
   async pluginAsset(plugin: string, name: string, revision: string): Promise<string> {
     let offset = 0;
-    let source = "";
+    const chunks: string[] = [];
     for (;;) {
       const value = await this.control(id => ({ type: "pluginasset", id, plugin, name, revision, offset }));
       if (!value || typeof value !== "object" || Array.isArray(value)
         || typeof value.text !== "string" || typeof value.next !== "number"
         || typeof value.done !== "boolean" || !Number.isSafeInteger(value.next)
-        || value.next < offset || (!value.done && value.next === offset) || value.next > 8 * 1024 * 1024) throw new Error("Invalid plugin asset chunk");
-      source += value.text;
+        || value.next < offset || (!value.done && value.next === offset)) throw new Error("Invalid plugin asset chunk");
+      chunks.push(value.text);
       offset = value.next;
-      if (value.done) return source;
+      if (value.done) return chunks.join("");
     }
   }
 
@@ -120,6 +126,8 @@ export class InProcessTransport implements ClientTransport {
 
   private id(): number {
     if (this.closed) throw this.closed;
+    // IDs must remain exact across JSON numbers and native u64 correlation;
+    // paging cannot extend one numeric identifier beyond that representation.
     if (this.next === Number.MAX_SAFE_INTEGER) throw new Error("request IDs exhausted");
     return ++this.next;
   }
@@ -134,6 +142,9 @@ export class InProcessTransport implements ClientTransport {
       const code = char.codePointAt(0)!;
       bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
     }
+    // A data invocation is one atomic JSON value under the existing protocol;
+    // splitting it would change admission/transaction semantics. Plugin catalog
+    // and asset transfers already page around this per-message bound.
     if (bytes > MAX_WIRE_MESSAGE_BYTES) {
       const error = new Error("request too large (1 MiB limit)");
       this.pending.get(request.id)?.reject(error);

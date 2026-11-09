@@ -56,6 +56,23 @@ for the desktop, lab and old raw-bundle regression harnesses.
 
 ## Stream and lifecycle
 
+Tokamak has **no product limits**. Installed plugins, contributions, dependencies,
+capability lists and descriptor strings have no arbitrary count/length quotas.
+Identifier syntax, nonempty/unique capabilities and version compatibility remain
+validation rules. Catalog and UI asset transfers have no total-size ceilings;
+8 KiB pages keep each event below the wire budget. The SDK joins chunks once
+when complete. UI source is compiled as a whole by QuickJS after transfer, so
+compilation still needs memory proportional to the module. The desktop window
+heap has no fixed quota (the former 64 MiB ceiling is removed); system allocation
+failures remain possible. Backend code/maps have a separate 512 MiB whole-input safety exception; see
+[the server contract](../server/PLUGINS.md#loading-and-reload-contract).
+
+Catalog manifests use indexed identity lookup. Module retirement builds reverse
+edges and walks affected importers once, including static imports that have not
+yet loaded. The rail shares one memoized view list and active-route lookup;
+rendering N buttons does not repeatedly enumerate N manifests. There is no rail
+entry ceiling or eager module fetch per button.
+
 The shell sends `{type:"plugins",id}` on its connected session. The response is an 8192-byte UTF-8 JSON text page: `{revision,text,next,done}`.
 Continue with `{type:"pluginspage",id,revision,offset:next}` until `done`; the SDK
 assembles `{revision,plugins,functions}` and discards mixed revisions, including
@@ -73,7 +90,9 @@ After an atomic server reload, every connected session receives
 as data updates. The loader fetches the new catalog in bounded pages before
 retiring affected owners, accumulating ids if reloads race. The server compares the entire old/new catalogs, so one reload
 also reports other edited/added/removed artifacts in that installation. The
-loader retires affected modules plus transitive importers, including in-flight
+loader also diffs the assembled old/new manifests. If the changed-id list would
+exceed one event, the notification omits that list; the paged catalog diff still
+retires every affected module. The loader retires transitive importers and in-flight
 loads. Unrelated completed modules remain live. Version checks prevent stale
 asset promises from publishing. Factories receive a frozen registration/loading capability scoped to their own
 module and generation; host `provide`, `remove` and `require` APIs are never

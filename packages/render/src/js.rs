@@ -116,8 +116,12 @@ pub(crate) struct Js(QuickJsContext, Rc<HookState>);
 
 impl Js {
     pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {
-        let world =
-            block_on(QuickJsContext::new(64 * 1024 * 1024)).map_err(|e| Error(e.to_string()))?;
+        // A window retains arbitrarily many plugin modules and assembles large
+        // streamed assets. QuickJS cannot page its live heap or compile partial
+        // functions, so a fixed window heap quota would become a product cap.
+        // Use the address-space maximum rather than a fixed window quota; backend
+        // invocation budgets remain separate. System allocation can still fail.
+        let world = block_on(QuickJsContext::new(usize::MAX)).map_err(|e| Error(e.to_string()))?;
         let hooks = Rc::new(HookState::default());
         block_on(world.context().async_with(async |ctx| {
             ctx.store_userdata(hooks.clone())

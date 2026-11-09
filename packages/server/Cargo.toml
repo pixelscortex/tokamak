@@ -18,6 +18,8 @@ required-features = ["protocol-codegen"]
 protocol-codegen = ["dep:ts-rs"]
 
 [dependencies]
+tempfile = "3.27.0"
+futures-util = "0.3.34"
 directories = "=6.0.0"
 sha2 = "0.10.9"
 semver = "1.0.28"

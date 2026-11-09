@@ -111,7 +111,7 @@ impl Server {
             Err(error) => Err(error),
         };
         let loaded = match loaded {
-            Ok(loaded) => Box::pin(loaded.record_grants(&database))
+            Ok(loaded) => Box::pin(loaded.record_grants(&database, None))
                 .await
                 .map(|()| loaded),
             Err(error) => Err(error),
@@ -208,7 +208,7 @@ impl Server {
         &self,
         id: String,
         name: String,
-    ) -> Result<Option<Arc<Vec<u8>>>, Error> {
+    ) -> Result<Option<Arc<crate::plugins::Asset>>, Error> {
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::Asset(id, name, reply))?;
         wait.await.map_err(|_| Error::Closed)?
@@ -526,7 +526,7 @@ enum Command {
     Asset(
         String,
         String,
-        oneshot::Sender<Result<Option<Arc<Vec<u8>>>, Error>>,
+        oneshot::Sender<Result<Option<Arc<crate::plugins::Asset>>, Error>>,
     ),
 }
 
@@ -601,11 +601,13 @@ impl Coordinator {
     }
 
     fn catalog_page(&self, revision: Option<&str>, offset: u64) -> Result<Json, String> {
-        let metadata = self.metadata().map_err(|e| e.to_string())?;
-        if revision.is_some_and(|r| metadata["revision"].as_str() != Some(r)) {
+        let loaded = self.plugins.as_ref().ok_or("No plugin installation")?;
+        if revision.is_some_and(|r| r != loaded.catalog.revision) {
             return Err("Plugin generation changed".into());
         }
-        let text = serde_json::to_string(&metadata).map_err(|e| e.to_string())?;
+        // Serialize once per generation, rather than once per page (quadratic
+        // in catalog size). Paging bounds wire memory, never plugin count.
+        let text = &loaded.catalog_text;
         let start = usize::try_from(offset).map_err(|_| "Invalid catalog offset")?;
         if start > text.len() || !text.is_char_boundary(start) {
             return Err("Invalid catalog offset".into());
@@ -617,7 +619,7 @@ impl Coordinator {
             end -= 1;
         }
         Ok(
-            serde_json::json!({"revision":metadata["revision"], "text":&text[start..end], "next":end,"done":end == text.len()}),
+            serde_json::json!({"revision":loaded.catalog.revision, "text":&text[start..end], "next":end,"done":end == text.len()}),
         )
     }
 
@@ -653,7 +655,8 @@ impl Coordinator {
             .plugin_root
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
-        let catalog = crate::plugins::Catalog::read(root)?;
+        let catalog =
+            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
         if !catalog.plugins.contains_key(id)
             && !self
                 .plugins
@@ -662,8 +665,10 @@ impl Coordinator {
         {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
-        let candidate = crate::plugins::Loaded::load(catalog, &self.pool).await?;
-        Box::pin(candidate.record_grants(&self.database)).await?;
+        let candidate =
+            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
+                .await?;
+        Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
         self.kinds = candidate
@@ -804,6 +809,15 @@ impl Coordinator {
                         result: Err("result too large (1 MiB limit); subscription ended".into()),
                     }
                 }
+                Event::PluginChanged { catalog, .. } => {
+                    // The complete catalog is already paged. Clients diff it
+                    // after assembly, so an arbitrarily large list of changed
+                    // identities need not fit a single notification envelope.
+                    Event::PluginChanged {
+                        plugins: Vec::new(),
+                        catalog,
+                    }
+                }
                 _ => return,
             };
         }
@@ -881,19 +895,7 @@ impl Coordinator {
                         .get(&plugin)
                         .and_then(|p| p.ui_asset(&name))
                         .ok_or("Unknown plugin UI asset")?;
-                    let text =
-                        std::str::from_utf8(&bytes).map_err(|_| "Plugin UI asset is not UTF-8")?;
-                    let start = usize::try_from(offset).map_err(|_| "Invalid asset offset")?;
-                    if start > text.len() || !text.is_char_boundary(start) {
-                        return Err("Invalid asset offset".to_owned());
-                    }
-                    let mut end = (start + 8192).min(text.len());
-                    while !text.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    Ok(
-                        serde_json::json!({"text": &text[start..end], "next": end, "done": end == text.len()}),
-                    )
+                    bytes.page(offset).map_err(|e| e.to_string())
                 })();
                 self.emit(session, Event::Response { id, result });
             }

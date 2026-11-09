@@ -188,12 +188,23 @@ async fn plugin_asset(
             } else {
                 "application/json"
             };
+            let stream =
+                futures_util::stream::try_unfold((bytes, 0u64), |(asset, offset)| async move {
+                    if offset == asset.len {
+                        return Ok::<_, std::io::Error>(None);
+                    }
+                    let chunk = asset
+                        .read(offset, 64 * 1024)
+                        .map_err(std::io::Error::other)?;
+                    let next = offset + chunk.len() as u64;
+                    Ok(Some((chunk, (asset, next))))
+                });
             (
                 [
                     ("content-type", content_type),
                     ("cache-control", "no-store"),
                 ],
-                bytes.as_ref().clone(),
+                axum::body::Body::from_stream(stream),
             )
                 .into_response()
         }
