@@ -24,5 +24,4 @@ for (const [name, exports] of Object.entries({
   "@tokamak/ui/components": components,
   "@tokamak/runtime/router": router,
 })) modules.provide(name, exports);
-Object.defineProperty(globalThis, "__tokamakModules", { value: modules });
 mount(() => <Shell modules={modules} />);

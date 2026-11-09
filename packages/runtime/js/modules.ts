@@ -49,8 +49,22 @@ export class ModuleRegistry {
     this.accepting = name;
     try {
       // Assets come from the owner's verified immutable installation, not user
-      // data. Indirect eval keeps plugin declarations outside the shell scope.
-      (0, eval)(code);
+      // data. Function scope keeps declarations outside the shell's scope.
+      // Evaluation gets one capability for this module only. Never publish the
+      // registry itself: provide/remove/require are host administration APIs.
+      let registering = true;
+      const api = Object.freeze({
+        register: (id: string, dependencies: string[], factory: Factory) => {
+          if (!registering || id !== name) throw new Error(`Unexpected plugin registration: ${id}`);
+          this.register(id, dependencies, factory);
+        },
+
+      });
+      try {
+        // The globalThis spelling supports existing artifacts, but its facade
+        // has the same scoped capability, never the host's global object.
+        new Function("globalThis", "__tokamakModules", code)(Object.freeze({ __tokamakModules: api }), api);
+      } finally { registering = false; }
       if (!this.definitions.has(name)) throw new Error(`UI did not register ${name}`);
     } catch (error) {
       this.definitions.delete(name);
