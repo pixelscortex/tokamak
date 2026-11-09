@@ -11,6 +11,7 @@ export type { SchemaDefinition, TableDefinition, DataModel, ModelFromSchema } fr
 export {
   query,
   mutation,
+  action,
   createFunctions,
   createRegistry,
   functionMetadata,
@@ -23,6 +24,7 @@ export type {
   FunctionRegistry,
   QueryContext,
   MutationContext,
+  ActionContext,
   PluginCalls,
   WireResult,
 } from "./functions";

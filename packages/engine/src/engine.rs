@@ -103,10 +103,16 @@ impl Engine for QuickJsEngine {
         )
         .await?;
         world.set_deadline(Some(load_end));
+        let web_invocation = Invocation::unbounded();
+        let web_ops = Arc::new(crate::web::WebHost::new(Vec::new())?.operations()?);
         world
             .context
             .with(|ctx| {
-                crate::web::install_disabled(&ctx).map_err(|e| js_error(&ctx, e, bundle, false))
+                let host = bridge::install_ops(&ctx, web_ops, &web_invocation)
+                    .map_err(|e| js_error(&ctx, e, bundle, false))?;
+                // Bundled action dependencies may construct encoders during module
+                // inspection. Pure APIs are shared; external effects stay disabled.
+                crate::web::install(&ctx, host, false).map_err(|e| js_error(&ctx, e, bundle, false))
             })
             .await?;
         let namespace = timed(

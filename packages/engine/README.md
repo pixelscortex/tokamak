@@ -183,3 +183,19 @@ clock/randomness, external cancellation, streaming, fairness by plugin or plugin
 permissions are added. Broad interruption guarantees for catastrophic regexes and
 long native operations remain TKM-13 work; the bytecode-loop and heap-cap recovery
 behavior here does not establish a process security sandbox.
+
+## Actions and web APIs
+
+`ActionEngine` implements the same `Engine` trait. `Pool::new_actions` creates
+an independent, bounded lane (the server uses two workers and 32 queued calls).
+The server propagates the configured JS heap cap; action load/call time budgets
+are ignored. Action invocation leases have an explicit absent deadline, and
+QuickJS interruption checks only lifecycle cancellation. No elapsed-time timer
+runs on this path. Query/mutation scheduling and deadlines remain on `Pool::new`.
+
+The native capabilities use owned JSON/byte chunks through `OpRegistry` and are
+engine-independent; only installation and promise conversion know QuickJS.
+See [WEB_APIS.md](WEB_APIS.md) for the API subset, permission/cancellation rules,
+polyfill provenance, go/no-go evidence and measurements. Pure APIs also install
+in transactional worlds so action dependencies can be inspected at startup;
+fetch, timers and OS randomness reject there. Render contexts opt in explicitly.

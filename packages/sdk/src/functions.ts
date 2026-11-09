@@ -11,7 +11,7 @@ import { jsonSnapshot } from "./values";
 import { createApi, functionName, type FunctionReference } from "./api";
 import { callHost } from "./host";
 
-export type FunctionKind = "query" | "mutation";
+export type FunctionKind = "query" | "mutation" | "action";
 
 type WireValue<V> = V extends void ? null : V;
 
@@ -31,7 +31,14 @@ export interface QueryContext<M extends DataModel> {
 
 export interface MutationContext<M extends DataModel> {
   readonly db: DatabaseWriter<M>;
-  use<T>(api: T): PluginCalls<T, FunctionKind>;
+  use<T>(api: T): PluginCalls<T, "query" | "mutation">;
+  providers<T>(interfaceName: string): Promise<readonly T[]>;
+}
+
+/** Actions have no database capability; each nested call owns its transaction. */
+export interface ActionContext {
+  runQuery<A, R>(reference: FunctionReference<"query", A, R>, args: NoInfer<A>): Promise<R>;
+  runMutation<A, R>(reference: FunctionReference<"mutation", A, R>, args: NoInfer<A>): Promise<R>;
   providers<T>(interfaceName: string): Promise<readonly T[]>;
 }
 
@@ -55,7 +62,7 @@ export type FunctionBuilder<K extends FunctionKind, M extends DataModel> = <
 >(definition: {
   args?: F;
   handler: (
-    ctx: K extends "query" ? QueryContext<M> : MutationContext<M>,
+    ctx: K extends "query" ? QueryContext<M> : K extends "mutation" ? MutationContext<M> : ActionContext,
     args: ObjectValue<F>,
   ) => R;
 }) => FunctionDefinition<K, ObjectValue<F>, WireResult<R>>;
@@ -74,12 +81,21 @@ function builder<K extends FunctionKind, M extends DataModel>(kind: K): Function
         const args = jsonSnapshot(input, "args");
         validate(description, args);
 
-        const ctx = Object.freeze({
+        const providers = async <T>(interfaceName: string) =>
+          (await callHost(host, "plugin.providers", { interface: interfaceName }))
+            .map(id => createApi<T>(id));
+        const run = async (kind: "query" | "mutation", reference: { [functionName]: string }, input: unknown) =>
+          callHost(host, kind === "query" ? "action.runQuery" : "action.runMutation", {
+            name: reference[functionName], args: jsonSnapshot(input, "nested call args"),
+          });
+        const ctx = Object.freeze(kind === "action" ? {
+          runQuery: (reference: { [functionName]: string }, args: unknown) => run("query", reference, args),
+          runMutation: (reference: { [functionName]: string }, args: unknown) => run("mutation", reference, args),
+          providers,
+        } : {
           db: kind === "query" ? createDatabase<M>(host, false) : createDatabase<M>(host, true),
           use: <T>(api: T) => bindCalls(api, host),
-          providers: async <T>(interfaceName: string) =>
-            (await callHost(host, "plugin.providers", { interface: interfaceName }))
-              .map(id => createApi<T>(id)),
+          providers,
         });
         // The generic kind determines the context; the branch above enforces it
         // at runtime as well. Plugin reference kinds are erased, so the kernel
@@ -115,13 +131,15 @@ function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, FunctionKind> {
 /** Loose builders are useful without a schema; createFunctions adds table types. */
 export const query = builder<"query", Record<string, JsonObject>>("query");
 export const mutation = builder<"mutation", Record<string, JsonObject>>("mutation");
+export const action = builder<"action", Record<string, JsonObject>>("action");
 export function createFunctions<S extends SchemaDefinition>(
   _schema: S,
 ): {
   query: FunctionBuilder<"query", ModelFromSchema<S>>;
   mutation: FunctionBuilder<"mutation", ModelFromSchema<S>>;
+  action: FunctionBuilder<"action", ModelFromSchema<S>>;
 } {
-  return { query: builder("query"), mutation: builder("mutation") };
+  return { query: builder("query"), mutation: builder("mutation"), action: builder("action") };
 }
 
 export type FunctionRegistry = Readonly<Record<string, FunctionDefinition>>;

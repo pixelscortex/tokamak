@@ -102,6 +102,7 @@ pub(crate) struct Target {
     pub owner: String,
     pub local_name: String,
     pub mutation: bool,
+    pub kind: crate::service::FunctionKind,
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,
 }
@@ -186,14 +187,15 @@ impl Loaded {
                     )));
                 }
             }
-            for (local_name, mutation) in kinds {
+            for (local_name, kind) in kinds {
                 let name = format!("{id}/{local_name}");
                 targets.insert(
                     name,
                     Target {
                         owner: id.clone(),
                         local_name,
-                        mutation,
+                        mutation: kind == crate::service::FunctionKind::Mutation,
+                        kind,
                         bundle: bundle.clone(),
                         space: DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?,
                     },
@@ -242,6 +244,9 @@ impl Loaded {
                 "{} is not exported by {}",
                 target.local_name, target.owner
             ));
+        }
+        if target.kind == crate::service::FunctionKind::Action {
+            return Err("Queries and mutations cannot call actions".into());
         }
         if target.mutation && !writable {
             return Err("Queries cannot call mutations".into());
@@ -551,7 +556,7 @@ impl Catalog {
                 .plugin
                 .permissions
                 .iter()
-                .any(|permission| permission == &format!("net:{host}") || permission == "net:*")
+                .any(|permission| permission == &format!("net:{host}"))
         })
     }
 }

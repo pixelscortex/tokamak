@@ -2,6 +2,6 @@
 // Edit packages/server/src/protocol.rs, not this file.
 import type { JsonValue } from './values';
 
-export type Request = { "type": "query", id: number, name: string, args: JsonValue, } | { "type": "mutation", id: number, name: string, args: JsonValue, } | { "type": "subscribe", id: number, name: string, args: JsonValue, } | { "type": "unsubscribe", id: number, };
+export type Request = { "type": "query", id: number, name: string, args: JsonValue, } | { "type": "mutation", id: number, name: string, args: JsonValue, } | { "type": "action", id: number, name: string, args: JsonValue, } | { "type": "subscribe", id: number, name: string, args: JsonValue, } | { "type": "unsubscribe", id: number, };
 
 export type Event = { "type": "response", id: number, result: { Ok : JsonValue } | { Err : string }, } | { "type": "subscription", id: number, result: { Ok : JsonValue } | { Err : string }, } | { "type": "unsubscribed", id: number, };

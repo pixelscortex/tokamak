@@ -26,10 +26,15 @@
     }
     dispatchEvent(event) {
       event.target = this;
+      let failure;
       for (const item of [...(this.#listeners.get(event.type) || [])]) {
         if (item.once) this.removeEventListener(event.type, item.callback);
-        typeof item.callback === "function" ? item.callback.call(this, event) : item.callback.handleEvent(event);
+        // One throwing application listener must not suppress the listener
+        // which cancels native HTTP I/O. Report its error after all listeners.
+        try { typeof item.callback === "function" ? item.callback.call(this, event) : item.callback.handleEvent(event); }
+        catch (error) { failure ??= { error }; }
       }
+      if (failure) throw failure.error;
       return !event.defaultPrevented;
     }
   }
@@ -336,7 +341,7 @@
     },
     get subtle() { return unsupported("crypto.subtle"); },
   };
-  Object.assign(globalThis,{DOMException,Event,EventTarget,AbortSignal,AbortController,TextEncoder,TextDecoder,TextDecoderStream,URLSearchParams,URL,Headers,Request,Response,fetch,crypto,
+  Object.assign(globalThis,{DOMException,Event,EventTarget,AbortSignal,AbortController,TextEncoder,TextDecoder,TextDecoderStream,URLSearchParams,URL,Headers,Request,Response,fetch:network?fetch:()=>effects(),crypto,
     setTimeout:(fn,ms,...args)=>schedule(fn,ms,false,args),setInterval:(fn,ms,...args)=>schedule(fn,ms,true,args),clearTimeout:clearTimer,clearInterval:clearTimer,
   });
   for (const name of ["WebSocket","XMLHttpRequest","Blob","File","FormData","Worker","EventSource","TextEncoderStream"]) Object.defineProperty(globalThis,name,{configurable:true,get:()=>unsupported(name)});

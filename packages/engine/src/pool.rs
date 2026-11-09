@@ -52,6 +52,7 @@ pub struct Pool {
     closing: Arc<AtomicBool>,
     threads: Vec<thread::JoinHandle<()>>,
     shutdown: Option<CancellationToken>,
+    limits: Limits,
 }
 
 impl Pool {
@@ -108,6 +109,7 @@ impl Pool {
             closing: Arc::new(AtomicBool::new(false)),
             threads: Vec::new(),
             shutdown: None,
+            limits: config.limits.clone(),
         };
         for id in 0..config.workers {
             let receiver = receiver.clone();
@@ -157,6 +159,10 @@ impl Pool {
             pool.threads.push(worker);
         }
         Ok(pool)
+    }
+
+    pub fn limits(&self) -> &Limits {
+        &self.limits
     }
 
     /// Immediate bounded admission. Budget starts when execution begins, not

@@ -22,6 +22,12 @@ pub enum Request {
         name: String,
         args: Json,
     },
+    Action {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        name: String,
+        args: Json,
+    },
     Subscribe {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
@@ -39,6 +45,7 @@ impl Request {
         match self {
             Self::Query { id, .. }
             | Self::Mutation { id, .. }
+            | Self::Action { id, .. }
             | Self::Subscribe { id, .. }
             | Self::Unsubscribe { id } => *id,
         }

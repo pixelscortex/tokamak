@@ -376,9 +376,3 @@ pub fn install<'js>(
     let factory: rquickjs::Function = ctx.eval(include_str!("surface.js"))?;
     factory.call::<_, ()>((host, network))
 }
-
-/// Transactional worlds do not need HTTP clients, timers or random sources.
-/// Keep an explicit error instead of making a forbidden fetch look accidental.
-pub(crate) fn install_disabled(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<()> {
-    ctx.eval::<(), _>("globalThis.fetch = () => { throw new Error('fetch is forbidden in queries and mutations; use an action'); };")
-}

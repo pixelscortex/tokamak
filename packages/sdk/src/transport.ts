@@ -42,6 +42,10 @@ export class InProcessTransport implements ClientTransport {
     return this.call("mutation", name, args);
   }
 
+  action(name: string, args: JsonValue): Promise<JsonValue> {
+    return this.call("action", name, args);
+  }
+
   private id(): number {
     if (this.closed) throw this.closed;
     if (this.next === Number.MAX_SAFE_INTEGER) throw new Error("request IDs exhausted");
@@ -59,7 +63,7 @@ export class InProcessTransport implements ClientTransport {
     }
   }
 
-  private call(type: "query" | "mutation", name: string, args: JsonValue): Promise<JsonValue> {
+  private call(type: "query" | "mutation" | "action", name: string, args: JsonValue): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
