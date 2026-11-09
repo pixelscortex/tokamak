@@ -1,0 +1,29 @@
+packages/engine/Cargo.toml
+  s_823c0d6f2944a8::t_59ebc31608c7ac 12
+packages/engine/WEB_APIS.md
+  s_823c0d6f2944a8::t_681d2dda99a9c1 47-55
+packages/engine/src/action.rs
+  s_823c0d6f2944a8::t_ba7046074e0a07 46-48,75
+packages/engine/src/engine.rs
+  s_823c0d6f2944a8::t_7b90553e5a84f3 107-109
+packages/engine/src/pool.rs
+  s_823c0d6f2944a8::t_4f4b14f1def79f 120-124
+packages/engine/src/web/mod.rs
+  s_823c0d6f2944a8::t_99e864846df4d9 49-67,87-90,103-106,151-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4ffb9029ea0cd8cc0e863a991ce6456336d0af0",
+  "prompts": {},
+  "sessions": {
+    "s_823c0d6f2944a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfaf-03fa-7490-ab98-69133c30ac30",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
