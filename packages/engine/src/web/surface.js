@@ -92,6 +92,7 @@
     if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     throw new TypeError("Expected an ArrayBuffer or typed array");
   };
+  const closeDecoder = Symbol();
   class TextDecoder {
     #id;
     constructor(label = "utf-8", options = {}) {
@@ -99,18 +100,24 @@
       // Validate even before the first decode, without retaining a native slot.
       const id = sync("decoder", { label: this.encoding, ignoreBOM: this.ignoreBOM }); sync("closeDecoder", { id });
     }
+    [closeDecoder]() {
+      if (this.#id !== undefined) { sync("closeDecoder", { id: this.#id }); this.#id = undefined; }
+    }
     decode(input = new Uint8Array(), options = {}) {
-      const bytes = byteView(input);
-      this.#id ??= sync("decoder", { label: this.encoding, ignoreBOM: this.ignoreBOM });
-      let output = "";
+      let keep = false;
       try {
+        const bytes = byteView(input);
+        this.#id ??= sync("decoder", { label: this.encoding, ignoreBOM: this.ignoreBOM });
+        let output = "";
         for (let offset = 0; offset < bytes.length || offset === 0; offset += chunkSize) {
           const last = offset + chunkSize >= bytes.length && !options.stream;
           output += sync("decode", { id: this.#id, bytes: Array.from(bytes.subarray(offset, offset + chunkSize)), last, fatal: this.fatal });
         }
+        keep = !!options.stream;
         return output;
       } finally {
-        if (!options.stream) { sync("closeDecoder", { id: this.#id }); this.#id = undefined; }
+        // Fatal decoding and invalid inputs reset streaming state too.
+        if (!keep) this[closeDecoder]();
       }
     }
   }
@@ -119,8 +126,12 @@
       const decoder = new TextDecoder(label, options);
       this.encoding = decoder.encoding; this.fatal = decoder.fatal; this.ignoreBOM = decoder.ignoreBOM;
       const stream = new TransformStream({
-        transform(chunk, controller) { const text = decoder.decode(chunk, { stream: true }); if (text) controller.enqueue(text); },
+        transform(chunk, controller) {
+          try { const text = decoder.decode(chunk, { stream: true }); if (text) controller.enqueue(text); }
+          catch (e) { decoder[closeDecoder](); throw e; }
+        },
         flush(controller) { const text = decoder.decode(); if (text) controller.enqueue(text); },
+        cancel() { decoder[closeDecoder](); },
       });
       this.readable = stream.readable; this.writable = stream.writable;
     }
@@ -225,6 +236,7 @@
       if (!/^[A-Z]+$/.test(this.method) || ["CONNECT","TRACE","TRACK"].includes(this.method)) throw new TypeError("Unsupported request method");
       if (["GET","HEAD"].includes(this.method) && this.body) throw new TypeError("GET/HEAD cannot have a body");
       this.signal = init.signal ?? source?.signal ?? new AbortController().signal;
+      if (!(this.signal instanceof AbortSignal)) throw new TypeError("Expected AbortSignal");
       this.redirect = init.redirect ?? source?.redirect ?? "follow";
       if (!["follow","manual","error"].includes(this.redirect)) throw new TypeError("Invalid redirect mode");
       for (const key of Object.keys(init)) if (!["method","headers","body","signal","redirect","duplex"].includes(key)) unsupported(`Request.${key}`);
@@ -315,17 +327,18 @@
   const timers = new Map();
   function schedule(callback, delay, repeat, args) {
     effects(); if (typeof callback !== "function") throw new TypeError("Timer callback must be a function");
-    const handle = sync("timer"); const entry = {native:handle}; timers.set(handle,entry);
+    // Coercion can run application code and throw; allocate only after it succeeds.
     const ms = Math.min(2147483647,Math.max(0,Math.trunc(Number(delay)||0)));
+    const handle = sync("timer"); const entry = {native:handle}; timers.set(handle,entry);
     const tick = async () => {
       const fired = await asyncOp("sleep",{id:entry.native,ms});
       if (!fired || !timers.has(handle)) return;
       if (!repeat) timers.delete(handle);
       try { callback(...args); } finally {
-        if (repeat && timers.has(handle)) { entry.native = sync("timer"); tick(); }
+        if (repeat && timers.has(handle)) { entry.native = sync("timer"); tick().catch(() => clearTimer(handle)); }
       }
     };
-    tick(); return handle;
+    tick().catch(() => clearTimer(handle)); return handle;
   }
   function clearTimer(id) { const entry = timers.get(id); if (entry) { timers.delete(id); sync("clearTimer",{id:entry.native}); } }
   const crypto = {

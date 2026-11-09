@@ -52,8 +52,15 @@ running while the JS worker waits for another job. Abort drops the response and
 wakes pending I/O immediately; connection teardown continues while that worker
 is idle. HTTP/1.1 with connection pooling disabled gives each exchange its own
 socket, so cancelling a body closes its connection rather than retaining an idle
-or multiplexed transport. Readers apply
-backpressure; `.text()`, `.json()`, `.bytes()` and `.arrayBuffer()` intentionally
+or multiplexed transport.
+
+Incremental decoders release their slot on flush, readable cancellation,
+writable abort and decoding/transform errors; plain streaming decoders reset on
+errors as well. Fetch exchanges release on EOF, cancellation and native I/O
+errors. Timers release on fire/clear; delay coercion happens before allocation.
+The native invocation lease clears all three resource classes on every exit,
+including unused response bodies and abandoned streaming decoders/timers.
+Readers apply backpressure; `.text()`, `.json()`, `.bytes()` and `.arrayBuffer()` intentionally
 consume the whole body and are subject to the JS heap cap. Unused bodies should
 be cancelled. Redirects default to follow (20 hops), with a fresh permission
 check each hop and credential-header stripping on origin changes. Replaying a

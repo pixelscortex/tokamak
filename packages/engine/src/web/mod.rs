@@ -323,7 +323,7 @@ impl WebHost {
                 .ok_or("fetch is aborted or closed")?;
             (x.cancel.clone(), x.response.clone())
         };
-        tokio::select! {
+        let result = tokio::select! {
             biased;
             _ = cancel.cancelled() => Err("fetch aborted".into()),
             result = async {
@@ -378,7 +378,24 @@ impl WebHost {
                     _ => Err("unsupported async web operation".into()),
                 }
             } => result
+        };
+        if result.is_err() {
+            // A transport/read/upload failure is terminal even if JS catches it
+            // or stops polling the corresponding promise.
+            if let Some(exchange) = self
+                .resources
+                .lock()
+                .map_err(|_| "web resource lock poisoned")?
+                .requests
+                .remove(&request_id)
+            {
+                exchange.cancel.cancel();
+                if let Ok(mut response) = exchange.response.try_lock() {
+                    response.take();
+                }
+            }
         }
+        result
     }
 }
 
