@@ -46,6 +46,25 @@ impl Resources {
     }
 }
 
+/// Owned by the invocation, independently of JS/native promise reference cycles.
+/// Dropping an invocation future also retires resources without running JS cleanup.
+pub(crate) struct WebLease(Arc<Mutex<Resources>>);
+impl Drop for WebLease {
+    fn drop(&mut self) {
+        let mut resources = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        for (_, exchange) in std::mem::take(&mut resources.requests) {
+            exchange.cancel.cancel();
+            if let Ok(mut response) = exchange.response.try_lock() {
+                response.take();
+            }
+        }
+        for (_, timer) in std::mem::take(&mut resources.timers) {
+            timer.cancel();
+        }
+        resources.decoders.clear();
+    }
+}
+
 /// Every world owns one resource table. No detached task can outlive its lease;
 /// abort wakes I/O even while another operation holds the response reader.
 pub struct WebHost {
@@ -65,6 +84,10 @@ impl WebHost {
             // Ambient proxies would resolve/connect outside our address filter.
             .no_proxy()
             .dns_resolver(Arc::new(PublicResolver))
+            // Each exchange owns its connection: abort must close the socket,
+            // rather than leave an idle pooled or multiplexed connection alive.
+            .http1_only()
+            .pool_max_idle_per_host(0)
             // JS follows redirects by opening another checked request. Disabling
             // implicit redirects prevents an allowed host lending its authority.
             .redirect(reqwest::redirect::Policy::none())
@@ -75,6 +98,10 @@ impl WebHost {
             permissions,
             client,
         })
+    }
+
+    pub(crate) fn lease(&self) -> WebLease {
+        WebLease(self.resources.clone())
     }
 
     pub fn operations(self) -> std::result::Result<OpRegistry, Error> {
@@ -121,6 +148,9 @@ impl WebHost {
             "cancel" => {
                 if let Some(x) = r.requests.remove(&id(&p)?) {
                     x.cancel.cancel();
+                    if let Ok(mut response) = x.response.try_lock() {
+                        response.take();
+                    }
                 }
                 Ok(Json::Null)
             }

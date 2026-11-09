@@ -43,7 +43,9 @@ impl Engine for ActionEngine {
             .set_interrupt_handler(Some(Box::new(move || stopped.is_cancelled())))
             .await;
         let invocation = Invocation::unbounded();
-        let web_ops = Arc::new(web::WebHost::new(ops.network_permissions())?.operations()?);
+        let web = web::WebHost::new(ops.network_permissions())?;
+        let web_lease = web.lease();
+        let web_ops = Arc::new(web.operations()?);
         // Module initialization is also unbounded. The only termination signals
         // on this lane are a returned value, an exception, heap exhaustion, or
         // explicit shutdown/reload; an idle 30-minute await has no deadline.
@@ -70,6 +72,7 @@ impl Engine for ActionEngine {
             }) => result,
         };
         invocation.retire();
+        drop(web_lease);
         if self.shutdown.is_cancelled() {
             return Err(Error::Closed);
         }

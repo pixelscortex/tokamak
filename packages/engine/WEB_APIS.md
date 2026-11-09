@@ -44,7 +44,15 @@ to resolve to the same IP. No private-range or wildcard grants are supported.
 
 The native resource table has a shared maximum of 64 HTTP exchanges, pending
 timers and active incremental decoders per invocation. Returning or throwing
-retires the lease and drops the world and its native futures. Readers apply
+retires the lease and explicitly clears the native resource table, independently
+of JS cleanup and promise lifetimes, then drops the world and its native futures.
+Dropping a cancelled invocation future runs the same native lease cleanup.
+Each JS worker uses a Tokio runtime with one background I/O driver, which keeps
+running while the JS worker waits for another job. Abort drops the response and
+wakes pending I/O immediately; connection teardown continues while that worker
+is idle. HTTP/1.1 with connection pooling disabled gives each exchange its own
+socket, so cancelling a body closes its connection rather than retaining an idle
+or multiplexed transport. Readers apply
 backpressure; `.text()`, `.json()`, `.bytes()` and `.arrayBuffer()` intentionally
 consume the whole body and are subject to the JS heap cap. Unused bodies should
 be cancelled. Redirects default to follow (20 hops), with a fresh permission

@@ -104,7 +104,9 @@ impl Engine for QuickJsEngine {
         .await?;
         world.set_deadline(Some(load_end));
         let web_invocation = Invocation::unbounded();
-        let web_ops = Arc::new(crate::web::WebHost::new(Vec::new())?.operations()?);
+        let web = crate::web::WebHost::new(Vec::new())?;
+        let _web_lease = web.lease();
+        let web_ops = Arc::new(web.operations()?);
         world
             .context
             .with(|ctx| {

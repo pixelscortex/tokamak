@@ -117,7 +117,11 @@ impl Pool {
             let factory = factory.clone();
             // Build the fallible executor here so startup errors reach the
             // caller, instead of returning a pool of silently dead workers.
-            let executor = tokio::runtime::Builder::new_current_thread()
+            // QuickJS remains on this worker's block_on thread. A separate
+            // Tokio driver keeps HTTP connection teardown running while recv()
+            // blocks between invocations; current-thread runtimes freeze it.
+            let executor = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
                 .enable_all()
                 .build()
                 .map_err(|e| Error::Engine(format!("cannot start JS executor: {e}")))?;
