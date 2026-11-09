@@ -10,4 +10,4 @@ proto run bun -- tests/compiler.ts
 proto run bun -- tests/run.ts
 cargo build --locked --package server --bin tokamak --jobs 2
 proto run bun -- tests/local-server.ts
-cargo test --locked --package tokamak-app --test native --test socket --jobs 2 -- --test-threads=1
+cargo test --locked --package tokamak-app --test native --test socket --test plugins --jobs 2 -- --test-threads=1
