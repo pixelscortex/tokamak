@@ -788,18 +788,24 @@ impl Coordinator {
             }
         }
         if serde_json::to_writer(&mut Limit(0), &event).is_err() {
-            match &mut event {
-                Event::Response { result, .. } => {
-                    *result = Err("result too large (1 MiB limit)".into())
-                }
-                Event::Subscription { id, result } => {
+            event = match event {
+                Event::Response { id, .. } => Event::Response {
+                    id,
+                    result: Err("result too large (1 MiB limit)".into()),
+                },
+                Event::Subscription { id, .. } => {
                     if let Some(client) = self.sessions.get_mut(&session) {
-                        client.subscriptions.remove(id);
+                        client.subscriptions.remove(&id);
                     }
-                    *result = Err("result too large (1 MiB limit); subscription ended".into());
+                    // Response is also the protocol's terminal subscription
+                    // failure: SDK releases its observer/capacity immediately.
+                    Event::Response {
+                        id,
+                        result: Err("result too large (1 MiB limit); subscription ended".into()),
+                    }
                 }
                 _ => return,
-            }
+            };
         }
         let Some(client) = self.sessions.get(&session) else {
             return;
