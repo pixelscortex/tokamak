@@ -1,0 +1,19 @@
+packages/runtime/tests/run.sh
+  s_ff6a4e1bf09ffb::t_544d7038faac79 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "935dc3dfa8d68df6618caa1a2a9f94d83d57b858",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
