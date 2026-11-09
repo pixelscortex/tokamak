@@ -22,3 +22,7 @@ keyboard-types = "=0.8.0"
 futures-lite = "=2.6.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.154"
+
+# Physical memory size for the UI heap ceiling (already in the lock graph).
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.191"

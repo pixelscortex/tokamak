@@ -117,11 +117,15 @@ pub(crate) struct Js(QuickJsContext, Rc<HookState>);
 impl Js {
     pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {
         // A window retains arbitrarily many plugin modules and assembles large
-        // streamed assets. QuickJS cannot page its live heap or compile partial
-        // functions, so a fixed window heap quota would become a product cap.
-        // Use the address-space maximum rather than a fixed window quota; backend
-        // invocation budgets remain separate. System allocation can still fail.
-        let world = block_on(QuickJsContext::new(usize::MAX)).map_err(|e| Error(e.to_string()))?;
+        // streamed assets, so a small fixed quota (the old 64 MiB) would act as a
+        // product cap. But every plugin UI shares this one heap: with no ceiling,
+        // one runaway plugin (an accidental unbounded array) could exhaust the
+        // machine's memory and freeze the whole system before anything stops it.
+        // The ceiling therefore scales with the machine and is invisible in
+        // normal use, while a runaway still ends in a clear QuickJS
+        // out-of-memory error. Backend invocation budgets remain separate.
+        let world =
+            block_on(QuickJsContext::new(window_heap_bytes())).map_err(|e| Error(e.to_string()))?;
         let hooks = Rc::new(HookState::default());
         block_on(world.context().async_with(async |ctx| {
             ctx.store_userdata(hooks.clone())
@@ -291,4 +295,38 @@ impl Drop for Js {
             eprintln!("UI cleanup: {error}");
         }
     }
+}
+
+/// UI heap ceiling for one window: half of physical memory by default, so it
+/// never bounds real use but still stops a runaway plugin before it can starve
+/// the operating system. `TOKAMAK_UI_HEAP_BYTES` overrides it (e.g. to test
+/// out-of-memory handling, or on a machine shared with heavier work).
+fn window_heap_bytes() -> usize {
+    const FALLBACK: usize = 4 * 1024 * 1024 * 1024; // when RAM size is unknown
+    const FLOOR: usize = 256 * 1024 * 1024; // never below a usable minimum
+    if let Some(bytes) = std::env::var("TOKAMAK_UI_HEAP_BYTES")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|bytes| *bytes > 0)
+    {
+        return bytes;
+    }
+    physical_memory().map_or(FALLBACK, |total| (total / 2).max(FLOOR))
+}
+
+#[cfg(unix)]
+fn physical_memory() -> Option<usize> {
+    // SAFETY: sysconf only reads system configuration values.
+    let (pages, size) = unsafe {
+        (
+            libc::sysconf(libc::_SC_PHYS_PAGES),
+            libc::sysconf(libc::_SC_PAGESIZE),
+        )
+    };
+    (pages > 0 && size > 0).then(|| (pages as usize).saturating_mul(size as usize))
+}
+
+#[cfg(not(unix))]
+fn physical_memory() -> Option<usize> {
+    None
 }

@@ -4842,6 +4842,7 @@ dependencies = [
  "engine",
  "futures-lite",
  "keyboard-types",
+ "libc",
  "serde",
  "serde_json",
  "winit",
