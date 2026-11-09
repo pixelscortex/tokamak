@@ -1,0 +1,15 @@
+{
+  "title": "SDK reference",
+  "pages": [
+    "plugin",
+    "functions",
+    "validators",
+    "schema",
+    "database",
+    "references",
+    "client",
+    "solid",
+    "values",
+    "host"
+  ]
+}

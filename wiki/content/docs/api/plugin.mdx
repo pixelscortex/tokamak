@@ -1,0 +1,32 @@
+---
+title: Plugins
+description: definePlugin and the static descriptor that identifies a plugin.
+---
+
+`definePlugin` validates a plugin's packaging identity and returns a frozen
+copy. The build reads it to write `dist/manifest.json`; you never write that
+manifest by hand. Loading, dependency resolution and grants are host concerns.
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite";
+import { definePlugin } from "@tokamak/sdk";
+import { tokamak } from "@tokamak/build/vite";
+
+export default defineConfig({
+  plugins: [tokamak({ plugin: definePlugin({ id: "acme.notes", version: "0.1.0" }) })],
+});
+```
+
+## definePlugin
+
+<api-declaration path="../../../../packages/sdk/src/plugin.ts" name="definePlugin" />
+
+The ID is a stable lowercase identifier (`acme.notes`), the version is a
+semantic version, and `api` names a host API range such as `tokamak@^1`.
+Unknown fields are rejected, and `contributes` holds only static arrays.
+
+## PluginDefinition
+
+<api-declaration path="../../../../packages/sdk/src/plugin.ts" name="PluginDefinition" />
+
+<auto-type-table path="../../../../packages/sdk/src/plugin.ts" name="PluginDefinition" />

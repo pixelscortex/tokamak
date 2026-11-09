@@ -1,0 +1,23 @@
+---
+title: Solid
+description: useQuery from @tokamak/sdk/solid, a live query bound to Solid signals.
+---
+
+The Solid binding lives outside the portable `src/`, so backend bundles never
+depend on a UI runtime. Each change of the reactive arguments owns exactly one
+live subscription, and it stops when the owner is cleaned up.
+
+```tsx
+import { useQuery } from "@tokamak/sdk/solid";
+
+const todos = useQuery(client, api.todos.list, () => ({ done: false }));
+// todos.data(), todos.loading(), todos.error()
+```
+
+## useQuery
+
+<api-declaration path="../../../../packages/sdk/src/../solid.ts" name="useQuery" />
+
+## QueryState
+
+<api-declaration path="../../../../packages/sdk/src/../solid.ts" name="QueryState" />

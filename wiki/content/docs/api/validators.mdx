@@ -1,0 +1,34 @@
+---
+title: Validators
+description: The v validators, argument checking and the TypeScript types they infer.
+---
+
+Validators describe arguments once: they infer handler and client types, and
+keep a serializable description for host metadata. Validation never transforms
+a value, so wire arguments and handler arguments mean the same thing.
+Arguments default to an empty, strict object.
+
+```ts
+const args = { text: v.string(), tags: v.array(v.string()), due: v.optional(v.number()) };
+type Args = ObjectValue<typeof args>; // { text: string; tags: string[]; due?: number }
+```
+
+## v
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="v" />
+
+## validate
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="validate" />
+
+## Types
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="Validator" />
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="ValidatorDescription" />
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="Fields" />
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="Infer" />
+
+<api-declaration path="../../../../packages/sdk/src/validators.ts" name="ObjectValue" />

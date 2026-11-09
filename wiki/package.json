@@ -4,15 +4,16 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
-    "dev": "fumapress dev",
-    "build": "fumapress build",
-    "start": "fumapress start",
+    "dev": "proto run node -- node_modules/fumapress/cli.js dev",
+    "build": "proto run node -- scripts/check-api.mjs && proto run node -- node_modules/fumapress/cli.js build",
+    "start": "proto run node -- node_modules/fumapress/cli.js start",
     "types:check": "tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
     "fumadocs-core": "16.18.4",
     "fumadocs-mdx": "15.5.3",
+    "fumadocs-typescript": "5.6.0",
     "fumadocs-ui": "npm:@fumadocs/base-ui@16.18.4",
     "fumapress": "2.0.1",
     "react": "19.3.1",

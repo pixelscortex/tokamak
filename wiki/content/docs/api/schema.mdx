@@ -1,0 +1,36 @@
+---
+title: Schema
+description: defineSchema and defineTable, which give handlers typed tables and documents.
+---
+
+A schema describes tables for types and host metadata. It is not enforced in
+storage yet, and there are no migrations. Bind it with `createFunctions` to get
+table, document and filter types in `ctx.db`.
+
+```ts title="schema.ts"
+import { defineSchema, defineTable, v } from "@tokamak/sdk";
+
+export default defineSchema({
+  todos: defineTable({ text: v.string(), done: v.boolean() }),
+});
+```
+
+## defineSchema
+
+<api-declaration path="../../../../packages/sdk/src/schema.ts" name="defineSchema" />
+
+## defineTable
+
+<api-declaration path="../../../../packages/sdk/src/schema.ts" name="defineTable" />
+
+Fields cannot be named `_id` or `_creationTime`: the host owns them.
+
+## Types
+
+<api-declaration path="../../../../packages/sdk/src/schema.ts" name="SchemaDefinition" />
+
+<api-declaration path="../../../../packages/sdk/src/schema.ts" name="TableDefinition" />
+
+<api-declaration path="../../../../packages/sdk/src/schema.ts" name="DataModel" />
+
+<api-declaration path="../../../../packages/sdk/src/schema.ts" name="ModelFromSchema" />

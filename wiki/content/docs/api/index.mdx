@@ -1,0 +1,25 @@
+---
+title: SDK reference
+description: The public API of @tokamak/sdk, generated from its TypeScript source on every build.
+---
+
+`@tokamak/sdk` is the portable layer between TypeScript features and the native
+host. Its `src/` uses ES2022 only, so the same code runs in QuickJS on the
+server and in the UI. `@tokamak/sdk/solid` adds the optional Solid binding.
+
+Each page below shows declarations and type tables read from
+`packages/sdk/src` when the site builds, so they always match the code. The
+build also fails if an export is missing from these pages.
+
+<Cards>
+  <Card title="Plugins" href="/docs/api/plugin">`definePlugin` and the static descriptor.</Card>
+  <Card title="Functions" href="/docs/api/functions">`query`, `mutation` and their handler context.</Card>
+  <Card title="Validators" href="/docs/api/validators">`v`, argument checking and inferred types.</Card>
+  <Card title="Schema" href="/docs/api/schema">`defineSchema` and `defineTable`.</Card>
+  <Card title="Database" href="/docs/api/database">`ctx.db` readers, writers and table queries.</Card>
+  <Card title="References" href="/docs/api/references">`createApi` and typed function references.</Card>
+  <Card title="Client" href="/docs/api/client">`TokamakClient` and its transports.</Card>
+  <Card title="Solid" href="/docs/api/solid">`useQuery` for live UI data.</Card>
+  <Card title="Values" href="/docs/api/values">JSON values and record IDs.</Card>
+  <Card title="Host integration" href="/docs/api/host">The registry and host operations a runtime implements.</Card>
+</Cards>

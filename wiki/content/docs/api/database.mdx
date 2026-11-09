@@ -1,0 +1,30 @@
+---
+title: Database
+description: The ctx.db reader and writer, and immutable table queries.
+---
+
+`ctx.db` is scoped to one handler call. Query builders are immutable plans:
+`.where(field, "=", value)` adds an AND equality filter, `.order()` sorts by
+creation time (ascending by default), and nothing runs until `take(n)`,
+`first()` or `collect()`. There are no indexes, SQL expressions or pagination.
+
+Writes return the new ID (`insert`) or `null`. `get` returns `null` for a
+missing document; `patch` and `replace` on a missing document throw. `patch`
+merges top-level fields and `replace` replaces them; both keep `_id` and
+`_creationTime`.
+
+## DatabaseReader
+
+<api-declaration path="../../../../packages/sdk/src/database.ts" name="DatabaseReader" />
+
+## DatabaseWriter
+
+<api-declaration path="../../../../packages/sdk/src/database.ts" name="DatabaseWriter" />
+
+## TableQuery
+
+<api-declaration path="../../../../packages/sdk/src/database.ts" name="TableQuery" />
+
+## Doc
+
+<api-declaration path="../../../../packages/sdk/src/database.ts" name="Doc" />

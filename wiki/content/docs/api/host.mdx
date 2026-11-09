@@ -1,0 +1,36 @@
+---
+title: Host integration
+description: The function registry and host operations that a native runtime implements.
+---
+
+Plugin authors don't need this page. It is the contract between a backend
+bundle and the native host. The bundle exports `schema`, `functions` (a
+registry keyed by `module/path:export`), `metadata` and `invoke`. The host
+owns call lifetime, read-only queries, transactions and change notifications.
+
+## Registry
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="createRegistry" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="FunctionRegistry" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="functionMetadata" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="invokeFunction" />
+
+## Host operations
+
+`host.op(name, payload)` takes and returns plain JSON values. A bridge is
+bound to one invocation; there is no process-wide database handle.
+
+<api-declaration path="../../../../packages/sdk/src/host.ts" name="HostBridge" />
+
+<api-declaration path="../../../../packages/sdk/src/host.ts" name="HostOperations" />
+
+<api-declaration path="../../../../packages/sdk/src/host.ts" name="HostOperation" />
+
+<api-declaration path="../../../../packages/sdk/src/host.ts" name="StoredDocument" />
+
+<api-declaration path="../../../../packages/sdk/src/host.ts" name="QueryRequest" />
+
+<api-declaration path="../../../../packages/sdk/src/host.ts" name="EqualityClause" />
