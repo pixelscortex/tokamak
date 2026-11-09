@@ -1,0 +1,23 @@
+packages/sdk/tests/acceptance.test.mjs
+  s_aa06e9f4f56641::t_eec01a092af865 14-15
+packages/sdk/tools/check.mjs
+  s_aa06e9f4f56641::t_eec01a092af865 68
+packages/build/src/exports.ts
+  s_aa06e9f4f56641::t_06a5b3c3347adc 40-62,65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a55c28d0277e8d51f89469919c9a748cf075eb8",
+  "prompts": {},
+  "sessions": {
+    "s_aa06e9f4f56641": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf07-8a7e-7b52-84dc-c04376147eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
