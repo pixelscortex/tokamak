@@ -21,6 +21,12 @@ export function Shell(props: { modules: ModuleRegistry }) {
 
   const href = (view: SlotContribution) => `/p/${view.plugin}${view.options.route === "/" ? "" : view.options.route}`;
   const active = () => loader.contributions("view").find(view => matchRoute(href(view), router.location().pathname));
+  // Catalog refreshes allocate new descriptors. Only identity/generation may
+  // retire the view owner, otherwise reloading an unrelated plugin loses state.
+  const activeKey = () => {
+    const view = active();
+    return view && JSON.stringify([view.plugin, view.id, loader.version(view.plugin)]);
+  };
   return <ClientContext.Provider value={client}><RouterContext.Provider value={router}>
     <For each={Object.entries(loader.styles())}>{([id, css]) => <style data-plugin={id}>{css}</style>}</For>
     <ShellFrame
@@ -38,8 +44,8 @@ export function Shell(props: { modules: ModuleRegistry }) {
       </>}
       stage={<>
         <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
-        <Show keyed when={active()} fallback={<p>{router.match("/chat") || router.match("/chat/:thread") ? "Chat" : "View not found"}</p>}>
-          {(view: SlotContribution) => <Contribution loader={loader} contribution={view} componentProps={{ router }} />}
+        <Show keyed when={activeKey()} fallback={<p>{router.match("/chat") || router.match("/chat/:thread") ? "Chat" : "View not found"}</p>}>
+          {(_key: string) => <Contribution loader={loader} contribution={active()!} componentProps={{ router }} />}
         </Show>
       </>}
       thread={<p>Thread panel</p>}
