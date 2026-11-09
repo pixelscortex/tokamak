@@ -79,7 +79,10 @@ impl HostSender {
         // allocate an arbitrary-size Value/string merely to discover its size.
         // A topic is at most 256 UTF-8 bytes (1538 serialized bytes, including
         // quotes). Its envelope is bounded separately from the wire payload.
-        let prefix = format!("{{\"topic\":{},\"payload\":", serde_json::to_string(topic).unwrap());
+        let prefix = format!(
+            "{{\"topic\":{},\"payload\":",
+            serde_json::to_string(topic).unwrap()
+        );
         let offset = prefix.len();
         let mut bytes = EventBytes(prefix.into_bytes(), offset + engine::MAX_WIRE_MESSAGE_BYTES);
         serde_json::to_writer(&mut bytes, &payload).map_err(|e| Error(e.to_string()))?;
