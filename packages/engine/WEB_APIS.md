@@ -74,9 +74,9 @@ The Rust runner installs the surface into rquickjs **0.14.0**, evaluates the
 browser bundle, calls its async export and forwards deltas through a native
 callback. The Python mock sends OpenAI chat-completion SSE chunks every 200 ms.
 
-On aarch64 macOS, three callback tokens arrived at 08:46:36.606981,
-08:46:36.805187 and 08:46:37.007857 UTC. The callback aborted after token three;
-the mock logged `DISCONNECT` at 08:46:37.416115 UTC. Without `net:127.0.0.1`,
+On aarch64 macOS, three callback tokens arrived at 06:46:36.606981,
+06:46:36.805187 and 06:46:37.007857 UTC. The callback aborted after token three;
+the mock logged `DISCONNECT` at 06:46:37.416115 UTC. Without `net:127.0.0.1`,
 the SDK reported `fetch permission denied: requires net:127.0.0.1`, with zero
 tokens and no additional mock request. No OPENAI_API_KEY or ANTHROPIC_API_KEY
 was set; a real-provider call was not run.
@@ -101,3 +101,96 @@ baseline `5f3b3be` **39,923,312 bytes**; Phase 1 web-enabled binary **40,253,904
 added **330,592 bytes** (0.83%). The baseline was built from original
 server/engine sources in an ignored minimal workspace with the original lock
 versions; the changed binary used the normal workspace release build.
+
+## Action scheduling and Phase 2 evidence
+
+The SDK exports `action({...})` and schema-bound `createFunctions(...).action`.
+Generated `api.*` references carry the action kind; `client.action(...)` uses the
+same correlated response protocol over native and WebSocket transports. Actions
+receive `runQuery`, `runMutation` and `providers`, with no `db` or `use` property.
+A forged nested-call kind is checked again in Rust. Cross-plugin calls use the
+existing dependency/interface/export resolver and the target's data space.
+
+The server admits actions to a **separate two-thread pool**, with 32 queued jobs
+and at most 34 outstanding completion tasks. Query/mutation requests stay on the
+serialized coordinator. Nested calls rejoin that coordinator with their own
+transaction and normal writer/subscription barrier. The action never owns a
+database/transaction handle and is never automatically replayed. The configured
+JS heap cap applies to both lanes. `ActionEngine` never sets a clock deadline or
+wraps evaluation in a timeout; this includes module initialization. Both load and
+call time budgets are ignored on the action lane. Queries and mutations retain
+their existing budgets and cannot obtain network authority.
+
+Explicit shutdown/reload uses a cancellation token, independent of time limits.
+It wakes idle I/O/timers and interrupts busy JS, retires capabilities and drops
+the world before joining workers. Reload cancels the old pool before publishing
+the new installation; old-generation nested commands are also rejected. Accepted
+nested mutations finish their commit/rollback and barrier even if the action
+stops waiting. Ordinary client disconnect does not retract accepted work.
+
+The ignored `server-proof` executable exercised the public plugin builder,
+generated API, real QuickJS action engine, embedded database and session protocol:
+
+| Acceptance | Observed proof |
+| --- | --- |
+| AI SDK inside an action | Three token mutations produced three subscription callbacks at about 386, 642 and 899 ms; the final action result was `{count:3, aborted:true, rows:3}` after `runQuery`. |
+| Abort closes HTTP | The local SSE mock logged `DISCONNECT` after the action's controller aborted. The consumer breaks after abort because the AI SDK may already have buffered additional deltas. |
+| Missing permission | A second plugin artifact with no grants rejected its action with `fetch permission denied: requires net:127.0.0.1`; no request reached the mock. |
+| Query/mutation fetch | Both SDK definitions failed with `fetch is forbidden in queries and mutations`; neither could start HTTP. |
+| Separate lane | Both action workers awaited 1,500/1,600 ms timers; a query completed in 134 ms, before either action, and both actions later succeeded beyond the normal one-second budget. |
+| No transaction held | The action context had no `db`; all three writes used `runMutation`. Closing with a live 1,800,000 ms timer succeeded in 8 ms instead of returning the database's Busy error. |
+| No idle deadline | A direct pool proof ignored a configured 10 ms call budget and completed a 153 ms await. The server proof exceeded the default one-second budget. The source has no time check on this lane; the 30-minute timer was cancelled explicitly, not waited out. |
+| Explicit lifecycle stop | Cancelling a pool running `while(true){}` completed in under 1 ms in the throwaway proof. |
+| Typed/client API | Throwaway strict type checks rejected action `db`, query-as-mutation references and actions through transactional contexts. `client.action` emitted an `action` request with `proof/ops:noDb` and correlated its response. |
+
+For browser-targeted third-party declarations, action authors can opt into the
+SDK's type-only `@tokamak/sdk/web` entry. It provides standard DOM declaration
+libraries, which are a **typing superset**, not a runtime compatibility promise.
+The portable SDK's own source checker still allows only ES2022. The AI SDK's
+Node HTTP/Buffer and JSON Schema type references need build-only `@types/node`
+and `@types/json-schema`; no Node module is present in the browser bundle or
+loaded by QuickJS. Console, process/env, filesystem and all other non-listed APIs
+remain absent. Configure the AI SDK's error callback when handling provider
+errors rather than depending on a console global.
+
+Current limitations include the documented web subset rather than full WHATWG
+conformance, JSON byte-array marshalling overhead, and native TLS/HTTP buffers
+outside QuickJS's allocator (request/decoder/timer counts and bridge chunks are
+bounded separately). Event listener errors propagate after all registered
+listeners have run, so an application exception cannot suppress HTTP abort.
+The mock covers OpenAI chat-completion SSE; real-provider/TLS behavior and other
+AI SDK modalities were not exercised without keys. Final regression tests are
+intentionally left to the separate test-writer.
+
+Final action-enabled release, rebuilt after the scheduling/reload changes:
+**40,320,144 bytes**, compared with **39,923,312 bytes** baseline: **+396,832 bytes
+(+0.99%)**. This is the complete action + web API cost, separate from
+the Phase 1 surface-only comparison above.
+
+Final-source allocator recheck: bare **100,744**, surface
+**615,416**, SDK loaded **6,847,536**, after abort
+**7,314,696 bytes**. Separate 50-world processes measured 16,368 KiB
+bare RSS and 52,992 KiB with APIs, or **732.48 KiB added per world**; the modest
+variation from Phase 1 reflects allocator/OS variability and the final adapters.
+
+An additional real WebSocket proof drove `TokamakClient(WebSocketTransport)`
+against the public server adapter: an action and concurrent query shared one
+socket, the query completed in **149 ms**, the idle action returned after
+**1,502 ms**, and the SDK streaming action returned three persisted rows with
+`aborted: true`. The controller used Bun only as throwaway build/test tooling;
+all action execution and outbound provider HTTP ran in QuickJS/Rust.
+
+## Workspace verification
+
+`CARGO_BUILD_JOBS=2 moon run :check :test :e2e` passed all 28 tasks in
+3 minutes 30 seconds. `cargo fmt --all -- --check` and `git diff --check`
+also passed. The runner's injected environment included invalid UTF-8 values;
+an ignored launcher removed only those entries before executing the commands,
+because Cargo dependency build scripts and proto otherwise panic reading them.
+No environment workaround is shipped.
+
+Existing test support was kept compiling with the new action request variant.
+The build tests' existing scratch helper also received a counter suffix: parallel
+tests could share a timestamp on this platform and overwrite each other's files.
+No final action regression tests were added; all new behavioral probes remain
+in the ignored spike directory for the separate test-writer's handoff.

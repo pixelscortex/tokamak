@@ -1,6 +1,6 @@
 //! Bounded, transport-independent feature service. One coordinator linearizes
-//! calls and subscription refreshes: less throughput than concurrent scheduling,
-//! but one owned lifecycle and no stale-run generations or writer fence to leak.
+//! transactions and subscription refreshes; actions use separate workers and
+//! rejoin that coordinator only for nested query/mutation calls.
 //! A session has ONE ordered output stream; transports must preserve its order.
 
 pub use crate::protocol::Event;
@@ -58,7 +58,7 @@ impl std::error::Error for Error {}
 
 /// Startup inspects the bundled SDK registry in a fresh QuickJS world. The
 /// caller owns the Tokio host runtime and must keep it alive through close;
-/// initialize embedded storage there, not on the time-only JS executors.
+/// initialize embedded storage there, not on the JS executors.
 pub struct Server {
     commands: mpsc::Sender<Command>,
     // Shutdown must never compete for space with application calls.
@@ -757,7 +757,6 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
         let candidate = crate::plugins::Loaded::load(catalog, &self.pool).await?;
-        Box::pin(candidate.record_grants(&self.database)).await?;
         let action_pool = Arc::new(
             Pool::new_actions(PoolConfig {
                 limits: self.pool.limits().clone(),
@@ -765,6 +764,7 @@ impl Coordinator {
             })
             .map_err(|e| Error::Invalid(e.to_string()))?,
         );
+        Box::pin(candidate.record_grants(&self.database)).await?;
         // Transactions finish before this swap. Cancel old-generation actions
         // so a reload cannot leave revoked network grants running in old worlds.
         self.action_pool.cancel_actions();

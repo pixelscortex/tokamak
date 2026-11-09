@@ -78,7 +78,7 @@ Defaults: two workers, 32 waiting jobs, 64 MiB JS heap per worker, one second to
 load and one second to call. Queue time does not consume execution budgets. Queue
 capacity excludes jobs already received by workers. `submit` never waits for
 room: a full queue returns `Error::Overloaded`. `PendingCall` can be awaited on any
-executor; each worker has a local Tokio executor with time enabled.
+executor; each worker has a local Tokio executor with time and I/O enabled.
 
 The heap cap is installed before allocating standard globals. Load and call each
 have both a QuickJS wall-clock interrupt and a Rust timer. The former interrupts
@@ -178,9 +178,9 @@ On aarch64-apple-darwin, Rust 1.97.0, unchanged workspace release profile:
 
 ## Scope boundary
 
-This is for trusted POC features, not third-party isolation. No web APIs, frozen
-clock/randomness, external cancellation, streaming, fairness by plugin or plugin
-permissions are added. Broad interruption guarantees for catastrophic regexes and
+This is for trusted POC features, not third-party isolation. Actions add the web
+capabilities and lifecycle cancellation described below; fairness by plugin is
+not implemented. Broad interruption guarantees for catastrophic regexes and
 long native operations remain TKM-13 work; the bytecode-loop and heap-cap recovery
 behavior here does not establish a process security sandbox.
 
