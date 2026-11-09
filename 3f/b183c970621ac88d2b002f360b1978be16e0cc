@@ -1,0 +1,21 @@
+packages/sdk/tests/acceptance.test.mjs
+  s_aa06e9f4f56641::t_eec01a092af865 14-15
+packages/sdk/tools/check.mjs
+  s_aa06e9f4f56641::t_eec01a092af865 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fb183c970621ac88d2b002f360b1978be16e0cc",
+  "prompts": {},
+  "sessions": {
+    "s_aa06e9f4f56641": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf07-8a7e-7b52-84dc-c04376147eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
