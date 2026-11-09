@@ -11,6 +11,8 @@ const workspace = resolve(sdk, "../..");
 const feature = join(sdk, "tests/fixtures/feature");
 
 function run(command, cwd = workspace) {
+  // Force compiler diagnostics to stay plain even in Bun's agent environment.
+  if (command[1] === "check") command = [...command.slice(0, 2), "--no-pretty", ...command.slice(2)];
   const result = Bun.spawnSync(command, { cwd, stdout: "pipe", stderr: "pipe" });
   return { code: result.exitCode, output: result.stdout.toString() + result.stderr.toString() };
 }

@@ -65,7 +65,7 @@ try {
 // programs still need the ordinary check; test ambient types never join src's.
 for (const config of ["tsconfig.runtime.json", "tsconfig.json"]) {
   const result = Bun.spawnSync(
-    [process.execPath, "check", "--no-script", "--project", resolve(root, config)],
+    [process.execPath, "check", "--no-script", "--no-pretty", "--project", resolve(root, config)],
     { stdout: "inherit", stderr: "inherit" },
   );
   if (result.exitCode !== 0) process.exit(result.exitCode ?? 1);
