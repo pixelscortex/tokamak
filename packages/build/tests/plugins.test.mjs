@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { source, build, built, workspace } from "../../../app/tests/plugin-fixtures.mjs";
 
@@ -71,5 +71,71 @@ test("component-only exports infer UI dependencies without inventing contributio
     expect(manifest.plugin.contributes).toEqual({});
     expect(manifest.entries.backend).toBeUndefined();
     expect(await artifact(path, "ui.js")).toContain('require("@plugins/other/ui")');
+  });
+}, 30_000);
+
+// F: TypeScript erases these exports; discovering them as views creates rail
+// entries whose exports do not exist when the native loader evaluates the UI.
+test("type-only named and star re-exports never create contributions", async () => {
+  await scratch(async root => {
+    const path = await source(root, "erased-exports", `
+      export type { Home as Ghost } from "./home";
+      export type * from "./home";
+      export { Home as Actual } from "./home";
+    `);
+    await writeFile(resolve(path, "src/home.tsx"), `
+      import { view } from "@tokamak/sdk";
+      export const Home = view({ route: "/" }, () => <p>Home</p>);
+    `);
+    built(path);
+    expect(JSON.parse(await artifact(path, "manifest.json")).plugin.contributes)
+      .toEqual({ view: [{ id: "Actual", route: "/" }] });
+  });
+}, 30_000);
+
+// G: An erased intermediate module must not force installation of a plugin
+// that the emitted runtime graph never imports.
+test("type-import chains do not infer runtime plugin dependencies", async () => {
+  await scratch(async root => {
+    const path = await source(root, "erased-chain", `
+      import type { Shape } from "./types";
+      export const label: Shape = "ok";
+    `);
+    await writeFile(resolve(path, "src/types.ts"), `
+      import { Other } from "@plugins/type-only/ui";
+      export type Shape = ReturnType<typeof Other>;
+    `);
+    built(path);
+    const manifest = JSON.parse(await artifact(path, "manifest.json"));
+    expect(manifest.plugin.depends ?? {}).toEqual({});
+    expect(await artifact(path, "ui.js")).not.toContain("@plugins/type-only");
+  });
+}, 30_000);
+
+// E: Optional UI imports must remain lazy and use the scoped native loader,
+// rather than leave an unsupported QuickJS import() in the emitted factory.
+test("literal dynamic plugin imports use the lazy loader and optional dependencies", async () => {
+  await scratch(async root => {
+    const path = await source(root, "lazy-import", `
+      export const load = async () => (await import("@plugins/optional/ui")).Other;
+    `);
+    built(path);
+    const manifest = JSON.parse(await artifact(path, "manifest.json"));
+    expect(manifest.plugin.optional).toEqual({ optional: "*" });
+    expect(manifest.plugin.depends ?? {}).toEqual({});
+    expect(await artifact(path, "ui.js")).toMatch(/__tokamakModules\.load\(["'`]@plugins\/optional\/ui["'`]\)/);
+  });
+}, 30_000);
+
+// E: A computed import cannot be checked or assigned a loader capability;
+// accepting it postpones the failure until the user opens the native view.
+test("computed dynamic imports fail the build with an actionable diagnostic", async () => {
+  await scratch(async root => {
+    const path = await source(root, "computed-import", `
+      export const load = (name: string) => import(name);
+    `);
+    const result = build(path);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Dynamic plugin imports require a string literal");
   });
 }, 30_000);
