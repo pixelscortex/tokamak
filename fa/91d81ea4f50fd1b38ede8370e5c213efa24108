@@ -1,0 +1,38 @@
+packages/build/src/vite.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 12,59,101
+bun.lock
+  s_aa06e9f4f56641::t_eae04a00271652 48,352-353
+packages/server/PLUGINS.md
+  s_aa06e9f4f56641::t_295738cd3825a4 69-72
+packages/server/tests/fixtures/plugins/a/api.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 1
+packages/server/tests/fixtures/plugins/a/vite.config.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 3
+packages/server/src/plugins.rs
+  s_aa06e9f4f56641::t_295738cd3825a4 77-78,182-188,236-244
+  s_aa06e9f4f56641::t_c5b010828c5ccc 245
+packages/server/tests/fixtures/plugins/b/api.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 1
+packages/build/package.json
+  s_aa06e9f4f56641::t_6f8b79c8f10e05 14,16
+packages/server/tests/fixtures/plugins/b/vite.config.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 3
+packages/build/src/exports.ts
+  s_aa06e9f4f56641::t_295738cd3825a4 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa91d81ea4f50fd1b38ede8370e5c213efa24108",
+  "prompts": {},
+  "sessions": {
+    "s_aa06e9f4f56641": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf07-8a7e-7b52-84dc-c04376147eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
