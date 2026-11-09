@@ -1,0 +1,607 @@
+Cargo.toml
+  s_d390039e069d8d::t_2714ec6d1868c3 18-24
+vendor/rquickjs-sys/.cargo_vcs_info.json
+  s_d390039e069d8d::t_cc25e5f4f0d9fb 1-6
+vendor/rquickjs-sys/.gitignore
+  s_d390039e069d8d::t_414cad6ea1f365 1
+vendor/rquickjs-sys/Cargo.lock
+  s_d390039e069d8d::t_068214e72915b7 1-325
+vendor/rquickjs-sys/Cargo.toml
+  s_d390039e069d8d::t_d2807aba2b4825 1-68
+vendor/rquickjs-sys/Cargo.toml.orig
+  s_d390039e069d8d::t_f5c2f6c3c53390 1-48
+vendor/rquickjs-sys/Makefile
+  s_d390039e069d8d::t_f5a1f5ebd934f0 1-28
+vendor/rquickjs-sys/README.md
+  s_d390039e069d8d::t_a1c7063a529eb1 1-32
+vendor/rquickjs-sys/TOKAMAK_PATCHES.md
+  s_d390039e069d8d::t_942537c176e563 1-35
+vendor/rquickjs-sys/build.rs
+  s_d390039e069d8d::t_29d4340a83937a 1-415
+vendor/rquickjs-sys/quickjs.bind.h
+  s_d390039e069d8d::t_8d20693e809cab 1-16
+vendor/rquickjs-sys/quickjs/.gitattributes
+  s_d390039e069d8d::t_a73b626bff9e3e 1-4
+vendor/rquickjs-sys/quickjs/.github/dependabot.yml
+  s_d390039e069d8d::t_973aaad1d8e8ff 1-7
+vendor/rquickjs-sys/quickjs/.github/workflows/ci.yml
+  s_d390039e069d8d::t_15eeea18f9ef5a 1-866
+vendor/rquickjs-sys/quickjs/.github/workflows/docs.yml
+  s_d390039e069d8d::t_5862bb623f412b 1-49
+vendor/rquickjs-sys/quickjs/.github/workflows/gc-stress.yml
+  s_d390039e069d8d::t_011edcd0c5290a 1-61
+vendor/rquickjs-sys/quickjs/.github/workflows/release.yml
+  s_d390039e069d8d::t_20d40e763d539d 1-183
+vendor/rquickjs-sys/quickjs/.github/workflows/test-docs.yml
+  s_d390039e069d8d::t_32ebfe457dbab5 1-23
+vendor/rquickjs-sys/quickjs/.github/workflows/tsan.yml
+  s_d390039e069d8d::t_415b1e53d19583 1-32
+vendor/rquickjs-sys/quickjs/.github/workflows/valgrind.yml
+  s_d390039e069d8d::t_34646a1a270b68 1-33
+vendor/rquickjs-sys/quickjs/.gitignore
+  s_d390039e069d8d::t_4bb1701443bdf6 1-15
+vendor/rquickjs-sys/quickjs/.gitmodules
+  s_d390039e069d8d::t_a4bc8ee92bb93f 1-5
+vendor/rquickjs-sys/quickjs/CMakeLists.txt
+  s_d390039e069d8d::t_e4a6be66defd67 1-573
+vendor/rquickjs-sys/quickjs/LICENSE
+  s_d390039e069d8d::t_f3a74cc2b6cf95 1-24
+vendor/rquickjs-sys/quickjs/Makefile
+  s_d390039e069d8d::t_27baedb368f547 1-149
+vendor/rquickjs-sys/quickjs/README.md
+  s_d390039e069d8d::t_b7cc2c2d175287 1-24
+vendor/rquickjs-sys/quickjs/SECURITY.md
+  s_d390039e069d8d::t_2b4f3cad8d195d 1-96
+vendor/rquickjs-sys/quickjs/amalgam.js
+  s_d390039e069d8d::t_130e9fa4ca5ed8 1-53
+vendor/rquickjs-sys/quickjs/api-test.c
+  s_d390039e069d8d::t_3afa3d8e88388a 1-2203
+vendor/rquickjs-sys/quickjs/builtin-array-fromasync.js
+  s_d390039e069d8d::t_0ff26f84e4004f 1-36
+vendor/rquickjs-sys/quickjs/builtin-iterator-zip-keyed.js
+  s_d390039e069d8d::t_eedfbadf4238ac 1-194
+vendor/rquickjs-sys/quickjs/builtin-iterator-zip.js
+  s_d390039e069d8d::t_8f701849c4a8b0 1-210
+vendor/rquickjs-sys/quickjs/ctest.c
+  s_d390039e069d8d::t_4afe5044a3f45c 1-17
+vendor/rquickjs-sys/quickjs/cutils.h
+  s_d390039e069d8d::t_7eda2bcd9ccde8 1-2021
+vendor/rquickjs-sys/quickjs/cxxtest.cc
+  s_d390039e069d8d::t_3f1e6427b543df 1-2
+vendor/rquickjs-sys/quickjs/docs/.gitignore
+  s_d390039e069d8d::t_89b1ab69143f79 1-20
+vendor/rquickjs-sys/quickjs/docs/.nvmrc
+  s_d390039e069d8d::t_67e6acbadc946b 1
+vendor/rquickjs-sys/quickjs/docs/babel.config.js
+  s_d390039e069d8d::t_7477bc21058d5b 1-3
+vendor/rquickjs-sys/quickjs/docs/docs/building.md
+  s_d390039e069d8d::t_4b561e0b75b844 1-74
+vendor/rquickjs-sys/quickjs/docs/docs/cli.md
+  s_d390039e069d8d::t_90a46aae49ef4e 1-130
+vendor/rquickjs-sys/quickjs/docs/docs/developer-guide/_category_.json
+  s_d390039e069d8d::t_6cb7f881d2ae9d 1-7
+vendor/rquickjs-sys/quickjs/docs/docs/developer-guide/api.md
+  s_d390039e069d8d::t_cf0d050c0f0b3d 1-3
+vendor/rquickjs-sys/quickjs/docs/docs/developer-guide/internals.md
+  s_d390039e069d8d::t_7a4e37277f0f4c 1-117
+vendor/rquickjs-sys/quickjs/docs/docs/developer-guide/intro.md
+  s_d390039e069d8d::t_6961b658e24d64 1-111
+vendor/rquickjs-sys/quickjs/docs/docs/diff.md
+  s_d390039e069d8d::t_ee4810f6888a32 1-68
+vendor/rquickjs-sys/quickjs/docs/docs/es_features.md
+  s_d390039e069d8d::t_7ea2af771d30ee 1-11
+vendor/rquickjs-sys/quickjs/docs/docs/installation.md
+  s_d390039e069d8d::t_157aa539029916 1-34
+vendor/rquickjs-sys/quickjs/docs/docs/intro.md
+  s_d390039e069d8d::t_15831bada2a699 1-33
+vendor/rquickjs-sys/quickjs/docs/docs/projects.md
+  s_d390039e069d8d::t_789451c3be6d4d 1-113
+vendor/rquickjs-sys/quickjs/docs/docs/stdlib.md
+  s_d390039e069d8d::t_9792c07ae1e1b1 1-605
+vendor/rquickjs-sys/quickjs/docs/docs/supported_platforms.md
+  s_d390039e069d8d::t_df1493a098a208 1-20
+vendor/rquickjs-sys/quickjs/docs/docusaurus.config.js
+  s_d390039e069d8d::t_3abe20b72a7a61 1-114
+vendor/rquickjs-sys/quickjs/docs/package-lock.json
+  s_d390039e069d8d::t_935ccee80b6d5a 1-14656
+vendor/rquickjs-sys/quickjs/docs/package.json
+  s_d390039e069d8d::t_f3a20408639dbe 1-42
+vendor/rquickjs-sys/quickjs/docs/sidebars.js
+  s_d390039e069d8d::t_10d454108436c5 1-20
+vendor/rquickjs-sys/quickjs/docs/src/css/custom.css
+  s_d390039e069d8d::t_518258e2c1fbf7 1-30
+vendor/rquickjs-sys/quickjs/dtoa.c
+  s_d390039e069d8d::t_0461332d8cc2d6 1-1619
+vendor/rquickjs-sys/quickjs/dtoa.h
+  s_d390039e069d8d::t_cbc9c8ee7ab7d4 1-87
+vendor/rquickjs-sys/quickjs/examples/fib.c
+  s_d390039e069d8d::t_f149ccd79b43b0 1-67
+vendor/rquickjs-sys/quickjs/examples/fib_module.js
+  s_d390039e069d8d::t_440f82f2544f6e 1-10
+vendor/rquickjs-sys/quickjs/examples/hello.js
+  s_d390039e069d8d::t_ed7f3885ab613e 1
+vendor/rquickjs-sys/quickjs/examples/hello_module.js
+  s_d390039e069d8d::t_95e9012dea8379 1-6
+vendor/rquickjs-sys/quickjs/examples/meson.build
+  s_d390039e069d8d::t_34bb2830677c93 1-17
+vendor/rquickjs-sys/quickjs/examples/pi_bigint.js
+  s_d390039e069d8d::t_3302b03927df93 1-118
+vendor/rquickjs-sys/quickjs/examples/point.c
+  s_d390039e069d8d::t_0aa0901c1b26ca 1-154
+vendor/rquickjs-sys/quickjs/examples/test_fib.js
+  s_d390039e069d8d::t_94b229b20ca01e 1-8
+vendor/rquickjs-sys/quickjs/examples/test_point.js
+  s_d390039e069d8d::t_acb441eaf41b34 1-43
+vendor/rquickjs-sys/quickjs/fuzz.c
+  s_d390039e069d8d::t_52e6e24cf21db9 1-51
+vendor/rquickjs-sys/quickjs/gc-stress-skip.txt
+  s_d390039e069d8d::t_7a69c319bd1ee7 1-3
+vendor/rquickjs-sys/quickjs/libregexp-opcode.h
+  s_d390039e069d8d::t_44a93856a13c1c 1-73
+vendor/rquickjs-sys/quickjs/libregexp.c
+  s_d390039e069d8d::t_d1b9bbf5f4391a 1-3522
+vendor/rquickjs-sys/quickjs/libregexp.h
+  s_d390039e069d8d::t_4bbbfb428917c1 1-101
+vendor/rquickjs-sys/quickjs/libunicode-table.h
+  s_d390039e069d8d::t_d5ed95a283cd45 1-5160
+vendor/rquickjs-sys/quickjs/libunicode.c
+  s_d390039e069d8d::t_11cc3cdffe841b 1-2074
+vendor/rquickjs-sys/quickjs/libunicode.h
+  s_d390039e069d8d::t_c024842c45f141 1-172
+vendor/rquickjs-sys/quickjs/list.h
+  s_d390039e069d8d::t_7397915fc9a56b 1-107
+vendor/rquickjs-sys/quickjs/lre-test.c
+  s_d390039e069d8d::t_d6715e29e00d14 1-112
+vendor/rquickjs-sys/quickjs/meson.build
+  s_d390039e069d8d::t_6098e21e0b423c 1-686
+vendor/rquickjs-sys/quickjs/meson_options.txt
+  s_d390039e069d8d::t_773dc98c64abb7 1-6
+vendor/rquickjs-sys/quickjs/qjs-wasi-reactor.c
+  s_d390039e069d8d::t_46a086572919e7 1-208
+vendor/rquickjs-sys/quickjs/qjs.c
+  s_d390039e069d8d::t_ede6eb8fd8a11c 1-762
+vendor/rquickjs-sys/quickjs/qjs.man
+  s_d390039e069d8d::t_c88d80390e44ae 1-90
+vendor/rquickjs-sys/quickjs/qjsc.c
+  s_d390039e069d8d::t_3f0bed0f4c449a 1-673
+vendor/rquickjs-sys/quickjs/qjsc.man
+  s_d390039e069d8d::t_db8af5bf82d588 1-78
+vendor/rquickjs-sys/quickjs/quickjs-atom.h
+  s_d390039e069d8d::t_dcf73e9c4bdda1 1-280
+vendor/rquickjs-sys/quickjs/quickjs-c-atomics.h
+  s_d390039e069d8d::t_3bdd1e106bae5f 1-54
+vendor/rquickjs-sys/quickjs/quickjs-libc.c
+  s_d390039e069d8d::t_e0c0d38116d5d1 1-5057
+vendor/rquickjs-sys/quickjs/quickjs-libc.h
+  s_d390039e069d8d::t_56d3e645c61a73 1-87
+vendor/rquickjs-sys/quickjs/quickjs-opcode.h
+  s_d390039e069d8d::t_10d5da30d613e3 1-377
+vendor/rquickjs-sys/quickjs/quickjs.c
+  s_d390039e069d8d::t_2e3d778ded216d 1-64907
+vendor/rquickjs-sys/quickjs/quickjs.h
+  s_d390039e069d8d::t_61987d4fcd69c2 1-1464
+vendor/rquickjs-sys/quickjs/repl.js
+  s_d390039e069d8d::t_a36d5b369ddb76 1-1927
+vendor/rquickjs-sys/quickjs/run-test262.c
+  s_d390039e069d8d::t_63b8424449bfed 1-2384
+vendor/rquickjs-sys/quickjs/standalone.js
+  s_d390039e069d8d::t_9e9b8bd2bfcf61 1-129
+vendor/rquickjs-sys/quickjs/test262-fast.conf
+  s_d390039e069d8d::t_90640359e5b5d5 1-132
+vendor/rquickjs-sys/quickjs/test262.conf
+  s_d390039e069d8d::t_352adb4fb5fbd9 1-284
+vendor/rquickjs-sys/quickjs/test262_errors.txt
+  s_d390039e069d8d::t_424eb06178534b 1-52
+vendor/rquickjs-sys/quickjs/tests.conf
+  s_d390039e069d8d::t_efded80da2a055 1-18
+vendor/rquickjs-sys/quickjs/tests/array-fromasync-enumerable.js
+  s_d390039e069d8d::t_df21cf0ecd8b17 1-23
+vendor/rquickjs-sys/quickjs/tests/array-sort-identical-values.js
+  s_d390039e069d8d::t_3029fd7ea4bb47 1-259
+vendor/rquickjs-sys/quickjs/tests/assert.js
+  s_d390039e069d8d::t_b3e6ea96fddb41 1-49
+vendor/rquickjs-sys/quickjs/tests/atomics-store-leak.js
+  s_d390039e069d8d::t_ceeb7ff82aa5b2 1-36
+vendor/rquickjs-sys/quickjs/tests/bug1296.js
+  s_d390039e069d8d::t_15d9c056a69dca 1-12
+vendor/rquickjs-sys/quickjs/tests/bug1297.js
+  s_d390039e069d8d::t_8c6f204793fe81 1-22
+vendor/rquickjs-sys/quickjs/tests/bug1301.js
+  s_d390039e069d8d::t_7148c9f1def656 1-21
+vendor/rquickjs-sys/quickjs/tests/bug1302.js
+  s_d390039e069d8d::t_8c0f42af16f487 1-24
+vendor/rquickjs-sys/quickjs/tests/bug1305.js
+  s_d390039e069d8d::t_b5803ddd751932 1-26
+vendor/rquickjs-sys/quickjs/tests/bug1318.js
+  s_d390039e069d8d::t_8ee02e29bc1490 1-54
+vendor/rquickjs-sys/quickjs/tests/bug1352.js
+  s_d390039e069d8d::t_a73896fcc840fb 1-8
+vendor/rquickjs-sys/quickjs/tests/bug1354.js
+  s_d390039e069d8d::t_784190a4b5113f 1-6
+vendor/rquickjs-sys/quickjs/tests/bug1355.js
+  s_d390039e069d8d::t_bf5000055eed70 1-58
+vendor/rquickjs-sys/quickjs/tests/bug1368.js
+  s_d390039e069d8d::t_fd379f87c9a5ef 1-72
+vendor/rquickjs-sys/quickjs/tests/bug1430.js
+  s_d390039e069d8d::t_8ccd97f8f6299e 1-17
+vendor/rquickjs-sys/quickjs/tests/bug1468.js
+  s_d390039e069d8d::t_82984dbf8a8288 1-25
+vendor/rquickjs-sys/quickjs/tests/bug1498.js
+  s_d390039e069d8d::t_5dd17890f561fa 1-30
+vendor/rquickjs-sys/quickjs/tests/bug1552.js
+  s_d390039e069d8d::t_4c09f3e33fc50e 1-87
+vendor/rquickjs-sys/quickjs/tests/bug1557.js
+  s_d390039e069d8d::t_fd86cf028e4771 1-55
+vendor/rquickjs-sys/quickjs/tests/bug1562.js
+  s_d390039e069d8d::t_303493d6b4d8d4 1-65
+vendor/rquickjs-sys/quickjs/tests/bug1564.js
+  s_d390039e069d8d::t_fdbc6c4ab77223 1-5
+vendor/rquickjs-sys/quickjs/tests/bug1565.js
+  s_d390039e069d8d::t_53fc2905074e7f 1-16
+vendor/rquickjs-sys/quickjs/tests/bug1571.js
+  s_d390039e069d8d::t_22120894e587d6 1-13
+vendor/rquickjs-sys/quickjs/tests/bug1572.js
+  s_d390039e069d8d::t_429f2d7fe47df7 1-18
+vendor/rquickjs-sys/quickjs/tests/bug1591.js
+  s_d390039e069d8d::t_42535a16844e52 1-26
+vendor/rquickjs-sys/quickjs/tests/bug1598.js
+  s_d390039e069d8d::t_250ed0eac7b395 1-22
+vendor/rquickjs-sys/quickjs/tests/bug1625.js
+  s_d390039e069d8d::t_3f932475d02f4f 1-6
+vendor/rquickjs-sys/quickjs/tests/bug1626.js
+  s_d390039e069d8d::t_1c727fc1d74551 1-74
+vendor/rquickjs-sys/quickjs/tests/bug1627.js
+  s_d390039e069d8d::t_42a392ca89b87d 1-33
+vendor/rquickjs-sys/quickjs/tests/bug1628.js
+  s_d390039e069d8d::t_3437b21de6a830 1-53
+vendor/rquickjs-sys/quickjs/tests/bug1661.js
+  s_d390039e069d8d::t_d9e1d7f315beae 1-42
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.every.js
+  s_d390039e069d8d::t_48f4abf0de10d5 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.filter.js
+  s_d390039e069d8d::t_c56cb19e373823 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.find.js
+  s_d390039e069d8d::t_25727243663ac9 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.findIndex.js
+  s_d390039e069d8d::t_4b983b41c145f2 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.findLast.js
+  s_d390039e069d8d::t_0a1bd021d3cdfd 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.findLastIndex.js
+  s_d390039e069d8d::t_a0acb8d2297c56 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.forEach.js
+  s_d390039e069d8d::t_b78a39620bba70 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.includes.js
+  s_d390039e069d8d::t_5dca059157a3e4 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.indexOf.js
+  s_d390039e069d8d::t_ec3993c99d9d8e 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.lastIndexOf.js
+  s_d390039e069d8d::t_ffec011e218eee 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.map.js
+  s_d390039e069d8d::t_3a0ba205541c37 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.reduce.js
+  s_d390039e069d8d::t_d8dde4f91ff1eb 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.reduceRight.js
+  s_d390039e069d8d::t_ae036aa9b71e94 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1672/Array.prototype.some.js
+  s_d390039e069d8d::t_d450489bb9b3e0 1-7
+vendor/rquickjs-sys/quickjs/tests/bug1683.js
+  s_d390039e069d8d::t_c74cc7ddc786f8 1-3
+vendor/rquickjs-sys/quickjs/tests/bug1690.js
+  s_d390039e069d8d::t_e97ef26e757444 1-6
+vendor/rquickjs-sys/quickjs/tests/bug1691.js
+  s_d390039e069d8d::t_e42a5e9fd27a73 1-5
+vendor/rquickjs-sys/quickjs/tests/bug1693.js
+  s_d390039e069d8d::t_bea6870d4d0d3a 1-80
+vendor/rquickjs-sys/quickjs/tests/bug39/1.js
+  s_d390039e069d8d::t_cc63a337008c88 1-6
+vendor/rquickjs-sys/quickjs/tests/bug39/2.js
+  s_d390039e069d8d::t_8b87f677eea8a9 1-6
+vendor/rquickjs-sys/quickjs/tests/bug39/3.js
+  s_d390039e069d8d::t_d7a01d8e60dd3c 1-7
+vendor/rquickjs-sys/quickjs/tests/bug488-upstream.js
+  s_d390039e069d8d::t_3135fc66dada95 1-7
+vendor/rquickjs-sys/quickjs/tests/bug492.js
+  s_d390039e069d8d::t_583b41927b31e8 1-113
+vendor/rquickjs-sys/quickjs/tests/bug493.js
+  s_d390039e069d8d::t_cfe46c5990f699 1-10
+vendor/rquickjs-sys/quickjs/tests/bug567.js
+  s_d390039e069d8d::t_adcf82de6ae950 1-5
+vendor/rquickjs-sys/quickjs/tests/bug633/0.js
+  s_d390039e069d8d::t_11cfa9acc42485 1-7
+vendor/rquickjs-sys/quickjs/tests/bug633/1.js
+  s_d390039e069d8d::t_052acc9019b573 1-4
+vendor/rquickjs-sys/quickjs/tests/bug633/2.js
+  s_d390039e069d8d::t_e180cca493c13d 1-4
+vendor/rquickjs-sys/quickjs/tests/bug633/3.js
+  s_d390039e069d8d::t_d304c87076b173 1-4
+vendor/rquickjs-sys/quickjs/tests/bug645/0.js
+  s_d390039e069d8d::t_4f351da9858e45 1-4
+vendor/rquickjs-sys/quickjs/tests/bug645/1.js
+  s_d390039e069d8d::t_8189ba893d56a6 1-9
+vendor/rquickjs-sys/quickjs/tests/bug645/2.js
+  s_d390039e069d8d::t_04589a7bd1ee16 1-7
+vendor/rquickjs-sys/quickjs/tests/bug648.js
+  s_d390039e069d8d::t_2be6907ee65e4a 1-13
+vendor/rquickjs-sys/quickjs/tests/bug652.js
+  s_d390039e069d8d::t_9821d33adc7b54 1-4
+vendor/rquickjs-sys/quickjs/tests/bug741.js
+  s_d390039e069d8d::t_155120ba9c211b 1-19
+vendor/rquickjs-sys/quickjs/tests/bug775.js
+  s_d390039e069d8d::t_b1b2a900813df6 1-7
+vendor/rquickjs-sys/quickjs/tests/bug776.js
+  s_d390039e069d8d::t_e5bb7d1684afb0 1-7
+vendor/rquickjs-sys/quickjs/tests/bug832.js
+  s_d390039e069d8d::t_41975582f8d899 1-2
+vendor/rquickjs-sys/quickjs/tests/bug858.js
+  s_d390039e069d8d::t_0ebd0b76ca8fbf 1-26
+vendor/rquickjs-sys/quickjs/tests/bug904.js
+  s_d390039e069d8d::t_017f7695edc9ff 1-6
+vendor/rquickjs-sys/quickjs/tests/bug988.js
+  s_d390039e069d8d::t_69ae7209baf55f 1-7
+vendor/rquickjs-sys/quickjs/tests/bug999.js
+  s_d390039e069d8d::t_311d00d56108a7 1-3
+vendor/rquickjs-sys/quickjs/tests/callsite-isconstructor.js
+  s_d390039e069d8d::t_ea292c7fd26dc0 1-30
+vendor/rquickjs-sys/quickjs/tests/callsite-native-position.js
+  s_d390039e069d8d::t_0916c082ea2436 1-19
+vendor/rquickjs-sys/quickjs/tests/destructured-export.js
+  s_d390039e069d8d::t_cae9fab05d7346 1-20
+vendor/rquickjs-sys/quickjs/tests/detect_module/0.js
+  s_d390039e069d8d::t_1e0c4f0f76e32e 1
+vendor/rquickjs-sys/quickjs/tests/detect_module/1.js
+  s_d390039e069d8d::t_92f30ccc3a9a39 1-2
+vendor/rquickjs-sys/quickjs/tests/detect_module/2.js
+  s_d390039e069d8d::t_c507a9544c6d53 1
+vendor/rquickjs-sys/quickjs/tests/detect_module/3.js
+  s_d390039e069d8d::t_aed79201787f54 1-8
+vendor/rquickjs-sys/quickjs/tests/detect_module/4.js
+  s_d390039e069d8d::t_7cd6ba29d9c2da 1-3
+vendor/rquickjs-sys/quickjs/tests/dynamic_import_rejection_handled.js
+  s_d390039e069d8d::t_7c48f2af217c0c 1-7
+vendor/rquickjs-sys/quickjs/tests/fix_set_array_length-uaf.js
+  s_d390039e069d8d::t_9e26eeae8cc8a8 1-6
+vendor/rquickjs-sys/quickjs/tests/fixture_cyclic_import.js
+  s_d390039e069d8d::t_96d3f5376a31a5 1-2
+vendor/rquickjs-sys/quickjs/tests/fixture_import_attributes.json
+  s_d390039e069d8d::t_815f92a9d3bccf 1
+vendor/rquickjs-sys/quickjs/tests/fixture_reexport_direct.js
+  s_d390039e069d8d::t_5db8bc988ef5d0 1
+vendor/rquickjs-sys/quickjs/tests/fixture_reexport_missing.js
+  s_d390039e069d8d::t_b6a67304b7decd 1
+vendor/rquickjs-sys/quickjs/tests/fixture_reexport_source.js
+  s_d390039e069d8d::t_f7b29f44ef7e97 1
+vendor/rquickjs-sys/quickjs/tests/fixture_string_exports.js
+  s_d390039e069d8d::t_0d175949e56f17 1-12
+vendor/rquickjs-sys/quickjs/tests/fixture_throwing_module.js
+  s_d390039e069d8d::t_033431fbee99a7 1
+vendor/rquickjs-sys/quickjs/tests/for-await-normal-close.js
+  s_d390039e069d8d::t_6bec0421e1b611 1-50
+vendor/rquickjs-sys/quickjs/tests/function_source.js
+  s_d390039e069d8d::t_8e5ddb2b0b1459 1-14
+vendor/rquickjs-sys/quickjs/tests/global-reference-column.js
+  s_d390039e069d8d::t_eb2970e1ff97fe 1-19
+vendor/rquickjs-sys/quickjs/tests/import-attributes-identity.js
+  s_d390039e069d8d::t_ccb5770357854a 1-35
+vendor/rquickjs-sys/quickjs/tests/iterator-filter-leak.js
+  s_d390039e069d8d::t_2464bb7d1d8673 1-21
+vendor/rquickjs-sys/quickjs/tests/iterator-tostringtag-setter.js
+  s_d390039e069d8d::t_de213743123762 1-44
+vendor/rquickjs-sys/quickjs/tests/microbench.js
+  s_d390039e069d8d::t_1f4efcf1ea3b98 1-1267
+vendor/rquickjs-sys/quickjs/tests/null_or_undefined.js
+  s_d390039e069d8d::t_5efcba44913e4b 1-38
+vendor/rquickjs-sys/quickjs/tests/parse-error-column.js
+  s_d390039e069d8d::t_5fdc52c880f1ee 1-46
+vendor/rquickjs-sys/quickjs/tests/reexport-error-module.js
+  s_d390039e069d8d::t_35fd9ed89fbbc4 1-14
+vendor/rquickjs-sys/quickjs/tests/resize_array_buffer_index_valueOf.js
+  s_d390039e069d8d::t_edf6723ad7fe94 1-10
+vendor/rquickjs-sys/quickjs/tests/str-pad-leak.js
+  s_d390039e069d8d::t_9a620c301b2964 1-5
+vendor/rquickjs-sys/quickjs/tests/suspended-coroutine-closure-gc.js
+  s_d390039e069d8d::t_1319cdf02936b8 1-35
+vendor/rquickjs-sys/quickjs/tests/suspended-coroutine-mapped-arguments-gc.js
+  s_d390039e069d8d::t_295a2225538786 1-28
+vendor/rquickjs-sys/quickjs/tests/suspended-generator-closure-gc.js
+  s_d390039e069d8d::t_96e1ed33525a09 1-33
+vendor/rquickjs-sys/quickjs/tests/test_array_to_gc.js
+  s_d390039e069d8d::t_2e3c309018ac53 1-69
+vendor/rquickjs-sys/quickjs/tests/test_base64.js
+  s_d390039e069d8d::t_475df0216c6a64 1-95
+vendor/rquickjs-sys/quickjs/tests/test_bigint.js
+  s_d390039e069d8d::t_7e55c5392c6dc4 1-137
+vendor/rquickjs-sys/quickjs/tests/test_bjson.js
+  s_d390039e069d8d::t_eb01707cb6d1e1 1-375
+vendor/rquickjs-sys/quickjs/tests/test_builtin.js
+  s_d390039e069d8d::t_e6ac47ecc95292 1-1355
+vendor/rquickjs-sys/quickjs/tests/test_closure.js
+  s_d390039e069d8d::t_6ecfdb538b7926 1-220
+vendor/rquickjs-sys/quickjs/tests/test_domexception.js
+  s_d390039e069d8d::t_dbca1e6e61ea8d 1-52
+vendor/rquickjs-sys/quickjs/tests/test_for_of_line_numbers.js
+  s_d390039e069d8d::t_821a0791eb8cbc 1-50
+vendor/rquickjs-sys/quickjs/tests/test_language.js
+  s_d390039e069d8d::t_3d4e40edcd2acd 1-1112
+vendor/rquickjs-sys/quickjs/tests/test_loop.js
+  s_d390039e069d8d::t_7435a6ad4f1ce8 1-367
+vendor/rquickjs-sys/quickjs/tests/test_queue_microtask.js
+  s_d390039e069d8d::t_4fce8d276e742a 1-39
+vendor/rquickjs-sys/quickjs/tests/test_std.js
+  s_d390039e069d8d::t_1723afc2c9b2d1 1-340
+vendor/rquickjs-sys/quickjs/tests/test_string_exports.js
+  s_d390039e069d8d::t_06b93812bf071c 1-25
+vendor/rquickjs-sys/quickjs/tests/test_worker.js
+  s_d390039e069d8d::t_fd3808a1653a97 1-43
+vendor/rquickjs-sys/quickjs/tests/test_worker_module.js
+  s_d390039e069d8d::t_b9f01e5ca19038 1-30
+vendor/rquickjs-sys/quickjs/tests/typedarray-lastindexof-shrink.js
+  s_d390039e069d8d::t_30bf3cc14b049d 1-73
+vendor/rquickjs-sys/quickjs/tests/typedarray-set-invalid-index.js
+  s_d390039e069d8d::t_b60408295d4708 1-50
+vendor/rquickjs-sys/quickjs/tests/typedarray-slice-overlap.js
+  s_d390039e069d8d::t_f8d9ac5725593e 1-48
+vendor/rquickjs-sys/quickjs/tests/typedarray-subarray-species.js
+  s_d390039e069d8d::t_5c40b641f1cbcc 1-82
+vendor/rquickjs-sys/quickjs/unicode_download.sh
+  s_d390039e069d8d::t_0155f2698e21f7 1-26
+vendor/rquickjs-sys/quickjs/unicode_gen.c
+  s_d390039e069d8d::t_48d3d294e826cf 1-3617
+vendor/rquickjs-sys/quickjs/unicode_gen_def.h
+  s_d390039e069d8d::t_3745bb1144d42c 1-326
+vendor/rquickjs-sys/quickjs/update-version.sh
+  s_d390039e069d8d::t_43faa3d1312a74 1-32
+vendor/rquickjs-sys/src/bindings/aarch64-apple-darwin.rs
+  s_d390039e069d8d::t_dcd07be1230064 1-2335
+vendor/rquickjs-sys/src/bindings/aarch64-pc-windows-msvc.rs
+  s_d390039e069d8d::t_04344d2d2e9f3a 1-2334
+vendor/rquickjs-sys/src/bindings/aarch64-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_780693d7b4d937 1-2334
+vendor/rquickjs-sys/src/bindings/aarch64-unknown-linux-musl.rs
+  s_d390039e069d8d::t_2c772cc10be8b5 1-2334
+vendor/rquickjs-sys/src/bindings/armv7-unknown-linux-gnueabi.rs
+  s_d390039e069d8d::t_464f04e058d476 1-2303
+vendor/rquickjs-sys/src/bindings/armv7-unknown-linux-gnueabihf.rs
+  s_d390039e069d8d::t_2e257ea50dd1ff 1-2303
+vendor/rquickjs-sys/src/bindings/i686-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_eeac79f2ba5a0a 1-2303
+vendor/rquickjs-sys/src/bindings/loongarch64-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_2d7206dab56973 1-2334
+vendor/rquickjs-sys/src/bindings/loongarch64-unknown-linux-musl.rs
+  s_d390039e069d8d::t_dd17003e95a767 1-2334
+vendor/rquickjs-sys/src/bindings/powerpc64-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_bb35370b048e99 1-2334
+vendor/rquickjs-sys/src/bindings/riscv64a23-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_e27cae159ae5cc 1-2334
+vendor/rquickjs-sys/src/bindings/riscv64gc-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_3ceda256a2b99a 1-2334
+vendor/rquickjs-sys/src/bindings/wasm32-unknown-unknown.rs
+  s_d390039e069d8d::t_218b52d9c8f005 1-2303
+vendor/rquickjs-sys/src/bindings/wasm32-wasip1.rs
+  s_d390039e069d8d::t_cf90e01e0ff81d 1-2303
+vendor/rquickjs-sys/src/bindings/wasm32-wasip2.rs
+  s_d390039e069d8d::t_a1db5bda006c64 1-2303
+vendor/rquickjs-sys/src/bindings/x86_64-apple-darwin.rs
+  s_d390039e069d8d::t_a25cc24500bd64 1-2335
+vendor/rquickjs-sys/src/bindings/x86_64-pc-windows-gnu.rs
+  s_d390039e069d8d::t_628e587d8d3534 1-2334
+vendor/rquickjs-sys/src/bindings/x86_64-pc-windows-msvc.rs
+  s_d390039e069d8d::t_6387185c555c73 1-2334
+vendor/rquickjs-sys/src/bindings/x86_64-unknown-linux-gnu.rs
+  s_d390039e069d8d::t_fb505abc8b1075 1-2334
+vendor/rquickjs-sys/src/bindings/x86_64-unknown-linux-musl.rs
+  s_d390039e069d8d::t_49bc7d905a3df0 1-2334
+vendor/rquickjs-sys/src/inlines/common.rs
+  s_d390039e069d8d::t_b7a838e2a4618b 1-117
+vendor/rquickjs-sys/src/inlines/ptr_32_nan_boxing.rs
+  s_d390039e069d8d::t_1e4ade8d840dea 1-98
+vendor/rquickjs-sys/src/inlines/ptr_64.rs
+  s_d390039e069d8d::t_033d63f5a1e812 1-76
+vendor/rquickjs-sys/src/lib.rs
+  s_d390039e069d8d::t_590a454f21e897 1-27
+vendor/rquickjs-sys/vendor/wasi-libc/NOTICE.md
+  s_d390039e069d8d::t_b94fc30258971d 1-26
+vendor/rquickjs-sys/vendor/wasi-libc/include/__fd_set.h
+  s_d390039e069d8d::t_b23895c3ef27fe 1-78
+vendor/rquickjs-sys/vendor/wasi-libc/include/__functions_malloc.h
+  s_d390039e069d8d::t_085cf918beef50 1-28
+vendor/rquickjs-sys/vendor/wasi-libc/include/__functions_memcpy.h
+  s_d390039e069d8d::t_6c35476ac01f95 1-22
+vendor/rquickjs-sys/vendor/wasi-libc/include/__header_inttypes.h
+  s_d390039e069d8d::t_fed4395d8f3616 1-184
+vendor/rquickjs-sys/vendor/wasi-libc/include/__header_stdlib.h
+  s_d390039e069d8d::t_1af2a023baa2c9 1-23
+vendor/rquickjs-sys/vendor/wasi-libc/include/__header_string.h
+  s_d390039e069d8d::t_45fa3a16171597 1-25
+vendor/rquickjs-sys/vendor/wasi-libc/include/__header_time.h
+  s_d390039e069d8d::t_3cbf1ab8046b09 1-35
+vendor/rquickjs-sys/vendor/wasi-libc/include/__header_unistd.h
+  s_d390039e069d8d::t_6ab345574ff945 1-30
+vendor/rquickjs-sys/vendor/wasi-libc/include/__macro_FD_SETSIZE.h
+  s_d390039e069d8d::t_2ca412d6942247 1-8
+vendor/rquickjs-sys/vendor/wasi-libc/include/__macro_PAGESIZE.h
+  s_d390039e069d8d::t_de72a5a891ea9d 1-18
+vendor/rquickjs-sys/vendor/wasi-libc/include/__seek.h
+  s_d390039e069d8d::t_5077076ec317b7 1-12
+vendor/rquickjs-sys/vendor/wasi-libc/include/__struct_iovec.h
+  s_d390039e069d8d::t_e9a818e77716bf 1-14
+vendor/rquickjs-sys/vendor/wasi-libc/include/__struct_timespec.h
+  s_d390039e069d8d::t_5d65b10f0fb39b 1-14
+vendor/rquickjs-sys/vendor/wasi-libc/include/__struct_timeval.h
+  s_d390039e069d8d::t_8d1b715cca2b08 1-15
+vendor/rquickjs-sys/vendor/wasi-libc/include/__struct_tm.h
+  s_d390039e069d8d::t_97c83944ab1063 1-21
+vendor/rquickjs-sys/vendor/wasi-libc/include/__typedef_clock_t.h
+  s_d390039e069d8d::t_37b424e03d0752 1-9
+vendor/rquickjs-sys/vendor/wasi-libc/include/__typedef_clockid_t.h
+  s_d390039e069d8d::t_ce42fdcd050a46 1-8
+vendor/rquickjs-sys/vendor/wasi-libc/include/__typedef_fd_set.h
+  s_d390039e069d8d::t_e4e6601cfdf9f7 1-16
+vendor/rquickjs-sys/vendor/wasi-libc/include/__typedef_sigset_t.h
+  s_d390039e069d8d::t_6df350c3e24b84 1-9
+vendor/rquickjs-sys/vendor/wasi-libc/include/__typedef_suseconds_t.h
+  s_d390039e069d8d::t_dd40273834db7d 1-10
+vendor/rquickjs-sys/vendor/wasi-libc/include/__typedef_time_t.h
+  s_d390039e069d8d::t_89cda1288373cb 1-9
+vendor/rquickjs-sys/vendor/wasi-libc/include/alloca.h
+  s_d390039e069d8d::t_3782f9bcc8248b 1-21
+vendor/rquickjs-sys/vendor/wasi-libc/include/assert.h
+  s_d390039e069d8d::t_8a62eecb45b428 1-25
+vendor/rquickjs-sys/vendor/wasi-libc/include/bits/alltypes.h
+  s_d390039e069d8d::t_3a8394178f1ec0 1-462
+vendor/rquickjs-sys/vendor/wasi-libc/include/bits/limits.h
+  s_d390039e069d8d::t_f17a4fae2ce979 1-3
+vendor/rquickjs-sys/vendor/wasi-libc/include/bits/posix.h
+  s_d390039e069d8d::t_9593de3daac2e1 1-4
+vendor/rquickjs-sys/vendor/wasi-libc/include/bits/stdint.h
+  s_d390039e069d8d::t_c394d4d60d1185 1-22
+vendor/rquickjs-sys/vendor/wasi-libc/include/ctype.h
+  s_d390039e069d8d::t_b9bc448b4d9b1b 1-79
+vendor/rquickjs-sys/vendor/wasi-libc/include/features.h
+  s_d390039e069d8d::t_6dcc8fe79a0a2b 1-42
+vendor/rquickjs-sys/vendor/wasi-libc/include/inttypes.h
+  s_d390039e069d8d::t_563513d036a7d0 1-235
+vendor/rquickjs-sys/vendor/wasi-libc/include/limits.h
+  s_d390039e069d8d::t_816e7740a02a31 1-182
+vendor/rquickjs-sys/vendor/wasi-libc/include/math.h
+  s_d390039e069d8d::t_cff3a688b8f27c 1-461
+vendor/rquickjs-sys/vendor/wasi-libc/include/stdbool.h
+  s_d390039e069d8d::t_17967d4675f616 1-16
+vendor/rquickjs-sys/vendor/wasi-libc/include/stdint.h
+  s_d390039e069d8d::t_96055b89c8015f 1-119
+vendor/rquickjs-sys/vendor/wasi-libc/include/stdio.h
+  s_d390039e069d8d::t_d786832f7da99d 1-256
+vendor/rquickjs-sys/vendor/wasi-libc/include/stdlib.h
+  s_d390039e069d8d::t_b69fab57a7c458 1-219
+vendor/rquickjs-sys/vendor/wasi-libc/include/string.h
+  s_d390039e069d8d::t_aaf721a87f0c3e 1-130
+vendor/rquickjs-sys/vendor/wasi-libc/include/strings.h
+  s_d390039e069d8d::t_043e7f3ac1c360 1-41
+vendor/rquickjs-sys/vendor/wasi-libc/include/sys/select.h
+  s_d390039e069d8d::t_44c13c7abcbae9 1-56
+vendor/rquickjs-sys/vendor/wasi-libc/include/sys/time.h
+  s_d390039e069d8d::t_837e4d6c97ba7c 1-86
+vendor/rquickjs-sys/vendor/wasi-libc/include/time.h
+  s_d390039e069d8d::t_8a4c11ad85d026 1-206
+vendor/rquickjs-sys/vendor/wasi-libc/include/unistd.h
+  s_d390039e069d8d::t_114b3f34af6cb3 1-587
+vendor/rquickjs-sys/vendor/wasi-libc/include/wasi/api.h
+  s_d390039e069d8d::t_193bd6b4e907cd 1-2117
+vendor/rquickjs-sys/wasm-shim/shim.c
+  s_d390039e069d8d::t_a31da28477f7b7 1-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "69676753e7103f3f33e594e33e3917f7a68d74eb",
+  "prompts": {},
+  "sessions": {
+    "s_d390039e069d8d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a77406a-fc0b-403a-b3b9-e4628d4084c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

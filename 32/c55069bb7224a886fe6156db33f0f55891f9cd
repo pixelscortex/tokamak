@@ -1,0 +1,30 @@
+packages/engine/tests/find_interrupt.rs
+  s_72a739cc9ead06::t_c6ec14681712cd 1-19,30-34,41-123,127-151,154-185
+  s_72a739cc9ead06::t_9d2042520d7c41 35-40,124-126
+  s_72a739cc9ead06::t_f0a11855722b19 152
+  s_72a739cc9ead06::t_ab20381ab9b022 20-29,153
+packages/render/tests/find_interrupt.rs
+  s_72a739cc9ead06::t_d6363b68506c7b 133-135,137-141
+  s_72a739cc9ead06::t_6185a46877d28c 178,182-189
+  s_72a739cc9ead06::t_ab20381ab9b022 22-31,123
+  s_72a739cc9ead06::t_afe0c5bc11048f 1-21,32-122,124-132,136,142-177,179-181,190-191
+packages/engine/tests/vendored_quickjs.rs
+  s_72a739cc9ead06::t_989e049311e920 40-42,50-54
+  s_72a739cc9ead06::t_0697d3534065e6 1-39,43-49,55-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "32c55069bb7224a886fe6156db33f0f55891f9cd",
+  "prompts": {},
+  "sessions": {
+    "s_72a739cc9ead06": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2217fd12-3d2f-461a-8dd4-1ad433a8db18",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
