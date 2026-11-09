@@ -58,7 +58,9 @@ for the desktop, lab and old raw-bundle regression harnesses.
 
 The shell sends `{type:"plugins",id}` on its connected session. The response is an 8192-byte UTF-8 JSON text page: `{revision,text,next,done}`.
 Continue with `{type:"pluginspage",id,revision,offset:next}` until `done`; the SDK
-assembles `{revision,plugins,functions}` and rejects mixed revisions. No UI assets are fetched at
+assembles `{revision,plugins,functions}` and discards mixed revisions, including
+a mismatched revision in the assembled catalog. Stale-page errors restart the
+transfer from its first page, with at most three attempts before rejecting. No UI assets are fetched at
 connect. A contribution's first render calls the loader. Code/CSS requests are
 `{type:"pluginasset",id,plugin,name,revision,offset}`; responses are
 `{text,next,done}` in the usual `response.result.Ok` envelope. Offsets count

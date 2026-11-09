@@ -16,6 +16,9 @@ export interface MessageConnection {
 type Pending = { resolve(value: JsonValue): void; reject(error: Error): void };
 type Observer = (event: SubscriptionEvent<JsonValue>) => void;
 const CAPACITY = 128;
+class CatalogRevisionChanged extends Error {
+  constructor() { super("Plugin generation changed during catalog transfer"); }
+}
 
 export class InProcessTransport implements ClientTransport {
   private next = 0;
@@ -45,20 +48,43 @@ export class InProcessTransport implements ClientTransport {
   }
 
   async plugins(): Promise<JsonValue> {
+    // A reload may retire any page already in flight. Discard the whole partial
+    // transfer and pin a fresh first page, with bounded retries under churn.
+    for (let attempt = 0; ; attempt++) {
+      try { return await this.catalog(); }
+      catch (error) {
+        if (attempt >= 2 || !(error instanceof CatalogRevisionChanged
+          || error instanceof Error && error.message === "Plugin generation changed")) throw error;
+      }
+    }
+  }
+
+  private async catalog(): Promise<JsonValue> {
     let value = await this.control(id => ({ type: "plugins", id }));
     let text = "", offset = 0;
+    let revision: string | undefined;
     for (;;) {
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid catalog page");
       // Accept older hosts and structural test transports with a full catalog.
-      if (Array.isArray(value.plugins)) return value;
+      if (Array.isArray(value.plugins)) {
+        if (revision !== undefined) throw new CatalogRevisionChanged();
+        return value;
+      }
       if (typeof value.text !== "string" || typeof value.revision !== "string" || typeof value.done !== "boolean"
         || typeof value.next !== "number" || !Number.isSafeInteger(value.next) || value.next < offset
         || (!value.done && value.next === offset) || value.next > 64 * 1024 * 1024) throw new Error("Invalid catalog page");
+      if (revision === undefined) revision = value.revision;
+      else if (value.revision !== revision) throw new CatalogRevisionChanged();
       text += value.text;
-      if (value.done) return JSON.parse(text) as JsonValue;
+      if (value.done) {
+        const assembled = JSON.parse(text) as JsonValue;
+        if (!assembled || typeof assembled !== "object" || Array.isArray(assembled)
+          || assembled.revision !== revision) throw new CatalogRevisionChanged();
+        return assembled;
+      }
       offset = value.next;
-      const revision = value.revision;
-      value = await this.control(id => ({ type: "pluginspage", id, revision, offset }));
+      const pinned = revision;
+      value = await this.control(id => ({ type: "pluginspage", id, revision: pinned, offset }));
     }
   }
 
