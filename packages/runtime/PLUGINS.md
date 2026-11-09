@@ -19,7 +19,11 @@ globalThis.__tokamakModules.register("@plugins/todo/ui", ["@tokamak/render", "@t
 
 Host packages and `@plugins/*` stay external. A plugin can import another's
 ordinary exports with `import { Component } from "@plugins/other/ui"` (the bare
-`@plugins/other` spelling is an alias). Dependencies load before factories run.
+`@plugins/other` spelling is an alias). Static dependencies load before factories run. Literal dynamic imports, such as
+`import("@plugins/other/ui")`, compile to the evaluation-scoped
+`__tokamakModules.load(...)` capability. They infer `optional[other] = "*"`
+(unless already required), keeping installation and UI loading lazy. Computed
+`import(expr)` is rejected because the compiler cannot prove its target namespace.
 Configure TypeScript paths to the other plugin's source or declarations when
 checking cross-plugin imports locally; the bundle keeps the module name external.
 The compiler rejects bundled host runtimes and browser runtime imports. Plugins
@@ -43,7 +47,9 @@ Other kinds use `itemRenderer: [{id,type}]`, `toolbar: [{id,label}]`,
 `command: [{id,title}]`, and `entityCard: [{id,table}]`. Computed options,
 spreads, and nonliteral values fail the build. Runtime imports of
 `@plugins/<id>` infer a `depends[id]` range of `*` unless explicitly constrained.
-Plain exports add no contributions. `ui:false` and `backend:false` support
+Type-only imports/reexports disappear before dependency and contribution
+inference; the emitted JS graph and TypeScript's emitted export syntax are the
+sources of truth. Plain exports add no contributions. `ui:false` and `backend:false` support
 logic-only and UI-only artifacts. Plugin CSS is optional; the host document
 uses its own shell HTML. `standalone:true` retains complete native documents
 for the desktop, lab and old raw-bundle regression harnesses.
@@ -67,7 +73,9 @@ retiring affected owners, accumulating ids if reloads race. The server compares 
 also reports other edited/added/removed artifacts in that installation. The
 loader retires affected modules plus transitive importers, including in-flight
 loads. Unrelated completed modules remain live. Version checks prevent stale
-asset promises from publishing. Factories own disposable Solid roots;
+asset promises from publishing. Factories receive a frozen registration/loading capability scoped to their own
+module and generation; host `provide`, `remove` and `require` APIs are never
+published. Retired handles cannot register or load modules. Factories own disposable Solid roots;
 contribution owners reset at the same generation boundary. Future renders load
 fresh modules lazily.
 
@@ -93,6 +101,18 @@ thread panel is a placeholder. Navigation buttons use real back/forward.
 `contributions(kind)` enumerates all five slot kinds without fetching modules.
 Views mount in the stage now; future item, toolbar, entity and command surfaces
 can select descriptors and reuse the same boundary/lifecycle plumbing.
+
+Native event and host callbacks capture their Solid owner at registration.
+QuickJS promise hooks propagate that ownership through async/await, and report
+unhandled rejections after promise jobs settle so normal catches still work.
+Factory effects have a separate module-owned error scope; the registry forwards
+those failures by module id to mounted consumers, including transitive importers.
+Retired scopes ignore late failures. No attribution depends on whichever view is
+active when an error arrives.
+
+The error card uses a flex formatting context: Blitz's inline formatting hit
+test can return the anonymous parent box at an inline button's centre. Flex gives
+the Reload button a separate box while keeping the existing card classes.
 
 Requests and individual events share the WebSocket's 1 MiB UTF-8 limit. The
 native event queue still holds at most 256 events / 1 MiB in total. Oversized
