@@ -7,6 +7,7 @@ workspace:
 tasks:
   bundle:
     command: 'proto run bun -- ../packages/build/src/build.ts'
+    deps: ['plugin-bundle']
     options:
       cache: false
   check:
@@ -15,6 +16,10 @@ tasks:
     options:
       cache: false
       mutex: 'cargo'
+  plugin-bundle:
+    command: 'proto run bun -- ../packages/build/src/build.ts ../plugins/todo'
+    options:
+      cache: false
   fixture-bundle:
     command: 'proto run bun -- tests/build-todo.ts'
     options:

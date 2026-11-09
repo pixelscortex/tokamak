@@ -63,10 +63,10 @@ try {
   await mkdir(fixture, { recursive: true });
   // Keep the original end-to-end compiler regressions against retired Todo,
   // but use the actual product's zero-option build configuration.
-  await cp(join(app, "tests/fixtures/todo/src"), join(fixture, "src"), { recursive: true });
+  await cp(join(app, "dist/tests/todo/src"), join(fixture, "src"), { recursive: true });
   await mkdir(join(fixture, "backend"));
   for (const name of ["schema.ts", "todo.ts", "_limits.ts", "_legacyApi.ts", "tsconfig.json"]) {
-    await copyFile(join(app, name === "tsconfig.json" ? "backend" : "tests/fixtures/todo/backend", name),
+    await copyFile(join(app, name === "tsconfig.json" ? "backend" : "dist/tests/todo/backend", name),
       join(fixture, "backend", name));
   }
   for (const name of ["package.json", "vite.config.ts", "tsconfig.json", "tsconfig.tools.json"]) {

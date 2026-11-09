@@ -7,13 +7,13 @@ import { fileURLToPath } from "node:url";
 import { ensure, status, stop } from "../../packages/runtime/tools/local-server";
 import { WebSocketTransport } from "../../packages/sdk/src/transport";
 import { TokamakClient } from "../../packages/sdk/src/client";
-import { api } from "./fixtures/todo/backend/_legacyApi";
+import { api } from "../dist/tests/todo/backend/_legacyApi";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 await mkdir(resolve(root, "app/dist/tests"), { recursive: true });
 const directory = await mkdtemp(resolve(root, "app/dist/tests/local-"));
 const binary = resolve(root, `target/debug/tokamak${process.platform === "win32" ? ".exe" : ""}`);
-const bundle = resolve(root, "app/tests/fixtures/todo/dist/bundle.js");
+const bundle = resolve(root, "app/dist/tests/todo/dist/bundle.js");
 const sockets: WebSocket[] = [];
 const transports: WebSocketTransport[] = [];
 async function client(url: string, capability: string) {

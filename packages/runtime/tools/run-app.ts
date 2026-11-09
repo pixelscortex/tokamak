@@ -22,7 +22,7 @@ if (command === "stop") {
   const running = await status(directory);
   console.log(running ? `Local server: pid ${running.pid}, ${running.url}` : "Local server not running");
 } else {
-  const running = await ensure(binary, resolve(root, "app/dist/bundle.js"), directory);
+  const running = await ensure(binary, resolve(root, "plugins"), directory, "plugins");
   console.log(`Local server: pid ${running.pid}, ${running.url} (independent of desktop)`);
   if (command === "app") {
     const child = spawn(resolve(root, `target/${profile}/tokamak-desktop${suffix}`), [], {

@@ -1,0 +1,15 @@
+{
+  "name": "todo",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "dependencies": {
+    "@tokamak/render": "workspace:*",
+    "@tokamak/sdk": "workspace:*",
+    "@tokamak/ui": "workspace:*",
+    "solid-js": "1.9.18"
+  },
+  "devDependencies": {
+    "@tokamak/build": "workspace:*"
+  }
+}

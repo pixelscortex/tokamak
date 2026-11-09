@@ -2,7 +2,7 @@
 
 This is the thin native client, ready for deliberate Core/plugin contracts.
 The backend is currently an empty registry. Todo is retired and retained only
-under `tests/fixtures/todo`; the independent component catalog is root `lab/`.
+as the real plugin `../plugins/todo`; the independent component catalog is root `lab/`.
 There is no product router, plugin loader or invented Core schema yet.
 
 ## Commands (repository root)
@@ -57,3 +57,9 @@ No tests open the real user store.
 
 `moon run lab:test` separately checks the actual UI catalog. Physical native
 close/IME/VoiceOver and visual presentation remain separate manual acceptance.
+
+
+The application is a shared-runtime plugin shell. `bun run app` builds Todo and
+starts/reuses the independent server with `--plugins <workspace>/plugins`.
+[The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,
+module loading and the separate presentation frame for the Paper design pass.

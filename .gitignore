@@ -21,3 +21,6 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Plugin references are regenerated before builds and checks.
+/plugins/*/backend/_generated/

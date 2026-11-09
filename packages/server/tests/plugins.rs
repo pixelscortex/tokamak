@@ -106,11 +106,18 @@ fn public_ui_builder_hashes_final_assets_for_the_native_catalog() {
 }
 
 async fn next(session: &mut Session) -> Event {
-    tokio::time::timeout(Duration::from_secs(10), session.recv())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap()
+    // Existing backend assertions consume data events. UI generation notices
+    // now share this ordered stream and have their own client-loader coverage.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let event = session.recv().await.unwrap().unwrap();
+            if !matches!(event, Event::PluginChanged { .. }) {
+                return event;
+            }
+        }
+    })
+    .await
+    .unwrap()
 }
 async fn call(session: &mut Session, id: u64, name: &str, args: Value) -> Result<Value, String> {
     session.call(id, name, args).unwrap();

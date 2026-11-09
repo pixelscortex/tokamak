@@ -1,10 +1,10 @@
 /** Local process ownership only; the server owns storage and shutdown. */
 import { createHash, randomBytes } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { link, lstat, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, open, readFile, rm, realpath, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-export type Identity = { pid: number; url: string; bundleHash: string };
+export type Identity = { pid: number; url: string; bundleHash: string; pluginRoot?: string };
 
 export function localDirectory(binary: string, cwd = process.cwd()): string {
   const result = spawnSync(binary, ["--local-path"], { cwd, encoding: "utf8" });
@@ -65,11 +65,12 @@ async function wait(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 50));
 }
 
-export async function ensure(binary: string, bundle: string, directory: string): Promise<Identity> {
-  const hash = createHash("sha256").update(await readFile(bundle)).digest("hex");
+export async function ensure(binary: string, bundle: string, directory: string, mode: "bundle" | "plugins" = "bundle"): Promise<Identity> {
+  const pluginRoot = mode === "plugins" ? await realpath(bundle) : undefined;
+  const hash = mode === "bundle" ? createHash("sha256").update(await readFile(bundle)).digest("hex") : undefined;
   function compatible(identity: Identity): Identity {
-    if (identity.bundleHash !== hash) {
-      throw new Error("Local server has a different backend bundle; run `bun run server:stop` first");
+    if (mode === "plugins" ? identity.pluginRoot !== pluginRoot : identity.bundleHash !== hash) {
+      throw new Error("Local server has a different backend bundle or plugin installation; run `bun run server:stop` first");
     }
     return identity;
   }
@@ -102,7 +103,7 @@ export async function ensure(binary: string, bundle: string, directory: string):
     } finally { await rm(temporary, { force: true }); }
     await token(directory);
     const log = await open(resolve(directory, "server.log"), "a", 0o600);
-    const child = spawn(binary, ["--local-dir", directory, "--bundle", bundle], {
+    const child = spawn(binary, ["--local-dir", directory, mode === "plugins" ? "--plugins" : "--bundle", bundle], {
       detached: true, stdio: ["ignore", log.fd, log.fd],
     });
     let failure: Error | undefined;

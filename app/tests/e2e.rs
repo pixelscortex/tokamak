@@ -47,8 +47,8 @@ fn native_roundtrip(root: &Path, write: bool) -> Value {
             storage: Storage::Disk(root.join("store")),
             bundle: Arc::new(
                 Bundle::new(
-                    include_str!("fixtures/todo/dist/bundle.js"),
-                    Some(include_str!("fixtures/todo/dist/bundle.js.map")),
+                    include_str!("../dist/tests/todo/dist/bundle.js"),
+                    Some(include_str!("../dist/tests/todo/dist/bundle.js.map")),
                 )
                 .unwrap(),
             ),
@@ -58,7 +58,7 @@ fn native_roundtrip(root: &Path, write: bool) -> Value {
     let session = rt.block_on(backend.connect()).unwrap();
     let (send, receive) = connection::admission();
     let mut doc = NativeDocument::new_connected(
-        include_str!("fixtures/todo/dist/shell.html"),
+        include_str!("../dist/tests/todo/dist/shell.html"),
         &bridge,
         Some(send),
     )

@@ -172,6 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Install fallible signal setup before owning any live datastore.
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let plugin_root = plugins.as_ref().map(std::fs::canonicalize).transpose()?;
     let (backend, bundle_hash) = if let Some(root) = plugins {
         let backend = Backend::start_plugins(Storage::Disk(data), javascript, &root).await?;
         let hash = backend.server().plugins().await?["revision"]
@@ -194,6 +195,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "url": format!("ws://{}/ws", listener.local_addr()?),
         "pid": std::process::id(),
         "bundleHash": bundle_hash,
+        "pluginRoot": plugin_root,
     });
     if let Some(directory) = &local {
         let temporary = directory.join(format!("server.json.{}.tmp", std::process::id()));

@@ -18,8 +18,7 @@ target/debug/tokamak --plugins path/to/plugins --local-dir path/to/private-serve
 ```
 
 The local directory requires the same private `server.token` as the desktop
-launcher. Never pass the token in arguments. The launcher still defaults to the
-single application bundle until the client-plugin loader is integrated in M1.3.
+launcher. Never pass the token in arguments. The launcher now uses the workspace `plugins/` installation, including Todo.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
@@ -125,3 +124,10 @@ checking authentication, Origin rejection and backend-source non-exposure.
 and immutable UI snapshots. Engine module tests cover shared-worker delegation
 and caught/abandoned child error observation. These are self-authored tests,
 not an independent review or proof of hybrid sync/long-running AI.
+
+
+The connected UI session also exposes `plugins` and revision-checked,
+UTF-8-chunked `pluginasset` requests. Successful generation swaps emit
+`pluginchanged` with the new catalog before refreshing existing subscriptions.
+See [the client host contract](../runtime/PLUGINS.md) for the wire shape and lazy
+module lifecycle. The authenticated HTTP asset/control endpoints remain usable.

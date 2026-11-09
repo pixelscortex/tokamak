@@ -53,7 +53,7 @@ struct App {
 }
 impl App {
     fn open(path: &Path) -> Self {
-        Self::with_ui(path, include_str!("fixtures/todo/dist/ui.js"))
+        Self::with_ui(path, include_str!("../dist/tests/todo/dist/ui.js"))
     }
     fn with_ui(path: &Path, ui: &str) -> Self {
         Self::with_queued_ui(path, ui, Vec::new())
@@ -69,8 +69,8 @@ impl App {
                 storage: Storage::Disk(path.join("store")),
                 bundle: Arc::new(
                     Bundle::new(
-                        include_str!("fixtures/todo/dist/bundle.js"),
-                        Some(include_str!("fixtures/todo/dist/bundle.js.map")),
+                        include_str!("../dist/tests/todo/dist/bundle.js"),
+                        Some(include_str!("../dist/tests/todo/dist/bundle.js.map")),
                     )
                     .unwrap(),
                 ),
@@ -88,7 +88,7 @@ impl App {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let captured = requests.clone();
         let mut doc = NativeDocument::new_connected(
-            include_str!("fixtures/todo/dist/shell.html"),
+            include_str!("../dist/tests/todo/dist/shell.html"),
             ui,
             Some(Box::new(move |message| {
                 captured
@@ -583,8 +583,8 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
             storage: Storage::Disk(store.0.join("store")),
             bundle: Arc::new(
                 Bundle::new(
-                    include_str!("fixtures/todo/dist/bundle.js"),
-                    Some(include_str!("fixtures/todo/dist/bundle.js.map")),
+                    include_str!("../dist/tests/todo/dist/bundle.js"),
+                    Some(include_str!("../dist/tests/todo/dist/bundle.js.map")),
                 )
                 .unwrap(),
             ),
