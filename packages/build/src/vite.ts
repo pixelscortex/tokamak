@@ -11,13 +11,15 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { publicFunctions } from "./exports.ts";
 import { compileCss } from "./css.ts";
+import { uiContributions } from "./contributions.ts";
+import { nativeSolid } from "./native.ts";
 import { nativeConfig, nativePlugins } from "./native.ts";
 
-export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginDefinition } = {}): PluginOption {
+export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginDefinition; standalone?: boolean } = {}): PluginOption {
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   return [
-    ...(options.ui === false ? [] : nativePlugins()),
+    ...(options.ui === false ? [] : options.standalone ? nativePlugins() : [nativeSolid()]),
     {
       name: "tokamak-application",
       config(config, environment) {
@@ -43,7 +45,12 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
             fileName: "ui.js",
           },
         );
-        return { ...native, root };
+        if (options.standalone) return { ...native, root };
+        return { ...native, root, build: { ...native.build,
+          lib: { entry: resolve(root, "src/main.tsx"), formats: ["cjs"], fileName: () => "ui.js" },
+          rollupOptions: { external: id => /^(solid-js(?:$|\/)|@tokamak\/|@plugins\/)/.test(id),
+            output: { exports: "named" } },
+        } };
       },
       resolveId(id) {
         if (options.ui === false && id === resolve(root, ".tokamak-empty-ui.js")) return "\0tokamak-empty-ui";
@@ -55,6 +62,12 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
           version: manifest.version ?? "0.1.0",
         });
+        if (options.ui !== false && !options.standalone) {
+          const ui = uiContributions(root);
+          const depends = { ...plugin.depends };
+          for (const id of ui.depends) depends[id] ??= "*";
+          plugin = definePlugin({ ...plugin, depends, contributes: ui.contributes });
+        }
         const entries: Record<string, unknown> = {};
         if (options.backend === false && plugin.exports !== undefined) throw new Error("Plugin exports require a backend");
         if (options.backend !== false) {
@@ -103,6 +116,21 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
       },
       generateBundle(_options, bundle) {
         if (options.ui === false) delete bundle["ui.js"];
+        if (options.ui !== false && !options.standalone) {
+          const ui = bundle["ui.js"];
+          if (!ui || ui.type !== "chunk") throw new Error("Missing plugin UI module");
+          const modules = [...this.getModuleIds()];
+          if (modules.some(id => /\/solid-js\/|\/render\/js\//.test(id))) throw new Error("Shared runtime leaked into plugin UI");
+          if (/document\.|window\.|solid-js\/web/.test(ui.code)) throw new Error("Browser runtime leaked into plugin UI");
+          const deps = ui.imports;
+          ui.code = `globalThis.__tokamakModules.register(${JSON.stringify(`@plugins/${plugin.id}/ui`)},${JSON.stringify(deps)},function(require,exports,module){\n${ui.code}\n});\n`;
+          const map = bundle["ui.js.map"];
+          if (map?.type === "asset") {
+            const source = JSON.parse(String(map.source));
+            source.mappings = ";" + source.mappings;
+            map.source = JSON.stringify(source);
+          }
+        }
         // Commit the hashes of final emitted bytes, not intermediate compiler
         // inputs. A loader snapshots and verifies these before evaluating code.
         const manifest = bundle["manifest.json"];
