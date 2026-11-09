@@ -138,10 +138,14 @@
   }
   const formEncode = value => encodeURIComponent(value).replace(/%20/g,"+").replace(/[!'()~]/g,c=>`%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   const formDecode = value => { try { return decodeURIComponent(value.replace(/\+/g," ")); } catch { return value.replace(/\+/g," "); } };
+  const replaceParams = Symbol();
   class URLSearchParams {
     #pairs = []; #change;
     constructor(init = "", change) {
-      this.#change = change;
+      this.#change = change; this[replaceParams](init);
+    }
+    [replaceParams](init) {
+      this.#pairs = [];
       if (typeof init === "string") {
         for (const pair of init.replace(/^\?/,"").split("&")) if (pair) {
           const i = pair.indexOf("="); this.#pairs.push([formDecode(i < 0 ? pair : pair.slice(0,i)), formDecode(i < 0 ? "" : pair.slice(i+1))]);
@@ -170,11 +174,17 @@
     #parts; #params;
     constructor(url, base) { this.#parts = sync("url", { url: String(url), ...(base === undefined ? {} : { base: String(base) }) }); }
     get href() { return this.#parts.href; }
-    set href(value) { this.#parts = sync("url", { url: String(value) }); this.#params = undefined; }
+    set href(value) { this.#update(sync("url", { url: String(value) })); }
     get origin() { return this.#parts.origin; }
     get searchParams() { return this.#params ??= new URLSearchParams(this.search, s => { this.#parts = sync("url", { url: this.href, set: "search", value: s }); }); }
     _get(k) { return this.#parts[k]; }
-    _set(k,v) { this.#parts = sync("url", { url: this.href, set:k, value:String(v) }); this.#params = undefined; }
+    #update(parts) {
+      this.#parts = parts;
+      // Retained references stay linked after either search or href changes.
+      // Replace the pairs without firing the reverse URL-update callback.
+      this.#params?.[replaceParams](parts.search);
+    }
+    _set(k,v) { this.#update(sync("url", { url: this.href, set:k, value:String(v) })); }
     toString() { return this.href; }
     toJSON() { return this.href; }
     static canParse(url, base) { try { new URL(url,base); return true; } catch { return false; } }
