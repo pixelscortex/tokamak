@@ -21,3 +21,6 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Delta app workspace state (worktrees, clones, settings) is local tooling, not source.
+/.delta/
