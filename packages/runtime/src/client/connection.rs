@@ -59,9 +59,9 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
     request.headers_mut().insert("authorization", authorization);
     let config = WebSocketConfig::default()
         .write_buffer_size(0)
-        .max_write_buffer_size(2 * 1024 * 1024)
-        .max_message_size(Some(1024 * 1024))
-        .max_frame_size(Some(1024 * 1024));
+        .max_write_buffer_size(2 * render::MAX_WIRE_MESSAGE_BYTES)
+        .max_message_size(Some(render::MAX_WIRE_MESSAGE_BYTES))
+        .max_frame_size(Some(render::MAX_WIRE_MESSAGE_BYTES));
     let (socket, _) = tokio::time::timeout(
         Duration::from_secs(5),
         tokio_tungstenite::connect_async_with_config(request, Some(config), true),
@@ -74,7 +74,7 @@ pub fn admission() -> (render::MessageSender, mpsc::Receiver<String>) {
     let (requests, receiver) = mpsc::channel(64);
     (
         Box::new(move |message: String| {
-            if message.len() > 1024 * 1024 {
+            if message.len() > render::MAX_WIRE_MESSAGE_BYTES {
                 return Err(render::Error("request too large (1 MiB limit)".into()));
             }
             requests

@@ -8,6 +8,7 @@ mod wire;
 use blitz_dom::{DocGuard, DocGuardMut, Document, EventDriver, EventHandler};
 use blitz_html::HtmlDocument;
 use blitz_traits::{NodeId, events::*};
+pub use engine::MAX_WIRE_MESSAGE_BYTES;
 use keyboard_types::{Key, Modifiers, NamedKey};
 pub use mailbox::{HostMailbox, HostSender};
 use serde::Deserialize;

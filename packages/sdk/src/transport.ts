@@ -298,7 +298,7 @@ export class WebSocketTransport extends InProcessTransport {
         const text = JSON.stringify(request);
         // Bound the SDK's socket queue as well as the server queues. A failed
         // send closes the whole connection; admitted mutation outcomes are unknown.
-        if (text.length > 1024 * 1024 || socket.bufferedAmount > 1024 * 1024)
+        if (text.length > MAX_WIRE_MESSAGE_BYTES || socket.bufferedAmount > MAX_WIRE_MESSAGE_BYTES)
           throw new Error("WebSocket buffer capacity exceeded");
         socket.send(text);
       },
