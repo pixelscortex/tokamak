@@ -46,7 +46,7 @@ reuses it; desktop exit does not stop it. `bun run server:status`,
 
 `bun run ui:lab` opens the component catalog without starting a server or
 touching user storage. Todo is retired from the product and retained only in
-`app/tests/fixtures/todo` for the native, compiler and five E2E regressions.
+`plugins/todo` (with an isolated standalone build at `app/dist/tests/todo`) for the native, compiler and five E2E regressions.
 
 `.prototools` pins moon, Bun, and Rust. Moon's built-in toolchains read those
 pins and manage their tool caches and dependency installation; no custom proto

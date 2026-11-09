@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport, createApi } from "../packages/sdk/src/index";
 import type { ApiFromModule, SubscriptionEvent } from "../packages/sdk/src/index";
-import { api } from "../app/tests/fixtures/todo/backend/_legacyApi";
+import { api } from "../app/dist/tests/todo/backend/_legacyApi";
 import { buildFeature } from "../packages/server/tests/build-feature.mjs";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
@@ -137,7 +137,7 @@ try {
   const expected: Rows = JSON.parse(await readFile(join(root, "native-rows.json"), "utf8"));
   // Scenarios 2/4: two separate SDKs, sockets and server sessions; BOTH actually
   // subscribe before either writes. Full equality proves the native data path.
-  await headless(resolve("app/tests/fixtures/todo/dist/bundle.js"), join(root, "store"), async address => {
+  await headless(resolve("app/dist/tests/todo/dist/bundle.js"), join(root, "store"), async address => {
     const first = await connect(address);
     try {
       const second = await connect(address);
