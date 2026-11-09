@@ -1,0 +1,29 @@
+app/vite.config.ts
+  s_4b707c4a248406::t_e4d55bdf389146 6
+packages/sdk/src/contributions.ts
+  s_4b707c4a248406::t_e2722849314ad3 1-24
+packages/build/src/vite.ts
+  s_4b707c4a248406::t_e4d55bdf389146 14-15,18,22,48-53,65-70,119-133
+app/tests/fixtures/todo/vite.config.ts
+  s_4b707c4a248406::t_e4d55bdf389146 3
+packages/build/src/contributions.ts
+  s_4b707c4a248406::t_e2722849314ad3 1-63
+packages/sdk/src/index.ts
+  s_4b707c4a248406::t_e2722849314ad3 51-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "726651b8f11069c354081f29ea9b4c5e783d2994",
+  "prompts": {},
+  "sessions": {
+    "s_4b707c4a248406": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfb6-a3db-7a91-aae7-c146ae7a257e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
