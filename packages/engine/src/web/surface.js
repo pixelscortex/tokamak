@@ -306,8 +306,9 @@
       const onAbort = () => cancel(request.signal.reason);
       const close = () => { finished = true; reader?.cancel().catch(()=>{}); request.signal.removeEventListener("abort",onAbort); };
       request.signal.addEventListener("abort",onAbort,{once:true});
-      // Both futures stay on the world's executor. A one-chunk native channel
-      // applies backpressure without buffering the upload or spawning a task.
+      // The JS upload pump stays on the world's executor; its host futures own
+      // the native I/O tasks. A one-chunk channel supplies backpressure without
+      // buffering the upload.
       const send = asyncOp("send", {id,url:request.url,method:request.method,headers:[...request.headers]});
       const pump = (async () => {
         if (!request.body) return;

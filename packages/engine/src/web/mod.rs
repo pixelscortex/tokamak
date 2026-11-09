@@ -288,7 +288,18 @@ impl WebHost {
         Ok(())
     }
 
-    async fn asynchronous(&self, p: Json) -> Result<Json> {
+    async fn asynchronous(self: Arc<Self>, p: Json) -> Result<Json> {
+        // A pending read may hold the response lock when JS aborts and then
+        // keeps running. Drive native I/O on the background executor so token
+        // cancellation can drop that reader/socket without another JS poll.
+        // The world's future owns this handle; no native task is detached.
+        let task =
+            tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move { self.io(p).await }));
+        task.await
+            .map_err(|e| format!("native web operation stopped: {e}"))?
+    }
+
+    async fn io(&self, p: Json) -> Result<Json> {
         let operation = text(&p, "op")?;
         let request_id = id(&p)?;
         if operation == "sleep" {

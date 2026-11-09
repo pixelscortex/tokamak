@@ -49,8 +49,11 @@ of JS cleanup and promise lifetimes, then drops the world and its native futures
 Dropping a cancelled invocation future runs the same native lease cleanup.
 Each JS worker uses a Tokio runtime with one background I/O driver, which keeps
 running while the JS worker waits for another job. Abort drops the response and
-wakes pending I/O immediately; connection teardown continues while that worker
-is idle. HTTP/1.1 with connection pooling disabled gives each exchange its own
+wakes pending I/O immediately. Native web futures run on tracked Tokio tasks,
+owned by abort-on-drop handles in the world's futures, so cancellation also
+releases a reader's response lock while JS is busy. The invocation lease cancels
+all resources and dropping the world aborts its task handles; teardown continues
+on the background driver while the JS worker is idle. HTTP/1.1 with connection pooling disabled gives each exchange its own
 socket, so cancelling a body closes its connection rather than retaining an idle
 or multiplexed transport.
 
