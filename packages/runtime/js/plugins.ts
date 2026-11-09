@@ -82,9 +82,9 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     };
     const task = (async () => {
       const entry = p.entries.ui!;
-      for (const dependency of Object.keys(p.plugin.depends ?? {})) {
-        if (manifest(dependency)?.entries.ui) await load(dependency, [...stack, id]);
-      }
+      // Manifest depends also includes backend requirements. Register this
+      // inert factory first, then resolve only its actual UI imports; otherwise
+      // a backend dependency would prematurely fetch an unrelated UI module.
       const code = await assets.pluginAsset(id, entry.code, revision);
       live();
       registry.evaluate(moduleName(id), code);
