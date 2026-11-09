@@ -70,7 +70,7 @@
 
   class TextEncoder {
     get encoding() { return "utf-8"; }
-    encode(text = "") { return new Uint8Array(sync("encode", { text: String(text) })); }
+    encode(text = "") { return new Uint8Array(sync("encode", { text: String(text).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,"\uFFFD") })); }
     encodeInto(text, destination) {
       if (!(destination instanceof Uint8Array)) throw new TypeError("Expected Uint8Array");
       let read = 0, written = 0;
@@ -222,7 +222,8 @@
       this.signal = init.signal ?? source?.signal ?? new AbortController().signal;
       this.redirect = init.redirect ?? source?.redirect ?? "follow";
       if (!["follow","manual","error"].includes(this.redirect)) throw new TypeError("Invalid redirect mode");
-      for (const key of ["integrity","keepalive"]) if (init[key]) unsupported(`Request.${key}`);
+      for (const key of Object.keys(init)) if (!["method","headers","body","signal","redirect","duplex"].includes(key)) unsupported(`Request.${key}`);
+      if (init.duplex !== undefined && init.duplex !== "half") unsupported("Request.duplex");
     }
     clone() { return new Request(this,{body:this._cloneBody()}); }
   }

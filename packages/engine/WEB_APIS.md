@@ -86,3 +86,18 @@ QuickJS `JSMemoryUsage.malloc_size` (64 MiB configured cap): bare context
 loaded **6,845,760**; after the three-token abort **7,312,920**. These are the
 engine's allocator counts, not whole-process RSS; TLS/native buffers and Rust
 resource tables live outside the JS heap and have separate resource/chunk caps.
+
+A separate throwaway proof streamed three request-body chunks to the mock at
+150 ms intervals (5 bytes each), decoded the 15-byte JSON result, exercised
+incremental UTF-8/BOM handling, stream transforms, clones, timer cancellation,
+intervals, signal composition, UUIDs and integer-array randomness. A redirect
+from allowed `127.0.0.1` to ungranted `localhost` was rejected before the target
+request. Across separate processes holding 50 worlds, bare RSS was 16,384 KiB
+and web-enabled RSS 52,496 KiB: approximately **722 KiB added per world**,
+including native/runtime overhead (allocator and OS dependent).
+
+Release binary (workspace size-oriented profile, stripped LTO, aarch64 macOS):
+baseline `5f3b3be` **39,923,312 bytes**; Phase 1 web-enabled binary **40,253,904 bytes**;
+added **330,592 bytes** (0.83%). The baseline was built from original
+server/engine sources in an ignored minimal workspace with the original lock
+versions; the changed binary used the normal workspace release build.
