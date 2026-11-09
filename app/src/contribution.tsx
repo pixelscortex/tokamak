@@ -1,6 +1,6 @@
 /** Every slot owns an error boundary and reactive generation. Keying the owner
  * retires effects/resources before mounting an updated plugin contribution. */
-import { ErrorBoundary, Show, createSignal, onCleanup, type Accessor, type Component } from "solid-js";
+import { ErrorBoundary, Show, createRoot, createSignal, onCleanup, type Accessor, type Component } from "solid-js";
 import { createComponent } from "@tokamak/render";
 import type { ModuleExports } from "@tokamak/runtime/modules";
 import type { PluginLoader, SlotContribution } from "@tokamak/runtime/plugins";
@@ -17,9 +17,16 @@ export function Contribution(props: {
       <span>{props.contribution.plugin} failed · </span>
       <button onClick={() => props.loader.reload(props.contribution.plugin)}>Reload</button>
     </div>}>
-      <LoadedContribution {...props} />
+      <ContributionRoot {...props} />
     </ErrorBoundary>}
   </Show>;
+}
+function ContributionRoot(props: Parameters<typeof Contribution>[0]) {
+  // A root marks the contribution lifetime for callbacks/promises independently
+  // of short-lived JSX property computations. Boundary reset disposes it too.
+  let release = () => {};
+  onCleanup(() => release());
+  return createRoot(dispose => { release = dispose; return LoadedContribution(props); });
 }
 function LoadedContribution(props: Parameters<typeof Contribution>[0]) {
   const [module, setModule] = createSignal<ModuleExports>();

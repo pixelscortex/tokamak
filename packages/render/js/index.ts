@@ -22,7 +22,12 @@ function currentScope(): Scope | undefined {
     scope = { owner, alive: true };
     scopes.set(owner, scope);
     const captured = scope;
-    onCleanup(() => { captured.alive = false; });
+    // Property spreads run in short-lived computations. Their cleanup on a
+    // reactive rerun does not retire the node or its installed callbacks. Tie
+    // liveness to the surrounding root, retaining the captured error context.
+    let lifetime = owner;
+    while ("fn" in lifetime && lifetime.owner) lifetime = lifetime.owner;
+    runWithOwner(lifetime, () => onCleanup(() => { captured.alive = false; }));
   }
   return scope;
 }
@@ -30,7 +35,18 @@ function owned<T extends (...args: any[]) => any>(callback: T): T {
   const scope = currentScope();
   if (!scope) return callback;
   return ((...args: Parameters<T>) => {
-    if (scope.alive) return runWithOwner(scope.owner, () => callback(...args));
+    if (!scope.alive) return;
+    let result: ReturnType<T> | undefined;
+    let failure: { cause: unknown } | undefined;
+    runWithOwner(scope.owner, () => {
+      // Finish the update batch before re-entering the owner's error handler.
+      // Throwing through runWithOwner would discard valid writes queued by an
+      // ordinary host callback before its failure.
+      try { result = callback(...args); }
+      catch (cause) { failure = { cause }; }
+    });
+    if (failure) { const { cause } = failure; runWithOwner(scope.owner, () => { throw cause; }); }
+    return result;
   }) as T;
 }
 function flushRejections() {
