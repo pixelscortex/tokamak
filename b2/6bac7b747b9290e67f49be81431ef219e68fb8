@@ -1,0 +1,21 @@
+packages/build/src/contributions.ts
+  s_f190b446980e88::t_cc5e3ab6a56dd5 8,23-26
+packages/build/src/vite.ts
+  s_f190b446980e88::t_91799219452f94 127-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b26bac7b747b9290e67f49be81431ef219e68fb8",
+  "prompts": {},
+  "sessions": {
+    "s_f190b446980e88": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bff9-07ad-7df2-baef-8b9191983be6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
