@@ -1,0 +1,19 @@
+packages/engine/src/web/surface.js
+  s_823c0d6f2944a8::t_1bd0e5bcb14d87 141,145-148,177,181-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "154e93af2e63723499de604f36c65d3f659c3eac",
+  "prompts": {},
+  "sessions": {
+    "s_823c0d6f2944a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfaf-03fa-7490-ab98-69133c30ac30",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
