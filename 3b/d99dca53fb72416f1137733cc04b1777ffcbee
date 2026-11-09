@@ -1,0 +1,23 @@
+README.md
+  s_4b707c4a248406::t_e76506587efbdb 49
+e2e/README.md
+  s_4b707c4a248406::t_c82f6ac954a5b7 5,12
+e2e/run.ts
+  s_4b707c4a248406::t_3acc255a93e446 10,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3bd99dca53fb72416f1137733cc04b1777ffcbee",
+  "prompts": {},
+  "sessions": {
+    "s_4b707c4a248406": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bfb6-a3db-7a91-aae7-c146ae7a257e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
