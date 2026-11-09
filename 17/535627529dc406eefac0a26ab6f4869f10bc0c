@@ -1,0 +1,31 @@
+packages/server/tests/actions.rs
+  s_95b003709671b2::t_c99dccbeac0944 27-29
+  s_95b003709671b2::t_bb54c8be19981a 446-449
+packages/server/tests/fixtures/actions/resolver.c
+  s_95b003709671b2::t_bb54c8be19981a 27-38
+packages/server/tests/helpers/actions_dns.rs
+  s_95b003709671b2::t_3713ac8b03586c 1-9,16,21-23,30-32,36-39,49-51,54-55,72-73,95-96,106-107,114-116,122-126,134-139,147-149,154-166,172-178,239,262-271,280,288-297,309,333-340,345-346
+  s_95b003709671b2::t_f0b0a5e3349d87 10-15,17-20,24-29,33-35,40-48,56-71,74-77,79-94,97-105,108-113,117-121,127-133,140-146,150-153,167-171,179-200,202-210,212-218,220-238,240-261,272-279,281-287,298-308,310-332,341-344
+  s_95b003709671b2::t_c99dccbeac0944 52-53,78
+  s_95b003709671b2::t_2cca78ceefc9be 201,211,219
+packages/server/tests/build-actions.mjs
+  s_95b003709671b2::t_bb54c8be19981a 26
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_95b003709671b2::t_bb54c8be19981a 10-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17535627529dc406eefac0a26ab6f4869f10bc0c",
+  "prompts": {},
+  "sessions": {
+    "s_95b003709671b2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c03a-e299-7292-b03c-dc8deab9dd08",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
