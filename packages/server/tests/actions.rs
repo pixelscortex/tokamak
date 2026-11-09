@@ -24,6 +24,9 @@ fn root() -> PathBuf {
 fn artifacts() -> &'static BTreeMap<String, String> {
     static BUILT: OnceLock<BTreeMap<String, String>> = OnceLock::new();
     BUILT.get_or_init(|| {
+        if let Some(path) = std::env::var_os("TKM45_TEST_ARTIFACTS") {
+            return serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        }
         let output = Command::new("proto")
             .args([
                 "run",
@@ -440,3 +443,7 @@ fn web_fix_cancel_disconnects_with_worker_idle() {
         }).await.expect("cancelled action regression timeout");
     });
 }
+
+#[cfg(unix)]
+#[path = "helpers/actions_dns.rs"]
+mod dns;

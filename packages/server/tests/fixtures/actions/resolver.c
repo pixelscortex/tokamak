@@ -24,6 +24,18 @@ static int real_lookup(const char *host, const char *service,
 static int test_lookup(const char *host, const char *service,
                        const struct addrinfo *hints, struct addrinfo **result) {
     const char *address = NULL;
+    if (host && !strcmp(host, "held.tkm.test")) {
+        const char *log = getenv("TKM45_DNS_LOG");
+        const char *release = getenv("TKM45_DNS_RELEASE");
+        // One atomic append per real OS lookup, not per attempted JS fetch.
+        if (log) {
+            int file = open(log, O_WRONLY | O_APPEND | O_CREAT, 0600);
+            if (file >= 0) { (void)write(file, "entered\n", 8); close(file); }
+        }
+        // Parent watchdog kills this isolated test process on assertion failure.
+        while (release && access(release, F_OK) != 0) usleep(1000);
+        address = "10.1.2.3";
+    }
     if (host && !strcmp(host, "loopback.tkm.test")) address = "127.0.0.1";
     if (host && !strcmp(host, "private.tkm.test")) address = "10.1.2.3";
     if (host && !strcmp(host, "metadata.tkm.test")) address = "169.254.169.254";
