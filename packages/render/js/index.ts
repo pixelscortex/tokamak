@@ -14,6 +14,7 @@ let asyncScope: Scope | undefined;
 const scopeStack: (Scope | undefined)[] = [];
 const promiseScopes = new WeakMap<object, Scope>();
 const rejections = new Map<object, { scope: Scope; cause: unknown }>();
+const hookFailures: { scope: Scope; cause: unknown }[] = [];
 function currentScope(): Scope | undefined {
   const owner = getOwner();
   if (!owner) return asyncScope;
@@ -50,8 +51,9 @@ function owned<T extends (...args: any[]) => any>(callback: T): T {
   }) as T;
 }
 function flushRejections() {
-  const failures = [...rejections.values()];
+  const failures = [...rejections.values(), ...hookFailures];
   rejections.clear();
+  hookFailures.length = 0;
   for (const { scope, cause } of failures) {
     if (scope.alive) runWithOwner(scope.owner, () => { throw cause; });
   }
@@ -302,6 +304,12 @@ Object.defineProperty(globalThis, "__tokamak", {
         if (scope?.alive) rejections.set(promise, { scope, cause });
       }
     },
+    promiseHookError(promise: object, cause: unknown): boolean {
+      const scope = promiseScopes.get(promise) ?? currentScope();
+      if (!scope?.alive || hookFailures.length >= 16) return false;
+      hookFailures.push({ scope, cause });
+      return true;
+    },
     dispatch(json: string): string {
       return JSON.stringify(dispatch(JSON.parse(json) as Dispatch));
     },
@@ -318,6 +326,7 @@ Object.defineProperty(globalThis, "__tokamak", {
         dispose = undefined;
         subscriptions.clear();
         rejections.clear();
+        hookFailures.length = 0;
         nodes.clear();
         pending = [];
       }

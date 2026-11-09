@@ -3,17 +3,108 @@
 use crate::{Error, Result};
 use engine::{
     QuickJsContext,
-    rquickjs::{CaughtError, Function, Object},
+    rquickjs::{CaughtError, Ctx, Function, JsLifetime, Object, Value},
 };
 use futures_lite::future::block_on;
-use std::time::{Duration, Instant};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
-pub(crate) struct Js(QuickJsContext);
+#[derive(Default)]
+struct HookState {
+    active: Cell<bool>,
+    errors: RefCell<Vec<String>>,
+}
+
+// This state owns only Rust data, with no JavaScript handles or borrowed lifetimes.
+unsafe impl<'js> JsLifetime<'js> for HookState {
+    type Changed<'to> = Self;
+}
+
+fn promise_callback<'js>(
+    ctx: &Ctx<'js>,
+    promise: Value<'js>,
+    method: &str,
+    invoke: impl FnOnce(Function<'js>) -> engine::rquickjs::Result<()>,
+) {
+    let Some(state) = ctx.userdata::<Rc<HookState>>() else {
+        return;
+    };
+    if state.active.replace(true) {
+        return;
+    }
+    struct Active<'a>(&'a Cell<bool>);
+    impl Drop for Active<'_> {
+        fn drop(&mut self) {
+            self.0.set(false);
+        }
+    }
+    let _active = Active(&state.active);
+    // QuickJS invokes AFTER with the thenable's exception still pending. Even a
+    // callback which catches its own errors can consume it, so isolate the entire
+    // callback/lookup/reporting sequence and restore only the saved exception.
+    let pending = ctx.has_exception().then(|| ctx.catch());
+    let result = (|| {
+        let Some(api) = ctx.globals().get::<_, Option<Object>>("__tokamak")? else {
+            return Ok(());
+        };
+        if let Some(callback) = api.get::<_, Option<Function>>(method)? {
+            invoke(callback)?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        let caught = CaughtError::from_error(ctx, error);
+        let message = format!("{method}: {caught}");
+        // Error properties can themselves be hostile getters.
+        if ctx.has_exception() {
+            drop(ctx.catch());
+        }
+        let cause = match caught {
+            CaughtError::Exception(error) => Some(error.into_value()),
+            CaughtError::Value(value) => Some(value),
+            CaughtError::Error(_) => None,
+        };
+        // Prefer the promise's captured owner. Reporting is guarded too: a
+        // broken reporter cannot leak another pending exception into QuickJS.
+        let reported = cause.is_some_and(|cause| {
+            (|| -> engine::rquickjs::Result<bool> {
+                let api: Object = ctx.globals().get("__tokamak")?;
+                let Some(report) = api.get::<_, Option<Function>>("promiseHookError")? else {
+                    return Ok(false);
+                };
+                report.call((promise, cause))
+            })()
+            .unwrap_or(false)
+        });
+        if !reported && state.errors.borrow().len() < 16 {
+            state
+                .errors
+                .borrow_mut()
+                .push(message.chars().take(2048).collect());
+        }
+    }
+    if ctx.has_exception() {
+        drop(ctx.catch());
+    }
+    if let Some(pending) = pending {
+        ctx.throw(pending);
+    }
+}
+
+pub(crate) struct Js(QuickJsContext, Rc<HookState>);
 
 impl Js {
     pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {
         let world =
             block_on(QuickJsContext::new(64 * 1024 * 1024)).map_err(|e| Error(e.to_string()))?;
+        let hooks = Rc::new(HookState::default());
+        block_on(world.context().async_with(async |ctx| {
+            ctx.store_userdata(hooks.clone())
+                .map_err(|e| Error(e.to_string()))
+        }))?;
         // Promise hooks retain plugin/contribution attribution even for detached
         // async functions. Rejections are delivered after jobs settle, allowing
         // ordinary .catch/try-await handlers to consume them first.
@@ -27,11 +118,11 @@ impl Js {
                         engine::rquickjs::promise::PromiseHookType::After => "after",
                         engine::rquickjs::promise::PromiseHookType::Resolve => return,
                     };
-                    if let Ok(api) = ctx.globals().get::<_, Object>("__tokamak") {
-                        if let Ok(callback) = api.get::<_, Function>("promiseHook") {
-                            let _ = callback.call::<_, ()>((kind, promise, parent));
-                        }
-                    }
+                    // Capture-free: rquickjs 0.14 hands out &mut to this
+                    // closure even on recursive hooks. State lives in userdata.
+                    promise_callback(&ctx, promise.clone(), "promiseHook", |callback| {
+                        callback.call((kind, promise, parent))
+                    });
                 }))),
         );
         block_on(
@@ -39,11 +130,9 @@ impl Js {
                 .runtime()
                 .set_host_promise_rejection_tracker(Some(Box::new(
                     |ctx, promise, reason, handled| {
-                        if let Ok(api) = ctx.globals().get::<_, Object>("__tokamak") {
-                            if let Ok(callback) = api.get::<_, Function>("promiseRejection") {
-                                let _ = callback.call::<_, ()>((promise, reason, handled));
-                            }
-                        }
+                        promise_callback(&ctx, promise.clone(), "promiseRejection", |callback| {
+                            callback.call((promise, reason, handled))
+                        });
                     },
                 ))),
         );
@@ -83,7 +172,7 @@ impl Js {
             Ok(())
         }))?;
         world.set_deadline(None);
-        Ok(Self(world))
+        Ok(Self(world, hooks))
     }
 
     /// Run ready promise continuations before draining mutations. There are no
@@ -113,7 +202,14 @@ impl Js {
             Err(Error("UI microtask budget exceeded".into()))
         })();
         self.0.set_deadline(None);
+        self.report_hook_errors();
         result
+    }
+
+    fn report_hook_errors(&self) {
+        for error in self.1.errors.take() {
+            eprintln!("UI promise callback: {error}");
+        }
     }
 
     pub fn call(&self, method: &str, json: Option<&str>) -> Result<Option<String>> {
@@ -136,6 +232,7 @@ impl Js {
             call().map_err(|e| Error(CaughtError::from_error(&ctx, e).to_string()))
         }));
         self.0.set_deadline(None);
+        self.report_hook_errors();
         result
     }
 }
