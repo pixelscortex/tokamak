@@ -1,0 +1,39 @@
+packages/engine/WEB_APIS.md
+  s_7a2496f4752be8::t_f36e73dfe560bf 1-88
+packages/engine/Cargo.toml
+  s_7a2496f4752be8::t_172f16dde598ff 13-19
+  s_7a2496f4752be8::t_4beb3d6181a2ba 12
+packages/engine/src/web/mod.rs
+  s_7a2496f4752be8::t_1a4c49ce2638bf 1-8,10-65,67-105,108-167,169-181,183-226,228-341,346,351-358,360-363,365-369,376-378
+  s_7a2496f4752be8::t_9925266cd10cb4 9,66,106-107,168,182,227,342-345,347-350,359,364,370-375
+Cargo.lock
+  s_7a2496f4752be8::t_62ee47caec8c62 1698-1701,1706-1707
+packages/engine/src/bridge.rs
+  s_7a2496f4752be8::t_8fa7668611b24d 134,141-148,185,315-316
+packages/engine/src/engine.rs
+  s_7a2496f4752be8::t_12518e82b1213c 105-114
+packages/engine/src/lib.rs
+  s_7a2496f4752be8::t_45e7c7d9d76c02 11
+packages/engine/src/web/surface.js
+  s_7a2496f4752be8::t_8643274e8d3d7a 1-342
+packages/engine/src/web/vendor/streams.LICENSE
+  s_7a2496f4752be8::t_6e9e259cce44a8 1-22
+packages/engine/src/web/vendor/streams.js
+  s_7a2496f4752be8::t_789c7ad985968d 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99d9cbaf9059df76958dcba3da1ace424a49051e",
+  "prompts": {},
+  "sessions": {
+    "s_7a2496f4752be8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf08-03fa-7432-a0c2-b88be0a101d9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
