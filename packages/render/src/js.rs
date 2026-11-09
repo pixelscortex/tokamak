@@ -14,6 +14,39 @@ impl Js {
     pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {
         let world =
             block_on(QuickJsContext::new(64 * 1024 * 1024)).map_err(|e| Error(e.to_string()))?;
+        // Promise hooks retain plugin/contribution attribution even for detached
+        // async functions. Rejections are delivered after jobs settle, allowing
+        // ordinary .catch/try-await handlers to consume them first.
+        block_on(
+            world
+                .runtime()
+                .set_promise_hook(Some(Box::new(|ctx, kind, promise, parent| {
+                    let kind = match kind {
+                        engine::rquickjs::promise::PromiseHookType::Init => "init",
+                        engine::rquickjs::promise::PromiseHookType::Before => "before",
+                        engine::rquickjs::promise::PromiseHookType::After => "after",
+                        engine::rquickjs::promise::PromiseHookType::Resolve => return,
+                    };
+                    if let Ok(api) = ctx.globals().get::<_, Object>("__tokamak") {
+                        if let Ok(callback) = api.get::<_, Function>("promiseHook") {
+                            let _ = callback.call::<_, ()>((kind, promise, parent));
+                        }
+                    }
+                }))),
+        );
+        block_on(
+            world
+                .runtime()
+                .set_host_promise_rejection_tracker(Some(Box::new(
+                    |ctx, promise, reason, handled| {
+                        if let Ok(api) = ctx.globals().get::<_, Object>("__tokamak") {
+                            if let Ok(callback) = api.get::<_, Function>("promiseRejection") {
+                                let _ = callback.call::<_, ()>((promise, reason, handled));
+                            }
+                        }
+                    },
+                ))),
+        );
         world.set_deadline(Some(Instant::now() + Duration::from_secs(2)));
         block_on(world.context().async_with(async |ctx| {
             // Install before evaluating: initial Solid subscriptions must have

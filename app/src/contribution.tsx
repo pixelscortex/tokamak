@@ -22,6 +22,9 @@ export function Contribution(props: {
 function LoadedContribution(props: Parameters<typeof Contribution>[0]) {
   const [module, setModule] = createSignal<ModuleExports>();
   const [failure, setFailure] = createSignal<{ cause: unknown }>();
+  // Factory roots are deliberately separate from view roots. Their errors are
+  // attributed by module id, then bridged into each consuming boundary.
+  onCleanup(props.loader.onError(props.contribution.plugin, cause => setFailure({ cause })));
   let alive = true;
   onCleanup(() => { alive = false; });
   // Solid's resource scheduler requires queueMicrotask, absent in QuickJS.

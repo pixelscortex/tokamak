@@ -121,6 +121,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
   });
   return {
     metadata, version, styles, load,
+    onError(id: string, listener: (cause: unknown) => void) { return registry.onError(moduleName(id), listener); },
     async connect() {
       const before = changes;
       const value = await assets.plugins();

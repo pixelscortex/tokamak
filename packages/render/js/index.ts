@@ -1,10 +1,45 @@
 /** Solid's universal host: a small owned tree, not a DOM polyfill. Rust consumes
  * ordered mutations only after a synchronous JS turn, before native paint. */
-import { createRoot, onCleanup } from "solid-js";
+import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js";
 import { createRenderer } from "solid-js/universal";
 import type { JSX, NativeEvent, EventHandler } from "./jsx-runtime";
 
 export type { JSX, NativeEvent, EventHandler } from "./jsx-runtime";
+
+// Capture the owner where a callback/promise is created, never the active view
+// at failure time. QuickJS hooks carry the same scope through native async/await.
+type Scope = { owner: Owner; alive: boolean };
+const scopes = new WeakMap<Owner, Scope>();
+let asyncScope: Scope | undefined;
+const scopeStack: (Scope | undefined)[] = [];
+const promiseScopes = new WeakMap<object, Scope>();
+const rejections = new Map<object, { scope: Scope; cause: unknown }>();
+function currentScope(): Scope | undefined {
+  const owner = getOwner();
+  if (!owner) return asyncScope;
+  let scope = scopes.get(owner);
+  if (!scope || !scope.alive) {
+    scope = { owner, alive: true };
+    scopes.set(owner, scope);
+    const captured = scope;
+    onCleanup(() => { captured.alive = false; });
+  }
+  return scope;
+}
+function owned<T extends (...args: any[]) => any>(callback: T): T {
+  const scope = currentScope();
+  if (!scope) return callback;
+  return ((...args: Parameters<T>) => {
+    if (scope.alive) return runWithOwner(scope.owner, () => callback(...args));
+  }) as T;
+}
+function flushRejections() {
+  const failures = [...rejections.values()];
+  rejections.clear();
+  for (const { scope, cause } of failures) {
+    if (scope.alive) runWithOwner(scope.owner, () => { throw cause; });
+  }
+}
 
 export class NativeNode {
   readonly children: NativeNode[] = [];
@@ -87,7 +122,7 @@ const adapter = createRenderer<NativeNode>({
       if (value != null && typeof value !== "function")
         throw new TypeError(`${name} must be a handler`);
       const event = name.slice(2).toLowerCase();
-      if (typeof value === "function") node.handlers.set(event, value as EventHandler);
+      if (typeof value === "function") node.handlers.set(event, owned(value as EventHandler));
       else node.handlers.delete(event);
       return;
     }
@@ -135,7 +170,7 @@ export function mount(component: () => JSX.Element): void {
 export function onHostEvent<T>(topic: string, handler: (payload: T) => void): void {
   let handlers = subscriptions.get(topic);
   if (!handlers) subscriptions.set(topic, (handlers = new Set()));
-  const listener = handler as (payload: unknown) => void;
+  const listener = owned(handler as (payload: unknown) => void);
   handlers.add(listener);
   onCleanup(() => {
     handlers.delete(listener);
@@ -144,6 +179,7 @@ export function onHostEvent<T>(topic: string, handler: (payload: T) => void): vo
 }
 
 function drain() {
+  flushRejections();
   const mutations = pending;
   pending = [];
   return JSON.stringify(mutations);
@@ -234,6 +270,22 @@ export function dispatchClick(node: NativeNode): void {
 Object.defineProperty(globalThis, "__tokamak", {
   value: Object.freeze({
     drain,
+    promiseHook(kind: string, promise: object, parent: object) {
+      if (kind === "init") {
+        const scope = currentScope() ?? promiseScopes.get(parent);
+        if (scope) promiseScopes.set(promise, scope);
+      } else if (kind === "before") {
+        scopeStack.push(asyncScope);
+        asyncScope = promiseScopes.get(promise);
+      } else if (kind === "after") asyncScope = scopeStack.pop();
+    },
+    promiseRejection(promise: object, cause: unknown, handled: boolean) {
+      if (handled) rejections.delete(promise);
+      else {
+        const scope = promiseScopes.get(promise);
+        if (scope?.alive) rejections.set(promise, { scope, cause });
+      }
+    },
     dispatch(json: string): string {
       return JSON.stringify(dispatch(JSON.parse(json) as Dispatch));
     },
@@ -249,6 +301,7 @@ Object.defineProperty(globalThis, "__tokamak", {
       } finally {
         dispose = undefined;
         subscriptions.clear();
+        rejections.clear();
         nodes.clear();
         pending = [];
       }
