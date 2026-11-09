@@ -133,7 +133,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
             if (match) depends[match[1]!] ??= "*";
           }
           metadata.plugin.depends = depends;
-          metadata.plugin.contributes = uiContributions(root, new Set(ui.exports)).contributes;
+          metadata.plugin.contributes = uiContributions(root).contributes;
           metadataAsset.source = JSON.stringify(metadata);
           const deps = ui.imports;
           ui.code = `globalThis.__tokamakModules.register(${JSON.stringify(`@plugins/${plugin.id}/ui`)},${JSON.stringify(deps)},function(require,exports,module){\n${ui.code}\n});\n`;

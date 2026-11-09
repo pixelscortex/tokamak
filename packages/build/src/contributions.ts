@@ -5,25 +5,62 @@ import ts from "typescript";
 import { resolve } from "node:path";
 
 const fields = { view: "route", itemRenderer: "type", toolbar: "label", command: "title", entityCard: "table" } as const;
-export function uiContributions(root: string, runtimeExports?: ReadonlySet<string>) {
+export function uiContributions(root: string) {
   const entry = resolve(root, "src/main.tsx");
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
   if (configResult.error) throw new Error(ts.flattenDiagnosticMessageText(configResult.error.messageText, "\n"));
   const config = configResult.config;
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
-  const program = ts.createProgram([entry], { ...parsed.options, noEmit: true });
+  const program = ts.createProgram([entry], { ...parsed.options, noEmit: false, noEmitOnError: false,
+    declaration: false, emitDeclarationOnly: false, sourceMap: false, module: ts.ModuleKind.ESNext });
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(entry);
   if (!source) throw new Error(`Missing plugin UI entry ${entry}`);
+  // Inspect TS's emitted module syntax before bundler dead-code elimination.
+  // This excludes type-only stars/aliases throughout re-export chains while
+  // preserving declared exports after a top-level throw (never execute code).
+  const emittedNames = new Map<ts.SourceFile, Set<string>>();
+  function runtimeNames(file: ts.SourceFile): Set<string> {
+    const cached = emittedNames.get(file);
+    if (cached) return cached;
+    const names = new Set<string>();
+    emittedNames.set(file, names);
+    let js = "";
+    program.emit(file, (name, text) => { if (/\.[cm]?jsx?$/.test(name)) js = text; });
+    const emitted = ts.createSourceFile(file.fileName, js, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    function binding(name: ts.BindingName) {
+      if (ts.isIdentifier(name)) names.add(name.text);
+      else for (const element of name.elements) if (ts.isBindingElement(element)) binding(element.name);
+    }
+    for (const statement of emitted.statements) {
+      if (ts.isExportDeclaration(statement)) {
+        if (statement.exportClause) {
+          if (ts.isNamedExports(statement.exportClause)) for (const item of statement.exportClause.elements) names.add(item.name.text);
+          else names.add(statement.exportClause.name.text);
+        } else if (statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+          const specifier = statement.moduleSpecifier.text;
+          const original = file.statements.find((node): node is ts.ExportDeclaration => ts.isExportDeclaration(node)
+            && !!node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier);
+          const target = original?.moduleSpecifier && checker.getSymbolAtLocation(original.moduleSpecifier);
+          const source = target?.declarations?.find(ts.isSourceFile);
+          if (source) for (const name of runtimeNames(source)) if (name !== "default") names.add(name);
+        }
+      } else if (ts.isExportAssignment(statement)) names.add("default");
+      else if (ts.canHaveModifiers(statement) && ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
+        if (ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)) names.add("default");
+        else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) binding(declaration.name);
+        else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) names.add(statement.name.text);
+      }
+    }
+    return names;
+  }
+  const runtime = runtimeNames(source);
   const original = (s: ts.Symbol): ts.Symbol => s.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(s) : s;
   const module = checker.getSymbolAtLocation(source);
   const contributes: Record<string, { id: string; [key: string]: string }[]> = {};
   for (const exported of module ? checker.getExportsOfModule(module) : []) {
-    // TS resolves type-only aliases back to values too. Public contribution
-    // names must actually be present in the emitted runtime export table.
-    if (runtimeExports && !runtimeExports.has(exported.name)) continue;
-    if (exported.declarations?.some(d => ts.isExportSpecifier(d) && (d.isTypeOnly || (ts.isExportDeclaration(d.parent.parent) && d.parent.parent.isTypeOnly)))) continue;
+    if (!runtime.has(exported.name)) continue;
     const symbol = original(exported);
     const declaration = symbol.valueDeclaration;
     if (!declaration) continue;
