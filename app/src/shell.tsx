@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, type Accessor } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient, type Event, type Request } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
@@ -20,7 +20,13 @@ export function Shell(props: { modules: ModuleRegistry }) {
   onCleanup(() => { loader.dispose(); subscriptions.dispose(); transport.close(); });
 
   const href = (view: SlotContribution) => `/p/${view.plugin}${view.options.route === "/" ? "" : view.options.route}`;
-  const active = () => loader.contributions("view").find(view => matchRoute(href(view), router.location().pathname));
+  // Every rail button reads active state. Cache these projections so a large
+  // catalog does not allocate/search its entire view list once per button.
+  const views = createMemo(() => loader.contributions("view"));
+  const active = createMemo(() => {
+    const pathname = router.location().pathname;
+    return views().find(view => matchRoute(href(view), pathname));
+  });
   // Catalog refreshes allocate new descriptors. Only identity/generation may
   // retire the view owner, otherwise reloading an unrelated plugin loses state.
   const activeKey = () => {
@@ -32,7 +38,7 @@ export function Shell(props: { modules: ModuleRegistry }) {
     <ShellFrame
       rail={<>
         <button aria-current={router.match("/chat") || router.match("/chat/:thread") ? "page" : undefined} onClick={() => router.navigate("/chat")}>Chat</button>
-        <For each={loader.contributions("view")}>{view => <button
+        <For each={views()}>{view => <button
           data-plugin-view={`${view.plugin}/${view.id}`}
           aria-current={active()?.id === view.id && active()?.plugin === view.plugin ? "page" : undefined}
           onClick={() => router.navigate(href(view))}>{view.id}</button>}</For>
