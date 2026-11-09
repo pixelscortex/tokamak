@@ -1,0 +1,61 @@
+packages/sdk/package.json
+  s_7a2496f4752be8::t_1576484f1b941f 8-9
+packages/server/src/service.rs
+  s_7a2496f4752be8::t_15ddf09f9ddc42 36,595,603-604,637,646
+  s_7a2496f4752be8::t_88a2b3e02b1928 167-170,596-602,631-633,635,762-766
+  s_7a2496f4752be8::t_834ddbeea44068 12,24-30,99,108-109,142,144,153-154,157-158,163,166,171-178,193-195,205,211,302,324-326,329,384,433,439-445,530,535,543,548,579,584-586,594,605-630,634,636,638-645,647-707,719,761,767-771,775,808,814-818,849,905,909,912-917,951,1020
+packages/server/src/plugins.rs
+  s_7a2496f4752be8::t_a38e2bedf7c4ca 105,190,197-198,248-250,559
+packages/engine/src/web/surface.js
+  s_7a2496f4752be8::t_ab934a95cf6894 29,32-35,37
+  s_7a2496f4752be8::t_32927a330af4d2 344
+packages/sdk/src/host.ts
+  s_7a2496f4752be8::t_b7e8a69b93bcdb 38-39
+packages/sdk/web.d.ts
+  s_7a2496f4752be8::t_1576484f1b941f 1-6
+packages/sdk/README.md
+  s_7a2496f4752be8::t_ab934a95cf6894 10,50,55-99
+  s_7a2496f4752be8::t_db20e5c5699314 100
+packages/engine/src/engine.rs
+  s_7a2496f4752be8::t_88a2b3e02b1928 106-107,111-115
+packages/sdk/src/transport.ts
+  s_7a2496f4752be8::t_b7e8a69b93bcdb 45-48,66
+packages/engine/README.md
+  s_7a2496f4752be8::t_ab934a95cf6894 186-201
+packages/runtime/src/client/connection.rs
+  s_7a2496f4752be8::t_e653dc38d08a33 5,109,142-144,164,189-206
+packages/sdk/src/index.ts
+  s_7a2496f4752be8::t_b7e8a69b93bcdb 14,27
+packages/server/src/protocol.rs
+  s_7a2496f4752be8::t_b7e8a69b93bcdb 25-30,48
+packages/engine/src/pool.rs
+  s_7a2496f4752be8::t_267cb55017db82 55,112,164-165
+  s_7a2496f4752be8::t_ec914de637ab15 166-167
+packages/sdk/src/functions.ts
+  s_7a2496f4752be8::t_b7e8a69b93bcdb 14,34-41,65,84-95,98,134,140,142
+packages/sdk/src/client.ts
+  s_7a2496f4752be8::t_b7e8a69b93bcdb 14-15,48-51
+  s_7a2496f4752be8::t_f9c7d0b59a16f5 52-54
+packages/sdk/src/protocol.ts
+  s_7a2496f4752be8::t_738acd6ca60ed4 5
+packages/server/src/actions.rs
+  s_7a2496f4752be8::t_6e0f72b9c70820 1-90
+packages/server/src/lib.rs
+  s_7a2496f4752be8::t_d512c849cbd25f 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dda53740d74bfa9e2230ee9e6091b5b7c7061e4b",
+  "prompts": {},
+  "sessions": {
+    "s_7a2496f4752be8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf08-03fa-7432-a0c2-b88be0a101d9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

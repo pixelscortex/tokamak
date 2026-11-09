@@ -1,0 +1,21 @@
+packages/build/src/lib.rs
+  s_7a2496f4752be8::t_ccc528df3644d6 81-84,93-94,96,101-102
+app/tests/support/embedded.rs
+  s_7a2496f4752be8::t_81b622d668853a 36-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "874e1462c44d6fcdd10f4690076e837ffda284ef",
+  "prompts": {},
+  "sessions": {
+    "s_7a2496f4752be8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf08-03fa-7432-a0c2-b88be0a101d9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
