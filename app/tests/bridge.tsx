@@ -5,7 +5,7 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { ArgsOf, Event, Request } from "@tokamak/sdk";
-import { api } from "./fixtures/todo/backend/_generated/api";
+import { api } from "./fixtures/todo/backend/_legacyApi";
 
 function Trace() {
   const [trace, setTrace] = createSignal<string[]>([]);

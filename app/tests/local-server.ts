@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { ensure, status, stop } from "../../packages/runtime/tools/local-server";
 import { WebSocketTransport } from "../../packages/sdk/src/transport";
 import { TokamakClient } from "../../packages/sdk/src/client";
-import { api } from "./fixtures/todo/backend/_generated/api";
+import { api } from "./fixtures/todo/backend/_legacyApi";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 await mkdir(resolve(root, "app/dist/tests"), { recursive: true });

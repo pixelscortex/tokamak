@@ -6,7 +6,7 @@ import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { Event, Request } from "@tokamak/sdk";
 import { useQuery } from "@tokamak/sdk/solid";
 import { Button, Input } from "@tokamak/ui/elements";
-import { api } from "../backend/_generated/api";
+import { api } from "../backend/_legacyApi";
 import { MAX_TITLE_UNITS } from "../backend/_limits";
 
 function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {

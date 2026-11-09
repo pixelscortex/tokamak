@@ -65,7 +65,7 @@ try {
   // but use the actual product's zero-option build configuration.
   await cp(join(app, "tests/fixtures/todo/src"), join(fixture, "src"), { recursive: true });
   await mkdir(join(fixture, "backend"));
-  for (const name of ["schema.ts", "todo.ts", "_limits.ts", "tsconfig.json"]) {
+  for (const name of ["schema.ts", "todo.ts", "_limits.ts", "_legacyApi.ts", "tsconfig.json"]) {
     await copyFile(join(app, name === "tsconfig.json" ? "backend" : "tests/fixtures/todo/backend", name),
       join(fixture, "backend", name));
   }

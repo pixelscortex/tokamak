@@ -64,7 +64,7 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
             "run", "bun", "--",
             fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
             resolve(root, "backend"),
-            ...(options.plugin ? ["--plugin", plugin.id] : []),
+            "--plugin", plugin.id,
           ], { stdio: "inherit" });
           if (bundled.error) throw bundled.error;
           if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
