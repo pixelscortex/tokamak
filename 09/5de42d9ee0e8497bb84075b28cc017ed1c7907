@@ -1,0 +1,27 @@
+app/tests/plugin-fixtures.mjs
+  s_ff6a4e1bf09ffb::t_eb2724bc9869bf 253
+  s_ff6a4e1bf09ffb::t_bf28f784067927 124
+  s_ff6a4e1bf09ffb::t_e6b09b160b07d3 270-273,275-277
+  s_ff6a4e1bf09ffb::t_be501424ab7496 110-113
+  s_ff6a4e1bf09ffb::t_89f000e971b841 164-166,174,179,181-183,186-189,195-197,212,224-243,247-252,254-269,274,278-337,383-386
+  s_ff6a4e1bf09ffb::t_f5ea2df7938583 341
+  s_ff6a4e1bf09ffb::t_149a3e7829d5fb 338
+app/tests/parts-host.tsx
+  s_ff6a4e1bf09ffb::t_f5ea2df7938583 8,13-15,18-21,24,29,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "095de42d9ee0e8497bb84075b28cc017ed1c7907",
+  "prompts": {},
+  "sessions": {
+    "s_ff6a4e1bf09ffb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f608c29-d402-499e-b40f-dcbff51d8e98",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
