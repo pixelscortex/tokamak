@@ -78,7 +78,10 @@ fn generate(root: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     struct Scratch(PathBuf);
     impl Drop for Scratch {
@@ -87,13 +90,16 @@ mod tests {
         }
     }
     fn scratch() -> Scratch {
+        // Clock resolution can give parallel tests the same timestamp.
+        static NEXT: AtomicU64 = AtomicU64::new(0);
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-            "dist/context-{}-{}",
+            "dist/context-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
         ));
         fs::create_dir_all(root.join("dist")).unwrap();
         fs::create_dir_all(root.join("out")).unwrap();
