@@ -141,8 +141,14 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     onError(id: string, listener: (cause: unknown) => void) { return registry.onError(moduleName(id), listener); },
     async connect() {
       const before = changes;
-      const value = await assets.plugins();
-      if (!disposed && changes === before) setMetadata(catalog(value));
+      try {
+        const value = await assets.plugins();
+        if (!disposed && changes === before) setMetadata(catalog(value));
+      } catch (error) {
+        // A newer catalog fetch owns the outcome after a reload. An older
+        // transfer's stale-page failure must not become a permanent shell alert.
+        if (!disposed && changes === before) throw error;
+      }
     },
     contributions(kind: ContributionKind): SlotContribution[] {
       return metadata().plugins.flatMap(p => (p.plugin.contributes?.[kind] ?? []).map(options => ({
