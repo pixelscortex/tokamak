@@ -1,0 +1,19 @@
+.gitignore
+  s_d390039e069d8d::t_51fd75ded6accd 19-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0d07c427978e90f5cefd0675f02a0463d6d73449",
+  "prompts": {},
+  "sessions": {
+    "s_d390039e069d8d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a77406a-fc0b-403a-b3b9-e4628d4084c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
