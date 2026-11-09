@@ -4,7 +4,7 @@ import { catchError, createRoot } from "solid-js";
 
 export type ModuleExports = Record<string, unknown>;
 type Factory = (require: (name: string) => ModuleExports, exports: ModuleExports, module: { exports: ModuleExports }) => void;
-interface Definition { dependencies: readonly string[]; factory: Factory }
+interface Definition { dependencies: readonly string[]; factory: Factory; lazy: Set<string> }
 const canonical = (name: string) => /^@plugins\/[^/]+$/.test(name) ? `${name}/ui` : name;
 
 export class ModuleRegistry {
@@ -33,6 +33,10 @@ export class ModuleRegistry {
     }
   }
   private accepting: string | undefined;
+  private lazyLoad: ((name: string) => Promise<ModuleExports>) | undefined;
+
+  setLoader(load: (name: string) => Promise<ModuleExports>): void { this.lazyLoad = load; }
+
   provide(name: string, exports: ModuleExports): void {
     if (this.host.has(name)) throw new Error(`Host module already provided: ${name}`);
     this.host.set(name, exports);
@@ -41,7 +45,7 @@ export class ModuleRegistry {
   register(name: string, dependencies: string[], factory: Factory): void {
     if (name !== this.accepting || this.definitions.has(name)) throw new Error(`Unexpected plugin registration: ${name}`);
     if (!Array.isArray(dependencies) || dependencies.some(value => typeof value !== "string") || typeof factory !== "function") throw new Error("Invalid UI registration");
-    this.definitions.set(name, { dependencies: dependencies.map(canonical), factory });
+    this.definitions.set(name, { dependencies: dependencies.map(canonical), factory, lazy: new Set() });
   }
 
   evaluate(name: string, code: string): void {
@@ -53,12 +57,19 @@ export class ModuleRegistry {
       // Evaluation gets one capability for this module only. Never publish the
       // registry itself: provide/remove/require are host administration APIs.
       let registering = true;
+      let registered: Definition | undefined;
       const api = Object.freeze({
         register: (id: string, dependencies: string[], factory: Factory) => {
           if (!registering || id !== name) throw new Error(`Unexpected plugin registration: ${id}`);
           this.register(id, dependencies, factory);
+          registered = this.definitions.get(name);
         },
-
+        load: (dependency: string) => {
+          if (!registered || this.definitions.get(name) !== registered) return Promise.reject(new Error(`Retired plugin module: ${name}`));
+          if (!/^@plugins\/[^/]+(?:\/ui)?$/.test(dependency)) return Promise.reject(new Error(`Invalid lazy plugin module: ${dependency}`));
+          registered.lazy.add(canonical(dependency));
+          return this.lazyLoad ? this.lazyLoad(canonical(dependency)) : Promise.reject(new Error("Plugin loader unavailable"));
+        },
       });
       try {
         // The globalThis spelling supports existing artifacts, but its facade
@@ -105,7 +116,7 @@ export class ModuleRegistry {
     while (changed) {
       changed = false;
       for (const [name, definition] of this.definitions) {
-        if (!affected.has(name) && definition.dependencies.some(dep => affected.has(dep))) {
+        if (!affected.has(name) && [...definition.dependencies, ...definition.lazy].some(dep => affected.has(dep))) {
           affected.add(name); changed = true;
         }
       }

@@ -116,6 +116,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     }
   }
 
+  registry.setLoader(name => load(name.slice(9, -3)));
   const stop = assets.onPluginsChanged(event => {
     changes++;
     for (const id of event.plugins) invalidations.add(id);
