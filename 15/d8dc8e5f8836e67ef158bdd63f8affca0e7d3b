@@ -1,0 +1,19 @@
+packages/server/src/service.rs
+  s_f190b446980e88::t_f829cad83d1177 791-796,798-804,808
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15d8dc8e5f8836e67ef158bdd63f8affca0e7d3b",
+  "prompts": {},
+  "sessions": {
+    "s_f190b446980e88": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bff9-07ad-7df2-baef-8b9191983be6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
