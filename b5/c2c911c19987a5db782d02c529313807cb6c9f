@@ -1,0 +1,21 @@
+packages/sdk/src/transport.ts
+  s_f88e5fe8eb54c5::t_b975c30b47d534 19-21,51-62,65,69-72,76-77,79-84,86-87
+packages/runtime/PLUGINS.md
+  s_f88e5fe8eb54c5::t_b975c30b47d534 61-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b5c2c911c19987a5db782d02c529313807cb6c9f",
+  "prompts": {},
+  "sessions": {
+    "s_f88e5fe8eb54c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c040-d814-7ef2-a3d6-0289069a9547",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
