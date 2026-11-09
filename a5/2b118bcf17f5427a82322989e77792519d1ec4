@@ -1,0 +1,44 @@
+packages/server/tests/fixtures/plugins/b/backend/determinism.ts
+  s_4b335c00a11717::t_6861b7a13c7d84 2
+  s_4b335c00a11717::t_c81e7213498d44 1,3-13
+packages/server/tests/fixtures/plugins/a/backend/determinism.ts
+  s_4b335c00a11717::t_c81e7213498d44 4,6,10,15
+  s_4b335c00a11717::t_6861b7a13c7d84 2-3,5,7-9,11-14,16-22
+  s_4b335c00a11717::t_bafe9f58a39e2f 1
+packages/server/tests/fixtures/plugins/b/backend/ops.ts
+  s_4b335c00a11717::t_6efd9eec7f4e23 1,36
+  s_4b335c00a11717::t_a41320077a200c 20-22
+  s_4b335c00a11717::t_6861b7a13c7d84 16-18,23-32
+  s_4b335c00a11717::t_74c23072bd6098 35,37-40
+  s_4b335c00a11717::t_20a44b9bce5f25 19
+packages/server/tests/fixtures/plugins/a/api.ts
+  s_4b335c00a11717::t_74c23072bd6098 1
+packages/server/tests/plugins.rs
+  s_4b335c00a11717::t_58e7a65276b969 2,6,11,17,25-29,38,407-466,476-530,537-738,740-785,787-808,810-830,832-841
+  s_4b335c00a11717::t_74c23072bd6098 467-475
+  s_4b335c00a11717::t_be3da0db2b4357 531-536,739,786,809,831
+packages/sdk/tests/acceptance.test.mjs
+  s_4b335c00a11717::t_bafe9f58a39e2f 13,16,612-654
+packages/server/tests/fixtures/plugins/a/backend/ops.ts
+  s_4b335c00a11717::t_6861b7a13c7d84 21-26
+packages/server/tests/fixtures/plugins/a/backend/_sample.ts
+  s_4b335c00a11717::t_6861b7a13c7d84 1-9
+packages/server/tests/fixtures/plugins/b/api.ts
+  s_4b335c00a11717::t_6861b7a13c7d84 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a52b118bcf17f5427a82322989e77792519d1ec4",
+  "prompts": {},
+  "sessions": {
+    "s_4b335c00a11717": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf2a-a345-7a71-905f-26b45d0865a7",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
