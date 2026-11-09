@@ -57,7 +57,9 @@ or multiplexed transport.
 Incremental decoders release their slot on flush, readable cancellation,
 writable abort and decoding/transform errors; plain streaming decoders reset on
 errors as well. Fetch exchanges release on EOF, cancellation and native I/O
-errors. Timers release on fire/clear; delay coercion happens before allocation.
+errors. Early abort/permission failures cancel transferred upload bodies too;
+response completion cancels an upload that is still running. Timers release on
+fire/clear; delay coercion happens before allocation.
 The native invocation lease clears all three resource classes on every exit,
 including unused response bodies and abandoned streaming decoders/timers.
 Readers apply backpressure; `.text()`, `.json()`, `.bytes()` and `.arrayBuffer()` intentionally

@@ -233,7 +233,9 @@
       if (this.bodyUsed || this.body?.locked) throw new TypeError("Body has already been consumed");
       if (!this.body) return new Uint8Array();
       const reader = this.body.getReader(); const chunks = []; let length = 0;
-      try { while (true) { const {done,value} = await reader.read(); if (done) break; const b = byteView(value); chunks.push(b); length += b.length; } } finally { reader.releaseLock(); }
+      try { while (true) { const {done,value} = await reader.read(); if (done) break; const b = byteView(value); chunks.push(b); length += b.length; } }
+      catch (e) { reader.cancel(e).catch(()=>{}); throw e; }
+      finally { reader.releaseLock(); }
       const bytes = new Uint8Array(length); let offset = 0; for (const b of chunks) { bytes.set(b,offset); offset += b.length; } return bytes;
     }
     async arrayBuffer() { return (await this.bytes()).buffer; }
@@ -278,20 +280,31 @@
 
   async function fetch(input, init) {
     effects();
-    let request = new Request(input,init);
+    const request = new Request(input,init);
+    try { return await fetchRequest(request); }
+    catch (e) {
+      // Abort/permission failures can happen before an exchange or upload reader
+      // exists. Cancel the transferred body too, including native fetch sources.
+      // Do not await: a tee branch can wait for its sibling's cancellation.
+      if (request.body && !request.body.locked) request.body.cancel(e).catch(()=>{});
+      throw e;
+    }
+  }
+  async function fetchRequest(request) {
     for (let redirects = 0; ; redirects++) {
       request.signal.throwIfAborted();
       const id = sync("open", { url:request.url, stream:!!request.body });
       let controller, reader, finished = false;
       const cancel = reason => {
+        // An upload can still be running after the response has completed.
+        reader?.cancel(reason).catch(()=>{});
         if (finished) return;
         finished = true; sync("cancel", {id});
-        reader?.cancel(reason).catch(()=>{});
         if (controller) { try { controller.error(reason); } catch {} }
         request.signal.removeEventListener("abort",onAbort);
       };
       const onAbort = () => cancel(request.signal.reason);
-      const close = () => { finished = true; request.signal.removeEventListener("abort",onAbort); };
+      const close = () => { finished = true; reader?.cancel().catch(()=>{}); request.signal.removeEventListener("abort",onAbort); };
       request.signal.addEventListener("abort",onAbort,{once:true});
       // Both futures stay on the world's executor. A one-chunk native channel
       // applies backpressure without buffering the upload or spawning a task.
