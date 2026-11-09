@@ -1,0 +1,40 @@
+packages/sdk/src/transport.ts
+  s_f190b446980e88::t_ff5d734082c1b8 46-62,101-115
+packages/runtime/js/plugins.ts
+  s_f190b446980e88::t_a43b62c873d8ec 40,121-125,129-130,132-136
+  s_f190b446980e88::t_4d5b6c772178f5 126-128,131
+packages/sdk/src/protocol.ts
+  s_f190b446980e88::t_ff5d734082c1b8 5
+app/tests/socket.rs
+  s_f190b446980e88::t_e99f75f44f888d 69-71
+app/tests/support/embedded.rs
+  s_f190b446980e88::t_63ceadf70affad 39
+packages/render/src/mailbox.rs
+  s_f190b446980e88::t_1e701433045e0e 17-18,117-119
+packages/render/tests/native_solid.rs
+  s_f190b446980e88::t_f752a815951df6 708
+packages/runtime/PLUGINS.md
+  s_f190b446980e88::t_69035ce5bd99c9 53-55,60,64-66,96-101
+packages/runtime/src/client/connection.rs
+  s_f190b446980e88::t_77307c2db1192c 62,77-78,123-126,186-194
+packages/server/src/protocol.rs
+  s_f190b446980e88::t_3475d6677675cd 35-41,65
+packages/server/src/service.rs
+  s_f190b446980e88::t_344c5ce8437832 418-426,535-539,603-623,699,774-803,849-857
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9136dc77e171b108fff7a85d5b4dd0bcc0f703bc",
+  "prompts": {},
+  "sessions": {
+    "s_f190b446980e88": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bff9-07ad-7df2-baef-8b9191983be6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
