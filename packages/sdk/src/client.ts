@@ -6,6 +6,8 @@ import type { FunctionReference } from "./api";
 import type { JsonValue } from "./values";
 import { assertJson, jsonSnapshot } from "./values";
 
+/** Terminal errors mean the transport has removed the subscription. A new
+ * subscribe call is required to retry; ordinary rerun errors can still recover. */
 export type SubscriptionEvent<T> = { value: T } | { error: Error; terminal?: boolean };
 
 export interface ClientTransport {

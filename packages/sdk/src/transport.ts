@@ -1,6 +1,7 @@
 // Correlation and subscription lifecycle are shared by both transports. Hosts
 // provide an ordered native message connection or an already-open WebSocket;
-// this module installs no browser/Node globals and performs no automatic retry.
+// this module installs no browser/Node globals. Only immutable catalog transfers
+// may restart; queries and mutations are never automatically retried.
 import type { ClientTransport, SubscriptionEvent } from "./client";
 import type { Event, Request } from "./protocol";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";

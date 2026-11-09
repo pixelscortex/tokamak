@@ -1,6 +1,7 @@
 /** Window-owned query cache bridges contribution remounts during UI reload.
  * Dormant entries stay subscribed until the window closes, bounded by the same
- * 128-entry limit as the wire transport. Reload never closes the SDK session. */
+ * 128-entry limit as the wire transport. Terminal failures evict dead entries
+ * so Reload can re-subscribe without closing the SDK session. */
 import type { ClientTransport, JsonValue, SubscriptionEvent } from "@tokamak/sdk";
 export function retainSubscriptions(transport: ClientTransport): ClientTransport & { dispose(): void } {
   const entries = new Map<string, {
