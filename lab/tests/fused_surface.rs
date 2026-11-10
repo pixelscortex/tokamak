@@ -459,9 +459,19 @@ fn resize_frames_match_fresh_renders() {
             hidpi_scale: scale,
             ..Default::default()
         });
-        out.frame(&mut fresh_doc);
-        let (want, _, _) = out.frame(&mut fresh_doc);
+        // The reference shares the renderer (and Vello's image atlas) with
+        // the live document: draw until it settles too.
+        let mut want = out.frame(&mut fresh_doc).0;
+        for _ in 0..4 {
+            want = out.frame(&mut fresh_doc).0;
+        }
         drop(fresh_doc);
+        // Back to the live document, as the only one again (a window never
+        // has two): let Vello drop the reference's images first.
+        out.resize(&mut doc, w, 900);
+        for _ in 0..3 {
+            out.frame(&mut doc);
+        }
         let differing = live
             .chunks(4)
             .zip(want.chunks(4))
@@ -607,6 +617,101 @@ fn settled_sections_request_no_frames_and_render_nothing() {
         !doc.inner().is_animating(),
         "after a resize: {frames} frames"
     );
+    assert!(doc.take_error().is_none());
+}
+
+/// Full-screen sizes at scale 2: every shell layer (the plugin container and
+/// the stage panel) is drawn, at the jump from the normal window straight to
+/// full screen (with `data-fullscreen` set in the same frame), at a resize
+/// into and out of it, and the result matches a from-scratch render.
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn full_screen_sizes_draw_every_shell_surface() {
+    let scale = 2.0;
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    out.frame(&mut doc);
+    let set_full = |doc: &mut NativeDocument, on: bool| {
+        let root = doc.inner().root_element().id;
+        let name = blitz_dom::QualName::new(
+            None,
+            blitz_dom::Namespace::from(""),
+            blitz_dom::LocalName::from("data-fullscreen"),
+        );
+        if on {
+            doc.inner_mut().mutate().set_attribute(root, name, "");
+        } else {
+            doc.inner_mut().mutate().clear_attribute(root, name);
+        }
+    };
+    // Device-pixel colour at a CSS point.
+    let at = |px: &[u8], width: u32, x: f32, y: f32| {
+        let i = (((y * scale) as u32 * width + (x * scale) as u32) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2]]
+    };
+    let check = |doc: &mut NativeDocument, out: &mut Offscreen, label: &str| {
+        // What the window does: draw, and keep drawing while the document
+        // asks for frames (a surface that registered a new texture asks for
+        // a few, see gpu.rs `SETTLE_FRAMES`). The frame the window stops on
+        // must show everything.
+        let (mut px, _, _) = out.frame(doc);
+        let mut extra = 0;
+        while doc.inner().is_animating() && extra < 10 {
+            px = out.frame(doc).0;
+            extra += 1;
+        }
+        let stage = doc
+            .inner()
+            .get_client_bounding_rect(support::id(doc, "shell-stage"))
+            .unwrap();
+        let sidebar_x = stage.x as f32 - 100.0;
+        let mid = (stage.y + stage.height * 0.5) as f32;
+        // Empty stage area (the lane's left padding) and the sidebar's
+        // empty area below its list.
+        let panel = at(&px, out.width, stage.x as f32 + 20.0, mid + 100.0);
+        let sidebar = at(&px, out.width, sidebar_x, mid + 100.0);
+        println!("{label}: stage {panel:?}, sidebar {sidebar:?}");
+        assert_eq!(panel, [0x1b; 3], "{label}: the stage panel is drawn");
+        assert_eq!(sidebar, [0x12; 3], "{label}: the plugin container is drawn");
+        px
+    };
+    for (w, h) in [(1728, 1117), (2056, 1329), (2560, 1440), (3024, 1964)] {
+        // Straight from the normal window to full screen, in one frame.
+        out.resize(&mut doc, 1440, 900);
+        set_full(&mut doc, false);
+        out.frame(&mut doc);
+        out.resize(&mut doc, w, h);
+        set_full(&mut doc, true);
+        let live = check(&mut doc, &mut out, &format!("{w}x{h} jump"));
+        let mut fresh_doc = document(scale, 900.0);
+        out.resize(&mut fresh_doc, w, h);
+        set_full(&mut fresh_doc, true);
+        // The reference shares the renderer (and Vello's image atlas) with
+        // the live document: draw until it settles too.
+        let mut want = out.frame(&mut fresh_doc).0;
+        for _ in 0..4 {
+            want = out.frame(&mut fresh_doc).0;
+        }
+        drop(fresh_doc);
+        // Back to the live document, as the only one again (a window never
+        // has two): let Vello drop the reference's images first.
+        out.resize(&mut doc, w, h);
+        for _ in 0..3 {
+            out.frame(&mut doc);
+        }
+        let differing = live
+            .chunks(4)
+            .zip(want.chunks(4))
+            .filter(|(a, b)| a.iter().zip(*b).any(|(x, y)| x.abs_diff(*y) > 2))
+            .count();
+        assert_eq!(differing, 0, "{w}x{h}: differs from a fresh render");
+        // Out of full screen and back, in steps.
+        for (sw, sh) in [(w - 300, h - 200), (1440, 900), (w, h)] {
+            out.resize(&mut doc, sw, sh);
+            set_full(&mut doc, sw == w);
+            check(&mut doc, &mut out, &format!("{w}x{h} step {sw}x{sh}"));
+        }
+    }
     assert!(doc.take_error().is_none());
 }
 

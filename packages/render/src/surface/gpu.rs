@@ -8,7 +8,15 @@
 //!   index), and Vello registers and copies one image instead of one per
 //!   surface. This is what makes hundreds of small surfaces cheap.
 //! - Large surfaces (and small ones when the atlas is full) keep their own
-//!   texture: there are few of them, and their cost is pixels, not passes.
+//!   textures: a grid of uniform `TILE` px tiles. There are few of them, and
+//!   their cost is pixels, not passes. Uniform tiles matter because Vello
+//!   packs every registered texture into one image atlas of at most 8192 px a
+//!   side and never repacks it once at that size: textures of arbitrary,
+//!   changing sizes (a stage panel at each step of a resize) fragmented it
+//!   until a window-sized panel no longer fitted and was silently skipped,
+//!   which is how the stage vanished in full screen. Equal tiles pack
+//!   without fragmenting, and a resize reuses them (only their contents and
+//!   the grid change); new tiles are registered only when the grid grows.
 //!
 //! Vello copies every registered texture into its own image atlas on every
 //! frame: anyrender_vello 0.15 `window_renderer.rs:463-465` marks each one
@@ -471,12 +479,32 @@ struct Rendered {
     shapes: Vec<Shape>,
     look: Look,
     scale: u32,
+    size: (u32, u32),
+}
+
+/// Frames a surface keeps asking for after registering a new own texture.
+/// Vello keeps the texture it replaced in its image atlas until that has
+/// gone unused for two frames, and only then can reuse the space; in the
+/// frame of the swap a large new texture may not fit beside the old one and
+/// is skipped. Without these extra frames the window could stop on exactly
+/// that frame (a resize or a switch to full screen ends, nothing else moves)
+/// and show the surface missing until something else redraws.
+const SETTLE_FRAMES: u8 = 3;
+
+/// Edge of an own-texture tile, device px.
+const TILE: u32 = 1024;
+
+/// One tile of an own target: its texture and Vello image.
+struct Tile {
+    texture: wgpu::Texture,
+    id: ResourceId,
 }
 
 enum Target {
     None,
-    /// Its own registered texture, with its own buffers.
-    Own(wgpu::Texture, ResourceId, Box<Buffers>),
+    /// Its own registered tiles (row-major grid of `cols` columns covering
+    /// the surface; the pool may hold spare tiles), with its own buffers.
+    Own(Vec<Tile>, u32, Box<Buffers>),
     /// A slot in the device atlas, and the slot's size.
     Slot(Slot, u32, u32),
 }
@@ -494,6 +522,8 @@ pub(super) struct Gpu {
     /// The atlas had no room at this size: keep the own texture instead of
     /// retrying (and fully re-rendering) every frame.
     atlas_full: bool,
+    /// Frames left to request after a new own texture (`SETTLE_FRAMES`).
+    settle: u8,
 }
 
 impl Drop for Gpu {
@@ -531,6 +561,7 @@ impl Gpu {
             rendered: None,
             atlas_id: None,
             atlas_full: false,
+            settle: 0,
         })
     }
 
@@ -549,23 +580,27 @@ impl Gpu {
     ) -> bool {
         let small = width <= ATLAS_MAX_SLOT && height <= ATLAS_MAX_SLOT;
         let fits = match &self.target {
-            Target::Own(t, _, _) => {
-                let same = t.width() == width && t.height() == height;
-                if !same {
+            Target::Own(..) => {
+                if !small {
                     self.atlas_full = false;
                 }
-                same && (!small || self.atlas_full)
+                // The grid is fitted to the size below, every paint.
+                !small || self.atlas_full
             }
             Target::Slot(slot, w, h) => *w == width && *h == height && self.slot_current(slot),
             Target::None => false,
         };
         if fits {
-            return true;
+            return self.fit_tiles(render_ctx, width, height);
         }
         // Release the old target. A slot from an older generation was
         // already reclaimed by the repack.
         match std::mem::replace(&mut self.target, Target::None) {
-            Target::Own(_, id, _) => render_ctx.unregister_resource(id),
+            Target::Own(tiles, ..) => {
+                for tile in tiles {
+                    render_ctx.unregister_resource(tile.id);
+                }
+            }
             Target::Slot(slot, ..) if self.slot_current(&slot) => {
                 let owner = self.owner;
                 with_atlas(&self.device, &self.queue, |a| a.release(owner));
@@ -580,18 +615,54 @@ impl Gpu {
             return true;
         }
         self.atlas_full = small;
-        let texture = texture(&self.device, width, height);
-        match render_ctx.try_register_custom_resource(Box::new(texture.clone())) {
-            Ok(id) => {
-                let buffers = Buffers::new(&self.device, &self.shared, [1024, 1024, 256]);
-                self.target = Target::Own(texture, id, Box::new(buffers));
-                true
-            }
-            Err(error) => {
-                eprintln!("tk-surface: texture registration failed: {error:?}");
-                false
+        let buffers = Buffers::new(&self.device, &self.shared, [1024, 1024, 256]);
+        self.target = Target::Own(Vec::new(), 0, Box::new(buffers));
+        self.fit_tiles(render_ctx, width, height)
+    }
+
+    /// Size an own target's tile grid to the surface: reuse the tiles it
+    /// has, register more if the grid grew, release spares beyond a few.
+    fn fit_tiles(&mut self, render_ctx: &mut dyn RenderContext, width: u32, height: u32) -> bool {
+        let Target::Own(tiles, cols, _) = &mut self.target else {
+            return true;
+        };
+        let (c, r) = (width.div_ceil(TILE).max(1), height.div_ceil(TILE).max(1));
+        let needed = (c * r) as usize;
+        if *cols != c {
+            // Tiles now cover other parts of the surface.
+            *cols = c;
+            self.rendered = None;
+        }
+        let debug = std::env::var_os("TK_DEBUG_SURFACES").is_some();
+        let grew = tiles.len() < needed;
+        while tiles.len() < needed {
+            let texture = texture(&self.device, TILE, TILE);
+            match render_ctx.try_register_custom_resource(Box::new(texture.clone())) {
+                Ok(id) => tiles.push(Tile { texture, id }),
+                Err(error) => {
+                    eprintln!("tk-surface: texture registration failed: {error:?}");
+                    return false;
+                }
             }
         }
+        if grew {
+            self.rendered = None;
+            self.settle = SETTLE_FRAMES;
+        }
+        // Keep a few spares for a window growing back; drop the rest.
+        while tiles.len() > needed + 4 {
+            let tile = tiles.pop().unwrap();
+            render_ctx.unregister_resource(tile.id);
+        }
+        if debug && grew {
+            eprintln!(
+                "tk-surface {}: {width}x{height} device px in {c}x{r} tiles of {TILE} ({} registered: {:?})",
+                self.owner,
+                tiles.len(),
+                tiles.iter().map(|t| t.id).collect::<Vec<_>>()
+            );
+        }
+        true
     }
 
     /// Bring the target up to date with `shapes` under `look`: nothing if it
@@ -626,8 +697,11 @@ impl Gpu {
                 atlas.id.map(|(id, _)| id)
             });
         }
+        self.settle = self.settle.saturating_sub(1);
         let rects = match &self.rendered {
-            Some(r) if r.look == *look && r.scale == scale.to_bits() => {
+            Some(r)
+                if r.look == *look && r.scale == scale.to_bits() && r.size == (width, height) =>
+            {
                 if r.shapes == shapes && r.keys == keys {
                     return 0;
                 }
@@ -655,18 +729,40 @@ impl Gpu {
                 };
                 with_atlas(&self.device, &self.queue, |atlas| atlas.jobs.push(job));
             }
-            Target::Own(texture, _, buffers) => {
+            Target::Own(tiles, cols, buffers) => {
+                // One job per tile: the same parameters and tile words, the
+                // tile's origin (negative: the surface starts left of and
+                // above the tile) and one pass per tile texture.
+                let cols = *cols;
+                let used = (width.div_ceil(TILE).max(1) * height.div_ceil(TILE).max(1)) as usize;
+                let mut table = Vec::with_capacity(used * 4);
+                for i in 0..used as u32 {
+                    let (tx, ty) = ((i % cols) * TILE, (i / cols) * TILE);
+                    table.extend([0, 0, (-(tx as i32)) as u32, (-(ty as i32)) as u32]);
+                }
                 buffers.upload(
                     (&self.device, &self.queue, &self.shared),
                     [
                         &floats(&encoded.params),
                         &words(&encoded.words),
-                        &words(&[0, 0, 0, 0]),
+                        &words(&table),
                     ],
                 );
-                let view = texture.create_view(&Default::default());
                 let mut encoder = take_encoder(&self.device);
-                {
+                for (i, tile) in tiles.iter().take(used).enumerate() {
+                    let (tx, ty) = ((i as u32 % cols) * TILE, (i as u32 / cols) * TILE);
+                    let local: Vec<[u32; 4]> = rects
+                        .iter()
+                        .filter_map(|&[x, y, w, h]| {
+                            let (x0, y0) = (x.max(tx), y.max(ty));
+                            let (x1, y1) = ((x + w).min(tx + TILE), (y + h).min(ty + TILE));
+                            (x1 > x0 && y1 > y0).then(|| [x0 - tx, y0 - ty, x1 - x0, y1 - y0])
+                        })
+                        .collect();
+                    if local.is_empty() && partial {
+                        continue;
+                    }
+                    let view = tile.texture.create_view(&Default::default());
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("tk-surface"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -690,9 +786,9 @@ impl Gpu {
                     });
                     pass.set_pipeline(&self.shared.pipeline);
                     pass.set_bind_group(0, &buffers.bind, &[]);
-                    for &[x, y, w, h] in &rects {
+                    for &[x, y, w, h] in &local {
                         pass.set_scissor_rect(x, y, w, h);
-                        pass.draw(0..3, 0..1);
+                        pass.draw(0..3, i as u32..i as u32 + 1);
                     }
                 }
                 put_encoder(&self.device, &self.queue, encoder);
@@ -704,36 +800,53 @@ impl Gpu {
             shapes: shapes.to_vec(),
             look: *look,
             scale: scale.to_bits(),
+            size: (width, height),
         });
         pixels
     }
 
-    /// The Scene that draws the target at the widget's content box.
+    /// True for a few frames after a new own texture (see `SETTLE_FRAMES`).
+    pub fn settling(&self) -> bool {
+        self.settle > 0
+    }
+
+    /// The Scene that draws the target at the widget's content box (an own
+    /// texture may be larger than the box: only its top-left part is used).
     pub fn scene(&self, width: u32, height: u32) -> Scene {
         let mut scene = Scene::new();
-        let (id, offset) = match &self.target {
-            Target::Own(_, id, _) => (*id, None),
-            Target::Slot(slot, ..) => match self.atlas_id {
-                // Sample the atlas at the slot: brush moved by -origin.
-                Some(id) => (
-                    id,
-                    Some(Affine::translate((-(slot.x as f64), -(slot.y as f64)))),
-                ),
-                None => return scene,
-            },
-            Target::None => return scene,
+        let mut draw = |id: ResourceId, brush: Affine, rect: Rect| {
+            let paint: anyrender::PaintRef<'_> = anyrender::Paint::Resource(ImageBrush {
+                image: id,
+                sampler: ImageSampler::new(),
+            });
+            scene.fill(Fill::NonZero, Affine::IDENTITY, paint, Some(brush), &rect);
         };
-        let paint: anyrender::PaintRef<'_> = anyrender::Paint::Resource(ImageBrush {
-            image: id,
-            sampler: ImageSampler::new(),
-        });
-        scene.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            paint,
-            offset,
-            &Rect::new(0.0, 0.0, width as f64, height as f64),
-        );
+        match &self.target {
+            Target::Own(tiles, cols, _) => {
+                let used = (width.div_ceil(TILE).max(1) * height.div_ceil(TILE).max(1)) as usize;
+                for (i, tile) in tiles.iter().take(used).enumerate() {
+                    let (tx, ty) = ((i as u32 % cols) * TILE, (i as u32 / cols) * TILE);
+                    let rect = Rect::new(
+                        tx as f64,
+                        ty as f64,
+                        (tx + TILE).min(width) as f64,
+                        (ty + TILE).min(height) as f64,
+                    );
+                    draw(tile.id, Affine::translate((tx as f64, ty as f64)), rect);
+                }
+            }
+            // Sample the atlas at the slot: brush moved by -origin.
+            Target::Slot(slot, ..) => {
+                if let Some(id) = self.atlas_id {
+                    draw(
+                        id,
+                        Affine::translate((-(slot.x as f64), -(slot.y as f64))),
+                        Rect::new(0.0, 0.0, width as f64, height as f64),
+                    );
+                }
+            }
+            Target::None => {}
+        }
         scene
     }
 }

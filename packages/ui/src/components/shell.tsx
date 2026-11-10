@@ -141,20 +141,28 @@ function ShellFrame(props: ShellProps) {
             <Slot region="top-end" />
           </div>
         </div>
-        <Surface
-          group={shellGroups.sidebar}
-          material="sidebar"
-          plate={false}
-          join={10}
-          class="flex min-h-0 flex-1 pr-2 pb-2"
-        >
-          <div class="relative flex w-[46px] shrink-0 flex-col items-center gap-0.5">
-            <Slot region="rail" />
-          </div>
-          <Surface.Union radius={12} class="flex min-w-0 flex-1">
-            <div class="flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
-              <Slot region="sidebar" />
+        {/* The plugin container (sidebar layer) is only as wide as the rail
+          * and sidebar, tucked 16 px under the stage panel, which paints over
+          * it: its texture stays small. Sized to the whole body it was a second
+          * window-sized texture, and at full-screen sizes Vello could not fit
+          * both in its 8192 px image atlas, so both layers vanished. */}
+        <div class="flex min-h-0 flex-1 pr-2 pb-2">
+          <Surface
+            group={shellGroups.sidebar}
+            material="sidebar"
+            plate={false}
+            join={10}
+            class="-mr-4 flex shrink-0"
+          >
+            <div class="relative flex w-[46px] shrink-0 flex-col items-center gap-0.5">
+              <Slot region="rail" />
             </div>
+            <Surface.Union radius={12} class="flex pr-4">
+              <div class="flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
+                <Slot region="sidebar" />
+              </div>
+            </Surface.Union>
+          </Surface>
             <Surface
               group={shellGroups.stage}
               material="panel"
@@ -172,8 +180,7 @@ function ShellFrame(props: ShellProps) {
                 <Slot region="bottom" />
               </div>
             </Surface>
-          </Surface.Union>
-        </Surface>
+        </div>
       </div>
       {/* Views: their teleports render into the regions above, not here. */}
       {props.children}

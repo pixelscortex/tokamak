@@ -192,7 +192,9 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
     let job = jobs[in.job];
     PB = job.x;
     TB = job.y;
-    let pos = in.pos.xy - vec2<f32>(f32(job.z), f32(job.w));
+    // The job's origin in the target, signed: an atlas slot's offset, or
+    // minus an own tile's position in the surface.
+    let pos = in.pos.xy - vec2<f32>(f32(bitcast<i32>(job.z)), f32(bitcast<i32>(job.w)));
     let scale = P(0).z;
     let tiling = P(6);
     let tx = u32(pos.x / tiling.y);

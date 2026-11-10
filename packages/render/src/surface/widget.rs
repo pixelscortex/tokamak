@@ -210,7 +210,8 @@ impl Surface {
             let b = b.borrow();
             b.version != self.bound_seen && b.animate.iter().any(|a| *a)
         });
-        !self.tweens.is_empty() || pending
+        let settling = self.gpu.as_ref().is_some_and(|g| g.settling());
+        !self.tweens.is_empty() || pending || settling
     }
 }
 
