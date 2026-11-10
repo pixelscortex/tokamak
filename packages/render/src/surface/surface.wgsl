@@ -217,7 +217,7 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
     var b = P(5).rgb;
     let bevel = P(1).x;
     let in_bevel = bevel > 0.0 && d_fill > -bevel - 1.0;
-    let in_border = a_border > 0.0 && border.z > 0.5;
+    let in_border = a_border > 0.0 && border.z > 0.0;
     if (in_bevel || in_border) {
         let e = 0.5 / scale;
         let g = vec2<f32>(
@@ -232,7 +232,8 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
                 c = tone(c, facing * (1.0 - t) * (1.0 - t), P(2).y, P(2).z);
             }
             if (in_border) {
-                b = tone(b, facing, BORDER_LIT_GAIN, BORDER_SHADE_GAIN);
+                // `border-lit` scales the swing: 0 flat, 1 fully lit.
+                b = tone(b, facing * border.z, BORDER_LIT_GAIN, BORDER_SHADE_GAIN);
             }
         }
     }

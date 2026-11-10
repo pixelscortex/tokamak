@@ -139,14 +139,11 @@ pub(super) fn shade(shapes: &[Shape], list: &[u32], look: &Look, p: V2, scale: f
     let a_fill = (0.5 - d_fill).clamp(0.0, 1.0);
     let a_border = (a_total - a_fill).max(0.0);
     let mut c = [look.fill[0], look.fill[1], look.fill[2]];
-    let mut b = [
-        look.border_colour[0],
-        look.border_colour[1],
-        look.border_colour[2],
-    ];
+    let border = look.border_rgba();
+    let mut b = [border[0], border[1], border[2]];
     let bevel = look.bevel * scale;
     let in_bevel = bevel > 0.0 && d_fill > -bevel - 1.0;
-    let in_border = a_border > 0.0 && look.border_lit;
+    let in_border = a_border > 0.0 && look.border_lit > 0.0;
     if in_bevel || in_border {
         let e = 0.5 / scale;
         let gx = field(shapes, list, look, [p[0] + e, p[1]]) - dc;
@@ -168,12 +165,18 @@ pub(super) fn shade(shapes: &[Shape], list: &[u32], look: &Look, p: V2, scale: f
                 c.iter_mut().for_each(|v| tone(v, s, LIT_GAIN, SHADE_GAIN));
             }
             if in_border {
-                b.iter_mut()
-                    .for_each(|v| tone(v, facing, BORDER_LIT_GAIN, BORDER_SHADE_GAIN));
+                b.iter_mut().for_each(|v| {
+                    tone(
+                        v,
+                        facing * look.border_lit,
+                        BORDER_LIT_GAIN,
+                        BORDER_SHADE_GAIN,
+                    )
+                });
             }
         }
     }
-    let (fa, ba) = (a_fill * look.fill[3], a_border * look.border_colour[3]);
+    let (fa, ba) = (a_fill * look.fill[3], a_border * border[3]);
     let alpha = fa + ba;
     if alpha <= 0.0 {
         return [0; 4];

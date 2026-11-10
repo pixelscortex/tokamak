@@ -1,7 +1,9 @@
 //! Behaviour of the surface maths and widget, checked on the CPU reference.
 //! The GPU path is exercised by the lab's offscreen tests (lab/tests).
 use super::reference::{field, raster, shade};
-use super::shape::{Align, Look, Poly, Shape, V2, dot2, len2, parse_colour, parse_shapes};
+use super::shape::{
+    Align, Key, Look, Poly, Shape, V2, dot2, index_keys, len2, parse_colour, parse_shapes,
+};
 use super::tiles::dirty_rects;
 use super::widget::{ANIMATION, Surface};
 use blitz_dom::node::Widget;
@@ -200,10 +202,40 @@ fn border_follows_the_silhouette_and_lit_border_takes_the_light() {
     let buf = raster(&plate, &look, 40, 40, 1.0);
     let (top, centre) = (px(&buf, 40, 20, 5), px(&buf, 40, 20, 20));
     assert!(top[0] > 100 && centre[0] < 40, "{top:?} {centre:?}");
-    look.border_lit = true;
+    look.border_lit = 1.0;
     let buf = raster(&plate, &look, 40, 40, 1.0);
     let (top, bottom) = (px(&buf, 40, 20, 5), px(&buf, 40, 20, 34));
     assert!(top[0] > 128 && bottom[0] < 128, "{top:?} {bottom:?}");
+    // A calm hairline: `border-mix` derives the colour from the fill, and a
+    // low `border-lit` leaves only a small bias between top and bottom; at
+    // 0 the hairline is flat all round.
+    let mut calm = Look {
+        border: 1.0,
+        border_mix: 0.055,
+        border_lit: 0.25,
+        ..Look::default()
+    };
+    let (top_y, bottom_y) = (4, 35);
+    let swing = |look: &Look| {
+        let buf = raster(&plate, look, 40, 40, 1.0);
+        (
+            px(&buf, 40, 20, top_y)[0] as i32,
+            px(&buf, 40, 20, bottom_y)[0] as i32,
+        )
+    };
+    let (full_top, full_bottom) = swing(&look);
+    let (top, bottom) = swing(&calm);
+    assert!(top > bottom, "still a hint of light: {top} {bottom}");
+    assert!(
+        (top - bottom) * 3 < full_top - full_bottom,
+        "much less swing than fully lit: {top}/{bottom} vs {full_top}/{full_bottom}"
+    );
+    calm.border_lit = 0.0;
+    let (top, bottom) = swing(&calm);
+    assert_eq!(top, bottom, "flat hairline");
+    // 5.5% of the way from the fill (0x12) to white.
+    let want = (0x12 as f32 + (255.0 - 0x12 as f32) * 0.055).round() as i32;
+    assert!((top - want).abs() <= 1, "{top} vs {want}");
     look.border_align = Align::Outside;
     let buf = raster(&plate, &look, 40, 40, 1.0);
     assert!(
@@ -218,7 +250,7 @@ fn culling_and_partial_rects_do_not_change_any_pixel() {
     let look = Look {
         join: 12.0,
         border: 1.5,
-        border_lit: true,
+        border_lit: 1.0,
         ..Look::default()
     };
     let mut shapes: Vec<Shape> = (0..60)
@@ -257,7 +289,8 @@ fn culling_and_partial_rects_do_not_change_any_pixel() {
     // Moving one shape dirties one rect, and nothing outside it changes.
     let mut moved = shapes.clone();
     moved[3].rect[0] += 10.0;
-    let rects = dirty_rects(&shapes, &moved, &look, w, h, scale).unwrap();
+    let keys = index_keys(shapes.len());
+    let rects = dirty_rects((&keys, &shapes), (&keys, &moved), &look, w, h, scale).unwrap();
     assert_eq!(rects.len(), 1);
     let after = raster(&moved, &look, w, h, scale);
     let [rx, ry, rw, rh] = rects[0];
@@ -270,9 +303,37 @@ fn culling_and_partial_rects_do_not_change_any_pixel() {
     }
     // Identical shapes: nothing to re-render.
     assert_eq!(
-        dirty_rects(&shapes, &shapes, &look, w, h, scale),
+        dirty_rects((&keys, &shapes), (&keys, &shapes), &look, w, h, scale),
         Some(vec![])
     );
+    // Removing a shape from the middle of the list (shapes matched by key,
+    // so the ones after it do not count as moved) dirties only its old area,
+    // and nothing outside that area changes.
+    let removed = 7;
+    let (fewer_keys, fewer): (Vec<Key>, Vec<Shape>) = keys
+        .iter()
+        .zip(&shapes)
+        .enumerate()
+        .filter(|(i, _)| *i != removed)
+        .map(|(_, (k, s))| (*k, s.clone()))
+        .unzip();
+    let rects = dirty_rects((&keys, &shapes), (&fewer_keys, &fewer), &look, w, h, scale).unwrap();
+    assert_eq!(rects.len(), 1, "one area: the removed shape's");
+    let [x0, y0, x1, y1] = super::tiles::influence(&look, &shapes[removed]);
+    let [rx, ry, rw, rh] = rects[0];
+    assert!(
+        rx as f32 <= x0.max(0.0) && ry as f32 <= y0.max(0.0),
+        "{rects:?} covers the old area"
+    );
+    assert!(((rx + rw) as f32) >= x1.min(w as f32) && ((ry + rh) as f32) >= y1.min(h as f32));
+    let after = raster(&fewer, &look, w, h, scale);
+    for y in 0..h {
+        for x in 0..w {
+            if !(x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+                assert_eq!(px(&culled, w, x, y), px(&after, w, x, y), "({x},{y})");
+            }
+        }
+    }
 }
 
 #[test]
@@ -309,4 +370,435 @@ fn a_demo_with_nothing_moving_requests_no_frames() {
     assert!(surface.requires_redraw());
     surface.attribute_changed("moving", None, Some("0"));
     assert!(!surface.requires_redraw());
+}
+
+// ---------------------------------------------------------------- layout binding
+
+mod binding {
+    use super::super::bind::{Registry, Side, attached, slanted};
+    use super::super::shape::Look;
+    use super::super::tiles::dirty_rects;
+    use super::super::widget::{ANIMATION, Surface};
+    use super::field_all;
+    use blitz_dom::node::Widget;
+    use blitz_dom::{Document, LocalName, Namespace, QualName};
+    use blitz_html::HtmlDocument;
+    use blitz_traits::{NodeId, shell::Viewport};
+
+    const HTML: &str = r#"<html><body style="margin:0">
+      <div style="position:relative;width:100%;height:200px">
+        <tk-surface id="surface" group="g"
+          style="position:absolute;left:0;top:0;width:100%;height:100%"></tk-surface>
+        <div id="plate" surface-groups="g" surface-radius="8"
+          style="position:absolute;left:10px;top:10px;width:50%;height:120px"></div>
+        <div id="tab" surface-groups="g" surface-animate=""
+          style="position:absolute;left:20px;top:150px;width:30px;height:30px"></div>
+        <div id="other" surface-groups="elsewhere"
+          style="position:absolute;left:0;top:0;width:10px;height:10px"></div>
+        <div id="notch" surface-groups="g" surface-op="subtract" surface-radius="6"
+          style="position:absolute;left:100px;top:10px;width:60px;height:20px"></div>
+        <div id="composer" surface-groups="g" surface-op="subtract"
+          style="position:absolute;left:100px;top:100px;width:80px;height:30px"></div>
+        <div id="fresh" surface-groups="g"
+          style="position:absolute;left:300px;top:150px;width:40px;height:30px"></div>
+      </div></body></html>"#;
+
+    struct Fixture {
+        doc: HtmlDocument,
+        registry: Registry,
+        surface: NodeId,
+    }
+
+    impl Fixture {
+        /// The plate, the tab and a member of another group.
+        fn new() -> Self {
+            Self::with(&["plate", "tab", "other"])
+        }
+
+        /// The fixture with only `members` registered (the others are not
+        /// members yet, like elements a view has not mounted).
+        fn with(members: &[&str]) -> Self {
+            let doc = HtmlDocument::from_html(HTML, Default::default());
+            let id = |doc: &HtmlDocument, name: &str| doc.inner().get_element_by_id(name).unwrap();
+            let mut registry = Registry::default();
+            let surface = id(&doc, "surface");
+            let _widget = registry.surface(surface);
+            for member in members {
+                registry.member(id(&doc, member), true);
+            }
+            let mut fixture = Fixture {
+                doc,
+                registry,
+                surface,
+            };
+            fixture.resize(400);
+            fixture
+        }
+
+        fn id(&self, name: &str) -> NodeId {
+            self.doc.inner().get_element_by_id(name).unwrap()
+        }
+
+        fn resize(&mut self, width: u32) {
+            self.doc.inner_mut().set_viewport(Viewport {
+                window_size: (width, 300),
+                ..Default::default()
+            });
+        }
+
+        fn style(&mut self, name: &str, style: &str) {
+            let node = self.id(name);
+            let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+            self.doc
+                .inner_mut()
+                .mutate()
+                .set_attribute(node, attr, style);
+        }
+
+        /// One frame's pass: layout, then binding. Returns (version, animate).
+        fn frame(&mut self) -> (u64, bool) {
+            self.doc.inner_mut().resolve(0.0);
+            self.registry.bind(&self.doc.inner());
+            let handle = self.registry.handle(self.surface);
+            let b = handle.borrow();
+            (b.version, b.animate.iter().any(|a| *a))
+        }
+
+        fn member(&mut self, name: &str, present: bool) {
+            let node = self.id(name);
+            self.registry.member(node, present);
+        }
+
+        /// A widget sharing this surface's handle, synced to the last pass.
+        fn widget(&self) -> Surface {
+            let mut widget = Surface::bound(self.registry.handle(self.surface));
+            widget.sync_for_test();
+            widget
+        }
+
+        fn shapes(&self) -> Vec<super::Shape> {
+            self.registry.handle(self.surface).borrow().shapes.clone()
+        }
+    }
+
+    #[test]
+    fn members_become_shapes_relative_to_the_surface_and_idle_frames_change_nothing() {
+        let mut f = Fixture::new();
+        assert_eq!(f.frame().0, 1);
+        let shapes = f.shapes();
+        assert_eq!(
+            shapes.len(),
+            2,
+            "the member of another group is not included"
+        );
+        assert_eq!(shapes[0].rect, [10.0, 10.0, 200.0, 120.0]);
+        assert_eq!(shapes[0].radii, [8.0; 4]);
+        assert_eq!(shapes[1].rect, [20.0, 150.0, 30.0, 30.0]);
+        // Nothing changed: no new version, so the widget has nothing to do and
+        // requests no frames.
+        assert_eq!(f.frame().0, 1);
+        let widget = Surface::bound(f.registry.handle(f.surface));
+        assert!(!widget.requires_redraw());
+    }
+
+    #[test]
+    fn members_follow_layout_on_resize_without_animating() {
+        let mut f = Fixture::new();
+        f.frame();
+        f.resize(300);
+        let (version, animate) = f.frame();
+        assert_eq!(version, 2);
+        assert!(!animate, "a resize follows, it does not animate");
+        assert_eq!(f.shapes()[0].rect, [10.0, 10.0, 150.0, 120.0]);
+    }
+
+    #[test]
+    fn a_moving_member_animates_and_dirties_only_its_own_area() {
+        let mut f = Fixture::new();
+        f.frame();
+        let before = f.shapes();
+        f.style(
+            "tab",
+            "position:absolute;left:120px;top:150px;width:30px;height:30px",
+        );
+        let (version, animate) = f.frame();
+        assert_eq!(version, 2);
+        assert!(
+            animate,
+            "a member that asked to animate, in an unchanged surface"
+        );
+        let widget = Surface::bound(f.registry.handle(f.surface));
+        assert!(
+            widget.requires_redraw(),
+            "the pending animation requests frames"
+        );
+        let after = f.shapes();
+        let keys = f.registry.handle(f.surface).borrow().keys.clone();
+        let rects = dirty_rects(
+            (&keys, &before),
+            (&keys, &after),
+            &Look::default(),
+            400,
+            200,
+            1.0,
+        )
+        .unwrap();
+        assert_eq!(rects.len(), 1);
+        let [x, y, w, h] = rects[0];
+        // Old and new tab boxes (x 20..150, y 150..180) plus padding, nothing
+        // of the plate's interior above.
+        assert!(
+            x <= 20 && x + w >= 150 && y >= 140 && y + h <= 200,
+            "{:?}",
+            rects[0]
+        );
+        // Moving the plate (no animate flag) snaps.
+        f.style(
+            "plate",
+            "position:absolute;left:30px;top:10px;width:50%;height:120px",
+        );
+        assert_eq!(f.frame(), (3, false));
+    }
+
+    #[test]
+    fn adding_and_removing_members_updates_the_surface() {
+        let mut f = Fixture::new();
+        f.frame();
+        let tab = f.id("tab");
+        f.registry.member(tab, false);
+        assert_eq!(f.frame().0, 2);
+        assert_eq!(f.shapes().len(), 1);
+        f.registry.member(tab, true);
+        assert_eq!(f.frame().0, 3);
+        assert_eq!(f.shapes().len(), 2);
+    }
+
+    /// The shape of `name` as the widget shows it, found by identity.
+    fn shown(widget: &Surface, f: &Fixture, name: &str) -> super::Shape {
+        let key = super::Key::Member(f.id(name));
+        let i = widget.keys().iter().position(|k| *k == key).unwrap();
+        widget.shown()[i].clone()
+    }
+
+    fn target(widget: &Surface, f: &Fixture, name: &str) -> super::Shape {
+        let key = super::Key::Member(f.id(name));
+        let i = widget.keys().iter().position(|k| *k == key).unwrap();
+        widget.target()[i].clone()
+    }
+
+    /// A view switch: the rail tab moves while two members (the chat view's
+    /// title notch and composer) leave and another arrives, all in one pass.
+    /// The tab animates between its own two boxes; nothing else moves.
+    #[test]
+    fn a_tab_moving_while_members_come_and_go_animates_between_its_own_boxes() {
+        let mut f = Fixture::with(&["plate", "tab", "notch", "composer"]);
+        f.frame();
+        let mut widget = f.widget();
+        assert_eq!(widget.shown().len(), 4);
+        let plate = shown(&widget, &f, "plate");
+        f.style(
+            "tab",
+            "position:absolute;left:20px;top:60px;width:30px;height:30px",
+        );
+        f.member("notch", false);
+        f.member("composer", false);
+        f.member("fresh", true);
+        let (_, animate) = f.frame();
+        assert!(animate, "the tab still animates although the count changed");
+        widget.sync_for_test();
+        assert!(widget.requires_redraw());
+        assert_eq!(widget.shown().len(), 3, "plate, tab, fresh");
+        widget.step_for_test(Default::default());
+        let tab = shown(&widget, &f, "tab");
+        assert!(
+            tab.rect[0] == 20.0 && (tab.rect[1] - 150.0).abs() < 0.5,
+            "starts at its own old box: {:?}",
+            tab.rect
+        );
+        assert_eq!(
+            shown(&widget, &f, "plate"),
+            plate,
+            "the plate does not move"
+        );
+        assert_eq!(
+            shown(&widget, &f, "fresh"),
+            target(&widget, &f, "fresh"),
+            "an arriving member appears at once, it does not morph from another shape"
+        );
+        widget.step_for_test(ANIMATION / 2);
+        let mid = shown(&widget, &f, "tab").rect;
+        assert!(mid[1] < 150.0 && mid[1] > 60.0, "half way: {mid:?}");
+        assert_eq!(mid[0], 20.0, "it moves along its own path only");
+        assert!(widget.step_for_test(ANIMATION), "finishes");
+        assert_eq!(shown(&widget, &f, "tab").rect, [20.0, 60.0, 30.0, 30.0]);
+        assert!(!widget.requires_redraw());
+    }
+
+    /// Removing a member while another is in flight does not restart, snap
+    /// or redirect the one in flight.
+    #[test]
+    fn removing_a_member_mid_animation_leaves_the_animating_one_alone() {
+        let mut f = Fixture::with(&["plate", "tab", "notch"]);
+        f.frame();
+        let mut widget = f.widget();
+        f.style(
+            "tab",
+            "position:absolute;left:220px;top:150px;width:30px;height:30px",
+        );
+        f.frame();
+        widget.sync_for_test();
+        widget.step_for_test(ANIMATION / 3);
+        let before = shown(&widget, &f, "tab").rect[0];
+        assert!(before > 20.0 && before < 220.0, "in flight: {before}");
+        f.member("notch", false);
+        let (_, animate) = f.frame();
+        assert!(!animate, "nothing new to animate");
+        widget.sync_for_test();
+        assert_eq!(widget.shown().len(), 2);
+        assert!(widget.requires_redraw(), "the tab is still in flight");
+        widget.step_for_test(Default::default());
+        let after = shown(&widget, &f, "tab").rect[0];
+        assert!(
+            (after - before).abs() < 8.0 && after < 220.0,
+            "continues from {before}, not restarted or snapped: {after}"
+        );
+        assert!(widget.step_for_test(ANIMATION));
+        assert_eq!(shown(&widget, &f, "tab").rect[0], 220.0);
+    }
+
+    /// A rail tab attached to the left edge of its container (x = 46,
+    /// top 0, corner 12) with 10 px fillets, the tab 39 x 32 with 10 px
+    /// free corners, its top `d` px below the container's top.
+    fn tab(d: f32) -> [super::Shape; 2] {
+        let mut container = super::Shape::rect(false, [46.0, 0.0, 300.0, 400.0], [12.0; 4]);
+        container.join = 10.0;
+        let tab = attached(
+            Side::Right,
+            [7.0, d, 39.0, 32.0],
+            [10.0, 0.0, 0.0, 10.0],
+            10.0,
+            container.rect,
+            container.radii,
+        )
+        .unwrap();
+        [container, tab]
+    }
+
+    #[test]
+    fn a_tab_level_with_the_top_runs_straight_into_the_container() {
+        let look = Look {
+            join: 10.0,
+            ..Look::default()
+        };
+        let shapes = tab(0.0);
+        // From the end of the tab's own corner arc (x = 17) across where the
+        // container's rounded corner was, into its straight top edge: on the
+        // outline, no bulge above, no dip below.
+        for i in 0..=100 {
+            let x = 17.0 + i as f32 * 0.6;
+            let on = field_all(&shapes, &look, [x, 0.0]);
+            let above = field_all(&shapes, &look, [x, -0.5]);
+            let below = field_all(&shapes, &look, [x, 0.5]);
+            assert!(on.abs() < 1e-3, "x {x}: {on} on the top edge");
+            assert!((above - 0.5).abs() < 1e-3, "x {x}: {above} above (bulge)");
+            assert!((below + 0.5).abs() < 1e-3, "x {x}: {below} below (dip)");
+        }
+        // The lower fillet, where the tab's bottom meets the container's
+        // left edge: an exact arc of radius 10 centred 10 px outside both.
+        let (r, centre) = (10.0, [36.0, 42.0]);
+        assert!((field_all(&shapes, &look, centre) - r).abs() < 1e-3);
+        for step in 0..=9 {
+            let a = (180.0 + step as f32 * 10.0).to_radians() + std::f32::consts::FRAC_PI_2;
+            let p = [centre[0] + r * a.cos(), centre[1] + r * a.sin()];
+            assert!(field_all(&shapes, &look, p).abs() < 1e-3, "{p:?}");
+        }
+        // Away from the top (item 1, 34 px down) the upper fillet is the
+        // same exact arc and the container keeps its own rounded corner.
+        let shapes = tab(34.0);
+        assert!((field_all(&shapes, &look, [36.0, 24.0]) - r).abs() < 1e-3);
+        let corner = [46.0 + 12.0, 12.0];
+        assert!((field_all(&shapes, &look, corner) + 12.0).abs() < 1e-3);
+        let on_corner = [58.0 - 12.0 * 0.70710677, 12.0 - 12.0 * 0.70710677];
+        assert!(field_all(&shapes, &look, on_corner).abs() < 1e-3);
+    }
+
+    #[test]
+    fn an_attached_tab_changes_continuously_as_it_leaves_the_top() {
+        let look = Look {
+            join: 10.0,
+            ..Look::default()
+        };
+        let probes: Vec<[f32; 2]> = (0..12)
+            .flat_map(|i| (0..8).map(move |j| [30.0 + i as f32 * 3.0, -4.0 + j as f32 * 5.0]))
+            .collect();
+        let sample = |d: f32| -> Vec<f32> {
+            let shapes = tab(d);
+            probes
+                .iter()
+                .map(|p| field_all(&shapes, &look, *p))
+                .collect()
+        };
+        // Exact outlines at closely spaced positions: no pops.
+        let mut prev = sample(0.0);
+        for k in 1..=160 {
+            let d = k as f32 * 0.25;
+            let now = sample(d);
+            let jump = prev
+                .iter()
+                .zip(&now)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0, f32::max);
+            assert!(jump < 0.6, "d {d}: field jumped by {jump}");
+            prev = now;
+        }
+        // The animation interpolates the two outlines vertex by vertex.
+        let (a, b) = (&tab(0.0)[1], &tab(34.0)[1]);
+        let mut prev = sample(0.0);
+        for k in 1..=40 {
+            let t = k as f32 / 40.0;
+            let mid = super::Shape::lerp(a, b, t);
+            assert!(mid.poly.is_some(), "stays an outline");
+            let shapes = [tab(0.0)[0].clone(), mid];
+            let now: Vec<f32> = probes
+                .iter()
+                .map(|p| field_all(&shapes, &look, *p))
+                .collect();
+            let jump = prev
+                .iter()
+                .zip(&now)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0, f32::max);
+            assert!(jump < 1.5, "t {t}: field jumped by {jump}");
+            prev = now;
+        }
+    }
+
+    #[test]
+    fn slanted_members_have_exact_flared_joins() {
+        // A notch hanging from a top edge at y = 0, right side leaning 45
+        // degrees: subtracted from a plate, the join where the side meets the
+        // edge is an arc of radius `join` (centre r inside the plate from both
+        // the edge and the side), as for a hand-written `poly`.
+        let look = Look::default();
+        let plate = super::Shape::rect(false, [0.0, 0.0, 300.0, 200.0], [0.0; 4]);
+        let join = 14.0;
+        let notch = slanted(true, [100.0, 0.0, 80.0, 40.0], [10.0; 4], join, [0.0, 45.0]).unwrap();
+        let shapes = [plate, notch];
+        // Side line through (180, 40) and (220, 0); unit normal into the plate.
+        let n = [
+            std::f32::consts::FRAC_1_SQRT_2,
+            std::f32::consts::FRAC_1_SQRT_2,
+        ];
+        // Centre: y = join and signed distance `join` from the side line.
+        let x = 180.0 + (join - (join - 40.0) * n[1]) / n[0];
+        let centre = [x, join];
+        assert!((field_all(&shapes, &look, centre) + join).abs() < 1e-2);
+        for step in 0..=36 {
+            let a = (step as f32 * 10.0).to_radians();
+            let p = [centre[0] + join * a.cos(), centre[1] + join * a.sin()];
+            // Points on the circle are inside or on the outline, never outside:
+            // the fillet is the circle itself where it is the boundary.
+            assert!(field_all(&shapes, &look, p) <= 1e-2, "{p:?}");
+        }
+    }
 }

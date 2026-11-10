@@ -50,6 +50,8 @@ pub(crate) struct Tree {
     topology: HashMap<u32, Entry>,
     native: HashMap<u32, NodeId>,
     handles: HashMap<NodeId, u32>,
+    /// `<tk-surface>` widgets and the elements bound to them (surface/bind.rs).
+    pub surfaces: crate::surface::Registry,
 }
 
 impl Tree {
@@ -64,6 +66,7 @@ impl Tree {
             )]),
             native: HashMap::from([(0, root)]),
             handles: HashMap::from([(root, 0)]),
+            surfaces: Default::default(),
         }
     }
 
@@ -140,18 +143,19 @@ impl Tree {
         for mutation in mutations {
             match mutation {
                 Mutation::Element { id, tag } => {
-                    let widget = crate::surface::widget_for(&tag);
                     let native = dom.create_element(
                         QualName::new(
                             None,
                             Namespace::from("http://www.w3.org/1999/xhtml"),
-                            tag.into(),
+                            tag.as_str().into(),
                         ),
                         vec![],
                     );
-                    // Native widgets (`<tk-surface>`) attach before attributes
-                    // arrive, so each one reaches Widget::attribute_changed.
-                    if let Some(widget) = widget {
+                    // Native widgets (`<tk-surface>`, `<tk-icon>`) attach before
+                    // attributes arrive, so each one reaches attribute_changed.
+                    if let Some(widget) =
+                        crate::surface::widget_for(&tag, native, &mut self.surfaces)
+                    {
                         dom.set_custom_widget(native, widget);
                     }
                     self.native.insert(id, native);
@@ -164,6 +168,9 @@ impl Tree {
                 }
                 Mutation::TextValue { id, value } => dom.set_node_text(self.native[&id], &value),
                 Mutation::Attribute { id, name, value } => {
+                    if name == "surface-groups" {
+                        self.surfaces.member(self.native[&id], value.is_some());
+                    }
                     let attribute = QualName::new(None, Namespace::from(""), name.into());
                     if let Some(value) = value {
                         dom.set_attribute(self.native[&id], attribute, &value);

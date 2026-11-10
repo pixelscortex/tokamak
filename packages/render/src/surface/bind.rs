@@ -1,0 +1,492 @@
+//! Layout binding: surfaces whose shapes come from the boxes of ordinary
+//! elements, read after Blitz layout and before paint. The shapes never pass
+//! through an attribute or JS; they are handed to the widget through a shared
+//! handle created with it.
+//!
+//! Marking (set by `@tokamak/ui`'s `Surface` components, usable by hand):
+//! - A surface element (`<tk-surface>`) names its group: `group="name"`.
+//! - A member element joins one or more groups: `surface-groups="a b"`, with
+//!   optional `surface-op` (`union` default | `subtract`), `surface-radius`
+//!   (`r` or `tl tr br bl`), `surface-join`, `surface-gap`, `surface-slant`
+//!   (`a` or `left right` degrees, see `slanted`) and `surface-animate`.
+//!
+//! A member's shape is its border box relative to the surface element's box.
+//!
+//! When the pass runs: once per window redraw (`NativeDocument::
+//! layout_surfaces`, called by the shell after `resolve`), never on its own,
+//! so an idle window does nothing. A surface's shapes change only if one of
+//! its members' boxes or settings changed; the widget then re-renders only
+//! the dirty area (see `tiles`).
+//!
+//! Identity: every shape carries its member's node id (`Key::Member`), and
+//! the widget matches old and new shapes by it, never by list position. A
+//! view switch that removes and adds members in the same pass as the rail
+//! tab moves (switching to or from the Chat view takes the title notch and
+//! the composer out of the shell layers) leaves the tab's identity intact.
+//!
+//! Animate or follow, per member: a member animates (220 ms, like an
+//! explicit `shapes` change) from its old box to its new one only if it
+//! carries `surface-animate`, it was there before, its box changed, AND the
+//! surface's own size did not change in the same pass. A window resize moves
+//! members and resizes surfaces together, so it never animates; layout simply
+//! follows. Members that appear or disappear do so at once, and never drag
+//! other shapes along.
+//!
+//! Order: unions before subtractions, each in document (node id) order, so a
+//! cut always cuts every plate of its group.
+use super::shape::{Key, Poly, Shape};
+use blitz_dom::{BaseDocument, LocalName, Node};
+use blitz_traits::NodeId;
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashMap},
+    rc::Rc,
+};
+
+/// What the layout pass hands to a surface widget.
+#[derive(Default)]
+pub(super) struct Bound {
+    pub shapes: Vec<Shape>,
+    /// Per shape: its identity (`Key::Member`).
+    pub keys: Vec<Key>,
+    /// Per shape: animate from its previous box (see the module header).
+    pub animate: Vec<bool>,
+    /// Bumped on every change, so the widget notices without comparing.
+    pub version: u64,
+    /// Nesting depth (0 = no enclosing surface) and the surface's top-left in
+    /// the window, CSS px. Kept current by every pass for depth-based lighting
+    /// (not used by rendering yet; a window-level height map would be built
+    /// from these, see SURFACES.md). Changes here do not bump `version`.
+    pub depth: u32,
+    pub origin: [f32; 2],
+}
+
+pub(super) type Handle = Rc<RefCell<Bound>>;
+
+/// A member's shape in one surface: sort key (subtract?, attached?, node),
+/// shape, whether it asked to animate, and its attachment if any.
+type Placed = ((bool, bool, NodeId), Shape, bool, Option<Attach>);
+
+/// Which side of a member meets the edge it is attached to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Side {
+    Left,
+    Right,
+}
+
+/// What `attached` needs about a member with `surface-attach`.
+#[derive(Clone, Copy)]
+struct Attach {
+    side: Side,
+    rect: [f32; 4],
+    radii: [f32; 4],
+    join: f32,
+}
+
+struct Entry {
+    handle: Handle,
+    /// Last shapes handed over, by member (the widget may still be animating
+    /// to them).
+    last: Vec<(NodeId, Shape)>,
+    /// The surface's size in the last pass, to tell a resize from a move.
+    size: Option<(f32, f32)>,
+}
+
+/// Every surface widget and every member element of one document.
+#[derive(Default)]
+pub(crate) struct Registry {
+    surfaces: HashMap<NodeId, Entry>,
+    members: BTreeSet<NodeId>,
+}
+
+fn attr<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
+    node.attr(LocalName::from(name))
+}
+
+fn number(node: &Node, name: &str) -> Option<f32> {
+    attr(node, name)?
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|v| v.is_finite())
+}
+
+fn numbers(node: &Node, name: &str) -> Vec<f32> {
+    attr(node, name)
+        .unwrap_or("")
+        .split_whitespace()
+        .filter_map(|v| v.parse::<f32>().ok().filter(|v| v.is_finite()))
+        .collect()
+}
+
+impl Registry {
+    /// A new surface widget for `node`, sharing its handle with the registry.
+    pub fn surface(&mut self, node: NodeId) -> Box<dyn blitz_dom::node::Widget> {
+        let handle = Handle::default();
+        self.surfaces.insert(
+            node,
+            Entry {
+                handle: handle.clone(),
+                last: Vec::new(),
+                size: None,
+            },
+        );
+        Box::new(super::widget::Surface::bound(handle))
+    }
+
+    #[cfg(test)]
+    pub(super) fn handle(&self, node: NodeId) -> Handle {
+        self.surfaces[&node].handle.clone()
+    }
+
+    /// Track `surface-groups` on an element (added, changed or removed).
+    pub fn member(&mut self, node: NodeId, present: bool) {
+        if present {
+            self.members.insert(node);
+        } else {
+            self.members.remove(&node);
+        }
+    }
+
+    /// The layout pass. `doc` must be resolved (styles and layout current).
+    pub fn bind(&mut self, doc: &BaseDocument) {
+        let live = |id: NodeId| {
+            doc.get_node(id)
+                .filter(|n| n.flags.is_in_document() && n.element_data().is_some())
+        };
+        // Forget nodes Blitz has dropped; keep detached ones (they may return).
+        self.surfaces.retain(|id, _| doc.get_node(*id).is_some());
+        self.members.retain(|id| doc.get_node(*id).is_some());
+
+        let mut groups: HashMap<&str, NodeId> = HashMap::new();
+        let mut boxes: HashMap<NodeId, [f32; 4]> = HashMap::new();
+        for &id in self.surfaces.keys() {
+            if let (Some(node), Some(rect)) = (live(id), doc.get_client_bounding_rect(id)) {
+                if let Some(group) = attr(node, "group") {
+                    groups.insert(group, id);
+                }
+                boxes.insert(
+                    id,
+                    [
+                        rect.x as f32,
+                        rect.y as f32,
+                        rect.width as f32,
+                        rect.height as f32,
+                    ],
+                );
+            }
+        }
+        // (subtract?, attached?, node) sorts plain unions first, then
+        // attached unions (they need their target in place, and join it
+        // exactly), then subtractions, each in document order.
+        let mut lists: HashMap<NodeId, Vec<Placed>> = HashMap::new();
+        for &id in &self.members {
+            let Some(node) = live(id) else { continue };
+            let Some(rect) = doc.get_client_bounding_rect(id) else {
+                continue;
+            };
+            if rect.width <= 0.0 && rect.height <= 0.0 {
+                continue; // not rendered (display: none)
+            }
+            let mut joined: Vec<NodeId> = Vec::new();
+            for group in attr(node, "surface-groups")
+                .unwrap_or("")
+                .split_whitespace()
+            {
+                let Some(&surface) = groups.get(group) else {
+                    continue;
+                };
+                // One shape per member and surface: the node is its identity.
+                if joined.contains(&surface) {
+                    continue;
+                }
+                joined.push(surface);
+                let origin = boxes[&surface];
+                let local = [
+                    rect.x as f32 - origin[0],
+                    rect.y as f32 - origin[1],
+                    rect.width as f32,
+                    rect.height as f32,
+                ];
+                let shape = member_shape(node, local);
+                let animate = attr(node, "surface-animate").is_some();
+                let attach = match attr(node, "surface-attach") {
+                    Some("right") => Some(Side::Right),
+                    Some("left") => Some(Side::Left),
+                    _ => None,
+                }
+                .filter(|_| !shape.sub)
+                .map(|side| Attach {
+                    side,
+                    rect: local,
+                    radii: shape.radii,
+                    // The member's join, else the surface's default.
+                    join: number(node, "surface-join")
+                        .or_else(|| live(surface).and_then(|n| number(n, "join")))
+                        .unwrap_or(0.0)
+                        .max(0.0),
+                });
+                lists.entry(surface).or_default().push((
+                    (shape.sub, attach.is_some(), id),
+                    shape,
+                    animate,
+                    attach,
+                ));
+            }
+        }
+        // Depth: ancestors that directly contain another registered surface
+        // element (a `Surface` component's root holds its `<tk-surface>`).
+        let holders: std::collections::HashSet<NodeId> = boxes
+            .keys()
+            .filter_map(|id| doc.get_node(*id).and_then(|n| n.parent))
+            .collect();
+        for (id, entry) in &mut self.surfaces {
+            let Some(origin) = boxes.get(id) else {
+                continue;
+            };
+            {
+                let own = doc.get_node(*id).and_then(|n| n.parent);
+                let mut current = own.and_then(|p| doc.get_node(p)).and_then(|n| n.parent);
+                let mut depth = 0;
+                while let Some(ancestor) = current {
+                    depth += u32::from(holders.contains(&ancestor));
+                    current = doc.get_node(ancestor).and_then(|n| n.parent);
+                }
+                let mut bound = entry.handle.borrow_mut();
+                bound.depth = depth;
+                bound.origin = [origin[0], origin[1]];
+            }
+            let size = (origin[2], origin[3]);
+            let mut list = lists.remove(id).unwrap_or_default();
+            list.sort_by_key(|(key, ..)| *key);
+            resolve_attached(&mut list);
+            let next: Vec<(NodeId, Shape)> = list
+                .iter()
+                .map(|((_, _, node), shape, ..)| (*node, shape.clone()))
+                .collect();
+            if next != entry.last {
+                let resized = entry.size.is_some_and(|s| s != size);
+                // Per member: animate only if it asked to, was there before
+                // and its own box changed.
+                let animate: Vec<bool> = list
+                    .iter()
+                    .map(|((_, _, node), shape, wants, _)| {
+                        *wants
+                            && !resized
+                            && entry.last.iter().any(|(n, old)| n == node && old != shape)
+                    })
+                    .collect();
+                let mut bound = entry.handle.borrow_mut();
+                bound.keys = next.iter().map(|(n, _)| Key::Member(*n)).collect();
+                bound.shapes = next.iter().map(|(_, s)| s.clone()).collect();
+                bound.animate = animate;
+                bound.version += 1;
+                entry.last = next;
+            }
+            entry.size = Some(size);
+        }
+    }
+}
+
+/// Replace each attached member's shape by its exact outline against the
+/// plain union it touches (see `attached`). A member whose target is missing
+/// keeps its plain rounded box.
+fn resolve_attached(list: &mut [Placed]) {
+    let targets: Vec<Shape> = list
+        .iter()
+        .filter(|((sub, attached, _), s, ..)| !sub && !attached && s.poly.is_none())
+        .map(|(_, s, ..)| s.clone())
+        .collect();
+    for (_, shape, _, attach) in list.iter_mut() {
+        let Some(a) = attach else { continue };
+        let [x, y, w, h] = a.rect;
+        let edge = match a.side {
+            Side::Right => x + w,
+            Side::Left => x,
+        };
+        let target = targets.iter().find(|t| {
+            let [tx, ty, tw, th] = t.rect;
+            let touching = match a.side {
+                Side::Right => (tx - edge).abs() < 0.5,
+                Side::Left => (tx + tw - edge).abs() < 0.5,
+            };
+            touching && ty < y + h && ty + th > y
+        });
+        if let Some(outline) =
+            target.and_then(|t| attached(a.side, a.rect, a.radii, a.join, t.rect, t.radii))
+        {
+            *shape = outline;
+        }
+    }
+}
+
+/// A member attached by one side (`surface-attach`) to a vertical edge of
+/// the plain union shape it touches (a rail tab against its container), as
+/// ONE exact outline: the member's free corners keep its own radii, the two
+/// places where its top and bottom edges meet the target's edge carry
+/// concave fillets of radius `join`, and a strip running along the inside of
+/// the target's whole edge (and around its corners, with the target's own
+/// corner radii) closes the outline. The CSG join of the result is 0 and it
+/// sorts after its target: a plain union of exactly coincident boundaries,
+/// so nothing bulges. (A CSG round join treats two collinear boundaries as a
+/// crease and fills it, which is what made a tab level with the container's
+/// top bulge.)
+///
+/// Near the target's corner the fillet flattens: with the member's top `d`
+/// px below the target's top, the fillet and the target's corner share the
+/// leg between them as an S-curve until there is room for both (at
+/// `d = 2 * max(join, corner)`). At `d = 0` both are gone: the member's top
+/// edge runs straight into the target's top edge, the strip covering the
+/// target's rounded corner. Same at the bottom. The outline always has 8
+/// vertices, so an animating member interpolates them continuously.
+pub(super) fn attached(
+    side: Side,
+    rect: [f32; 4],
+    radii: [f32; 4],
+    join: f32,
+    target: [f32; 4],
+    target_radii: [f32; 4],
+) -> Option<Shape> {
+    // Work as if attached on the right; mirror x for the left side.
+    let mirror = side == Side::Left;
+    let flip = |r: [f32; 4]| {
+        if mirror {
+            [-r[0] - r[2], r[1], r[2], r[3]]
+        } else {
+            r
+        }
+    };
+    let [x, y, w, h] = flip(rect);
+    let [_, ty, tw, th] = flip(target);
+    // Member corners on the free side, target corners on the attached edge
+    // (tl tr br bl, as seen after mirroring).
+    let (tl, bl) = if mirror {
+        (radii[1], radii[2])
+    } else {
+        (radii[0], radii[3])
+    };
+    let (ct, cb) = if mirror {
+        (target_radii[1], target_radii[2])
+    } else {
+        (target_radii[0], target_radii[3])
+    };
+    let edge = x + w;
+    let (top, bottom) = (ty, ty + th);
+    // How much of the fillet and the target's corner fit in the leg between.
+    let room = |d: f32, corner: f32| {
+        let full = 2.0 * join.max(corner);
+        if full <= 0.0 {
+            1.0
+        } else {
+            (d.max(0.0) / full).min(1.0)
+        }
+    };
+    let st = room(y - top, ct);
+    let sb = room(bottom - (y + h), cb);
+    // Wide enough that the target's corner arc fits on the strip's top and
+    // bottom edges (a vertex arc may use at most half of each edge).
+    let strip = edge + (2.0 * join.max(ct).max(cb) + 2.0).min(tw);
+    let (yt, yb) = (top.min(y), bottom.max(y + h));
+    let mut points = vec![
+        [x, y, tl],
+        [edge, y, join * st],
+        [edge, yt, ct * st],
+        [strip, yt, 0.0],
+        [strip, yb, 0.0],
+        [edge, yb, cb * sb],
+        [edge, y + h, join * sb],
+        [x, y + h, bl],
+    ];
+    if mirror {
+        for p in &mut points {
+            p[0] = -p[0];
+        }
+    }
+    let mut shape = Shape::from_poly(false, Poly::new(points)?);
+    shape.join = 0.0;
+    Some(shape)
+}
+
+/// A member's shape from its box (CSS px, relative to the surface) and its
+/// `surface-*` settings.
+fn member_shape(node: &Node, rect: [f32; 4]) -> Shape {
+    let sub = attr(node, "surface-op") == Some("subtract");
+    let radii = match numbers(node, "surface-radius").as_slice() {
+        [r] => [r.max(0.0); 4],
+        [a, b, c, d] => [*a, *b, *c, *d].map(|v| v.max(0.0)),
+        _ => [0.0; 4],
+    };
+    let join = number(node, "surface-join").map_or(-1.0, |v| v.max(0.0));
+    let gap = number(node, "surface-gap").map_or(-1.0, |v| v.max(0.0));
+    let slant = match numbers(node, "surface-slant").as_slice() {
+        [a] => [*a; 2],
+        [a, b] => [*a, *b],
+        _ => [0.0; 2],
+    }
+    .map(|a| a.clamp(-75.0, 75.0));
+    if slant != [0.0; 2]
+        && let Some(shape) = slanted(sub, rect, radii, join.max(0.0), slant)
+    {
+        return Shape { gap, ..shape };
+    }
+    Shape {
+        join,
+        gap,
+        ..Shape::rect(sub, rect, radii)
+    }
+}
+
+/// A member with leaning sides, as an exact outline. `slant` is degrees from
+/// vertical per side (left, right); positive leans the side outward towards
+/// the top, so the top is the wide end; negative angles make the bottom wide.
+/// The wide end is the end that meets the plate edge (a notch hanging from a
+/// top edge, a composer rising from a bottom edge): the outline continues
+/// along that edge line beyond both sides, and the two vertices where the
+/// sides meet that line carry the `join` radius. Those vertices become exact
+/// circular fillets of radius `join`, tangent to the side and to the edge, at
+/// any angle (CSG joins are exact only at 90 degrees). The far corners carry
+/// the member's own radii. The CSG join of the shape is 0: the outline
+/// already contains the fillets.
+pub(super) fn slanted(
+    sub: bool,
+    rect: [f32; 4],
+    radii: [f32; 4],
+    join: f32,
+    slant: [f32; 2],
+) -> Option<Shape> {
+    let [x, y, w, h] = rect;
+    let [tl, tr] = slant.map(|a| a.to_radians().tan());
+    // How far the outline continues along the edge line, and beyond it.
+    let ext = join * 3.0 + 4.0;
+    let points = if tl + tr >= 0.0 {
+        // Wide at the top (y): far corners at the bottom keep x..x+w.
+        let (jl, jr) = (x - h * tl, x + w + h * tr);
+        vec![
+            [jl - ext, y - ext, 0.0],
+            [jr + ext, y - ext, 0.0],
+            [jr + ext, y, 0.0],
+            [jr, y, join],
+            [x + w, y + h, radii[2]],
+            [x, y + h, radii[3]],
+            [jl, y, join],
+            [jl - ext, y, 0.0],
+        ]
+    } else {
+        // Wide at the bottom (y + h): far corners at the top keep x..x+w.
+        let (jl, jr) = (x + h * tl, x + w - h * tr);
+        let b = y + h;
+        vec![
+            [jl - ext, b, 0.0],
+            [jl, b, join],
+            [x, y, radii[0]],
+            [x + w, y, radii[1]],
+            [jr, b, join],
+            [jr + ext, b, 0.0],
+            [jr + ext, b + ext, 0.0],
+            [jl - ext, b + ext, 0.0],
+        ]
+    };
+    let mut shape = Shape::from_poly(sub, Poly::new(points)?);
+    shape.join = 0.0;
+    Some(shape)
+}

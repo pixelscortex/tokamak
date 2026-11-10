@@ -55,6 +55,20 @@ export namespace JSX {
     onKeyUp?: EventHandler;
     onComposition?: EventHandler;
     onAppleKeybinding?: EventHandler;
+    /** Layout-bound surface member (render/SURFACES.md); set by
+     * `@tokamak/ui`'s Surface components. Presence flags: pass `true` or
+     * leave undefined (a string "false" would still be present). */
+    "surface-groups"?: string;
+    "surface-op"?: "union" | "subtract";
+    "surface-radius"?: string;
+    "surface-join"?: number;
+    "surface-gap"?: number;
+    "surface-slant"?: string;
+    "surface-animate"?: true;
+    "surface-attach"?: "left" | "right";
+    /** With `WindowOptions::custom_titlebar`: pressing here drags the window. */
+    "window-drag"?: true;
+    "window-no-drag"?: true;
   }
 
   export interface ButtonAttributes extends Attributes {
@@ -75,6 +89,8 @@ export namespace JSX {
    * surface painted natively on the GPU; it has no children. `shapes` is a
    * JSON list of shapes in the element's CSS px. */
   export interface SurfaceAttributes extends Attributes {
+    /** Members with this name in `surface-groups` add their boxes as shapes. */
+    group?: string;
     shapes?: string;
     join?: number;
     gap?: number;
@@ -85,11 +101,22 @@ export namespace JSX {
     border?: number;
     "border-color"?: string;
     "border-align"?: "inside" | "center" | "outside";
-    "border-lit"?: string;
+    "border-lit"?: string | number;
+    "border-mix"?: number;
+  }
+
+  /** `<tk-icon>` (render/src/icon.rs): SVG path data drawn natively. */
+  export interface IconAttributes extends Attributes {
+    d: string;
+    view?: number;
+    fill?: string;
+    stroke?: string;
+    "stroke-width"?: number;
   }
 
   export interface IntrinsicElements {
     "tk-surface": SurfaceAttributes;
+    "tk-icon": IconAttributes;
     div: Attributes;
     span: Attributes;
     p: Attributes;

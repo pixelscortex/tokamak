@@ -8,6 +8,13 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[profile.dev.package.rquickjs-sys]
+# QuickJS's C interpreter built at -O0 spends so much native stack per JS call
+# that a deeply nested Solid tree (the lab shell) exceeds QuickJS's 1 MiB stack
+# budget in debug builds only ("Maximum call stack size exceeded" on mount).
+# Optimising just this C crate in dev keeps debug behaviour equal to release.
+opt-level = 2
+
 [profile.release]
 # On aarch64-apple-darwin with Rust 1.97.0, the empty host measured
 # 286080 bytes with s versus 286096 with z. Remeasure as real code arrives.

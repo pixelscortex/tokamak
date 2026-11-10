@@ -13,12 +13,14 @@
 //! - `tiles`: per-tile culling and dirty rects for partial re-render.
 //! - `gpu`: pipeline, shared atlas, own textures, the Scene a widget returns.
 //! - `frame`: the per-frame hook that renders the atlas and submits once.
+//! - `bind`: layout binding (member elements' boxes become shapes).
 //! - `widget`: the Blitz widget (attributes, animation, paint).
 //! - `demo`, `stats`, `fps`: lab-only stress demo and readout
 //!   (`surface-demo` feature, not in product builds).
 //! - `surface.wgsl`: the distance field and shading, on the GPU.
 //! - `reference`, `tests`: the same maths on the CPU as a test oracle, and
 //!   the tests (test builds only).
+mod bind;
 mod frame;
 mod gpu;
 mod shape;
@@ -55,14 +57,25 @@ pub use frame::end_frame;
 /// events/mod.rs, "Handle event forwarding for custom widget"), so wheel
 /// scrolling stopped over a surface. Surfaces are background layers with no
 /// children, so hit testing passes through to the element underneath.
-pub(crate) const UA_CSS: &str = "tk-surface { display: block; pointer-events: none; }";
+pub(crate) const UA_CSS: &str =
+    "tk-surface, tk-icon { display: block; flex-shrink: 0; pointer-events: none; }";
+
+pub(crate) use bind::Registry;
+pub(crate) use shape::parse_colour;
 
 /// The widget for an element tag, if the tag is one of ours. Attached when
 /// the element is created, before its attributes arrive, so every attribute
-/// reaches `Widget::attribute_changed`.
-pub(crate) fn widget_for(tag: &str) -> Option<Box<dyn Widget>> {
+/// reaches `Widget::attribute_changed`. Surfaces register with `registry` so
+/// the layout pass can hand them member shapes.
+pub(crate) fn widget_for(
+    tag: &str,
+    node: blitz_traits::NodeId,
+    registry: &mut Registry,
+) -> Option<Box<dyn Widget>> {
     match tag {
-        "tk-surface" => Some(Box::new(widget::Surface::new())),
+        "tk-surface" => Some(registry.surface(node)),
+        // Not a surface; dispatched here so wire.rs has one widget hook.
+        "tk-icon" => Some(crate::icon::widget()),
         #[cfg(feature = "surface-demo")]
         fps::TAG => Some(fps::widget()),
         _ => None,

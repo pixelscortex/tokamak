@@ -13,7 +13,8 @@
 //! value deep inside another shape, but never a painted pixel: deep interior
 //! is flat fill either way. `tests.rs` checks culled == unculled pixel by
 //! pixel, and that pixels outside a dirty rect do not change.
-use super::shape::{Look, Shape};
+use super::shape::{Key, Look, Shape};
+use std::collections::HashMap;
 
 /// Culling tile edge, device px. The shader reads it from the parameters.
 pub(super) const CULL_TILE: u32 = 32;
@@ -111,34 +112,68 @@ impl Tiles {
 
 /// Device-px rects (x, y, w, h) that must be re-rendered to go from `old` to
 /// `new` under the same look and size, or None if a full render is required
-/// (shape count or op changed) or cheaper (most of the target is dirty).
+/// (a kept shape changed op, kept shapes changed order, keys are not unique)
+/// or cheaper (most of the target is dirty). Shapes are matched by key: a
+/// moved shape dirties its old and new influence, an added one its new, a
+/// removed one its old; shapes that stay put dirty nothing wherever they sit
+/// in the list.
 pub(super) fn dirty_rects(
-    old: &[Shape],
-    new: &[Shape],
+    old: (&[Key], &[Shape]),
+    new: (&[Key], &[Shape]),
     look: &Look,
     width: u32,
     height: u32,
     scale: f32,
 ) -> Option<Vec<[u32; 4]>> {
-    if old.len() != new.len() {
+    let ((old_keys, old), (new_keys, new)) = (old, new);
+    if old_keys.len() != old.len() || new_keys.len() != new.len() {
         return None;
     }
-    let mut rects: Vec<[f32; 4]> = Vec::new();
-    for (a, b) in old.iter().zip(new) {
-        if a == b {
-            continue;
-        }
-        if a.sub != b.sub {
-            return None;
-        }
-        let (ia, ib) = (influence(look, a), influence(look, b));
-        rects.push([
-            (ia[0].min(ib[0]) * scale).floor().max(0.0),
-            (ia[1].min(ib[1]) * scale).floor().max(0.0),
-            (ia[2].max(ib[2]) * scale).ceil().min(width as f32),
-            (ia[3].max(ib[3]) * scale).ceil().min(height as f32),
-        ]);
+    let old_at: HashMap<Key, usize> = old_keys.iter().enumerate().map(|(i, k)| (*k, i)).collect();
+    let new_at: HashMap<Key, usize> = new_keys.iter().enumerate().map(|(i, k)| (*k, i)).collect();
+    if old_at.len() != old.len() || new_at.len() != new.len() {
+        return None;
     }
+    // The field folds shapes in list order: shapes kept on both sides must
+    // keep their relative order for untouched pixels to stay valid.
+    let kept_old = old_keys.iter().filter(|k| new_at.contains_key(k));
+    let kept_new = new_keys.iter().filter(|k| old_at.contains_key(k));
+    if !kept_old.eq(kept_new) {
+        return None;
+    }
+    let mut areas: Vec<[f32; 4]> = Vec::new();
+    for (k, b) in new_keys.iter().zip(new) {
+        match old_at.get(k).map(|&j| &old[j]) {
+            Some(a) if a == b => {}
+            Some(a) if a.sub != b.sub => return None,
+            Some(a) => {
+                let (ia, ib) = (influence(look, a), influence(look, b));
+                areas.push([
+                    ia[0].min(ib[0]),
+                    ia[1].min(ib[1]),
+                    ia[2].max(ib[2]),
+                    ia[3].max(ib[3]),
+                ]);
+            }
+            None => areas.push(influence(look, b)),
+        }
+    }
+    for (k, a) in old_keys.iter().zip(old) {
+        if !new_at.contains_key(k) {
+            areas.push(influence(look, a));
+        }
+    }
+    let mut rects: Vec<[f32; 4]> = areas
+        .iter()
+        .map(|a| {
+            [
+                (a[0] * scale).floor().max(0.0),
+                (a[1] * scale).floor().max(0.0),
+                (a[2] * scale).ceil().min(width as f32),
+                (a[3] * scale).ceil().min(height as f32),
+            ]
+        })
+        .collect();
     rects.retain(|r| r[2] > r[0] && r[3] > r[1]);
     // Merge overlapping rects until stable (overlaps would render twice).
     let overlaps =

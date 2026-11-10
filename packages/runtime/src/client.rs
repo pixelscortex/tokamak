@@ -8,15 +8,29 @@ pub struct ClientConfig<'a> {
     pub shell: &'a str,
     pub ui: &'a str,
     pub window_size: (u32, u32),
+    /// `minWidth` / `minHeight` from app.config.json, if set.
+    pub min_window_size: Option<(u32, u32)>,
+}
+
+impl ClientConfig<'_> {
+    /// Window options from the config: the platform title bar, and the
+    /// minimum size if the config sets one.
+    pub fn window_options(&self) -> render::WindowOptions {
+        render::WindowOptions {
+            min_size: self.min_window_size,
+            ..Default::default()
+        }
+    }
 }
 
 /// UI-only clients do not discover or connect to a backend.
 pub fn run_ui(config: ClientConfig<'_>) -> Result<(), Error> {
-    render::launch_window(
+    render::launch_window_with(
         config.shell,
         config.ui,
         config.title,
         config.window_size,
+        config.window_options(),
         None,
         |_| {},
     )?;
@@ -40,11 +54,12 @@ pub fn run(config: ClientConfig<'_>) -> Result<(), Error> {
     let (host, ready) = tokio::sync::oneshot::channel();
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let worker = runtime.spawn(connection::serve(socket, receiver, ready, stopped));
-    let result = render::launch_window(
+    let result = render::launch_window_with(
         config.shell,
         config.ui,
         config.title,
         config.window_size,
+        config.window_options(),
         Some(requests),
         move |sender| {
             let _ = host.send(sender);

@@ -13,6 +13,11 @@ struct Window {
     title: String,
     width: u32,
     height: u32,
+    /// Optional smallest window size, logical px (both or neither).
+    #[serde(rename = "minWidth")]
+    min_width: Option<u32>,
+    #[serde(rename = "minHeight")]
+    min_height: Option<u32>,
 }
 
 /// Validate the builder's artifact and let Cargo track its embed inputs.
@@ -33,6 +38,17 @@ fn generate(root: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
     if window.title.is_empty() || window.width == 0 || window.height == 0 {
         return Err("Application title and nonzero window dimensions are required".into());
     }
+    let min_size = match (window.min_width, window.min_height) {
+        (None, None) => None,
+        (Some(w), Some(h)) if w > 0 && h > 0 && w <= window.width && h <= window.height => {
+            Some((w, h))
+        }
+        _ => {
+            return Err(
+                "minWidth and minHeight go together, nonzero and within width and height".into(),
+            );
+        }
+    };
     let artifact: serde_json::Value =
         serde_json::from_slice(&fs::read(&manifest).map_err(|e| {
             format!("Build application assets before Cargo (missing dist/manifest.json): {e}")
@@ -61,10 +77,11 @@ fn generate(root: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
         assets.insert(field, path);
     }
     let context = format!(
-        "::runtime::client::ClientConfig {{ title: {:?}, window_size: ({}, {}), shell: include_str!({:?}), ui: include_str!({:?}) }}",
+        "::runtime::client::ClientConfig {{ title: {:?}, window_size: ({}, {}), min_window_size: {:?}, shell: include_str!({:?}), ui: include_str!({:?}) }}",
         window.title,
         window.width,
         window.height,
+        min_size,
         assets["shell"].to_string_lossy(),
         assets["code"].to_string_lossy(),
     );
@@ -137,6 +154,7 @@ mod tests {
             pub mod client {{
                 pub struct ClientConfig<'a> {{
                     pub title: &'a str, pub window_size: (u32,u32),
+                    pub min_window_size: Option<(u32,u32)>,
                     pub shell: &'a str, pub ui: &'a str,
                 }}
             }}
@@ -144,6 +162,7 @@ mod tests {
             fn main() {{
                 assert_eq!(CONFIG.title, "Native \"UI\"");
                 assert_eq!(CONFIG.window_size, (680,820));
+                assert_eq!(CONFIG.min_window_size, None);
                 assert_eq!(CONFIG.shell, "<html></html>");
             }}
         "#,
@@ -202,6 +221,17 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("nonzero")
+        );
+        fs::write(
+            root.0.join("app.config.json"),
+            r#"{"title":"UI","width":680,"height":820,"minWidth":700}"#,
+        )
+        .unwrap();
+        assert!(
+            generate(&root.0, &root.0.join("out"))
+                .unwrap_err()
+                .to_string()
+                .contains("minWidth and minHeight")
         );
     }
 }

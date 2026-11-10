@@ -1,6 +1,7 @@
 //! Native Solid documents run QuickJS and Blitz on the window event-loop
 //! thread. Host producers send owned JSON through a generation-scoped mailbox;
 //! neither JS values nor native document references cross that boundary.
+mod icon;
 mod js;
 mod mailbox;
 mod shell;
@@ -14,7 +15,7 @@ use keyboard_types::{Key, Modifiers, NamedKey};
 pub use mailbox::{HostMailbox, HostSender};
 use serde::Deserialize;
 use serde_json::{Value, json};
-pub use shell::{launch, launch_connected, launch_window};
+pub use shell::{WindowOptions, launch, launch_connected, launch_window, launch_window_with};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -89,6 +90,13 @@ impl NativeDocument {
 
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// Hand layout-bound shapes to `<tk-surface>` widgets (surface/bind.rs).
+    /// Call after `resolve` and before painting; the window does this on
+    /// every redraw. Does nothing when no member box or setting changed.
+    pub fn layout_surfaces(&mut self) {
+        self.bridge.tree.surfaces.bind(&self.html.inner());
     }
 
     pub fn take_error(&mut self) -> Option<Error> {

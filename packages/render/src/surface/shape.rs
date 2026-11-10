@@ -11,6 +11,22 @@ pub(super) const MAX_SHAPES: usize = 4096;
 
 pub(super) type V2 = [f32; 2];
 
+/// A shape's identity within its surface, stable across changes: an entry
+/// of the `shapes` attribute by index, a layout-bound member by node. Shape
+/// animation and partial re-rendering match old and new shapes by key, never
+/// by position, so shapes appearing or disappearing elsewhere in the list do
+/// not move (or re-render) the others.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) enum Key {
+    Explicit(u32),
+    Member(blitz_traits::NodeId),
+}
+
+/// Index keys for a list without identities (tests, the demo driver).
+pub(super) fn index_keys(n: usize) -> Vec<Key> {
+    (0..n as u32).map(Key::Explicit).collect()
+}
+
 pub(super) fn sub2(a: V2, b: V2) -> V2 {
     [a[0] - b[0], a[1] - b[1]]
 }
@@ -305,7 +321,7 @@ pub(super) fn parse_shapes(json: &str) -> Result<Vec<Shape>, String> {
 }
 
 /// `#rgb`, `#rrggbb` or `#rrggbbaa`, straight alpha, sRGB-encoded values.
-pub(super) fn parse_colour(text: &str) -> Option<[f32; 4]> {
+pub(crate) fn parse_colour(text: &str) -> Option<[f32; 4]> {
     let hex = text.trim().strip_prefix('#')?;
     let digit = |i: usize, n: usize| u8::from_str_radix(hex.get(i..i + n)?, 16).ok();
     let (r, g, b, a) = match hex.len() {
@@ -336,7 +352,19 @@ pub(super) struct Look {
     pub border: f32,
     pub border_colour: [f32; 4],
     pub border_align: Align,
-    pub border_lit: bool,
+    /// How much the light modulates the border (`border-lit`): 0 is a flat
+    /// hairline, 1 the full lit/shaded swing with the edge direction.
+    pub border_lit: f32,
+    /// `border-mix`: when set (>= 0), the border colour is the fill moved
+    /// this fraction of the way to white (a hairline "strength"), instead of
+    /// `border_colour`. Follows the fill, so one number tunes every material.
+    pub border_mix: f32,
+}
+
+/// `var(--name)` -> `name` (custom property names are stored without `--`).
+pub(super) fn var_name(value: &str) -> Option<String> {
+    let inner = value.trim().strip_prefix("var(")?.strip_suffix(')')?.trim();
+    Some(inner.strip_prefix("--")?.to_string())
 }
 
 impl Default for Look {
@@ -352,7 +380,8 @@ impl Default for Look {
             border: 0.0,
             border_colour: grey(0x2a),
             border_align: Align::Inside,
-            border_lit: false,
+            border_lit: 0.0,
+            border_mix: -1.0,
         }
     }
 }
@@ -394,7 +423,15 @@ impl Look {
                     _ => Align::Inside,
                 }
             }
-            "border-lit" => self.border_lit = value.is_some_and(|v| v != "false"),
+            // `true` (or empty) is the full swing, a number is the amount.
+            "border-lit" => {
+                self.border_lit = match value.map(str::trim) {
+                    None | Some("false") => 0.0,
+                    Some("" | "true") => 1.0,
+                    Some(_) => number(0.0).clamp(0.0, 1.0),
+                }
+            }
+            "border-mix" => self.border_mix = number(-1.0).min(1.0),
             _ => return false,
         }
         true
@@ -419,6 +456,16 @@ impl Look {
             Align::Outside => self.border,
         };
         (outer, outer - self.border)
+    }
+
+    /// The border's colour as painted (see `border_mix`).
+    pub fn border_rgba(&self) -> [f32; 4] {
+        if self.border_mix < 0.0 {
+            return self.border_colour;
+        }
+        let m = self.border_mix;
+        let [r, g, b, a] = self.fill;
+        [r + (1.0 - r) * m, g + (1.0 - g) * m, b + (1.0 - b) * m, a]
     }
 
     pub fn join_of(&self, s: &Shape) -> f32 {

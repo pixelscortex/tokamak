@@ -18,7 +18,7 @@
 //! Nothing is submitted here: passes are recorded into the frame encoder
 //! (`frame`), atlas jobs are queued, and `frame::end_frame` submits.
 use super::frame::{put_encoder, take_encoder};
-use super::shape::{Look, Shape};
+use super::shape::{Key, Look, Shape};
 use super::tiles::{CULL_TILE, Tiles, dirty_rects};
 use anyrender::{PaintScene, RenderContext, ResourceId, Scene};
 use anyrender_vello::{DeviceHandle, wgpu};
@@ -232,10 +232,10 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
     params[4] = [
         outer,
         inner,
-        if look.border_lit { 1.0 } else { 0.0 },
+        look.border_lit,
         if look.border > 0.0 { 1.0 } else { 0.0 },
     ];
-    params[5] = look.border_colour;
+    params[5] = look.border_rgba();
     params[6] = [tiles.nx as f32, CULL_TILE as f32, 0.0, 0.0];
     let mut corner_slot = HEADER_SLOTS + SHAPE_SLOTS * shapes.len();
     for (i, s) in shapes.iter().enumerate() {
@@ -458,12 +458,16 @@ pub(super) fn encode_atlases() {
 /// Called on renderer suspend: the registered atlas textures are gone.
 pub(super) fn forget_atlases() {
     ATLAS.with(|a| a.borrow_mut().clear());
+    // wgpu reuses ids of dropped devices: a cached pipeline must never be
+    // matched to a later device that happens to compare equal.
+    SHARED.with(|s| s.borrow_mut().clear());
 }
 
 // ---------------------------------------------------------------- surface
 
 /// What the target currently shows.
 struct Rendered {
+    keys: Vec<Key>,
     shapes: Vec<Shape>,
     look: Look,
     scale: u32,
@@ -596,6 +600,7 @@ impl Gpu {
     pub fn update(
         &mut self,
         render_ctx: &mut dyn RenderContext,
+        keys: &[Key],
         shapes: &[Shape],
         look: &Look,
         width: u32,
@@ -623,10 +628,17 @@ impl Gpu {
         }
         let rects = match &self.rendered {
             Some(r) if r.look == *look && r.scale == scale.to_bits() => {
-                if r.shapes == shapes {
+                if r.shapes == shapes && r.keys == keys {
                     return 0;
                 }
-                dirty_rects(&r.shapes, shapes, look, width, height, scale)
+                dirty_rects(
+                    (&r.keys, &r.shapes),
+                    (keys, shapes),
+                    look,
+                    width,
+                    height,
+                    scale,
+                )
             }
             _ => None,
         };
@@ -688,6 +700,7 @@ impl Gpu {
             Target::None => return 0,
         }
         self.rendered = Some(Rendered {
+            keys: keys.to_vec(),
             shapes: shapes.to_vec(),
             look: *look,
             scale: scale.to_bits(),
