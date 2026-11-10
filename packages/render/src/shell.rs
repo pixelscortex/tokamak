@@ -63,6 +63,20 @@ pub struct WindowOptions {
     /// or a stretched old frame) in the strip a live resize uncovers before
     /// the frame for the new size arrives. None keeps the platform's.
     pub background: Option<u32>,
+    /// macOS with `custom_titlebar`: where the close / minimise / zoom
+    /// buttons go, logical px from the window's top-left: the close button's
+    /// left edge and the buttons' vertical centre (the middle of the page's
+    /// top bar). None leaves AppKit's placement. Re-applied whenever AppKit
+    /// may lay them out again (resize, focus, scale change, redraw); left
+    /// alone in full screen, where they live in the system's title bar.
+    pub traffic_lights: Option<TrafficLights>,
+}
+
+/// See `WindowOptions::traffic_lights`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrafficLights {
+    pub left: f64,
+    pub center_y: f64,
 }
 
 /// Configurable native surface used by the reusable runtime host.
@@ -140,6 +154,16 @@ struct Host(
     WindowOptions,
 );
 
+/// `WindowOptions::traffic_lights`, outside full screen.
+#[cfg(target_os = "macos")]
+fn place_window_buttons(options: &WindowOptions, window: &dyn winit::window::Window) {
+    if let (true, Some(at)) = (options.custom_titlebar, options.traffic_lights)
+        && window.fullscreen().is_none()
+    {
+        place_traffic_lights(window, at);
+    }
+}
+
 impl ApplicationHandler for Host {
     fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.0.can_create_surfaces(event_loop);
@@ -174,6 +198,8 @@ impl ApplicationHandler for Host {
                 // before Blitz paints (surface/bind.rs). Blitz resolves again
                 // in its redraw, which is then a no-op.
                 WindowEvent::RedrawRequested => {
+                    #[cfg(target_os = "macos")]
+                    place_window_buttons(&self.2, &*view.window);
                     let time = view.current_animation_time();
                     let doc = view.downcast_doc_mut::<NativeDocument>();
                     doc.inner_mut().resolve(time);
@@ -191,7 +217,13 @@ impl ApplicationHandler for Host {
                         let _ = view.window.drag_window();
                     }
                 }
+                #[cfg(target_os = "macos")]
+                WindowEvent::Focused(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    place_window_buttons(&self.2, &*view.window);
+                }
                 WindowEvent::SurfaceResized(_) => {
+                    #[cfg(target_os = "macos")]
+                    place_window_buttons(&self.2, &*view.window);
                     if self.2.custom_titlebar {
                         let full = view.window.fullscreen().is_some();
                         let doc = view.downcast_doc_mut::<NativeDocument>();
@@ -514,4 +546,113 @@ unsafe fn objc2_foundation_string(text: &std::ffi::CStr) -> *mut objc2::runtime:
     };
     // SAFETY: a class method creating an autoreleased string from UTF-8.
     unsafe { msg_send![class, stringWithUTF8String: text.as_ptr()] }
+}
+
+/// Moves the macOS window buttons (close, minimise, zoom) so they sit at
+/// `at` within a custom title bar (`WindowOptions::traffic_lights`).
+///
+/// AppKit has no setting for this. Like Electron's `trafficLightPosition`,
+/// this resizes the buttons' title bar container (the superview of their
+/// superview) to twice the wanted centre height, pinned to the window's top,
+/// and centres the buttons in it at the wanted left edge, keeping AppKit's
+/// spacing between them. Only public NSView/NSWindow calls; the trade-off is
+/// that it relies on the buttons' container hierarchy, which AppKit does
+/// not document (if it changes, the buttons simply stay where AppKit put
+/// them), and AppKit lays the buttons out again on resize, focus and title
+/// bar changes, so the host re-applies this then.
+#[cfg(target_os = "macos")]
+fn place_traffic_lights(window: &dyn winit::window::Window, at: TrafficLights) {
+    use objc2::{Encode, Encoding, msg_send, runtime::AnyObject};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    struct Point {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    struct Size {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    struct Frame {
+        origin: Point,
+        size: Size,
+    }
+    // SAFETY: the layouts and names of CGPoint, CGSize and CGRect.
+    unsafe impl Encode for Point {
+        const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+    }
+    unsafe impl Encode for Size {
+        const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
+    }
+    unsafe impl Encode for Frame {
+        const ENCODING: Encoding = Encoding::Struct("CGRect", &[Point::ENCODING, Size::ENCODING]);
+    }
+
+    let Ok(handle) = window.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return;
+    };
+    // SAFETY: main thread (winit's event loop), the live NSView of an open
+    // window; every object is checked before use; only frames change.
+    unsafe {
+        let view = handle.ns_view.as_ptr().cast::<AnyObject>();
+        let ns_window: *mut AnyObject = msg_send![view, window];
+        let Some(ns_window) = ns_window.as_ref() else {
+            return;
+        };
+        // NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton.
+        let buttons: Vec<&AnyObject> = (0usize..3)
+            .filter_map(|kind| {
+                let b: *mut AnyObject = msg_send![ns_window, standardWindowButton: kind];
+                b.as_ref()
+            })
+            .collect();
+        let [close, mini, _] = buttons[..] else {
+            return;
+        };
+        let close_frame: Frame = msg_send![close, frame];
+        let mini_frame: Frame = msg_send![mini, frame];
+        let spacing = mini_frame.origin.x - close_frame.origin.x;
+        let superview: *mut AnyObject = msg_send![close, superview];
+        let Some(superview) = superview.as_ref() else {
+            return;
+        };
+        let container: *mut AnyObject = msg_send![superview, superview];
+        let Some(container) = container.as_ref() else {
+            return;
+        };
+        let window_frame: Frame = msg_send![ns_window, frame];
+        let mut frame: Frame = msg_send![container, frame];
+        let height = (at.center_y * 2.0).max(close_frame.size.height);
+        // The container's superview (the window's frame view) is not
+        // flipped: y counts up from the window's bottom.
+        let wanted_y = window_frame.size.height - height;
+        if frame.size.height != height || frame.origin.y != wanted_y {
+            frame.size.height = height;
+            frame.origin.y = wanted_y;
+            let _: () = msg_send![container, setFrame: frame];
+        }
+        for (i, button) in buttons.iter().enumerate() {
+            let b: Frame = msg_send![*button, frame];
+            let origin = Point {
+                x: at.left + spacing * i as f64,
+                y: (height - b.size.height) / 2.0,
+            };
+            if b.origin.x != origin.x || b.origin.y != origin.y {
+                let _: () = msg_send![*button, setFrameOrigin: origin];
+            }
+        }
+        if std::env::var_os("TK_DEBUG_LAYER").is_some() {
+            let close_now: Frame = msg_send![close, frame];
+            eprintln!("tk window buttons: container {frame:?}, close {close_now:?}");
+        }
+    }
 }

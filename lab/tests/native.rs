@@ -246,3 +246,20 @@ fn window_base_colour_matches_the_theme_token() {
         "lab/src/main.rs WINDOW_BASE must equal --color-base #{token}"
     );
 }
+
+/// The native window buttons are placed from the shell's top bar metrics.
+#[test]
+fn window_buttons_follow_the_shell_top_bar() {
+    let shell = include_str!("../../packages/ui/src/components/shell.tsx");
+    let main = include_str!("../src/main.rs");
+    let block = &shell[shell.find("export const topBar = {").unwrap()..];
+    let value = |key: &str| -> String {
+        let at = block.find(&format!("{key}: ")).unwrap() + key.len() + 2;
+        block[at..].split(',').next().unwrap().trim().to_string()
+    };
+    let (height, left) = (value("height"), value("left"));
+    assert!(
+        main.contains(&format!("TOP_BAR: (f64, f64) = ({height}.0, {left}.0);")),
+        "lab/src/main.rs TOP_BAR must equal topBar.height {height} and topBar.left {left}"
+    );
+}

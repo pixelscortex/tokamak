@@ -98,16 +98,16 @@ function teleport(region: Region) {
   };
 }
 
-const topBar = {
+const topBarRegions = {
   start: teleport("top-start"),
   center: teleport("top-center"),
   end: teleport("top-end"),
   stage: teleport("stage-top"),
 };
 
-function TopBar(props: { at?: keyof typeof topBar; children?: JSX.Element }) {
+function TopBar(props: { at?: keyof typeof topBarRegions; children?: JSX.Element }) {
   // `at` is fixed for the life of the component (a region, not a style).
-  const Region = topBar[props.at ?? "center"];
+  const Region = topBarRegions[props.at ?? "center"];
   return <Region>{props.children}</Region>;
 }
 
@@ -128,6 +128,20 @@ export const rail = {
   tab: 8,
 } as const;
 
+/** Top bar and macOS window buttons (custom title bar), CSS px. The native
+ * host places the buttons from the same numbers (render `WindowOptions::
+ * traffic_lights`: `left` and `height / 2`; the lab's main.rs passes them
+ * and its tests check they agree with these).
+ * - `height`: the top bar, which is the title bar.
+ * - `left`: window edge to the close button (the design file's position).
+ * - `reserve`: the top bar's start padding while the buttons are shown:
+ *   close, minimise and zoom (14 px each, 20 px apart) plus 11 px of air. */
+export const topBar = {
+  height: 40,
+  left: 13,
+  reserve: 13 + 2 * 20 + 14 + 11,
+} as const;
+
 /** Top of rail item `i` within the rail column (the first is level with the
  * plugin container's top, so the active tab's top edge runs straight into
  * the container's). */
@@ -146,9 +160,12 @@ function ShellFrame(props: ShellProps) {
       <div class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink">
         <div
           window-drag
-          class={`flex h-10 shrink-0 items-center pr-2 ${
-            props.trafficLights === false ? "pl-3.5" : "pl-[78px] [[data-fullscreen]_&]:pl-3.5"
+          class={`flex shrink-0 items-center pr-2 ${
+            props.trafficLights === false
+              ? "pl-3.5"
+              : "pl-(--tk-window-buttons) [[data-fullscreen]_&]:pl-3.5"
           }`}
+          style={`height: ${topBar.height}px; --tk-window-buttons: ${topBar.reserve}px`}
         >
           {/* Start and end keep their design widths on wide windows and give
             * way (down to their content) on narrow ones; the centre keeps at

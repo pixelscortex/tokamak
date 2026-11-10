@@ -15,7 +15,9 @@ use keyboard_types::{Key, Modifiers, NamedKey};
 pub use mailbox::{HostMailbox, HostSender};
 use serde::Deserialize;
 use serde_json::{Value, json};
-pub use shell::{WindowOptions, launch, launch_connected, launch_window, launch_window_with};
+pub use shell::{
+    TrafficLights, WindowOptions, launch, launch_connected, launch_window, launch_window_with,
+};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},

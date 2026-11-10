@@ -668,6 +668,7 @@ impl Gpu {
     /// Bring the target up to date with `shapes` under `look`: nothing if it
     /// already shows them, the dirty rects if only some shapes changed, all
     /// of it otherwise. Returns the device pixels queued for re-rendering.
+    #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         render_ctx: &mut dyn RenderContext,
