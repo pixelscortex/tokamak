@@ -1,0 +1,27 @@
+packages/ui/tests/contracts.test.ts
+  s_e3d99f9a782059::t_2e49f43c1a5cfb 11
+packages/ui/src/components/shell.tsx
+  s_e3d99f9a782059::t_c29d6d1956b84d 114-135,179-182
+lab/src/app.tsx
+  s_e3d99f9a782059::t_b9a26c0b2af337 8,25-26,41-42,51-52,60-61,68-69
+packages/ui/src/components/index.ts
+  s_e3d99f9a782059::t_b9a26c0b2af337 5
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_2e49f43c1a5cfb 718-736
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5bf220b59351472d1e396aea968dcde9a0b01c5",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
