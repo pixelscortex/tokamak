@@ -1,0 +1,37 @@
+lab/tests/native.rs
+  s_e3d99f9a782059::t_2635913725629c 249-265
+lab/src/main.rs
+  s_e3d99f9a782059::t_2635913725629c 8-12,23-26
+packages/render/src/surface/gpu.rs
+  s_e3d99f9a782059::t_274b93ee762665 671
+packages/ui/src/components/index.ts
+  s_e3d99f9a782059::t_b9141e1ee557ec 5
+packages/render/src/lib.rs
+  s_e3d99f9a782059::t_2635913725629c 18-20
+packages/render/src/shell.rs
+  s_e3d99f9a782059::t_951366272c2566 157-163,202,222,226
+  s_e3d99f9a782059::t_221ddcd0455700 66-79,164-166,201,220-221,225,550-564,566-607,611-617,621-624,628,632-653,656-658
+  s_e3d99f9a782059::t_2635913725629c 565,608-610,618-620,625-627,629-631,654-655
+  s_e3d99f9a782059::t_8bf4be441c257d 223
+packages/ui/tests/contracts.test.ts
+  s_e3d99f9a782059::t_b9141e1ee557ec 11
+packages/ui/src/components/shell.tsx
+  s_e3d99f9a782059::t_bd853a96618e25 101,108,110
+  s_e3d99f9a782059::t_b9141e1ee557ec 131-144,163-166,168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e6a9e8066aa2b66eab2b0912ed69b2e190c12e9",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
