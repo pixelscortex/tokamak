@@ -1,3 +1,3 @@
 import { mount } from "@tokamak/render";
-import ComponentLab from "./cases";
-mount(ComponentLab);
+import App from "./app";
+mount(App);

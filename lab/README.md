@@ -4,13 +4,19 @@ Run `bun run ui:lab` from the repository root. This is a separate UI-only
 workspace using the same Solid/QuickJS/Blitz/GPU path as the product.
 It needs no server, SDK client, credentials or database.
 
-- `src/cases.tsx`: catalog and local-state examples.
-- `src/styles.css`: independent lab theme/layout, importing shared UI rules.
+- `src/app.tsx`: the lab as the application shell (rail sections, top bar).
+- `src/chat.tsx`, `src/cases.tsx` (Components), `src/surfaces.tsx`,
+  `src/stress.tsx`: one view per rail section; `src/kit.tsx`: shared pieces;
+  `src/icons.ts`: icon paths (Lucide ISC, Phosphor MIT).
+- `src/styles.css`: imports, dark values for the older Button/Input theme and
+  base element rules; everything else is Tailwind utilities in the views.
 - `src/main.tsx`: mount entry.
-- `src/main.rs`: thin UI-only runtime invocation using a generated context.
+- `src/main.rs`: launches with its own title bar (render `WindowOptions`).
 - `app.config.json`: native title/window geometry.
 - `tests/native.rs`: real control interaction, validation, read-only/disabled
-  state, reset/remount/filter and wide/narrow layout.
+  state, reset/remount/filter and stage-width layout.
+- `tests/fused_surface.rs`: surfaces and shell behaviour; ignored GPU tests
+  render offscreen captures and the stress benchmark.
 
 Implement primitives in `packages/ui`, then add cases here. Include actual
 keyboard/focus/editing states and small realistic compositions, not mock controls.

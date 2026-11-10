@@ -1,6 +1,8 @@
 @import "@tokamak/ui/styles.css";
 @source "../../packages/ui/src";
 
+/* Dark values for the older `.tk-button` / `.tk-input` element theme (still
+ * class based; see packages/ui). Everything else is Tailwind utilities. */
 :root {
   --color-canvas: #0c0c0d;
   --color-surface: #181819;
@@ -11,69 +13,8 @@
   --color-focus: #d4d4df;
   --color-invalid: #f18b8b;
 }
-* { box-sizing: border-box; }
-body { @apply bg-canvas text-foreground font-sans; margin: 0; font-size: 15px; }
-p, h1, h2 { margin: 0; }
-p, footer { color: var(--color-muted); line-height: 1.6; }
-h1 { font-size: 34px; margin: 8px 0; }
-h2 { font-size: 18px; font-weight: 500; }
-.header, .intro { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
-.header { padding-bottom: 28px; border-bottom: 1px solid var(--color-border); font-size: 18px; }
-.intro { padding: 32px 0 24px; }
-.eyebrow { color: var(--color-muted); font-size: 11px; letter-spacing: 1px; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
-.card { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; overflow: hidden; }
-.card-header { display: flex; flex-direction: column; gap: 9px; padding: 22px; border-bottom: 1px solid var(--color-border); }
-.card-body { padding: 22px; }
-.stack { display: flex; flex-direction: column; gap: 18px; }
-.token { display: flex; align-items: center; gap: 12px; }
-.swatch { width: 28px; height: 28px; border: 1px solid var(--color-border); border-radius: 8px; }
-.swatch-canvas { background: var(--color-canvas); }
-.swatch-surface { background: var(--color-surface); }
-.swatch-foreground { background: var(--color-foreground); }
-.swatch-accent { background: var(--color-accent); }
-footer { margin-top: 28px; padding: 20px 0; border-top: 1px solid var(--color-border); font-size: 13px; }
-@media (max-width: 680px) {
-  .intro { flex-direction: column; align-items: start; }
-}
 
-/* Fused surfaces (src/fused.tsx). */
-.fused { margin-top: 28px; padding: 22px; background: #080808; border-radius: 16px; }
-.fused-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-.fused-grid { display: flex; flex-wrap: wrap; gap: 20px; }
-.fused-demo { position: relative; flex: none; width: 520px; height: 300px; background: #080808; }
-.fused-layer { position: absolute; left: 0; top: 0; width: 520px; height: 300px; z-index: 0; }
-.fused-content { position: absolute; z-index: 1; display: flex; flex-direction: column; gap: 8px; }
-.fused-rail-item { position: absolute; z-index: 1; left: 6px; width: 40px; height: 44px; padding: 0;
-  border: none; background: transparent; color: #5c5c60; font-size: 15px; }
-.fused-rail-item[aria-pressed="true"] { color: #ededee; }
-.fused-notch { align-items: center; justify-content: center; color: #a0a0a5; font-size: 12px; letter-spacing: 0.5px; }
-.fused-composer { flex-direction: row; justify-content: space-between; align-items: center; color: #6c6c70; }
-.fused-composer [data-part="field"] { flex: 1; min-width: 0; }
-.fused-composer .tk-input.fused-input { width: 100%; height: 28px; padding: 0; border: none; outline: none;
-  border-radius: 0; background: transparent; color: #ededee; font-size: 15px; box-shadow: none; }
-.fused-placeholder { position: absolute; left: 0; top: 4px; color: #6c6c70; font-size: 15px; pointer-events: none; }
-.fused-send { color: #a0a0a5; font-size: 12px; user-select: none; }
-.fused-rail-item, .fused-shutter { user-select: none; }
-.fused-shutter { position: absolute; z-index: 1; padding: 0; border: none; border-radius: 40px;
-  background: transparent; color: #3a3a3d; font-size: 34px; }
-.fused-stress-header { margin-top: 28px; }
-.fused-stress-bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
-.fused-stress-area { position: relative; background: #080808; }
-.fused-stress-layer { position: absolute; left: 0; top: 0; }
-.fused-stress-grid { display: flex; flex-wrap: wrap; gap: 4px; }
-.fused-stress-cell { display: block; flex: none; width: 36px; height: 36px; }
-.fused-title-row { display: flex; justify-content: space-between; align-items: start; gap: 20px; }
-.fused-fps { display: flex; flex: none; gap: 10px; padding: 10px 12px; margin-left: auto;
-  background: #121212; border-radius: 10px; }
-/* A custom widget swallows pointer events (wheel too); the readout is display only. */
-.fused-fps-digits { display: block; width: 72px; height: 130px; pointer-events: none; }
-.fused-fps-labels { display: flex; flex-direction: column; color: #8a8a8f; font-size: 11px; }
-.fused-fps-labels span { height: 26px; line-height: 18px; }
-.fused-short { height: 240px; }
-.fused-play { display: flex; flex-direction: column; gap: 14px; }
-.fused-controls { display: flex; flex-direction: column; gap: 8px; }
-.fused-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.fused-stepper-label { width: 80px; color: #8a8a8f; font-size: 12px; }
-.fused-caption { color: #8a8a8f; font-size: 13px; }
-.fused-probe { width: 36px; height: 36px; flex: none; }
+/* Base element rules: the window never scrolls (only the shell's stage does),
+ * and no preflight runs, so boxes and margins are set here once. */
+* { box-sizing: border-box; }
+html, body { @apply m-0 h-full overflow-hidden bg-base font-ui text-ink; }

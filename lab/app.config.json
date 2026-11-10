@@ -1,5 +1,7 @@
 {
   "title": "Tokamak · Component lab",
-  "width": 1160,
-  "height": 900
+  "width": 1440,
+  "height": 900,
+  "minWidth": 760,
+  "minHeight": 520
 }
