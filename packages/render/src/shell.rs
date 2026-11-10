@@ -63,7 +63,9 @@ pub fn launch_window(
     let mut app = BlitzApplication::new(proxy, events);
     app.add_window(WindowConfig::with_attributes(
         Box::new(document),
-        VelloWindowRenderer::new(),
+        // Vello plus the per-frame hook that renders and submits surface
+        // work once per frame (surface/frame.rs).
+        crate::surface::FrameRenderer(VelloWindowRenderer::new()),
         WindowAttributes::default()
             .with_title(title)
             .with_surface_size(LogicalSize::new(window_size.0, window_size.1)),
@@ -74,7 +76,7 @@ pub fn launch_window(
         .map_err(|e| Error(e.to_string()))
 }
 
-struct Host(BlitzApplication<VelloWindowRenderer>, HostMailbox);
+struct Host(BlitzApplication<crate::surface::FrameRenderer>, HostMailbox);
 
 impl ApplicationHandler for Host {
     fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {

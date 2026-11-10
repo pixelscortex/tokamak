@@ -1,6 +1,7 @@
 /** Real shared controls, not a second component library or product backend. */
 import { For, Show, createSignal } from "solid-js";
 import { Button, Input } from "@tokamak/ui/elements";
+import FusedSurfaces from "./fused";
 
 function Inputs() {
   const [name, setName] = createSignal("Personal workspace");
@@ -86,6 +87,7 @@ export default function ComponentLab() {
         }</For>
       </div>
     }</Show>
+    <FusedSurfaces />
     <footer>No database or account required. Add new cases here as primitives become real.</footer>
   </main>;
 }

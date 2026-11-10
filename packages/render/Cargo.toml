@@ -8,15 +8,25 @@ publish.workspace = true
 [features]
 # Opt-in upstream successful-present timings; normal product builds stay quiet.
 gpu-diagnostics = ["anyrender_vello/log_frame_times"]
+# Lab-only `<tk-surface>` stress demo, `<tk-fps>` readout and benchmark hooks
+# (surface/demo.rs, fps.rs, stats.rs). Product builds leave it off.
+surface-demo = []
 
 [dependencies]
 engine = { path = "../engine" }
-blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts"] }
+# `custom-widget` (dom, shell, paint) backs `<tk-surface>` (src/surface):
+# dom attaches widgets, paint draws their scenes, shell creates and frees
+# their GPU resources. blitz-dom's feature also enables its `accessibility`
+# feature, which pulls in `accesskit`.
+blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts", "custom-widget"] }
 blitz-html = { version = "=0.3.0-beta.4", default-features = false }
 blitz-traits = "=0.3.0-beta.4"
-blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard"] }
+blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard", "custom-widget"] }
+blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
+# Already in the lock graph through anyrender/vello; surfaces build image brushes.
+peniko = "=0.6.1"
 winit = "=0.31.0-beta.3"
 keyboard-types = "=0.8.0"
 futures-lite = "=2.6.1"

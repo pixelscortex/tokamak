@@ -19,6 +19,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
 
 [[package]]
+name = "accesskit"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e883d1d28c5fd5568c79ed2d2bd48d9f2fd3945c8974ed0f53690ceddb051be"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
 name = "addr"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -571,6 +580,8 @@ version = "0.3.0-beta.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a814bfd3ad19e6d8d26f99c75188062baca499564f9abe44250230962427d183"
 dependencies = [
+ "accesskit",
+ "anyrender",
  "app_units",
  "atomic_refcell",
  "bitflags",
@@ -4843,12 +4854,14 @@ dependencies = [
  "anyrender_vello",
  "blitz-dom",
  "blitz-html",
+ "blitz-paint",
  "blitz-shell",
  "blitz-traits",
  "engine",
  "futures-lite",
  "keyboard-types",
  "libc",
+ "peniko",
  "serde",
  "serde_json",
  "winit",
@@ -7136,7 +7149,10 @@ dependencies = [
 name = "tokamak-lab"
 version = "0.1.0"
 dependencies = [
+ "anyrender",
+ "anyrender_vello",
  "blitz-dom",
+ "blitz-paint",
  "blitz-traits",
  "keyboard-types",
  "render",

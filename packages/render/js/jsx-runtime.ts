@@ -71,7 +71,25 @@ export namespace JSX {
     readonly?: boolean;
   }
 
+  /** `<tk-surface>` (render/src/surface, render/SURFACES.md): a fused, lit
+   * surface painted natively on the GPU; it has no children. `shapes` is a
+   * JSON list of shapes in the element's CSS px. */
+  export interface SurfaceAttributes extends Attributes {
+    shapes?: string;
+    join?: number;
+    gap?: number;
+    fill?: string;
+    bevel?: number;
+    light?: number;
+    elevation?: "raised" | "recessed";
+    border?: number;
+    "border-color"?: string;
+    "border-align"?: "inside" | "center" | "outside";
+    "border-lit"?: string;
+  }
+
   export interface IntrinsicElements {
+    "tk-surface": SurfaceAttributes;
     div: Attributes;
     span: Attributes;
     p: Attributes;

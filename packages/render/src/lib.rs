@@ -4,6 +4,7 @@
 mod js;
 mod mailbox;
 mod shell;
+mod surface;
 mod wire;
 use blitz_dom::{DocGuard, DocGuardMut, Document, EventDriver, EventHandler};
 use blitz_html::HtmlDocument;
@@ -18,6 +19,14 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
+/// Embedders that paint a document without `launch_window` (e.g. offscreen
+/// rendering) must call this once per frame after `paint_scene`; see
+/// `surface/frame.rs`.
+pub use surface::end_frame as surface_end_frame;
+/// Lab-only paint statistics (benchmark hooks), `surface-demo` feature.
+#[cfg(feature = "surface-demo")]
+#[doc(hidden)]
+pub use surface::stats::{dirty_pixels as surface_dirty_pixels, paint_work as surface_paint_work};
 
 #[derive(Debug)]
 pub struct Error(pub String);
@@ -54,6 +63,9 @@ impl NativeDocument {
 
     pub fn new_connected(shell: &str, bundle: &str, send: Option<MessageSender>) -> Result<Self> {
         let mut html = HtmlDocument::from_html(shell, Default::default());
+        // `<tk-surface>` element defaults (see surface/mod.rs).
+        html.inner_mut()
+            .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(surface::UA_CSS));
         let root = html
             .get_element_by_id("app")
             .ok_or_else(|| Error("Shell needs #app".into()))?;

@@ -140,6 +140,7 @@ impl Tree {
         for mutation in mutations {
             match mutation {
                 Mutation::Element { id, tag } => {
+                    let widget = crate::surface::widget_for(&tag);
                     let native = dom.create_element(
                         QualName::new(
                             None,
@@ -148,6 +149,11 @@ impl Tree {
                         ),
                         vec![],
                     );
+                    // Native widgets (`<tk-surface>`) attach before attributes
+                    // arrive, so each one reaches Widget::attribute_changed.
+                    if let Some(widget) = widget {
+                        dom.set_custom_widget(native, widget);
+                    }
                     self.native.insert(id, native);
                     self.handles.insert(native, id);
                 }
