@@ -1,8 +1,58 @@
 # Native UI elements
 
-`@tokamak/ui/elements` exports Solid `Button` and `Input` for QuickJS + the
-universal renderer. `@tokamak/ui/components` deliberately exports nothing.
-No DOM globals, React dependency, overlays, animation, or accessibility-host claims.
+`@tokamak/ui/elements` exports Solid `Button`, `Input` and `Icon` for QuickJS +
+the universal renderer. `@tokamak/ui/components` exports `Surface` and `Shell`
+(used by the lab only so far; the app's shell frame and plugin slots are
+separate). No DOM globals, React dependency, overlays, or accessibility-host claims.
+
+## Styling
+
+One system: Tailwind v4 utilities written in the component, as complete static
+class names, with tokens in `src/theme.css` (colours, radii, fonts). Surface
+materials name the same tokens (`var(--color-panel)`), which the native widget
+resolves from computed style, so the GPU surfaces and the CSS cannot drift.
+Still on the older class pattern, pending a separate decision: `Button` and
+`Input` (`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
+`src/styles.css`). Do not add to that pattern.
+
+## Surface, Shell, Icon
+
+```tsx
+import { Shell, Surface } from "@tokamak/ui/components";
+import { Icon } from "@tokamak/ui/elements";
+
+<Surface material="card" radius={10} class="flex flex-col gap-2 p-4">
+  <Surface.Subtract class="absolute top-4 right-4 size-10" radius={20} gap={3}>
+    <button aria-label="Capture" />
+  </Surface.Subtract>
+  Card content
+</Surface>;
+
+<Shell>
+  <Shell.Sidebar>…</Shell.Sidebar>
+  <Shell.Stage>…</Shell.Stage>
+  <Shell.BottomBar>
+    <Surface.Union layer="base" radius={[18, 18, 0, 0]} join={22} class="w-[640px]">…</Surface.Union>
+  </Shell.BottomBar>
+</Shell>;
+
+<Icon d={paths.search} class="size-4 text-ink-3" />;
+```
+
+- `Surface` is one fused, lit layer (`material`: base, sidebar, panel, card,
+  chip, well). Its box is the painted area and, by default, its first shape.
+  `Surface.Union` / `Surface.Subtract` are ordinary elements laid out by CSS;
+  the render host turns their boxes into shapes of the nearest Surface
+  (`radius`, `join`, `gap`, `slant`, `animate`). Their children render above
+  the surface. `Surface.Intersect` is reserved for masking.
+- `Shell` is the fixed frame: top bar (the title bar with a custom title bar),
+  rail, plugin sidebar, stage (the only scrolling part) and bottom bar. Views
+  teleport content into regions with `Shell.TopBar` (`at`: start, center, end,
+  stage), `Shell.Rail`, `Shell.Sidebar`, `Shell.Stage`, `Shell.BottomBar`, and
+  join the shell's layers with `layer` (base, sidebar, stage).
+- `Icon` draws SVG path data natively; colour follows CSS `color`.
+
+See `packages/render/SURFACES.md` for the renderer side.
 
 ```tsx
 import { createSignal } from "solid-js";

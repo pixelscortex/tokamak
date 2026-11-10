@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 
 const dist = new URL("../dist/", import.meta.url);
-test("native library preserves public exports and an intentionally empty components entry", async () => {
+test("native library preserves its public element and component exports", async () => {
   const elementsPath = new URL("elements.js", dist).href;
   const componentsPath = new URL("components.js", dist).href;
-  assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Input"]);
-  assert.deepEqual(Object.keys(await import(componentsPath)), []);
+  assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
+  assert.deepEqual(Object.keys(await import(componentsPath)).sort(), ["Shell", "Surface", "materials", "shellGroups"]);
   let library = "";
   for (const file of await readdir(dist)) {
     if (!file.endsWith(".js")) continue;

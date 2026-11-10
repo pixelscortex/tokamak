@@ -1,5 +1,7 @@
 /* Shared semantic tokens: edit this file to restyle elements and utilities.
- * Hex colors and system fonts avoid color/font features not verified in Blitz. */
+ * Hex colors and system fonts avoid color/font features not verified in Blitz.
+ * `static` emits every token on :root even if no utility uses it: surfaces
+ * resolve their material colours from these variables at paint time. */
 @theme static {
   --color-canvas: #f4f6fa;
   --color-surface: #ffffff;
@@ -12,4 +14,35 @@
   --radius-control: 8px;
   --spacing: 4px;
   --font-sans: system-ui, sans-serif;
+
+  /* Surface materials (Surface component, render/SURFACES.md): pure neutral
+   * greys, darkest at the window base. Hex only: the GPU widget parses them. */
+  --color-base: #080808;
+  --color-sidebar: #121212;
+  --color-panel: #1b1b1b;
+  --color-card: #252525;
+  --color-chip: #2a2a2a;
+  --color-well: #151515;
+  /* The big shell surfaces' hairline is derived from their fill (strength
+   * and light modulation live in the material, components/surface.tsx). */
+
+  /* Text and icon tones on the dark surfaces, strongest first. */
+  --color-ink: #e8e8ea;
+  --color-ink-body: #d6d6d9;
+  --color-ink-2: #a0a0a6;
+  --color-ink-3: #8b8b92;
+  --color-ink-4: #6b6b72;
+  --color-ink-5: #55555b;
+  --color-ink-6: #4a4a50;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-card: 10px;
+  --radius-lg: 12px;
+
+  /* Geist is not installed on this machine and not bundled yet: the
+   * fallback is the system UI font. Departure Mono is installed. */
+  --font-ui: "Geist", system-ui, sans-serif;
+  --font-data: "Departure Mono", ui-monospace, monospace;
 }
