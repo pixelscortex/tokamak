@@ -111,6 +111,28 @@ function TopBar(props: { at?: keyof typeof topBar; children?: JSX.Element }) {
   return <Region>{props.children}</Region>;
 }
 
+/** Rail geometry, CSS px, in one place (the shell lays the column out; a
+ * view's rail items and their tab use the same numbers).
+ * - `width`: the rail column, window edge to the plugin container.
+ * - `item`: each item's square hit area; icons stay ~20 px, the rest is air.
+ * - `gap`: between items.
+ * - `inset`: from the window edge to the items.
+ * - `tab`: from the window edge to the active item's tab, which runs to the
+ *   container. Item and tab are placed so the icon sits centred in the tab:
+ *   equal room on the free side and on the side fused into the container. */
+export const rail = {
+  width: 56,
+  item: 38,
+  gap: 8,
+  inset: 13,
+  tab: 8,
+} as const;
+
+/** Top of rail item `i` within the rail column (the first is level with the
+ * plugin container's top, so the active tab's top edge runs straight into
+ * the container's). */
+export const railItemTop = (i: number) => i * (rail.item + rail.gap);
+
 export interface ShellProps {
   /** Keep room for the macOS traffic-light buttons (custom title bar). */
   trafficLights?: boolean;
@@ -154,7 +176,10 @@ function ShellFrame(props: ShellProps) {
             join={10}
             class="-mr-4 flex shrink-0"
           >
-            <div class="relative flex w-[46px] shrink-0 flex-col items-center gap-0.5">
+            <div
+              class="relative flex shrink-0 flex-col items-start"
+              style={`width: ${rail.width}px; gap: ${rail.gap}px; padding-left: ${rail.inset}px`}
+            >
               <Slot region="rail" />
             </div>
             <Surface.Union radius={12} class="flex pr-4">

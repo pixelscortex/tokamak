@@ -8,7 +8,7 @@ test("native library preserves its public element and component exports", async 
   const elementsPath = new URL("elements.js", dist).href;
   const componentsPath = new URL("components.js", dist).href;
   assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
-  assert.deepEqual(Object.keys(await import(componentsPath)).sort(), ["Shell", "Surface", "materials", "shellGroups"]);
+  assert.deepEqual(Object.keys(await import(componentsPath)).sort(), ["Shell", "Surface", "materials", "rail", "railItemTop", "shellGroups"]);
   let library = "";
   for (const file of await readdir(dist)) {
     if (!file.endsWith(".js")) continue;

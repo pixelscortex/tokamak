@@ -5,7 +5,7 @@
  * section is a view that teleports its parts into the shell regions. */
 import { For, Match, Switch, createSignal } from "solid-js";
 import { Icon } from "@tokamak/ui/elements";
-import { Shell, Surface } from "@tokamak/ui/components";
+import { Shell, Surface, rail, railItemTop } from "@tokamak/ui/components";
 import { fill, stroke } from "./icons";
 import { IconButton } from "./kit";
 import ChatView from "./chat";
@@ -22,9 +22,8 @@ const sections = [
 
 type Section = (typeof sections)[number]["id"];
 
-/** Rail items 32 px tall with 2 px gaps, so item i starts at i * 34, the
- * first level with the container's top (as in the design file). */
-const RAIL_STEP = 34;
+/** Each rail item's square hit area (the shell's rail metrics). */
+const item = `width: ${rail.item}px; height: ${rail.item}px`;
 
 function Rail(props: { active: Section; select: (section: Section) => void }) {
   const index = () => sections.findIndex((s) => s.id === props.active);
@@ -39,8 +38,8 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
         animate
         attach="right"
         radius={[10, 0, 0, 10]}
-        class="absolute left-[7px] h-8 w-[39px]"
-        style={`top: ${index() * RAIL_STEP}px`}
+        class="absolute"
+        style={`top: ${railItemTop(index())}px; left: ${rail.tab}px; width: ${rail.width - rail.tab}px; height: ${rail.item}px`}
       />
       <For each={sections}>
         {(section) => (
@@ -49,7 +48,8 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
             aria-label={section.label}
             aria-pressed={props.active === section.id}
             onClick={() => props.select(section.id)}
-            class="relative flex size-8 shrink-0 items-center justify-center rounded-[7px] border-0 bg-transparent p-0 text-ink-4 aria-pressed:text-ink"
+            class="relative flex shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-ink-4 aria-pressed:text-ink"
+            style={item}
           >
             <Icon d={section.icon} view={256} fill class="size-5" />
           </button>
@@ -57,14 +57,16 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
       </For>
       <button
         aria-label="New section"
-        class="flex size-8 shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-6"
+        class="flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-6"
+        style={item}
       >
         <Icon d={stroke.plus} strokeWidth={2} class="size-[18px]" />
       </button>
       <div class="flex-1" />
       <button
         aria-label="Settings"
-        class="mb-1 flex size-8 shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-4"
+        class="mb-1 flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-4"
+        style={item}
       >
         <Icon d={fill.sliders} view={256} fill class="size-5" />
       </button>

@@ -715,6 +715,25 @@ fn full_screen_sizes_draw_every_shell_surface() {
     assert!(doc.take_error().is_none());
 }
 
+/// The rail tab, attached to the plugin container: on the first item its
+/// top edge runs straight into the container's top edge; mid-animation; and
+/// on the second item, where both fillets and the container's corner are
+/// back. Crops of the rail into the capture directory.
+#[test]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
+fn capture_rail_tab() {
+    let dir = capture_dir();
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    open(&mut doc, "chat");
+    out.save_settled(&mut doc, &dir, "r7-tab-item0");
+    click(&mut doc, "lab-rail-components");
+    std::thread::sleep(Duration::from_millis(70));
+    out.save(&mut doc, &dir, "r7-tab-mid");
+    out.save_settled(&mut doc, &dir, "r7-tab-item1");
+    assert!(doc.take_error().is_none());
+}
+
 /// Every rail section at the lab window's size (1440x900 at scale 2), for
 /// comparing against the design file.
 #[test]
