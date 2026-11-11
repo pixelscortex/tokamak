@@ -27,8 +27,10 @@ in here. Every other branch still uses Blitz `=0.3.0-beta.4` from crates.io
 alone.
 
 To move the pin: push the new commit to the fork, replace the `rev` in all
-three entries, run `cargo update -p blitz-dom` once and commit `Cargo.lock`
-(builds use `--locked`).
+three entries, run one Cargo command without `--locked` (for example
+`cargo tree -p render`) so that Cargo rewrites the four `source` lines in
+`Cargo.lock`, and commit it (builds use `--locked`). `cargo update` is not
+needed, and also moves unrelated crates.
 
 Pushing to the fork: use SSH (`git@github.com:pixelscortex/blitz.git`). Blitz's
 history contains GitHub workflow files, and an HTTPS push with the `gh` token

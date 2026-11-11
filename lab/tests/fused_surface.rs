@@ -7,7 +7,8 @@
 //! the per-frame `surface_end_frame` hook the window uses) and are run
 //! explicitly:
 //! `cargo test --release -p tokamak-lab --test fused_surface -- --ignored --nocapture`.
-//! Captures go to `$TK_CAPTURE_DIR` (default `/tmp/tkm-fused-poc`) as raw RGBA.
+//! Captures go to `$TK_CAPTURE_DIR` (default `/tmp/tkm-fused-poc`) as raw RGBA;
+//! the plate painter comparisons as PNG.
 #[allow(dead_code)]
 #[path = "../../packages/render/tests/support/mod.rs"]
 mod support;

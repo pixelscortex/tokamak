@@ -9,9 +9,9 @@ Words: "Blitz" is the engine that draws the interface. "The fork" is our own
 copy of it at `github.com/pixelscortex/blitz`. "Upstream" is the original
 Blitz project.
 
-**Right now Tokamak does not use the fork.** It uses the published Blitz
-0.3.0-beta.4. Every change below is waiting in the fork until the owner has
-reviewed it.
+**Right now one branch uses the fork: `feature/ui-shell`, as a trial of
+change 1.** Every other branch uses the published Blitz 0.3.0-beta.4. Nothing
+has been offered to Blitz.
 
 ---
 
@@ -19,16 +19,16 @@ reviewed it.
 
 | | |
 |---|---|
-| Status | Waiting for the owner's review. Not used by Tokamak. Not offered to Blitz. |
-| Where | Draft pull request 1 inside our fork, branch `blitz/widget-event-result` |
+| Status | In use on `feature/ui-shell` as a trial, not offered to Blitz. |
+| Where | Draft pull request 1 inside our fork, branch `blitz/widget-event-result`, commit `99c448f` |
 | Size | One commit: 41 lines added, 22 removed, 6 files |
 | Linear | TKM-77 |
-| Needed right now | No |
+| Needed right now | On `feature/ui-shell`, yes: every plate there draws itself. Elsewhere, no. |
 | Blitz issue it answers | [Issue 233, "Custom widget support"](https://github.com/DioxusLabs/blitz/issues/233), open. The unchecked item "Event result" on that list describes this exact gap. |
 
 **The problem.** Tokamak draws its own bevelled backgrounds ("plates"). The
-simplest way would be to attach our drawing code to the button itself. But
-when you press an element that has our drawing code attached, Blitz gives the
+simplest way is to attach our drawing code to the button itself. But when
+you press an element that has our drawing code attached, Blitz gives the
 press to that code and stops. The button never finds out it was clicked,
 focused or held down. So a button with our drawing code on it was dead.
 
@@ -36,29 +36,57 @@ focused or held down. So a button with our drawing code on it was dead.
 press". Blitz then treats the button as a normal button. Nothing changes for
 anyone who does not use that answer.
 
-**Why Tokamak does not need it today.** We reach the same picture another
-way, without touching Blitz: the drawing code lives on a separate, invisible
-element behind the buttons ("the sheet"), which ignores all presses, and our
-build step turns ordinary background colours into fills for that sheet. The
-button itself never carries drawing code, so Blitz's behaviour never gets in
-the way. That is what runs in the lab now.
+**How Tokamak used to do without it.** The drawing code lived on a separate,
+invisible element behind the buttons ("the sheet"), which ignores all
+presses, and our build step turns ordinary background colours into fills
+for that sheet. That way still exists, and an area can ask for it.
 
-**What the change would improve if we adopted it.** Each button would draw
-itself in its own place, so these limits of the sheet would go away:
+**What we found when we adopted it** (on `feature/ui-shell`; each point is
+checked by a test that looks at the drawn pixels, and shown in the lab under
+Surfaces, "Plate painters", with the sheet on the left and the new way on
+the right):
 
-- A background that is meant to cover other content in the same area is
-  currently drawn underneath that content.
-- A parent's transparency, or a CSS transform or filter, does not apply to a
-  plate.
-- A plate inside a scrolling box other than the main stage is not clipped by
-  that box.
+- **A background that should cover what is under it now does.** A bar above
+  a scrolling list hides the lines that scroll under it. With the sheet the
+  lines showed through the bar. Fixed.
+- **A faded parent now fades the plate, and a moved or enlarged parent moves
+  and enlarges it.** With the sheet the plate stayed solid and stayed where
+  it was before the move. Fixed.
+- **A plate inside a small scrolling box is now cut off at the box's edge.**
+  With the sheet it stuck out over the edge. Fixed.
+- **Of two overlapping plates, the one told to be on top now is.** With the
+  sheet the later one in the page always won. Fixed.
+- A button with a plate on it still behaves as a button in every way we
+  test: it takes focus, shows its pressed look, clicks, answers the Enter
+  key, and scrolling the wheel over it scrolls the page.
+- Where the sheet had no problem, both ways draw the same picture, checked
+  point by point.
 
-It would also remove the need for the build step to hide backgrounds from
-Blitz.
+**What it did not fix, and what got worse.**
 
-**What it would not help with.** Lighting that spreads from one plate onto
+- Text fields, images and tables cannot carry our drawing code in Blitz: an
+  element has room for one kind of extra data, and a text field already
+  uses it for the text being edited. We worked around it on our side: the
+  plate they sit on (a card around a text field) draws their background for
+  them, and where there is none the sheet does. Letting them draw
+  themselves would need a second, larger change to Blitz; we have not made
+  it and do not need it now.
+- A plate drawn inside an enlarged parent is enlarged as a picture, so its
+  edges are slightly soft.
+- A plate on an element that hides its overflow and also has a CSS border
+  is cut off at the inside of the border.
+- Blitz asks every element that carries drawing code to draw on every frame
+  it draws, including elements scrolled out of view. The cost is small (see
+  the numbers in `SURFACES.md`), we keep no picture in memory for plates
+  outside the window, and a window where nothing changes still draws
+  nothing.
+- Each bevelled plate now keeps its own small picture, where the sheet kept
+  one picture per area. Hundreds of small plates are fine. Many large
+  bevelled plates on screen at once would cost more than with the sheet.
+
+**What it does not help with.** Lighting that spreads from one plate onto
 its neighbours is easier with the sheet, because one sheet sees every plate
-in its area.
+in its area. That is why an area can still choose the sheet.
 
 **Does Blitz want it.** Their own to-do list for this plug-in point has an
 open item describing the same gap ("Event result"). No one from Blitz has

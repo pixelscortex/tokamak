@@ -136,8 +136,8 @@ that map for contact shading. The hook point is the atlas pass in
 
 For things that are each one plate (buttons, keycaps, trays, chips, cards,
 coloured boxes) there is a lighter way than one `Surface` per element: an
-element with a solid background colour, inside a region, is a **plate**,
-and one **materials layer** per region draws every plate of that region.
+element with a solid background colour, inside a region, is a **plate**. Our
+shader draws its fill and lit edge; Blitz paints no background for it.
 Authors write ordinary Tailwind:
 
 ```tsx
@@ -152,11 +152,12 @@ Authors write ordinary Tailwind:
   (`packages/build/src/fills.ts`); `--tk-fill` is a registered `<color>`
   (`packages/ui/src/materials.css`), so Stylo resolves theme variables,
   `oklch()`, hex and `color-mix()` into one computed colour, which the
-  layout pass reads (alpha kept, times the element's own `opacity`).
+  layout pass reads (alpha kept).
 - **Edge.** `bevel-<n>` (CSS px; `bevel-2.5`, `bevel-[3]`) adds the lit
   edge band; without it the plate is flat. `raised` (default) or `recessed`.
-- **Shape.** The element's border box with its computed `border-radius`
-  (`rounded-*`; elliptical corners are drawn circular).
+- **Shape.** The element's border box, as Blitz paints it (the rounded
+  layout), with its computed `border-radius` (`rounded-*`; elliptical
+  corners are drawn circular).
 - **States** are plain CSS variants on any of these: `hover:bg-…`,
   `active:bg-…`, `aria-pressed:bg-…`, `active:recessed`, `active:bevel-1`,
   `dark:bg-…` (Tailwind's default `dark:` is `prefers-color-scheme`). No JS
@@ -175,81 +176,188 @@ What is translated and what is not:
 | a solid `background-color` from hand-written CSS or `@apply` | only on a marked element (see "Finding plates"); `.tk-button` is not one |
 | any background outside a region (the window root, `body`) | no: nothing draws it there, Blitz paints it |
 
-- **Layer.** `<tk-surface materials>` draws the plates of the element that
-  holds it (its parent), which carries `tk-region`: every plate whose nearest
-  such element, starting at the plate itself, is that parent. Shapes in a
-  layer do not fuse: each is shaded with its own material and painted over
-  the ones before it, outer elements first (a box, then the caps in it),
-  then in document order. All of a region's plates paint below all of its
-  content. Inside a region, materials.css sets a plate's own
-  `background-color` to transparent (`[tk-region] [tk-plate]`), so Blitz
-  paints nothing over the plates it holds. That is what fixes ordering: a
-  cap inside a box with a plain `bg-*` used to lose its cap under the box's
-  Blitz background; now the box is a plate drawn first.
-- **Regions own the layers.** Views never write one. `@tokamak/ui`'s shell
-  puts one in every region: the top bar, the rail, the sidebar, the two
-  overlays on the stage (`TopBar at="stage"`, `BottomBar`), which float over
-  the scrolled content and so need their own; and every `Surface` holds one
-  over its own fill, so plates inside a surface are drawn above it (the
-  stage's layer is the stage `Surface`'s). The stage's layer is a sibling of
-  the scroller, the size of the visible stage: plates are placed by their
-  on-screen boxes after scrolling, a plate half out of view is cut at the
-  stage edge (the texture ends there), and one out of view is skipped.
-  Something floating outside the regions or above other content (a menu, a
-  popover) is a `Sheet`: an element with its own layer, so it and its plates
-  paint where the sheet sits in the stacking order. The sheet's own
-  background or `material-*` class is its bottom plate.
-- **Finding plates.** The render host tracks plates when attributes arrive
-  (`wire.rs`), never by scanning the document. The build marks them: the
-  `tokamak` Vite plugin (`packages/build/src/materials.ts`) asks the
-  project's Tailwind design system (its `src/styles.css`, else
-  `@tokamak/ui/styles.css`) what each static class token compiles to, and
-  adds `tk-plate` to every intrinsic JSX element with a token that compiles
-  to a solid `background-color` or a `--tk-fill`. It fails the build, naming
-  the file, line, token and the closest known name, on a `bg-*`, `bevel-*`
-  or `material-*` token (or `raised` / `recessed`) that Tailwind generates
-  nothing for (`bg-blu-600`, an unknown variant), and on a malformed
-  `bg-[#hex]`. Static covers a string attribute and the string literals
-  inside a `class={...}` expression: template literal text, both branches of
-  `?:`, operands of `+`, `&&`, `||`, `??`, and `classList` keys. Not
-  covered, and found at run time instead by scanning the `class` of unmarked
-  elements for a `material-*` or `bg-*` token (other than `bg-transparent`,
-  `bg-current*`, `bg-inherit`): classes built from variables or calls, a
-  token cut by a substitution (`bg-${tone}`), spreads, and a component's
-  `class` prop (checked by the build, not marked: the component decides
-  where it lands). The host then sets `tk-plate` on the element natively, so
-  the stylesheet treats it like a marked one. Marked elements skip that scan.
-  Whatever found it, the computed `--tk-fill` decides whether anything is
-  drawn.
-- **Cost.** A layer renders only the part of its box its plates reach,
-  snapped out to a 64 device px grid, and nothing (no texture) without
-  plates; plates outside the layer's box are skipped. A plate's material is
-  re-read only when Stylo gives it a new computed style or its box changes
-  size; otherwise the pass costs a pointer compare and a box read per plate.
-  Static plates request no frames and re-render nothing; a pressed key
-  re-renders its own area.
+### Who draws a plate: itself, or the sheet
 
-`Surface`, `Surface.Union` and `Surface.Subtract` remain the way to make
-fused shapes, joins and cuts; plates are separate pieces.
+A **region** is an element marked `tk-region` that directly holds a
+`<tk-surface materials>` layer ("the sheet"). `@tokamak/ui` makes them:
+every shell region (the top bar, the rail, the sidebar, the stage, and the
+two overlays on the stage), every `Surface`, and every `Sheet`. Views never
+write a layer. A plate belongs to the nearest region, starting at the plate
+itself. Inside a region, materials.css sets a plate's own
+`background-color` to transparent (`[tk-region] [tk-plate]`).
 
-Limits:
+The region chooses who draws its plates:
 
-- Within one region, plates paint below all of the region's content,
-  whatever its z-index. A background that must cover other content of its
-  region (a sticky header over scrolled text, a positioned panel over
-  siblings) does not any more: put it in a `Sheet` or give it its own
-  region. Overlapping sibling plates paint by depth, then document order,
-  not by z-index.
+| | Self-painting (the default) | The sheet |
+| --- | --- | --- |
+| How to choose | nothing: `<Shell>`, `<Surface>`, `<Sheet>` (`tk-region`) | `plates="sheet"` on `Shell` (all shell regions), `Surface` or `Sheet` (`tk-region="sheet"`) |
+| Who draws | the plate's own widget, on the element itself | the region's layer, one shader pass for all its plates |
+| Paint order | the element's own place: after its border, before its text and children | below all of the region's content; among plates, outer elements first, then document order |
+| Covers other content of its region (a bar over a scrolling list) | yes | no: the content shows over it |
+| `z-index` between overlapping plates | yes | no (document order) |
+| An ancestor's `opacity`, `transform`, `filter` | apply | do not apply; only the element's own `opacity` does |
+| Clipped by | every scroll container and `overflow` clip around it | the region's box only |
+| A plate while its content scrolls or the stage scrolls | not re-rendered (its shape is in its own box) | re-rendered where it moved |
+
+To choose for a part of a view, wrap that part in a `Sheet`:
+`<Sheet plates="sheet">…</Sheet>` is a region whose layer draws everything
+inside it; a plain `<Sheet>` inside a sheet region paints its own plates
+again. Choose the sheet where plates must be lit as one piece (light that
+spreads from a plate onto its neighbours needs one shader pass that sees
+them all); self-painting everywhere else. `Surface`, `Surface.Union` and
+`Surface.Subtract` remain the way to make fused shapes, joins and cuts;
+plates are separate pieces in either mode.
+
+**Self-painting.** The layout pass (`bind.rs`) attaches a small widget
+(`plate.rs`) to the plate's element once it is in the document. Blitz draws
+a widget's scene as part of its element, inside whatever clips, opacity
+layers and transforms apply to the element, which is where every row of the
+table above comes from. The widget answers every input event with
+`EventResult::Ignored`, so Blitz runs the element's own default action:
+the element keeps focus, `:hover`, `:active`, click, keyboard activation
+and wheel scrolling, and its text, layout and children are untouched. That
+answer is the one change our Blitz fork carries (`BLITZ_CHANGES.md`,
+change 1); without it a button with a widget is dead. A bevelled plate is
+one slot in the shared atlas, rendered by the shader at the sub-pixel
+position of its element and drawn on whole device pixels. A plate without a
+bevel (and without guests, below) is a vector fill in the Scene: no
+texture.
+
+**Which elements cannot paint themselves, and who draws them.** An element
+in Blitz has one slot for data of its own, and a widget takes it. So these
+never carry a plate widget:
+
+- `input`, `textarea`, `select`: the slot holds the text editor or the
+  checked state.
+- `img`, `svg`, `canvas`, `video`, `embed`, `iframe`, `object`, `table`
+  (and any element with `display: table`), `link`, `style`, `title`.
+- An inline element without a box of its own (a `<span>` in running text):
+  Blitz does not paint it as an element, so it never draws a widget.
+- An element that already carries a widget (`<tk-surface>`, `<tk-icon>`).
+
+They are still plates. In a sheet region the sheet draws them like any
+other. In a self-painting region the nearest self-painting plate they sit
+in draws them, as its guests: `<div class="material-card"><input
+class="material-well" /></div>` gives the field its recessed well on the
+card, drawn by the card's widget over the card's own fill. Only when there
+is no such plate between the element and its region does the region's
+layer draw it (which is why every region keeps its layer, empty in the
+common case). A guest is drawn under everything between it and the plate
+that draws it, is cut at that plate's edge, and takes that plate's
+opacity, transform and clip; its own `opacity` still applies.
+
+**The sheet.** `<tk-surface materials>` draws the plates of the region that
+holds it. Shapes in a layer do not fuse: each is shaded with its own
+material and painted over the ones before it. The stage's layer is a
+sibling of the scroller, the size of the visible stage: plates are placed
+by their on-screen boxes after scrolling, a plate half out of view is cut
+at the stage edge (the texture ends there), and one out of view is
+skipped. A layer renders only the part of its box its plates reach, snapped
+out to a 64 device px grid, and nothing (no texture) without plates.
+
+### Finding plates
+
+The render host tracks plates when attributes arrive (`wire.rs`), never by
+scanning the document. The build marks them: the `tokamak` Vite plugin
+(`packages/build/src/materials.ts`) asks the project's Tailwind design
+system (its `src/styles.css`, else `@tokamak/ui/styles.css`) what each
+static class token compiles to, and adds `tk-plate` to every intrinsic JSX
+element with a token that compiles to a solid `background-color` or a
+`--tk-fill`. It fails the build, naming the file, line, token and the
+closest known name, on a `bg-*`, `bevel-*` or `material-*` token (or
+`raised` / `recessed`) that Tailwind generates nothing for (`bg-blu-600`,
+an unknown variant), and on a malformed `bg-[#hex]`. Static covers a string
+attribute and the string literals inside a `class={...}` expression:
+template literal text, both branches of `?:`, operands of `+`, `&&`, `||`,
+`??`, and `classList` keys. Not covered, and found at run time instead by
+scanning the `class` of unmarked elements for a `material-*` or `bg-*`
+token (other than `bg-transparent`, `bg-current*`, `bg-inherit`): classes
+built from variables or calls, a token cut by a substitution
+(`bg-${tone}`), spreads, and a component's `class` prop (checked by the
+build, not marked: the component decides where it lands). The host then
+sets `tk-plate` on the element natively, so the stylesheet treats it like a
+marked one. Marked elements skip that scan. Whatever found it, the computed
+`--tk-fill` decides whether anything is drawn.
+
+### What each frame costs
+
+The layout pass runs on every redraw. Per plate it decides who draws it (a
+walk up its ancestors to the nearest region), reads its painted box, and
+re-reads its material only when Stylo gave it a new computed style, its
+box changed size or its painter changed (otherwise a pointer compare).
+Static plates request no frames and re-render nothing in either mode; a
+pressed key re-renders its own plate (self-painting) or its own area of
+the layer (the sheet).
+
+What Blitz does on every frame for each element that carries a widget
+(blitz-paint 0.3.0-beta.4 `lib.rs`, `render.rs`), so for each self-painting
+plate, changed or not, on screen or not:
+
+1. Before walking the tree, it copies the list of widget nodes and, for
+   each one that has a size, reads the node's size, clones the reference to
+   its computed style and calls the widget's `paint`. Ours returns a Scene with one image fill
+   (bevelled) or one vector fill (flat), and does no GPU work when nothing
+   changed. Blitz keeps the Scene in a map by node.
+2. While walking the tree it looks up that map for every element it paints
+   (with or without a widget).
+3. When it reaches the plate's element, and only if the element is not
+   culled, it clones the Scene and appends it at the element's content box,
+   inside the element's clip, opacity and transform.
+
+Blitz does not skip `paint` for widgets that are scrolled out of view (its
+own to-do), so a plate out of view still costs step 1. To keep that from
+also costing a texture each (a long list scrolled away), the layout pass
+hands no shape to a plate whose box lies outside the window: it draws
+nothing and gives its atlas slot back, and renders again when it scrolls
+in. A plate under a CSS transform is always kept, because its layout box
+does not say where it shows. A static document still requests no frames:
+none of this runs while the window is idle.
+
+### Limits
+
+Self-painting:
+
+- The plate is clipped like the element's content: on an element that
+  clips its overflow (`overflow: hidden`, `auto`), to the padding box. With
+  a CSS border on such an element, the plate does not reach under the
+  border.
+- The plate follows a CSS transform as an image: scaled up, its edges are
+  as soft as a scaled image's.
+- A plate on an element that cannot carry a widget (the list above) is
+  drawn by the plate around it or by the region's layer: under the content
+  between the two, and cut at the edge of the plate that draws it.
+- Every bevelled plate in the window is its own piece of GPU state: up to
+  512 device px a side it is a slot in the shared atlas (about 790 caps of
+  44 x 26 CSS px at scale 2 fit; beyond that they fall back to own
+  textures); a larger one has its own texture, which Vello copies on every
+  drawn frame (see "Known limits"). Many large bevelled plates are cheaper
+  on a sheet. Flat plates cost no texture at any size.
+
+The sheet:
+
+- Plates paint below all of the region's content, whatever its z-index. A
+  background that must cover other content of its region (a bar over
+  scrolled text, a positioned panel over siblings) does not. Overlapping
+  sibling plates paint by depth, then document order, not by z-index.
 - An ancestor's `opacity`, any `transform` (boxes are layout boxes) and
   `filter` do not apply to a plate; the element's own `opacity` does.
 - A plate inside a nested scroll container (other than the stage) is not
   clipped by that container.
+
+Both:
+
 - `background-clip`, `background-origin` and borders: the plate is the
   whole border box; Blitz still paints the border, above the plate.
 - A dynamic class mixing `bg-current` (or `bg-inherit`) with another `bg-*`
   token that makes it a plate loses the `currentcolor` background inside a
   region (the plate cannot draw it). Static classes are not affected (the
   build only marks translated tokens).
+
+Each row of the table is a pixel test on the lab's "Plate painters" rows
+(`lab/tests/fused_surface.rs`, `the_two_painters_differ_where_documented`);
+`both_painters_draw_the_same_keycaps` checks that, where the sheet has no
+limit, the two draw the same pixels (to 1/255 on bevelled plates, 7/255 on
+the anti-aliased corners of flat ones, which Vello fills).
 
 ## How it stays cheap
 
@@ -298,38 +406,74 @@ requests frames, verified by test and by the lab window idling at 0% CPU.
 These are offscreen numbers; the lab's on-screen readout (`<tk-fps>`) shows
 the live fps, frame time, surface time and re-rendered pixels.
 
-Plates, 300 keycaps (`keycap_grid_bench`: the Stress view's variant C, 300
-`material-key` buttons in a `material-tray`, against variant A stopped),
-same setup, two runs each:
+Plates, both painters (`keycap_grid_bench` and `lab_views_bench`), same
+setup: release build, Apple M4 Pro, offscreen, 1440x900 CSS px at scale 2,
+100 forced repaints per row. Ranges cover three runs of two passes each
+(2026-11-11, commit 33dc800). "Frame" includes the GPU-to-CPU readback of
+the whole frame (about 1.4 to 1.9 ms) that a window does not do, and is the
+noisiest number: its spread between runs (about 1.5 ms) is larger than any
+difference between the painters.
+
+300 keycaps (the Stress view's variant C: 300 `material-key` buttons in a
+`material-tray`, against variant A stopped; 303 plates with the two the
+view always has and the lab's switch):
 
 | | frame | scene build | surface paint | binding pass | re-rendered |
 | --- | --- | --- | --- | --- | --- |
-| without the grid, static | 2.31 / 2.43 ms | 0.12 / 0.13 ms | 0.003 / 0.005 ms | 9 / 17 us | 0 px |
-| 300 plates, static | 4.02 / 3.96 ms | 1.07 / 1.06 ms | 0.008 / 0.009 ms | 60 / 69 us | 0 px |
-| 300 plates, one cap toggled | 3.88 / 3.76 ms (worst 10.4 / 6.6) | 1.22 / 1.17 ms | 0.15 / 0.13 ms | | 7.1 kpx |
+| without the grid, self-painting | 2.6 to 3.6 ms | 0.14 to 0.17 ms | 0.005 to 0.011 ms | 13 to 42 us | 0 px |
+| without the grid, sheet | 2.3 to 3.7 ms | 0.13 to 0.23 ms | 0.005 to 0.014 ms | 19 to 79 us | 0 px |
+| 300 plates static, self-painting | 4.3 to 6.1 ms | 1.22 to 1.35 ms | 0.044 to 0.067 ms | 72 to 145 us | 0 px |
+| 300 plates static, sheet | 3.9 to 5.7 ms | 1.07 to 1.29 ms | 0.011 to 0.016 ms | 95 to 197 us | 0 px |
+| one cap toggled, self-painting | 4.0 to 6.4 ms (worst 7.1 to 9.3) | 1.22 to 1.40 ms | 0.047 to 0.067 ms | | 4.6 kpx |
+| one cap toggled, sheet | 4.0 to 5.7 ms (worst 7.4 to 9.0) | 1.24 to 1.35 ms | 0.138 to 0.202 ms | | 7.1 kpx |
 
-"Static" rows are forced repaints; left alone, the document requests no
-frames (asserted). Most of the extra static frame time is Blitz painting
-300 buttons and their text (scene build), not the layer. A toggle is a
-click (pointer down and up, each with its restyle, layout and binding
-pass: 5.0 ms for both together) plus the next frame.
+- "Static" rows are forced repaints; left alone, the document requests no
+  frames and re-renders 0 px in both modes (asserted by both benches and by
+  `settled_sections_request_no_frames_and_render_nothing`).
+- Most of the static frame time of the grid is Blitz painting 300 buttons
+  and their text (scene build), in either mode.
+- Self-painting adds, per frame and per plate, about 0.15 us in the
+  widget's `paint` (surface paint: 0.05 ms for 300 against 0.013 ms for the
+  one layer) and about 0.4 us in all (scene build: Blitz's call, the Scene
+  it keeps and the clone it appends).
+- A toggle re-renders one cap (4.6 kpx) self-painting, and that cap's area
+  of the layer padded to the dirty grid (7.1 kpx) on the sheet.
+- A toggle is a click (pointer down and up, each with its restyle, layout
+  and binding pass: 5.3 to 6.0 ms for both together, the same in both
+  modes) plus the next frame. The worst single frame after a toggle is over
+  the 8.3 ms budget in some runs in both modes, readback included.
+- The binding pass in this table runs between frames, with cold caches.
+  In a tight loop (`keycap_grid_binding_pass_cost`, scale 1, 200 passes,
+  three runs) it is 54 to 55 us self-painting and 58 to 59 us with the
+  sheet, for the same 301 plates (57 to 63 us before plates could paint
+  themselves).
 
-Backgrounds as plates (`lab_views_bench` and `keycap_grid_bench`, same
-setup, two runs each; before = commit fd9f1e4, after = 0c6d914, which
-also adds 7 plates to the Surfaces view). Plates and layers are those drawn
-on the view as it opens; static frames are forced repaints, and every view
-settled, requested no frames and re-rendered 0 px:
+Every lab view as it opens (static, forced repaints; all settled, requested
+no frames and re-rendered 0 px). "Sheet plates" are drawn by a layer,
+"own" paint themselves:
 
-| View | plates before / after | layers before / after | static frame before | static frame after | binding pass before / after |
-| --- | --- | --- | --- | --- | --- |
-| Chat | 0 / 7 | 6 / 13 | 2.88 / 2.56 ms | 2.91 / 2.86 ms | 13 / 18 us |
-| Components | 0 / 0 | 6 / 12 | 2.35 / 2.42 ms | 3.18 / 2.53 ms | 9 / 14 us |
-| Surfaces | 17 / 26 | 7 / 12 | 2.99 / 3.09 ms | 3.65 / 2.76 ms | 18 / 21-26 us |
-| Stress (A, stopped) | 0 / 2 | 6 / 10 | 2.78 / 2.63 ms | 2.78 / 2.83 ms | 12 / 14 us |
-| Stress, 300 keycaps | 301 / 301 | | 4.22 / 4.12 ms | 3.69-4.40 ms | 62-67 / 57-63 us |
+| View | painter | layers | sheet plates | own | static frame | scene build | surface paint | binding pass |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Chat | self | 13 | 0 | 8 | 2.9 to 4.2 ms | 0.18 to 0.24 ms | 0.008 to 0.015 ms | 20 to 73 us |
+| Chat | sheet | 13 | 7 | 1 | 2.8 to 4.7 ms | 0.16 to 0.23 ms | 0.006 to 0.011 ms | 26 to 79 us |
+| Components | self | 12 | 0 | 1 | 2.6 to 4.2 ms | 0.14 to 0.19 ms | 0.004 to 0.009 ms | 13 to 67 us |
+| Components | sheet | 12 | 1 | 0 | 2.5 to 4.7 ms | 0.14 to 0.17 ms | 0.004 to 0.008 ms | 24 to 75 us |
+| Surfaces | self | 20 | 11 | 27 | 2.5 to 4.2 ms | 0.22 to 0.24 ms | 0.013 to 0.020 ms | 43 to 92 us |
+| Surfaces | sheet | 20 | 37 | 3 | 2.4 to 4.7 ms | 0.20 to 0.24 ms | 0.008 to 0.015 ms | 39 to 104 us |
+| Stress (A, stopped) | self | 10 | 0 | 3 | 2.4 to 3.6 ms | 0.14 to 0.16 ms | 0.005 to 0.010 ms | 17 to 69 us |
+| Stress (A, stopped) | sheet | 10 | 3 | 0 | 2.9 to 4.2 ms | 0.14 to 0.17 ms | 0.006 to 0.009 ms | 24 to 86 us |
 
-The extra layers are the empty ones every `Surface` now holds (no texture,
-no GPU work). Run-to-run spread on these frames is about 0.5 ms.
+The lab's switch changes the shell regions only: the Surfaces view's 11
+sheet plates in "self" are its `plates="sheet"` comparison cells, and the
+"own" plates that remain in "sheet" are inside a `Surface` or a plain
+`Sheet` (regions of their own). The Surfaces view has more self-painting
+plates than the 27 counted: those below the fold hold no shape until they
+scroll in. The 8 more layers than before are the comparison cells.
+
+Before plates could paint themselves (commit 0c6d914, the sheet only, two
+runs each): the grid static 3.69 to 4.40 ms with 57 to 63 us of binding
+pass, one cap toggled 3.76 to 3.88 ms; Chat 2.86 to 2.91 ms, Components
+2.53 to 3.18 ms, Surfaces 2.76 to 3.65 ms, Stress 2.78 to 2.83 ms.
 
 ## Known limits
 
@@ -340,8 +484,11 @@ no GPU work). Run-to-run spread on these frames is about 0.5 ms.
   layout boxes).
 - **Hit testing.** Surfaces get `pointer-events: none` from the render host's
   user-agent stylesheet. Without it blitz-dom gives every event that hits a
-  custom-widget node to the widget and skips the default action, so wheel
-  scrolling stopped over a surface. Hit testing follows boxes, not shapes.
+  custom-widget node to the widget and, unless the widget answers
+  `EventResult::Ignored` (our fork's change; `<tk-surface>` does not), skips
+  the default action, so wheel scrolling stopped over a surface. Hit testing
+  follows boxes, not shapes. A self-painting plate needs none of this: its
+  widget ignores every event and its element is hit like any other.
 - **Joins between separate shapes** (`add`/`sub` with `join`) are exact arcs
   only where the edges meet at 90 degrees. For angled sides use one `poly`
   outline, whose joins and corners are exact at any angle.
@@ -355,13 +502,16 @@ no GPU work). Run-to-run spread on these frames is about 0.5 ms.
   (bounded to 16 MiB), and only on frames that are drawn at all.
 - **Dependencies.** blitz-dom's `custom-widget` feature also enables its
   `accessibility` feature, which adds the `accesskit` crate to the build.
+  `blitz-dom` comes from our fork of Blitz (one commit over 0.3.0-beta.4,
+  see `BLITZ_FORK.md`): self-painting plates need its `EventResult`.
 - **GPU only.** Surfaces need the wgpu (Vello) renderer and panic without a
   wgpu device, in line with the shell refusing software adapters. The CPU
   evaluator in `src/surface/reference.rs` exists only as a test oracle.
 - **Embedding.** Code that paints a document without `launch_window` must call
   `NativeDocument::layout_surfaces` after `resolve` and
   `render::surface_end_frame()` after each `paint_scene`, or bound shapes are
-  missing and surfaces stay blank (the window does both).
+  missing, plates have no widget and surfaces stay blank (the window does
+  both).
 - **Scoped joins** (a join radius that applies only among some shapes, e.g. a
   future `Surface.Join`) are not built. The shape list is flat; it would
   become a two-level tree. Each member would carry a group id, and the field

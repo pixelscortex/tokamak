@@ -393,9 +393,9 @@ pub(super) struct Look {
     /// this fraction of the way to white (a hairline "strength"), instead of
     /// `border_colour`. Follows the fill, so one number tunes every material.
     pub border_mix: f32,
-    /// `materials`: a materials layer. Shapes are not combined into one
-    /// field; each is shaded with its own `Paint` and painted over the
-    /// previous ones (see `bind`, "Materials").
+    /// `materials`: a materials layer, or a self-painting plate (`plate`).
+    /// Shapes are not combined into one field; each is shaded with its own
+    /// `Paint` and painted over the previous ones (see `bind`, "Plates").
     pub layered: bool,
 }
 
