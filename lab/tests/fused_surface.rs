@@ -1091,7 +1091,7 @@ fn plates_follow_computed_style_and_pressed_states() {
         };
         assert_eq!(tray.radii, [10.0; 4], "rounded-[10px] from computed style");
         assert_eq!(hex(tray.fill.unwrap()), "#080808");
-        assert_eq!((tray.bevel, tray.recessed), (Some(1.5), true));
+        assert_eq!((tray.bevel, tray.recessed), (Some(1.0), true));
 
         // The build marked the caps (static `material-*` classes).
         for cap in ["lab-key-deny", "lab-key-always", "lab-key-once"] {
@@ -1105,7 +1105,7 @@ fn plates_follow_computed_style_and_pressed_states() {
         let deny = plate_shape(&doc, "lab-key-deny");
         assert_eq!(deny.radii, [7.0; 4]);
         assert_eq!(hex(deny.fill.unwrap()), "#2a2a2a");
-        assert_eq!((deny.bevel, deny.recessed), (Some(2.5), false));
+        assert_eq!((deny.bevel, deny.recessed), (Some(1.5), false));
         if mode == "self" {
             let size = doc
                 .inner()
@@ -1123,7 +1123,8 @@ fn plates_follow_computed_style_and_pressed_states() {
         pointer_half(&mut doc, "lab-key-deny", false);
         let down = plate_shape(&doc, "lab-key-deny");
         assert_eq!(hex(down.fill.unwrap()), "#252525", "pressed while :active");
-        assert_eq!((down.bevel, down.recessed), (Some(2.0), true));
+        // Pressed does not invert: the band gets thinner and stays raised.
+        assert_eq!((down.bevel, down.recessed), (Some(1.0), false));
         assert!(
             !doc.inner().is_animating(),
             "a state change needs one frame"
@@ -1131,13 +1132,13 @@ fn plates_follow_computed_style_and_pressed_states() {
         pointer_half(&mut doc, "lab-key-deny", true);
         assert_eq!(plate_shape(&doc, "lab-key-deny"), deny, "released");
 
-        // `active:bevel-1`: only the bevel changes.
+        // `active:bevel-[0.75]`: only the bevel changes.
         pointer_half(&mut doc, "lab-key-once", false);
         let once = plate_shape(&doc, "lab-key-once");
-        assert_eq!((once.bevel, once.recessed), (Some(1.0), false));
+        assert_eq!((once.bevel, once.recessed), (Some(0.75), false));
         assert_eq!(hex(once.fill.unwrap()), "#e8e8ea");
         pointer_half(&mut doc, "lab-key-once", true);
-        assert_eq!(plate_shape(&doc, "lab-key-once").bevel, Some(2.5));
+        assert_eq!(plate_shape(&doc, "lab-key-once").bevel, Some(1.5));
 
         // `aria-pressed:material-key-pressed`: a click toggles the attribute.
         pointer_half(&mut doc, "lab-key-always", false);
@@ -1148,18 +1149,18 @@ fn plates_follow_computed_style_and_pressed_states() {
             "{mode}: the click reached the button"
         );
         let toggled = plate_shape(&doc, "lab-key-always");
-        assert_eq!((toggled.bevel, toggled.recessed), (Some(2.0), true));
+        assert_eq!((toggled.bevel, toggled.recessed), (Some(1.0), false));
         assert!(!doc.inner().is_animating());
         // Shortcut keys and tiles are buttons too: a key sinks while held,
         // and a click selects a tile (the selected one stays down).
         pointer_half(&mut doc, "lab-key-cmd", false);
-        assert!(plate_shape(&doc, "lab-key-cmd").recessed);
+        assert_eq!(plate_shape(&doc, "lab-key-cmd").bevel, Some(1.0));
         pointer_half(&mut doc, "lab-key-cmd", true);
-        assert!(!plate_shape(&doc, "lab-key-cmd").recessed);
-        assert!(plate_shape(&doc, "lab-key-tile-chat").recessed);
+        assert_eq!(plate_shape(&doc, "lab-key-cmd").bevel, Some(1.5));
+        assert_eq!(plate_shape(&doc, "lab-key-tile-chat").bevel, Some(1.0));
         pointer_half(&mut doc, "lab-key-tile-code", false);
         pointer_half(&mut doc, "lab-key-tile-code", true);
-        assert!(plate_shape(&doc, "lab-key-tile-code").recessed);
+        assert_eq!(plate_shape(&doc, "lab-key-tile-code").bevel, Some(1.0));
         assert!(!plate_shape(&doc, "lab-key-tile-chat").recessed);
         assert!(!doc.inner().is_animating());
         assert!(doc.take_error().is_none());
@@ -1210,7 +1211,11 @@ fn a_self_painting_button_is_still_a_real_button() {
     // Pointer down: `:active` presses the plate and the button takes focus.
     pointer_half(&mut doc, "lab-key-deny", false);
     let focus_own = doc.inner().get_focussed_node_id();
-    assert!(plate_shape(&doc, "lab-key-deny").recessed, ":active");
+    assert_eq!(
+        plate_shape(&doc, "lab-key-deny").bevel,
+        Some(1.0),
+        ":active presses the plate"
+    );
     pointer_half(&mut doc, "lab-key-deny", true);
     // A click reaches the JS handler, and Enter clicks the focused button.
     pointer_half(&mut doc, "lab-key-always", false);
@@ -1339,7 +1344,7 @@ fn a_field_on_a_card_keeps_its_plate() {
         assert_eq!(hex(well.fill.unwrap()), "#151515", "material-well");
         assert_eq!(
             (well.bevel, well.recessed, well.radii),
-            (Some(1.5), true, [6.0; 4])
+            (Some(1.0), true, [6.0; 4])
         );
         assert!(near(mark.fill.unwrap(), "#155dfc"), "blue-600: {mark:?}");
         assert!(!doc.inner().is_animating());
@@ -1935,7 +1940,7 @@ fn background_buttons_are_plates_with_css_states() {
         assert!(near(blue.fill.unwrap(), "#155dfc"), "blue-600: {blue:?}");
         assert_eq!(
             (blue.bevel, blue.recessed, blue.radii),
-            (Some(2.0), false, [8.0; 4])
+            (Some(1.5), false, [8.0; 4])
         );
         assert!(near(shape(&doc, "green").fill.unwrap(), "#009966"));
         assert!(near(shape(&doc, "rose").fill.unwrap(), "#ec003f"));
@@ -1954,17 +1959,23 @@ fn background_buttons_are_plates_with_css_states() {
         pointer_half(&mut doc, "lab-bg-blue", false);
         let down = shape(&doc, "blue");
         assert!(near(down.fill.unwrap(), "#1447e6"), "active: blue-700");
-        assert!(down.recessed, "active:recessed");
+        // Pressed does not invert: a thinner band, still raised.
+        assert_eq!((down.bevel, down.recessed), (Some(0.75), false), "active");
         assert!(
             !doc.inner().is_animating(),
             "a state change needs one frame"
         );
         pointer_half(&mut doc, "lab-bg-blue", true);
         // Clicked: it stays down (aria-pressed) until another one is picked.
-        assert!(shape(&doc, "blue").recessed, "{mode}: the click arrived");
+        assert_eq!(
+            shape(&doc, "blue").bevel,
+            Some(0.75),
+            "{mode}: the click arrived"
+        );
         pointer_half(&mut doc, "lab-bg-green", false);
         pointer_half(&mut doc, "lab-bg-green", true);
-        assert!(shape(&doc, "green").recessed && !shape(&doc, "blue").recessed);
+        assert_eq!(shape(&doc, "green").bevel, Some(0.75));
+        assert_eq!(shape(&doc, "blue").bevel, Some(1.5));
         assert!(near(shape(&doc, "blue").fill.unwrap(), "#155dfc"));
         assert!(!doc.inner().is_animating());
         assert!(doc.take_error().is_none());

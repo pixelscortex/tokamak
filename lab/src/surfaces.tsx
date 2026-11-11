@@ -214,13 +214,22 @@ function NotchCase() {
 function BevelProfiles() {
   return <div class="flex items-center gap-4">
       <span class="w-24 text-[12px] text-ink-3">Bevel profile</span>
-<div id="lab-bevel-profiles" class="flex items-center gap-3">
-        <button class="bg-chip bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">sharp</button>
-        <button class="bg-chip bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">soft</button>
-        <button class="bg-blue-600 bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">sharp</button>
-        <button class="bg-blue-600 bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">soft</button>
-        <button class="bg-ink bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">sharp</button>
-        <button class="bg-ink bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">soft</button>
+<div id="lab-bevel-profiles" class="flex flex-col gap-3">
+        <div class="flex items-center gap-3">
+          <button class="bg-chip bevel flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">sharp</button>
+          <button class="bg-chip bevel bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">soft</button>
+          <button class="bg-blue-600 bevel flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">sharp</button>
+          <button class="bg-blue-600 bevel bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">soft</button>
+          <button class="bg-ink bevel flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">sharp</button>
+          <button class="bg-ink bevel bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">soft</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <button class="bg-blue-600 bevel-2 bevel-tilt-10 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">tilt 10</button>
+          <button class="bg-blue-600 bevel-2 bevel-tilt-20 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">tilt 20</button>
+          <button class="bg-blue-600 bevel-2 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">default 35</button>
+          <button class="bg-blue-600 bevel-2 bevel-tilt-60 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">tilt 60</button>
+          <button class="bg-blue-600 bevel-2 bevel-tilt-90 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">tilt 90</button>
+        </div>
       </div>
   </div>;
 }
@@ -246,7 +255,9 @@ function KeycapCase() {
   // One background button stays down at a time (click again to release).
   const [picked, setPicked] = createSignal<string>();
   const pick = (name: string) => setPicked(picked() === name ? undefined : name);
-  const sink = "bevel-2 active:recessed aria-pressed:recessed rounded-md";
+  // Pressed: the cap goes down, it does not turn inside out. The band gets
+  // thinner and flatter and the colour a step darker; the edge stays raised.
+  const sink = "bevel active:bevel-[0.75] active:bevel-tilt-15 aria-pressed:bevel-[0.75] aria-pressed:bevel-tilt-15 rounded-md";
   const press = "active:material-key-pressed aria-pressed:material-key-pressed";
   const reset = "border-0 select-none";
   const cap = `${reset} flex h-[30px] items-center px-3.5 text-[13px] font-medium`;
@@ -259,14 +270,14 @@ function KeycapCase() {
         <button id="lab-key-deny" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}>Deny</button>
         <button id="lab-key-always" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}
           aria-pressed={always()} onClick={() => setAlways(!always())}>Always allow</button>
-        <button id="lab-key-once" class={`material-key-bright rounded-[7px] active:bevel-1 ${cap} text-[#111111]`}>Allow once</button>
+        <button id="lab-key-once" class={`material-key-bright rounded-[7px] active:bevel-[0.75] ${cap} text-[#111111]`}>Allow once</button>
       </div>
     </div>
     <div class="flex items-center gap-4">
       <span class="w-24 text-[12px] text-ink-3">Coloured box</span>
       <div id="lab-plates-order" class="flex gap-[3px] rounded-[12px] bg-[#3a2420] p-3">
         <button id="lab-order-deny" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}>Deny</button>
-        <button id="lab-order-allow" class={`material-key-bright rounded-[7px] active:bevel-1 ${cap} text-[#111111]`}>Allow</button>
+        <button id="lab-order-allow" class={`material-key-bright rounded-[7px] active:bevel-[0.75] ${cap} text-[#111111]`}>Allow</button>
       </div>
     </div>
     <div class="flex items-center gap-4">

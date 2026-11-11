@@ -40,6 +40,7 @@
 @property --tk-bevel { syntax: "*"; inherits: false; }
 @property --tk-elevation { syntax: "*"; inherits: false; }
 @property --tk-bevel-profile { syntax: "*"; inherits: false; }
+@property --tk-bevel-tilt { syntax: "*"; inherits: false; }
 
 /* The plate draws the background; Blitz must not paint it under or over
  * the plate (or over the plates of the element's children). Only for plates
@@ -47,7 +48,13 @@
 :where([tk-region] [tk-plate], [tk-region][tk-plate]) { background-color: transparent !important; }
 
 /* The lit edge band, CSS px: `bevel-2`, `bevel-2.5`, `active:bevel-1`. */
+/* `bevel` alone is the default band, 1.5 px. */
+@utility bevel { --tk-bevel: 1.5; }
 @utility bevel-* { --tk-bevel: --value(number, [number]); }
+/* How steep the edge is, in degrees from flat (default 35). A steeper edge
+ * is lit and shaded harder: `bevel-tilt-15` is gentle, `bevel-tilt-90` is
+ * a vertical wall. */
+@utility bevel-tilt-* { --tk-bevel-tilt: --value(number, [number]); }
 /* The band's profile. Sharp is the default: an even band with a crisp inner
  * edge. `bevel-soft` fades it inward. */
 @utility bevel-sharp { --tk-bevel-profile: sharp; }
@@ -57,14 +64,14 @@
 
 /* Things you press: a flat face with a lit edge band, sitting in a `tray`
  * whose base colour shows as the seam between caps. */
-@utility material-key { @apply bg-chip bevel-2.5 raised; }
-@utility material-key-bright { @apply bg-ink bevel-2.5 raised; }
+@utility material-key { @apply bg-chip bevel-1.5 raised; }
+@utility material-key-bright { @apply bg-ink bevel-1.5 raised; }
 /* A pressed key: the face sinks (recessed bevel, the lit edge moves to the
  * bottom) and darkens a step. */
-@utility material-key-pressed { @apply bg-card bevel-2 recessed; }
-@utility material-tray { @apply bg-base bevel-1.5 recessed; }
+@utility material-key-pressed { @apply bg-card bevel-1 bevel-tilt-15 raised; }
+@utility material-tray { @apply bg-base bevel-1 recessed; }
 
 /* The same looks as the `Surface` component's card, chip and well. */
-@utility material-card { @apply bg-card bevel-2 raised; }
-@utility material-chip { @apply bg-chip bevel-1.5 raised; }
-@utility material-well { @apply bg-well bevel-1.5 recessed; }
+@utility material-card { @apply bg-card bevel-1.5 raised; }
+@utility material-chip { @apply bg-chip bevel-1 raised; }
+@utility material-well { @apply bg-well bevel-1 recessed; }

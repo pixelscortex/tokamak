@@ -38,7 +38,7 @@ use std::{cell::RefCell, rc::Rc};
 
 /// Lit edges move this fraction of the way to white at full facing; shadowed
 /// edges lose this fraction of their brightness. Passed to the shader.
-pub(super) const LIT_GAIN: f32 = 0.10;
+pub(super) const LIT_GAIN: f32 = 0.18;
 pub(super) const SHADE_GAIN: f32 = 0.45;
 
 /// vec4 slots before the shapes, per shape and per poly corner; the layout
@@ -248,7 +248,7 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
         tiles.nx as f32,
         CULL_TILE as f32,
         if look.layered { 1.0 } else { 0.0 },
-        if look.soft { 1.0 } else { 0.0 },
+        super::shape::bevel_slot(look.soft, look.strength),
     ];
     let mut corner_slot = HEADER_SLOTS + SHAPE_SLOTS * shapes.len();
     for (i, s) in shapes.iter().enumerate() {
@@ -265,8 +265,9 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
                 bevel: look.bevel,
                 recessed: look.recessed,
                 soft: look.soft,
+                strength: look.strength,
             });
-            params[base + 2][0] = if paint.soft { 1.0 } else { 0.0 };
+            params[base + 2][0] = super::shape::bevel_slot(paint.soft, paint.strength);
             params[base + 2][1] = paint.bevel * scale;
             params[base + 2][2] = if paint.recessed { -1.0 } else { 1.0 };
             params[base + 4] = paint.fill;

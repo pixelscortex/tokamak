@@ -240,7 +240,7 @@ function problem(token: string, classes: ClassInfo | null, sheet: string): strin
     return util.startsWith("material-") ? `unknown material "${util}"; no materials stylesheet (${sheet}) was found` : null;
   }
   if (util !== token && classes.css(util) !== null) return `unknown variant in "${token}"`;
-  if (util.startsWith("bevel-")) return `unknown bevel "${util}"; use bevel-<number> or bevel-[<number>]`;
+  if (util.startsWith("bevel-")) return `unknown bevel "${util}"; use bevel, bevel-<number>, bevel-[<number>], bevel-soft, bevel-sharp or bevel-tilt-<degrees>`;
   const prefix = util.startsWith("material-") ? "material-" : util.startsWith("bg-") ? "bg-" : "";
   const kind = prefix === "material-" ? "material" : prefix === "bg-" ? "background" : "class";
   const near = prefix ? closest(util, classes.names.filter((n) => n.startsWith(prefix))) : undefined;

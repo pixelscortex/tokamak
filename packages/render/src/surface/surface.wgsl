@@ -12,11 +12,11 @@
 //   4: border outer edge, inner edge (CSS px from the silhouette), lit, enabled
 //   5: border rgba
 //   6: culling tiles across, tile size (device px), materials layer (1 = layered),
-//      bevel profile (0 sharp, 1 soft)
+//      bevel profile and strength (strength 0..1, plus 2 when soft)
 //   7 + 5i: rect x, y, w, h (CSS px; a poly's bounding box)
 //   8 + 5i: corner radii tl, tr, br, bl
 //   9 + 5i: op (0 add, 1 sub), join (<0 = default), gap (<0 = default), kind (0 box, 1 poly);
-//           in a materials layer: bevel profile (0 sharp, 1 soft), bevel (device px), elevation sign, kind
+//           in a materials layer: bevel profile and strength (strength 0..1, plus 2 when soft), bevel (device px), elevation sign, kind
 //  10 + 5i: poly: first corner slot, corner count, orientation (+1 clockwise on screen)
 //  11 + 5i: materials layer only: the shape's fill rgba
 //   then poly corners, 2 slots each: (centre x, centre y, radius, convex),
@@ -233,13 +233,15 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
 }
 
 // How strongly the bevel shows at `t` (0 at the outline, 1 at the inner end
-// of a band `bevel` device px wide). Sharp: full strength across the band,
-// ending within one device pixel. Soft: fading inward.
-fn profile(t: f32, bevel: f32, soft: f32) -> f32 {
-    if (soft > 0.5) {
-        return (1.0 - t) * (1.0 - t);
+// of a band `bevel` device px wide). `slot` packs the strength (0..1, the
+// sine of the edge's tilt) and the profile (plus 2 when soft). Sharp: full
+// strength across the band, ending within one device pixel. Soft: fading
+// inward.
+fn profile(t: f32, bevel: f32, slot: f32) -> f32 {
+    if (slot >= 2.0) {
+        return (slot - 2.0) * (1.0 - t) * (1.0 - t);
     }
-    return clamp((1.0 - t) * bevel, 0.0, 1.0);
+    return slot * clamp((1.0 - t) * bevel, 0.0, 1.0);
 }
 
 fn tone(c: vec3<f32>, s: f32, lit: f32, shade: f32) -> vec3<f32> {

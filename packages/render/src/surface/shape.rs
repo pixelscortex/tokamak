@@ -182,6 +182,9 @@ pub(super) struct Paint {
     pub recessed: bool,
     /// The bevel fades softly inward (`bevel-soft`); otherwise it is sharp.
     pub soft: bool,
+    /// How strongly the band is lit and shaded, 0 to 1: the sine of the
+    /// edge's tilt (`bevel-tilt-<degrees>`).
+    pub strength: f32,
 }
 
 impl Shape {
@@ -386,6 +389,9 @@ pub(super) struct Look {
     /// Bevel profile: sharp (the default) is an even band with a crisp inner
     /// edge; soft (`bevel-profile="soft"`) fades inward.
     pub soft: bool,
+    /// How strongly the band is lit and shaded, 0 to 1: the sine of the
+    /// edge's tilt (`bevel-tilt`, degrees; a steeper edge shades harder).
+    pub strength: f32,
     pub light_deg: f32,
     pub recessed: bool,
     pub border: f32,
@@ -421,6 +427,7 @@ impl Default for Look {
             light_deg: 0.0,
             recessed: false,
             soft: false,
+            strength: tilt_strength(DEFAULT_TILT),
             border: 0.0,
             border_colour: grey(0x2a),
             border_align: Align::Inside,
@@ -456,6 +463,7 @@ impl Look {
             }
             "elevation" => self.recessed = value == Some("recessed"),
             "bevel-profile" => self.soft = value == Some("soft"),
+            "bevel-tilt" => self.strength = tilt_strength(number(DEFAULT_TILT)),
             "border" => self.border = number(defaults.border).max(0.0),
             "border-color" => {
                 self.border_colour = value
@@ -522,4 +530,22 @@ impl Look {
     pub fn gap_of(&self, s: &Shape) -> f32 {
         if s.gap >= 0.0 { s.gap } else { self.gap }
     }
+}
+
+/// The default tilt of a bevel's edge, degrees from flat.
+pub(super) const DEFAULT_TILT: f32 = 35.0;
+
+/// Shading strength of an edge tilted `degrees` from flat (0 = flat, no
+/// shading; 90 = a vertical wall, full shading).
+pub(super) fn tilt_strength(degrees: f32) -> f32 {
+    if !degrees.is_finite() {
+        return tilt_strength(DEFAULT_TILT);
+    }
+    degrees.clamp(0.0, 90.0).to_radians().sin()
+}
+
+/// Profile and strength packed into one shader slot: the strength (0 to 1),
+/// plus 2 when the profile is soft.
+pub(super) fn bevel_slot(soft: bool, strength: f32) -> f32 {
+    strength.clamp(0.0, 1.0) + if soft { 2.0 } else { 0.0 }
 }

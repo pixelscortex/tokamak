@@ -162,6 +162,7 @@ pub(super) fn shade(shapes: &[Shape], list: &[u32], look: &Look, p: V2, scale: f
             if in_bevel {
                 let t = (-d_fill / bevel).clamp(0.0, 1.0);
                 let s = facing
+                    * look.strength
                     * if look.soft {
                         (1.0 - t) * (1.0 - t)
                     } else {

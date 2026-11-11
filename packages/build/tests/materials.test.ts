@@ -15,7 +15,7 @@ test("the materials are utilities of the design system", () => {
   }
   expect(classes.css("material-crad")).toBeNull();
   // A material is a shortcut: a background colour, a bevel and an elevation.
-  expect(classes.css("material-key")).toMatch(/background-color: var\(--color-chip\);[^}]*--tk-bevel: 2\.5;[^}]*--tk-elevation: raised/s);
+  expect(classes.css("material-key")).toMatch(/background-color: var\(--color-chip\);[^}]*--tk-bevel: 1\.5;[^}]*--tk-elevation: raised/s);
 });
 
 test("solid background colours make an element a plate, with any variant", () => {
