@@ -1,0 +1,22 @@
+packages/ui/src/components/surface.tsx
+  s_e3d99f9a782059::t_9314601d358128 62-69
+packages/ui/src/components/shell.tsx
+  s_e3d99f9a782059::t_f9c81faa78ee13 245,249
+  s_e3d99f9a782059::t_9314601d358128 246-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bcc6a0e3db64c4d9fa972086b56513356da2aa13",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
