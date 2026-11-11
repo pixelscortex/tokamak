@@ -125,7 +125,7 @@ impl Widget for Plate {
         // Vello copies per frame.
         if let [base] = self.shapes.as_slice()
             && base.rect[..2] == [0.0; 2]
-            && let Some(paint) = base.paint.filter(|p| p.bevel <= 0.0)
+            && let Some(paint) = base.paint.filter(|p| p.bevel <= 0.0 && p.side == 0.0)
         {
             if let Some(gpu) = &mut self.gpu {
                 gpu.release(render_ctx);

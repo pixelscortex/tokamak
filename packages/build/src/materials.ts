@@ -67,7 +67,7 @@ export async function loadClasses(stylesheet: string, shown = stylesheet): Promi
 }
 
 /** Prefixes of the class tokens the build checks (see the header). */
-const CHECKED = /^(?:material-|bg-|bevel-)|^(?:raised|recessed)$/;
+const CHECKED = /^(?:material-|bg-|bevel-|elevation-)|^(?:raised|recessed|pressed)$/;
 
 /** True if the CSS of one token makes its element a plate. */
 function isPlate(css: string): boolean {
@@ -252,7 +252,7 @@ function problem(token: string, classes: ClassInfo | null, sheet: string): strin
  * nothing changes; throws on an unknown plate class. `classes` is null when
  * no stylesheet was found, which makes any material an error. */
 export function markPlates(code: string, id: string, classes: ClassInfo | null, sheet = "@tokamak/ui/styles.css") {
-  if (!/material-|bg-|bevel-|raised|recessed/.test(code)) return null;
+  if (!/material-|bg-|bevel-|elevation-|raised|recessed|pressed/.test(code)) return null;
   const source = ts.createSourceFile(id, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const output = new MagicString(code);
   let changed = false;

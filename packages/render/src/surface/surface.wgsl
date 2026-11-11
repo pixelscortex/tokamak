@@ -17,7 +17,8 @@
 //   8 + 5i: corner radii tl, tr, br, bl
 //   9 + 5i: op (0 add, 1 sub), join (<0 = default), gap (<0 = default), kind (0 box, 1 poly);
 //           in a materials layer: bevel profile and strength (strength 0..1, plus 2 when soft), bevel (device px), elevation sign, kind
-//  10 + 5i: poly: first corner slot, corner count, orientation (+1 clockwise on screen)
+//  10 + 5i: poly: first corner slot, corner count, orientation (+1 clockwise on screen);
+//           a box in a materials layer: elevation side (CSS px, negative when pressed)
 //  11 + 5i: materials layer only: the shape's fill rgba
 //   then poly corners, 2 slots each: (centre x, centre y, radius, convex),
 //   (tangent-in x, y, tangent-out x, y).
@@ -192,6 +193,18 @@ fn shape_at(p: vec2<f32>, base: u32) -> f32 {
     return rounded_box(p, P(base), P(base + 1u));
 }
 
+// The face of an elevated plate: its box without the strip of `side` CSS px
+// that shows the plate's side (under the face, or above it when pressed).
+fn face_at(p: vec2<f32>, base: u32, side: f32) -> f32 {
+    var rect = P(base);
+    let h = min(abs(side), rect.w * 0.5);
+    rect.w = rect.w - h;
+    if (side < 0.0) {
+        rect.y = rect.y + h;
+    }
+    return rounded_box(p, rect, P(base + 1u));
+}
+
 // Materials layer: no CSG. Each shape of the tile, in order, is shaded with
 // its own fill, bevel and elevation, then painted over what is below it
 // (premultiplied "over"). A tray and the caps in it are one layer.
@@ -210,18 +223,43 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
         let fill = P(base + 4u);
         var c = fill.rgb;
         let bevel = info.y;
-        if (bevel > 0.0 && d > -bevel - 1.0) {
+        // Elevation: the bevel belongs to the face; outside the face, inside
+        // the outline, is the plate's side.
+        let side = select(0.0, P(base + 3u).x, info.w < 0.5);
+        var sf = s;
+        if (side != 0.0) {
+            sf = face_at(p, base, side);
+        }
+        let df = sf * scale;
+        if (bevel > 0.0 && df > -bevel - 1.0) {
             let e = 0.5 / scale;
-            let g = vec2<f32>(
-                shape_at(p + vec2<f32>(e, 0.0), base) - s,
-                shape_at(p + vec2<f32>(0.0, e), base) - s,
-            );
+            var g = vec2<f32>(0.0);
+            if (side != 0.0) {
+                g = vec2<f32>(
+                    face_at(p + vec2<f32>(e, 0.0), base, side) - sf,
+                    face_at(p + vec2<f32>(0.0, e), base, side) - sf,
+                );
+            } else {
+                g = vec2<f32>(
+                    shape_at(p + vec2<f32>(e, 0.0), base) - s,
+                    shape_at(p + vec2<f32>(0.0, e), base) - s,
+                );
+            }
             let len = length(g);
             if (len > 1e-6) {
                 let facing = dot(g / len, light) * info.z;
-                let t = clamp(-d / bevel, 0.0, 1.0);
+                let t = clamp(-df / bevel, 0.0, 1.0);
                 c = tone(c, facing * profile(t, bevel, info.x), P(2).y, P(2).z);
             }
+        }
+        if (side != 0.0) {
+            // A faint line all round the face, then the side strip in a
+            // darker tone of the fill (darker still when pressed: a hole).
+            let face = clamp(0.5 - df, 0.0, 1.0);
+            let hair = clamp(df + scale, 0.0, 1.0);
+            c = c + (vec3<f32>(1.0) - c) * (0.09 * hair);
+            let dark = select(0.58, 0.40, side < 0.0);
+            c = mix(fill.rgb * dark, c, face);
         }
         let fa = a * fill.a;
         acc = vec4<f32>(c * fa, fa) + acc * (1.0 - fa);
