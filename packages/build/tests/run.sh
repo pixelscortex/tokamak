@@ -1,5 +1,5 @@
 #!/bin/sh
 set -eu
 mkdir -p dist
-proto run bun -- test tests/css.test.ts tests/plugins.test.mjs
+proto run bun -- test tests/css.test.ts tests/plugins.test.mjs tests/materials.test.ts
 cargo test --locked --package tokamak-build --jobs 2

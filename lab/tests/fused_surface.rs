@@ -971,6 +971,10 @@ fn css_materials_follow_computed_style_and_pressed_states() {
     assert_eq!(hex(tray.fill.unwrap()), "#080808");
     assert_eq!(tray.bevel, Some(1.5));
 
+    // The build marked the caps (static `material-*` classes).
+    for cap in ["lab-css-key-deny", "lab-css-key-always", "lab-css-key-once"] {
+        assert!(support::attr(&doc, cap, "tk-plate").is_some(), "{cap}");
+    }
     let deny = material_shape(&doc, layer, "lab-css-key-deny");
     assert_eq!(deny.radii, [7.0; 4]);
     assert_eq!(hex(deny.fill.unwrap()), "#2a2a2a");

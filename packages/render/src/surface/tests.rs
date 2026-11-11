@@ -823,6 +823,24 @@ fn material_classes_are_found_behind_variants() {
     }
 }
 
+/// The build's `tk-plate` marker makes a plate on its own: a marked
+/// element's class is not scanned, and the class scan stays the fallback
+/// for unmarked ones.
+#[test]
+fn the_build_marker_registers_a_plate_without_the_class_scan() {
+    let mut registry = super::bind::Registry::default();
+    let node = blitz_traits::NodeId::from_u64(7);
+    registry.plate_marker(node, true);
+    registry.plate_class(node, Some("flex px-2"));
+    assert!(registry.is_plate(node), "marked, whatever the class says");
+    registry.plate_marker(node, false);
+    assert!(!registry.is_plate(node));
+    registry.plate_class(node, Some("flex material-key"));
+    assert!(registry.is_plate(node), "the run-time fallback");
+    registry.plate_class(node, None);
+    assert!(!registry.is_plate(node));
+}
+
 /// A materials layer renders only the grid-snapped part of its box that its
 /// plates reach, clipped to the box, and nothing without plates.
 #[test]

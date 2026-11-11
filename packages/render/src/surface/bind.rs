@@ -37,8 +37,8 @@
 //!
 //! Plates (materials from CSS): an element marked `tk-plate` (added by the
 //! build to elements whose static `class` has a `material-*` utility, see
-//! `packages/build/src/materials.ts`), or, as a fallback for classes built
-//! at run time, one whose `class` has a `material-*` token. Its material is
+//! `packages/build/src/materials.ts`), or, as the fallback for classes built
+//! at run time, an unmarked one whose `class` has a `material-*` token. Its material is
 //! whatever its computed style says: `--tk-fill`, `--tk-bevel` and
 //! `--tk-elevation` (registered, non-inherited custom properties set by the
 //! utilities in `packages/ui/src/materials.css`, so `hover:`, `active:` and
@@ -270,6 +270,11 @@ impl Registry {
     #[cfg(test)]
     pub(super) fn handle(&self, node: NodeId) -> Handle {
         self.surfaces[&node].handle.clone()
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_plate(&self, node: NodeId) -> bool {
+        self.plates.contains_key(&node)
     }
 
     /// Track `surface-groups` on an element (added, changed or removed).

@@ -173,8 +173,20 @@ draws every plate of that region.
   so it and its plates paint where the sheet sits in the stacking order.
   The sheet's own `material-*` class is its bottom plate.
 - **Finding plates.** The render host tracks plates when attributes arrive
-  (`wire.rs`), never by scanning the document: an element is a plate if its
-  `class` has a `material-*` token (bare or behind variants).
+  (`wire.rs`), never by scanning the document. The build marks them: the
+  `tokamak` Vite plugin (`packages/build/src/materials.ts`) adds `tk-plate`
+  to every intrinsic JSX element whose `class` uses a `material-*` utility
+  as a static string, and fails the build on a material name that
+  `materials.css` does not define (naming the file, line, the bad name and
+  the closest defined one). Static covers a string attribute and the string
+  literals inside a `class={...}` expression: template literal text, both
+  branches of `?:`, operands of `+`, `&&`, `||`, `??`, and `classList`
+  keys; variants (`active:material-…`) included. Not covered, and found at
+  run time instead by scanning the `class` of unmarked elements for a
+  `material-*` token: classes built from variables or calls, a token cut by
+  a substitution (`material-${name}`), spreads, and a component's `class`
+  prop (checked by the build, not marked: the component decides where it
+  lands). Marked elements skip that scan.
 - **Cost.** A layer renders only the part of its box its plates reach,
   snapped out to a 64 device px grid, and nothing (no texture) without
   plates; plates outside the layer's box are skipped. A plate's material is

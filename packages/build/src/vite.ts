@@ -16,13 +16,15 @@ import { publicFunctions } from "./exports.ts";
 import { compileCss } from "./css.ts";
 import { uiContributions } from "./contributions.ts";
 import { nativeSolid } from "./native.ts";
+import { materialPlates } from "./materials.ts";
 import { nativeConfig, nativePlugins } from "./native.ts";
 
 export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginDefinition; standalone?: boolean } = {}): PluginOption {
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   return [
-    ...(options.ui === false ? [] : options.standalone ? nativePlugins() : [nativeSolid()]),
+    // Plates are marked in TSX before Solid compiles it.
+    ...(options.ui === false ? [] : [materialPlates(), ...(options.standalone ? nativePlugins() : [nativeSolid()])]),
     {
       name: "tokamak-application",
       config(config, environment) {
