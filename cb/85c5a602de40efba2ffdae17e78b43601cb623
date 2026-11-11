@@ -1,0 +1,23 @@
+packages/ui/src/components/surface.tsx
+  s_e3d99f9a782059::t_9e2acf97ddb190 56-60
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_9e2acf97ddb190 217-228
+lab/src/surfaces.tsx
+  s_e3d99f9a782059::t_9e2acf97ddb190 210-253,271-272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb85c5a602de40efba2ffdae17e78b43601cb623",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
