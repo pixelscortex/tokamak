@@ -15,3 +15,6 @@ export { Chip, ChipMore } from "./chip";
 export type { ChipMoreProps, ChipProps } from "./chip";
 export { Textarea, textareaLine } from "./textarea";
 export type { TextareaProps } from "./textarea";
+export { Select } from "./select";
+export type { SelectOption, SelectProps } from "./select";
+export { dismissOutside } from "./dismiss";

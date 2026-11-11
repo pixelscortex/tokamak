@@ -52,6 +52,7 @@
 import { For, children, createContext, createSignal, onCleanup, useContext } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { JSX } from "@tokamak/render";
+import { dismissOutside } from "./dismiss";
 import { MaterialsLayer, Surface, shellGroups } from "./surface";
 import type { PlatePainter } from "./surface";
 
@@ -175,7 +176,9 @@ function ShellFrame(props: ShellProps) {
   const region = () => (props.plates === "sheet" ? "sheet" : true);
   return (
     <ShellContext.Provider value={regions}>
-      <div class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink">
+      {/* Every click in the window bubbles up to here: open menus that it
+        * missed close (dismiss.ts). */}
+      <div class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink" onClick={dismissOutside}>
         <div
           window-drag
           tk-region={region()}
