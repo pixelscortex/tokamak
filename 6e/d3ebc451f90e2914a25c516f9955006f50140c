@@ -1,0 +1,29 @@
+packages/render/src/surface/gpu.rs
+  s_168cc46266f1ae::t_da358c305e97f3 81,131
+lab/tests/fused_surface.rs
+  s_168cc46266f1ae::t_da358c305e97f3 1817-1931
+packages/render/src/surface/mod.rs
+  s_168cc46266f1ae::t_da358c305e97f3 42-43
+packages/render/src/surface/stats.rs
+  s_168cc46266f1ae::t_da358c305e97f3 18-30
+packages/render/src/lib.rs
+  s_168cc46266f1ae::t_da358c305e97f3 34-37
+lab/src/stress.tsx
+  s_168cc46266f1ae::t_da358c305e97f3 56-58,70,72,94,116-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ed3ebc451f90e2914a25c516f9955006f50140c",
+  "prompts": {},
+  "sessions": {
+    "s_168cc46266f1ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1ba09e9c-a92b-49ed-9e10-16ba88da528a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
