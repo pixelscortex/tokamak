@@ -7154,6 +7154,7 @@ dependencies = [
  "blitz-paint",
  "blitz-traits",
  "keyboard-types",
+ "png",
  "render",
  "runtime",
  "serde_json",

@@ -1033,6 +1033,16 @@ fn own_plates(doc: &NativeDocument, selector: &str) -> Vec<blitz_traits::NodeId>
         .collect()
 }
 
+/// Scroll element `id` to offset `y` (any scroll container).
+fn scroll_node(doc: &mut NativeDocument, id: blitz_traits::NodeId, y: f64) {
+    let current = doc.inner().get_node(id).unwrap().scroll_offset().y;
+    doc.inner_mut()
+        .scroll_by(id, 0.0, y - current, Default::default());
+    doc.inner_mut().resolve(0.0);
+    doc.layout_surfaces();
+    assert_eq!(doc.inner().get_node(id).unwrap().scroll_offset().y, y);
+}
+
 /// Keycaps from CSS, with either painter: every `material-*` element of the
 /// keycap case is a plate with its computed fill, bevel, elevation and
 /// `border-radius` (from `rounded-*`, no attribute). Self-painting, each
@@ -1933,5 +1943,326 @@ fn capture_plate_backgrounds() {
     pointer_half(&mut doc, "lab-bg-blue", false);
     out.save_settled(&mut doc, &dir, "plates-backgrounds-pressed");
     pointer_half(&mut doc, "lab-bg-blue", true);
+    assert!(doc.take_error().is_none());
+}
+
+// ---------------------------------------------------------------- the two painters, as pixels
+
+/// One offscreen frame, read in CSS px.
+struct Shot {
+    px: Vec<u8>,
+    width: u32,
+    scale: f64,
+}
+
+impl Shot {
+    fn take(out: &mut Offscreen, doc: &mut NativeDocument) -> Shot {
+        // Twice: the first frame after a change renders the plates, and a
+        // new own texture asks for settle frames.
+        out.frame(doc);
+        let mut px = out.frame(doc).0;
+        for _ in 0..10 {
+            if !doc.inner().is_animating() {
+                break;
+            }
+            px = out.frame(doc).0;
+        }
+        Shot {
+            px,
+            width: out.width,
+            scale: out.scale as f64,
+        }
+    }
+
+    /// The pixel at (x, y) CSS px in the window.
+    fn at(&self, x: f64, y: f64) -> [u8; 3] {
+        let i = (((y * self.scale) as u32 * self.width + (x * self.scale) as u32) * 4) as usize;
+        [self.px[i], self.px[i + 1], self.px[i + 2]]
+    }
+
+    /// Save the CSS px rect (x, y, w, h) as a PNG.
+    fn save_png(&self, rect: [f64; 4], path: &str) {
+        let [x, y, w, h] = rect.map(|v| (v * self.scale).round() as u32);
+        let mut data = Vec::with_capacity((w * h * 4) as usize);
+        for row in y..y + h {
+            let start = ((row * self.width + x) * 4) as usize;
+            data.extend_from_slice(&self.px[start..start + (w * 4) as usize]);
+        }
+        let file = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+        let mut encoder = png::Encoder::new(file, w, h);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&data)
+            .unwrap();
+        println!("{path}");
+    }
+}
+
+/// True if two colours differ by at most `by` per channel.
+fn close(a: [u8; 3], b: [u8; 3], by: u8) -> bool {
+    a.iter().zip(b).all(|(x, y)| x.abs_diff(y) <= by)
+}
+
+/// The four differences between the two plate painters, as pixels, on the
+/// lab's comparison rows (lab/src/surfaces.tsx, `PainterCases`): every row
+/// holds the same elements twice, in a `plates="sheet"` cell and in a
+/// self-painting one. Each row's capture (both cells) is saved as a PNG in
+/// the capture directory.
+///
+/// a. A z-indexed bar over a scrolling list: self-painting, its background
+///    hides the list; the sheet draws it under the list.
+/// b. A parent with `opacity: 0.5`, and a parent moved and scaled by a CSS
+///    transform: a self-painting plate fades and moves with its parent; the
+///    sheet draws it opaque at its layout box.
+/// c. A plate inside a nested `overflow: auto` box, scrolled half out: a
+///    self-painting plate is clipped at the box's edge; the sheet's is not.
+/// d. Two overlapping sibling plates, the first with `z-index: 10`:
+///    self-painting, the first is on top; the sheet paints them in document
+///    order.
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn the_two_painters_differ_where_documented() {
+    let scale = 2.0;
+    let dir = capture_dir();
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-painters");
+    doc.layout_surfaces();
+    let rect = |doc: &NativeDocument, name: &str| {
+        doc.inner()
+            .get_client_bounding_rect(support::id(doc, name))
+            .unwrap()
+    };
+    // Both cells of a row, with a margin, as one image.
+    let row = |doc: &NativeDocument, case: &str| {
+        let (a, b) = (
+            rect(doc, &format!("lab-mode-{case}-sheet")),
+            rect(doc, &format!("lab-mode-{case}-self")),
+        );
+        [
+            a.x - 8.0,
+            a.y - 8.0,
+            b.x + b.width - a.x + 16.0,
+            a.height + 16.0,
+        ]
+    };
+    // Colours (sRGB): Tailwind's blue-600, rose-600, rose-700, emerald-500
+    // and the cells' `bg-base`.
+    const BLUE: [u8; 3] = [0x15, 0x5d, 0xfc];
+    const ROSE: [u8; 3] = [0xec, 0x00, 0x3f];
+    const BAR: [u8; 3] = [0xc7, 0x00, 0x36];
+    const GREEN: [u8; 3] = [0x00, 0xbc, 0x7d];
+    const BASE: [u8; 3] = [0x08; 3];
+
+    // c needs its boxes scrolled: 12 px of the plate start above the box's
+    // top edge, 8 px more make it half out.
+    for mode in ["sheet", "self"] {
+        let scroller = support::id(&doc, &format!("lab-mode-clip-{mode}-scroll"));
+        scroll_node(&mut doc, scroller, 8.0);
+    }
+    let shot = Shot::take(&mut out, &mut doc);
+    assert!(!doc.inner().is_animating(), "settled");
+
+    // a. Covering: a point of the bar over a green stripe of the list.
+    for (mode, want, what) in [
+        ("self", BAR, "the bar hides the stripe under it"),
+        (
+            "sheet",
+            GREEN,
+            "the stripe shows over the bar (the sheet's limit)",
+        ),
+    ] {
+        let bar = rect(&doc, &format!("lab-mode-cover-{mode}-bar"));
+        // The first stripe is 20 to 30 px below the list's top; clear of
+        // the bar's label and its bevel band.
+        let got = shot.at(bar.x + bar.width - 40.0, bar.y + 25.0);
+        assert!(close(got, want, 2), "covering, {mode}: {what}: {got:?}");
+        // Between stripes both show the bar's own colour.
+        let got = shot.at(bar.x + bar.width - 40.0, bar.y + 34.0);
+        assert!(
+            close(got, BAR, 2),
+            "covering, {mode}: the bar's fill: {got:?}"
+        );
+    }
+    shot.save_png(
+        row(&doc, "cover"),
+        &format!("{dir}/painters-a-covering.png"),
+    );
+
+    // b. Opacity: the plate's face, clear of its label and bevel.
+    for (mode, want, what) in [
+        (
+            "self",
+            [BLUE[0] / 2 + 4, BLUE[1] / 2 + 4, BLUE[2] / 2 + 4],
+            "half the plate over the cell",
+        ),
+        ("sheet", BLUE, "opaque (the sheet's limit)"),
+    ] {
+        let p = rect(&doc, &format!("lab-mode-fx-{mode}-faded"));
+        let got = shot.at(p.x + 8.0, p.y + p.height / 2.0);
+        assert!(close(got, want, 3), "opacity, {mode}: {what}: {got:?}");
+    }
+    // b. Transform: the parent moves by (24, 32) and scales by 1.25 about
+    // its centre, so the 80 x 40 plate covers x 14..114, y 27..77 from its
+    // layout box's corner.
+    for (mode, at_layout, at_moved, what) in [
+        ("self", BASE, BLUE, "drawn where the transform puts it"),
+        (
+            "sheet",
+            BLUE,
+            BASE,
+            "drawn at its layout box (the sheet's limit)",
+        ),
+    ] {
+        let cell = rect(&doc, &format!("lab-mode-fx-{mode}"));
+        // The layout box starts 120, 12 px into the cell.
+        let (x, y) = (cell.x + 120.0, cell.y + 12.0);
+        let (layout, moved) = (shot.at(x + 6.0, y + 8.0), shot.at(x + 104.0, y + 66.0));
+        assert!(
+            close(layout, at_layout, 3) && close(moved, at_moved, 3),
+            "transform, {mode}: {what}: layout box {layout:?}, moved box {moved:?}"
+        );
+    }
+    shot.save_png(
+        row(&doc, "fx"),
+        &format!("{dir}/painters-b-opacity-transform.png"),
+    );
+
+    // c. Nested scroll: the plate is 40 px tall and 20 px of it are above
+    // the box's top edge (its border is 1 px).
+    for (mode, above, what) in [
+        ("self", BASE, "clipped at the box's edge"),
+        ("sheet", BLUE, "drawn over the edge (the sheet's limit)"),
+    ] {
+        let (scroller, plate) = (
+            rect(&doc, &format!("lab-mode-clip-{mode}-scroll")),
+            rect(&doc, &format!("lab-mode-clip-{mode}-plate")),
+        );
+        // Blitz moves a scroller's own client rect by its scroll offset
+        // (8 px here); its top edge on screen has not moved.
+        let top = scroller.y + 8.0;
+        assert_eq!(plate.y - top, -19.0, "{mode}: half out");
+        let x = plate.x + 8.0;
+        let got = shot.at(x, top - 8.0);
+        assert!(
+            close(got, above, 3),
+            "nested scroll, {mode}: {what}: {got:?}"
+        );
+        // The box is a plate too (`bg-well`): its own fill stays put while
+        // its content scrolls.
+        let well = shot.at(scroller.x + scroller.width - 12.0, top + 4.0);
+        assert!(
+            close(well, [0x15; 3], 2),
+            "nested scroll, {mode}: the box's own fill: {well:?}"
+        );
+        let got = shot.at(x, top + 8.0);
+        assert!(
+            close(got, BLUE, 3),
+            "nested scroll, {mode}: the visible half: {got:?}"
+        );
+    }
+    shot.save_png(
+        row(&doc, "clip"),
+        &format!("{dir}/painters-c-nested-scroll.png"),
+    );
+
+    // d. z-index: a point both plates cover.
+    for (mode, want, what) in [
+        ("self", ROSE, "the z-index 10 plate is on top"),
+        ("sheet", BLUE, "document order (the sheet's limit)"),
+    ] {
+        let (front, back) = (
+            rect(&doc, &format!("lab-mode-z-{mode}-front")),
+            rect(&doc, &format!("lab-mode-z-{mode}-back")),
+        );
+        let got = shot.at(back.x + 12.0, front.y + front.height - 10.0);
+        assert!(close(got, want, 3), "z-index, {mode}: {what}: {got:?}");
+        // Where only one of them is, that one shows.
+        assert!(close(shot.at(front.x + 8.0, front.y + 12.0), ROSE, 3));
+        assert!(close(
+            shot.at(back.x + back.width - 8.0, back.y + back.height - 12.0),
+            BLUE,
+            3
+        ));
+    }
+    shot.save_png(row(&doc, "z"), &format!("{dir}/painters-d-z-index.png"));
+
+    // All four rows in one image.
+    let (first, last) = (row(&doc, "cover"), row(&doc, "z"));
+    shot.save_png(
+        [first[0], first[1], first[2], last[1] + last[3] - first[1]],
+        &format!("{dir}/painters-all.png"),
+    );
+    // Static: nothing asks for frames, and repaints re-render nothing.
+    let dirty = render::surface_dirty_pixels();
+    for _ in 0..10 {
+        out.frame(&mut doc);
+    }
+    assert!(!doc.inner().is_animating());
+    assert_eq!(render::surface_dirty_pixels(), dirty, "static: 0 px");
+    assert!(doc.take_error().is_none());
+}
+
+/// Where the sheet has no limit, both painters draw the same picture: the
+/// keycap case (trays, caps, coloured box, background buttons, tiles) and
+/// the 300-keycap grid are compared pixel by pixel between the two. Both
+/// place a plate at the box Blitz paints its element in, so a cap after
+/// text of fractional width is not half a pixel off in either.
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn both_painters_draw_the_same_keycaps() {
+    let scale = 2.0;
+    let dir = capture_dir();
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    let mut compare = |doc: &mut NativeDocument, name: &str, file: &str| {
+        let mut shots = Vec::new();
+        for mode in PAINTERS {
+            painter(doc, mode);
+            scroll_to(doc, name);
+            shots.push(Shot::take(&mut out, doc));
+        }
+        painter(doc, "self");
+        let r = doc
+            .inner()
+            .get_client_bounding_rect(support::id(doc, name))
+            .unwrap();
+        let rect = [r.x - 8.0, r.y - 8.0, r.width + 16.0, r.height + 16.0];
+        for (shot, mode) in shots.iter().zip(PAINTERS) {
+            shot.save_png(rect, &format!("{dir}/{file}-{mode}.png"));
+        }
+        // Device pixels of the case that differ, and by how much at most.
+        let [x, y, w, h] = rect.map(|v| (v * scale as f64).round() as u32);
+        let (mut differ, mut worst) = (0u32, 0u8);
+        for row in y..y + h {
+            for col in x..x + w {
+                let i = ((row * out.width + col) * 4) as usize;
+                let d = (0..3)
+                    .map(|c| shots[0].px[i + c].abs_diff(shots[1].px[i + c]))
+                    .max()
+                    .unwrap();
+                differ += u32::from(d > 0);
+                worst = worst.max(d);
+            }
+        }
+        println!(
+            "{name}: {differ} of {} px differ, by at most {worst}/255",
+            w * h
+        );
+        (differ, worst)
+    };
+    open(&mut doc, "surfaces");
+    let (differ, worst) = compare(&mut doc, "lab-keycaps", "keycaps");
+    // Up to 7/255 on the corner pixels of the flat coloured box: a
+    // self-painting plate without a bevel is a vector fill, anti-aliased by
+    // Vello instead of our shader. Bevelled plates match to 1/255.
+    assert!(worst <= 8, "keycap case: {differ} px, {worst}");
+    open_keycap_grid(&mut doc);
+    let (differ, worst) = compare(&mut doc, "lab-keycap-grid", "keycap-grid");
+    assert!(worst <= 1, "keycap grid: {differ} px, {worst}");
     assert!(doc.take_error().is_none());
 }

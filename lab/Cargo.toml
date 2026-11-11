@@ -23,3 +23,5 @@ keyboard-types = "=0.8.0"
 blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
+# PNG captures of the offscreen frames (already in the lock graph).
+png = "=0.18.1"
