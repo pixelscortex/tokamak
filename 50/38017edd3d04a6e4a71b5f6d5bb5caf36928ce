@@ -1,0 +1,22 @@
+packages/render/src/layout.rs
+  s_e9fd07ae4e5f95::t_13f88460a0c7f3 44,70,75-78,85-98
+  s_e9fd07ae4e5f95::t_f0319790ee2080 99-100
+packages/render/tests/native_solid.rs
+  s_e9fd07ae4e5f95::t_10065377c77350 816-817
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5038017edd3d04a6e4a71b5f6d5bb5caf36928ce",
+  "prompts": {},
+  "sessions": {
+    "s_e9fd07ae4e5f95": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e025cf7c-ef28-45fd-b90d-baea2a58dfca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
