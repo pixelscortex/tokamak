@@ -195,6 +195,41 @@ fn a_view_switch_moves_the_rail_tab_without_animating() {
     assert!(doc.take_error().is_none());
 }
 
+/// The stage scroller must be a stacking context. Blitz hoists every
+/// descendant with a z-index to the nearest stacking context and paints it
+/// there; when that was an ancestor of the scroller, scrolled content (the
+/// "Shutter" label of the Surfaces view) was drawn over the top bar.
+#[test]
+fn the_stage_scroller_clips_content_that_has_a_z_index() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    let stage = stage(&doc);
+    assert!(
+        doc.inner()
+            .get_node(stage)
+            .unwrap()
+            .is_stacking_context_root(false),
+        "the stage scroller owns the paint order of its z-indexed content"
+    );
+    assert!(doc.take_error().is_none());
+}
+
+/// The same bug, as pixels: the Surfaces view scrolled until the "Shutter"
+/// label sits above the stage's top edge. Nothing may show in the top bar.
+#[test]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
+fn capture_scrolled_stage_clip() {
+    let dir = capture_dir();
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    open(&mut doc, "surfaces");
+    let label = support::id(&doc, "lab-fused-presses");
+    let rect = doc.inner().get_client_bounding_rect(label).unwrap();
+    scroll_stage(&mut doc, rect.y - 30.0);
+    out.save_settled(&mut doc, &dir, "r8-stage-clip");
+    assert!(doc.take_error().is_none());
+}
+
 // ---------------------------------------------------------------- offscreen GPU
 
 /// Offscreen frame source: the production paint path for a 1440x900 CSS

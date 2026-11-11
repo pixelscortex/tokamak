@@ -212,7 +212,11 @@ function ShellFrame(props: ShellProps) {
               join={14}
               class="min-w-0 flex-1"
             >
-              <div id="shell-stage" class="absolute inset-0 overflow-y-auto">
+              {/* `z-0` makes the scroller a stacking context. Without it Blitz
+                * paints any descendant that has a z-index from an ancestor
+                * above this element, outside its clip, so scrolled content
+                * shows through the top bar. */}
+              <div id="shell-stage" class="absolute inset-0 z-0 overflow-y-auto">
                 <Slot region="stage" />
               </div>
               <div class="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center *:pointer-events-auto">
