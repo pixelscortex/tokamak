@@ -2174,8 +2174,9 @@ fn the_two_painters_differ_where_documented() {
         // the bar's label and its bevel band.
         let got = shot.at(bar.x + bar.width - 40.0, bar.y + 25.0);
         assert!(close(got, want, 2), "covering, {mode}: {what}: {got:?}");
-        // Between stripes both show the bar's own colour.
-        let got = shot.at(bar.x + bar.width - 40.0, bar.y + 34.0);
+        // Above the first stripe both show the bar's own colour (clear of
+        // the bevel band at the bar's top and bottom edges).
+        let got = shot.at(bar.x + bar.width - 40.0, bar.y + 14.0);
         assert!(
             close(got, BAR, 2),
             "covering, {mode}: the bar's fill: {got:?}"

@@ -209,6 +209,22 @@ function NotchCase() {
   </div>;
 }
 
+/** The two bevel profiles side by side: sharp (the default, an even band
+ * with a crisp inner edge) and `bevel-soft` (fading inward). */
+function BevelProfiles() {
+  return <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Bevel profile</span>
+<div id="lab-bevel-profiles" class="flex items-center gap-3">
+        <button class="bg-chip bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">sharp</button>
+        <button class="bg-chip bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">soft</button>
+        <button class="bg-blue-600 bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">sharp</button>
+        <button class="bg-blue-600 bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">soft</button>
+        <button class="bg-ink bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">sharp</button>
+        <button class="bg-ink bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">soft</button>
+      </div>
+  </div>;
+}
+
 /** Keycaps from material classes: every cap is a real `<button>` with a
  * `material-key` class (flat face, lit edge band from the one light above)
  * in a `material-tray` (the 3 px of tray between caps is the seam). Each
@@ -264,17 +280,6 @@ function KeycapCase() {
           class={`bg-rose-600 hover:bg-rose-500 active:bg-rose-700 aria-pressed:bg-rose-700 ${sink} ${cap} text-white`}>Delete</button>
         <button id="lab-bg-ghost" aria-pressed={picked() === "ghost"} onClick={() => pick("ghost")}
           class={`bg-white/10 hover:bg-white/15 active:bg-white/5 aria-pressed:bg-white/5 ${sink} ${cap} text-ink`}>Cancel</button>
-      </div>
-    </div>
-    <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">Bevel profile</span>
-      <div id="lab-bevel-profiles" class="flex items-center gap-3">
-        <button class="bg-chip bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">sharp</button>
-        <button class="bg-chip bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">soft</button>
-        <button class="bg-blue-600 bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">sharp</button>
-        <button class="bg-blue-600 bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">soft</button>
-        <button class="bg-ink bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">sharp</button>
-        <button class="bg-ink bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">soft</button>
       </div>
     </div>
     <div class="flex items-center gap-4">
@@ -419,6 +424,7 @@ export default function SurfacesView() {
           Plain buttons with material classes. Each paints its own plate; press them.
         </SectionTitle>
         <KeycapCase />
+        <BevelProfiles />
         <FieldCase />
         <SectionTitle eyebrow="PLATE PAINTERS" title="The sheet and self-painting, side by side">
           The same elements twice: drawn by the region's one layer, and each painting itself.
