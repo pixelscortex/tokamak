@@ -1,0 +1,25 @@
+lab/src/stress.tsx
+  s_00ceffea939684::t_566e5ccf925e4e 141
+  s_00ceffea939684::t_e3f65edf00c85a 53-56,63,65,82,97-98,127-128
+  s_00ceffea939684::t_5277e21e852f97 129
+lab/src/surfaces.tsx
+  s_00ceffea939684::t_e629cd57bc7257 291-293,301
+  s_00ceffea939684::t_566e5ccf925e4e 294,299-300,316,319
+  s_00ceffea939684::t_e3f65edf00c85a 280-290,295-298,302-315,317-318,320-333,355-358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "499ec489b948e96b677f764ea17038e1c1e63034",
+  "prompts": {},
+  "sessions": {
+    "s_00ceffea939684": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "08e12bfe-436d-4f8f-bc7c-202ab274b454",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
