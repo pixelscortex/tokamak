@@ -161,7 +161,12 @@ pub(super) fn shade(shapes: &[Shape], list: &[u32], look: &Look, p: V2, scale: f
             };
             if in_bevel {
                 let t = (-d_fill / bevel).clamp(0.0, 1.0);
-                let s = facing * (1.0 - t) * (1.0 - t);
+                let s = facing
+                    * if look.soft {
+                        (1.0 - t) * (1.0 - t)
+                    } else {
+                        ((1.0 - t) * bevel).clamp(0.0, 1.0)
+                    };
                 c.iter_mut().for_each(|v| tone(v, s, LIT_GAIN, SHADE_GAIN));
             }
             if in_border {

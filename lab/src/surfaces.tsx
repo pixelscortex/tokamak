@@ -267,6 +267,17 @@ function KeycapCase() {
       </div>
     </div>
     <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Bevel profile</span>
+      <div id="lab-bevel-profiles" class="flex items-center gap-3">
+        <button class="bg-chip bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">sharp</button>
+        <button class="bg-chip bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-ink">soft</button>
+        <button class="bg-blue-600 bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">sharp</button>
+        <button class="bg-blue-600 bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-white">soft</button>
+        <button class="bg-ink bevel-3 flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">sharp</button>
+        <button class="bg-ink bevel-3 bevel-soft flex h-[34px] items-center rounded-[8px] border-0 px-4 text-[13px] font-medium text-[#111111]">soft</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
       <span class="w-24 text-[12px] text-ink-3">Shortcut keys</span>
       <div class={`material-tray rounded-[9px] ${tray}`}>
         <button id="lab-key-cmd" class={small}>CMD</button>

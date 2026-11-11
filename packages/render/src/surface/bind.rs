@@ -328,6 +328,7 @@ fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])
         .unwrap_or(0.0)
         .max(0.0);
     let recessed = text("tk-elevation").as_deref() == Some("recessed");
+    let soft = text("tk-bevel-profile").as_deref() == Some("soft");
     let border = style.get_border();
     // A corner's horizontal radius (elliptical corners are drawn circular).
     let r = |c: &style::values::computed::BorderCornerRadius| {
@@ -348,6 +349,7 @@ fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])
             fill,
             bevel,
             recessed,
+            soft,
         },
         radii,
     ))

@@ -248,7 +248,7 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
         tiles.nx as f32,
         CULL_TILE as f32,
         if look.layered { 1.0 } else { 0.0 },
-        0.0,
+        if look.soft { 1.0 } else { 0.0 },
     ];
     let mut corner_slot = HEADER_SLOTS + SHAPE_SLOTS * shapes.len();
     for (i, s) in shapes.iter().enumerate() {
@@ -264,7 +264,9 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
                 fill: look.fill,
                 bevel: look.bevel,
                 recessed: look.recessed,
+                soft: look.soft,
             });
+            params[base + 2][0] = if paint.soft { 1.0 } else { 0.0 };
             params[base + 2][1] = paint.bevel * scale;
             params[base + 2][2] = if paint.recessed { -1.0 } else { 1.0 };
             params[base + 4] = paint.fill;

@@ -180,6 +180,8 @@ pub(super) struct Paint {
     pub fill: [f32; 4],
     pub bevel: f32,
     pub recessed: bool,
+    /// The bevel fades softly inward (`bevel-soft`); otherwise it is sharp.
+    pub soft: bool,
 }
 
 impl Shape {
@@ -381,6 +383,9 @@ pub(super) struct Look {
     pub gap: f32,
     pub fill: [f32; 4],
     pub bevel: f32,
+    /// Bevel profile: sharp (the default) is an even band with a crisp inner
+    /// edge; soft (`bevel-profile="soft"`) fades inward.
+    pub soft: bool,
     pub light_deg: f32,
     pub recessed: bool,
     pub border: f32,
@@ -415,6 +420,7 @@ impl Default for Look {
             bevel: 2.0,
             light_deg: 0.0,
             recessed: false,
+            soft: false,
             border: 0.0,
             border_colour: grey(0x2a),
             border_align: Align::Inside,
@@ -449,6 +455,7 @@ impl Look {
                     })
             }
             "elevation" => self.recessed = value == Some("recessed"),
+            "bevel-profile" => self.soft = value == Some("soft"),
             "border" => self.border = number(defaults.border).max(0.0),
             "border-color" => {
                 self.border_colour = value

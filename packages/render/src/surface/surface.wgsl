@@ -11,11 +11,12 @@
 //   3: fill rgba (straight alpha, sRGB-encoded values, no linearisation)
 //   4: border outer edge, inner edge (CSS px from the silhouette), lit, enabled
 //   5: border rgba
-//   6: culling tiles across, tile size (device px), materials layer (1 = layered)
+//   6: culling tiles across, tile size (device px), materials layer (1 = layered),
+//      bevel profile (0 sharp, 1 soft)
 //   7 + 5i: rect x, y, w, h (CSS px; a poly's bounding box)
 //   8 + 5i: corner radii tl, tr, br, bl
 //   9 + 5i: op (0 add, 1 sub), join (<0 = default), gap (<0 = default), kind (0 box, 1 poly);
-//           in a materials layer: unused, bevel (device px), elevation sign, kind
+//           in a materials layer: bevel profile (0 sharp, 1 soft), bevel (device px), elevation sign, kind
 //  10 + 5i: poly: first corner slot, corner count, orientation (+1 clockwise on screen)
 //  11 + 5i: materials layer only: the shape's fill rgba
 //   then poly corners, 2 slots each: (centre x, centre y, radius, convex),
@@ -219,7 +220,7 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
             if (len > 1e-6) {
                 let facing = dot(g / len, light) * info.z;
                 let t = clamp(-d / bevel, 0.0, 1.0);
-                c = tone(c, facing * (1.0 - t) * (1.0 - t), P(2).y, P(2).z);
+                c = tone(c, facing * profile(t, bevel, info.x), P(2).y, P(2).z);
             }
         }
         let fa = a * fill.a;
@@ -229,6 +230,16 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
         return vec4<f32>(0.0);
     }
     return vec4<f32>(acc.rgb / acc.a, acc.a);
+}
+
+// How strongly the bevel shows at `t` (0 at the outline, 1 at the inner end
+// of a band `bevel` device px wide). Sharp: full strength across the band,
+// ending within one device pixel. Soft: fading inward.
+fn profile(t: f32, bevel: f32, soft: f32) -> f32 {
+    if (soft > 0.5) {
+        return (1.0 - t) * (1.0 - t);
+    }
+    return clamp((1.0 - t) * bevel, 0.0, 1.0);
 }
 
 fn tone(c: vec3<f32>, s: f32, lit: f32, shade: f32) -> vec3<f32> {
@@ -285,7 +296,7 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
             let facing = dot(g / len, P(1).yz) * P(1).w;
             if (in_bevel) {
                 let t = clamp(-d_fill / bevel, 0.0, 1.0);
-                c = tone(c, facing * (1.0 - t) * (1.0 - t), P(2).y, P(2).z);
+                c = tone(c, facing * profile(t, bevel, P(6).w), P(2).y, P(2).z);
             }
             if (in_border) {
                 // `border-lit` scales the swing: 0 flat, 1 fully lit.

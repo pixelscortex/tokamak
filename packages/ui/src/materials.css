@@ -39,6 +39,7 @@
 @property --tk-fill { syntax: "<color>"; inherits: false; initial-value: transparent; }
 @property --tk-bevel { syntax: "*"; inherits: false; }
 @property --tk-elevation { syntax: "*"; inherits: false; }
+@property --tk-bevel-profile { syntax: "*"; inherits: false; }
 
 /* The plate draws the background; Blitz must not paint it under or over
  * the plate (or over the plates of the element's children). Only for plates
@@ -47,6 +48,10 @@
 
 /* The lit edge band, CSS px: `bevel-2`, `bevel-2.5`, `active:bevel-1`. */
 @utility bevel-* { --tk-bevel: --value(number, [number]); }
+/* The band's profile. Sharp is the default: an even band with a crisp inner
+ * edge. `bevel-soft` fades it inward. */
+@utility bevel-sharp { --tk-bevel-profile: sharp; }
+@utility bevel-soft { --tk-bevel-profile: soft; }
 @utility raised { --tk-elevation: raised; }
 @utility recessed { --tk-elevation: recessed; }
 
