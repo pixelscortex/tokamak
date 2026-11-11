@@ -1,0 +1,39 @@
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_7c9ff98b4d33e9 1108,1126-1127,1135,1138,1141
+  s_e3d99f9a782059::t_2d00d849e3ac67 1152,1157,1159-1160,1163
+  s_e3d99f9a782059::t_d8575453728452 1094,1214-1218,1347,1943,1962-1963,1970-1974,1977-1978
+packages/render/src/surface/gpu.rs
+  s_e3d99f9a782059::t_0e141476d32bdf 41,251,268,270
+packages/ui/src/materials.css
+  s_e3d99f9a782059::t_0e141476d32bdf 43,51-52,54-57,67-68,71-72,75-77
+packages/render/src/surface/surface.wgsl
+  s_e3d99f9a782059::t_0e141476d32bdf 15,19,236-242,244
+packages/build/src/materials.ts
+  s_e3d99f9a782059::t_2d00d849e3ac67 243
+packages/render/src/surface/reference.rs
+  s_e3d99f9a782059::t_0e141476d32bdf 165
+packages/render/src/surface/bind.rs
+  s_e3d99f9a782059::t_0e141476d32bdf 332-336,358
+packages/render/src/surface/shape.rs
+  s_e3d99f9a782059::t_0e141476d32bdf 185-187,392-394,430,466,534-551
+packages/build/tests/materials.test.ts
+  s_e3d99f9a782059::t_2d00d849e3ac67 18
+lab/src/surfaces.tsx
+  s_e3d99f9a782059::t_7c9ff98b4d33e9 217-232,258-260,273,280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "182e67eddde9bb3cea258bec5a1d6e6e7729f0ee",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
