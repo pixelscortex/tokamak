@@ -45,3 +45,23 @@ is refused without the `workflow` scope.
 
 Proposed, Trying, In the fork, Ready to offer, Approved to offer, Offered,
 Accepted or declined. See TKM-76 for what each means.
+
+## Where changes wait for review
+
+A change that is not approved for upstream is parked as a draft pull request
+inside our own fork: head `blitz/<short-name>`, base
+`tokamak/base-0.3.0-beta.4`, in `pixelscortex/blitz`. The Blitz project is not
+notified of pull requests inside a fork.
+
+- Always pass the base repository explicitly
+  (`gh pr create --repo pixelscortex/blitz --base tokamak/base-0.3.0-beta.4 ...`).
+  Without it, GitHub targets the upstream project.
+- Do not write upstream issue or pull request numbers or links (for example
+  `#233` or a `github.com/DioxusLabs/...` URL) in commit messages, branch
+  descriptions or pull request text in the fork. GitHub can show such
+  references on the upstream issue. Describe the upstream item in words, and
+  keep the links in Linear.
+- A draft pull request on the upstream project is public and notifies its
+  maintainers. It is not a private place to park work.
+
+Current: change 1 is draft pull request 1 in the fork (Linear TKM-77).
