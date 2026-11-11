@@ -1,9 +1,15 @@
 /** The lab window as the application shell (Paper "R3b · Double sidebar"):
  * a 40 px top bar that is also the title bar, a rail with one item per lab
- * section (the active one is simply brighter), the
- * section's list in the plugin sidebar, and the section in the stage. Each
- * section is a view that teleports its parts into the shell regions. */
+ * section (the active one is simply brighter), the section's list in the
+ * plugin sidebar, and the section in the stage. Each section is a view that
+ * teleports its parts into the shell regions.
+ *
+ * Tests reach two things the window does not show, through the `lab-test`
+ * host event (lab/tests/fused_surface.rs): the fixtures view (markup that
+ * only tests need, no rail item) and the painter of the shell regions'
+ * plates. The window never sends that event. */
 import { For, Match, Switch, createSignal } from "solid-js";
+import { onHostEvent } from "@tokamak/render";
 import { Icon } from "@tokamak/ui/elements";
 import { Shell, Surface, rail } from "@tokamak/ui/components";
 import type { PlatePainter } from "@tokamak/ui/components";
@@ -12,16 +18,15 @@ import { IconButton } from "./kit";
 import ChatView from "./chat";
 import ComponentsView from "./cases";
 import SurfacesView from "./surfaces";
-import StressView from "./stress";
+import FixturesView from "./fixtures";
 
 const sections = [
   { id: "chat", label: "Chat", icon: fill.chat },
   { id: "components", label: "Components", icon: fill.checkSquare },
   { id: "surfaces", label: "Surfaces", icon: fill.kanban },
-  { id: "stress", label: "Stress", icon: fill.codeBlock },
 ] as const;
 
-type Section = (typeof sections)[number]["id"];
+type Section = (typeof sections)[number]["id"] | "fixtures";
 
 /** Each rail item's square hit area (the shell's rail metrics). */
 const item = `width: ${rail.item}px; height: ${rail.item}px`;
@@ -29,9 +34,7 @@ const item = `width: ${rail.item}px; height: ${rail.item}px`;
 function Rail(props: { active: Section; select: (section: Section) => void }) {
   return (
     <Shell.Rail>
-      {/* Kept plain for now: every icon at 50% white, the active one at
-       * 75%. The fused tab (a `Surface.Union` on the sidebar layer with
-       * `attach="right"`) is removed here, not from the primitives. */}
+      {/* Kept plain for now: every icon at 50% white, the active one at 75%. */}
       <For each={sections}>
         {(section) => (
           <button
@@ -65,10 +68,8 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
   );
 }
 
-/** Top bar parts every section shares: navigation, the command search and
- * the switch between the two plate painters for every shell region (each
- * plate painting itself, or each region's sheet drawing its plates). */
-function TopBar(props: { plates: PlatePainter; setPlates: (plates: PlatePainter) => void }) {
+/** Top bar parts every section shares: navigation and the command search. */
+function TopBar() {
   return (
     <>
       <Shell.TopBar at="start">
@@ -95,27 +96,27 @@ function TopBar(props: { plates: PlatePainter; setPlates: (plates: PlatePainter)
         </Surface>
         </div>
       </Shell.TopBar>
-      <Shell.TopBar at="end">
-        <button
-          id="lab-plates-mode"
-          window-no-drag
-          aria-pressed={props.plates === "sheet"}
-          onClick={() => props.setPlates(props.plates === "sheet" ? "self" : "sheet")}
-          class="material-key active:material-key-pressed aria-pressed:material-key-pressed flex h-6 items-center rounded-[6px] border-0 px-2 font-data text-[10px] tracking-[0.06em] text-ink-body select-none"
-        >
-          {props.plates === "sheet" ? "PLATES: SHEET" : "PLATES: SELF"}
-        </button>
-      </Shell.TopBar>
     </>
   );
+}
+
+/** What tests may ask for (see the header): open a section, including the
+ * fixtures view, and choose who draws the shell regions' plates. */
+interface TestRequest {
+  section?: Section;
+  plates?: PlatePainter;
 }
 
 export default function App() {
   const [section, setSection] = createSignal<Section>("chat");
   const [plates, setPlates] = createSignal<PlatePainter>("self");
+  onHostEvent<TestRequest>("lab-test", (request) => {
+    if (request.section) setSection(request.section);
+    if (request.plates) setPlates(request.plates);
+  });
   return (
     <Shell plates={plates()}>
-      <TopBar plates={plates()} setPlates={setPlates} />
+      <TopBar />
       <Rail active={section()} select={setSection} />
       <Switch>
         <Match when={section() === "chat"}>
@@ -127,8 +128,8 @@ export default function App() {
         <Match when={section() === "surfaces"}>
           <SurfacesView />
         </Match>
-        <Match when={section() === "stress"}>
-          <StressView />
+        <Match when={section() === "fixtures"}>
+          <FixturesView />
         </Match>
       </Switch>
     </Shell>

@@ -1,10 +1,9 @@
 /** Small lab pieces shared by the sections: icon buttons, sidebar list rows,
- * section titles and the value stepper used by the playground cases. */
-import { For, Show } from "solid-js";
+ * and section titles. */
+import { Show } from "solid-js";
 import type { JSX } from "@tokamak/render";
-import { Button, Icon } from "@tokamak/ui/elements";
+import { Icon } from "@tokamak/ui/elements";
 import { Surface } from "@tokamak/ui/components";
-import { stroke } from "./icons";
 
 /** 28 px square icon button (top bar, composer). */
 export function IconButton(props: {
@@ -138,28 +137,3 @@ export function SectionTitle(props: { eyebrow: string; title: string; children?:
     </header>
   );
 }
-
-/** A row of value buttons: the playground's stand-in for a slider. */
-export function Stepper<T extends string | number>(props: {
-  id: string;
-  label: string;
-  values: T[];
-  value: T;
-  set: (value: T) => void;
-  unit?: string;
-}) {
-  return (
-    <div class="flex flex-wrap items-center gap-1.5">
-      <span class="w-20 text-[12px] text-ink-3">{props.label}</span>
-      <For each={props.values}>
-        {(v) => (
-          <Button id={`${props.id}-${v}`} pressed={props.value === v} onClick={() => props.set(v)}>
-            {`${v}${props.unit ?? ""}`}
-          </Button>
-        )}
-      </For>
-    </div>
-  );
-}
-
-export { stroke };

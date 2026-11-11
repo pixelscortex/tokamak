@@ -6,20 +6,19 @@ publish.workspace = true
 
 [dependencies]
 runtime = { path = "../packages/runtime", features = ["client"] }
-# The lab shows the `<tk-surface>` stress demo and `<tk-fps>` readout; the
-# feature unifies onto the `render` that runtime links.
-render = { path = "../packages/render", features = ["surface-demo"] }
+render = { path = "../packages/render" }
 
 [build-dependencies]
 tokamak-build = { path = "../packages/build" }
 
 [dev-dependencies]
+# The tests read what surfaces and plates drew (render's lab probes).
 render = { path = "../packages/render", features = ["surface-demo"] }
 serde_json = "1.0.154"
 blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts"] }
 blitz-traits = "=0.3.0-beta.4"
 keyboard-types = "=0.8.0"
-# Offscreen GPU captures and benchmark of the surfaces (tests/fused_surface.rs).
+# Offscreen GPU frames and captures of the lab (tests/fused_surface.rs).
 blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
