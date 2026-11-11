@@ -1,0 +1,21 @@
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_3428ad1ecbb476 2177-2179
+lab/src/surfaces.tsx
+  s_e3d99f9a782059::t_1a9e78f749b72b 212-227,427
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "de4f10607a18affa80cf99f478cef017e4f96b5b",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
