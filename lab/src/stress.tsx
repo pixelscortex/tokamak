@@ -60,7 +60,7 @@ function KeycapGrid() {
   return <div id="lab-keycap-grid" class="material-tray flex w-[1037px] flex-wrap gap-[3px] rounded-[10px] p-[3px]">
     <For each={Array.from({ length: CAPS }, (_, i) => i)}>{i =>
       <button id={`lab-grid-cap-${i}`} aria-pressed={pressed().has(i)} onClick={() => toggle(i)}
-        class="material-key active:material-key-pressed aria-pressed:material-key-pressed flex h-[26px] w-[44px] items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-data text-[10px] text-ink-body select-none">
+        class="material-key active:material-key-pressed aria-pressed:material-key-pressed flex h-[26px] w-[44px] items-center justify-center rounded-[6px] border-0 p-0 font-data text-[10px] text-ink-body select-none">
         {i}</button>
     }</For>
   </div>;

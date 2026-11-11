@@ -981,12 +981,16 @@ fn plates_follow_computed_style_and_pressed_states() {
     doc.layout_surfaces();
     let layer = stage_layer(&doc);
     let shapes = shapes_within(&doc, layer, "lab-keycaps");
-    // 4 trays (one per row, two in the shortcut row) and 3 + 4 + 4 caps.
-    assert_eq!(shapes.len(), 4 + 11, "{shapes:#?}");
-    // Outer elements first: the trays paint below the caps they hold.
+    // 4 trays (one per row, two in the shortcut row) and the coloured box,
+    // then 3 + 4 + 4 caps, the box's 2 and 4 background buttons.
+    assert_eq!(shapes.len(), 5 + 17, "{shapes:#?}");
+    // Outer elements first: the trays and the box paint below what they
+    // hold (the box is flat, the trays recessed).
     assert!(
-        shapes[..4].iter().all(|s| s.recessed),
-        "trays first: {shapes:#?}"
+        shapes[..5]
+            .iter()
+            .all(|s| s.recessed || hex(s.fill.unwrap()) == "#3a2420"),
+        "trays and box first: {shapes:#?}"
     );
     let tray = &shapes[0];
     assert_eq!(tray.radii, [10.0; 4], "rounded-[10px] from computed style");
@@ -1431,5 +1435,159 @@ fn lab_views_bench() {
             "{view}: static re-renders nothing"
         );
     }
+    assert!(doc.take_error().is_none());
+}
+
+/// True if `c` is within 2/255 of `#rrggbb` per channel.
+fn near(c: [f32; 4], want: &str) -> bool {
+    let w = u32::from_str_radix(want.trim_start_matches('#'), 16).unwrap();
+    let w = [(w >> 16) & 255, (w >> 8) & 255, w & 255].map(|v| v as f32 / 255.0);
+    c.iter().zip(w).all(|(a, b)| (a - b).abs() <= 2.0 / 255.0)
+}
+
+/// The ordering case: a cap inside a box with a plain `bg-[#3a2420]`.
+/// The box is a plate of the same layer (the build marked it), drawn first
+/// and flat (no `bevel-*`), so the caps it holds paint over it; Blitz paints
+/// no background for it (pixels: `the_ordering_case_draws_the_cap_on_the_box`).
+#[test]
+fn a_plain_background_is_a_plate_under_the_plates_it_holds() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-plates-order");
+    doc.layout_surfaces();
+    let layer = stage_layer(&doc);
+    assert!(support::attr(&doc, "lab-plates-order", "tk-plate").is_some());
+    let shapes = shapes_within(&doc, layer, "lab-plates-order");
+    assert_eq!(shapes.len(), 3, "the box and its two caps: {shapes:#?}");
+    let bx = &shapes[0];
+    assert_eq!(hex(bx.fill.unwrap()), "#3a2420", "the box, first");
+    assert_eq!(
+        (bx.bevel, bx.recessed, bx.radii),
+        (Some(0.0), false, [12.0; 4])
+    );
+    assert_eq!(shapes[1], material_shape(&doc, layer, "lab-order-deny"));
+    assert_eq!(hex(shapes[1].fill.unwrap()), "#2a2a2a");
+    assert!(!doc.inner().is_animating());
+    assert!(doc.take_error().is_none());
+}
+
+/// `bg-* bevel-* rounded-*` buttons are plates in their own colour: theme
+/// colours (oklch in Tailwind's palette) and an opacity form (`bg-white/10`,
+/// alpha kept), the bevel from `bevel-2`, the radius from `rounded-md`.
+/// `hover:`, `active:` and `aria-pressed:` variants change colour and
+/// elevation through CSS alone, and the document settles after each.
+#[test]
+fn background_buttons_are_plates_with_css_states() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-bg-row");
+    doc.layout_surfaces();
+    let layer = stage_layer(&doc);
+    for name in ["blue", "green", "rose", "ghost"] {
+        let id = format!("lab-bg-{name}");
+        assert!(support::attr(&doc, &id, "tk-plate").is_some(), "{id}");
+    }
+    let shape =
+        |doc: &NativeDocument, name: &str| material_shape(doc, layer, &format!("lab-bg-{name}"));
+    let blue = shape(&doc, "blue");
+    assert!(near(blue.fill.unwrap(), "#155dfc"), "blue-600: {blue:?}");
+    assert_eq!(
+        (blue.bevel, blue.recessed, blue.radii),
+        (Some(2.0), false, [8.0; 4])
+    );
+    assert!(near(shape(&doc, "green").fill.unwrap(), "#009966"));
+    assert!(near(shape(&doc, "rose").fill.unwrap(), "#ec003f"));
+    let ghost = shape(&doc, "ghost").fill.unwrap();
+    assert!(
+        near(ghost, "#ffffff") && (ghost[3] - 0.1).abs() < 0.01,
+        "white/10: {ghost:?}"
+    );
+
+    hover(&mut doc, "lab-bg-blue");
+    doc.layout_surfaces();
+    assert!(
+        near(shape(&doc, "blue").fill.unwrap(), "#2b7fff"),
+        "hover: blue-500"
+    );
+    pointer_half(&mut doc, "lab-bg-blue", false);
+    let down = shape(&doc, "blue");
+    assert!(near(down.fill.unwrap(), "#1447e6"), "active: blue-700");
+    assert!(down.recessed, "active:recessed");
+    assert!(
+        !doc.inner().is_animating(),
+        "a state change needs one frame"
+    );
+    pointer_half(&mut doc, "lab-bg-blue", true);
+    // Clicked: it stays down (aria-pressed) until another one is picked.
+    assert!(shape(&doc, "blue").recessed);
+    pointer_half(&mut doc, "lab-bg-green", false);
+    pointer_half(&mut doc, "lab-bg-green", true);
+    assert!(shape(&doc, "green").recessed && !shape(&doc, "blue").recessed);
+    assert!(near(shape(&doc, "blue").fill.unwrap(), "#155dfc"));
+    assert!(!doc.inner().is_animating());
+    assert!(doc.take_error().is_none());
+}
+
+/// The ordering case as pixels: the cap shows on the coloured box. Before
+/// backgrounds became plates, Blitz painted the box over the stage's layer
+/// and only the cap's label was left.
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn the_ordering_case_draws_the_cap_on_the_box() {
+    let scale = 2.0;
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-plates-order");
+    out.frame(&mut doc);
+    let px = out.frame(&mut doc).0;
+    let at = |x: f64, y: f64| {
+        let i = (((y * scale as f64) as u32 * out.width + (x * scale as f64) as u32) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2]]
+    };
+    let rect = |name: &str| {
+        doc.inner()
+            .get_client_bounding_rect(support::id(&doc, name))
+            .unwrap()
+    };
+    let (bx, cap) = (rect("lab-plates-order"), rect("lab-order-deny"));
+    assert_eq!(
+        at(bx.x + 4.0, bx.y + bx.height / 2.0),
+        [0x3a, 0x24, 0x20],
+        "the box"
+    );
+    // Inside the cap, left of its label and clear of its bevel band.
+    assert_eq!(
+        at(cap.x + 6.0, cap.y + cap.height / 2.0),
+        [0x2a; 3],
+        "the cap's face, on the box"
+    );
+    assert!(doc.take_error().is_none());
+}
+
+/// Captures for review (raw RGBA, see `capture_dir`): the keycap case at
+/// rest, with the ordering row and the background buttons; then the
+/// background buttons pressed (Run held down, Merge toggled down).
+#[test]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
+fn capture_plate_backgrounds() {
+    let dir = capture_dir();
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-keycaps");
+    for name in ["lab-keycaps", "lab-bg-row"] {
+        let r = doc
+            .inner()
+            .get_client_bounding_rect(support::id(&doc, name))
+            .unwrap();
+        println!("{name} css rect {} {} {} {}", r.x, r.y, r.width, r.height);
+    }
+    out.save_settled(&mut doc, &dir, "plates-keycaps-rest");
+    pointer_half(&mut doc, "lab-bg-green", false);
+    pointer_half(&mut doc, "lab-bg-green", true);
+    pointer_half(&mut doc, "lab-bg-blue", false);
+    out.save_settled(&mut doc, &dir, "plates-backgrounds-pressed");
+    pointer_half(&mut doc, "lab-bg-blue", true);
     assert!(doc.take_error().is_none());
 }

@@ -214,12 +214,22 @@ function NotchCase() {
  * `Surface` component, no layer written here. Pressed states are CSS
  * variants: `active:` while the pointer is down, `aria-pressed:` for a cap
  * that stays down (Always allow, the selected tile). The menu floats over
- * other content, so it is a `Sheet`. */
+ * other content, so it is a `Sheet`.
+ *
+ * Plain backgrounds are plates too: a cap on a box with an ordinary
+ * `bg-[#...]` sits on the box (the box is drawn first, by the same layer,
+ * and Blitz paints no background over the cap), and `bg-* bevel-*` buttons
+ * are caps in any colour. Plates get no UA button background either, so
+ * the caps need no `bg-transparent`. */
 function KeycapCase() {
   const [always, setAlways] = createSignal(false);
   const [tile, setTile] = createSignal("CHAT");
+  // One background button stays down at a time (click again to release).
+  const [picked, setPicked] = createSignal<string>();
+  const pick = (name: string) => setPicked(picked() === name ? undefined : name);
+  const sink = "bevel-2 active:recessed aria-pressed:recessed rounded-md";
   const press = "active:material-key-pressed aria-pressed:material-key-pressed";
-  const reset = "border-0 bg-transparent select-none";
+  const reset = "border-0 select-none";
   const cap = `${reset} flex h-[30px] items-center px-3.5 text-[13px] font-medium`;
   const small = `material-key ${press} ${reset} flex h-6 min-w-[26px] items-center justify-center rounded-[6px] px-2 font-data text-[10px] tracking-[0.06em] text-ink-body`;
   const tray = "flex w-fit gap-[3px] p-[3px]";
@@ -231,6 +241,26 @@ function KeycapCase() {
         <button id="lab-key-always" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}
           aria-pressed={always()} onClick={() => setAlways(!always())}>Always allow</button>
         <button id="lab-key-once" class={`material-key-bright rounded-[7px] active:bevel-1 ${cap} text-[#111111]`}>Allow once</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Coloured box</span>
+      <div id="lab-plates-order" class="flex gap-[3px] rounded-[12px] bg-[#3a2420] p-3">
+        <button id="lab-order-deny" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}>Deny</button>
+        <button id="lab-order-allow" class={`material-key-bright rounded-[7px] active:bevel-1 ${cap} text-[#111111]`}>Allow</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Backgrounds</span>
+      <div id="lab-bg-row" class="flex items-center gap-2">
+        <button id="lab-bg-blue" aria-pressed={picked() === "blue"} onClick={() => pick("blue")}
+          class={`bg-blue-600 hover:bg-blue-500 active:bg-blue-700 aria-pressed:bg-blue-700 ${sink} ${cap} text-white`}>Run</button>
+        <button id="lab-bg-green" aria-pressed={picked() === "green"} onClick={() => pick("green")}
+          class={`bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 aria-pressed:bg-emerald-700 ${sink} ${cap} text-white`}>Merge</button>
+        <button id="lab-bg-rose" aria-pressed={picked() === "rose"} onClick={() => pick("rose")}
+          class={`bg-rose-600 hover:bg-rose-500 active:bg-rose-700 aria-pressed:bg-rose-700 ${sink} ${cap} text-white`}>Delete</button>
+        <button id="lab-bg-ghost" aria-pressed={picked() === "ghost"} onClick={() => pick("ghost")}
+          class={`bg-white/10 hover:bg-white/15 active:bg-white/5 aria-pressed:bg-white/5 ${sink} ${cap} text-ink`}>Cancel</button>
       </div>
     </div>
     <div class="flex items-center gap-4">
@@ -267,7 +297,7 @@ function KeycapCase() {
           <For each={["Rename", "Duplicate", "Delete"]}>
             {(item, i) => (
               <button id={`lab-sheet-item-${i()}`}
-                class={`flex h-[26px] items-center rounded-[7px] border-0 bg-transparent px-2 text-[13px] text-ink select-none hover:material-chip ${i() === 0 ? "material-chip" : ""}`}>
+                class={`flex h-[26px] items-center rounded-[7px] border-0 px-2 text-[13px] text-ink select-none hover:material-chip ${i() === 0 ? "material-chip" : ""}`}>
                 {item}</button>
             )}
           </For>
