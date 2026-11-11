@@ -710,6 +710,73 @@ mod binding {
         assert!(field_all(&shapes, &look, on_corner).abs() < 1e-3);
     }
 
+    /// Top and bottom attachment is left and right attachment with x and y
+    /// swapped: a compact trigger (60 x 26, corners 6) attached by its
+    /// bottom to the top edge of a wider menu below it (240 x 120, corners
+    /// 12), flush with the menu's left edge, joins 3. Its left edge runs
+    /// straight into the menu's (no bulge at the seam), its right side
+    /// meets the menu's top with an exact concave arc of radius 3, and the
+    /// field equals the transposed right-attached outline everywhere.
+    #[test]
+    fn a_trigger_attached_by_its_bottom_merges_into_the_menu_below() {
+        let look = Look {
+            join: 3.0,
+            ..Look::default()
+        };
+        let menu = super::Shape::rect(false, [0.0, 26.0, 240.0, 120.0], [0.0, 12.0, 12.0, 12.0]);
+        let trigger = attached(
+            Side::Bottom,
+            [0.0, 0.0, 60.0, 26.0],
+            [6.0; 4],
+            3.0,
+            menu.rect,
+            menu.radii,
+        )
+        .unwrap();
+        let shapes = [menu.clone(), trigger];
+        // The left edge, from below the trigger's corner arc down into the
+        // menu: on the outline, nothing outside it, nothing missing inside.
+        for i in 0..=100 {
+            let y = 7.0 + i as f32 * 0.6;
+            let on = field_all(&shapes, &look, [0.0, y]);
+            let out = field_all(&shapes, &look, [-0.5, y]);
+            let inside = field_all(&shapes, &look, [0.5, y]);
+            assert!(on.abs() < 1e-3, "y {y}: {on} on the left edge");
+            assert!((out - 0.5).abs() < 1e-3, "y {y}: {out} outside (bulge)");
+            assert!((inside + 0.5).abs() < 1e-3, "y {y}: {inside} inside (dip)");
+        }
+        // The concave fillet: centred 3 px right of the trigger and 3 px
+        // above the menu, radius 3.
+        let (r, centre) = (3.0, [63.0, 23.0]);
+        assert!((field_all(&shapes, &look, centre) - r).abs() < 1e-3);
+        for step in 0..=9 {
+            let a = (90.0 + step as f32 * 10.0).to_radians();
+            let p = [centre[0] + r * a.cos(), centre[1] + r * a.sin()];
+            assert!(field_all(&shapes, &look, p).abs() < 1e-3, "{p:?}");
+        }
+        // The transposed right-attached outline gives the same field.
+        let t = |r: [f32; 4]| [r[1], r[0], r[3], r[2]];
+        let menu_t = super::Shape::rect(false, t(menu.rect), [0.0, 12.0, 12.0, 12.0]);
+        let trigger_t = attached(
+            Side::Right,
+            t([0.0, 0.0, 60.0, 26.0]),
+            [6.0; 4],
+            3.0,
+            menu_t.rect,
+            menu_t.radii,
+        )
+        .unwrap();
+        let transposed = [menu_t, trigger_t];
+        for i in 0..30 {
+            for j in 0..20 {
+                let p = [-4.0 + i as f32 * 3.0, -4.0 + j as f32 * 3.0];
+                let a = field_all(&shapes, &look, p);
+                let b = field_all(&transposed, &look, [p[1], p[0]]);
+                assert!((a - b).abs() < 1e-3, "{p:?}: {a} vs {b}");
+            }
+        }
+    }
+
     #[test]
     fn an_attached_tab_changes_continuously_as_it_leaves_the_top() {
         let look = Look {

@@ -149,6 +149,10 @@ type Placed = ((bool, bool, u32, NodeId), Shape, bool, Option<Attach>);
 pub(super) enum Side {
     Left,
     Right,
+    /// The member's top meets the bottom edge of the shape above it.
+    Top,
+    /// The member's bottom meets the top edge of the shape below it.
+    Bottom,
 }
 
 /// What `attached` needs about a member with `surface-attach`.
@@ -604,6 +608,8 @@ impl Registry {
                 let attach = match attr(node, "surface-attach") {
                     Some("right") => Some(Side::Right),
                     Some("left") => Some(Side::Left),
+                    Some("top") => Some(Side::Top),
+                    Some("bottom") => Some(Side::Bottom),
                     _ => None,
                 }
                 .filter(|_| !shape.sub)
@@ -1085,17 +1091,16 @@ fn resolve_attached(list: &mut [Placed]) {
     for (_, shape, _, attach) in list.iter_mut() {
         let Some(a) = attach else { continue };
         let [x, y, w, h] = a.rect;
-        let edge = match a.side {
-            Side::Right => x + w,
-            Side::Left => x,
-        };
         let target = targets.iter().find(|t| {
             let [tx, ty, tw, th] = t.rect;
-            let touching = match a.side {
-                Side::Right => (tx - edge).abs() < 0.5,
-                Side::Left => (tx + tw - edge).abs() < 0.5,
-            };
-            touching && ty < y + h && ty + th > y
+            let along_y = ty < y + h && ty + th > y;
+            let along_x = tx < x + w && tx + tw > x;
+            match a.side {
+                Side::Right => (tx - (x + w)).abs() < 0.5 && along_y,
+                Side::Left => (tx + tw - x).abs() < 0.5 && along_y,
+                Side::Bottom => (ty - (y + h)).abs() < 0.5 && along_x,
+                Side::Top => (ty + th - y).abs() < 0.5 && along_x,
+            }
         });
         if let Some(outline) =
             target.and_then(|t| attached(a.side, a.rect, a.radii, a.join, t.rect, t.radii))
@@ -1105,8 +1110,9 @@ fn resolve_attached(list: &mut [Placed]) {
     }
 }
 
-/// A member attached by one side (`surface-attach`) to a vertical edge of
-/// the plain union shape it touches (a tab against its container), as
+/// A member attached by one side (`surface-attach`) to an edge of
+/// the plain union shape it touches (a tab against its container; a
+/// trigger against the menu below it), as
 /// ONE exact outline: the member's free corners keep its own radii, the two
 /// places where its top and bottom edges meet the target's edge carry
 /// concave fillets of radius `join`, and a strip running along the inside of
@@ -1132,6 +1138,49 @@ pub(super) fn attached(
     target: [f32; 4],
     target_radii: [f32; 4],
 ) -> Option<Shape> {
+    let points = match side {
+        Side::Left | Side::Right => attached_points(side, rect, radii, join, target, target_radii),
+        // A horizontal edge is a vertical one with x and y swapped: the
+        // member's bottom meeting a top edge is, transposed, its right side
+        // meeting a left edge. Transposing keeps tl and br and swaps tr
+        // and bl; the outline is swapped back (its winding flips, which a
+        // poly accepts).
+        Side::Top | Side::Bottom => {
+            let t = |r: [f32; 4]| [r[1], r[0], r[3], r[2]];
+            let corners = |r: [f32; 4]| [r[0], r[3], r[2], r[1]];
+            let along = if side == Side::Bottom {
+                Side::Right
+            } else {
+                Side::Left
+            };
+            let mut points = attached_points(
+                along,
+                t(rect),
+                corners(radii),
+                join,
+                t(target),
+                corners(target_radii),
+            );
+            for p in &mut points {
+                p.swap(0, 1);
+            }
+            points
+        }
+    };
+    let mut shape = Shape::from_poly(false, Poly::new(points)?);
+    shape.join = 0.0;
+    Some(shape)
+}
+
+/// `attached` for a vertical edge (`Side::Left` or `Side::Right`).
+fn attached_points(
+    side: Side,
+    rect: [f32; 4],
+    radii: [f32; 4],
+    join: f32,
+    target: [f32; 4],
+    target_radii: [f32; 4],
+) -> Vec<[f32; 3]> {
     // Work as if attached on the right; mirror x for the left side.
     let mirror = side == Side::Left;
     let flip = |r: [f32; 4]| {
@@ -1187,9 +1236,7 @@ pub(super) fn attached(
             p[0] = -p[0];
         }
     }
-    let mut shape = Shape::from_poly(false, Poly::new(points)?);
-    shape.join = 0.0;
-    Some(shape)
+    points
 }
 
 /// A member's shape from its box (CSS px, relative to the surface) and its

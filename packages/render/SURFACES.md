@@ -85,11 +85,15 @@ going through an attribute or JS:
   (`a` or `left right` degrees from vertical; positive leans outward towards
   the top, so the top is the wide end that meets the plate edge; negative
   angles make the bottom the wide end), `surface-animate` and
-  `surface-attach` (`left` | `right`, unions only: the member is attached
-  by that side to a vertical edge of another union of the surface, as one
-  exact outline with `join` as concave fillets at its top and bottom; level
-  with the other shape's top or bottom its edge runs straight into it: a
-  tab fused into the side of a panel).
+  `surface-attach` (`left` | `right` | `top` | `bottom`, unions only: the
+  member is attached by that side to an edge of another union of the
+  surface, a vertical edge for `left`/`right` and a horizontal one for
+  `top`/`bottom`, as one exact outline with `join` as concave fillets where
+  its sides meet that edge; level with the other shape's corner its edge
+  runs straight into it: a tab fused into the side of a panel, a compact
+  select's trigger merged onto its menu). A plain `join` cannot do this:
+  where two shapes' edges continue each other (flush sides), a CSG round
+  join fills the crease and bulges.
 - Its shape is its border box relative to the surface element's box. Unions
   come before subtractions, each in node order.
 - A slanted member becomes an exact rounded outline whose two wide-end

@@ -175,12 +175,14 @@ export interface ShapeProps {
   slant?: number | [number, number];
   /** Animate when this shape's box moves (window resizes never animate). */
   animate?: boolean;
-  /** Union only: this side of the shape meets a vertical edge of another
-   * union shape of the same surface (a tab against its container). The
-   * shape becomes one exact outline with the join as concave fillets where
-   * its top and bottom meet that edge; level with the other shape's top (or
-   * bottom) its edge runs straight into it, no step. */
-  attach?: "left" | "right";
+  /** Union only: this side of the shape meets an edge of another union
+   * shape of the same surface: `left`/`right` a vertical edge (a tab
+   * against its container), `top`/`bottom` a horizontal one (a trigger on
+   * the menu below it). The shape becomes one exact outline with the join
+   * as concave fillets where its sides meet that edge; level with a corner
+   * of the other shape its edge runs straight into it, no step, no bulge.
+   * Attach the narrower shape to the wider one. */
+  attach?: "left" | "right" | "top" | "bottom";
   /** Join a shell layer instead of the nearest Surface. */
   layer?: ShellLayer;
   id?: string;
