@@ -1,0 +1,21 @@
+lab/src/surfaces.tsx
+  s_e9593949284022::t_7493e32c5e326e 254-345,365-367
+lab/tests/fused_surface.rs
+  s_e9593949284022::t_11daafbb654f59 825-1106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79a065232c5b087adc13f1a6a85a739ba82677f5",
+  "prompts": {},
+  "sessions": {
+    "s_e9593949284022": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e6a396-0bd5-4d14-9ecf-53727156b0c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

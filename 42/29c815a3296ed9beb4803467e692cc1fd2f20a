@@ -1,0 +1,27 @@
+packages/render/src/lib.rs
+  s_e9593949284022::t_f9c8952a85cbce 25-26
+packages/render/src/surface/bind.rs
+  s_e9593949284022::t_f9c8952a85cbce 385-387,408,413-418
+packages/render/src/wire.rs
+  s_e9593949284022::t_f9c8952a85cbce 178-180
+packages/render/src/surface/mod.rs
+  s_e9593949284022::t_f9c8952a85cbce 65
+lab/tests/fused_surface.rs
+  s_e9593949284022::t_f9c8952a85cbce 884-888,928-931,948-951,953-957,1061-1064
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4229c815a3296ed9beb4803467e692cc1fd2f20a",
+  "prompts": {},
+  "sessions": {
+    "s_e9593949284022": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e6a396-0bd5-4d14-9ecf-53727156b0c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
