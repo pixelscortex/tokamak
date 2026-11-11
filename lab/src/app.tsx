@@ -1,11 +1,11 @@
 /** The lab window as the application shell (Paper "R3b · Double sidebar"):
  * a 40 px top bar that is also the title bar, a rail with one item per lab
- * section whose active item is a tab fused into the plugin container, the
+ * section (the active one is simply brighter), the
  * section's list in the plugin sidebar, and the section in the stage. Each
  * section is a view that teleports its parts into the shell regions. */
 import { For, Match, Switch, createSignal } from "solid-js";
 import { Icon } from "@tokamak/ui/elements";
-import { Shell, Surface, rail, railItemTop } from "@tokamak/ui/components";
+import { Shell, Surface, rail } from "@tokamak/ui/components";
 import { fill, stroke } from "./icons";
 import { IconButton } from "./kit";
 import ChatView from "./chat";
@@ -26,21 +26,11 @@ type Section = (typeof sections)[number]["id"];
 const item = `width: ${rail.item}px; height: ${rail.item}px`;
 
 function Rail(props: { active: Section; select: (section: Section) => void }) {
-  const index = () => sections.findIndex((s) => s.id === props.active);
   return (
     <Shell.Rail>
-      {/* The active item's tab: container material attached to the
-       * container's left edge (one exact outline with the sidebar layer's
-       * 10 px join as fillets). It jumps between items: animation is off for
-       * now (add `animate` to bring the slide back). On the first item
-       * its top edge runs straight into the container's top edge. */}
-      <Surface.Union
-        layer="sidebar"
-        attach="right"
-        radius={[10, 0, 0, 10]}
-        class="absolute"
-        style={`top: ${railItemTop(index())}px; left: ${rail.tab}px; width: ${rail.width - rail.tab}px; height: ${rail.item}px`}
-      />
+      {/* Kept plain for now: every icon at 50% white, the active one at
+       * 75%. The fused tab (a `Surface.Union` on the sidebar layer with
+       * `attach="right"`) is removed here, not from the primitives. */}
       <For each={sections}>
         {(section) => (
           <button
@@ -48,7 +38,7 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
             aria-label={section.label}
             aria-pressed={props.active === section.id}
             onClick={() => props.select(section.id)}
-            class="relative flex shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-ink-4 aria-pressed:text-ink"
+            class="relative flex shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-[#808080] aria-pressed:text-[#bfbfbf]"
             style={item}
           >
             <Icon d={section.icon} view={256} fill class="size-5" />
@@ -57,7 +47,7 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
       </For>
       <button
         aria-label="New section"
-        class="flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-6"
+        class="flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-[#808080]"
         style={item}
       >
         <Icon d={stroke.plus} strokeWidth={2} class="size-[18px]" />
@@ -65,7 +55,7 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
       <div class="flex-1" />
       <button
         aria-label="Settings"
-        class="mb-1 flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-4"
+        class="mb-1 flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-[#808080]"
         style={item}
       >
         <Icon d={fill.sliders} view={256} fill class="size-5" />
