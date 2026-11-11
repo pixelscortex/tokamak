@@ -41,8 +41,7 @@ pub(crate) fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
     if !n.flags.is_in_document() {
         return None;
     }
-    let r = doc.get_client_bounding_rect(node)?;
-    let rect = [r.x as f32, r.y as f32, r.width as f32, r.height as f32];
+    let rect = border_box(doc, node)?;
     if rect[2] <= 0.0 && rect[3] <= 0.0 && n.primary_styles().is_none() {
         return None;
     }
@@ -68,19 +67,35 @@ pub(crate) fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
         if !clips {
             continue;
         }
-        let Some(b) = doc.get_client_bounding_rect(id) else {
+        let Some(b) = border_box(doc, id) else {
             continue;
         };
         let border = ancestor.final_layout().border;
         let padding = [
-            b.x as f32 + border.left,
-            b.y as f32 + border.top,
-            b.width as f32 - border.left - border.right,
-            b.height as f32 - border.top - border.bottom,
+            b[0] + border.left,
+            b[1] + border.top,
+            b[2] - border.left - border.right,
+            b[3] - border.top - border.bottom,
         ];
         clip = intersect(clip, padding);
     }
     Some(Report { rect, clip })
+}
+
+/// The border box of `node` in window coordinates. Blitz's client rect of
+/// a scroll container also subtracts the container's OWN scroll offset
+/// (blitz-dom 0.3.0-beta.4 `physical_unrounded_geometry` walks from the
+/// node itself), so a scrolled scroller would seem to move up with its
+/// content; that offset is added back.
+fn border_box(doc: &BaseDocument, node: NodeId) -> Option<[f32; 4]> {
+    let r = doc.get_client_bounding_rect(node)?;
+    let own = doc.get_node(node)?.scroll_offset();
+    Some([
+        (r.x + own.x) as f32,
+        (r.y + own.y) as f32,
+        r.width as f32,
+        r.height as f32,
+    ])
 }
 
 /// The overlap of two rects (x, y, w, h); empty ones keep a zero size.

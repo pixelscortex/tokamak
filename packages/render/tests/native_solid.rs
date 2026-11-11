@@ -813,6 +813,8 @@ fn observed_layout_reaches_js_after_layout_and_only_when_it_changes() {
         "{}",
         layout(&doc)
     );
+    // The scroller itself does not move: the clip stays.
+    assert_eq!(layout(&doc)["clip"], got["clip"], "the clip stays");
     // A size change is reported.
     host(&mut doc, "tall", json!(true));
     doc.resolve_layout(0.0);
