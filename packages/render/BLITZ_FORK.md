@@ -38,8 +38,13 @@ is refused without the `workflow` scope.
 5. Quick versions are allowed for trying things out and are marked as such. A
    change is rewritten cleanly before it is offered upstream. The sub-issue
    says which state it is in.
-6. Adding a new change to the fork needs the owner's agreement first. Finding
-   a bug in Blitz is not permission to fix it in the fork.
+6. A new change to the fork is allowed without asking first when Blitz is
+   blocking our work or a small change removes a real obstacle (owner,
+   2026-11-11: "if there is an issue blocking us, let's fix it"). It is not
+   allowed silently: the change gets its own branch, its Linear sub-issue and
+   its entry in `BLITZ_CHANGES.md` in the same piece of work, and the owner is
+   told what was changed and why. Rules 1 and 2 still hold: nothing is offered
+   upstream without approval.
 7. When Blitz releases a new version, each change is re-applied and re-tested,
    and the result is recorded on its sub-issue.
 8. The same Blitz pin is used by other branches. Switching the workspace to a
