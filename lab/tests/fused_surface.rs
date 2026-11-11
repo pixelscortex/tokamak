@@ -1275,13 +1275,31 @@ fn a_self_painting_button_is_still_a_real_button() {
 /// A plate leaves the document and comes back (a view switch and back):
 /// Blitz drops a widget with its element, so the layout pass attaches a new
 /// one when the element returns, and stops tracking plates that are gone.
+/// A plate scrolled out of the window keeps its widget but is handed no
+/// shape (Blitz calls every widget's paint on every frame, in view or not),
+/// and gets it back when it scrolls in.
 #[test]
 fn self_painting_plates_survive_leaving_and_returning() {
     let mut doc = document(1.0, 900.0);
     open(&mut doc, "surfaces");
     doc.layout_surfaces();
     let count = doc.own_plate_count();
-    assert!(count > 20, "the Surfaces view's plates: {count}");
+    assert!(count > 20, "the Surfaces view's plates in view: {count}");
+    {
+        let deny = support::id(&doc, "lab-key-deny");
+        let shape = doc.own_plate_shape(deny).unwrap();
+        scroll_stage(&mut doc, 1200.0);
+        doc.layout_surfaces();
+        let rect = doc.inner().get_client_bounding_rect(deny).unwrap();
+        assert!(rect.y + rect.height < 0.0, "scrolled out: {rect:?}");
+        assert!(carries_widget(&doc, deny));
+        assert!(doc.own_plate_shape(deny).is_none(), "nothing to draw");
+        assert!(doc.own_plate_count() < count);
+        scroll_stage(&mut doc, 0.0);
+        doc.layout_surfaces();
+        assert_eq!(doc.own_plate_shape(deny), Some(shape));
+        assert_eq!(doc.own_plate_count(), count);
+    }
     // The top bar's switch is a plate in every view.
     open(&mut doc, "components");
     doc.layout_surfaces();

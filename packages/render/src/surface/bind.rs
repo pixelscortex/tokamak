@@ -192,6 +192,9 @@ struct Plan {
     depth: u32,
     /// It paints itself; otherwise `layer` draws it.
     own: bool,
+    /// It or an ancestor has a CSS transform: its layout box does not say
+    /// where it is on screen.
+    transformed: bool,
 }
 
 /// Tags whose elements Blitz gives data or behaviour of their own later
@@ -654,13 +657,15 @@ impl Registry {
             // the plate's depth in the document.
             let mut region = None;
             let mut depth = 0u32;
-            let mut current = Some(id);
+            let mut transformed = false;
+            let mut current = Some(node);
             while let Some(at) = current {
-                if region.is_none() && regions.contains_key(&at) {
-                    region = Some(at);
+                if region.is_none() && regions.contains_key(&at.id) {
+                    region = Some(at.id);
                 }
+                transformed |= at.transform().is_some();
                 depth += 1;
-                current = doc.get_node(at).and_then(|n| n.parent);
+                current = at.parent.and_then(|p| doc.get_node(p));
             }
             // An element without a box of its own is not painted as an
             // element, so Blitz never draws a widget on it.
@@ -672,6 +677,7 @@ impl Registry {
                 layer: region.map(|r| regions[&r]),
                 depth,
                 own,
+                transformed,
             });
         }
         plans
@@ -741,6 +747,12 @@ impl Registry {
         lists: &mut HashMap<NodeId, Vec<Placed>>,
     ) {
         let scale = doc.viewport().scale_f64();
+        // The window, CSS px.
+        let (width, height) = doc.viewport().window_size;
+        let window = [
+            (width as f64 / scale) as f32,
+            (height as f64 / scale) as f32,
+        ];
         // Where each layer in use is painted (as its plates: rounded).
         let mut origins: HashMap<NodeId, [f32; 2]> = HashMap::new();
         for plan in plans {
@@ -769,7 +781,17 @@ impl Registry {
                         None => [0.0; 2],
                     };
                 }
-                let look = rect
+                // A plate laid out outside the window (a long list scrolled
+                // away) draws nothing and holds no atlas slot: Blitz calls
+                // every widget's `paint` on every frame, in view or not, and
+                // would otherwise keep a texture for each of them. With a
+                // transform anywhere above it the layout box does not say
+                // where it shows, so it is kept.
+                let shown = rect.filter(|&[x, y, w, h]| {
+                    plan.transformed
+                        || (x < window[0] && y < window[1] && x + w > 0.0 && y + h > 0.0)
+                });
+                let look = shown
                     .zip(node.primary_styles())
                     .and_then(|([.., w, h], style)| {
                         look_of(&mut self.seen, id, (*style).clone(), w, h, true)

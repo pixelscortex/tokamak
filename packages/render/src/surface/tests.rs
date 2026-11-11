@@ -953,6 +953,10 @@ mod painters {
         <input id="input" style="--tk-fill:#0000ff;display:block;width:80px;height:30px">
         <p style="margin:0">text <span id="inline" style="--tk-fill:#ffff00">inline</span></p>
         <div id="hidden" style="--tk-fill:#ffffff;display:none;width:10px;height:10px"></div>
+        <div id="far" style="--tk-fill:#111111;--tk-bevel:1;position:absolute;left:0;top:2000px;width:40px;height:20px"></div>
+        <div style="position:absolute;left:0;top:0;transform:translateY(-1900px)">
+          <div id="moved" style="--tk-fill:#222222;--tk-bevel:1;position:absolute;left:0;top:2000px;width:40px;height:20px"></div>
+        </div>
         <div id="sheet" tk-region="sheet" style="position:relative;width:200px;height:50px">
           <tk-surface id="sheet-layer" materials
             style="display:block;position:absolute;left:0;top:0;width:100%;height:100%"></tk-surface>
@@ -962,8 +966,8 @@ mod painters {
       <div id="outside" style="--tk-fill:#00ffff;width:50px;height:20px"></div>
     </body></html>"#;
 
-    const PLATES: [&str; 7] = [
-        "box", "button", "input", "inline", "hidden", "inner", "outside",
+    const PLATES: [&str; 9] = [
+        "box", "button", "input", "inline", "hidden", "far", "moved", "inner", "outside",
     ];
 
     struct Fixture {
@@ -1080,6 +1084,13 @@ mod painters {
             assert!(f.own(name).is_none(), "{name}");
         }
 
+        // Laid out below the window (400 px tall): it carries its widget
+        // but is handed no shape, so it holds no texture. Under a transform
+        // the layout box does not say where it shows: kept.
+        assert!(f.carries_widget("far") && f.carries_widget("moved"));
+        assert!(f.own("far").unwrap().borrow().shapes.is_empty());
+        assert_eq!(f.own("moved").unwrap().borrow().shapes.len(), 1);
+
         // Unchanged frames change nothing.
         let version = handle.borrow().version;
         f.frame();
@@ -1092,10 +1103,11 @@ mod painters {
         let region = f.id("region");
         f.registry.region(region, Some("sheet"));
         f.frame();
-        for name in ["box", "button"] {
+        for name in ["box", "button", "far", "moved"] {
             assert!(!f.carries_widget(name), "{name}");
             assert!(f.own(name).is_none(), "{name}");
         }
+        // (The two plates laid out below the layer's box are skipped.)
         assert_eq!(f.drawn_by("layer"), [RED_HALF, GREEN, BLUE, YELLOW]);
         // And back.
         f.registry.region(region, Some("true"));
