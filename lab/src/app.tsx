@@ -31,11 +31,11 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
     <Shell.Rail>
       {/* The active item's tab: container material attached to the
        * container's left edge (one exact outline with the sidebar layer's
-       * 10 px join as fillets), animating between items. On the first item
+       * 10 px join as fillets). It jumps between items: animation is off for
+       * now (add `animate` to bring the slide back). On the first item
        * its top edge runs straight into the container's top edge. */}
       <Surface.Union
         layer="sidebar"
-        animate
         attach="right"
         radius={[10, 0, 0, 10]}
         class="absolute"

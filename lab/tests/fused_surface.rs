@@ -174,14 +174,12 @@ fn idle_and_stopped_surfaces_request_no_frames() {
     assert!(doc.take_error().is_none());
 }
 
-/// Switching to or from Chat takes its title notch and composer out of (or
-/// puts them into) the shell layers in the same layout pass as the rail tab
-/// moves. The tab must still animate between its own two boxes: matched by
-/// identity, not by position in the layer's shape list (which changes
-/// length here). The pending animation is what makes the document ask for
-/// frames.
+/// Animation is switched off in the lab for now: no shape asks for it, so a
+/// view switch (which moves the rail tab and adds or removes the Chat title
+/// notch and composer in the same layout pass) lands in one frame and the
+/// document asks for no further frames.
 #[test]
-fn the_rail_tab_animates_when_a_view_switch_adds_and_removes_shell_shapes() {
+fn a_view_switch_moves_the_rail_tab_without_animating() {
     let mut doc = document(1.0, 900.0);
     doc.layout_surfaces();
     assert!(!doc.inner().is_animating());
@@ -189,7 +187,10 @@ fn the_rail_tab_animates_when_a_view_switch_adds_and_removes_shell_shapes() {
         support::pointer(&mut doc, &format!("lab-rail-{section}"));
         doc.inner_mut().resolve(0.0);
         doc.layout_surfaces();
-        assert!(doc.inner().is_animating(), "to {section}: the tab animates");
+        assert!(
+            !doc.inner().is_animating(),
+            "to {section}: nothing animates"
+        );
     }
     assert!(doc.take_error().is_none());
 }
