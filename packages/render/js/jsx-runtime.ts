@@ -97,6 +97,18 @@ export namespace JSX {
     readonly?: boolean;
   }
 
+  /** Blitz's multi-line plain text editor (parley). Its height is `rows`
+   * lines of its line height (default 2); it wraps at word boundaries,
+   * scrolls vertically to keep the caret in view and never grows with its
+   * content (`@tokamak/ui`'s Textarea grows it). Its initial text is its
+   * text content; `value` replaces the editor's text. No placeholder. */
+  export interface TextareaAttributes extends Attributes {
+    value?: string;
+    rows?: number;
+    disabled?: boolean;
+    readonly?: boolean;
+  }
+
   /** `<tk-surface>` (render/src/surface, render/SURFACES.md): a fused, lit
    * surface painted natively on the GPU; it has no children. `shapes` is a
    * JSON list of shapes in the element's CSS px. */
@@ -151,5 +163,6 @@ export namespace JSX {
     label: Attributes;
     button: ButtonAttributes;
     input: InputAttributes;
+    textarea: TextareaAttributes;
   }
 }
