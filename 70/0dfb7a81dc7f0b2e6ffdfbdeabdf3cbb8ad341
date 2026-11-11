@@ -1,0 +1,31 @@
+lab/tests/fused_surface.rs
+  s_168cc46266f1ae::t_4784c90c8c63b3 1594-1748
+  s_168cc46266f1ae::t_4006b56f35accb 1749-1816
+lab/src/stress.tsx
+  s_168cc46266f1ae::t_6bb5cd6d5f1fa3 53-56,63-71,91-92,114-118,138
+lab/src/surfaces.tsx
+  s_168cc46266f1ae::t_0df1324df511e5 357,372
+  s_168cc46266f1ae::t_6bb5cd6d5f1fa3 6,11-23,324-356,358-371,373-425,456-460
+lab/src/styles.css
+  s_168cc46266f1ae::t_e3ae92a6135af8 21-35
+lab/Cargo.toml
+  s_168cc46266f1ae::t_4784c90c8c63b3 26-27
+Cargo.lock
+  s_168cc46266f1ae::t_3757fd517192b2 7161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "700dfb7a81dc7f0b2e6ffdfbdeabdf3cbb8ad341",
+  "prompts": {},
+  "sessions": {
+    "s_168cc46266f1ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1ba09e9c-a92b-49ed-9e10-16ba88da528a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
