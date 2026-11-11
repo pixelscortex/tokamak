@@ -1,0 +1,21 @@
+lab/src/surfaces.tsx
+  s_ef483fea3c151e::t_f8c4dd0a887056 434,439-441,448-449,459-462,467
+  s_ef483fea3c151e::t_bc3ea6855b7386 464-466,469-470
+  s_ef483fea3c151e::t_c0d3fbab903a8e 444-447,453-454
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39fccc5e4e1e9e157b3aeae65e2a4be374ed3fdf",
+  "prompts": {},
+  "sessions": {
+    "s_ef483fea3c151e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "101e35c4-4f7c-43f0-af0d-2b064a915d86",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
