@@ -1,0 +1,19 @@
+packages/ui/src/materials.css
+  s_168cc46266f1ae::t_e3ae92a6135af8 47-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8961f682b878bb28dcade0b05b4ba10a93e7e8a2",
+  "prompts": {},
+  "sessions": {
+    "s_168cc46266f1ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1ba09e9c-a92b-49ed-9e10-16ba88da528a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
