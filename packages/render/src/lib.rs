@@ -111,6 +111,17 @@ impl NativeDocument {
         self.bridge.tree.surfaces.own_shape(node)
     }
 
+    /// Lab probe (surface-demo): for a plate that cannot carry a widget and
+    /// sits in a self-painting plate: that plate's node, and the shape it
+    /// draws for `node`, in its own border box.
+    #[cfg(feature = "surface-demo")]
+    pub fn hosted_plate_shape(
+        &self,
+        node: blitz_traits::NodeId,
+    ) -> Option<(blitz_traits::NodeId, surface::MaterialShape)> {
+        self.bridge.tree.surfaces.hosted_shape(node)
+    }
+
     /// Lab probe (surface-demo): how many plates paint themselves.
     #[cfg(feature = "surface-demo")]
     pub fn own_plate_count(&self) -> usize {

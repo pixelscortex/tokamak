@@ -1272,6 +1272,80 @@ fn a_self_painting_button_is_still_a_real_button() {
     assert!(doc.take_error().is_none());
 }
 
+/// Plates on elements that cannot carry a widget (a text field, whose
+/// element holds the text editor, and an inline highlight, which has no box
+/// of its own), inside a card. Self-painting, the card draws them as its
+/// guests, over its own fill (the stage's layer would be under the card);
+/// with the sheet, the stage's layer draws all three, the card first. The
+/// field stays a text field either way.
+#[test]
+fn a_field_on_a_card_keeps_its_plate() {
+    for mode in PAINTERS {
+        let mut doc = document(1.0, 900.0);
+        open(&mut doc, "surfaces");
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-field-case");
+        doc.layout_surfaces();
+        let (card, field, inline) = (
+            support::id(&doc, "lab-field-card"),
+            support::id(&doc, "lab-field"),
+            support::id(&doc, "lab-field-inline"),
+        );
+        for id in [card, field, inline] {
+            let node = doc.inner();
+            let element = node.get_node(id).unwrap().element_data().unwrap();
+            assert!(
+                element
+                    .attr(blitz_dom::LocalName::from("tk-plate"))
+                    .is_some()
+            );
+        }
+        assert!(!carries_widget(&doc, field) && !carries_widget(&doc, inline));
+        assert!(
+            doc.inner()
+                .get_node(field)
+                .unwrap()
+                .element_data()
+                .unwrap()
+                .text_input_data()
+                .is_some(),
+            "{mode}: still a text field"
+        );
+        let layer = stage_layer(&doc);
+        let in_layer = shapes_within(&doc, layer, "lab-field-case");
+        let (well, mark) = if mode == "self" {
+            assert!(carries_widget(&doc, card));
+            assert!(in_layer.is_empty(), "{in_layer:#?}");
+            assert_eq!(
+                hex(doc.own_plate_shape(card).unwrap().fill.unwrap()),
+                "#252525"
+            );
+            let (host, well) = doc.hosted_plate_shape(field).expect("drawn by the card");
+            assert_eq!(host, card);
+            // In the card's border box.
+            let (at, of) = (painted_box(&doc, field), painted_box(&doc, card));
+            assert_eq!(well.rect, [at[0] - of[0], at[1] - of[1], at[2], at[3]]);
+            let (host, mark) = doc.hosted_plate_shape(inline).expect("drawn by the card");
+            assert_eq!(host, card);
+            (well, mark)
+        } else {
+            assert!(!carries_widget(&doc, card));
+            assert_eq!(in_layer.len(), 3, "{in_layer:#?}");
+            assert_eq!(hex(in_layer[0].fill.unwrap()), "#252525", "the card, first");
+            assert!(doc.hosted_plate_shape(field).is_none());
+            (in_layer[1].clone(), in_layer[2].clone())
+        };
+        assert_eq!(hex(well.fill.unwrap()), "#151515", "material-well");
+        assert_eq!(
+            (well.bevel, well.recessed, well.radii),
+            (Some(1.5), true, [6.0; 4])
+        );
+        assert!(near(mark.fill.unwrap(), "#155dfc"), "blue-600: {mark:?}");
+        assert!(!doc.inner().is_animating());
+        assert!(doc.take_error().is_none());
+    }
+}
+
 /// A plate leaves the document and comes back (a view switch and back):
 /// Blitz drops a widget with its element, so the layout pass attaches a new
 /// one when the element returns, and stops tracking plates that are gone.
@@ -2282,5 +2356,58 @@ fn both_painters_draw_the_same_keycaps() {
     open_keycap_grid(&mut doc);
     let (differ, worst) = compare(&mut doc, "lab-keycap-grid", "keycap-grid");
     assert!(worst <= 1, "keycap grid: {differ} px, {worst}");
+    assert!(doc.take_error().is_none());
+}
+
+/// The field on a card, as pixels, with either painter: the field's well
+/// and the inline highlight show on the card (before the card drew them as
+/// its guests, a self-painting card covered them).
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn a_field_on_a_card_shows_its_well() {
+    let scale = 2.0;
+    let dir = capture_dir();
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    open(&mut doc, "surfaces");
+    for mode in PAINTERS {
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-field-case");
+        let shot = Shot::take(&mut out, &mut doc);
+        let rect = |name: &str| {
+            doc.inner()
+                .get_client_bounding_rect(support::id(&doc, name))
+                .unwrap()
+        };
+        let (card, field, inline) = (
+            rect("lab-field-card"),
+            rect("lab-field"),
+            rect("lab-field-inline"),
+        );
+        shot.save_png(
+            [
+                card.x - 8.0,
+                card.y - 8.0,
+                card.width + 16.0,
+                card.height + 16.0,
+            ],
+            &format!("{dir}/field-on-card-{mode}.png"),
+        );
+        // The card's face, between its edge and the field.
+        let got = shot.at(card.x + 4.0, card.y + card.height / 2.0);
+        assert!(close(got, [0x25; 3], 2), "{mode}: the card: {got:?}");
+        // The field's well, right of its text and clear of its bevel.
+        let got = shot.at(field.x + field.width - 8.0, field.y + field.height / 2.0);
+        assert!(
+            close(got, [0x15; 3], 2),
+            "{mode}: the field's well: {got:?}"
+        );
+        // The highlight, above its glyphs (its line box is 20 px tall).
+        let got = shot.at(inline.x + inline.width / 2.0, inline.y + 2.0);
+        assert!(
+            close(got, [0x15, 0x5d, 0xfc], 3),
+            "{mode}: the inline highlight: {got:?}"
+        );
+    }
     assert!(doc.take_error().is_none());
 }

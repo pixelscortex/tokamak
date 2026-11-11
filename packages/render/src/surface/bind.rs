@@ -71,10 +71,16 @@
 //!   pass sees all of a region's plates, which is what lighting that
 //!   spreads between neighbours needs.
 //!
-//! An element Blitz cannot hang a widget on is drawn by the sheet of its
-//! region in either mode (`can_decorate`): an element has one slot for its
-//! own data, and a widget in it would replace a text input's editor, an
-//! image, a table's layout or another widget.
+//! An element Blitz cannot hang a widget on (`can_decorate`: an element
+//! has one slot for its own data, and a widget in it would replace a text
+//! input's editor, an image, a table's layout or another widget; and an
+//! inline element without a box of its own is never painted as an element)
+//! is drawn for it by someone else. In a sheet region, by the sheet like
+//! every other plate. In a self-painting region, by the nearest
+//! self-painting plate it sits in, as a guest of that plate's widget (a
+//! field's well is drawn by the card around it, over the card's own fill);
+//! the region's layer draws it only when there is no such plate. Drawn by
+//! the region's layer it would be under the card, and invisible.
 //!
 //! Change detection: a plate's material is re-read only when Stylo gives it
 //! a new computed style object or its box changes size (`Seen` keeps the
@@ -115,6 +121,9 @@ pub(super) struct Bound {
     /// edges are as sharp as the sheet's. Changes here do not bump
     /// `version`.
     pub sub: [f32; 2],
+    /// Self-painting plates only: the element's border box size, CSS px
+    /// (what the widget's texture covers; guests are cut at its edge).
+    pub size: [f32; 2],
 }
 
 pub(super) type Handle = Rc<RefCell<Bound>>;
@@ -176,11 +185,12 @@ pub(crate) struct Registry {
     own: HashMap<NodeId, Own>,
 }
 
-/// A self-painting plate: the handle its widget reads, and the shape last
-/// handed over (in the element's own border box).
+/// A self-painting plate: the handle its widget reads, and the shapes last
+/// handed over, in the element's own border box: its own (keyed by its
+/// node), then its guests' (see "Who draws a plate"), in paint order.
 struct Own {
     handle: Handle,
-    last: Option<Shape>,
+    last: Vec<(NodeId, Shape)>,
 }
 
 /// Where one plate is drawn in this pass.
@@ -195,6 +205,11 @@ struct Plan {
     /// It or an ancestor has a CSS transform: its layout box does not say
     /// where it is on screen.
     transformed: bool,
+    /// Its region, if it is in one.
+    region: Option<NodeId>,
+    /// It cannot paint itself, and this self-painting plate around it draws
+    /// it as a guest (instead of `layer`).
+    host: Option<NodeId>,
 }
 
 /// Tags whose elements Blitz gives data or behaviour of their own later
@@ -338,6 +353,17 @@ fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])
     ))
 }
 
+#[cfg(feature = "surface-demo")]
+fn material_shape(s: &Shape) -> MaterialShape {
+    MaterialShape {
+        rect: s.rect,
+        radii: s.radii,
+        fill: s.paint.map(|p| p.fill),
+        bevel: s.paint.map(|p| p.bevel),
+        recessed: s.paint.is_some_and(|p| p.recessed),
+    }
+}
+
 fn attr<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
     node.attr(LocalName::from(name))
 }
@@ -381,17 +407,7 @@ impl Registry {
             return Vec::new();
         };
         let bound = entry.handle.borrow();
-        bound
-            .shapes
-            .iter()
-            .map(|s| MaterialShape {
-                rect: s.rect,
-                radii: s.radii,
-                fill: s.paint.map(|p| p.fill),
-                bevel: s.paint.map(|p| p.bevel),
-                recessed: s.paint.is_some_and(|p| p.recessed),
-            })
-            .collect()
+        bound.shapes.iter().map(material_shape).collect()
     }
 
     #[cfg(test)]
@@ -428,20 +444,30 @@ impl Registry {
     /// border box; None if `node` does not paint itself.
     #[cfg(feature = "surface-demo")]
     pub fn own_shape(&self, node: NodeId) -> Option<MaterialShape> {
-        let s = self.own.get(&node)?.last.as_ref()?;
-        Some(MaterialShape {
-            rect: s.rect,
-            radii: s.radii,
-            fill: s.paint.map(|p| p.fill),
-            bevel: s.paint.map(|p| p.bevel),
-            recessed: s.paint.is_some_and(|p| p.recessed),
-        })
+        let (_, s) = self.own.get(&node)?.last.iter().find(|(n, _)| *n == node)?;
+        Some(material_shape(s))
+    }
+
+    /// Lab test probe: the self-painting plate that draws `node`'s plate as
+    /// a guest, and the shape it draws, in that plate's border box.
+    #[cfg(feature = "surface-demo")]
+    pub fn hosted_shape(&self, node: NodeId) -> Option<(NodeId, MaterialShape)> {
+        self.own
+            .iter()
+            .filter(|(host, _)| **host != node)
+            .find_map(|(host, own)| {
+                let (_, s) = own.last.iter().find(|(n, _)| *n == node)?;
+                Some((*host, material_shape(s)))
+            })
     }
 
     /// Lab test probe: how many plates paint themselves.
     #[cfg(feature = "surface-demo")]
     pub fn own_count(&self) -> usize {
-        self.own.values().filter(|o| o.last.is_some()).count()
+        self.own
+            .iter()
+            .filter(|(id, own)| own.last.iter().any(|(n, _)| n == *id))
+            .count()
     }
 
     #[cfg(test)]
@@ -678,9 +704,39 @@ impl Registry {
                 depth,
                 own,
                 transformed,
+                region,
+                host: None,
             });
         }
+        self.find_hosts(doc, &mut plans);
         plans
+    }
+
+    /// For every plate of a self-painting region that cannot paint itself:
+    /// the nearest self-painting plate it sits in, inside its region, which
+    /// then draws it as a guest (see "Who draws a plate"). Such plates are
+    /// rare, so the set of self-painting plates is only built if there is
+    /// one.
+    fn find_hosts(&self, doc: &BaseDocument, plans: &mut [Plan]) {
+        let orphan = |p: &Plan| !p.own && p.region.is_some_and(|r| !self.sheets.contains(&r));
+        if !plans.iter().any(orphan) {
+            return;
+        }
+        let owners: HashSet<NodeId> = plans.iter().filter(|p| p.own).map(|p| p.id).collect();
+        for plan in plans.iter_mut().filter(|p| orphan(p)) {
+            let mut current = doc.get_node(plan.id).and_then(|n| n.parent);
+            while let Some(at) = current {
+                // The region itself holds the layer, above its own plate.
+                if Some(at) == plan.region {
+                    break;
+                }
+                if owners.contains(&at) {
+                    plan.host = Some(at);
+                    break;
+                }
+                current = doc.get_node(at).and_then(|n| n.parent);
+            }
+        }
     }
 
     /// Attach the widget of every plate planned to paint itself that has
@@ -729,12 +785,19 @@ impl Registry {
             let handle = Handle::default();
             doc.set_custom_widget(id, Box::new(super::plate::Plate::new(handle.clone())));
             self.seen.remove(&id);
-            self.own.insert(id, Own { handle, last: None });
+            self.own.insert(
+                id,
+                Own {
+                    handle,
+                    last: Vec::new(),
+                },
+            );
         }
     }
 
-    /// Plates to whoever draws them: a self-painting plate's shape to its
-    /// own widget, the others into the lists of their regions' layers.
+    /// Plates to whoever draws them: a self-painting plate's shape, and its
+    /// guests', to its own widget; the others into the lists of their
+    /// regions' layers.
     ///
     /// A plate is the box Blitz paints its element in: the rounded layout
     /// (`painted_box`), not the client rect, which is unrounded and can be
@@ -755,6 +818,36 @@ impl Registry {
         ];
         // Where each layer in use is painted (as its plates: rounded).
         let mut origins: HashMap<NodeId, [f32; 2]> = HashMap::new();
+        // Plates drawn by the self-painting plate around them, by that
+        // plate: (depth, node, shape in that plate's border box). With the
+        // host's opacity layers around it, a guest's own `opacity` still
+        // has to scale its fill, as on a sheet.
+        let mut guests: HashMap<NodeId, Vec<(u32, NodeId, Shape)>> = HashMap::new();
+        for plan in plans {
+            let Some(host) = plan.host else { continue };
+            let (Some(node), Some(at)) = (doc.get_node(plan.id), doc.get_node(host)) else {
+                continue;
+            };
+            let (Some([x, y, w, h]), Some([hx, hy, ..])) =
+                (painted_box(doc, node), painted_box(doc, at))
+            else {
+                continue;
+            };
+            let Some(style) = node.primary_styles().map(|s| (*s).clone()) else {
+                continue;
+            };
+            let Some((paint, radii)) = look_of(&mut self.seen, plan.id, style, w, h, false) else {
+                continue;
+            };
+            let shape = Shape {
+                paint: Some(paint),
+                ..Shape::rect(false, [x - hx, y - hy, w, h], radii)
+            };
+            guests
+                .entry(host)
+                .or_default()
+                .push((plan.depth, plan.id, shape));
+        }
         for plan in plans {
             let id = plan.id;
             let Some(node) = doc.get_node(id) else {
@@ -763,7 +856,7 @@ impl Registry {
             // None: not rendered (display: none).
             let rect = painted_box(doc, node);
             if plan.own {
-                let Some(own) = self.own.get_mut(&id) else {
+                let Some(own) = self.own.get(&id) else {
                     continue;
                 };
                 // Blitz draws the widget's scene at the content box origin,
@@ -791,25 +884,51 @@ impl Registry {
                     plan.transformed
                         || (x < window[0] && y < window[1] && x + w > 0.0 && y + h > 0.0)
                 });
-                let look = shown
+                // Its own shape, then the guests it draws, outer first.
+                let own_shape = shown
                     .zip(node.primary_styles())
                     .and_then(|([.., w, h], style)| {
-                        look_of(&mut self.seen, id, (*style).clone(), w, h, true)
-                            .map(|(paint, radii)| (paint, radii, w, h))
+                        look_of(&mut self.seen, id, (*style).clone(), w, h, true).map(
+                            |(paint, radii)| Shape {
+                                paint: Some(paint),
+                                ..Shape::rect(false, [0.0, 0.0, w, h], radii)
+                            },
+                        )
                     });
-                let shape = look.map(|(paint, radii, w, h)| Shape {
-                    paint: Some(paint),
-                    ..Shape::rect(false, [0.0, 0.0, w, h], radii)
-                });
-                if shape != own.last {
-                    let mut bound = own.handle.borrow_mut();
-                    bound.keys = shape.iter().map(|_| Key::Member(id)).collect();
-                    bound.shapes = shape.iter().cloned().collect();
-                    bound.animate = vec![false; bound.shapes.len()];
-                    bound.version += 1;
-                    drop(bound);
-                    own.last = shape;
+                let hosted = guests.remove(&id).filter(|_| shown.is_some());
+                let own = self.own.get_mut(&id).unwrap();
+                if let Some([.., w, h]) = shown {
+                    own.handle.borrow_mut().size = [w, h];
                 }
+                // The usual case, checked without building a list: no
+                // guests, and the same shape (or none) as last time.
+                let unchanged = hosted.is_none()
+                    && match (&own_shape, own.last.as_slice()) {
+                        (None, []) => true,
+                        (Some(shape), [(node, last)]) => *node == id && shape == last,
+                        _ => false,
+                    };
+                if !unchanged {
+                    let mut shapes: Vec<(NodeId, Shape)> =
+                        own_shape.into_iter().map(|shape| (id, shape)).collect();
+                    if let Some(mut list) = hosted {
+                        list.sort_by_key(|(depth, node, _)| (*depth, *node));
+                        shapes.extend(list.into_iter().map(|(_, node, shape)| (node, shape)));
+                    }
+                    if shapes != own.last {
+                        let mut bound = own.handle.borrow_mut();
+                        bound.keys = shapes.iter().map(|(n, _)| Key::Member(*n)).collect();
+                        bound.shapes = shapes.iter().map(|(_, s)| s.clone()).collect();
+                        bound.animate = vec![false; shapes.len()];
+                        bound.version += 1;
+                        drop(bound);
+                        own.last = shapes;
+                    }
+                }
+                continue;
+            }
+            // Drawn by the plate around it (above).
+            if plan.host.is_some() {
                 continue;
             }
             let (Some(layer), Some([x, y, w, h])) = (plan.layer, rect) else {

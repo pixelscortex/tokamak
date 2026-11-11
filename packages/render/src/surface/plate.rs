@@ -1,12 +1,13 @@
 //! The widget of a self-painting plate (bind.rs, "Who draws a plate"): one
 //! rounded box with its own fill and lit bevel, drawn by the element that
-//! carries it.
+//! carries it, plus the plates inside it that cannot carry a widget of
+//! their own (its guests: a text field's well on a card).
 //!
 //! It decorates an ordinary element (a `<button>`, a `<div>`), so it differs
 //! from `<tk-surface>` in three ways. It ignores every input event, so Blitz
 //! runs the element's own default action (focus, `:active`, click, wheel
 //! scrolling; this needs `EventResult` from our Blitz fork). It ignores the
-//! element's attributes: its one shape and material come from the layout
+//! element's attributes: its shapes and materials come from the layout
 //! pass through a handle. And it draws the element's border box, although
 //! Blitz places a widget's scene at the content box, with its image on
 //! whole device pixels wherever the element is (the shape carries the
@@ -34,12 +35,15 @@ pub(super) struct Plate {
     id: u32,
     handle: Handle,
     seen: u64,
-    /// The plate in its own border box, with its key; None draws nothing.
-    shape: Option<(Key, Shape)>,
+    /// What it draws, in the element's border box, in paint order: its own
+    /// shape first if it has a fill, then its guests (plates inside it
+    /// that cannot carry a widget, see bind.rs). Empty draws nothing.
+    keys: Vec<Key>,
+    shapes: Vec<Shape>,
     /// The sub-pixel part of the plate's position on screen (device px,
-    /// 0..1 each way) and the shape moved by it: what is rendered.
+    /// 0..1 each way) and the shapes moved by it: what is rendered.
     sub: [f32; 2],
-    placed: Option<Shape>,
+    placed: Vec<Shape>,
     /// Each shape carries its own material (`Look::layered`).
     look: Look,
     gpu: Option<Gpu>,
@@ -51,9 +55,10 @@ impl Plate {
             id: super::widget::next_id(),
             handle,
             seen: 0,
-            shape: None,
+            keys: Vec::new(),
+            shapes: Vec::new(),
             sub: [0.0; 2],
-            placed: None,
+            placed: Vec::new(),
             look: Look {
                 layered: true,
                 ..Look::default()
@@ -87,41 +92,41 @@ impl Widget for Plate {
     ) -> Scene {
         let started = Instant::now();
         let s = scale as f32;
-        let shift = {
+        let (shift, size) = {
             let bound = self.handle.borrow();
-            if bound.version != self.seen || (bound.sub != self.sub && self.shape.is_some()) {
+            let moved = bound.sub != self.sub && !self.shapes.is_empty();
+            if bound.version != self.seen || moved {
                 if bound.version != self.seen {
                     self.seen = bound.version;
-                    self.shape = bound
-                        .keys
-                        .first()
-                        .copied()
-                        .zip(bound.shapes.first().cloned());
+                    self.keys.clone_from(&bound.keys);
+                    self.shapes.clone_from(&bound.shapes);
                 }
                 // The image is drawn on whole device pixels (below), so the
-                // shape carries the sub-pixel part of the plate's position:
-                // the same pixels as a shape drawn in place by the sheet,
+                // shapes carry the sub-pixel part of the plate's position:
+                // the same pixels as shapes drawn in place by the sheet,
                 // instead of an image resampled half a pixel over.
                 self.sub = bound.sub;
-                self.placed = self
-                    .shape
-                    .as_ref()
-                    .map(|(_, shape)| shape.translated(self.sub[0] / s, self.sub[1] / s));
+                let (dx, dy) = (self.sub[0] / s, self.sub[1] / s);
+                self.placed = self.shapes.iter().map(|p| p.translated(dx, dy)).collect();
             }
-            bound.shift
+            (bound.shift, bound.size)
         };
-        let (Some((key, base)), Some(shape)) = (&self.shape, &self.placed) else {
+        if self.shapes.is_empty() {
             if let Some(gpu) = &mut self.gpu {
                 gpu.release(render_ctx);
             }
             stats::record(started.elapsed(), 0, false);
             return Scene::new();
-        };
-        // A flat plate (no bevel) is a plain rounded box: a vector fill in
-        // the Scene, as Blitz would have painted the background, with no
-        // texture and no atlas slot. Large flat backgrounds (a panel, a
-        // column) would otherwise each be a texture Vello copies per frame.
-        if let Some(paint) = base.paint.filter(|p| p.bevel <= 0.0) {
+        }
+        // A flat plate (no bevel) with no guests is a plain rounded box: a
+        // vector fill in the Scene, as Blitz would have painted the
+        // background, with no texture and no atlas slot. Large flat
+        // backgrounds (a panel, a column) would otherwise each be a texture
+        // Vello copies per frame.
+        if let [base] = self.shapes.as_slice()
+            && base.rect[..2] == [0.0; 2]
+            && let Some(paint) = base.paint.filter(|p| p.bevel <= 0.0)
+        {
             if let Some(gpu) = &mut self.gpu {
                 gpu.release(render_ctx);
             }
@@ -158,13 +163,13 @@ impl Widget for Plate {
         let gpu = self.gpu.as_mut().unwrap();
         // The whole border box from the device pixel it starts in, rounded
         // up. (Blitz hands the box size rounded down, which would cut the
-        // last device pixel of a fractional box.)
-        let width = ((shape.rect[0] + shape.rect[2]) * s).ceil().max(1.0) as u32;
-        let height = ((shape.rect[1] + shape.rect[3]) * s).ceil().max(1.0) as u32;
+        // last device pixel of a fractional box.) Guests are cut at it.
+        let width = (self.sub[0] + size[0] * s).ceil().max(1.0) as u32;
+        let height = (self.sub[1] + size[1] * s).ceil().max(1.0) as u32;
         let dirty = gpu.update(
             render_ctx,
-            std::slice::from_ref(key),
-            std::slice::from_ref(shape),
+            &self.keys,
+            &self.placed,
             &self.look,
             width,
             height,

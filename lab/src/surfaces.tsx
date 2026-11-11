@@ -310,6 +310,23 @@ function KeycapCase() {
   </div>;
 }
 
+/** Plates on elements that cannot carry a widget, inside a self-painting
+ * plate: a text field (its element holds the text editor) and an inline
+ * highlight (no box of its own). The card around them draws their plates
+ * with its own, so the field keeps its recessed well on the card; with the
+ * "Plates" switch on "sheet" the stage's layer draws all three. */
+function FieldCase() {
+  return <div id="lab-field-case" class="flex items-center gap-4">
+    <span class="w-24 text-[12px] text-ink-3">Field on a card</span>
+    <div id="lab-field-card" class="material-card flex items-center gap-3 rounded-[10px] p-2">
+      <input id="lab-field" aria-label="Name" value="A text field"
+        class="material-well h-7 w-44 rounded-[6px] border-0 px-2 text-[13px] text-ink outline-none" />
+      <p class="m-0 pr-1 text-[12px] leading-5 text-ink-2">
+        with an <span id="lab-field-inline" class="rounded-[3px] bg-blue-600 px-1 text-white">inline</span> highlight</p>
+    </div>
+  </div>;
+}
+
 /** The two plate painters side by side, one row per difference. Every cell
  * is a `Sheet` (a region of its own) holding the same elements: on the left
  * its materials layer draws the plates (`plates="sheet"`), on the right each
@@ -391,6 +408,7 @@ export default function SurfacesView() {
           Plain buttons with material classes. Each paints its own plate; press them.
         </SectionTitle>
         <KeycapCase />
+        <FieldCase />
         <SectionTitle eyebrow="PLATE PAINTERS" title="The sheet and self-painting, side by side">
           The same elements twice: drawn by the region's one layer, and each painting itself.
         </SectionTitle>

@@ -948,7 +948,9 @@ mod painters {
       <div id="region" tk-region style="position:relative;width:300px;height:260px">
         <tk-surface id="layer" materials
           style="display:block;position:absolute;left:0;top:0;width:100%;height:100%"></tk-surface>
-        <div id="box" style="--tk-fill:#ff0000;--tk-bevel:2;width:100px;height:40px;border-radius:6px;opacity:0.5"></div>
+        <div id="box" style="--tk-fill:#ff0000;--tk-bevel:2;box-sizing:border-box;width:100px;height:40px;padding:5px;border-radius:6px;opacity:0.5">
+          <input id="field" style="--tk-fill:#0000aa;--tk-bevel:1;display:block;box-sizing:border-box;width:60px;height:20px;margin:0;border:0;padding:0;opacity:0.5">
+        </div>
         <button id="button" style="--tk-fill:#00ff00;display:block;width:80px;height:30px"></button>
         <input id="input" style="--tk-fill:#0000ff;display:block;width:80px;height:30px">
         <p style="margin:0">text <span id="inline" style="--tk-fill:#ffff00">inline</span></p>
@@ -966,8 +968,8 @@ mod painters {
       <div id="outside" style="--tk-fill:#00ffff;width:50px;height:20px"></div>
     </body></html>"#;
 
-    const PLATES: [&str; 9] = [
-        "box", "button", "input", "inline", "hidden", "far", "moved", "inner", "outside",
+    const PLATES: [&str; 10] = [
+        "box", "field", "button", "input", "inline", "hidden", "far", "moved", "inner", "outside",
     ];
 
     struct Fixture {
@@ -1035,6 +1037,7 @@ mod painters {
     const BLUE: [u8; 4] = [0, 0, 255, 255];
     const YELLOW: [u8; 4] = [255, 255, 0, 255];
     const MAGENTA_HALF: [u8; 4] = [255, 0, 255, 128];
+    const FIELD_HALF: [u8; 4] = [0, 0, 170, 128];
 
     #[test]
     fn plates_paint_themselves_unless_the_region_is_a_sheet() {
@@ -1055,11 +1058,25 @@ mod painters {
             // the element's opacity layer), so the fill keeps its alpha.
             assert_eq!(paint.fill, [1.0, 0.0, 0.0, 1.0]);
         }
-        // An element a widget cannot go on stays with the region's layer:
-        // the input keeps its text editor, and an inline element without a
-        // box of its own would never have its widget painted.
-        for name in ["input", "inline"] {
+        // An element a widget cannot go on is drawn for it: the input
+        // keeps its text editor, and an inline element without a box of its
+        // own would never have its widget painted. Directly in the region,
+        // the region's layer draws them.
+        for name in ["input", "inline", "field"] {
             assert!(!f.carries_widget(name), "{name}");
+        }
+        // Inside a self-painting plate, that plate draws it as a guest,
+        // over its own fill (the region's layer is under the plate): placed
+        // in the plate's border box, with the guest's own opacity in its
+        // fill (only the plate's opacity layers are around it).
+        {
+            let bound = handle.borrow();
+            assert_eq!(bound.shapes.len(), 2, "the box and the field in it");
+            let field = &bound.shapes[1];
+            assert_eq!(field.rect, [5.0, 5.0, 60.0, 20.0]);
+            let paint = field.paint.unwrap();
+            assert_eq!(paint.fill.map(|v| (v * 255.0).round() as u8), FIELD_HALF);
+            assert_eq!(paint.bevel, 1.0);
         }
         let input = f.id("input");
         assert!(
@@ -1108,12 +1125,16 @@ mod painters {
             assert!(f.own(name).is_none(), "{name}");
         }
         // (The two plates laid out below the layer's box are skipped.)
-        assert_eq!(f.drawn_by("layer"), [RED_HALF, GREEN, BLUE, YELLOW]);
+        assert_eq!(
+            f.drawn_by("layer"),
+            [RED_HALF, GREEN, BLUE, FIELD_HALF, YELLOW]
+        );
         // And back.
         f.registry.region(region, Some("true"));
         f.frame();
         assert!(f.carries_widget("box") && f.carries_widget("button"));
         assert_eq!(f.drawn_by("layer"), [BLUE, YELLOW]);
+        assert_eq!(f.own("box").unwrap().borrow().shapes.len(), 2);
     }
 
     /// Blitz drops a widget when its element leaves the document. The pass
@@ -1130,7 +1151,7 @@ mod painters {
         f.frame();
         let after = f.registry.own_handle(node).expect("attached again");
         assert!(!std::rc::Rc::ptr_eq(&before, &after), "a new widget");
-        assert_eq!(after.borrow().shapes.len(), 1);
+        assert_eq!(after.borrow().shapes.len(), 2, "itself and its field");
         let inner = f.doc.inner();
         let element = inner.get_node(node).unwrap().element_data().unwrap();
         assert!(element.custom_widget_data().is_some());
