@@ -67,9 +67,15 @@ export namespace JSX {
     "surface-animate"?: true;
     "surface-attach"?: "left" | "right";
     /** A plate: drawn by its region's materials layer from its computed
-     * `material-*` style. Added by the build to elements whose static `class`
-     * has a `material-*` utility; authors do not write it. */
+     * fill (a solid background colour or a `material-*` utility). Added by
+     * the build to elements whose static `class` makes them one; authors do
+     * not write it. */
     "tk-plate"?: true;
+    /** A region: the element directly holding a `<tk-surface materials>`
+     * layer. Its plates are drawn by that layer and Blitz paints no
+     * background under them. Written by `@tokamak/ui`'s shell regions,
+     * `Surface` and `Sheet`; views do not write it. */
+    "tk-region"?: true;
     /** With `WindowOptions::custom_titlebar`: pressing here drags the window. */
     "window-drag"?: true;
     "window-no-drag"?: true;
@@ -107,9 +113,9 @@ export namespace JSX {
     "border-align"?: "inside" | "center" | "outside";
     "border-lit"?: string | number;
     "border-mix"?: number;
-    /** Materials layer: draws the plates (`material-*` elements) of the
-     * region that holds it (its parent), each with its own computed material,
-     * no fusing. Written by `@tokamak/ui`'s shell regions and `Sheet`. */
+    /** Materials layer: draws the plates of the region that holds it (its
+     * parent, marked `tk-region`), each with its own computed material, no
+     * fusing. Written by `@tokamak/ui`'s shell regions, `Surface` and `Sheet`. */
     materials?: true;
   }
 

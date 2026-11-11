@@ -156,20 +156,52 @@ struct Seen {
     height: f32,
 }
 
-/// True if a `class` value has a `material-*` utility, bare or behind
-/// variants (`active:material-key-pressed`, `aria-pressed:material-…`).
-pub(crate) fn has_material_class(class: &str) -> bool {
+/// True if a `class` value can make its element a plate: a `material-*` or
+/// `bg-*` utility, bare or behind variants (`active:material-key-pressed`,
+/// `hover:bg-chip`). The run-time fallback for classes the build could not
+/// read (see "Plates"); the element's computed `--tk-fill` then decides
+/// whether anything is drawn. `bg-transparent`, `bg-current*` and
+/// `bg-inherit` do not count: their colour is not the element's own, so an
+/// element with only those stays Blitz's to paint.
+pub(crate) fn has_plate_class(class: &str) -> bool {
     class.split_whitespace().any(|token| {
-        token
-            .rsplit(':')
-            .next()
-            .is_some_and(|u| u.trim_start_matches('!').starts_with("material-"))
+        token.rsplit(':').next().is_some_and(|u| {
+            let u = u.trim_start_matches('!').trim_end_matches('!');
+            u.starts_with("material-")
+                || (u.starts_with("bg-")
+                    && !matches!(u, "bg-transparent" | "bg-inherit")
+                    && !u.starts_with("bg-current"))
+        })
     })
 }
 
-/// Paint and corner radii of a plate from its computed style.
+/// A computed colour as straight-alpha sRGB from its serialization: a
+/// registered `<color>` serializes as `rgb()`, `oklch()`, `oklab()` and so
+/// on (whatever the source was: hex, a theme variable, `color-mix()`).
+/// None for anything that is not one colour (`currentcolor`, a mix with it).
+pub(super) fn css_colour(text: &str) -> Option<[f32; 4]> {
+    use peniko::color::{Srgb, parse_color};
+    let colour = parse_color(text.trim()).ok()?.to_alpha_color::<Srgb>();
+    // Out-of-gamut colours (wide oklch) are clipped to sRGB.
+    Some(colour.components.map(|v| {
+        if v.is_finite() {
+            v.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }))
+}
+
+/// Paint and corner radii of a plate from its computed style. None when it
+/// draws nothing: no fill or a fully transparent one, or `visibility` other
+/// than visible. The element's own `opacity` scales the fill's alpha (an
+/// ancestor's does not: the layer is not painted inside the ancestor).
 fn material_of(style: &Style, width: f32) -> Option<(Paint, [f32; 4])> {
     use blitz_dom::Atom;
+    use style::properties::longhands::visibility::computed_value::T as Visibility;
+    if style.get_inherited_box().visibility != Visibility::Visible {
+        return None;
+    }
     let props = style.custom_properties();
     let text = |name: &str| -> Option<String> {
         let atom = Atom::from(name);
@@ -177,13 +209,23 @@ fn material_of(style: &Style, width: f32) -> Option<(Paint, [f32; 4])> {
             .non_inherited
             .get(&atom)
             .or_else(|| props.inherited.get(&atom))?;
-        Some(value.as_universal()?.css.trim().to_string())
+        // `--tk-fill` is a registered `<color>` (materials.css); the others
+        // keep their text (universal syntax).
+        Some(match value.as_universal() {
+            Some(text) => text.css.trim().to_string(),
+            None => value.to_variable_value().css,
+        })
     };
-    let fill = super::shape::parse_colour(&text("tk-fill")?)?;
+    let mut fill = css_colour(&text("tk-fill")?)?;
+    fill[3] *= style.get_effects().opacity.clamp(0.0, 1.0);
+    if fill[3] <= 0.0 {
+        return None;
+    }
+    // Without `bevel-*` the plate is flat.
     let bevel = text("tk-bevel")
         .and_then(|v| v.parse::<f32>().ok())
         .filter(|v| v.is_finite())
-        .unwrap_or(2.0)
+        .unwrap_or(0.0)
         .max(0.0);
     let recessed = text("tk-elevation").as_deref() == Some("recessed");
     let border = style.get_border();
@@ -291,14 +333,20 @@ impl Registry {
         self.set_plate(node, |p| p.marked = present);
     }
 
-    /// Track an element's `class` (the fallback: a `material-*` token makes
-    /// it a plate). Elements the build marked skip the scan.
-    pub fn plate_class(&mut self, node: NodeId, class: Option<&str>) {
+    /// Track an element's `class` (the fallback: a `material-*` or `bg-*`
+    /// token makes it a plate, see `has_plate_class`). Elements the build
+    /// marked skip the scan. Returns the new state when the fallback turned
+    /// the element into a plate or back: the host mirrors it as a `tk-plate`
+    /// attribute, which is what materials.css keys on to stop Blitz painting
+    /// the background under the plate.
+    pub fn plate_class(&mut self, node: NodeId, class: Option<&str>) -> Option<bool> {
         if self.plates.get(&node).is_some_and(|p| p.marked) {
-            return;
+            return None;
         }
-        let present = class.is_some_and(has_material_class);
+        let present = class.is_some_and(has_plate_class);
+        let was = self.plates.get(&node).is_some_and(|p| p.classed);
         self.set_plate(node, |p| p.classed = present);
+        (was != present).then_some(present)
     }
 
     fn set_plate(&mut self, node: NodeId, change: impl FnOnce(&mut Plate)) {

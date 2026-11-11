@@ -172,14 +172,27 @@ impl Tree {
                         self.surfaces.member(self.native[&id], value.is_some());
                     }
                     // Plates (surface/bind.rs, "Plates"): the build's marker,
-                    // and the `class` scan for classes built at run time.
+                    // and the `class` scan for classes built at run time. A
+                    // plate found by the scan gets the marker here, natively
+                    // (JS never sees it), so the stylesheet treats it like a
+                    // marked one.
                     match name.as_str() {
                         "tk-plate" => self
                             .surfaces
                             .plate_marker(self.native[&id], value.is_some()),
-                        "class" => self
-                            .surfaces
-                            .plate_class(self.native[&id], value.as_deref()),
+                        "class" => {
+                            let native = self.native[&id];
+                            if let Some(plate) = self.surfaces.plate_class(native, value.as_deref())
+                            {
+                                let marker =
+                                    QualName::new(None, Namespace::from(""), "tk-plate".into());
+                                if plate {
+                                    dom.set_attribute(native, marker, "");
+                                } else {
+                                    dom.clear_attribute(native, marker);
+                                }
+                            }
+                        }
                         _ => {}
                     }
                     let attribute = QualName::new(None, Namespace::from(""), name.into());

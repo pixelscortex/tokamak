@@ -1,43 +1,59 @@
-/* Materials from classes (render/SURFACES.md, "Plates").
+/* Plates (render/SURFACES.md, "Plates").
  *
- * A `material-*` utility makes a plain element a plate: it sets the custom
- * properties below, the render host reads them from the element's computed
- * style and draws the element's border box, with its computed
- * `border-radius`, in the materials layer of its region (the shell regions
- * and `Sheet` hold one). Variants change the drawn material through CSS
- * alone: `hover:`, `active:material-key-pressed`, `aria-pressed:...`,
- * `active:bevel-1`.
+ * An element with a solid background colour, inside a region, is a plate:
+ * its fill and lit edge are drawn by the region's materials layer (the
+ * sheet below the region's content), not by Blitz. Ordinary Tailwind:
  *
- *   <button class="material-key active:material-key-pressed rounded-[7px] px-3.5">Deny</button>
+ *   <button class="bg-blue-600 bevel-2 rounded-md px-3 active:bg-blue-700 active:recessed">Run</button>
  *
- * Every material is an `@utility material-<name>` rule in this file: the
- * build marks elements that use one (`tk-plate`) and rejects a name that is
- * not defined here (packages/build/src/materials.ts reads this file).
+ * - Fill: any solid `background-color`. The build gives every one a
+ *   `--tk-fill` twin (packages/build/src/fills.ts), so `bg-<theme colour>`,
+ *   `bg-[#hex]`, `bg-white/50` and their variants (`hover:`, `active:`,
+ *   `aria-pressed:`, `dark:`) are plate fills, alpha included. Not solid,
+ *   and painted by Blitz as before: gradients, images, `bg-transparent`,
+ *   `bg-current`, `bg-inherit`.
+ * - Edge: `bevel-<n>` (CSS px, `bevel-[2.5]` too) adds the lit edge band;
+ *   without it the plate is flat. `raised` (the default: lit edge at the
+ *   top, towards the light) or `recessed` (lit edge at the bottom: a well, a
+ *   tray, a pressed key).
+ * - Shape: the border box with its computed `border-radius` (`rounded-*`).
+ * - `material-*`: shortcuts for a fill, a bevel and an elevation.
  *
- * The properties are registered and not inherited, so a cap inside a tray
- * does not pick up the tray's material. `syntax: "*"` keeps them as text
- * with `var(--color-*)` substituted, the hex the GPU widget parses.
- * - `--tk-fill`: face colour (a theme token). Without it nothing is drawn.
- * - `--tk-bevel`: width of the lit edge band, CSS px.
- * - `--tk-elevation`: `raised` (lit edge at the top, towards the light) or
- *   `recessed` (lit edge at the bottom: a well, a tray, a pressed key). */
-@property --tk-fill { syntax: "*"; inherits: false; }
+ * The build marks plates (`tk-plate`, packages/build/src/materials.ts) and
+ * fails on a `bg-*`, `bevel-*` or `material-*` class Tailwind does not
+ * know. A region is an element holding a materials layer and marked
+ * `tk-region` (the shell regions, `Surface`, `Sheet`); outside regions
+ * nothing is translated and Blitz paints every background. */
+
+/* Registered and not inherited, so a cap inside a tray does not pick up the
+ * tray's material. `--tk-fill` is a `<color>`: Stylo resolves `var()`,
+ * `oklch()` and `color-mix()` into one computed colour, which the render
+ * host reads; transparent (the initial value) draws nothing. The others
+ * stay text. */
+@property --tk-fill { syntax: "<color>"; inherits: false; initial-value: transparent; }
 @property --tk-bevel { syntax: "*"; inherits: false; }
 @property --tk-elevation { syntax: "*"; inherits: false; }
 
+/* The plate draws the background; Blitz must not paint it over the plate
+ * (or over the plates of the element's children). Only for plates inside a
+ * region: elsewhere no layer would draw it. */
+:where([tk-region] [tk-plate], [tk-region][tk-plate]) { background-color: transparent !important; }
+
+/* The lit edge band, CSS px: `bevel-2`, `bevel-2.5`, `active:bevel-1`. */
+@utility bevel-* { --tk-bevel: --value(number, [number]); }
+@utility raised { --tk-elevation: raised; }
+@utility recessed { --tk-elevation: recessed; }
+
 /* Things you press: a flat face with a lit edge band, sitting in a `tray`
  * whose base colour shows as the seam between caps. */
-@utility material-key { --tk-fill: var(--color-chip); --tk-bevel: 2.5; --tk-elevation: raised; }
-@utility material-key-bright { --tk-fill: var(--color-ink); --tk-bevel: 2.5; --tk-elevation: raised; }
+@utility material-key { @apply bg-chip bevel-2.5 raised; }
+@utility material-key-bright { @apply bg-ink bevel-2.5 raised; }
 /* A pressed key: the face sinks (recessed bevel, the lit edge moves to the
  * bottom) and darkens a step. */
-@utility material-key-pressed { --tk-fill: var(--color-card); --tk-bevel: 2; --tk-elevation: recessed; }
-@utility material-tray { --tk-fill: var(--color-base); --tk-bevel: 1.5; --tk-elevation: recessed; }
+@utility material-key-pressed { @apply bg-card bevel-2 recessed; }
+@utility material-tray { @apply bg-base bevel-1.5 recessed; }
 
 /* The same looks as the `Surface` component's card, chip and well. */
-@utility material-card { --tk-fill: var(--color-card); --tk-bevel: 2; --tk-elevation: raised; }
-@utility material-chip { --tk-fill: var(--color-chip); --tk-bevel: 1.5; --tk-elevation: raised; }
-@utility material-well { --tk-fill: var(--color-well); --tk-bevel: 1.5; --tk-elevation: recessed; }
-
-/* The bevel alone, over any material: `bevel-1`, `active:bevel-1`. */
-@utility bevel-* { --tk-bevel: --value(number); }
+@utility material-card { @apply bg-card bevel-2 raised; }
+@utility material-chip { @apply bg-chip bevel-1.5 raised; }
+@utility material-well { @apply bg-well bevel-1.5 recessed; }

@@ -21,13 +21,15 @@ test("Tailwind extracts TSX utilities and honors shared sources/exclusions", asy
       .applied { @apply flex; }
     `);
     await writeFile(resolve(scratch, "src/main.tsx"),
-      '<div class="grid gap-4 w-[137px] min-[681px]:grid-cols-2 data-[active]:opacity-50" />');
+      '<div class="grid gap-4 w-[137px] min-[681px]:grid-cols-2 data-[active]:opacity-50 bg-[#137137]" />');
     await writeFile(resolve(scratch, "shared/input.tsx"), '<input class="rounded-[13px]" />');
     await writeFile(resolve(scratch, "src/excluded/demo.tsx"), '<div class="w-[999px]" />');
     await writeFile(resolve(scratch, "dist/ui.js"), '"w-[888px]"');
     const css = await compileCss(path);
     for (const rule of [".grid {", ".gap-4 {", "width: 137px", "width >= 681px",
-      "[data-active]", "border-radius: 13px", ".applied {"]) assert(css.includes(rule), rule);
+      "[data-active]", "border-radius: 13px", ".applied {",
+      // Solid backgrounds carry their plate fill (fills.ts).
+      "background-color: #137137; --tk-fill: #137137;"]) assert(css.includes(rule), rule);
     assert(!css.includes("999px"));
     assert(!css.includes("888px"));
     assert.equal(await compileCss(path), css);

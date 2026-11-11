@@ -803,42 +803,105 @@ mod binding {
     }
 }
 
-/// Plates are found by a `material-*` utility in `class`, bare or behind
-/// variants, and by nothing else (the run-time fallback for classes the
-/// build cannot see).
+/// The run-time fallback for classes the build cannot see: a `material-*`
+/// or `bg-*` utility in `class`, bare or behind variants, makes a plate
+/// candidate; colours that are not the element's own do not.
 #[test]
-fn material_classes_are_found_behind_variants() {
-    use super::bind::has_material_class;
+fn plate_classes_are_found_behind_variants() {
+    use super::bind::has_plate_class;
     for class in [
         "material-key",
         "flex material-tray rounded-[10px]",
         "active:material-key-pressed px-2",
         "aria-pressed:hover:material-key-pressed",
         "!material-key",
+        "bg-blue-600",
+        "p-2 hover:bg-chip",
+        "bg-[#3a2420]",
+        "bg-white/50",
+        "bg-red-500!",
     ] {
-        assert!(has_material_class(class), "{class}");
+        assert!(has_plate_class(class), "{class}");
     }
-    for class in ["", "flex gap-2", "materials", "text-material-x", "bevel-1"] {
-        assert!(!has_material_class(class), "{class}");
+    for class in [
+        "",
+        "flex gap-2",
+        "materials",
+        "text-material-x",
+        "bevel-1",
+        "bg-transparent",
+        "hover:bg-current",
+        "bg-current/50",
+        "bg-inherit",
+        "text-bg-x",
+    ] {
+        assert!(!has_plate_class(class), "{class}");
     }
 }
 
 /// The build's `tk-plate` marker makes a plate on its own: a marked
 /// element's class is not scanned, and the class scan stays the fallback
-/// for unmarked ones.
+/// for unmarked ones. The scan reports when it changes an element's state,
+/// so the host can mirror it as the marker attribute.
 #[test]
 fn the_build_marker_registers_a_plate_without_the_class_scan() {
     let mut registry = super::bind::Registry::default();
     let node = blitz_traits::NodeId::from_u64(7);
     registry.plate_marker(node, true);
-    registry.plate_class(node, Some("flex px-2"));
+    assert_eq!(registry.plate_class(node, Some("flex bg-chip")), None);
     assert!(registry.is_plate(node), "marked, whatever the class says");
     registry.plate_marker(node, false);
     assert!(!registry.is_plate(node));
-    registry.plate_class(node, Some("flex material-key"));
+    assert_eq!(
+        registry.plate_class(node, Some("flex material-key")),
+        Some(true)
+    );
     assert!(registry.is_plate(node), "the run-time fallback");
-    registry.plate_class(node, None);
+    assert_eq!(
+        registry.plate_class(node, Some("bg-chip")),
+        None,
+        "unchanged"
+    );
+    assert_eq!(registry.plate_class(node, None), Some(false));
     assert!(!registry.is_plate(node));
+}
+
+/// Plate fills come from a computed `<color>`, serialized in whatever
+/// space Stylo kept: every form ends as straight-alpha sRGB, and what is
+/// not one colour is no fill.
+#[test]
+fn plate_fills_parse_every_computed_colour_form() {
+    use super::bind::css_colour;
+    let close = |text: &str, want: [f32; 4]| {
+        let got = css_colour(text).unwrap_or_else(|| panic!("{text}"));
+        assert!(
+            got.iter().zip(want).all(|(a, b)| (a - b).abs() < 0.004),
+            "{text}: {got:?}"
+        );
+    };
+    close(
+        "#3a2420",
+        [
+            0x3a as f32 / 255.0,
+            0x24 as f32 / 255.0,
+            0x20 as f32 / 255.0,
+            1.0,
+        ],
+    );
+    close(
+        "rgb(37, 99, 235)",
+        [37.0 / 255.0, 99.0 / 255.0, 235.0 / 255.0, 1.0],
+    );
+    close("rgba(255, 255, 255, 0.5)", [1.0, 1.0, 1.0, 0.5]);
+    // Tailwind's blue-600 and white/50 as Stylo computes them.
+    close("oklch(0.546 0.245 262.881)", [0.082, 0.364, 0.988, 1.0]);
+    close("oklab(1 0 0 / 0.5)", [1.0, 1.0, 1.0, 0.5]);
+    close("rgba(0, 0, 0, 0)", [0.0; 4]);
+    assert_eq!(css_colour("currentcolor"), None);
+    assert_eq!(
+        css_colour("color-mix(in oklab, currentcolor 50%, transparent)"),
+        None
+    );
 }
 
 /// A materials layer renders only the grid-snapped part of its box that its

@@ -1,35 +1,89 @@
 /** Plates (render/SURFACES.md, "Plates"): the build marks every JSX element
- * whose `class` uses a `material-*` utility as a static string with a
- * `tk-plate` attribute, so the render host registers it as a plate without
- * scanning class strings at run time, and rejects material names that
- * `@tokamak/ui`'s materials.css does not define.
+ * whose `class` makes it a plate, as a static string, with a `tk-plate`
+ * attribute, so the render host registers it without scanning class strings
+ * at run time; and it fails on plate classes Tailwind does not know.
+ *
+ * A class token makes its element a plate when the project's Tailwind
+ * design system (its `src/styles.css`, else `@tokamak/ui/styles.css`)
+ * compiles it to a solid `background-color` (see fills.ts: `bg-blue-600`,
+ * `bg-[#3a2420]`, `bg-white/50`, `hover:bg-chip`, ...) or to a `--tk-fill`.
+ * The `material-*` utilities do both. Tailwind decides, so every colour
+ * form and variant it accepts is covered exactly, and `bg-cover`,
+ * `bg-linear-to-r`, `bg-[url(...)]`, `bg-transparent`, `bg-current` and
+ * `bg-inherit` are not plates (Blitz paints them as before).
+ *
+ * Checked, and fatal when Tailwind generates nothing for them: every
+ * `material-*`, `bg-*` and `bevel-*` token, and `raised` / `recessed`, with
+ * their variants (the message names the file, line and column, the token
+ * and the closest known name). A `bg-[#...]` with a malformed hex colour
+ * fails too.
  *
  * Static means written in the source: a string attribute, and the string
  * literals inside a `class={...}` expression: template literal text,
  * both branches of `?:`, operands of `+`, `&&`, `||`, `??`, and the keys of
  * a `classList={{...}}` object. A token next to a substitution
- * (`material-${name}`) and classes from calls, variables or spreads are
- * dynamic: they are not checked here, and the host's class scan finds them
- * at run time. Only intrinsic elements (`<div>`, `<button>`) are marked;
- * a component's `class` prop is checked but not marked (the component
- * decides where it lands; the run-time scan covers it).
+ * (`bg-${name}`) and classes from calls, variables or spreads are dynamic:
+ * they are not checked here, and the host's class scan finds them at run
+ * time. Only intrinsic elements (`<div>`, `<button>`) are marked; a
+ * component's `class` prop is checked but not marked (the component decides
+ * where it lands; the run-time scan covers it).
  *
  * Runs before Solid compiles JSX, on .tsx sources only. */
 import ts from "typescript";
 import MagicString from "magic-string";
 import type { Plugin } from "vite";
+import { __unstable__loadDesignSystem } from "@tailwindcss/node";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { solidColour } from "./fills.ts";
 
-/** Material names (without `material-`) defined by `@utility material-<name>`
- * rules in a stylesheet. */
-export function materialNames(css: string): Set<string> {
-  const names = new Set<string>();
-  for (const match of css.matchAll(/@utility\s+material-([A-Za-z0-9_-]+)\s*\{/g)) {
-    names.add(match[1]!);
+/** What the build asks Tailwind about class names. */
+export interface ClassInfo {
+  /** The CSS Tailwind generates for one class token (variants included),
+   * or null when it generates nothing. */
+  css(token: string): string | null;
+  /** Every utility name Tailwind lists (for "did you mean" hints). */
+  names: readonly string[];
+  /** The stylesheet, as shown in messages. */
+  sheet: string;
+}
+
+/** The Tailwind design system of `stylesheet` (its theme, utilities and
+ * `@utility` rules, imports resolved from its directory). `shown` is the
+ * name used in messages. */
+export async function loadClasses(stylesheet: string, shown = stylesheet): Promise<ClassInfo> {
+  const system = await __unstable__loadDesignSystem(readFileSync(stylesheet, "utf8"), { base: dirname(stylesheet) });
+  const cache = new Map<string, string | null>();
+  return {
+    css(token) {
+      let css = cache.get(token);
+      if (css === undefined) cache.set(token, (css = system.candidatesToCss([token])[0] ?? null));
+      return css;
+    },
+    names: system.getClassList().map(([name]) => name),
+    sheet: shown,
+  };
+}
+
+/** Prefixes of the class tokens the build checks (see the header). */
+const CHECKED = /^(?:material-|bg-|bevel-)|^(?:raised|recessed)$/;
+
+/** True if the CSS of one token makes its element a plate. */
+function isPlate(css: string): boolean {
+  if (/--tk-fill\s*:/.test(css)) return true;
+  for (const m of css.matchAll(/(?<![\w-])background-color\s*:\s*([^;{}]+?)\s*;/g)) {
+    if (solidColour(m[1]!)) return true;
   }
-  return names;
+  return false;
+}
+
+/** A malformed hex colour in the CSS of a token (`bg-[#zz]`), if any. */
+function badHex(css: string): string | undefined {
+  for (const m of css.matchAll(/(?<![\w-])background-color\s*:\s*(#[^\s;]*)/g)) {
+    if (!/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(m[1]!)) return m[1];
+  }
+  return undefined;
 }
 
 /** A piece of a class string known at build time. `open*`: the piece
@@ -138,8 +192,8 @@ function distance(a: string, b: string): number {
   return d[a.length]![b.length]!;
 }
 
-/** The defined material closest to `name` (edit distance). */
-export function closestMaterial(name: string, names: Iterable<string>): string | undefined {
+/** The name closest to `name` (edit distance). */
+export function closest(name: string, names: Iterable<string>): string | undefined {
   let best: string | undefined;
   let score = Infinity;
   for (const candidate of names) {
@@ -173,11 +227,32 @@ function classTokens(attribute: ts.JsxAttribute, source: ts.SourceFile) {
   return tokens(list);
 }
 
+/** Why a checked token is wrong, or null if Tailwind knows it. */
+function problem(token: string, classes: ClassInfo | null, sheet: string): string | null {
+  const util = utility(token);
+  const css = classes?.css(token) ?? null;
+  if (css !== null) {
+    const hex = badHex(css);
+    return hex ? `invalid colour "${hex}" in "${token}"` : null;
+  }
+  if (!classes) {
+    // No stylesheet: nothing can draw a material; other classes are inert.
+    return util.startsWith("material-") ? `unknown material "${util}"; no materials stylesheet (${sheet}) was found` : null;
+  }
+  if (util !== token && classes.css(util) !== null) return `unknown variant in "${token}"`;
+  if (util.startsWith("bevel-")) return `unknown bevel "${util}"; use bevel-<number> or bevel-[<number>]`;
+  const prefix = util.startsWith("material-") ? "material-" : util.startsWith("bg-") ? "bg-" : "";
+  const kind = prefix === "material-" ? "material" : prefix === "bg-" ? "background" : "class";
+  const near = prefix ? closest(util, classes.names.filter((n) => n.startsWith(prefix))) : undefined;
+  const hint = near ? `; did you mean "${near}"?` : prefix === "material-" ? `; ${classes.sheet} defines no materials` : "";
+  return `unknown ${kind} "${util}"${hint}`;
+}
+
 /** Mark plates in one TSX module (see the header). Returns null when
- * nothing changes; throws on an unknown material name. `names` is null when
- * no materials stylesheet was found, which makes any material an error. */
-export function markPlates(code: string, id: string, names: ReadonlySet<string> | null, sheet = "@tokamak/ui/materials.css") {
-  if (!code.includes("material-")) return null;
+ * nothing changes; throws on an unknown plate class. `classes` is null when
+ * no stylesheet was found, which makes any material an error. */
+export function markPlates(code: string, id: string, classes: ClassInfo | null, sheet = "@tokamak/ui/styles.css") {
+  if (!/material-|bg-|bevel-|raised|recessed/.test(code)) return null;
   const source = ts.createSourceFile(id, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const output = new MagicString(code);
   let changed = false;
@@ -189,20 +264,13 @@ export function markPlates(code: string, id: string, names: ReadonlySet<string> 
         if (!ts.isJsxAttribute(attribute)) continue;
         if (attribute.name.getText(source) === "tk-plate") marked = true;
         for (const { token, pos } of classTokens(attribute, source)) {
-          const util = utility(token);
-          if (!util.startsWith("material-")) continue;
-          const name = util.slice("material-".length);
-          if (!names?.has(name)) {
+          if (!CHECKED.test(utility(token))) continue;
+          const wrong = problem(token, classes, sheet);
+          if (wrong) {
             const { line, character } = source.getLineAndCharacterOfPosition(pos);
-            const near = names ? closestMaterial(name, names) : undefined;
-            const hint = near
-              ? `; did you mean "material-${near}"?`
-              : names
-                ? `; ${sheet} defines no materials`
-                : `; no materials stylesheet (${sheet}) was found`;
-            throw new Error(`${id}:${line + 1}:${character + 1}: unknown material "material-${name}"${hint}`);
+            throw new Error(`${id}:${line + 1}:${character + 1}: ${wrong}`);
           }
-          plate = true;
+          if (classes && isPlate(classes.css(token)!)) plate = true;
         }
       }
       // Intrinsic elements only (lowercase tag, or a custom element name).
@@ -219,11 +287,25 @@ export function markPlates(code: string, id: string, names: ReadonlySet<string> 
   return { code: output.toString(), map: output.generateMap({ source: id, includeContent: true, hires: true }) };
 }
 
-/** The Vite plugin: reads the material names from `css` (default:
- * `@tokamak/ui/materials.css` resolved from the project root) and marks
- * plates in every .tsx module before Solid compiles it. */
+/** The stylesheet whose classes a project uses: `css`, else the project's
+ * `src/styles.css` (the one the build compiles), else `@tokamak/ui/styles.css`
+ * resolved from the project root; undefined if none exists. */
+export function projectStylesheet(root: string, css?: string): string | undefined {
+  if (css) return css;
+  const own = resolve(root, "src/styles.css");
+  if (existsSync(own)) return own;
+  try {
+    return createRequire(resolve(root, "package.json")).resolve("@tokamak/ui/styles.css");
+  } catch {
+    return undefined;
+  }
+}
+
+/** The Vite plugin: loads the project's Tailwind design system (see
+ * `projectStylesheet`) and marks plates in every .tsx module before Solid
+ * compiles it. */
 export function materialPlates(options: { css?: string } = {}): Plugin {
-  let names: Set<string> | null = null;
+  let classes: ClassInfo | null = null;
   let path: string | undefined;
   let root = process.cwd();
   return {
@@ -232,23 +314,16 @@ export function materialPlates(options: { css?: string } = {}): Plugin {
     configResolved(config) {
       root = config.root;
     },
-    buildStart() {
-      path = options.css;
-      if (!path) {
-        try {
-          path = createRequire(resolve(root, "package.json")).resolve("@tokamak/ui/materials.css");
-        } catch {
-          path = undefined;
-        }
-      }
-      names = path ? materialNames(readFileSync(path, "utf8")) : null;
+    async buildStart() {
+      path = projectStylesheet(root, options.css);
+      classes = path ? await loadClasses(path, relative(root, path) || path) : null;
       if (path) this.addWatchFile(path);
     },
     transform(code, id) {
       if (!/\.tsx(?:\?|$)/.test(id)) return;
       const file = id.replace(/\?.*$/, "");
       const shown = relative(root, file) || file;
-      return markPlates(code, shown, names, path ? relative(root, path) : undefined) ?? undefined;
+      return markPlates(code, shown, classes) ?? undefined;
     },
   };
 }

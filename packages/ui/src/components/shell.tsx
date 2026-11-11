@@ -34,8 +34,9 @@
  * `<Surface.Union layer="base">`, `layer="sidebar"`, `layer="stage"`.
  *
  * Plates: every region holds a materials layer (render/SURFACES.md,
- * "Plates"), so an element with a `material-*` class anywhere in a view is
- * drawn without a component. The stage's layer stays fixed over the stage
+ * "Plates"), so an element with a solid background (`bg-*`) or a
+ * `material-*` class anywhere in a view is drawn as a plate without a
+ * component. The stage's layer stays fixed over the stage
  * while its content scrolls: plates are drawn where they are on screen and
  * clipped at the stage edge. Views never write a layer; floating pieces
  * outside the regions use `Sheet`.
@@ -167,6 +168,7 @@ function ShellFrame(props: ShellProps) {
       <div class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink">
         <div
           window-drag
+          tk-region
           class={`relative isolate flex shrink-0 items-center pr-2 ${
             props.trafficLights === false
               ? "pl-3.5"
@@ -202,6 +204,7 @@ function ShellFrame(props: ShellProps) {
             class="-mr-4 flex shrink-0"
           >
             <div
+              tk-region
               class="relative isolate flex shrink-0 flex-col items-start"
               style={`width: ${rail.width}px; gap: ${rail.gap}px; padding-left: ${rail.inset}px`}
             >
@@ -209,7 +212,7 @@ function ShellFrame(props: ShellProps) {
               <Slot region="rail" />
             </div>
             <Surface.Union radius={12} class="flex pr-4">
-              <div class="relative isolate flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
+              <div tk-region class="relative isolate flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
                 <MaterialsLayer />
                 <Slot region="sidebar" />
               </div>
@@ -222,11 +225,11 @@ function ShellFrame(props: ShellProps) {
               join={14}
               class="min-w-0 flex-1"
             >
-              {/* The stage's plates, scrolled content included: a sibling of
-                * the scroller, so it covers the visible stage only (plates are
-                * placed by their on-screen boxes) and paints over the panel and
-                * under the scroller's content. */}
-              <MaterialsLayer />
+              {/* The stage's plates, scrolled content included, are drawn by
+                * the stage surface's own materials layer (every `Surface` is a
+                * region): a sibling of the scroller, so it covers the visible
+                * stage only (plates are placed by their on-screen boxes) and
+                * paints over the panel and under the scroller's content. */}
               {/* `z-0` makes the scroller a stacking context. Without it Blitz
                 * paints any descendant that has a z-index from an ancestor
                 * above this element, outside its clip, so scrolled content
@@ -235,11 +238,11 @@ function ShellFrame(props: ShellProps) {
                 <Slot region="stage" />
               </div>
               {/* Above the scrolled content, so with their own layers. */}
-              <div class="pointer-events-none absolute inset-x-0 top-0 isolate flex flex-col items-center *:pointer-events-auto">
+              <div tk-region class="pointer-events-none absolute inset-x-0 top-0 isolate flex flex-col items-center *:pointer-events-auto">
                 <MaterialsLayer />
                 <Slot region="stage-top" />
               </div>
-              <div class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex flex-col items-center *:pointer-events-auto">
+              <div tk-region class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex flex-col items-center *:pointer-events-auto">
                 <MaterialsLayer />
                 <Slot region="bottom" />
               </div>

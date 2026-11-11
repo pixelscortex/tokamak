@@ -940,6 +940,28 @@ fn material_shape(
         .unwrap_or_else(|| panic!("{name}: no shape at {want:?}"))
 }
 
+/// The layer's shapes that lie inside element `name`'s box, in paint order.
+fn shapes_within(
+    doc: &NativeDocument,
+    layer: blitz_traits::NodeId,
+    name: &str,
+) -> Vec<render::MaterialShape> {
+    let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
+    let r = doc
+        .inner()
+        .get_client_bounding_rect(support::id(doc, name))
+        .unwrap();
+    let (x, y) = ((r.x - origin.x) as f32, (r.y - origin.y) as f32);
+    let (w, h) = (r.width as f32, r.height as f32);
+    doc.surface_shapes(layer)
+        .into_iter()
+        .filter(|s| {
+            let [sx, sy, sw, sh] = s.rect;
+            sx >= x - 0.01 && sy >= y - 0.01 && sx + sw <= x + w + 0.01 && sy + sh <= y + h + 0.01
+        })
+        .collect()
+}
+
 fn hex(c: [f32; 4]) -> String {
     let [r, g, b, _] = c.map(|v| (v * 255.0).round() as u8);
     format!("#{r:02x}{g:02x}{b:02x}")
@@ -958,7 +980,7 @@ fn plates_follow_computed_style_and_pressed_states() {
     scroll_to(&mut doc, "lab-keycaps");
     doc.layout_surfaces();
     let layer = stage_layer(&doc);
-    let shapes = doc.surface_shapes(layer);
+    let shapes = shapes_within(&doc, layer, "lab-keycaps");
     // 4 trays (one per row, two in the shortcut row) and 3 + 4 + 4 caps.
     assert_eq!(shapes.len(), 4 + 11, "{shapes:#?}");
     // Outer elements first: the trays paint below the caps they hold.

@@ -18,13 +18,16 @@
  * pointer events. `Surface.Intersect` is reserved for masking (not built).
  *
  * Plates: for pieces that are each one plate (keycaps, trays, chips), a
- * plain element with a `material-*` utility (materials.css) is drawn by the
- * materials layer of its region, no component needed:
+ * plain element with a solid background colour or a `material-*` utility
+ * (materials.css) is drawn by the materials layer of its region, no
+ * component needed:
  *
+ *   <button class="bg-blue-600 bevel-2 rounded-md px-3 active:recessed">Run</button>
  *   <button class="material-key active:material-key-pressed rounded-[7px] px-3">Deny</button>
  *
- * Every shell region holds a layer. Something floating outside the regions
- * (a menu, a popover) is a `Sheet`: an element with its own layer.
+ * Every shell region and every `Surface` holds a layer. Something floating
+ * outside the regions (a menu, a popover) is a `Sheet`: an element with its
+ * own layer.
  *
  * `layer` joins a fixed shell layer (see Shell) instead of the nearest
  * surface: `<Surface.Union layer="base">` makes a shape of window-base
@@ -110,6 +113,7 @@ function SurfaceRoot(props: SurfaceProps): JSX.Element {
   return (
     <div
       id={props.id}
+      tk-region
       class={`isolate ${positioned(props.class)}`}
       style={props.style}
       surface-groups={props.plate === false ? undefined : group}
@@ -129,6 +133,10 @@ function SurfaceRoot(props: SurfaceProps): JSX.Element {
         border-mix={look().borderStrength}
         border-lit={look().borderLight}
       />
+      {/* Plates inside the surface (`bg-*`, `material-*`): over the surface,
+        * under its content. Without it they would go to the enclosing
+        * region's layer, below this surface, and not show. */}
+      <MaterialsLayer />
       <GroupContext.Provider value={group}>{props.children}</GroupContext.Provider>
     </div>
   );
@@ -211,9 +219,10 @@ function shape(op: "union" | "subtract") {
 
 /** The materials layer of the element it is placed in (render/SURFACES.md,
  * "Plates"): draws the plates of that element below all of its content. The
- * element must be a stacking context (`isolate`) so the layer stays above
- * what is behind the element. Used by the shell regions and `Sheet`, not by
- * views. */
+ * element must carry `tk-region` (so the stylesheet stops Blitz painting
+ * the backgrounds the layer draws) and be a stacking context (`isolate`) so
+ * the layer stays above what is behind the element. Used by the shell
+ * regions, `Surface` and `Sheet`, not by views. */
 export function MaterialsLayer(): JSX.Element {
   return <tk-surface materials class="absolute inset-0 -z-10" />;
 }
@@ -236,7 +245,7 @@ export interface SheetProps {
  */
 export function Sheet(props: SheetProps): JSX.Element {
   return (
-    <div id={props.id} class={`isolate ${positioned(props.class)}`} style={props.style}>
+    <div id={props.id} tk-region class={`isolate ${positioned(props.class)}`} style={props.style}>
       <MaterialsLayer />
       {props.children}
     </div>
