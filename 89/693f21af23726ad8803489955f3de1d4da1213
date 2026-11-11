@@ -1,0 +1,35 @@
+packages/render/src/surface/shape.rs
+  s_e3d99f9a782059::t_b9e90d0e34a24f 188-192
+lab/src/surfaces.tsx
+  s_e3d99f9a782059::t_ba31545d0a5414 212-243,469
+packages/render/src/surface/plate.rs
+  s_e3d99f9a782059::t_b9e90d0e34a24f 128
+packages/render/src/surface/gpu.rs
+  s_e3d99f9a782059::t_b9e90d0e34a24f 269,275-278
+packages/build/src/materials.ts
+  s_e3d99f9a782059::t_ba31545d0a5414 70,255
+packages/render/src/surface/bind.rs
+  s_e3d99f9a782059::t_b9e90d0e34a24f 331-341,370
+packages/render/src/surface/surface.wgsl
+  s_e3d99f9a782059::t_b9e90d0e34a24f 20-21,196-207,226-234,236-247,251,255-263
+packages/ui/src/materials.css
+  s_e3d99f9a782059::t_b9e90d0e34a24f 44-45,64-69
+packages/render/CSS_OVERLAP.md
+  s_e3d99f9a782059::t_414ad337e58fc5 18,25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89693f21af23726ad8803489955f3de1d4da1213",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
