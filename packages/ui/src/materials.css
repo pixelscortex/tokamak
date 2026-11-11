@@ -7,7 +7,7 @@
  * packages/build/src/materials.ts) and fails on a plate class Tailwind does
  * not know. A typical button:
  *
- *   <button class="bg-blue-600 elevation-3 hover:sink-1 active:pressed rounded-md px-4">Run</button>
+ *   <button class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-md px-4">Run</button>
  *
  * Utilities (all take Tailwind variants: `hover:`, `active:`,
  * `aria-pressed:`, `dark:`):
@@ -75,7 +75,10 @@
  * edge. `bevel-soft` fades it inward. */
 @utility bevel-sharp { --tk-bevel-profile: sharp; }
 @utility bevel-soft { --tk-bevel-profile: soft; }
-/* How far the plate stands off the surface, CSS px: `elevation-3`. A strip
+/* PARKED (Linear TKM-80): not used by any component since 2026-11-11; the
+ * owner set elevation aside to keep buttons simple. Kept working for the
+ * revisit.
+ * How far the plate stands off the surface, CSS px: `elevation-3`. A strip
  * under the face shows the plate's side, in a tone taken from the fill
  * (darker on a bright plate, lighter on a dark one). Without a bevel the
  * face also gets a faint line all round.

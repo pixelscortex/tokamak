@@ -114,7 +114,7 @@ fn clicks_reach_controls_above_surfaces() {
 fn wheel_over_a_surface_scrolls_the_page() {
     use blitz_traits::events::*;
     use keyboard_types::Modifiers;
-    let mut doc = document(1.0, 900.0);
+    let mut doc = document(1.0, 520.0); // short enough that the Surfaces page scrolls
     open(&mut doc, "surfaces");
     let surface = doc
         .inner()
@@ -949,7 +949,7 @@ fn plates_follow_computed_style_and_pressed_states() {
 /// button's own box). Switching the painter takes the widget off again.
 #[test]
 fn a_self_painting_button_is_still_a_real_button() {
-    let mut doc = document(1.0, 900.0);
+    let mut doc = document(1.0, 520.0); // short enough that the Surfaces page scrolls
     open(&mut doc, "surfaces");
     scroll_to(&mut doc, "lab-keycaps");
     doc.layout_surfaces();

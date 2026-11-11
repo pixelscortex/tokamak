@@ -191,7 +191,7 @@ export function Select(props: SelectProps): JSX.Element {
         class={`flex min-w-0 items-center gap-1.5 border-0 font-ui outline-none focus:ring-2 focus:ring-ink-5 aria-disabled:opacity-40 ${
           compact()
             ? "h-[26px] rounded-sm bg-transparent px-2 text-ink-3 not-aria-disabled:hover:bg-chip not-aria-disabled:hover:text-ink aria-expanded:bg-chip aria-expanded:text-ink"
-            : "h-[34px] w-full justify-between rounded-md bg-chip elevation-3 px-3 text-ink not-aria-disabled:hover:sink-1 not-aria-disabled:active:pressed"
+            : "h-[34px] w-full justify-between rounded-md bg-chip px-3 text-ink not-aria-disabled:hover:bg-lift aria-expanded:bg-lift"
         }`}
       >
         <span class={`min-w-0 truncate ${type()} ${selected() ? "" : "text-ink-4"}`}>

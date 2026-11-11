@@ -2,8 +2,7 @@
  * live toggle, `Kbd` and `Chip`.
  *
  * The hover, pressed and focused columns are the live CSS states held on
- * with the same utilities (`sink-1`, `pressed`, the ring); `ghost` shows
- * its hover and pressed plates with `!` (its rest class is transparent).
+ * with the same fills and the ring, forced with `!`.
  * The last column is a live button: hover it, press it, Tab to it. */
 import { For, createSignal } from "solid-js";
 import { Icon } from "@tokamak/ui/elements";
@@ -17,8 +16,12 @@ const states = ["rest", "hover", "pressed", "focused", "disabled", "live"] as co
 
 /** The classes that hold a state on (see the header). */
 function hold(variant: ButtonVariant, state: (typeof states)[number]) {
-  if (state === "hover") return variant === "ghost" ? "bg-chip! text-ink!" : "sink-1";
-  if (state === "pressed") return variant === "ghost" ? "bg-card! text-ink!" : "pressed";
+  if (state === "hover") {
+    return variant === "primary" ? "bg-white!" : variant === "outline" ? "bg-card! text-ink!" : variant === "ghost" ? "bg-chip! text-ink!" : "bg-lift!";
+  }
+  if (state === "pressed") {
+    return variant === "primary" ? "bg-ink-body!" : variant === "outline" ? "bg-base!" : "bg-card!";
+  }
   if (state === "focused") return "ring-2 ring-ink-5";
   return "";
 }
@@ -34,7 +37,7 @@ export default function ButtonsView() {
     <Shell.Stage>
       <div id="lab-buttons" class="flex flex-col gap-8 px-8 pt-8 pb-16">
         <SectionTitle eyebrow="BUTTON" title="Variants and states">
-          Plates that stand off the surface (elevation-3), sink a step on hover and all the way while pressed.
+          Flat plates: the fill changes on hover and while pressed. Nothing moves.
           Ghost has no plate until hover.
         </SectionTitle>
         <div class="flex flex-col gap-3">

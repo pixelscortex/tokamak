@@ -4,10 +4,9 @@
  *   <Button variant="ghost" size="icon" label="Attach"><Icon d={…} class="size-4" /></Button>
  *   <Button pressed={always()} onClick={() => setAlways(!always())}>Always allow</Button>
  *
- * Every variant but `ghost` stands off the surface (`elevation-3`), sinks a
- * step on hover and all the way while pressed (`active:pressed`); a toggle
- * that is on stays down (`aria-pressed:pressed`). No bevel, no border, no
- * shadow: the plate's strip and faint outline are its edge. `ghost` has no
+ * Flat plates: the fill changes on hover and while pressed, and a toggle
+ * that is on keeps its pressed fill (`aria-pressed`). No bevel, no border,
+ * no shadow, no movement. `ghost` has no
  * plate until hover. Keyboard focus shows a ring (`:focus`; Blitz has no
  * `:focus-visible`, so a click that focuses shows it too).
  *
@@ -49,15 +48,13 @@ export function Button(props: ButtonProps): JSX.Element {
       class={`inline-flex shrink-0 items-center justify-center gap-1.5 border-0 font-ui font-medium whitespace-nowrap outline-none focus:ring-2 focus:ring-ink-5 aria-disabled:opacity-40 ${
         variant() === "ghost"
           ? "bg-transparent text-ink-3 not-aria-disabled:hover:bg-chip not-aria-disabled:hover:text-ink not-aria-disabled:active:bg-card aria-pressed:bg-chip aria-pressed:text-ink"
-          : `elevation-3 not-aria-disabled:hover:sink-1 not-aria-disabled:active:pressed aria-pressed:pressed ${
-              variant() === "primary"
-                ? "bg-ink text-base"
-                : variant() === "outline"
-                  ? "bg-well text-ink-body"
-                  : variant() === "destructive"
-                    ? "bg-chip text-danger"
-                    : "bg-chip text-ink"
-            }`
+          : variant() === "primary"
+            ? "bg-ink text-base not-aria-disabled:hover:bg-white not-aria-disabled:active:bg-ink-body aria-pressed:bg-ink-body"
+            : variant() === "outline"
+              ? "bg-well text-ink-body not-aria-disabled:hover:bg-card not-aria-disabled:hover:text-ink not-aria-disabled:active:bg-base aria-pressed:bg-card"
+              : `bg-chip not-aria-disabled:hover:bg-lift not-aria-disabled:active:bg-card aria-pressed:bg-card ${
+                  variant() === "destructive" ? "text-danger" : "text-ink"
+                }`
       } ${
         size() === "icon"
           ? "size-7 p-0"

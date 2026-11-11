@@ -15,30 +15,6 @@ function Row(props: { label: string; children: JSX.Element }) {
   </div>;
 }
 
-/** Buttons stand off the surface (`elevation-3`), sink a step on hover
- * and all the way while pressed. The edge tone follows the fill. */
-function Elevation() {
-  const b = "flex h-9 items-center rounded-md border-0 px-4 text-[14px] font-medium select-none";
-  const state = "elevation-3 hover:sink-1 active:pressed";
-  return <div id="lab-elevation" class="flex flex-col gap-4 rounded-[12px] bg-[#0c0c0c] p-6">
-    <Row label="elevation-3">
-      <div class="flex items-center gap-4">
-        <button id="lab-elev-blue" class={`bg-blue-600 active:bg-blue-700 ${state} ${b} text-white`}>Primary</button>
-        <button class={`bg-zinc-200 active:bg-zinc-300 ${state} ${b} text-zinc-900`}>Secondary</button>
-        <button class={`bg-[#141414] ${state} ${b} text-white`}>Outline</button>
-        <button class={`bg-red-600 active:bg-red-700 ${state} ${b} text-white`}>Destructive</button>
-      </div>
-    </Row>
-    <Row label="Rest, hover, pressed">
-      <div class="flex items-center gap-4">
-        <button class={`bg-blue-600 elevation-3 ${b} text-white`}>rest</button>
-        <button class={`bg-blue-600 elevation-3 sink-1 ${b} text-white`}>hover</button>
-        <button class={`bg-blue-600 elevation-3 pressed ${b} text-white`}>pressed</button>
-      </div>
-    </Row>
-  </div>;
-}
-
 /** The lit edge band: the default (sharp), `bevel-soft`, and how strongly
  * it is lit and shaded (`bevel-tilt-<degrees>`, default 35). */
 function Bevel() {
@@ -146,10 +122,6 @@ export default function SurfacesView() {
   return <>
     <Shell.Stage>
       <div id="lab-surfaces" class="flex flex-col gap-7 px-8 pt-8 pb-10">
-        <SectionTitle eyebrow="ELEVATION" title="Buttons stand off the surface">
-          elevation-3 hover:sink-1 active:pressed. The strip under the face takes its tone from the fill.
-        </SectionTitle>
-        <Elevation />
         <SectionTitle eyebrow="BEVEL" title="A lit edge band" />
         <Bevel />
         <SectionTitle eyebrow="MATERIALS" title="Keycaps in a tray">
