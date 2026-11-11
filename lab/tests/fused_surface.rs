@@ -214,6 +214,18 @@ fn the_stage_scroller_clips_content_that_has_a_z_index() {
     assert!(doc.take_error().is_none());
 }
 
+/// The keycap case of the Surfaces view, for judging the lighting.
+#[test]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
+fn capture_keycaps() {
+    let dir = capture_dir();
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    open(&mut doc, "surfaces");
+    out.save_settled(&mut doc, &dir, "r9-keycaps");
+    assert!(doc.take_error().is_none());
+}
+
 /// The same bug, as pixels: the Surfaces view scrolled until the "Shutter"
 /// label sits above the stage's top edge. Nothing may show in the top bar.
 #[test]

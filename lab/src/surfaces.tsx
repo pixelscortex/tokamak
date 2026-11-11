@@ -207,6 +207,50 @@ function NotchCase() {
   </div>;
 }
 
+/** Keycaps from the `Surface` primitive only: every cap is a `key` plate
+ * (flat face, lit edge band from the one light above) in a recessed `tray`;
+ * the 3 px of tray between caps is the seam. No gradients on the face. */
+function KeycapCase() {
+  const cap = "flex h-[30px] items-center px-3.5 text-[13px] font-medium";
+  const small = "flex h-6 min-w-[26px] items-center justify-center px-2 font-data text-[10px] tracking-[0.06em] text-ink-body";
+  const tile = "flex h-[58px] w-[74px] flex-col justify-between px-[9px] pt-2 pb-[7px] font-data text-[10px] tracking-[0.06em]";
+  const tray = "flex w-fit gap-[3px] p-[3px]";
+  return <div id="lab-keycaps" class="flex flex-col gap-5">
+    <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Buttons</span>
+      <Surface material="tray" radius={10} class={tray}>
+        <Surface material="key" radius={7} class={`${cap} text-ink`}>Deny</Surface>
+        <Surface material="key" radius={7} class={`${cap} text-ink`}>Always allow</Surface>
+        <Surface material="keyBright" radius={7} class={`${cap} text-[#111111]`}>Allow once</Surface>
+      </Surface>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Shortcut keys</span>
+      <Surface material="tray" radius={9} class={tray}>
+        <Surface material="key" radius={6} class={small}>CMD</Surface>
+        <Surface material="key" radius={6} class={small}>K</Surface>
+      </Surface>
+      <Surface material="tray" radius={9} class={tray}>
+        <Surface material="key" radius={6} class={small}>SHIFT</Surface>
+        <Surface material="key" radius={6} class={small}>ENTER</Surface>
+      </Surface>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="w-24 text-[12px] text-ink-3">Plugin tiles</span>
+      <Surface material="tray" radius={12} class={tray}>
+        <For each={["CHAT", "TODO", "BOARD", "CODE"]}>
+          {(name, i) => (
+            <Surface material="key" radius={9} class={`${tile} ${i() === 0 ? "text-ink" : "text-ink-2"}`}>
+              <span class="size-[14px] rounded-[3px] bg-current opacity-80" />
+              <span>{name}</span>
+            </Surface>
+          )}
+        </For>
+      </Surface>
+    </div>
+  </div>;
+}
+
 export default function SurfacesView() {
   return <>
     <Shell.Sidebar>
@@ -224,6 +268,8 @@ export default function SurfacesView() {
           One tk-surface element per group: rounded shapes fused by SDF unions and cuts, one light from above.
           Rendered on the GPU; only what changes is re-rendered.
         </SectionTitle>
+        <SectionTitle eyebrow="KEYCAPS" title="Buttons as caps in a tray" />
+        <KeycapCase />
         <div class="flex flex-wrap gap-5">
           <RailTab />
           <DockedPanel />
