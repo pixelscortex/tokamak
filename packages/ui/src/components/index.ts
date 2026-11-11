@@ -13,3 +13,5 @@ export { Kbd } from "./kbd";
 export type { KbdProps } from "./kbd";
 export { Chip, ChipMore } from "./chip";
 export type { ChipMoreProps, ChipProps } from "./chip";
+export { Textarea, textareaLine } from "./textarea";
+export type { TextareaProps } from "./textarea";
