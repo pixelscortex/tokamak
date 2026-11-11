@@ -62,13 +62,6 @@ export const materials = {
   card: { fill: "var(--color-card)", bevel: 2 },
   chip: { fill: "var(--color-chip)", bevel: 1.5 },
   well: { fill: "var(--color-well)", bevel: 1.5, recessed: true },
-  /** Keycaps: a flat face with a lit edge band, sitting in a `tray` whose
-   * base colour shows as the seam between caps. For things you press. */
-  key: { fill: "var(--color-chip)", bevel: 2.5 },
-  keyBright: { fill: "var(--color-ink)", bevel: 2.5 },
-  /** A pressed key (the same look as the `material-key-pressed` utility). */
-  keyPressed: { fill: "var(--color-card)", bevel: 2, recessed: true },
-  tray: { fill: "var(--color-base)", bevel: 1.5, recessed: true },
 } satisfies Record<string, MaterialLook>;
 
 export type Material = keyof typeof materials;

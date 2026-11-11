@@ -45,16 +45,38 @@ function Readout(props: { id: string }) {
   </div>;
 }
 
+/** 300 keycaps as plates (`material-key` buttons in a `material-tray`),
+ * drawn by the stage's materials layer. Static, they cost nothing per frame;
+ * clicking a cap toggles its pressed material (`aria-pressed:`), which
+ * re-renders that cap's area only. */
+const CAPS = 300;
+function KeycapGrid() {
+  const [pressed, setPressed] = createSignal<ReadonlySet<number>>(new Set());
+  const toggle = (i: number) => {
+    const next = new Set(pressed());
+    if (!next.delete(i)) next.add(i);
+    setPressed(next);
+  };
+  return <div id="lab-keycap-grid" class="material-tray flex w-[1037px] flex-wrap gap-[3px] rounded-[10px] p-[3px]">
+    <For each={Array.from({ length: CAPS }, (_, i) => i)}>{i =>
+      <button id={`lab-grid-cap-${i}`} aria-pressed={pressed().has(i)} onClick={() => toggle(i)}
+        class="material-key active:material-key-pressed aria-pressed:material-key-pressed flex h-[26px] w-[44px] items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-data text-[10px] text-ink-body select-none">
+        {i}</button>
+    }</For>
+  </div>;
+}
+
 /** A: N squares in ONE surface, fused where they touch. B: N separate
- * one-square surfaces (no fusing), to show the per-surface cost. "moving"
- * keeps only M of the N in motion; the probe is a small unrelated animation,
- * to show what static surfaces cost when something else repaints. */
+ * one-square surfaces (no fusing), to show the per-surface cost. C: 300
+ * keycap plates in the stage's materials layer. "moving" keeps only M of
+ * the N in motion; the probe is a small unrelated animation, to show what
+ * static surfaces cost when something else repaints. */
 function Stress() {
   const [running, setRunning] = createSignal(false);
   const [count, setCount] = createSignal(16);
   const [moving, setMoving] = createSignal<Moving>("all");
   const [probe, setProbe] = createSignal(false);
-  const [variant, setVariant] = createSignal<"one" | "many">("one");
+  const [variant, setVariant] = createSignal<"one" | "many" | "keys">("one");
   const cols = Math.floor(STRESS_W / (CELL + 4));
   const moves = (i: number) => running() && (moving() === "all" || i < (moving() as number));
   return <div id="lab-fused-stress" class="flex flex-col gap-4">
@@ -67,6 +89,8 @@ function Stress() {
             A · one surface</Button>
           <Button id="lab-fused-stress-many" pressed={variant() === "many"} onClick={() => setVariant("many")}>
             B · N surfaces</Button>
+          <Button id="lab-fused-stress-keys" pressed={variant() === "keys"} onClick={() => setVariant("keys")}>
+            C · 300 keycaps</Button>
           <Button id="lab-fused-stress-probe" pressed={probe()} onClick={() => setProbe(!probe())}>
             Probe repaint</Button>
           <tk-surface class="size-9 shrink-0" demo="orbit" running={probe() ? "true" : undefined}
@@ -92,6 +116,9 @@ function Stress() {
         }</For>
       </div>
     </Show>
+    <Show when={variant() === "keys"}>
+      <KeycapGrid />
+    </Show>
   </div>;
 }
 
@@ -102,6 +129,7 @@ export default function StressView() {
       <SidebarLabel first>Variants</SidebarLabel>
       <SidebarRow label="A · one surface" meta="fused" selected />
       <SidebarRow label="B · N surfaces" meta="atlas" />
+      <SidebarRow label="C · 300 keycaps" meta="plates" />
     </Shell.Sidebar>
     <Shell.Stage>
       <div id="lab-stress" class="flex flex-col gap-6 px-8 pt-8 pb-10">

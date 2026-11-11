@@ -250,6 +250,22 @@ requests frames, verified by test and by the lab window idling at 0% CPU.
 These are offscreen numbers; the lab's on-screen readout (`<tk-fps>`) shows
 the live fps, frame time, surface time and re-rendered pixels.
 
+Plates, 300 keycaps (`keycap_grid_bench`: the Stress view's variant C, 300
+`material-key` buttons in a `material-tray`, against variant A stopped),
+same setup, two runs each:
+
+| | frame | scene build | surface paint | binding pass | re-rendered |
+| --- | --- | --- | --- | --- | --- |
+| without the grid, static | 2.31 / 2.43 ms | 0.12 / 0.13 ms | 0.003 / 0.005 ms | 9 / 17 us | 0 px |
+| 300 plates, static | 4.02 / 3.96 ms | 1.07 / 1.06 ms | 0.008 / 0.009 ms | 60 / 69 us | 0 px |
+| 300 plates, one cap toggled | 3.88 / 3.76 ms (worst 10.4 / 6.6) | 1.22 / 1.17 ms | 0.15 / 0.13 ms | | 7.1 kpx |
+
+"Static" rows are forced repaints; left alone, the document requests no
+frames (asserted). Most of the extra static frame time is Blitz painting
+300 buttons and their text (scene build), not the layer. A toggle is a
+click (pointer down and up, each with its restyle, layout and binding
+pass: 5.0 ms for both together) plus the next frame.
+
 ## Known limits
 
 - **Layout comes from members, not the widget.** A Blitz widget sees only its

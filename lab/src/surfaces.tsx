@@ -207,93 +207,53 @@ function NotchCase() {
   </div>;
 }
 
-/** Keycaps from the `Surface` primitive only: every cap is a `key` plate
- * (flat face, lit edge band from the one light above) in a recessed `tray`;
- * the 3 px of tray between caps is the seam. No gradients on the face. */
+/** Keycaps from material classes: every cap is a real `<button>` with a
+ * `material-key` class (flat face, lit edge band from the one light above)
+ * in a `material-tray` (the 3 px of tray between caps is the seam). The
+ * stage's materials layer draws them all from their computed style; no
+ * `Surface` component, no layer written here. Pressed states are CSS
+ * variants: `active:` while the pointer is down, `aria-pressed:` for a cap
+ * that stays down (Always allow, the selected tile). The menu floats over
+ * other content, so it is a `Sheet`. */
 function KeycapCase() {
-  const cap = "flex h-[30px] items-center px-3.5 text-[13px] font-medium";
-  const small = "flex h-6 min-w-[26px] items-center justify-center px-2 font-data text-[10px] tracking-[0.06em] text-ink-body";
-  const tile = "flex h-[58px] w-[74px] flex-col justify-between px-[9px] pt-2 pb-[7px] font-data text-[10px] tracking-[0.06em]";
+  const [always, setAlways] = createSignal(false);
+  const [tile, setTile] = createSignal("CHAT");
+  const press = "active:material-key-pressed aria-pressed:material-key-pressed";
+  const reset = "border-0 bg-transparent select-none";
+  const cap = `${reset} flex h-[30px] items-center px-3.5 text-[13px] font-medium`;
+  const small = `material-key ${press} ${reset} flex h-6 min-w-[26px] items-center justify-center rounded-[6px] px-2 font-data text-[10px] tracking-[0.06em] text-ink-body`;
   const tray = "flex w-fit gap-[3px] p-[3px]";
   return <div id="lab-keycaps" class="flex flex-col gap-5">
     <div class="flex items-center gap-4">
       <span class="w-24 text-[12px] text-ink-3">Buttons</span>
-      <Surface material="tray" radius={10} class={tray}>
-        <Surface material="key" radius={7} class={`${cap} text-ink`}>Deny</Surface>
-        <Surface material="key" radius={7} class={`${cap} text-ink`}>Always allow</Surface>
-        <Surface material="keyBright" radius={7} class={`${cap} text-[#111111]`}>Allow once</Surface>
-      </Surface>
-    </div>
-    <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">Shortcut keys</span>
-      <Surface material="tray" radius={9} class={tray}>
-        <Surface material="key" radius={6} class={small}>CMD</Surface>
-        <Surface material="key" radius={6} class={small}>K</Surface>
-      </Surface>
-      <Surface material="tray" radius={9} class={tray}>
-        <Surface material="key" radius={6} class={small}>SHIFT</Surface>
-        <Surface material="key" radius={6} class={small}>ENTER</Surface>
-      </Surface>
-    </div>
-    <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">Plugin tiles</span>
-      <Surface material="tray" radius={12} class={tray}>
-        <For each={["CHAT", "TODO", "BOARD", "CODE"]}>
-          {(name, i) => (
-            <Surface material="key" radius={9} class={`${tile} ${i() === 0 ? "text-ink" : "text-ink-2"}`}>
-              <span class="size-[14px] rounded-[3px] bg-current opacity-80" />
-              <span>{name}</span>
-            </Surface>
-          )}
-        </For>
-      </Surface>
-    </div>
-  </div>;
-}
-
-/** The same keycaps from CSS only: plain elements carry `material-*`
- * utilities, and the stage's materials layer draws every one of them from
- * its computed style (fill, bevel, elevation, border-radius). No `Surface`
- * component, no wrapper per cap, no layer written here. Pressed states are CSS
- * variants: `active:` while the pointer is down, `aria-pressed:` for a
- * toggled cap. The menu floats over other content, so it is a `Sheet`. */
-function CssKeycapCase() {
-  const [always, setAlways] = createSignal(false);
-  const cap = "flex h-[30px] items-center border-0 bg-transparent px-3.5 text-[13px] font-medium select-none";
-  const press = "active:material-key-pressed aria-pressed:material-key-pressed";
-  const small = "material-key flex h-6 min-w-[26px] items-center justify-center rounded-[6px] px-2 font-data text-[10px] tracking-[0.06em] text-ink-body";
-  const tile = "material-key flex h-[58px] w-[74px] flex-col justify-between rounded-[9px] px-[9px] pt-2 pb-[7px] font-data text-[10px] tracking-[0.06em]";
-  const tray = "flex w-fit gap-[3px] p-[3px]";
-  return <div id="lab-css-keycaps" class="flex flex-col gap-5">
-    <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">Buttons</span>
       <div class={`material-tray rounded-[10px] ${tray}`}>
-        <button id="lab-css-key-deny" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}>Deny</button>
-        <button id="lab-css-key-always" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}
+        <button id="lab-key-deny" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}>Deny</button>
+        <button id="lab-key-always" class={`material-key rounded-[7px] ${press} ${cap} text-ink`}
           aria-pressed={always()} onClick={() => setAlways(!always())}>Always allow</button>
-        <button id="lab-css-key-once" class={`material-key-bright rounded-[7px] active:bevel-1 ${cap} text-[#111111]`}>Allow once</button>
+        <button id="lab-key-once" class={`material-key-bright rounded-[7px] active:bevel-1 ${cap} text-[#111111]`}>Allow once</button>
       </div>
     </div>
     <div class="flex items-center gap-4">
       <span class="w-24 text-[12px] text-ink-3">Shortcut keys</span>
       <div class={`material-tray rounded-[9px] ${tray}`}>
-        <div class={small}>CMD</div>
-        <div class={small}>K</div>
+        <button id="lab-key-cmd" class={small}>CMD</button>
+        <button class={small}>K</button>
       </div>
       <div class={`material-tray rounded-[9px] ${tray}`}>
-        <div class={small}>SHIFT</div>
-        <div class={small}>ENTER</div>
+        <button class={small}>SHIFT</button>
+        <button class={small}>ENTER</button>
       </div>
     </div>
     <div class="flex items-center gap-4">
       <span class="w-24 text-[12px] text-ink-3">Plugin tiles</span>
       <div class={`material-tray rounded-[12px] ${tray}`}>
         <For each={["CHAT", "TODO", "BOARD", "CODE"]}>
-          {(name, i) => (
-            <div class={`${tile} ${i() === 0 ? "text-ink" : "text-ink-2"}`}>
+          {(name) => (
+            <button id={`lab-key-tile-${name.toLowerCase()}`} aria-pressed={tile() === name} onClick={() => setTile(name)}
+              class={`material-key ${press} ${reset} flex h-[58px] w-[74px] flex-col items-start justify-between rounded-[9px] px-[9px] pt-2 pb-[7px] font-data text-[10px] tracking-[0.06em] ${tile() === name ? "text-ink" : "text-ink-2"}`}>
               <span class="size-[14px] rounded-[3px] bg-current opacity-80" />
               <span>{name}</span>
-            </div>
+            </button>
           )}
         </For>
       </div>
@@ -317,44 +277,6 @@ function CssKeycapCase() {
   </div>;
 }
 
-/** 300 caps in one tray, for measuring: `css` draws them in the stage's
- * materials layer, `surface` as 300 `<Surface material="key">` (the current way).
- * Clicking a cap toggles its pressed state, in both modes. */
-const GRID = 300;
-function KeycapGrid() {
-  const [mode, setMode] = createSignal<"off" | "css" | "surface">("off");
-  const [pressed, setPressed] = createSignal<ReadonlySet<number>>(new Set());
-  const toggle = (i: number) => {
-    const next = new Set(pressed());
-    if (!next.delete(i)) next.add(i);
-    setPressed(next);
-  };
-  const cap = "flex h-[26px] w-[44px] items-center justify-center border-0 bg-transparent p-0 font-data text-[10px] text-ink-body select-none";
-  const caps = Array.from({ length: GRID }, (_, i) => i);
-  return <div id="lab-keycap-grid" class="flex flex-col gap-3">
-    <Stepper id="lab-keycap-grid-mode" label="300 caps" values={["off", "css", "surface"] as ("off" | "css" | "surface")[]}
-      value={mode()} set={setMode} />
-    <Show when={mode() === "css"}>
-      <div class="material-tray flex w-[1037px] flex-wrap gap-[3px] rounded-[10px] p-[3px]">
-        <For each={caps}>{i =>
-          <button id={`lab-grid-cap-${i}`} class={`material-key aria-pressed:material-key-pressed rounded-[6px] ${cap}`}
-            aria-pressed={pressed().has(i)} onClick={() => toggle(i)}>{i}</button>
-        }</For>
-      </div>
-    </Show>
-    <Show when={mode() === "surface"}>
-      <Surface material="tray" radius={10} class="flex w-[1037px] flex-wrap gap-[3px] p-[3px]">
-        <For each={caps}>{i =>
-          <Surface material={pressed().has(i) ? "keyPressed" : "key"} radius={6}>
-            <button id={`lab-grid-cap-${i}`} class={cap} aria-pressed={pressed().has(i)}
-              onClick={() => toggle(i)}>{i}</button>
-          </Surface>
-        }</For>
-      </Surface>
-    </Show>
-  </div>;
-}
-
 export default function SurfacesView() {
   return <>
     <Shell.Sidebar>
@@ -372,11 +294,10 @@ export default function SurfacesView() {
           One tk-surface element per group: rounded shapes fused by SDF unions and cuts, one light from above.
           Rendered on the GPU; only what changes is re-rendered.
         </SectionTitle>
-        <SectionTitle eyebrow="KEYCAPS" title="Buttons as caps in a tray" />
+        <SectionTitle eyebrow="KEYCAPS" title="Buttons as caps in a tray">
+          Plain buttons with material classes, drawn by the stage's materials layer. Press them.
+        </SectionTitle>
         <KeycapCase />
-        <SectionTitle eyebrow="KEYCAPS FROM CSS" title="The same caps from material classes" />
-        <CssKeycapCase />
-        <KeycapGrid />
         <div class="flex flex-wrap gap-5">
           <RailTab />
           <DockedPanel />

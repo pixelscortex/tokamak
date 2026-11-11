@@ -952,10 +952,10 @@ fn hex(c: [f32; 4]) -> String {
 /// `aria-pressed:` when a click toggles it, `active:bevel-1` the bevel alone;
 /// and the document settles (requests no frames) after each change.
 #[test]
-fn css_materials_follow_computed_style_and_pressed_states() {
+fn plates_follow_computed_style_and_pressed_states() {
     let mut doc = document(1.0, 900.0);
     open(&mut doc, "surfaces");
-    scroll_to(&mut doc, "lab-css-keycaps");
+    scroll_to(&mut doc, "lab-keycaps");
     doc.layout_surfaces();
     let layer = stage_layer(&doc);
     let shapes = doc.surface_shapes(layer);
@@ -972,51 +972,60 @@ fn css_materials_follow_computed_style_and_pressed_states() {
     assert_eq!(tray.bevel, Some(1.5));
 
     // The build marked the caps (static `material-*` classes).
-    for cap in ["lab-css-key-deny", "lab-css-key-always", "lab-css-key-once"] {
+    for cap in ["lab-key-deny", "lab-key-always", "lab-key-once"] {
         assert!(support::attr(&doc, cap, "tk-plate").is_some(), "{cap}");
     }
-    let deny = material_shape(&doc, layer, "lab-css-key-deny");
+    let deny = material_shape(&doc, layer, "lab-key-deny");
     assert_eq!(deny.radii, [7.0; 4]);
     assert_eq!(hex(deny.fill.unwrap()), "#2a2a2a");
     assert_eq!((deny.bevel, deny.recessed), (Some(2.5), false));
     assert!(!doc.inner().is_animating());
 
     // `active:material-key-pressed`, CSS only (no JS state): down, then up.
-    pointer_half(&mut doc, "lab-css-key-deny", false);
-    let down = material_shape(&doc, layer, "lab-css-key-deny");
+    pointer_half(&mut doc, "lab-key-deny", false);
+    let down = material_shape(&doc, layer, "lab-key-deny");
     assert_eq!(hex(down.fill.unwrap()), "#252525", "pressed while :active");
     assert_eq!((down.bevel, down.recessed), (Some(2.0), true));
     assert!(
         !doc.inner().is_animating(),
         "a state change needs one frame"
     );
-    pointer_half(&mut doc, "lab-css-key-deny", true);
+    pointer_half(&mut doc, "lab-key-deny", true);
     assert_eq!(
-        material_shape(&doc, layer, "lab-css-key-deny"),
+        material_shape(&doc, layer, "lab-key-deny"),
         deny,
         "released"
     );
 
     // `active:bevel-1`: only the bevel changes.
-    pointer_half(&mut doc, "lab-css-key-once", false);
-    let once = material_shape(&doc, layer, "lab-css-key-once");
+    pointer_half(&mut doc, "lab-key-once", false);
+    let once = material_shape(&doc, layer, "lab-key-once");
     assert_eq!((once.bevel, once.recessed), (Some(1.0), false));
     assert_eq!(hex(once.fill.unwrap()), "#e8e8ea");
-    pointer_half(&mut doc, "lab-css-key-once", true);
-    assert_eq!(
-        material_shape(&doc, layer, "lab-css-key-once").bevel,
-        Some(2.5)
-    );
+    pointer_half(&mut doc, "lab-key-once", true);
+    assert_eq!(material_shape(&doc, layer, "lab-key-once").bevel, Some(2.5));
 
     // `aria-pressed:material-key-pressed`: a click toggles the attribute.
-    pointer_half(&mut doc, "lab-css-key-always", false);
-    pointer_half(&mut doc, "lab-css-key-always", true);
+    pointer_half(&mut doc, "lab-key-always", false);
+    pointer_half(&mut doc, "lab-key-always", true);
     assert_eq!(
-        support::attr(&doc, "lab-css-key-always", "aria-pressed").as_deref(),
+        support::attr(&doc, "lab-key-always", "aria-pressed").as_deref(),
         Some("true")
     );
-    let toggled = material_shape(&doc, layer, "lab-css-key-always");
+    let toggled = material_shape(&doc, layer, "lab-key-always");
     assert_eq!((toggled.bevel, toggled.recessed), (Some(2.0), true));
+    assert!(!doc.inner().is_animating());
+    // Shortcut keys and tiles are buttons too: a key sinks while held, and
+    // a click selects a tile (the selected one stays down).
+    pointer_half(&mut doc, "lab-key-cmd", false);
+    assert!(material_shape(&doc, layer, "lab-key-cmd").recessed);
+    pointer_half(&mut doc, "lab-key-cmd", true);
+    assert!(!material_shape(&doc, layer, "lab-key-cmd").recessed);
+    assert!(material_shape(&doc, layer, "lab-key-tile-chat").recessed);
+    pointer_half(&mut doc, "lab-key-tile-code", false);
+    pointer_half(&mut doc, "lab-key-tile-code", true);
+    assert!(material_shape(&doc, layer, "lab-key-tile-code").recessed);
+    assert!(!material_shape(&doc, layer, "lab-key-tile-chat").recessed);
     assert!(!doc.inner().is_animating());
     assert!(doc.take_error().is_none());
 }
@@ -1029,7 +1038,7 @@ fn css_materials_follow_computed_style_and_pressed_states() {
 fn stage_plates_follow_scrolling_and_leave_at_the_stage_edge() {
     let mut doc = document(1.0, 900.0);
     open(&mut doc, "surfaces");
-    scroll_to(&mut doc, "lab-css-keycaps");
+    scroll_to(&mut doc, "lab-keycaps");
     doc.layout_surfaces();
     let layer = stage_layer(&doc);
     let rect = |doc: &NativeDocument, id| doc.inner().get_client_bounding_rect(id).unwrap();
@@ -1043,16 +1052,16 @@ fn stage_plates_follow_scrolling_and_leave_at_the_stage_edge() {
     );
     let offset = |doc: &NativeDocument| doc.inner().get_node(stage(doc)).unwrap().scroll_offset().y;
     // The cap 100 px below the stage's top edge.
-    let cap = support::id(&doc, "lab-css-key-deny");
+    let cap = support::id(&doc, "lab-key-deny");
     let y = offset(&doc) + rect(&doc, cap).y - cover.y - 100.0;
     scroll_stage(&mut doc, y);
     doc.layout_surfaces();
-    let before = material_shape(&doc, layer, "lab-css-key-deny");
+    let before = material_shape(&doc, layer, "lab-key-deny");
     assert_eq!(before.rect[1], 100.0);
     let y = offset(&doc) + 50.0;
     scroll_stage(&mut doc, y);
     doc.layout_surfaces();
-    let after = material_shape(&doc, layer, "lab-css-key-deny");
+    let after = material_shape(&doc, layer, "lab-key-deny");
     assert_eq!(
         after.rect[1],
         before.rect[1] - 50.0,
@@ -1065,7 +1074,7 @@ fn stage_plates_follow_scrolling_and_leave_at_the_stage_edge() {
     let y = offset(&doc) + top + 10.0;
     scroll_stage(&mut doc, y);
     doc.layout_surfaces();
-    let edge = material_shape(&doc, layer, "lab-css-key-deny");
+    let edge = material_shape(&doc, layer, "lab-key-deny");
     assert!(
         edge.rect[1] < 0.0 && edge.rect[1] + edge.rect[3] > 0.0,
         "{edge:?}"
@@ -1110,7 +1119,7 @@ fn scrolled_plates_are_clipped_at_the_stage_edge() {
     let scroller = stage_box(&doc);
     // Reference: scrolled to the top, no plate near the stage's top edge.
     let reference = settled(&mut doc, &mut out);
-    let cap = support::id(&doc, "lab-css-key-deny");
+    let cap = support::id(&doc, "lab-key-deny");
     let r = doc.inner().get_client_bounding_rect(cap).unwrap();
     scroll_stage(&mut doc, r.y - scroller.y + r.height / 2.0);
     let r = doc.inner().get_client_bounding_rect(cap).unwrap();
@@ -1178,14 +1187,23 @@ fn a_sheet_draws_its_plates_in_its_own_layer() {
     assert!(doc.take_error().is_none());
 }
 
-/// The layout pass with the 300-cap CSS grid on screen and nothing changing:
+/// Open the Stress view's 300-keycap grid (variant C).
+fn open_keycap_grid(doc: &mut NativeDocument) {
+    open(doc, "stress");
+    click(doc, "lab-fused-stress-keys");
+}
+
+/// The layout pass with the 300-keycap grid on screen and nothing changing:
 /// every redraw runs it, so this is the static cost of change detection
-/// (one computed-style pointer compare and one box read per member).
+/// (one computed-style pointer compare and one box read per plate).
 #[test]
-fn css_material_grid_binding_pass_cost() {
+fn keycap_grid_binding_pass_cost() {
     let mut doc = document(1.0, 900.0);
-    open(&mut doc, "surfaces");
-    click(&mut doc, "lab-keycap-grid-mode-css");
+    open_keycap_grid(&mut doc);
+    for i in [0, 299] {
+        let cap = format!("lab-grid-cap-{i}");
+        assert!(support::attr(&doc, &cap, "tk-plate").is_some(), "{cap}");
+    }
     scroll_to(&mut doc, "lab-keycap-grid");
     doc.layout_surfaces();
     let layer = stage_layer(&doc);
@@ -1205,53 +1223,53 @@ fn css_material_grid_binding_pass_cost() {
         doc.layout_surfaces();
     }
     println!(
-        "binding pass, surfaces view with the 300-cap css grid, static: {:.1} us",
+        "binding pass, stress view with the 300-keycap grid, static: {:.1} us",
         t.elapsed().as_secs_f64() * 1e6 / 200.0
     );
     assert!(!doc.inner().is_animating());
     assert!(doc.take_error().is_none());
 }
 
-/// Both keycap cases side by side (Surface components above, CSS classes
-/// below), at rest and with caps pressed through CSS state.
+/// The keycap case at rest, and with caps pressed through CSS state (Deny
+/// held down, Always allow toggled, the CODE tile selected); then the
+/// Stress view's 300-keycap grid.
 #[test]
 #[ignore = "writes offscreen GPU captures; run explicitly"]
-fn capture_css_keycaps() {
+fn capture_keycap_states() {
     let dir = capture_dir();
     let mut doc = document(2.0, 900.0);
     let mut out = Offscreen::new(2.0);
     open(&mut doc, "surfaces");
     scroll_to(&mut doc, "lab-keycaps");
-    out.save_settled(&mut doc, &dir, "css-keycaps-rest");
-    pointer_half(&mut doc, "lab-css-key-always", false);
-    pointer_half(&mut doc, "lab-css-key-always", true);
-    pointer_half(&mut doc, "lab-css-key-deny", false);
-    out.save_settled(&mut doc, &dir, "css-keycaps-pressed");
-    pointer_half(&mut doc, "lab-css-key-deny", true);
-    click(&mut doc, "lab-keycap-grid-mode-css");
+    out.save_settled(&mut doc, &dir, "keycaps-rest");
+    pointer_half(&mut doc, "lab-key-always", false);
+    pointer_half(&mut doc, "lab-key-always", true);
+    pointer_half(&mut doc, "lab-key-tile-code", false);
+    pointer_half(&mut doc, "lab-key-tile-code", true);
+    pointer_half(&mut doc, "lab-key-deny", false);
+    out.save_settled(&mut doc, &dir, "keycaps-pressed");
+    pointer_half(&mut doc, "lab-key-deny", true);
+    open_keycap_grid(&mut doc);
     scroll_to(&mut doc, "lab-keycap-grid");
-    out.save_settled(&mut doc, &dir, "css-keycap-grid");
-    click(&mut doc, "lab-keycap-grid-mode-surface");
-    scroll_to(&mut doc, "lab-keycap-grid");
-    out.save_settled(&mut doc, &dir, "surface-keycap-grid");
+    out.save_settled(&mut doc, &dir, "keycap-grid");
     assert!(doc.take_error().is_none());
 }
 
-/// 300 caps on screen, `css` (one materials layer)
-/// against `surface` (300 `<Surface material="key">`). Static: the document
-/// must settle and request no frames; then 100 repaints with nothing
-/// changing. One cap changing state: a click toggles its pressed material,
-/// then the next frame is timed (40 toggles). Prints means; --nocapture.
+/// 300 keycap plates on screen (Stress view, variant C) against the same
+/// view without them (variant A, stopped). Static: the document must settle,
+/// request no frames and re-render no pixel over 100 repaints. One cap
+/// changing state: a click toggles its pressed material, then the next
+/// frame is timed (40 toggles). Prints means; --nocapture.
 #[test]
 #[ignore = "GPU benchmark; run explicitly"]
 fn keycap_grid_bench() {
     let mut doc = document(2.0, 900.0);
     let mut out = Offscreen::new(2.0);
-    open(&mut doc, "surfaces");
+    open(&mut doc, "stress");
     let mean = |v: &[Duration]| v.iter().sum::<Duration>().as_secs_f64() * 1e3 / v.len() as f64;
-    for mode in ["off", "css", "surface", "css", "surface"] {
-        click(&mut doc, &format!("lab-keycap-grid-mode-{mode}"));
-        scroll_to(&mut doc, "lab-keycap-grid");
+    for mode in ["one", "keys", "one", "keys"] {
+        click(&mut doc, &format!("lab-fused-stress-{mode}"));
+        scroll_to(&mut doc, "lab-fused-stress");
         for _ in 0..10 {
             out.frame(&mut doc);
         }
@@ -1277,7 +1295,7 @@ fn keycap_grid_bench() {
             dirty.push(render::surface_dirty_pixels() - px);
         }
         println!(
-            "grid {mode} static: frame {:.2} ms, scene build {:.3} ms, surface paint {:.3} ms, \
+            "{mode} static: frame {:.2} ms, scene build {:.3} ms, surface paint {:.3} ms, \
              binding pass {:.1} us, dirty {} px total",
             mean(&totals),
             mean(&scenes),
@@ -1285,7 +1303,12 @@ fn keycap_grid_bench() {
             mean(&binds) * 1e3,
             dirty.iter().sum::<u64>(),
         );
-        if mode == "off" {
+        assert_eq!(
+            dirty.iter().sum::<u64>(),
+            0,
+            "{mode}: static re-renders nothing"
+        );
+        if mode == "one" {
             continue;
         }
         let (mut totals, mut scenes, mut work, mut dirty, mut handle) =
@@ -1310,7 +1333,7 @@ fn keycap_grid_bench() {
             }
         }
         println!(
-            "grid {mode} one cap toggled: frame {:.2} ms (worst {:.2}), scene build {:.3} ms, \
+            "{mode} one cap toggled: frame {:.2} ms (worst {:.2}), scene build {:.3} ms, \
              surface paint {:.3} ms, dirty {:.1} kpx/frame; click+restyle+bind {:.2} ms",
             mean(&totals),
             totals.iter().max().unwrap().as_secs_f64() * 1e3,
