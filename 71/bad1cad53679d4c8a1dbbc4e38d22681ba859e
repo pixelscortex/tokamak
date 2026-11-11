@@ -1,0 +1,21 @@
+packages/render/src/surface/surface.wgsl
+  s_e3d99f9a782059::t_c0658f140c7e92 221-224,230,246,254-255
+packages/ui/src/materials.css
+  s_e3d99f9a782059::t_c0658f140c7e92 70-72,74-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71bad1cad53679d4c8a1dbbc4e38d22681ba859e",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
