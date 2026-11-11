@@ -218,13 +218,16 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
         let boxy = info.w < 0.5;
         let el = P(base + 3u);
         // Elevation (boxes only): the strip still showing under the face,
-        // how far the face is pushed down, and whether it is on.
+        // how far the face is pushed down, and whether it is on. The element
+        // itself moves down by `sink` (a CSS translate, so its text moves
+        // with the face); the plate gives up the same amount at its bottom,
+        // so its foot stays where it was.
         let strip = select(0.0, el.x, boxy);
         let sink = select(0.0, el.y, boxy);
         let elevated = boxy && el.z > 0.5;
         var s = 0.0;
         if (sink > 0.0) {
-            s = plate_box(p, base, sink, 0.0);
+            s = plate_box(p, base, 0.0, sink);
         } else {
             s = shape_at(p, base);
         }
@@ -240,7 +243,7 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
         // outline, is the plate's side.
         var sf = s;
         if (elevated) {
-            sf = plate_box(p, base, sink, strip);
+            sf = plate_box(p, base, 0.0, sink + strip);
         }
         let df = sf * scale;
         if (bevel > 0.0 && df > -bevel - 1.0) {
@@ -248,8 +251,8 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
             var g = vec2<f32>(0.0);
             if (elevated) {
                 g = vec2<f32>(
-                    plate_box(p + vec2<f32>(e, 0.0), base, sink, strip) - sf,
-                    plate_box(p + vec2<f32>(0.0, e), base, sink, strip) - sf,
+                    plate_box(p + vec2<f32>(e, 0.0), base, 0.0, sink + strip) - sf,
+                    plate_box(p + vec2<f32>(0.0, e), base, 0.0, sink + strip) - sf,
                 );
             } else {
                 g = vec2<f32>(

@@ -237,11 +237,6 @@ function Elevation() {
       <button class={`bg-[#141414] elevation-3 sink-1 ${b} text-white`}>hover</button>
       <button class={`bg-[#141414] elevation-3 pressed ${b} text-white`}>pressed</button>
     </div>
-    <div class="flex items-center gap-4">
-      <span class="w-28 text-[12px] text-ink-3">With a bevel</span>
-      <button class={`bg-blue-600 elevation-3 bevel ${b} text-white`}>bevel</button>
-      <button class={`bg-[#141414] elevation-3 bevel ${b} text-white`}>bevel</button>
-    </div>
   </div>;
 }
 
