@@ -21,6 +21,12 @@ pub(super) const ANIMATION: Duration = Duration::from_millis(220);
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
+/// A new id for a widget that renders through `gpu` (surfaces and plates
+/// share the atlas, which tells its owners apart by this id).
+pub(super) fn next_id() -> u32 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
+
 /// One shape on its way from `from` to its target, by identity (`Key`).
 struct Tween {
     from: Shape,
@@ -63,7 +69,7 @@ pub(super) struct Surface {
 impl Surface {
     pub fn new() -> Self {
         Self {
-            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            id: next_id(),
             look: Look::default(),
             explicit: Vec::new(),
             bound: None,
@@ -376,7 +382,7 @@ impl Widget for Surface {
             height,
             scale as f32,
         );
-        let scene = gpu.scene(width, height, [x, y]);
+        let scene = gpu.scene(width, height, [x as f64, y as f64]);
         stats::record(started.elapsed(), dirty, active);
         scene
     }

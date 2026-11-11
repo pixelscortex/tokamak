@@ -66,16 +66,18 @@ export namespace JSX {
     "surface-slant"?: string;
     "surface-animate"?: true;
     "surface-attach"?: "left" | "right";
-    /** A plate: drawn by its region's materials layer from its computed
-     * fill (a solid background colour or a `material-*` utility). Added by
-     * the build to elements whose static `class` makes them one; authors do
-     * not write it. */
+    /** A plate: an element drawn from its computed fill (a solid background
+     * colour or a `material-*` utility) and bevel instead of a Blitz
+     * background. Added by the build to elements whose static `class` makes
+     * them one; authors do not write it. */
     "tk-plate"?: true;
     /** A region: the element directly holding a `<tk-surface materials>`
-     * layer. Its plates are drawn by that layer and Blitz paints no
-     * background under them. Written by `@tokamak/ui`'s shell regions,
-     * `Surface` and `Sheet`; views do not write it. */
-    "tk-region"?: true;
+     * layer. Blitz paints no background under the plates inside it. Bare,
+     * each plate paints itself, at its own place in paint order; `"sheet"`
+     * makes the region's layer draw all of them, below the region's content
+     * (render/SURFACES.md, "Plates"). Written by `@tokamak/ui`'s shell
+     * regions, `Surface` and `Sheet`; views do not write it. */
+    "tk-region"?: true | "sheet";
     /** With `WindowOptions::custom_titlebar`: pressing here drags the window. */
     "window-drag"?: true;
     "window-no-drag"?: true;
@@ -113,9 +115,12 @@ export namespace JSX {
     "border-align"?: "inside" | "center" | "outside";
     "border-lit"?: string | number;
     "border-mix"?: number;
-    /** Materials layer: draws the plates of the region that holds it (its
-     * parent, marked `tk-region`), each with its own computed material, no
-     * fusing. Written by `@tokamak/ui`'s shell regions, `Surface` and `Sheet`. */
+    /** Materials layer ("the sheet") of the region that holds it (its
+     * parent, marked `tk-region`): draws the region's plates that do not
+     * paint themselves, each with its own computed material, no fusing: all
+     * of them in a `tk-region="sheet"`, otherwise only those on elements
+     * that cannot carry a widget (inputs, images, tables). Written by
+     * `@tokamak/ui`'s shell regions, `Surface` and `Sheet`. */
     materials?: true;
   }
 

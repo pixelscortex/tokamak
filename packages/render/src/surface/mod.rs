@@ -13,8 +13,10 @@
 //! - `tiles`: per-tile culling and dirty rects for partial re-render.
 //! - `gpu`: pipeline, shared atlas, own textures, the Scene a widget returns.
 //! - `frame`: the per-frame hook that renders the atlas and submits once.
-//! - `bind`: layout binding (member elements' boxes become shapes).
+//! - `bind`: layout binding (member elements' boxes become shapes; who
+//!   draws each plate).
 //! - `widget`: the Blitz widget (attributes, animation, paint).
+//! - `plate`: the widget of a self-painting plate, on the element itself.
 //! - `demo`, `stats`, `fps`: lab-only stress demo and readout
 //!   (`surface-demo` feature, not in product builds).
 //! - `surface.wgsl`: the distance field and shading, on the GPU.
@@ -23,6 +25,7 @@
 mod bind;
 mod frame;
 mod gpu;
+mod plate;
 mod shape;
 mod tiles;
 mod widget;

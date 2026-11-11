@@ -3,8 +3,10 @@
  * renderer directly (joins, cuts, gap rings, borders, exact `poly` notches).
  * The layout-bound notch shows the same result from `Surface` members. */
 import { For, Show, createSignal } from "solid-js";
+import type { JSX } from "@tokamak/render";
 import { Input } from "@tokamak/ui/elements";
 import { Sheet, Shell, Surface } from "@tokamak/ui/components";
+import type { PlatePainter } from "@tokamak/ui/components";
 import { SectionTitle, SidebarHeader, SidebarLabel, SidebarRow, Stepper } from "./kit";
 
 type Shape = {
@@ -209,18 +211,19 @@ function NotchCase() {
 
 /** Keycaps from material classes: every cap is a real `<button>` with a
  * `material-key` class (flat face, lit edge band from the one light above)
- * in a `material-tray` (the 3 px of tray between caps is the seam). The
- * stage's materials layer draws them all from their computed style; no
+ * in a `material-tray` (the 3 px of tray between caps is the seam). Each
+ * paints its own plate from its computed style (or, with the lab's "Plates"
+ * switch on "sheet", the stage's materials layer draws them all); no
  * `Surface` component, no layer written here. Pressed states are CSS
  * variants: `active:` while the pointer is down, `aria-pressed:` for a cap
  * that stays down (Always allow, the selected tile). The menu floats over
  * other content, so it is a `Sheet`.
  *
  * Plain backgrounds are plates too: a cap on a box with an ordinary
- * `bg-[#...]` sits on the box (the box is drawn first, by the same layer,
- * and Blitz paints no background over the cap), and `bg-* bevel-*` buttons
- * are caps in any colour. Plates get no UA button background either, so
- * the caps need no `bg-transparent`. */
+ * `bg-[#...]` sits on the box (the box is drawn first, and Blitz paints no
+ * background over the cap), and `bg-* bevel-*` buttons are caps in any
+ * colour. Plates get no UA button background either, so the caps need no
+ * `bg-transparent`. */
 function KeycapCase() {
   const [always, setAlways] = createSignal(false);
   const [tile, setTile] = createSignal("CHAT");
@@ -292,7 +295,7 @@ function KeycapCase() {
       <span class="w-24 text-[12px] text-ink-3">Menu sheet</span>
       <div class="relative h-[100px] w-[340px]">
         <p class="m-0 text-[13px] leading-5 text-ink-3">
-          Content under a floating menu. The menu is a Sheet: its plates are drawn in its own layer, above this text.</p>
+          Content under a floating menu. The menu is a Sheet: a region of its own, above this text.</p>
         <Sheet id="lab-sheet-menu" class="material-card absolute top-2 left-28 flex w-40 flex-col gap-0.5 rounded-[10px] p-1">
           <For each={["Rename", "Duplicate", "Delete"]}>
             {(item, i) => (
@@ -304,6 +307,66 @@ function KeycapCase() {
         </Sheet>
       </div>
     </div>
+  </div>;
+}
+
+/** The two plate painters side by side, one row per difference. Every cell
+ * is a `Sheet` (a region of its own) holding the same elements: on the left
+ * its materials layer draws the plates (`plates="sheet"`), on the right each
+ * plate paints itself (the default). `lab/tests/fused_surface.rs` asserts
+ * the pixels of each cell. Green stripes are borders, which Blitz always
+ * paints itself: they stand for "other content" in both modes. */
+function PainterCases() {
+  const modes: PlatePainter[] = ["sheet", "self"];
+  const cell = "h-[120px] w-[250px] shrink-0 overflow-hidden rounded-[10px] bg-base";
+  const plate = "rounded-md bevel-2";
+  const tag = "flex items-center justify-center text-[11px] text-white";
+  const row = (name: string, text: string, body: (mode: PlatePainter) => JSX.Element) =>
+    <div class="flex items-center gap-4">
+      <span class="w-24 shrink-0 text-[12px] leading-4 text-ink-3">{name}</span>
+      <For each={modes}>{(mode) =>
+        <div class="flex flex-col gap-1.5">
+          <span class="font-data text-[10px] tracking-[0.06em] text-ink-4">{mode === "sheet" ? "SHEET" : "SELF-PAINTING"}</span>
+          {body(mode)}
+        </div>
+      }</For>
+      <p class="m-0 w-[300px] text-[12px] leading-[18px] text-ink-3">{text}</p>
+    </div>;
+  return <div id="lab-painters" class="flex flex-col gap-5">
+    {row("Covering", "A bar above a scrolling list (z-index). Its background should hide the lines and stripes under it.", (mode) =>
+      <Sheet plates={mode} id={`lab-mode-cover-${mode}`} class={cell}>
+        <div id={`lab-mode-cover-${mode}-scroll`} class="h-full overflow-y-auto px-3">
+          <For each={[1, 2, 3, 4, 5, 6, 7, 8]}>{(i) => <>
+            <p class="m-0 text-[12px] leading-5 text-ink-2">Scrolled line {i}</p>
+            <div class="h-0 border-0 border-t-[10px] border-solid border-emerald-500" />
+          </>}</For>
+        </div>
+        <div id={`lab-mode-cover-${mode}-bar`}
+          class="absolute inset-x-0 top-0 z-10 flex h-9 items-center bg-rose-700 bevel-2 px-3 text-[12px] text-white">Bar</div>
+      </Sheet>)}
+    {row("Opacity, transform", "Left: the parent has opacity 0.5. Right: the parent is moved and scaled; the outline is where layout put it.", (mode) =>
+      <Sheet plates={mode} id={`lab-mode-fx-${mode}`} class={cell}>
+        <div class="absolute top-3 left-3 opacity-50">
+          <div id={`lab-mode-fx-${mode}-faded`} class={`h-10 w-20 bg-blue-600 ${plate} ${tag}`}>0.5</div>
+        </div>
+        <div class="absolute top-3 left-[120px] h-10 w-20 border border-solid border-ink-5" />
+        <div class="absolute top-3 left-[120px] translate-x-6 translate-y-8 scale-125">
+          <div id={`lab-mode-fx-${mode}-moved`} class={`h-10 w-20 bg-blue-600 ${plate} ${tag}`}>moved</div>
+        </div>
+      </Sheet>)}
+    {row("Nested scroll", "A plate inside a small scrolling box (a plate itself), part of it above the box's top edge. Scroll the box.", (mode) =>
+      <Sheet plates={mode} id={`lab-mode-clip-${mode}`} class={cell}>
+        <div id={`lab-mode-clip-${mode}-scroll`}
+          class="absolute inset-x-3 top-9 h-[72px] overflow-y-auto border border-solid border-ink-5 bg-well">
+          <div id={`lab-mode-clip-${mode}-plate`} class={`mx-2 -mt-3 h-10 w-24 bg-blue-600 ${plate} ${tag}`}>plate</div>
+          <div class="h-[160px]" />
+        </div>
+      </Sheet>)}
+    {row("z-index", "Two overlapping plates. The red one comes first in the document and has z-index 10, so it belongs on top.", (mode) =>
+      <Sheet plates={mode} id={`lab-mode-z-${mode}`} class={cell}>
+        <div id={`lab-mode-z-${mode}-front`} class={`absolute top-4 left-4 z-10 h-14 w-28 bg-rose-600 ${plate} ${tag}`}>z-10</div>
+        <div id={`lab-mode-z-${mode}-back`} class={`absolute top-10 left-16 h-14 w-28 bg-blue-600 ${plate} ${tag}`}>later</div>
+      </Sheet>)}
   </div>;
 }
 
@@ -325,9 +388,13 @@ export default function SurfacesView() {
           Rendered on the GPU; only what changes is re-rendered.
         </SectionTitle>
         <SectionTitle eyebrow="KEYCAPS" title="Buttons as caps in a tray">
-          Plain buttons with material classes, drawn by the stage's materials layer. Press them.
+          Plain buttons with material classes. Each paints its own plate; press them.
         </SectionTitle>
         <KeycapCase />
+        <SectionTitle eyebrow="PLATE PAINTERS" title="The sheet and self-painting, side by side">
+          The same elements twice: drawn by the region's one layer, and each painting itself.
+        </SectionTitle>
+        <PainterCases />
         <div class="flex flex-wrap gap-5">
           <RailTab />
           <DockedPanel />

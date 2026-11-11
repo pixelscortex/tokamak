@@ -45,10 +45,11 @@ function Readout(props: { id: string }) {
   </div>;
 }
 
-/** 300 keycaps as plates (`material-key` buttons in a `material-tray`),
- * drawn by the stage's materials layer. Static, they cost nothing per frame;
- * clicking a cap toggles its pressed material (`aria-pressed:`), which
- * re-renders that cap's area only. */
+/** 300 keycaps as plates (`material-key` buttons in a `material-tray`).
+ * Each paints itself, or the stage's materials layer draws them all (the
+ * top bar's "Plates" switch). Static, they re-render nothing; clicking a
+ * cap toggles its pressed material (`aria-pressed:`), which re-renders
+ * that cap only. */
 const CAPS = 300;
 function KeycapGrid() {
   const [pressed, setPressed] = createSignal<ReadonlySet<number>>(new Set());
@@ -68,7 +69,7 @@ function KeycapGrid() {
 
 /** A: N squares in ONE surface, fused where they touch. B: N separate
  * one-square surfaces (no fusing), to show the per-surface cost. C: 300
- * keycap plates in the stage's materials layer. "moving" keeps only M of
+ * keycap plates in the stage. "moving" keeps only M of
  * the N in motion; the probe is a small unrelated animation, to show what
  * static surfaces cost when something else repaints. */
 function Stress() {

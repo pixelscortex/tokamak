@@ -839,11 +839,11 @@ impl Gpu {
     }
 
     /// The Scene that draws the target (`width` x `height` device px) at
-    /// `origin` in the widget's content box (an own texture may be larger
-    /// than that: only its top-left part is used).
-    pub fn scene(&self, width: u32, height: u32, origin: [u32; 2]) -> Scene {
+    /// `origin` (device px) from the widget's content box (an own texture
+    /// may be larger than that: only its top-left part is used).
+    pub fn scene(&self, width: u32, height: u32, origin: [f64; 2]) -> Scene {
         let mut scene = Scene::new();
-        let at = Affine::translate((origin[0] as f64, origin[1] as f64));
+        let at = Affine::translate((origin[0], origin[1]));
         let mut draw = |id: ResourceId, brush: Affine, rect: Rect| {
             let paint: anyrender::PaintRef<'_> = anyrender::Paint::Resource(ImageBrush {
                 image: id,

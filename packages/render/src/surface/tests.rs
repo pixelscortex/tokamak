@@ -458,7 +458,7 @@ mod binding {
         /// One frame's pass: layout, then binding. Returns (version, animate).
         fn frame(&mut self) -> (u64, bool) {
             self.doc.inner_mut().resolve(0.0);
-            self.registry.bind(&self.doc.inner());
+            self.registry.bind(&mut self.doc.inner_mut());
             let handle = self.registry.handle(self.surface);
             let b = handle.borrow();
             (b.version, b.animate.iter().any(|a| *a))
@@ -933,4 +933,194 @@ fn a_materials_layer_crops_to_its_plates() {
         crop(&[cap], &look, 2000, 1000, 2.0),
         crop(&[nudged], &look, 2000, 1000, 2.0)
     );
+}
+
+/// Who draws a plate (bind.rs): by default the plate's own widget, attached
+/// to the element by the layout pass; the region's layer for a
+/// `tk-region="sheet"`, and for elements a widget cannot go on.
+mod painters {
+    use super::super::bind::{Handle, Registry};
+    use blitz_dom::Document;
+    use blitz_html::HtmlDocument;
+    use blitz_traits::{NodeId, shell::Viewport};
+
+    const HTML: &str = r#"<html><body style="margin:0">
+      <div id="region" tk-region style="position:relative;width:300px;height:260px">
+        <tk-surface id="layer" materials
+          style="display:block;position:absolute;left:0;top:0;width:100%;height:100%"></tk-surface>
+        <div id="box" style="--tk-fill:#ff0000;--tk-bevel:2;width:100px;height:40px;border-radius:6px;opacity:0.5"></div>
+        <button id="button" style="--tk-fill:#00ff00;display:block;width:80px;height:30px"></button>
+        <input id="input" style="--tk-fill:#0000ff;display:block;width:80px;height:30px">
+        <p style="margin:0">text <span id="inline" style="--tk-fill:#ffff00">inline</span></p>
+        <div id="hidden" style="--tk-fill:#ffffff;display:none;width:10px;height:10px"></div>
+        <div id="sheet" tk-region="sheet" style="position:relative;width:200px;height:50px">
+          <tk-surface id="sheet-layer" materials
+            style="display:block;position:absolute;left:0;top:0;width:100%;height:100%"></tk-surface>
+          <div id="inner" style="--tk-fill:#ff00ff;width:50px;height:20px;opacity:0.5"></div>
+        </div>
+      </div>
+      <div id="outside" style="--tk-fill:#00ffff;width:50px;height:20px"></div>
+    </body></html>"#;
+
+    const PLATES: [&str; 7] = [
+        "box", "button", "input", "inline", "hidden", "inner", "outside",
+    ];
+
+    struct Fixture {
+        doc: HtmlDocument,
+        registry: Registry,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let mut doc = HtmlDocument::from_html(HTML, Default::default());
+            doc.inner_mut().set_viewport(Viewport {
+                window_size: (400, 400),
+                ..Default::default()
+            });
+            let mut registry = Registry::default();
+            let id = |name: &str| doc.inner().get_element_by_id(name).unwrap();
+            for layer in ["layer", "sheet-layer"] {
+                let _widget = registry.surface(id(layer));
+            }
+            // What wire.rs reports as attributes arrive.
+            for plate in PLATES {
+                registry.plate_marker(id(plate), true);
+            }
+            registry.region(id("region"), Some("true"));
+            registry.region(id("sheet"), Some("sheet"));
+            let mut fixture = Fixture { doc, registry };
+            fixture.frame();
+            fixture
+        }
+
+        fn id(&self, name: &str) -> NodeId {
+            self.doc.inner().get_element_by_id(name).unwrap()
+        }
+
+        /// One frame's pass: layout, then binding.
+        fn frame(&mut self) {
+            self.doc.inner_mut().resolve(0.0);
+            self.registry.bind(&mut self.doc.inner_mut());
+        }
+
+        fn carries_widget(&self, name: &str) -> bool {
+            let inner = self.doc.inner();
+            let element = inner.get_node(self.id(name)).unwrap().element_data();
+            element.is_some_and(|e| e.custom_widget_data().is_some())
+        }
+
+        fn own(&self, name: &str) -> Option<Handle> {
+            self.registry.own_handle(self.id(name))
+        }
+
+        /// Fills (rgba, 0..255) of the shapes a layer draws, in paint order.
+        fn drawn_by(&self, layer: &str) -> Vec<[u8; 4]> {
+            let handle = self.registry.handle(self.id(layer));
+            let bound = handle.borrow();
+            bound
+                .shapes
+                .iter()
+                .map(|s| s.paint.unwrap().fill.map(|v| (v * 255.0).round() as u8))
+                .collect()
+        }
+    }
+
+    const RED_HALF: [u8; 4] = [255, 0, 0, 128];
+    const GREEN: [u8; 4] = [0, 255, 0, 255];
+    const BLUE: [u8; 4] = [0, 0, 255, 255];
+    const YELLOW: [u8; 4] = [255, 255, 0, 255];
+    const MAGENTA_HALF: [u8; 4] = [255, 0, 255, 128];
+
+    #[test]
+    fn plates_paint_themselves_unless_the_region_is_a_sheet() {
+        let mut f = Fixture::new();
+        // Ordinary elements in a plain region carry their own plate.
+        for name in ["box", "button"] {
+            assert!(f.carries_widget(name), "{name}");
+        }
+        let handle = f.own("box").unwrap();
+        {
+            let bound = handle.borrow();
+            let shape = &bound.shapes[0];
+            assert_eq!(shape.rect, [0.0, 0.0, 100.0, 40.0], "its own border box");
+            assert_eq!(shape.radii, [6.0; 4]);
+            let paint = shape.paint.unwrap();
+            assert_eq!(paint.bevel, 2.0);
+            // Its own opacity is Blitz's to apply (the plate is drawn inside
+            // the element's opacity layer), so the fill keeps its alpha.
+            assert_eq!(paint.fill, [1.0, 0.0, 0.0, 1.0]);
+        }
+        // An element a widget cannot go on stays with the region's layer:
+        // the input keeps its text editor, and an inline element without a
+        // box of its own would never have its widget painted.
+        for name in ["input", "inline"] {
+            assert!(!f.carries_widget(name), "{name}");
+        }
+        let input = f.id("input");
+        assert!(
+            f.doc
+                .inner()
+                .get_node(input)
+                .unwrap()
+                .element_data()
+                .unwrap()
+                .text_input_data()
+                .is_some(),
+            "the input is still a text input"
+        );
+        assert_eq!(f.drawn_by("layer"), [BLUE, YELLOW]);
+        // A `tk-region="sheet"` inside it decides for its own plates; with
+        // the sheet, the element's own opacity scales the fill.
+        assert!(!f.carries_widget("inner"));
+        assert_eq!(f.drawn_by("sheet-layer"), [MAGENTA_HALF]);
+        // Not rendered, or outside every region: nobody draws it.
+        for name in ["hidden", "outside"] {
+            assert!(!f.carries_widget(name), "{name}");
+            assert!(f.own(name).is_none(), "{name}");
+        }
+
+        // Unchanged frames change nothing.
+        let version = handle.borrow().version;
+        f.frame();
+        f.frame();
+        assert_eq!(handle.borrow().version, version);
+        assert!(std::rc::Rc::ptr_eq(&handle, &f.own("box").unwrap()));
+
+        // The region becomes a sheet: its layer draws every plate, outer
+        // first, then in document order, and the widgets are taken off.
+        let region = f.id("region");
+        f.registry.region(region, Some("sheet"));
+        f.frame();
+        for name in ["box", "button"] {
+            assert!(!f.carries_widget(name), "{name}");
+            assert!(f.own(name).is_none(), "{name}");
+        }
+        assert_eq!(f.drawn_by("layer"), [RED_HALF, GREEN, BLUE, YELLOW]);
+        // And back.
+        f.registry.region(region, Some("true"));
+        f.frame();
+        assert!(f.carries_widget("box") && f.carries_widget("button"));
+        assert_eq!(f.drawn_by("layer"), [BLUE, YELLOW]);
+    }
+
+    /// Blitz drops a widget when its element leaves the document. The pass
+    /// stops tracking it and attaches a new one when the element returns.
+    #[test]
+    fn a_plate_that_leaves_and_returns_gets_its_widget_again() {
+        let mut f = Fixture::new();
+        let (node, parent) = (f.id("box"), f.id("region"));
+        let before = f.own("box").unwrap();
+        f.doc.inner_mut().mutate().remove_node(node);
+        f.frame();
+        assert!(f.registry.own_handle(node).is_none(), "not tracked");
+        f.doc.inner_mut().mutate().append_children(parent, &[node]);
+        f.frame();
+        let after = f.registry.own_handle(node).expect("attached again");
+        assert!(!std::rc::Rc::ptr_eq(&before, &after), "a new widget");
+        assert_eq!(after.borrow().shapes.len(), 1);
+        let inner = f.doc.inner();
+        let element = inner.get_node(node).unwrap().element_data().unwrap();
+        assert!(element.custom_widget_data().is_some());
+    }
 }

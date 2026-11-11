@@ -19,15 +19,15 @@
  *
  * Plates: for pieces that are each one plate (keycaps, trays, chips), a
  * plain element with a solid background colour or a `material-*` utility
- * (materials.css) is drawn by the materials layer of its region, no
- * component needed:
+ * (materials.css) inside a region paints its own fill and lit edge, at its
+ * own place in paint order, no component needed:
  *
  *   <button class="bg-blue-600 bevel-2 rounded-md px-3 active:recessed">Run</button>
  *   <button class="material-key active:material-key-pressed rounded-[7px] px-3">Deny</button>
  *
- * Every shell region and every `Surface` holds a layer. Something floating
- * outside the regions (a menu, a popover) is a `Sheet`: an element with its
- * own layer.
+ * Every shell region, every `Surface` and every `Sheet` is a region.
+ * `plates="sheet"` on one makes its materials layer draw all of its plates
+ * in one pass below its content instead (see `PlatePainter`).
  *
  * `layer` joins a fixed shell layer (see Shell) instead of the nearest
  * surface: `<Surface.Union layer="base">` makes a shape of window-base
@@ -77,6 +77,22 @@ export const shellGroups = { sidebar: "shell-sidebar", stage: "shell-stage" } as
 
 type Radius = number | [number, number, number, number];
 
+/** Who draws the plates of a region (render/SURFACES.md, "Plates").
+ * - `"self"` (the default): each plate paints itself, as part of its own
+ *   element. It covers what its element covers and follows the element's
+ *   z-index, the opacity and transforms of its ancestors, and the clip of
+ *   every scroll container around it.
+ * - `"sheet"`: one layer below all of the region's content draws every
+ *   plate in one shader pass. Choose it for lighting that spreads between
+ *   neighbouring plates (one pass sees them all). Its limits: a plate never
+ *   covers other content of its region, ignores z-index, ancestor opacity
+ *   and transforms, and is clipped only by the region.
+ * A nested region decides for its own plates. */
+export type PlatePainter = "self" | "sheet";
+
+/** The `tk-region` attribute value for a painter. */
+const region = (plates: PlatePainter | undefined) => (plates === "sheet" ? "sheet" : true);
+
 const radiusAttr = (r: Radius | undefined) =>
   r === undefined ? undefined : Array.isArray(r) ? r.join(" ") : String(r);
 
@@ -101,6 +117,8 @@ export interface SurfaceProps {
   group?: string;
   /** The plate animates when its own box moves (not on window resize). */
   animate?: boolean;
+  /** Who draws the plates inside this surface (default: each its own). */
+  plates?: PlatePainter;
   id?: string;
   class?: string;
   style?: string;
@@ -113,7 +131,7 @@ function SurfaceRoot(props: SurfaceProps): JSX.Element {
   return (
     <div
       id={props.id}
-      tk-region
+      tk-region={region(props.plates)}
       class={`isolate ${positioned(props.class)}`}
       style={props.style}
       surface-groups={props.plate === false ? undefined : group}
@@ -133,9 +151,10 @@ function SurfaceRoot(props: SurfaceProps): JSX.Element {
         border-mix={look().borderStrength}
         border-lit={look().borderLight}
       />
-      {/* Plates inside the surface (`bg-*`, `material-*`): over the surface,
-        * under its content. Without it they would go to the enclosing
-        * region's layer, below this surface, and not show. */}
+      {/* The surface's sheet: over the surface, under its content. It draws
+        * the plates inside the surface that do not paint themselves (all of
+        * them with `plates="sheet"`). Without it those would go to the
+        * enclosing region's layer, below this surface, and not show. */}
       <MaterialsLayer />
       <GroupContext.Provider value={group}>{props.children}</GroupContext.Provider>
     </div>
@@ -217,35 +236,42 @@ function shape(op: "union" | "subtract") {
   };
 }
 
-/** The materials layer of the element it is placed in (render/SURFACES.md,
- * "Plates"): draws the plates of that element below all of its content. The
- * element must carry `tk-region` (so the stylesheet stops Blitz painting
- * the backgrounds the layer draws) and be a stacking context (`isolate`) so
- * the layer stays above what is behind the element. Used by the shell
+/** The materials layer ("the sheet") of the element it is placed in
+ * (render/SURFACES.md, "Plates"), below all of that element's content. It
+ * makes the element a region: the element must carry `tk-region` (so the
+ * stylesheet stops Blitz painting the backgrounds of its plates) and be a
+ * stacking context (`isolate`) so the layer stays above what is behind the
+ * element. The layer draws the region's plates that do not paint
+ * themselves: all of them when the region is `tk-region="sheet"`, otherwise
+ * only those on elements that cannot carry a widget. Used by the shell
  * regions, `Surface` and `Sheet`, not by views. */
 export function MaterialsLayer(): JSX.Element {
   return <tk-surface materials class="absolute inset-0 -z-10" />;
 }
 
 export interface SheetProps {
+  /** Who draws the plates inside this sheet (default: each its own). */
+  plates?: PlatePainter;
   id?: string;
   class?: string;
   style?: string;
   children?: JSX.Element;
 }
 
-/** A floating piece with its own materials layer, for plates outside the
- * shell regions or above other content (menus, popovers): the sheet and its
- * plates paint where the sheet sits in the stacking order. The sheet's own
- * `material-*` class, if any, is its bottom plate.
+/** A region of its own, anywhere: a floating piece (a menu, a popover) or a
+ * part of a view that chooses who draws its plates. The sheet's own
+ * `bg-*` or `material-*` class, if any, is its bottom plate.
  *
  *   <Sheet class="material-card absolute top-10 right-0 rounded-lg p-1">
  *     <button class="hover:material-chip rounded-md px-2">Rename</button>
  *   </Sheet>
- */
+ *
+ * With `plates="sheet"` its layer draws every plate inside it in one pass
+ * (see `PlatePainter`); the sheet and its plates then paint where the sheet
+ * sits in the stacking order, all of them below its content. */
 export function Sheet(props: SheetProps): JSX.Element {
   return (
-    <div id={props.id} tk-region class={`isolate ${positioned(props.class)}`} style={props.style}>
+    <div id={props.id} tk-region={region(props.plates)} class={`isolate ${positioned(props.class)}`} style={props.style}>
       <MaterialsLayer />
       {props.children}
     </div>

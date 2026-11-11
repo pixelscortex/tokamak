@@ -6,6 +6,7 @@
 import { For, Match, Switch, createSignal } from "solid-js";
 import { Icon } from "@tokamak/ui/elements";
 import { Shell, Surface, rail } from "@tokamak/ui/components";
+import type { PlatePainter } from "@tokamak/ui/components";
 import { fill, stroke } from "./icons";
 import { IconButton } from "./kit";
 import ChatView from "./chat";
@@ -64,8 +65,10 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
   );
 }
 
-/** Top bar parts every section shares: navigation and the command search. */
-function TopBar() {
+/** Top bar parts every section shares: navigation, the command search and
+ * the switch between the two plate painters for every shell region (each
+ * plate painting itself, or each region's sheet drawing its plates). */
+function TopBar(props: { plates: PlatePainter; setPlates: (plates: PlatePainter) => void }) {
   return (
     <>
       <Shell.TopBar at="start">
@@ -92,15 +95,27 @@ function TopBar() {
         </Surface>
         </div>
       </Shell.TopBar>
+      <Shell.TopBar at="end">
+        <button
+          id="lab-plates-mode"
+          window-no-drag
+          aria-pressed={props.plates === "sheet"}
+          onClick={() => props.setPlates(props.plates === "sheet" ? "self" : "sheet")}
+          class="material-key active:material-key-pressed aria-pressed:material-key-pressed flex h-6 items-center rounded-[6px] border-0 px-2 font-data text-[10px] tracking-[0.06em] text-ink-body select-none"
+        >
+          {props.plates === "sheet" ? "PLATES: SHEET" : "PLATES: SELF"}
+        </button>
+      </Shell.TopBar>
     </>
   );
 }
 
 export default function App() {
   const [section, setSection] = createSignal<Section>("chat");
+  const [plates, setPlates] = createSignal<PlatePainter>("self");
   return (
-    <Shell>
-      <TopBar />
+    <Shell plates={plates()}>
+      <TopBar plates={plates()} setPlates={setPlates} />
       <Rail active={section()} select={setSection} />
       <Switch>
         <Match when={section() === "chat"}>

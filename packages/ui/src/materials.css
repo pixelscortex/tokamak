@@ -1,8 +1,8 @@
 /* Plates (render/SURFACES.md, "Plates").
  *
  * An element with a solid background colour, inside a region, is a plate:
- * its fill and lit edge are drawn by the region's materials layer (the
- * sheet below the region's content), not by Blitz. Ordinary Tailwind:
+ * its fill and lit edge are drawn by our shader, not by Blitz. Ordinary
+ * Tailwind:
  *
  *   <button class="bg-blue-600 bevel-2 rounded-md px-3 active:bg-blue-700 active:recessed">Run</button>
  *
@@ -23,7 +23,13 @@
  * fails on a `bg-*`, `bevel-*` or `material-*` class Tailwind does not
  * know. A region is an element holding a materials layer and marked
  * `tk-region` (the shell regions, `Surface`, `Sheet`); outside regions
- * nothing is translated and Blitz paints every background. */
+ * nothing is translated and Blitz paints every background.
+ *
+ * Who draws a plate is the region's choice. By default each plate paints
+ * itself, as part of its own element (so it covers, stacks, fades, moves
+ * and clips like the element). In a `tk-region="sheet"` the region's
+ * materials layer draws all of its plates in one pass below the region's
+ * content (`plates="sheet"` on `Shell`, `Surface` and `Sheet`). */
 
 /* Registered and not inherited, so a cap inside a tray does not pick up the
  * tray's material. `--tk-fill` is a `<color>`: Stylo resolves `var()`,
@@ -34,9 +40,9 @@
 @property --tk-bevel { syntax: "*"; inherits: false; }
 @property --tk-elevation { syntax: "*"; inherits: false; }
 
-/* The plate draws the background; Blitz must not paint it over the plate
- * (or over the plates of the element's children). Only for plates inside a
- * region: elsewhere no layer would draw it. */
+/* The plate draws the background; Blitz must not paint it under or over
+ * the plate (or over the plates of the element's children). Only for plates
+ * inside a region: elsewhere nothing would draw it. */
 :where([tk-region] [tk-plate], [tk-region][tk-plate]) { background-color: transparent !important; }
 
 /* The lit edge band, CSS px: `bevel-2`, `bevel-2.5`, `active:bevel-1`. */

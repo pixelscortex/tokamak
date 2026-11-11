@@ -46,16 +46,35 @@
 //! (registered, non-inherited custom properties, see
 //! `packages/ui/src/materials.css`, so `hover:`, `active:` and
 //! `aria-pressed:` variants work through CSS alone), and its shape is its
-//! border box with its computed `border-radius`. A plate whose fill is
-//! transparent (a conditional class that is off) is not drawn.
+//! border box as Blitz paints it (the rounded layout, `painted_box`) with
+//! its computed `border-radius`. A plate whose fill is transparent (a
+//! conditional class that is off) is not drawn.
 //!
-//! A plate is drawn by the materials layer of its region: the nearest
-//! element, the plate itself or an ancestor, that directly holds a
-//! `<tk-surface materials>` (the shell regions and `Sheet` hold one). In a
-//! layer, shapes do not fuse: each is shaded with its own material and
-//! painted over the ones before it, outer elements first (a tray, then the
-//! caps in it), then in document order. Plates whose box does not reach the
-//! layer's box (scrolled out of view) are skipped.
+//! Who draws a plate. Its region is the nearest element, the plate itself
+//! or an ancestor, that directly holds a `<tk-surface materials>` (the shell
+//! regions, `Surface` and `Sheet` hold one). Two ways, chosen per region:
+//!
+//! - Self-painting (the default): the plate's own widget (`plate::Plate`),
+//!   attached to the element itself by this pass. Blitz draws a widget's
+//!   scene as part of its element, after the element's background and
+//!   border and before its text and children, so the plate sits at the
+//!   element's own place in paint order and inherits every clip, opacity
+//!   layer and transform Blitz applies to the element. The widget ignores
+//!   input (`EventResult::Ignored`, the one change our Blitz fork carries),
+//!   so the element keeps focus, `:active`, click and scrolling.
+//! - The sheet (`tk-region="sheet"` on the region): the region's materials
+//!   layer draws every plate of the region below all of its content. In a
+//!   layer, shapes do not fuse: each is shaded with its own material and
+//!   painted over the ones before it, outer elements first (a tray, then
+//!   the caps in it), then in document order. Plates whose box does not
+//!   reach the layer's box (scrolled out of view) are skipped. One shader
+//!   pass sees all of a region's plates, which is what lighting that
+//!   spreads between neighbours needs.
+//!
+//! An element Blitz cannot hang a widget on is drawn by the sheet of its
+//! region in either mode (`can_decorate`): an element has one slot for its
+//! own data, and a widget in it would replace a text input's editor, an
+//! image, a table's layout or another widget.
 //!
 //! Change detection: a plate's material is re-read only when Stylo gives it
 //! a new computed style object or its box changes size (`Seen` keeps the
@@ -65,7 +84,7 @@ use blitz_dom::{BaseDocument, LocalName, Node};
 use blitz_traits::NodeId;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -85,6 +104,17 @@ pub(super) struct Bound {
     /// from these, see SURFACES.md). Changes here do not bump `version`.
     pub depth: u32,
     pub origin: [f32; 2],
+    /// Self-painting plates only: where the element's border box starts
+    /// relative to the point Blitz draws the widget's scene at (the
+    /// element's content box, moved by its own scroll offset), CSS px. Read
+    /// at every paint; changes here do not bump `version`.
+    pub shift: [f32; 2],
+    /// Self-painting plates only: the sub-pixel part of the border box's
+    /// position on screen, device px in 0..1 (see `plate`). The widget draws
+    /// the shape moved by it and its image on whole device pixels, so the
+    /// edges are as sharp as the sheet's. Changes here do not bump
+    /// `version`.
+    pub sub: [f32; 2],
 }
 
 pub(super) type Handle = Rc<RefCell<Bound>>;
@@ -140,6 +170,48 @@ pub(crate) struct Registry {
     /// Per plate: the computed style its material was last read from, and
     /// that material (None: the style sets no `--tk-fill`).
     seen: HashMap<NodeId, Seen>,
+    /// Regions marked `tk-region="sheet"`: their layer draws their plates.
+    sheets: HashSet<NodeId>,
+    /// Self-painting plates whose widget this pass attached.
+    own: HashMap<NodeId, Own>,
+}
+
+/// A self-painting plate: the handle its widget reads, and the shape last
+/// handed over (in the element's own border box).
+struct Own {
+    handle: Handle,
+    last: Option<Shape>,
+}
+
+/// Where one plate is drawn in this pass.
+struct Plan {
+    id: NodeId,
+    /// The materials layer of its region, if it is in one.
+    layer: Option<NodeId>,
+    /// Its depth in the document (outer plates paint first in a layer).
+    depth: u32,
+    /// It paints itself; otherwise `layer` draws it.
+    own: bool,
+}
+
+/// Tags whose elements Blitz gives data or behaviour of their own later
+/// than this pass can see (an image arrives, a table is laid out), or lays
+/// out as replaced content: a widget on them would be overwritten, or would
+/// stop that behaviour. Their plates stay with the sheet.
+const NO_WIDGET: [&str; 14] = [
+    "img", "svg", "canvas", "video", "embed", "iframe", "object", "input", "textarea", "select",
+    "table", "link", "style", "title",
+];
+
+/// True if this pass may hang a plate widget on `element`: nothing else
+/// occupies its data slot (`ours`: the widget there is the plate's own).
+fn can_decorate(element: &blitz_dom::node::ElementData, ours: bool) -> bool {
+    use blitz_dom::node::SpecialElementData as Data;
+    match &element.special_data {
+        Data::None => !NO_WIDGET.contains(&&*element.name.local),
+        Data::CustomWidget(_) => ours,
+        _ => false,
+    }
 }
 
 /// How an element became a plate: the build's `tk-plate` marker, or a
@@ -157,6 +229,8 @@ struct Seen {
     look: Option<(Paint, [f32; 4])>,
     width: f32,
     height: f32,
+    /// Read for a self-painting plate (see `material_of`).
+    own: bool,
 }
 
 /// True if a `class` value can make its element a plate: a `material-*` or
@@ -197,9 +271,12 @@ pub(super) fn css_colour(text: &str) -> Option<[f32; 4]> {
 
 /// Paint and corner radii of a plate from its computed style. None when it
 /// draws nothing: no fill or a fully transparent one, or `visibility` other
-/// than visible. The element's own `opacity` scales the fill's alpha (an
-/// ancestor's does not: the layer is not painted inside the ancestor).
-fn material_of(style: &Style, width: f32) -> Option<(Paint, [f32; 4])> {
+/// than visible. For a plate drawn by the sheet (`own` false) the element's
+/// own `opacity` scales the fill's alpha (an ancestor's does not: the layer
+/// is not painted inside the ancestor). A self-painting plate is drawn
+/// inside the opacity layers Blitz makes for the element and its ancestors,
+/// so its fill keeps its own alpha.
+fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])> {
     use blitz_dom::Atom;
     use style::properties::longhands::visibility::computed_value::T as Visibility;
     if style.get_inherited_box().visibility != Visibility::Visible {
@@ -220,7 +297,9 @@ fn material_of(style: &Style, width: f32) -> Option<(Paint, [f32; 4])> {
         })
     };
     let mut fill = css_colour(&text("tk-fill")?)?;
-    fill[3] *= style.get_effects().opacity.clamp(0.0, 1.0);
+    if !own {
+        fill[3] *= style.get_effects().opacity.clamp(0.0, 1.0);
+    }
     if fill[3] <= 0.0 {
         return None;
     }
@@ -331,6 +410,42 @@ impl Registry {
         }
     }
 
+    /// Track `tk-region` on an element: `sheet` makes the region's layer draw
+    /// its plates (see "Who draws a plate"); any other value, or none, leaves
+    /// them self-painting.
+    pub fn region(&mut self, node: NodeId, value: Option<&str>) {
+        if value == Some("sheet") {
+            self.sheets.insert(node);
+        } else {
+            self.sheets.remove(&node);
+        }
+    }
+
+    /// Lab test probe: the shape a self-painting plate last drew, in its own
+    /// border box; None if `node` does not paint itself.
+    #[cfg(feature = "surface-demo")]
+    pub fn own_shape(&self, node: NodeId) -> Option<MaterialShape> {
+        let s = self.own.get(&node)?.last.as_ref()?;
+        Some(MaterialShape {
+            rect: s.rect,
+            radii: s.radii,
+            fill: s.paint.map(|p| p.fill),
+            bevel: s.paint.map(|p| p.bevel),
+            recessed: s.paint.is_some_and(|p| p.recessed),
+        })
+    }
+
+    /// Lab test probe: how many plates paint themselves.
+    #[cfg(feature = "surface-demo")]
+    pub fn own_count(&self) -> usize {
+        self.own.values().filter(|o| o.last.is_some()).count()
+    }
+
+    #[cfg(test)]
+    pub(super) fn own_handle(&self, node: NodeId) -> Option<Handle> {
+        self.own.get(&node).map(|o| o.handle.clone())
+    }
+
     /// Track the build's `tk-plate` marker on an element.
     pub fn plate_marker(&mut self, node: NodeId, present: bool) {
         self.set_plate(node, |p| p.marked = present);
@@ -362,7 +477,12 @@ impl Registry {
     }
 
     /// The layout pass. `doc` must be resolved (styles and layout current).
-    pub fn bind(&mut self, doc: &BaseDocument) {
+    /// It is mutable only to attach and remove plate widgets (`attach_own`);
+    /// nothing else in the document changes.
+    pub fn bind(&mut self, doc: &mut BaseDocument) {
+        let plans = self.plan_plates(doc);
+        self.attach_own(doc, &plans);
+        let doc = &*doc;
         let live = |id: NodeId| {
             doc.get_node(id)
                 .filter(|n| n.flags.is_in_document() && n.element_data().is_some())
@@ -372,20 +492,15 @@ impl Registry {
         self.members.retain(|id| doc.get_node(*id).is_some());
         self.plates.retain(|id, _| doc.get_node(*id).is_some());
         self.seen.retain(|id, _| doc.get_node(*id).is_some());
+        self.sheets.retain(|id| doc.get_node(*id).is_some());
+        self.own.retain(|id, _| doc.get_node(*id).is_some());
 
         let mut groups: HashMap<&str, NodeId> = HashMap::new();
-        // Materials layers by region (the element holding the layer).
-        let mut regions: HashMap<NodeId, NodeId> = HashMap::new();
         let mut boxes: HashMap<NodeId, [f32; 4]> = HashMap::new();
         for &id in self.surfaces.keys() {
             if let (Some(node), Some(rect)) = (live(id), doc.get_client_bounding_rect(id)) {
                 if let Some(group) = attr(node, "group") {
                     groups.insert(group, id);
-                }
-                if attr(node, "materials").is_some()
-                    && let Some(region) = node.parent
-                {
-                    regions.insert(region, id);
                 }
                 boxes.insert(
                     id,
@@ -456,9 +571,7 @@ impl Registry {
                 ));
             }
         }
-        if !regions.is_empty() {
-            self.place_plates(doc, &regions, &boxes, &mut lists);
-        }
+        self.place_plates(doc, &plans, &boxes, &mut lists);
         // Depth: ancestors that directly contain another registered surface
         // element (a `Surface` component's root holds its `<tk-surface>`).
         let holders: std::collections::HashSet<NodeId> = boxes
@@ -512,51 +625,186 @@ impl Registry {
         }
     }
 
-    /// Plates into the lists of their regions' layers (see "Plates").
-    fn place_plates(
-        &mut self,
-        doc: &BaseDocument,
-        regions: &HashMap<NodeId, NodeId>,
-        boxes: &HashMap<NodeId, [f32; 4]>,
-        lists: &mut HashMap<NodeId, Vec<Placed>>,
-    ) {
-        for &id in self.plates.keys() {
-            let Some(node) = doc
-                .get_node(id)
-                .filter(|n| n.flags.is_in_document() && n.element_data().is_some())
-            else {
-                continue;
-            };
-            let Some(rect) = doc.get_client_bounding_rect(id) else {
-                continue;
-            };
-            let (w, h) = (rect.width as f32, rect.height as f32);
-            if w <= 0.0 || h <= 0.0 {
-                continue; // not rendered (display: none)
+    /// Decide, for every plate in the document, who draws it in this pass
+    /// (see "Who draws a plate").
+    fn plan_plates(&self, doc: &BaseDocument) -> Vec<Plan> {
+        if self.plates.is_empty() {
+            return Vec::new();
+        }
+        // Materials layers by region (the element holding the layer).
+        let mut regions: HashMap<NodeId, NodeId> = HashMap::new();
+        for &id in self.surfaces.keys() {
+            if let Some(node) = doc.get_node(id).filter(|n| n.flags.is_in_document())
+                && attr(node, "materials").is_some()
+                && let Some(region) = node.parent
+            {
+                regions.insert(region, id);
             }
-            // Blitz moves an element's client rect by its own scroll offset
-            // too; a plate that scrolls its content stays where it is.
-            let scroll = node.scroll_offset();
-            let (x, y) = ((rect.x + scroll.x) as f32, (rect.y + scroll.y) as f32);
+        }
+        let mut plans = Vec::with_capacity(self.plates.len());
+        for &id in self.plates.keys() {
+            let Some(node) = doc.get_node(id).filter(|n| n.flags.is_in_document()) else {
+                continue;
+            };
+            let Some(element) = node.element_data() else {
+                continue;
+            };
             // The nearest region, starting at the plate itself (a `Sheet`
-            // with its own material draws in its own layer), and the plate's
-            // depth in the document (outer plates paint first).
-            let mut layer = None;
+            // with its own material is its own region's bottom plate), and
+            // the plate's depth in the document.
+            let mut region = None;
             let mut depth = 0u32;
             let mut current = Some(id);
             while let Some(at) = current {
-                if layer.is_none() {
-                    layer = regions.get(&at).copied();
+                if region.is_none() && regions.contains_key(&at) {
+                    region = Some(at);
                 }
                 depth += 1;
                 current = doc.get_node(at).and_then(|n| n.parent);
             }
-            let Some(layer) = layer else { continue };
-            let origin = boxes[&layer];
+            // An element without a box of its own is not painted as an
+            // element, so Blitz never draws a widget on it.
+            let own = region.is_some_and(|r| !self.sheets.contains(&r))
+                && has_box(node)
+                && can_decorate(element, self.own.contains_key(&id));
+            plans.push(Plan {
+                id,
+                layer: region.map(|r| regions[&r]),
+                depth,
+                own,
+            });
+        }
+        plans
+    }
+
+    /// Attach the widget of every plate planned to paint itself that has
+    /// none, and take it off elements that no longer paint themselves. Done
+    /// in this pass, not when the marker arrives: the region that decides is
+    /// only known once the element is in the document, and blitz-dom skips
+    /// an element's built-in setup (a button's form owner) if it already
+    /// carries a widget when it is inserted. Blitz drops the widget of an
+    /// element that leaves the document, so one that comes back is attached
+    /// again here.
+    fn attach_own(&mut self, doc: &mut BaseDocument, plans: &[Plan]) {
+        let carries = |doc: &BaseDocument, id: NodeId| {
+            doc.get_node(id)
+                .and_then(|n| n.element_data())
+                .is_some_and(|e| e.custom_widget_data().is_some())
+        };
+        let mut kept = 0;
+        let mut missing = Vec::new();
+        for plan in plans.iter().filter(|p| p.own) {
+            if self.own.contains_key(&plan.id) && carries(doc, plan.id) {
+                kept += 1;
+            } else {
+                missing.push(plan.id);
+            }
+        }
+        // Some tracked widget is not planned any more (its plate left the
+        // document, stopped being a plate, or its region became a sheet).
+        if kept != self.own.len() {
+            let keep: HashSet<NodeId> = plans.iter().filter(|p| p.own).map(|p| p.id).collect();
+            let gone: Vec<NodeId> = self
+                .own
+                .keys()
+                .copied()
+                .filter(|id| !keep.contains(id))
+                .collect();
+            for id in gone {
+                self.own.remove(&id);
+                // The material was read for a self-painting plate.
+                self.seen.remove(&id);
+                if carries(doc, id) {
+                    doc.remove_custom_widget(id);
+                }
+            }
+        }
+        for id in missing {
+            let handle = Handle::default();
+            doc.set_custom_widget(id, Box::new(super::plate::Plate::new(handle.clone())));
+            self.seen.remove(&id);
+            self.own.insert(id, Own { handle, last: None });
+        }
+    }
+
+    /// Plates to whoever draws them: a self-painting plate's shape to its
+    /// own widget, the others into the lists of their regions' layers.
+    ///
+    /// A plate is the box Blitz paints its element in: the rounded layout
+    /// (`painted_box`), not the client rect, which is unrounded and can be
+    /// half a pixel away (a flex item after text of fractional width).
+    fn place_plates(
+        &mut self,
+        doc: &BaseDocument,
+        plans: &[Plan],
+        boxes: &HashMap<NodeId, [f32; 4]>,
+        lists: &mut HashMap<NodeId, Vec<Placed>>,
+    ) {
+        let scale = doc.viewport().scale_f64();
+        // Where each layer in use is painted (as its plates: rounded).
+        let mut origins: HashMap<NodeId, [f32; 2]> = HashMap::new();
+        for plan in plans {
+            let id = plan.id;
+            let Some(node) = doc.get_node(id) else {
+                continue;
+            };
+            // None: not rendered (display: none).
+            let rect = painted_box(doc, node);
+            if plan.own {
+                let Some(own) = self.own.get_mut(&id) else {
+                    continue;
+                };
+                // Blitz draws the widget's scene at the content box origin,
+                // scrolled with the content; the plate is the border box.
+                let layout = node.final_layout();
+                let scroll = node.scroll_offset();
+                {
+                    let mut bound = own.handle.borrow_mut();
+                    bound.shift = [
+                        scroll.x as f32 - layout.border.left - layout.padding.left,
+                        scroll.y as f32 - layout.border.top - layout.padding.top,
+                    ];
+                    bound.sub = match rect {
+                        Some([x, y, ..]) => [x, y].map(|v| sub_pixel(v as f64 * scale)),
+                        None => [0.0; 2],
+                    };
+                }
+                let look = rect
+                    .zip(node.primary_styles())
+                    .and_then(|([.., w, h], style)| {
+                        look_of(&mut self.seen, id, (*style).clone(), w, h, true)
+                            .map(|(paint, radii)| (paint, radii, w, h))
+                    });
+                let shape = look.map(|(paint, radii, w, h)| Shape {
+                    paint: Some(paint),
+                    ..Shape::rect(false, [0.0, 0.0, w, h], radii)
+                });
+                if shape != own.last {
+                    let mut bound = own.handle.borrow_mut();
+                    bound.keys = shape.iter().map(|_| Key::Member(id)).collect();
+                    bound.shapes = shape.iter().cloned().collect();
+                    bound.animate = vec![false; bound.shapes.len()];
+                    bound.version += 1;
+                    drop(bound);
+                    own.last = shape;
+                }
+                continue;
+            }
+            let (Some(layer), Some([x, y, w, h])) = (plan.layer, rect) else {
+                continue;
+            };
+            let Some(size) = boxes.get(&layer) else {
+                continue;
+            };
+            let origin = *origins.entry(layer).or_insert_with(|| {
+                doc.get_node(layer)
+                    .and_then(|n| painted_box(doc, n))
+                    .map_or([size[0], size[1]], |b| [b[0], b[1]])
+            });
             let local = [x - origin[0], y - origin[1], w, h];
             // Out of the layer's box (scrolled away): nothing to draw.
-            if local[0] >= origin[2]
-                || local[1] >= origin[3]
+            if local[0] >= size[2]
+                || local[1] >= size[3]
                 || local[0] + w <= 0.0
                 || local[1] + h <= 0.0
             {
@@ -565,37 +813,96 @@ impl Registry {
             let Some(style) = node.primary_styles().map(|s| (*s).clone()) else {
                 continue;
             };
-            let look = match self.seen.get(&id) {
-                Some(seen)
-                    if Style::ptr_eq(&seen.style, &style)
-                        && seen.width == w
-                        && seen.height == h =>
-                {
-                    seen.look
-                }
-                _ => {
-                    let look = material_of(&style, w);
-                    self.seen.insert(
-                        id,
-                        Seen {
-                            style,
-                            look,
-                            width: w,
-                            height: h,
-                        },
-                    );
-                    look
-                }
+            let Some((paint, radii)) = look_of(&mut self.seen, id, style, w, h, false) else {
+                continue;
             };
-            let Some((paint, radii)) = look else { continue };
             let shape = Shape {
                 paint: Some(paint),
                 ..Shape::rect(false, local, radii)
             };
-            lists
-                .entry(layer)
-                .or_default()
-                .push(((false, false, depth, id), shape, false, None));
+            lists.entry(layer).or_default().push((
+                (false, false, plan.depth, id),
+                shape,
+                false,
+                None,
+            ));
+        }
+    }
+}
+
+/// True if the element has a layout box of its own (it is rendered, and is
+/// not an inline element that only exists as fragments of its lines).
+fn has_box(node: &Node) -> bool {
+    let size = node.unrounded_layout().size;
+    size.width > 0.0 && size.height > 0.0
+}
+
+/// The border box Blitz paints `node` in, in the window, CSS px (x, y, w,
+/// h): its rounded layout, from the same chain of containing blocks and
+/// scroll offsets as the client rect. Blitz moves an element by its own
+/// scroll offset too; a plate that scrolls its content stays where it is.
+/// An inline element without a box of its own gets the union of its line
+/// fragments (the client rect). None if the element is not rendered.
+fn painted_box(doc: &BaseDocument, node: &Node) -> Option<[f32; 4]> {
+    let scroll = node.scroll_offset();
+    if has_box(node) {
+        let at = node.absolute_position(0.0, 0.0);
+        let window = doc.viewport_scroll();
+        let size = node.final_layout().size;
+        return Some([
+            at.x + (scroll.x - window.x) as f32,
+            at.y + (scroll.y - window.y) as f32,
+            size.width,
+            size.height,
+        ]);
+    }
+    let rect = doc.get_client_bounding_rect(node.id)?;
+    (rect.width > 0.0 && rect.height > 0.0).then(|| {
+        [
+            (rect.x + scroll.x) as f32,
+            (rect.y + scroll.y) as f32,
+            rect.width as f32,
+            rect.height as f32,
+        ]
+    })
+}
+
+/// The sub-pixel part of a device px position, in steps of 1/64 px (so
+/// rounding noise in layout does not make a plate re-render), in 0..1.
+fn sub_pixel(position: f64) -> f32 {
+    let steps = (position * 64.0).round();
+    (steps - (steps / 64.0).floor() * 64.0) as f32 / 64.0
+}
+
+/// A plate's material, re-read only when Stylo gave it a new computed style,
+/// its box changed size, or who draws it changed (see "Change detection").
+fn look_of(
+    seen: &mut HashMap<NodeId, Seen>,
+    id: NodeId,
+    style: Style,
+    w: f32,
+    h: f32,
+    own: bool,
+) -> Option<(Paint, [f32; 4])> {
+    match seen.get(&id) {
+        Some(s)
+            if Style::ptr_eq(&s.style, &style) && s.width == w && s.height == h && s.own == own =>
+        {
+            s.look
+        }
+        _ => {
+            let look = material_of(&style, w, own);
+            seen.insert(
+                id,
+                Seen {
+                    style,
+                    look,
+                    width: w,
+                    height: h,
+                    own,
+                },
+            );
+            look
         }
     }
 }

@@ -180,6 +180,9 @@ impl Tree {
                         "tk-plate" => self
                             .surfaces
                             .plate_marker(self.native[&id], value.is_some()),
+                        // `tk-region="sheet"`: the region's layer draws its
+                        // plates instead of each plate painting itself.
+                        "tk-region" => self.surfaces.region(self.native[&id], value.as_deref()),
                         "class" => {
                             let native = self.native[&id];
                             if let Some(plate) = self.surfaces.plate_class(native, value.as_deref())

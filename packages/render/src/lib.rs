@@ -96,11 +96,25 @@ impl NativeDocument {
         self.generation
     }
 
-    /// Hand layout-bound shapes to `<tk-surface>` widgets (surface/bind.rs).
-    /// Call after `resolve` and before painting; the window does this on
-    /// every redraw. Does nothing when no member box or setting changed.
+    /// Hand layout-bound shapes to `<tk-surface>` widgets and attach the
+    /// widgets of self-painting plates (surface/bind.rs). Call after
+    /// `resolve` and before painting; the window does this on every redraw.
+    /// Changes nothing when no member box, plate or setting changed.
     pub fn layout_surfaces(&mut self) {
-        self.bridge.tree.surfaces.bind(&self.html.inner());
+        self.bridge.tree.surfaces.bind(&mut self.html.inner_mut());
+    }
+
+    /// Lab probe (surface-demo): the shape the self-painting plate `node`
+    /// last drew, in its own border box; None if it does not paint itself.
+    #[cfg(feature = "surface-demo")]
+    pub fn own_plate_shape(&self, node: blitz_traits::NodeId) -> Option<surface::MaterialShape> {
+        self.bridge.tree.surfaces.own_shape(node)
+    }
+
+    /// Lab probe (surface-demo): how many plates paint themselves.
+    #[cfg(feature = "surface-demo")]
+    pub fn own_plate_count(&self) -> usize {
+        self.bridge.tree.surfaces.own_count()
     }
 
     /// Lab probe (surface-demo): the shapes the last layout pass handed to

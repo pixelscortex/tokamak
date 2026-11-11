@@ -624,30 +624,38 @@ fn settled_sections_request_no_frames_and_render_nothing() {
         }
         frames
     };
-    for section in ["chat", "components", "surfaces", "stress", "chat"] {
-        open(&mut doc, section);
-        let frames = settle(&mut doc, &mut out);
-        assert!(
-            !doc.inner().is_animating(),
-            "{section}: still requesting frames after {frames}"
-        );
-        let (work, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
-        for _ in 0..10 {
-            out.frame(&mut doc);
+    // With each painter: every plate painting itself, then the sheets.
+    for mode in PAINTERS {
+        painter(&mut doc, mode);
+        for section in ["chat", "components", "surfaces", "stress", "chat"] {
+            open(&mut doc, section);
+            let frames = settle(&mut doc, &mut out);
             assert!(
                 !doc.inner().is_animating(),
-                "{section}: a repaint asked for more"
+                "{mode} {section}: still requesting frames after {frames}"
+            );
+            let (work, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
+            for _ in 0..10 {
+                out.frame(&mut doc);
+                assert!(
+                    !doc.inner().is_animating(),
+                    "{mode} {section}: a repaint asked for more"
+                );
+            }
+            let px = render::surface_dirty_pixels() - px;
+            let work = render::surface_paint_work() - work;
+            println!(
+                "{mode} {section}: settled after {frames} frames; 10 idle repaints re-rendered {px} px, \
+                 surface paint {:.3} ms in total",
+                work.as_secs_f64() * 1e3
+            );
+            assert_eq!(
+                px, 0,
+                "{mode} {section}: idle repaints re-rendered surface pixels"
             );
         }
-        let px = render::surface_dirty_pixels() - px;
-        let work = render::surface_paint_work() - work;
-        println!(
-            "{section}: settled after {frames} frames; 10 idle repaints re-rendered {px} px, \
-             surface paint {:.3} ms in total",
-            work.as_secs_f64() * 1e3
-        );
-        assert_eq!(px, 0, "{section}: idle repaints re-rendered surface pixels");
     }
+    painter(&mut doc, "self");
     // The layout binding pass on an idle document (every redraw runs it).
     open(&mut doc, "chat");
     settle(&mut doc, &mut out);
@@ -917,23 +925,32 @@ fn stage_layer(doc: &NativeDocument) -> blitz_traits::NodeId {
         .expect("the stage holds a materials layer")
 }
 
+/// The border box Blitz paints element `id` in (window, CSS px): its
+/// rounded layout. Plates are placed by it, not by the client rect, which
+/// is unrounded and can be half a pixel away.
+fn painted_box(doc: &NativeDocument, id: blitz_traits::NodeId) -> [f32; 4] {
+    let inner = doc.inner();
+    let node = inner.get_node(id).unwrap();
+    let at = node.absolute_position(0.0, 0.0);
+    let scroll = node.scroll_offset();
+    let size = node.final_layout().size;
+    [
+        at.x + scroll.x as f32,
+        at.y + scroll.y as f32,
+        size.width,
+        size.height,
+    ]
+}
+
 /// The layer's shape for element `name` (matched by its box).
 fn material_shape(
     doc: &NativeDocument,
     layer: blitz_traits::NodeId,
     name: &str,
 ) -> render::MaterialShape {
-    let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
-    let rect = doc
-        .inner()
-        .get_client_bounding_rect(support::id(doc, name))
-        .unwrap();
-    let want = [
-        (rect.x - origin.x) as f32,
-        (rect.y - origin.y) as f32,
-        rect.width as f32,
-        rect.height as f32,
-    ];
+    let origin = painted_box(doc, layer);
+    let [x, y, w, h] = painted_box(doc, support::id(doc, name));
+    let want = [x - origin[0], y - origin[1], w, h];
     doc.surface_shapes(layer)
         .into_iter()
         .find(|s| s.rect.iter().zip(&want).all(|(a, b)| (a - b).abs() < 0.01))
@@ -946,13 +963,9 @@ fn shapes_within(
     layer: blitz_traits::NodeId,
     name: &str,
 ) -> Vec<render::MaterialShape> {
-    let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
-    let r = doc
-        .inner()
-        .get_client_bounding_rect(support::id(doc, name))
-        .unwrap();
-    let (x, y) = ((r.x - origin.x) as f32, (r.y - origin.y) as f32);
-    let (w, h) = (r.width as f32, r.height as f32);
+    let origin = painted_box(doc, layer);
+    let [x, y, w, h] = painted_box(doc, support::id(doc, name));
+    let (x, y) = (x - origin[0], y - origin[1]);
     doc.surface_shapes(layer)
         .into_iter()
         .filter(|s| {
@@ -967,103 +980,325 @@ fn hex(c: [f32; 4]) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 
-/// Keycaps from CSS: one materials layer draws every `material-*` element
-/// of its region, each with its computed fill, bevel, elevation and
-/// `border-radius` (from `rounded-*`, no attribute). Pressed states defined
-/// only in CSS change the bound shape: `active:` while the pointer is down,
-/// `aria-pressed:` when a click toggles it, `active:bevel-1` the bevel alone;
-/// and the document settles (requests no frames) after each change.
+/// The two plate painters of the shell regions (render/SURFACES.md,
+/// "Plates"): each plate painting itself (how the lab opens), or each
+/// region's sheet drawing its plates.
+const PAINTERS: [&str; 2] = ["self", "sheet"];
+
+/// Switch every shell region to a painter with the top bar's "Plates"
+/// switch (the stage keeps its scroll position).
+fn painter(doc: &mut NativeDocument, mode: &str) {
+    let sheet = support::attr(doc, "lab-plates-mode", "aria-pressed").as_deref() == Some("true");
+    if sheet != (mode == "sheet") {
+        support::pointer(doc, "lab-plates-mode");
+    }
+    doc.inner_mut().resolve(0.0);
+    doc.layout_surfaces();
+    let stage_region = doc.inner().get_node(stage(doc)).unwrap().parent.unwrap();
+    let value = doc
+        .inner()
+        .get_node(stage_region)
+        .unwrap()
+        .attr(blitz_dom::LocalName::from("tk-region"))
+        .map(str::to_owned);
+    assert_eq!(
+        value.as_deref(),
+        Some(if mode == "sheet" { "sheet" } else { "true" }),
+        "the stage region follows the switch"
+    );
+}
+
+/// True if element `id` carries a widget (a self-painting plate does).
+fn carries_widget(doc: &NativeDocument, id: blitz_traits::NodeId) -> bool {
+    doc.inner()
+        .get_node(id)
+        .and_then(|n| n.element_data())
+        .is_some_and(|e| e.custom_widget_data().is_some())
+}
+
+/// The plate of element `name`, whoever draws it: its own shape (in its own
+/// border box) if it paints itself, else its shape in the stage's layer.
+fn plate_shape(doc: &NativeDocument, name: &str) -> render::MaterialShape {
+    doc.own_plate_shape(support::id(doc, name))
+        .unwrap_or_else(|| material_shape(doc, stage_layer(doc), name))
+}
+
+/// The elements matching `selector` that paint their own plate.
+fn own_plates(doc: &NativeDocument, selector: &str) -> Vec<blitz_traits::NodeId> {
+    doc.inner()
+        .query_selector_all(selector)
+        .unwrap()
+        .into_iter()
+        .filter(|&id| doc.own_plate_shape(id).is_some())
+        .collect()
+}
+
+/// Keycaps from CSS, with either painter: every `material-*` element of the
+/// keycap case is a plate with its computed fill, bevel, elevation and
+/// `border-radius` (from `rounded-*`, no attribute). Self-painting, each
+/// carries its own widget and the stage's layer draws none of them; with
+/// the sheet, the stage's layer draws them all, outer elements first.
+/// Pressed states defined only in CSS change the plate: `active:` while the
+/// pointer is down, `aria-pressed:` when a click toggles it,
+/// `active:bevel-1` the bevel alone; and the document settles (requests no
+/// frames) after each change.
 #[test]
 fn plates_follow_computed_style_and_pressed_states() {
+    for mode in PAINTERS {
+        let mut doc = document(1.0, 900.0);
+        open(&mut doc, "surfaces");
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-keycaps");
+        doc.layout_surfaces();
+        let layer = stage_layer(&doc);
+        let shapes = shapes_within(&doc, layer, "lab-keycaps");
+        let own = own_plates(&doc, "#lab-keycaps [tk-plate]");
+        let tray = if mode == "sheet" {
+            // 4 trays (one per row, two in the shortcut row) and the
+            // coloured box, then 3 + 4 + 4 caps, the box's 2 and 4
+            // background buttons. The menu is a region of its own.
+            assert_eq!(shapes.len(), 5 + 17, "{shapes:#?}");
+            assert_eq!(own.len(), 2, "only the menu and its selected item");
+            // Outer elements first: the trays and the box paint below what
+            // they hold (the box is flat, the trays recessed).
+            assert!(
+                shapes[..5]
+                    .iter()
+                    .all(|s| s.recessed || hex(s.fill.unwrap()) == "#3a2420"),
+                "trays and box first: {shapes:#?}"
+            );
+            shapes[0].clone()
+        } else {
+            // The same 22, plus the menu and its selected item; the stage's
+            // layer draws none of them.
+            assert_eq!(own.len(), 5 + 17 + 2);
+            assert!(shapes.is_empty(), "{mode}: {shapes:#?}");
+            assert!(own.iter().all(|&id| carries_widget(&doc, id)));
+            let deny = support::id(&doc, "lab-key-deny");
+            let tray = doc.inner().get_node(deny).unwrap().parent.unwrap();
+            doc.own_plate_shape(tray).unwrap()
+        };
+        assert_eq!(tray.radii, [10.0; 4], "rounded-[10px] from computed style");
+        assert_eq!(hex(tray.fill.unwrap()), "#080808");
+        assert_eq!((tray.bevel, tray.recessed), (Some(1.5), true));
+
+        // The build marked the caps (static `material-*` classes).
+        for cap in ["lab-key-deny", "lab-key-always", "lab-key-once"] {
+            assert!(support::attr(&doc, cap, "tk-plate").is_some(), "{cap}");
+            assert_eq!(
+                carries_widget(&doc, support::id(&doc, cap)),
+                mode == "self",
+                "{mode}: {cap}"
+            );
+        }
+        let deny = plate_shape(&doc, "lab-key-deny");
+        assert_eq!(deny.radii, [7.0; 4]);
+        assert_eq!(hex(deny.fill.unwrap()), "#2a2a2a");
+        assert_eq!((deny.bevel, deny.recessed), (Some(2.5), false));
+        if mode == "self" {
+            let size = doc
+                .inner()
+                .get_client_bounding_rect(support::id(&doc, "lab-key-deny"))
+                .unwrap();
+            assert_eq!(
+                deny.rect,
+                [0.0, 0.0, size.width as f32, size.height as f32],
+                "its own border box"
+            );
+        }
+        assert!(!doc.inner().is_animating());
+
+        // `active:material-key-pressed`, CSS only (no JS state): down, up.
+        pointer_half(&mut doc, "lab-key-deny", false);
+        let down = plate_shape(&doc, "lab-key-deny");
+        assert_eq!(hex(down.fill.unwrap()), "#252525", "pressed while :active");
+        assert_eq!((down.bevel, down.recessed), (Some(2.0), true));
+        assert!(
+            !doc.inner().is_animating(),
+            "a state change needs one frame"
+        );
+        pointer_half(&mut doc, "lab-key-deny", true);
+        assert_eq!(plate_shape(&doc, "lab-key-deny"), deny, "released");
+
+        // `active:bevel-1`: only the bevel changes.
+        pointer_half(&mut doc, "lab-key-once", false);
+        let once = plate_shape(&doc, "lab-key-once");
+        assert_eq!((once.bevel, once.recessed), (Some(1.0), false));
+        assert_eq!(hex(once.fill.unwrap()), "#e8e8ea");
+        pointer_half(&mut doc, "lab-key-once", true);
+        assert_eq!(plate_shape(&doc, "lab-key-once").bevel, Some(2.5));
+
+        // `aria-pressed:material-key-pressed`: a click toggles the attribute.
+        pointer_half(&mut doc, "lab-key-always", false);
+        pointer_half(&mut doc, "lab-key-always", true);
+        assert_eq!(
+            support::attr(&doc, "lab-key-always", "aria-pressed").as_deref(),
+            Some("true"),
+            "{mode}: the click reached the button"
+        );
+        let toggled = plate_shape(&doc, "lab-key-always");
+        assert_eq!((toggled.bevel, toggled.recessed), (Some(2.0), true));
+        assert!(!doc.inner().is_animating());
+        // Shortcut keys and tiles are buttons too: a key sinks while held,
+        // and a click selects a tile (the selected one stays down).
+        pointer_half(&mut doc, "lab-key-cmd", false);
+        assert!(plate_shape(&doc, "lab-key-cmd").recessed);
+        pointer_half(&mut doc, "lab-key-cmd", true);
+        assert!(!plate_shape(&doc, "lab-key-cmd").recessed);
+        assert!(plate_shape(&doc, "lab-key-tile-chat").recessed);
+        pointer_half(&mut doc, "lab-key-tile-code", false);
+        pointer_half(&mut doc, "lab-key-tile-code", true);
+        assert!(plate_shape(&doc, "lab-key-tile-code").recessed);
+        assert!(!plate_shape(&doc, "lab-key-tile-chat").recessed);
+        assert!(!doc.inner().is_animating());
+        assert!(doc.take_error().is_none());
+    }
+}
+
+/// A self-painting plate is a widget on the `<button>` itself, and the
+/// button stays a real button: same box and same text layout as with the
+/// sheet; pointer down focuses it as it does a button without a widget; a
+/// click reaches its JS handler; Enter clicks it when focused; a wheel over
+/// it scrolls the stage; and scrolling leaves its shape alone (it is in the
+/// button's own box). Switching the painter takes the widget off again.
+#[test]
+fn a_self_painting_button_is_still_a_real_button() {
     let mut doc = document(1.0, 900.0);
     open(&mut doc, "surfaces");
     scroll_to(&mut doc, "lab-keycaps");
     doc.layout_surfaces();
-    let layer = stage_layer(&doc);
-    let shapes = shapes_within(&doc, layer, "lab-keycaps");
-    // 4 trays (one per row, two in the shortcut row) and the coloured box,
-    // then 3 + 4 + 4 caps, the box's 2 and 4 background buttons.
-    assert_eq!(shapes.len(), 5 + 17, "{shapes:#?}");
-    // Outer elements first: the trays and the box paint below what they
-    // hold (the box is flat, the trays recessed).
-    assert!(
-        shapes[..5]
-            .iter()
-            .all(|s| s.recessed || hex(s.fill.unwrap()) == "#3a2420"),
-        "trays and box first: {shapes:#?}"
-    );
-    let tray = &shapes[0];
-    assert_eq!(tray.radii, [10.0; 4], "rounded-[10px] from computed style");
-    assert_eq!(hex(tray.fill.unwrap()), "#080808");
-    assert_eq!(tray.bevel, Some(1.5));
+    let deny = support::id(&doc, "lab-key-deny");
+    let always = support::id(&doc, "lab-key-always");
+    // The button's box, and its text: a flex button lays its text out in an
+    // anonymous block (its one layout child).
+    let layout = |doc: &NativeDocument, id: blitz_traits::NodeId| {
+        let inner = doc.inner();
+        let node = inner.get_node(id).unwrap();
+        let size = node.final_layout().size;
+        let block = node.layout_children.borrow().as_ref().unwrap()[0];
+        let block = inner.get_node(block).unwrap();
+        let text = block
+            .element_data()
+            .unwrap()
+            .inline_layout_data
+            .as_ref()
+            .unwrap();
+        let place = block.final_layout();
+        (
+            (size.width, size.height),
+            text.text.trim().to_string(),
+            text.layout.width(),
+            (place.location.x, place.location.y, place.size.height),
+        )
+    };
+    assert!(carries_widget(&doc, deny), "the button carries its plate");
+    let own = layout(&doc, deny);
+    assert_eq!(own.1, "Deny");
+    assert!(own.2 > 10.0 && own.3.0 + own.2 < own.0.0, "text inside");
 
-    // The build marked the caps (static `material-*` classes).
-    for cap in ["lab-key-deny", "lab-key-always", "lab-key-once"] {
-        assert!(support::attr(&doc, cap, "tk-plate").is_some(), "{cap}");
-    }
-    let deny = material_shape(&doc, layer, "lab-key-deny");
-    assert_eq!(deny.radii, [7.0; 4]);
-    assert_eq!(hex(deny.fill.unwrap()), "#2a2a2a");
-    assert_eq!((deny.bevel, deny.recessed), (Some(2.5), false));
-    assert!(!doc.inner().is_animating());
-
-    // `active:material-key-pressed`, CSS only (no JS state): down, then up.
+    // Pointer down: `:active` presses the plate and the button takes focus.
     pointer_half(&mut doc, "lab-key-deny", false);
-    let down = material_shape(&doc, layer, "lab-key-deny");
-    assert_eq!(hex(down.fill.unwrap()), "#252525", "pressed while :active");
-    assert_eq!((down.bevel, down.recessed), (Some(2.0), true));
-    assert!(
-        !doc.inner().is_animating(),
-        "a state change needs one frame"
-    );
+    let focus_own = doc.inner().get_focussed_node_id();
+    assert!(plate_shape(&doc, "lab-key-deny").recessed, ":active");
     pointer_half(&mut doc, "lab-key-deny", true);
-    assert_eq!(
-        material_shape(&doc, layer, "lab-key-deny"),
-        deny,
-        "released"
-    );
-
-    // `active:bevel-1`: only the bevel changes.
-    pointer_half(&mut doc, "lab-key-once", false);
-    let once = material_shape(&doc, layer, "lab-key-once");
-    assert_eq!((once.bevel, once.recessed), (Some(1.0), false));
-    assert_eq!(hex(once.fill.unwrap()), "#e8e8ea");
-    pointer_half(&mut doc, "lab-key-once", true);
-    assert_eq!(material_shape(&doc, layer, "lab-key-once").bevel, Some(2.5));
-
-    // `aria-pressed:material-key-pressed`: a click toggles the attribute.
+    // A click reaches the JS handler, and Enter clicks the focused button.
     pointer_half(&mut doc, "lab-key-always", false);
     pointer_half(&mut doc, "lab-key-always", true);
     assert_eq!(
         support::attr(&doc, "lab-key-always", "aria-pressed").as_deref(),
-        Some("true")
+        Some("true"),
+        "click reached the button"
     );
-    let toggled = material_shape(&doc, layer, "lab-key-always");
-    assert_eq!((toggled.bevel, toggled.recessed), (Some(2.0), true));
-    assert!(!doc.inner().is_animating());
-    // Shortcut keys and tiles are buttons too: a key sinks while held, and
-    // a click selects a tile (the selected one stays down).
-    pointer_half(&mut doc, "lab-key-cmd", false);
-    assert!(material_shape(&doc, layer, "lab-key-cmd").recessed);
-    pointer_half(&mut doc, "lab-key-cmd", true);
-    assert!(!material_shape(&doc, layer, "lab-key-cmd").recessed);
-    assert!(material_shape(&doc, layer, "lab-key-tile-chat").recessed);
-    pointer_half(&mut doc, "lab-key-tile-code", false);
-    pointer_half(&mut doc, "lab-key-tile-code", true);
-    assert!(material_shape(&doc, layer, "lab-key-tile-code").recessed);
-    assert!(!material_shape(&doc, layer, "lab-key-tile-chat").recessed);
+    doc.inner_mut().set_focus_to(always);
+    support::key(&mut doc, "Enter", false, false);
+    support::key(&mut doc, "Enter", true, false);
+    doc.inner_mut().resolve(0.0);
+    doc.layout_surfaces();
+    assert_eq!(
+        support::attr(&doc, "lab-key-always", "aria-pressed").as_deref(),
+        Some("false"),
+        "Enter clicked the focused button"
+    );
+    assert!(!plate_shape(&doc, "lab-key-always").recessed);
+
+    // A wheel over the plate scrolls the stage; the plate's shape does not
+    // change with scrolling.
+    let before = plate_shape(&doc, "lab-key-deny");
+    {
+        use blitz_traits::events::*;
+        let offset = doc.inner().get_node(stage(&doc)).unwrap().scroll_offset().y;
+        let event = pointer_at(&mut doc, "lab-key-deny", MouseEventButtons::None);
+        doc.handle_ui_event(UiEvent::PointerMove(event.clone()));
+        doc.handle_ui_event(UiEvent::Wheel(BlitzWheelEvent {
+            delta: BlitzWheelDelta::Pixels(0.0, -40.0),
+            coords: event.coords,
+            buttons: MouseEventButtons::None,
+            mods: keyboard_types::Modifiers::empty(),
+            element: Default::default(),
+        }));
+        let now = doc.inner().get_node(stage(&doc)).unwrap().scroll_offset().y;
+        assert_ne!(now, offset, "the stage scrolled");
+    }
+    doc.inner_mut().resolve(0.0);
+    doc.layout_surfaces();
+    assert_eq!(plate_shape(&doc, "lab-key-deny"), before);
+    assert!(!doc.inner().is_animating(), "settled: no frames requested");
+
+    // The sheet: no widget, same layout, same focus behaviour.
+    painter(&mut doc, "sheet");
+    assert!(!carries_widget(&doc, deny), "the sheet draws it now");
+    assert_eq!(layout(&doc, deny), own, "same box and text either way");
+    pointer_half(&mut doc, "lab-key-deny", false);
+    assert_eq!(
+        doc.inner().get_focussed_node_id(),
+        focus_own,
+        "focus as a button without a widget"
+    );
+    pointer_half(&mut doc, "lab-key-deny", true);
+    // And back: the widget is attached again.
+    painter(&mut doc, "self");
+    assert!(carries_widget(&doc, deny));
+    assert_eq!(plate_shape(&doc, "lab-key-deny"), before);
+    assert!(doc.take_error().is_none());
+}
+
+/// A plate leaves the document and comes back (a view switch and back):
+/// Blitz drops a widget with its element, so the layout pass attaches a new
+/// one when the element returns, and stops tracking plates that are gone.
+#[test]
+fn self_painting_plates_survive_leaving_and_returning() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    doc.layout_surfaces();
+    let count = doc.own_plate_count();
+    assert!(count > 20, "the Surfaces view's plates: {count}");
+    // The top bar's switch is a plate in every view.
+    open(&mut doc, "components");
+    doc.layout_surfaces();
+    let elsewhere = doc.own_plate_count();
+    assert!(elsewhere < count, "{elsewhere} of {count} left");
+    open(&mut doc, "surfaces");
+    doc.layout_surfaces();
+    assert_eq!(doc.own_plate_count(), count);
+    for name in ["lab-key-deny", "lab-bg-blue", "lab-plates-order"] {
+        assert!(carries_widget(&doc, support::id(&doc, name)), "{name}");
+        assert!(doc.own_plate_shape(support::id(&doc, name)).is_some());
+    }
     assert!(!doc.inner().is_animating());
     assert!(doc.take_error().is_none());
 }
 
-/// The stage's materials layer stays over the visible stage while its
-/// content scrolls: a plate is drawn where it is on screen, reaches past the
-/// stage's top edge while it scrolls out (its texture ends at the stage
-/// edge, which clips it) and is dropped once it is out of view.
+/// With the sheet as the painter, the stage's materials layer stays over
+/// the visible stage while its content scrolls: a plate is drawn where it is
+/// on screen, reaches past the stage's top edge while it scrolls out (its
+/// texture ends at the stage edge, which clips it) and is dropped once it is
+/// out of view. (A self-painting plate is drawn in its own box and clipped
+/// by Blitz with its element: `scrolled_plates_are_clipped_at_the_stage_edge`.)
 #[test]
 fn stage_plates_follow_scrolling_and_leave_at_the_stage_edge() {
     let mut doc = document(1.0, 900.0);
     open(&mut doc, "surfaces");
+    painter(&mut doc, "sheet");
     scroll_to(&mut doc, "lab-keycaps");
     doc.layout_surfaces();
     let layer = stage_layer(&doc);
@@ -1118,99 +1353,156 @@ fn stage_plates_follow_scrolling_and_leave_at_the_stage_edge() {
     assert!(doc.take_error().is_none());
 }
 
-/// The same, as pixels: with a cap scrolled half over the stage's top edge,
-/// nothing of it shows above the edge (the top bar is identical to a frame
-/// with no plate near it) and its lower half shows below the edge.
+/// As pixels, with either painter: with a cap scrolled half over the
+/// stage's top edge, nothing of it shows above the edge (the top bar is
+/// identical to a frame with no plate near it) and its lower half shows
+/// below the edge.
 #[test]
 #[ignore = "offscreen GPU frames; run explicitly"]
 fn scrolled_plates_are_clipped_at_the_stage_edge() {
     let scale = 2.0;
+    // One document and one renderer for both painters (the surfaces' GPU
+    // state is per thread and device).
     let mut doc = document(scale, 900.0);
     let mut out = Offscreen::new(scale);
     open(&mut doc, "surfaces");
-    let at = |px: &[u8], width: u32, x: f64, y: f64| {
-        let i = (((y * scale as f64) as u32 * width + (x * scale as f64) as u32) * 4) as usize;
-        [px[i], px[i + 1], px[i + 2]]
-    };
-    let settled = |doc: &mut NativeDocument, out: &mut Offscreen| {
-        let mut px = out.frame(doc).0;
-        for _ in 0..10 {
-            if !doc.inner().is_animating() {
-                break;
+    for mode in PAINTERS {
+        painter(&mut doc, mode);
+        scroll_stage(&mut doc, 0.0);
+        let at = |px: &[u8], width: u32, x: f64, y: f64| {
+            let i = (((y * scale as f64) as u32 * width + (x * scale as f64) as u32) * 4) as usize;
+            [px[i], px[i + 1], px[i + 2]]
+        };
+        let settled = |doc: &mut NativeDocument, out: &mut Offscreen| {
+            let mut px = out.frame(doc).0;
+            for _ in 0..10 {
+                if !doc.inner().is_animating() {
+                    break;
+                }
+                px = out.frame(doc).0;
             }
-            px = out.frame(doc).0;
-        }
-        px
-    };
-    let scroller = stage_box(&doc);
-    // Reference: scrolled to the top, no plate near the stage's top edge.
-    let reference = settled(&mut doc, &mut out);
-    let cap = support::id(&doc, "lab-key-deny");
-    let r = doc.inner().get_client_bounding_rect(cap).unwrap();
-    scroll_stage(&mut doc, r.y - scroller.y + r.height / 2.0);
-    let r = doc.inner().get_client_bounding_rect(cap).unwrap();
-    assert!(r.y < scroller.y && r.y + r.height > scroller.y + 4.0);
-    let px = settled(&mut doc, &mut out);
-    // Everything above the stage (the top bar) is unchanged, device row by row.
-    let row = (out.width * 4) as usize;
-    let above = (scroller.y * scale as f64) as usize;
-    assert!(
-        px[..above * row] == reference[..above * row],
-        "a scrolled plate showed above the stage edge"
-    );
-    // Below the edge, inside the cap: its face (#2a2a2a), not the panel.
-    let face = at(&px, out.width, r.x + 6.0, scroller.y + 4.0);
-    assert_eq!(face, [0x2a; 3], "the cap's visible half is drawn");
-    assert!(doc.take_error().is_none());
+            px
+        };
+        let scroller = stage_box(&doc);
+        // Reference: scrolled to the top, no plate near the stage's top edge.
+        let reference = settled(&mut doc, &mut out);
+        let cap = support::id(&doc, "lab-key-deny");
+        let r = doc.inner().get_client_bounding_rect(cap).unwrap();
+        scroll_stage(&mut doc, r.y - scroller.y + r.height / 2.0);
+        let r = doc.inner().get_client_bounding_rect(cap).unwrap();
+        assert!(r.y < scroller.y && r.y + r.height > scroller.y + 4.0);
+        let px = settled(&mut doc, &mut out);
+        // Everything above the stage (the top bar) is unchanged, device row
+        // by row.
+        let row = (out.width * 4) as usize;
+        let above = (scroller.y * scale as f64) as usize;
+        assert!(
+            px[..above * row] == reference[..above * row],
+            "{mode}: a scrolled plate showed above the stage edge"
+        );
+        // Below the edge, inside the cap: its face (#2a2a2a), not the panel.
+        let face = at(&px, out.width, r.x + 6.0, scroller.y + 4.0);
+        assert_eq!(face, [0x2a; 3], "{mode}: the cap's visible half is drawn");
+        assert!(doc.take_error().is_none());
+    }
 }
 
-/// A `Sheet` floats with its own layer: its plates (its own material and
-/// its items') are drawn there, not in the stage's layer under the content
-/// it covers; a hovered item gets its `hover:` material.
+/// A `Sheet` is a region of its own, with its own painter. The menu (the
+/// default): the sheet and its selected item paint themselves, a hovered
+/// item gets its `hover:` material, and neither its layer nor the stage's
+/// draws any of them. A `plates="sheet"` one (the z-index comparison cell):
+/// its own layer draws it and its plates, outer first, then in document
+/// order, whatever the shell regions use; none of them carries a widget.
 #[test]
-fn a_sheet_draws_its_plates_in_its_own_layer() {
-    let mut doc = document(1.0, 900.0);
-    open(&mut doc, "surfaces");
-    scroll_to(&mut doc, "lab-sheet-menu");
-    doc.layout_surfaces();
-    let sheet = doc
-        .inner()
-        .query_selector("#lab-sheet-menu > tk-surface[materials]")
-        .unwrap()
-        .expect("the sheet holds a layer");
-    let shapes = doc.surface_shapes(sheet);
-    assert_eq!(
-        shapes.len(),
-        2,
-        "the sheet and its selected item: {shapes:#?}"
-    );
-    assert_eq!(shapes[0].rect[..2], [0.0, 0.0], "the sheet itself, first");
-    assert_eq!(hex(shapes[0].fill.unwrap()), "#252525");
-    assert_eq!(
-        hex(material_shape(&doc, sheet, "lab-sheet-item-0")
-            .fill
-            .unwrap()),
-        "#2a2a2a"
-    );
-    let stage = stage_layer(&doc);
-    let origin = doc.inner().get_client_bounding_rect(stage).unwrap();
-    let menu = doc
-        .inner()
-        .get_client_bounding_rect(support::id(&doc, "lab-sheet-menu"))
-        .unwrap();
-    assert!(
-        !doc.surface_shapes(stage).iter().any(|s| {
-            (f64::from(s.rect[0]) + origin.x - menu.x).abs() < 0.5
-                && (f64::from(s.rect[1]) + origin.y - menu.y).abs() < 0.5
-        }),
-        "not in the stage's layer"
-    );
-    // Hover the last item: it becomes a plate of the sheet.
-    hover(&mut doc, "lab-sheet-item-2");
-    doc.layout_surfaces();
-    assert_eq!(doc.surface_shapes(sheet).len(), 3);
-    material_shape(&doc, sheet, "lab-sheet-item-2");
-    assert!(doc.take_error().is_none());
+fn a_sheet_is_a_region_with_its_own_painter() {
+    for mode in PAINTERS {
+        let mut doc = document(1.0, 900.0);
+        open(&mut doc, "surfaces");
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-sheet-menu");
+        doc.layout_surfaces();
+        let layer_of = |doc: &NativeDocument, name: &str| {
+            doc.inner()
+                .query_selector(&format!("#{name} > tk-surface[materials]"))
+                .unwrap()
+                .expect("the sheet holds a layer")
+        };
+        let in_stage_layer = |doc: &NativeDocument, name: &str| {
+            let stage = stage_layer(doc);
+            let origin = doc.inner().get_client_bounding_rect(stage).unwrap();
+            let at = doc
+                .inner()
+                .get_client_bounding_rect(support::id(doc, name))
+                .unwrap();
+            doc.surface_shapes(stage).iter().any(|s| {
+                (f64::from(s.rect[0]) + origin.x - at.x).abs() < 0.5
+                    && (f64::from(s.rect[1]) + origin.y - at.y).abs() < 0.5
+            })
+        };
+        // The menu: self-painting.
+        let menu = support::id(&doc, "lab-sheet-menu");
+        assert_eq!(
+            hex(doc.own_plate_shape(menu).unwrap().fill.unwrap()),
+            "#252525"
+        );
+        assert_eq!(
+            hex(plate_shape(&doc, "lab-sheet-item-0").fill.unwrap()),
+            "#2a2a2a"
+        );
+        let last = support::id(&doc, "lab-sheet-item-2");
+        assert!(doc.own_plate_shape(last).is_none(), "no fill until hovered");
+        assert!(
+            doc.surface_shapes(layer_of(&doc, "lab-sheet-menu"))
+                .is_empty()
+        );
+        assert!(!in_stage_layer(&doc, "lab-sheet-menu"), "{mode}");
+        hover(&mut doc, "lab-sheet-item-2");
+        doc.layout_surfaces();
+        assert_eq!(
+            hex(doc.own_plate_shape(last).unwrap().fill.unwrap()),
+            "#2a2a2a",
+            "hover:material-chip"
+        );
+
+        // The `plates="sheet"` cell: its own layer draws everything in it.
+        scroll_to(&mut doc, "lab-mode-z-sheet");
+        doc.layout_surfaces();
+        let layer = layer_of(&doc, "lab-mode-z-sheet");
+        let shapes = doc.surface_shapes(layer);
+        assert_eq!(shapes.len(), 3, "the cell and its two plates: {shapes:#?}");
+        assert_eq!(shapes[0].rect[..2], [0.0, 0.0], "the cell itself, first");
+        assert_eq!(hex(shapes[0].fill.unwrap()), "#080808");
+        assert_eq!(
+            shapes[1],
+            material_shape(&doc, layer, "lab-mode-z-sheet-front")
+        );
+        assert_eq!(
+            shapes[2],
+            material_shape(&doc, layer, "lab-mode-z-sheet-back")
+        );
+        for name in [
+            "lab-mode-z-sheet",
+            "lab-mode-z-sheet-front",
+            "lab-mode-z-sheet-back",
+        ] {
+            assert!(!carries_widget(&doc, support::id(&doc, name)), "{name}");
+            assert!(!in_stage_layer(&doc, name), "{mode}: {name}");
+        }
+        // Its neighbour paints itself: nothing in its layer.
+        assert!(
+            doc.surface_shapes(layer_of(&doc, "lab-mode-z-self"))
+                .is_empty()
+        );
+        for name in [
+            "lab-mode-z-self",
+            "lab-mode-z-self-front",
+            "lab-mode-z-self-back",
+        ] {
+            assert!(carries_widget(&doc, support::id(&doc, name)), "{name}");
+        }
+        assert!(!doc.inner().is_animating());
+        assert!(doc.take_error().is_none());
+    }
 }
 
 /// Open the Stress view's 300-keycap grid (variant C).
@@ -1219,41 +1511,47 @@ fn open_keycap_grid(doc: &mut NativeDocument) {
     click(doc, "lab-fused-stress-keys");
 }
 
-/// The layout pass with the 300-keycap grid on screen and nothing changing:
-/// every redraw runs it, so this is the static cost of change detection
-/// (one computed-style pointer compare and one box read per plate).
+/// The layout pass with the 300-keycap grid on screen and nothing changing,
+/// with either painter: every redraw runs it, so this is the static cost of
+/// change detection (who draws each plate, one computed-style pointer
+/// compare and one box read per plate).
 #[test]
 fn keycap_grid_binding_pass_cost() {
-    let mut doc = document(1.0, 900.0);
-    open_keycap_grid(&mut doc);
-    for i in [0, 299] {
-        let cap = format!("lab-grid-cap-{i}");
-        assert!(support::attr(&doc, &cap, "tk-plate").is_some(), "{cap}");
-    }
-    scroll_to(&mut doc, "lab-keycap-grid");
-    doc.layout_surfaces();
-    let layer = stage_layer(&doc);
-    let grid = doc
-        .inner()
-        .get_client_bounding_rect(support::id(&doc, "lab-keycap-grid"))
-        .unwrap();
-    let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
-    let in_grid = doc
-        .surface_shapes(layer)
-        .iter()
-        .filter(|s| f64::from(s.rect[1]) + origin.y >= grid.y - 0.5)
-        .count();
-    assert_eq!(in_grid, 301, "tray + 300 caps");
-    let t = Instant::now();
-    for _ in 0..200 {
+    for mode in PAINTERS {
+        let mut doc = document(1.0, 900.0);
+        open_keycap_grid(&mut doc);
+        painter(&mut doc, mode);
+        for i in [0, 299] {
+            let cap = format!("lab-grid-cap-{i}");
+            assert!(support::attr(&doc, &cap, "tk-plate").is_some(), "{cap}");
+        }
+        scroll_to(&mut doc, "lab-keycap-grid");
         doc.layout_surfaces();
+        let layer = stage_layer(&doc);
+        let grid = doc
+            .inner()
+            .get_client_bounding_rect(support::id(&doc, "lab-keycap-grid"))
+            .unwrap();
+        let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
+        let in_layer = doc
+            .surface_shapes(layer)
+            .iter()
+            .filter(|s| f64::from(s.rect[1]) + origin.y >= grid.y - 0.5)
+            .count();
+        let own = own_plates(&doc, "#lab-keycap-grid, #lab-keycap-grid [tk-plate]").len();
+        let want = if mode == "sheet" { (301, 0) } else { (0, 301) };
+        assert_eq!((in_layer, own), want, "{mode}: tray + 300 caps");
+        let t = Instant::now();
+        for _ in 0..200 {
+            doc.layout_surfaces();
+        }
+        println!(
+            "binding pass, stress view with the 300-keycap grid, static, {mode}: {:.1} us",
+            t.elapsed().as_secs_f64() * 1e6 / 200.0
+        );
+        assert!(!doc.inner().is_animating());
+        assert!(doc.take_error().is_none());
     }
-    println!(
-        "binding pass, stress view with the 300-keycap grid, static: {:.1} us",
-        t.elapsed().as_secs_f64() * 1e6 / 200.0
-    );
-    assert!(!doc.inner().is_animating());
-    assert!(doc.take_error().is_none());
 }
 
 /// The keycap case at rest, and with caps pressed through CSS state (Deny
@@ -1282,10 +1580,11 @@ fn capture_keycap_states() {
 }
 
 /// 300 keycap plates on screen (Stress view, variant C) against the same
-/// view without them (variant A, stopped). Static: the document must settle,
-/// request no frames and re-render no pixel over 100 repaints. One cap
-/// changing state: a click toggles its pressed material, then the next
-/// frame is timed (40 toggles). Prints means; --nocapture.
+/// view without them (variant A, stopped), with each painter (the caps
+/// painting themselves, then the stage's sheet drawing them). Static: the
+/// document must settle, request no frames and re-render no pixel over 100
+/// repaints. One cap changing state: a click toggles its pressed material,
+/// then the next frame is timed (40 toggles). Prints means; --nocapture.
 #[test]
 #[ignore = "GPU benchmark; run explicitly"]
 fn keycap_grid_bench() {
@@ -1293,7 +1592,17 @@ fn keycap_grid_bench() {
     let mut out = Offscreen::new(2.0);
     open(&mut doc, "stress");
     let mean = |v: &[Duration]| v.iter().sum::<Duration>().as_secs_f64() * 1e3 / v.len() as f64;
-    for mode in ["one", "keys", "one", "keys"] {
+    for (painter_mode, mode) in [
+        ("self", "one"),
+        ("self", "keys"),
+        ("sheet", "one"),
+        ("sheet", "keys"),
+        ("self", "one"),
+        ("self", "keys"),
+        ("sheet", "one"),
+        ("sheet", "keys"),
+    ] {
+        painter(&mut doc, painter_mode);
         click(&mut doc, &format!("lab-fused-stress-{mode}"));
         scroll_to(&mut doc, "lab-fused-stress");
         for _ in 0..10 {
@@ -1305,8 +1614,9 @@ fn keycap_grid_bench() {
         }
         assert!(
             !doc.inner().is_animating(),
-            "{mode}: static requests no frames"
+            "{painter_mode} {mode}: static requests no frames"
         );
+        let (layers, sheet, own) = plate_count(&doc);
         let (mut totals, mut scenes, mut binds, mut work, mut dirty) =
             (vec![], vec![], vec![], vec![], vec![]);
         for _ in 0..100 {
@@ -1321,7 +1631,8 @@ fn keycap_grid_bench() {
             dirty.push(render::surface_dirty_pixels() - px);
         }
         println!(
-            "{mode} static: frame {:.2} ms, scene build {:.3} ms, surface paint {:.3} ms, \
+            "{painter_mode} {mode} static ({sheet} sheet plates in {layers} layers, {own} \
+             self-painting): frame {:.2} ms, scene build {:.3} ms, surface paint {:.3} ms, \
              binding pass {:.1} us, dirty {} px total",
             mean(&totals),
             mean(&scenes),
@@ -1332,7 +1643,7 @@ fn keycap_grid_bench() {
         assert_eq!(
             dirty.iter().sum::<u64>(),
             0,
-            "{mode}: static re-renders nothing"
+            "{painter_mode} {mode}: static re-renders nothing"
         );
         if mode == "one" {
             continue;
@@ -1359,8 +1670,8 @@ fn keycap_grid_bench() {
             }
         }
         println!(
-            "{mode} one cap toggled: frame {:.2} ms (worst {:.2}), scene build {:.3} ms, \
-             surface paint {:.3} ms, dirty {:.1} kpx/frame; click+restyle+bind {:.2} ms",
+            "{painter_mode} {mode} one cap toggled: frame {:.2} ms (worst {:.2}), scene build \
+             {:.3} ms, surface paint {:.3} ms, dirty {:.1} kpx/frame; click+restyle+bind {:.2} ms",
             mean(&totals),
             totals.iter().max().unwrap().as_secs_f64() * 1e3,
             mean(&scenes),
@@ -1372,18 +1683,19 @@ fn keycap_grid_bench() {
     assert!(doc.take_error().is_none());
 }
 
-/// Plates bound in every materials layer of the document: (layers, plates).
-fn plate_count(doc: &NativeDocument) -> (usize, usize) {
+/// Plates in the document: (materials layers, plates those layers draw,
+/// plates that paint themselves).
+fn plate_count(doc: &NativeDocument) -> (usize, usize, usize) {
     let layers = doc
         .inner()
         .query_selector_all("tk-surface[materials]")
         .unwrap();
     let plates = layers.iter().map(|&l| doc.surface_shapes(l).len()).sum();
-    (layers.len(), plates)
+    (layers.len(), plates, doc.own_plate_count())
 }
 
-/// Every lab view as it opens (the Stress view stopped on variant A): the
-/// number of plates its materials layers draw and its static frame cost,
+/// Every lab view as it opens (the Stress view stopped on variant A), with
+/// each painter: the number of plates it draws and its static frame cost,
 /// forced repaints with nothing changing. Each view must settle, request no
 /// frames and re-render no pixel. Prints means; --nocapture.
 #[test]
@@ -1392,48 +1704,51 @@ fn lab_views_bench() {
     let mut doc = document(2.0, 900.0);
     let mut out = Offscreen::new(2.0);
     let mean = |v: &[Duration]| v.iter().sum::<Duration>().as_secs_f64() * 1e3 / v.len() as f64;
-    for view in ["chat", "components", "surfaces", "stress"] {
-        open(&mut doc, view);
-        for _ in 0..10 {
-            out.frame(&mut doc);
+    for mode in ["self", "sheet", "self", "sheet"] {
+        painter(&mut doc, mode);
+        for view in ["chat", "components", "surfaces", "stress"] {
+            open(&mut doc, view);
+            for _ in 0..10 {
+                out.frame(&mut doc);
+            }
+            std::thread::sleep(Duration::from_millis(300));
+            for _ in 0..5 {
+                out.frame(&mut doc);
+            }
+            assert!(
+                !doc.inner().is_animating(),
+                "{mode} {view}: static requests no frames"
+            );
+            let (layers, sheet, own) = plate_count(&doc);
+            let (mut totals, mut scenes, mut binds, mut work, mut dirty) =
+                (vec![], vec![], vec![], vec![], vec![]);
+            for _ in 0..100 {
+                let (w, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
+                let t = Instant::now();
+                doc.layout_surfaces();
+                binds.push(t.elapsed());
+                let (_, scene, total) = out.frame(&mut doc);
+                totals.push(total);
+                scenes.push(scene);
+                work.push(render::surface_paint_work() - w);
+                dirty.push(render::surface_dirty_pixels() - px);
+            }
+            println!(
+                "{mode} view {view}: {layers} layers drawing {sheet} plates, {own} \
+                 self-painting; static frame {:.2} ms, scene build {:.3} ms, surface paint \
+                 {:.3} ms, binding pass {:.1} us, dirty {} px total",
+                mean(&totals),
+                mean(&scenes),
+                mean(&work),
+                mean(&binds) * 1e3,
+                dirty.iter().sum::<u64>(),
+            );
+            assert_eq!(
+                dirty.iter().sum::<u64>(),
+                0,
+                "{mode} {view}: static re-renders nothing"
+            );
         }
-        std::thread::sleep(Duration::from_millis(300));
-        for _ in 0..5 {
-            out.frame(&mut doc);
-        }
-        assert!(
-            !doc.inner().is_animating(),
-            "{view}: static requests no frames"
-        );
-        let (layers, plates) = plate_count(&doc);
-        let (mut totals, mut scenes, mut binds, mut work, mut dirty) =
-            (vec![], vec![], vec![], vec![], vec![]);
-        for _ in 0..100 {
-            let (w, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
-            let t = Instant::now();
-            doc.layout_surfaces();
-            binds.push(t.elapsed());
-            let (_, scene, total) = out.frame(&mut doc);
-            totals.push(total);
-            scenes.push(scene);
-            work.push(render::surface_paint_work() - w);
-            dirty.push(render::surface_dirty_pixels() - px);
-        }
-        println!(
-            "view {view}: {layers} layers, {plates} plates; static frame {:.2} ms, \
-             scene build {:.3} ms, surface paint {:.3} ms, binding pass {:.1} us, \
-             dirty {} px total",
-            mean(&totals),
-            mean(&scenes),
-            mean(&work),
-            mean(&binds) * 1e3,
-            dirty.iter().sum::<u64>(),
-        );
-        assert_eq!(
-            dirty.iter().sum::<u64>(),
-            0,
-            "{view}: static re-renders nothing"
-        );
     }
     assert!(doc.take_error().is_none());
 }
@@ -1445,30 +1760,49 @@ fn near(c: [f32; 4], want: &str) -> bool {
     c.iter().zip(w).all(|(a, b)| (a - b).abs() <= 2.0 / 255.0)
 }
 
-/// The ordering case: a cap inside a box with a plain `bg-[#3a2420]`.
-/// The box is a plate of the same layer (the build marked it), drawn first
-/// and flat (no `bevel-*`), so the caps it holds paint over it; Blitz paints
-/// no background for it (pixels: `the_ordering_case_draws_the_cap_on_the_box`).
+/// The ordering case: a cap inside a box with a plain `bg-[#3a2420]`. The
+/// box is a plate too (the build marked it), flat (no `bevel-*`), and Blitz
+/// paints no background for it. With the sheet it is drawn first in the
+/// same layer, so the caps it holds paint over it; self-painting, the box
+/// and each cap draw themselves, the box first because it is the parent
+/// (pixels: `the_ordering_case_draws_the_cap_on_the_box`).
 #[test]
 fn a_plain_background_is_a_plate_under_the_plates_it_holds() {
-    let mut doc = document(1.0, 900.0);
-    open(&mut doc, "surfaces");
-    scroll_to(&mut doc, "lab-plates-order");
-    doc.layout_surfaces();
-    let layer = stage_layer(&doc);
-    assert!(support::attr(&doc, "lab-plates-order", "tk-plate").is_some());
-    let shapes = shapes_within(&doc, layer, "lab-plates-order");
-    assert_eq!(shapes.len(), 3, "the box and its two caps: {shapes:#?}");
-    let bx = &shapes[0];
-    assert_eq!(hex(bx.fill.unwrap()), "#3a2420", "the box, first");
-    assert_eq!(
-        (bx.bevel, bx.recessed, bx.radii),
-        (Some(0.0), false, [12.0; 4])
-    );
-    assert_eq!(shapes[1], material_shape(&doc, layer, "lab-order-deny"));
-    assert_eq!(hex(shapes[1].fill.unwrap()), "#2a2a2a");
-    assert!(!doc.inner().is_animating());
-    assert!(doc.take_error().is_none());
+    for mode in PAINTERS {
+        let mut doc = document(1.0, 900.0);
+        open(&mut doc, "surfaces");
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-plates-order");
+        doc.layout_surfaces();
+        let layer = stage_layer(&doc);
+        assert!(support::attr(&doc, "lab-plates-order", "tk-plate").is_some());
+        let shapes = shapes_within(&doc, layer, "lab-plates-order");
+        let own = own_plates(&doc, "#lab-plates-order, #lab-plates-order [tk-plate]");
+        if mode == "sheet" {
+            assert_eq!(shapes.len(), 3, "the box and its two caps: {shapes:#?}");
+            assert_eq!(
+                shapes[0],
+                plate_shape(&doc, "lab-plates-order"),
+                "the box, first"
+            );
+            assert_eq!(shapes[1], plate_shape(&doc, "lab-order-deny"));
+        } else {
+            assert!(shapes.is_empty(), "{shapes:#?}");
+            assert_eq!(own.len(), 3, "the box and its two caps");
+        }
+        let bx = plate_shape(&doc, "lab-plates-order");
+        assert_eq!(hex(bx.fill.unwrap()), "#3a2420");
+        assert_eq!(
+            (bx.bevel, bx.recessed, bx.radii),
+            (Some(0.0), false, [12.0; 4])
+        );
+        assert_eq!(
+            hex(plate_shape(&doc, "lab-order-deny").fill.unwrap()),
+            "#2a2a2a"
+        );
+        assert!(!doc.inner().is_animating());
+        assert!(doc.take_error().is_none());
+    }
 }
 
 /// `bg-* bevel-* rounded-*` buttons are plates in their own colour: theme
@@ -1478,59 +1812,65 @@ fn a_plain_background_is_a_plate_under_the_plates_it_holds() {
 /// elevation through CSS alone, and the document settles after each.
 #[test]
 fn background_buttons_are_plates_with_css_states() {
-    let mut doc = document(1.0, 900.0);
-    open(&mut doc, "surfaces");
-    scroll_to(&mut doc, "lab-bg-row");
-    doc.layout_surfaces();
-    let layer = stage_layer(&doc);
-    for name in ["blue", "green", "rose", "ghost"] {
-        let id = format!("lab-bg-{name}");
-        assert!(support::attr(&doc, &id, "tk-plate").is_some(), "{id}");
-    }
-    let shape =
-        |doc: &NativeDocument, name: &str| material_shape(doc, layer, &format!("lab-bg-{name}"));
-    let blue = shape(&doc, "blue");
-    assert!(near(blue.fill.unwrap(), "#155dfc"), "blue-600: {blue:?}");
-    assert_eq!(
-        (blue.bevel, blue.recessed, blue.radii),
-        (Some(2.0), false, [8.0; 4])
-    );
-    assert!(near(shape(&doc, "green").fill.unwrap(), "#009966"));
-    assert!(near(shape(&doc, "rose").fill.unwrap(), "#ec003f"));
-    let ghost = shape(&doc, "ghost").fill.unwrap();
-    assert!(
-        near(ghost, "#ffffff") && (ghost[3] - 0.1).abs() < 0.01,
-        "white/10: {ghost:?}"
-    );
+    for mode in PAINTERS {
+        let mut doc = document(1.0, 900.0);
+        open(&mut doc, "surfaces");
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-bg-row");
+        doc.layout_surfaces();
+        for name in ["blue", "green", "rose", "ghost"] {
+            let id = format!("lab-bg-{name}");
+            assert!(support::attr(&doc, &id, "tk-plate").is_some(), "{id}");
+            assert_eq!(
+                carries_widget(&doc, support::id(&doc, &id)),
+                mode == "self",
+                "{mode}: {id}"
+            );
+        }
+        let shape = |doc: &NativeDocument, name: &str| plate_shape(doc, &format!("lab-bg-{name}"));
+        let blue = shape(&doc, "blue");
+        assert!(near(blue.fill.unwrap(), "#155dfc"), "blue-600: {blue:?}");
+        assert_eq!(
+            (blue.bevel, blue.recessed, blue.radii),
+            (Some(2.0), false, [8.0; 4])
+        );
+        assert!(near(shape(&doc, "green").fill.unwrap(), "#009966"));
+        assert!(near(shape(&doc, "rose").fill.unwrap(), "#ec003f"));
+        let ghost = shape(&doc, "ghost").fill.unwrap();
+        assert!(
+            near(ghost, "#ffffff") && (ghost[3] - 0.1).abs() < 0.01,
+            "white/10: {ghost:?}"
+        );
 
-    hover(&mut doc, "lab-bg-blue");
-    doc.layout_surfaces();
-    assert!(
-        near(shape(&doc, "blue").fill.unwrap(), "#2b7fff"),
-        "hover: blue-500"
-    );
-    pointer_half(&mut doc, "lab-bg-blue", false);
-    let down = shape(&doc, "blue");
-    assert!(near(down.fill.unwrap(), "#1447e6"), "active: blue-700");
-    assert!(down.recessed, "active:recessed");
-    assert!(
-        !doc.inner().is_animating(),
-        "a state change needs one frame"
-    );
-    pointer_half(&mut doc, "lab-bg-blue", true);
-    // Clicked: it stays down (aria-pressed) until another one is picked.
-    assert!(shape(&doc, "blue").recessed);
-    pointer_half(&mut doc, "lab-bg-green", false);
-    pointer_half(&mut doc, "lab-bg-green", true);
-    assert!(shape(&doc, "green").recessed && !shape(&doc, "blue").recessed);
-    assert!(near(shape(&doc, "blue").fill.unwrap(), "#155dfc"));
-    assert!(!doc.inner().is_animating());
-    assert!(doc.take_error().is_none());
+        hover(&mut doc, "lab-bg-blue");
+        doc.layout_surfaces();
+        assert!(
+            near(shape(&doc, "blue").fill.unwrap(), "#2b7fff"),
+            "{mode}: hover: blue-500"
+        );
+        pointer_half(&mut doc, "lab-bg-blue", false);
+        let down = shape(&doc, "blue");
+        assert!(near(down.fill.unwrap(), "#1447e6"), "active: blue-700");
+        assert!(down.recessed, "active:recessed");
+        assert!(
+            !doc.inner().is_animating(),
+            "a state change needs one frame"
+        );
+        pointer_half(&mut doc, "lab-bg-blue", true);
+        // Clicked: it stays down (aria-pressed) until another one is picked.
+        assert!(shape(&doc, "blue").recessed, "{mode}: the click arrived");
+        pointer_half(&mut doc, "lab-bg-green", false);
+        pointer_half(&mut doc, "lab-bg-green", true);
+        assert!(shape(&doc, "green").recessed && !shape(&doc, "blue").recessed);
+        assert!(near(shape(&doc, "blue").fill.unwrap(), "#155dfc"));
+        assert!(!doc.inner().is_animating());
+        assert!(doc.take_error().is_none());
+    }
 }
 
-/// The ordering case as pixels: the cap shows on the coloured box. Before
-/// backgrounds became plates, Blitz painted the box over the stage's layer
-/// and only the cap's label was left.
+/// The ordering case as pixels, with either painter: the cap shows on the
+/// coloured box. Before backgrounds became plates, Blitz painted the box
+/// over the stage's layer and only the cap's label was left.
 #[test]
 #[ignore = "offscreen GPU frames; run explicitly"]
 fn the_ordering_case_draws_the_cap_on_the_box() {
@@ -1538,31 +1878,35 @@ fn the_ordering_case_draws_the_cap_on_the_box() {
     let mut doc = document(scale, 900.0);
     let mut out = Offscreen::new(scale);
     open(&mut doc, "surfaces");
-    scroll_to(&mut doc, "lab-plates-order");
-    out.frame(&mut doc);
-    let px = out.frame(&mut doc).0;
-    let at = |x: f64, y: f64| {
-        let i = (((y * scale as f64) as u32 * out.width + (x * scale as f64) as u32) * 4) as usize;
-        [px[i], px[i + 1], px[i + 2]]
-    };
-    let rect = |name: &str| {
-        doc.inner()
-            .get_client_bounding_rect(support::id(&doc, name))
-            .unwrap()
-    };
-    let (bx, cap) = (rect("lab-plates-order"), rect("lab-order-deny"));
-    assert_eq!(
-        at(bx.x + 4.0, bx.y + bx.height / 2.0),
-        [0x3a, 0x24, 0x20],
-        "the box"
-    );
-    // Inside the cap, left of its label and clear of its bevel band.
-    assert_eq!(
-        at(cap.x + 6.0, cap.y + cap.height / 2.0),
-        [0x2a; 3],
-        "the cap's face, on the box"
-    );
-    assert!(doc.take_error().is_none());
+    for mode in PAINTERS {
+        painter(&mut doc, mode);
+        scroll_to(&mut doc, "lab-plates-order");
+        out.frame(&mut doc);
+        let px = out.frame(&mut doc).0;
+        let at = |x: f64, y: f64| {
+            let i =
+                (((y * scale as f64) as u32 * out.width + (x * scale as f64) as u32) * 4) as usize;
+            [px[i], px[i + 1], px[i + 2]]
+        };
+        let rect = |name: &str| {
+            doc.inner()
+                .get_client_bounding_rect(support::id(&doc, name))
+                .unwrap()
+        };
+        let (bx, cap) = (rect("lab-plates-order"), rect("lab-order-deny"));
+        assert_eq!(
+            at(bx.x + 4.0, bx.y + bx.height / 2.0),
+            [0x3a, 0x24, 0x20],
+            "{mode}: the box"
+        );
+        // Inside the cap, left of its label and clear of its bevel band.
+        assert_eq!(
+            at(cap.x + 6.0, cap.y + cap.height / 2.0),
+            [0x2a; 3],
+            "{mode}: the cap's face, on the box"
+        );
+        assert!(doc.take_error().is_none());
+    }
 }
 
 /// Captures for review (raw RGBA, see `capture_dir`): the keycap case at
