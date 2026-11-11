@@ -242,8 +242,11 @@ function ShellFrame(props: ShellProps) {
               {/* `z-0` makes the scroller a stacking context. Without it Blitz
                 * paints any descendant that has a z-index from an ancestor
                 * above this element, outside its clip, so scrolled content
-                * shows through the top bar. */}
-              <div id="shell-stage" class="absolute inset-0 z-0 overflow-y-auto">
+                * shows through the top bar. It sits one pixel inside the panel's top and bottom
+                * and is clipped to the panel's rounded corners, so scrolled
+                * content never covers the panel's hairline: the edge cuts
+                * the content, not the other way round. */}
+              <div id="shell-stage" class="absolute inset-x-0 inset-y-px z-0 overflow-y-auto rounded-r-[11px]">
                 <Slot region="stage" />
               </div>
               {/* Above the scrolled content, so regions of their own. */}

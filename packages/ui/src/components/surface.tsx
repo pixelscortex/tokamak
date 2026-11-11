@@ -59,12 +59,14 @@ const hairline = { border: 1, borderStrength: 0.055, borderLight: 0.25 };
 /** Theme-token based looks; colours are `var(--token)` from theme.css, which
  * the native widget resolves from computed style. One place to tune. */
 export const materials = {
-  base: { fill: "var(--color-base)", bevel: 2 },
-  sidebar: { fill: "var(--color-sidebar)", bevel: 2, ...hairline },
-  panel: { fill: "var(--color-panel)", bevel: 2, ...hairline },
-  card: { fill: "var(--color-card)", bevel: 2 },
-  chip: { fill: "var(--color-chip)", bevel: 1.5 },
-  well: { fill: "var(--color-well)", bevel: 1.5, recessed: true },
+  // The big shell surfaces have no bevel band: their edge is the hairline
+  // alone, one crisp pixel that follows the fused outline.
+  base: { fill: "var(--color-base)", bevel: 0 },
+  sidebar: { fill: "var(--color-sidebar)", bevel: 0, ...hairline },
+  panel: { fill: "var(--color-panel)", bevel: 0, ...hairline },
+  card: { fill: "var(--color-card)", bevel: 1 },
+  chip: { fill: "var(--color-chip)", bevel: 1 },
+  well: { fill: "var(--color-well)", bevel: 1, recessed: true },
 } satisfies Record<string, MaterialLook>;
 
 export type Material = keyof typeof materials;
