@@ -1679,9 +1679,9 @@ fn near_box(a: [f32; 4], b: [f32; 4]) -> bool {
     a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 0.01)
 }
 
-/// Closed, the field trigger is a raised plate that does not move on
-/// hover (its fill lifts a step; the plate keeps its shape, nothing is
-/// translated) and sinks while pressed. Open, hover and press change
+/// Closed, the field trigger is a flat plate that never moves: on hover
+/// its fill lifts a step (the plate keeps its shape, nothing is
+/// translated), pressed it darkens in place. Open, hover and press change
 /// nothing: the trigger's own plate is off (the fused surface draws it).
 #[test]
 fn the_select_trigger_keeps_its_box_on_hover() {
@@ -1702,9 +1702,15 @@ fn the_select_trigger_keeps_its_box_on_hover() {
     assert_ne!(before.1.fill, after.1.fill, "the fill lifts a step");
     assert_eq!(hex(after.1.fill.unwrap()), "#313131", "lift");
     assert!(!translated(&doc, id), "nothing moves on hover");
-    // Pressed (closed): the button sinks (translated with its face).
+    // Pressed (closed): a flat plate, it darkens and stays where it is.
     pointer_half(&mut doc, trigger, false);
-    assert!(translated(&doc, id), "pressed sinks");
+    doc.layout_surfaces();
+    assert!(!translated(&doc, id), "nothing moves while pressed");
+    assert_eq!(
+        painted_box(&doc, id),
+        before.0,
+        "the box stays while pressed"
+    );
     pointer_half(&mut doc, trigger, true);
     // Now open: no plate of its own (the fused surface draws the trigger);
     // hover and press move nothing.
