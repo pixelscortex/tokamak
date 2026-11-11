@@ -1,0 +1,56 @@
+packages/build/tests/materials.test.ts
+  s_a1de94b2faca67::t_f05f6bcf61f4aa 14,43
+  s_a1de94b2faca67::t_b8d74296535a9b 3,6-10,12-13,15-42,44-56,96,112,117-118,122
+packages/render/src/surface/bind.rs
+  s_a1de94b2faca67::t_ef8ecf063081cc 336-342,344,346-347,349
+  s_a1de94b2faca67::t_3c7da7c20098aa 186-192
+  s_a1de94b2faca67::t_2f09315c047b65 182
+  s_a1de94b2faca67::t_818ba74ab9ca38 159-166,168-174,178-181,183-185,193-198,201-204,212-217,219-224,228
+packages/build/src/css.ts
+  s_a1de94b2faca67::t_075b79d63a2b9f 6
+  s_a1de94b2faca67::t_197d79a25b3167 19-20
+packages/render/src/surface/tests.rs
+  s_a1de94b2faca67::t_2f09315c047b65 806-808,810-811,818-822,824,826-838,844-845,851,865,869-881,895-900
+  s_a1de94b2faca67::t_3c7da7c20098aa 855-858,860-864,882-894,901-904
+  s_a1de94b2faca67::t_3c5ffa7164208c 905-906
+packages/build/tests/fills.test.ts
+  s_a1de94b2faca67::t_b8d74296535a9b 1-28
+packages/render/js/jsx-runtime.ts
+  s_a1de94b2faca67::t_68ab9d4f05fa47 70-72,74-78,116-118
+packages/ui/src/components/surface.tsx
+  s_a1de94b2faca67::t_fbfa0f653c2e10 21-23,25,28-30,116,136-139,222-225,248
+packages/render/src/wire.rs
+  s_a1de94b2faca67::t_3c7da7c20098aa 185
+  s_a1de94b2faca67::t_15b61ae4c20fa0 175-178,183-184,186-195
+packages/ui/src/components/shell.tsx
+  s_a1de94b2faca67::t_fbfa0f653c2e10 37-39,171,207,215,228-232,241,245
+packages/build/tests/run.sh
+  s_a1de94b2faca67::t_b8d74296535a9b 4
+packages/build/tests/css.test.ts
+  s_a1de94b2faca67::t_985b0c4b93d95c 24,30-32
+lab/tests/fused_surface.rs
+  s_a1de94b2faca67::t_79898cf7fcb65c 943-964
+  s_a1de94b2faca67::t_e788c710f8d169 983
+packages/build/src/fills.ts
+  s_a1de94b2faca67::t_42735429d27896 1-50
+packages/ui/src/materials.css
+  s_a1de94b2faca67::t_f6e1349a57f1e7 1,3-5,7,9-20,22-33,37-46,49-50,53-54,57-59
+packages/build/src/materials.ts
+  s_a1de94b2faca67::t_0a43d1c7154f00 2-19,25-29,35,37-76,78-86,195-196,230-250,252-255,267-269,271,273,290-306,308,317-319,326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f228dc6dff44f6472d29be7823e898e7c038d515",
+  "prompts": {},
+  "sessions": {
+    "s_a1de94b2faca67": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6d28824c-fa18-498d-804f-46db42bcc5dd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
