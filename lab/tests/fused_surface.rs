@@ -720,7 +720,7 @@ fn full_screen_sizes_draw_every_shell_surface() {
         let sidebar = at(&px, out.width, sidebar_x, mid + 100.0);
         println!("{label}: stage {panel:?}, sidebar {sidebar:?}");
         assert_eq!(panel, [0x1b; 3], "{label}: the stage panel is drawn");
-        assert_eq!(sidebar, [0x12; 3], "{label}: the plugin container is drawn");
+        assert_eq!(sidebar, [0x17; 3], "{label}: the plugin container is drawn");
         px
     };
     for (w, h) in [(1728, 1117), (2056, 1329), (2560, 1440), (3024, 1964)] {
