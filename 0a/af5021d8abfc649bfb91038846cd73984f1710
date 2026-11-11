@@ -1,0 +1,23 @@
+lab/tests/fused_surface.rs
+  s_66c6253f68fd42::t_aac6e1c1d272c5 1278-1280,1287-1302
+packages/render/src/surface/tests.rs
+  s_66c6253f68fd42::t_aac6e1c1d272c5 956-959,969-970,1087-1093,1106,1110
+packages/render/src/surface/bind.rs
+  s_66c6253f68fd42::t_8ce535c024d9ec 195-197,660-661,663-664,666,668,680,750-755,784-794
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0aaf5021d8abfc649bfb91038846cd73984f1710",
+  "prompts": {},
+  "sessions": {
+    "s_66c6253f68fd42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff863479-5fdb-4dfe-b68e-409d3fab0e1c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
