@@ -18,7 +18,7 @@
   /* Surface materials (Surface component, render/SURFACES.md): pure neutral
    * greys, darkest at the window base. Hex only: the GPU widget parses them. */
   --color-base: #080808;
-  --color-sidebar: #121212;
+  --color-sidebar: #171717;
   --color-panel: #1b1b1b;
   --color-card: #252525;
   --color-chip: #2a2a2a;
