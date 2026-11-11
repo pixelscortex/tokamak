@@ -17,4 +17,14 @@ export { Textarea, textareaLine } from "./textarea";
 export type { TextareaProps } from "./textarea";
 export { Select } from "./select";
 export type { SelectOption, SelectProps } from "./select";
+export { Composer } from "./composer";
+export type {
+  ComposerApproval,
+  ComposerCommand,
+  ComposerContext,
+  ComposerField,
+  ComposerForm,
+  ComposerProps,
+  ComposerRun,
+} from "./composer";
 export { dismissOutside } from "./dismiss";

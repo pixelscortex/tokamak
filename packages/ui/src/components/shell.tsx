@@ -17,7 +17,8 @@
  * `at="stage"` for content that hangs from the top bar over the stage, such as
  * a view title), the `Rail`, the plugin `Sidebar`, the `Stage` (the only part
  * that scrolls; the window never does) and the `BottomBar` (pinned to the
- * bottom of the stage, e.g. a composer rising from the window base). Views
+ * bottom of the stage, e.g. a composer rising from the window base; at most
+ * 60% of the stage tall, see below). Views
  * never create, size or position regions: they teleport content into them.
  *
  * Teleport: `solid-js/universal` has no Portal, so each region keeps a list
@@ -259,7 +260,10 @@ function ShellFrame(props: ShellProps) {
                 <MaterialsLayer />
                 <Slot region="stage-top" />
               </div>
-              <div tk-region={region()} class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex flex-col items-center *:pointer-events-auto">
+              {/* The bottom bar never takes more than 60% of the stage. Its
+                * content gets that as a definite limit (a flex column), so a
+                * child with `min-h-0` can give up room (the composer's text). */}
+              <div tk-region={region()} class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex max-h-[60%] flex-col items-center *:pointer-events-auto">
                 <MaterialsLayer />
                 <Slot region="bottom" />
               </div>

@@ -3,7 +3,9 @@
 `@tokamak/ui/elements` exports Solid `Button`, `Input` and `Icon` for QuickJS +
 the universal renderer. `@tokamak/ui/components` exports `Surface`, `Sheet` and
 `Shell` (used by the lab only so far; the app's shell frame and plugin slots are
-separate). No DOM globals, React dependency, overlays, or accessibility-host claims.
+separate) and the plate controls `Button`, `Kbd`, `Chip`, `ChipMore`,
+`Textarea`, `Select` and `Composer`. No DOM globals, React dependency, or
+accessibility-host claims.
 
 ## Styling
 
@@ -11,9 +13,10 @@ One system: Tailwind v4 utilities written in the component, as complete static
 class names, with tokens in `src/theme.css` (colours, radii, fonts). Surface
 materials name the same tokens (`var(--color-panel)`), which the native widget
 resolves from computed style, so the GPU surfaces and the CSS cannot drift.
-Still on the older class pattern, pending a separate decision: `Button` and
-`Input` (`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
-`src/styles.css`). Do not add to that pattern.
+Still on the older class pattern: the elements `Button` and `Input`
+(`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
+`src/styles.css`); the todo plugin uses them. Do not add to that pattern: new
+controls are in `@tokamak/ui/components`, where `Button` is the plate button.
 
 ## Surface, Sheet, Shell, plates, Icon
 
@@ -60,6 +63,40 @@ import { Icon } from "@tokamak/ui/elements";
 - `Icon` draws SVG path data natively; colour follows CSS `color`.
 
 See `packages/render/SURFACES.md` for the renderer side.
+
+## Controls (`@tokamak/ui/components`)
+
+Plates (a solid `bg-*`) with Tailwind utilities and theme tokens only. Each
+file starts with its usage and the details; the short version:
+
+```tsx
+<Button variant="primary" size="md" onClick={run}>Run</Button>   // primary | neutral | outline | destructive | ghost; sm | md | icon
+<Button variant="ghost" size="icon" label="Attach" pressed={on()}>…</Button>
+<Kbd keys={["cmd", "K"]} />
+<Chip label="Buy milk" detail="Todo" onRemove={drop} />  <ChipMore count={3} />
+<Textarea value={text()} onValueChange={setText} onSubmit={send} maxRows={8} placeholder="Reply…" />
+<Select options={opts} value={v()} onValueChange={setV} size="compact" side="top" search mono />
+<Shell.BottomBar>
+  <Composer docked placeholder="Reply…" onSubmit={send} models={models} model={m()} onModelChange={setM}
+    context={chips} running={run} onStop={stop} commands={commands} onCommand={pick}
+    form={form} approval={approval} above={…} tools={…} />
+</Shell.BottomBar>
+```
+
+- Buttons stand off the surface (`elevation-3 hover:sink-1 active:pressed`,
+  toggles `aria-pressed:pressed`); no bevel, border or shadow. Focus shows
+  `focus:ring-2` (`:focus`; Blitz has no `:focus-visible`).
+- Fields are recessed wells; menus are a `Sheet`.
+- `Textarea` grows by layout, not measuring: an invisible copy of its text
+  in the same grid cell sizes it (Blitz's `<textarea>` keeps a fixed
+  `rows` height and reports no content height).
+- `Select` closes on a click outside through the shell's root
+  (`dismissOutside`); outside a `Shell` only by its keys and picks. Scripts
+  cannot move focus in Blitz, so its search field is not focused on open;
+  typing on the focused trigger goes into it.
+- `Composer` owns the text; its states come from props (see composer.tsx).
+  The shell's bottom bar is at most 60% of the stage, and the composer's
+  text gives up lines first.
 
 ```tsx
 import { createSignal } from "solid-js";
