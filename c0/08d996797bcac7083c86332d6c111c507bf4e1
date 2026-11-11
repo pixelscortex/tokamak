@@ -1,0 +1,19 @@
+packages/render/BLITZ_FORK.md
+  s_e3d99f9a782059::t_8bd8ac615c2f91 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c008d996797bcac7083c86332d6c111c507bf4e1",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
