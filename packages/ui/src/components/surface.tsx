@@ -17,6 +17,15 @@
  * children render above the surface; authors never handle z-index or
  * pointer events. `Surface.Intersect` is reserved for masking (not built).
  *
+ * Plates: for pieces that are each one plate (keycaps, trays, chips), a
+ * plain element with a `material-*` utility (materials.css) is drawn by the
+ * materials layer of its region, no component needed:
+ *
+ *   <button class="material-key active:material-key-pressed rounded-[7px] px-3">Deny</button>
+ *
+ * Every shell region holds a layer. Something floating outside the regions
+ * (a menu, a popover) is a `Sheet`: an element with its own layer.
+ *
  * `layer` joins a fixed shell layer (see Shell) instead of the nearest
  * surface: `<Surface.Union layer="base">` makes a shape of window-base
  * material (it cuts every shell layer above the base, so the base shows
@@ -205,6 +214,40 @@ function shape(op: "union" | "subtract") {
       </div>
     );
   };
+}
+
+/** The materials layer of the element it is placed in (render/SURFACES.md,
+ * "Plates"): draws the plates of that element below all of its content. The
+ * element must be a stacking context (`isolate`) so the layer stays above
+ * what is behind the element. Used by the shell regions and `Sheet`, not by
+ * views. */
+export function MaterialsLayer(): JSX.Element {
+  return <tk-surface materials class="absolute inset-0 -z-10" />;
+}
+
+export interface SheetProps {
+  id?: string;
+  class?: string;
+  style?: string;
+  children?: JSX.Element;
+}
+
+/** A floating piece with its own materials layer, for plates outside the
+ * shell regions or above other content (menus, popovers): the sheet and its
+ * plates paint where the sheet sits in the stacking order. The sheet's own
+ * `material-*` class, if any, is its bottom plate.
+ *
+ *   <Sheet class="material-card absolute top-10 right-0 rounded-lg p-1">
+ *     <button class="hover:material-chip rounded-md px-2">Rename</button>
+ *   </Sheet>
+ */
+export function Sheet(props: SheetProps): JSX.Element {
+  return (
+    <div id={props.id} class={`isolate ${positioned(props.class)}`} style={props.style}>
+      <MaterialsLayer />
+      {props.children}
+    </div>
+  );
 }
 
 /** A surface with `Surface.Union` and `Surface.Subtract` shapes. */

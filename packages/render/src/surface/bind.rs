@@ -478,6 +478,10 @@ impl Registry {
             if w <= 0.0 || h <= 0.0 {
                 continue; // not rendered (display: none)
             }
+            // Blitz moves an element's client rect by its own scroll offset
+            // too; a plate that scrolls its content stays where it is.
+            let scroll = node.scroll_offset();
+            let (x, y) = ((rect.x + scroll.x) as f32, (rect.y + scroll.y) as f32);
             // The nearest region, starting at the plate itself (a `Sheet`
             // with its own material draws in its own layer), and the plate's
             // depth in the document (outer plates paint first).
@@ -493,7 +497,7 @@ impl Registry {
             }
             let Some(layer) = layer else { continue };
             let origin = boxes[&layer];
-            let local = [rect.x as f32 - origin[0], rect.y as f32 - origin[1], w, h];
+            let local = [x - origin[0], y - origin[1], w, h];
             // Out of the layer's box (scrolled away): nothing to draw.
             if local[0] >= origin[2]
                 || local[1] >= origin[3]

@@ -825,9 +825,12 @@ fn sections_teleport_into_the_shell_regions() {
 
 // ---------------------------------------------------------------- plates (materials from classes)
 
-/// Pointer down (`up` false) or up over the centre of element `name`, without
-/// the other half of a click: `:active` holds between the two.
-fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
+/// A pointer event over the centre of element `name`, with `buttons` held.
+fn pointer_at(
+    doc: &mut NativeDocument,
+    name: &str,
+    buttons: blitz_traits::events::MouseEventButtons,
+) -> blitz_traits::events::BlitzPointerEvent {
     use blitz_traits::events::*;
     use keyboard_types::Modifiers;
     doc.inner_mut().resolve(0.0);
@@ -839,7 +842,7 @@ fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
         (rect.x + rect.width / 2.0) as f32,
         (rect.y + rect.height / 2.0) as f32,
     );
-    let event = BlitzPointerEvent {
+    BlitzPointerEvent {
         id: BlitzPointerId::Mouse,
         is_primary: true,
         coords: PointerCoords {
@@ -851,16 +854,24 @@ fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
             client_y: y,
         },
         button: MouseEventButton::Main,
-        buttons: if up {
-            MouseEventButtons::None
-        } else {
-            MouseEventButtons::Primary
-        },
+        buttons,
         mods: Modifiers::empty(),
         details: Default::default(),
         element: Default::default(),
         active_pointers: Default::default(),
+    }
+}
+
+/// Pointer down (`up` false) or up over the centre of element `name`, without
+/// the other half of a click: `:active` holds between the two.
+fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
+    use blitz_traits::events::{MouseEventButtons, UiEvent};
+    let buttons = if up {
+        MouseEventButtons::None
+    } else {
+        MouseEventButtons::Primary
     };
+    let event = pointer_at(doc, name, buttons);
     doc.handle_ui_event(UiEvent::PointerMove(event.clone()));
     doc.handle_ui_event(if up {
         UiEvent::PointerUp(event)
@@ -871,13 +882,39 @@ fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
     doc.layout_surfaces();
 }
 
-/// The materials layer of a region: the `<tk-surface materials>` child of
-/// element `region`.
-fn layer_of(doc: &NativeDocument, region: &str) -> blitz_traits::NodeId {
-    doc.inner()
-        .query_selector(&format!("#{region} > tk-surface[materials]"))
+/// The pointer moves over the centre of element `name` (`:hover`).
+fn hover(doc: &mut NativeDocument, name: &str) {
+    use blitz_traits::events::{MouseEventButtons, UiEvent};
+    let event = pointer_at(doc, name, MouseEventButtons::None);
+    doc.handle_ui_event(UiEvent::PointerMove(event));
+    doc.inner_mut().resolve(0.0);
+}
+
+/// The visible stage: the box of the region the scroller fills.
+fn stage_box(doc: &NativeDocument) -> blitz_dom::BoundingRect {
+    let region = doc.inner().get_node(stage(doc)).unwrap().parent.unwrap();
+    doc.inner().get_client_bounding_rect(region).unwrap()
+}
+
+/// The stage's materials layer: the `<tk-surface materials>` beside the
+/// stage scroller (the shell writes it; views never do).
+fn stage_layer(doc: &NativeDocument) -> blitz_traits::NodeId {
+    let inner = doc.inner();
+    let scroller = inner.get_node(stage(doc)).unwrap();
+    inner
+        .get_node(scroller.parent.unwrap())
         .unwrap()
-        .unwrap()
+        .children
+        .iter()
+        .copied()
+        .find(|&id| {
+            let element = inner.get_node(id).unwrap().element_data();
+            element.is_some_and(|e| {
+                &*e.name.local == "tk-surface"
+                    && e.attr(blitz_dom::LocalName::from("materials")).is_some()
+            })
+        })
+        .expect("the stage holds a materials layer")
 }
 
 /// The layer's shape for element `name` (matched by its box).
@@ -920,7 +957,7 @@ fn css_materials_follow_computed_style_and_pressed_states() {
     open(&mut doc, "surfaces");
     scroll_to(&mut doc, "lab-css-keycaps");
     doc.layout_surfaces();
-    let layer = layer_of(&doc, "lab-css-keycaps");
+    let layer = stage_layer(&doc);
     let shapes = doc.surface_shapes(layer);
     // 4 trays (one per row, two in the shortcut row) and 3 + 4 + 4 caps.
     assert_eq!(shapes.len(), 4 + 11, "{shapes:#?}");
@@ -980,6 +1017,163 @@ fn css_materials_follow_computed_style_and_pressed_states() {
     assert!(doc.take_error().is_none());
 }
 
+/// The stage's materials layer stays over the visible stage while its
+/// content scrolls: a plate is drawn where it is on screen, reaches past the
+/// stage's top edge while it scrolls out (its texture ends at the stage
+/// edge, which clips it) and is dropped once it is out of view.
+#[test]
+fn stage_plates_follow_scrolling_and_leave_at_the_stage_edge() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-css-keycaps");
+    doc.layout_surfaces();
+    let layer = stage_layer(&doc);
+    let rect = |doc: &NativeDocument, id| doc.inner().get_client_bounding_rect(id).unwrap();
+    // (The scroller's own client rect moves with its scroll offset in
+    // Blitz; the region it fills does not.)
+    let (visible, cover) = (stage_box(&doc), rect(&doc, layer));
+    assert_eq!(
+        (cover.x, cover.y, cover.width, cover.height),
+        (visible.x, visible.y, visible.width, visible.height),
+        "the layer covers the visible stage, not the scrolled content"
+    );
+    let offset = |doc: &NativeDocument| doc.inner().get_node(stage(doc)).unwrap().scroll_offset().y;
+    // The cap 100 px below the stage's top edge.
+    let cap = support::id(&doc, "lab-css-key-deny");
+    let y = offset(&doc) + rect(&doc, cap).y - cover.y - 100.0;
+    scroll_stage(&mut doc, y);
+    doc.layout_surfaces();
+    let before = material_shape(&doc, layer, "lab-css-key-deny");
+    assert_eq!(before.rect[1], 100.0);
+    let y = offset(&doc) + 50.0;
+    scroll_stage(&mut doc, y);
+    doc.layout_surfaces();
+    let after = material_shape(&doc, layer, "lab-css-key-deny");
+    assert_eq!(
+        after.rect[1],
+        before.rect[1] - 50.0,
+        "drawn where it is now"
+    );
+    assert_eq!(after.rect[0], before.rect[0]);
+
+    // Half out over the top edge: still drawn, reaching above the layer.
+    let top = rect(&doc, cap).y - cover.y;
+    let y = offset(&doc) + top + 10.0;
+    scroll_stage(&mut doc, y);
+    doc.layout_surfaces();
+    let edge = material_shape(&doc, layer, "lab-css-key-deny");
+    assert!(
+        edge.rect[1] < 0.0 && edge.rect[1] + edge.rect[3] > 0.0,
+        "{edge:?}"
+    );
+    // Out of view: no shape above the layer any more.
+    let y = offset(&doc) + 200.0;
+    scroll_stage(&mut doc, y);
+    doc.layout_surfaces();
+    let shapes = doc.surface_shapes(layer);
+    assert!(
+        shapes.iter().all(|s| s.rect[1] + s.rect[3] > 0.0),
+        "{shapes:#?}"
+    );
+    assert!(!doc.inner().is_animating());
+    assert!(doc.take_error().is_none());
+}
+
+/// The same, as pixels: with a cap scrolled half over the stage's top edge,
+/// nothing of it shows above the edge (the top bar is identical to a frame
+/// with no plate near it) and its lower half shows below the edge.
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn scrolled_plates_are_clipped_at_the_stage_edge() {
+    let scale = 2.0;
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    open(&mut doc, "surfaces");
+    let at = |px: &[u8], width: u32, x: f64, y: f64| {
+        let i = (((y * scale as f64) as u32 * width + (x * scale as f64) as u32) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2]]
+    };
+    let settled = |doc: &mut NativeDocument, out: &mut Offscreen| {
+        let mut px = out.frame(doc).0;
+        for _ in 0..10 {
+            if !doc.inner().is_animating() {
+                break;
+            }
+            px = out.frame(doc).0;
+        }
+        px
+    };
+    let scroller = stage_box(&doc);
+    // Reference: scrolled to the top, no plate near the stage's top edge.
+    let reference = settled(&mut doc, &mut out);
+    let cap = support::id(&doc, "lab-css-key-deny");
+    let r = doc.inner().get_client_bounding_rect(cap).unwrap();
+    scroll_stage(&mut doc, r.y - scroller.y + r.height / 2.0);
+    let r = doc.inner().get_client_bounding_rect(cap).unwrap();
+    assert!(r.y < scroller.y && r.y + r.height > scroller.y + 4.0);
+    let px = settled(&mut doc, &mut out);
+    // Everything above the stage (the top bar) is unchanged, device row by row.
+    let row = (out.width * 4) as usize;
+    let above = (scroller.y * scale as f64) as usize;
+    assert!(
+        px[..above * row] == reference[..above * row],
+        "a scrolled plate showed above the stage edge"
+    );
+    // Below the edge, inside the cap: its face (#2a2a2a), not the panel.
+    let face = at(&px, out.width, r.x + 6.0, scroller.y + 4.0);
+    assert_eq!(face, [0x2a; 3], "the cap's visible half is drawn");
+    assert!(doc.take_error().is_none());
+}
+
+/// A `Sheet` floats with its own layer: its plates (its own material and
+/// its items') are drawn there, not in the stage's layer under the content
+/// it covers; a hovered item gets its `hover:` material.
+#[test]
+fn a_sheet_draws_its_plates_in_its_own_layer() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-sheet-menu");
+    doc.layout_surfaces();
+    let sheet = doc
+        .inner()
+        .query_selector("#lab-sheet-menu > tk-surface[materials]")
+        .unwrap()
+        .expect("the sheet holds a layer");
+    let shapes = doc.surface_shapes(sheet);
+    assert_eq!(
+        shapes.len(),
+        2,
+        "the sheet and its selected item: {shapes:#?}"
+    );
+    assert_eq!(shapes[0].rect[..2], [0.0, 0.0], "the sheet itself, first");
+    assert_eq!(hex(shapes[0].fill.unwrap()), "#252525");
+    assert_eq!(
+        hex(material_shape(&doc, sheet, "lab-sheet-item-0")
+            .fill
+            .unwrap()),
+        "#2a2a2a"
+    );
+    let stage = stage_layer(&doc);
+    let origin = doc.inner().get_client_bounding_rect(stage).unwrap();
+    let menu = doc
+        .inner()
+        .get_client_bounding_rect(support::id(&doc, "lab-sheet-menu"))
+        .unwrap();
+    assert!(
+        !doc.surface_shapes(stage).iter().any(|s| {
+            (f64::from(s.rect[0]) + origin.x - menu.x).abs() < 0.5
+                && (f64::from(s.rect[1]) + origin.y - menu.y).abs() < 0.5
+        }),
+        "not in the stage's layer"
+    );
+    // Hover the last item: it becomes a plate of the sheet.
+    hover(&mut doc, "lab-sheet-item-2");
+    doc.layout_surfaces();
+    assert_eq!(doc.surface_shapes(sheet).len(), 3);
+    material_shape(&doc, sheet, "lab-sheet-item-2");
+    assert!(doc.take_error().is_none());
+}
+
 /// The layout pass with the 300-cap CSS grid on screen and nothing changing:
 /// every redraw runs it, so this is the static cost of change detection
 /// (one computed-style pointer compare and one box read per member).
@@ -990,8 +1184,18 @@ fn css_material_grid_binding_pass_cost() {
     click(&mut doc, "lab-keycap-grid-mode-css");
     scroll_to(&mut doc, "lab-keycap-grid");
     doc.layout_surfaces();
-    let layer = layer_of_grid(&doc);
-    assert_eq!(doc.surface_shapes(layer).len(), 301, "tray + 300 caps");
+    let layer = stage_layer(&doc);
+    let grid = doc
+        .inner()
+        .get_client_bounding_rect(support::id(&doc, "lab-keycap-grid"))
+        .unwrap();
+    let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
+    let in_grid = doc
+        .surface_shapes(layer)
+        .iter()
+        .filter(|s| f64::from(s.rect[1]) + origin.y >= grid.y - 0.5)
+        .count();
+    assert_eq!(in_grid, 301, "tray + 300 caps");
     let t = Instant::now();
     for _ in 0..200 {
         doc.layout_surfaces();
@@ -1002,13 +1206,6 @@ fn css_material_grid_binding_pass_cost() {
     );
     assert!(!doc.inner().is_animating());
     assert!(doc.take_error().is_none());
-}
-
-fn layer_of_grid(doc: &NativeDocument) -> blitz_traits::NodeId {
-    doc.inner()
-        .query_selector("#lab-keycap-grid tk-surface[materials]")
-        .unwrap()
-        .unwrap()
 }
 
 /// Both keycap cases side by side (Surface components above, CSS classes

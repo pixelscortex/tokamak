@@ -161,6 +161,17 @@ draws every plate of that region.
   is shaded with its own material and painted over the ones before it, outer
   elements first (a tray, then the caps in it), then in document order. All
   of a region's plates paint below all of its content.
+- **Regions own the layers.** Views never write one. `@tokamak/ui`'s shell
+  puts one in every region: the top bar, the rail, the sidebar, the stage,
+  and the two overlays on the stage (`TopBar at="stage"`, `BottomBar`),
+  which float over the scrolled content and so need their own. The stage's
+  layer is a sibling of the scroller, the size of the visible stage: plates
+  are placed by their on-screen boxes after scrolling, a plate half out of
+  view is cut at the stage edge (the texture ends there), and one out of
+  view is skipped. Something floating outside the regions or above other
+  content (a menu, a popover) is a `Sheet`: an element with its own layer,
+  so it and its plates paint where the sheet sits in the stacking order.
+  The sheet's own `material-*` class is its bottom plate.
 - **Finding plates.** The render host tracks plates when attributes arrive
   (`wire.rs`), never by scanning the document: an element is a plate if its
   `class` has a `material-*` token (bare or behind variants).
@@ -174,6 +185,11 @@ draws every plate of that region.
 
 `Surface`, `Surface.Union` and `Surface.Subtract` remain the way to make
 fused shapes, joins and cuts; plates are separate pieces.
+
+Limits: within one region, plates paint below all of the region's content,
+whatever its z-index (overlapping pieces that must stack go in a `Sheet`).
+A plate whose box changes only through a CSS transform is not seen (boxes
+are layout boxes, as for members).
 
 ## How it stays cheap
 

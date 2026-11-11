@@ -33,6 +33,13 @@
  * surfaces with fixed group names, so a shape anywhere can join them:
  * `<Surface.Union layer="base">`, `layer="sidebar"`, `layer="stage"`.
  *
+ * Plates: every region holds a materials layer (render/SURFACES.md,
+ * "Plates"), so an element with a `material-*` class anywhere in a view is
+ * drawn without a component. The stage's layer stays fixed over the stage
+ * while its content scrolls: plates are drawn where they are on screen and
+ * clipped at the stage edge. Views never write a layer; floating pieces
+ * outside the regions use `Sheet`.
+ *
  * Window chrome: with render's `WindowOptions::custom_titlebar` the top bar is
  * the title bar. Its empty parts drag the window (`window-drag`), and it keeps
  * room for the traffic-light buttons except in full screen (`data-fullscreen`
@@ -41,7 +48,7 @@
 import { For, children, createContext, createSignal, onCleanup, useContext } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { JSX } from "@tokamak/render";
-import { Surface, shellGroups } from "./surface";
+import { MaterialsLayer, Surface, shellGroups } from "./surface";
 
 type Region =
   | "top-start"
@@ -160,13 +167,14 @@ function ShellFrame(props: ShellProps) {
       <div class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink">
         <div
           window-drag
-          class={`flex shrink-0 items-center pr-2 ${
+          class={`relative isolate flex shrink-0 items-center pr-2 ${
             props.trafficLights === false
               ? "pl-3.5"
               : "pl-(--tk-window-buttons) [[data-fullscreen]_&]:pl-3.5"
           }`}
           style={`height: ${topBar.height}px; --tk-window-buttons: ${topBar.reserve}px`}
         >
+          <MaterialsLayer />
           {/* Start and end keep their design widths on wide windows and give
             * way (down to their content) on narrow ones; the centre keeps at
             * least 220 px, so the three never overlap. */}
@@ -194,13 +202,15 @@ function ShellFrame(props: ShellProps) {
             class="-mr-4 flex shrink-0"
           >
             <div
-              class="relative flex shrink-0 flex-col items-start"
+              class="relative isolate flex shrink-0 flex-col items-start"
               style={`width: ${rail.width}px; gap: ${rail.gap}px; padding-left: ${rail.inset}px`}
             >
+              <MaterialsLayer />
               <Slot region="rail" />
             </div>
             <Surface.Union radius={12} class="flex pr-4">
-              <div class="flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
+              <div class="relative isolate flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
+                <MaterialsLayer />
                 <Slot region="sidebar" />
               </div>
             </Surface.Union>
@@ -212,6 +222,11 @@ function ShellFrame(props: ShellProps) {
               join={14}
               class="min-w-0 flex-1"
             >
+              {/* The stage's plates, scrolled content included: a sibling of
+                * the scroller, so it covers the visible stage only (plates are
+                * placed by their on-screen boxes) and paints over the panel and
+                * under the scroller's content. */}
+              <MaterialsLayer />
               {/* `z-0` makes the scroller a stacking context. Without it Blitz
                 * paints any descendant that has a z-index from an ancestor
                 * above this element, outside its clip, so scrolled content
@@ -219,10 +234,13 @@ function ShellFrame(props: ShellProps) {
               <div id="shell-stage" class="absolute inset-0 z-0 overflow-y-auto">
                 <Slot region="stage" />
               </div>
-              <div class="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center *:pointer-events-auto">
+              {/* Above the scrolled content, so with their own layers. */}
+              <div class="pointer-events-none absolute inset-x-0 top-0 isolate flex flex-col items-center *:pointer-events-auto">
+                <MaterialsLayer />
                 <Slot region="stage-top" />
               </div>
-              <div class="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center *:pointer-events-auto">
+              <div class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex flex-col items-center *:pointer-events-auto">
+                <MaterialsLayer />
                 <Slot region="bottom" />
               </div>
             </Surface>
