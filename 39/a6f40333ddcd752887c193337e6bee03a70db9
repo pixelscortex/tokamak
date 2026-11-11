@@ -1,0 +1,34 @@
+packages/render/src/surface/bind.rs
+  s_66c6253f68fd42::t_46711288ed5514 74-83,124-126,188-190,193,208-212,356-366,410,447-454,467-470,707-708,711,715-720,722-741,788-794,933
+  s_66c6253f68fd42::t_4396f52bfcfed5 455-461,721,798-800,821-850,859,887-888,891-896,898-926,930-932
+packages/render/src/surface/tests.rs
+  s_66c6253f68fd42::t_da774de4576da8 953,971-972,1040,1061-1065,1068-1080,1128-1131,1137
+  s_66c6253f68fd42::t_c566d39d594a4b 951-952,1154
+packages/render/src/surface/plate.rs
+  s_66c6253f68fd42::t_4396f52bfcfed5 3-4,10,38-42,44,46,58-59,61,95,97-98,101-102,105-106,109-110,112,114,120-129,166-168,171-172
+lab/src/surfaces.tsx
+  s_66c6253f68fd42::t_824081bfbb8787 313-329,411
+lab/tests/fused_surface.rs
+  s_66c6253f68fd42::t_f60ca6eeb843ee 2405-2406
+  s_66c6253f68fd42::t_824081bfbb8787 1275-1348,2361-2386,2396-2404,2407-2411,2413
+  s_66c6253f68fd42::t_d5b79099d575d5 2387-2395
+  s_66c6253f68fd42::t_4d45ae36c9e996 2412
+packages/render/src/lib.rs
+  s_66c6253f68fd42::t_4396f52bfcfed5 114-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39a6f40333ddcd752887c193337e6bee03a70db9",
+  "prompts": {},
+  "sessions": {
+    "s_66c6253f68fd42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff863479-5fdb-4dfe-b68e-409d3fab0e1c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

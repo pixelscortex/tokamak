@@ -1,0 +1,23 @@
+lab/Cargo.toml
+  s_66c6253f68fd42::t_fd164ed10f6327 26-27
+lab/tests/fused_surface.rs
+  s_66c6253f68fd42::t_fd164ed10f6327 1036-1045,1948-2268
+Cargo.lock
+  s_66c6253f68fd42::t_5aa76db729b26c 7157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a9a4b5b023fad1d4cc76746f3ae7f3b1eee19bd",
+  "prompts": {},
+  "sessions": {
+    "s_66c6253f68fd42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff863479-5fdb-4dfe-b68e-409d3fab0e1c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
