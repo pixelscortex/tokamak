@@ -35,6 +35,16 @@
   --color-ink-5: #55555b;
   --color-ink-6: #4a4a50;
 
+  /* The faint divider inside a plate (the composer's line between what
+   * sits above the message and the message). */
+  --color-line: #1c1c1c;
+  /* A plate one step up from `chip`: the selected or keyboard-active row
+   * of a menu on a card. */
+  --color-lift: #313131;
+  /* Label of a destructive action. The only colour that is not grey: it
+   * marks danger, it does not tint surfaces. */
+  --color-danger: #f2726d;
+
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;

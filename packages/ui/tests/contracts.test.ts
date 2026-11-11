@@ -8,7 +8,12 @@ test("native library preserves its public element and component exports", async 
   const elementsPath = new URL("elements.js", dist).href;
   const componentsPath = new URL("components.js", dist).href;
   assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
-  assert.deepEqual(Object.keys(await import(componentsPath)).sort(), ["Sheet", "Shell", "Surface", "materials", "rail", "railItemTop", "shellGroups", "topBar"]);
+  // The plate controls (Button, Kbd, Chip) sit
+  // beside the shell pieces; elements keeps the older class-based Button.
+  assert.deepEqual(Object.keys(await import(componentsPath)).sort(), [
+    "Button", "Chip", "ChipMore", "Kbd", "Sheet", "Shell", "Surface",
+    "materials", "rail", "railItemTop", "shellGroups", "topBar",
+  ]);
   let library = "";
   for (const file of await readdir(dist)) {
     if (!file.endsWith(".js")) continue;
@@ -32,4 +37,11 @@ test("Tailwind theme retains shared color, radius, spacing and font variables an
   }
   for (const selector of [".tk-button", ".tk-input", "[data-pressed]", "[data-disabled]", "[data-focused]", "[data-invalid]"]) assert(css.includes(selector), selector);
   assert(!/@apply|@import/.test(css), "QuickJS/Blitz must receive compiled CSS, not compiler directives");
+});
+
+test("the components' tokens are theme-owned", async () => {
+  const theme = await readFile(new URL("theme.css", dist), "utf8");
+  for (const token of ["color-line", "color-lift", "color-danger", "color-well", "color-chip", "font-data"]) {
+    assert(theme.includes(`--${token}:`), `${token} must be theme-owned`);
+  }
 });
