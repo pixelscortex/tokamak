@@ -28,8 +28,8 @@
  * ancestors, not the view's; CSS context (inherited styles, containing
  * blocks) is the region's; several entries in one region stack in mount order.
  *
- * Layers: the window base, the plugin container (`sidebar` material: the rail
- * tab and sidebar fuse into it) and the stage panel (`panel` material) are
+ * Layers: the window base, the plugin container (`sidebar` material, behind
+ * the sidebar) and the stage panel (`panel` material) are
  * surfaces with fixed group names, so a shape anywhere can join them:
  * `<Surface.Union layer="base">`, `layer="sidebar"`, `layer="stage"`.
  *
@@ -124,14 +124,16 @@ function TopBar(props: { at?: keyof typeof topBarRegions; children?: JSX.Element
 }
 
 /** Rail geometry, CSS px, in one place (the shell lays the column out; a
- * view's rail items and their tab use the same numbers).
+ * view's rail items, and a tab fused into the container if a view draws
+ * one, use the same numbers).
  * - `width`: the rail column, window edge to the plugin container.
  * - `item`: each item's square hit area; icons stay ~20 px, the rest is air.
  * - `gap`: between items.
  * - `inset`: from the window edge to the items.
- * - `tab`: from the window edge to the active item's tab, which runs to the
- *   container. Item and tab are placed so the icon sits centred in the tab:
- *   equal room on the free side and on the side fused into the container. */
+ * - `tab`: from the window edge to a fused tab for the active item, which
+ *   would run to the container, the icon centred in it: equal room on the
+ *   free side and on the side fused into the container. The lab draws
+ *   none. */
 export const rail = {
   width: 56,
   item: 38,
@@ -155,7 +157,7 @@ export const topBar = {
 } as const;
 
 /** Top of rail item `i` within the rail column (the first is level with the
- * plugin container's top, so the active tab's top edge runs straight into
+ * plugin container's top, so a fused tab's top edge would run straight into
  * the container's). */
 export const railItemTop = (i: number) => i * (rail.item + rail.gap);
 

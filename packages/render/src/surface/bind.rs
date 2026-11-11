@@ -1106,7 +1106,7 @@ fn resolve_attached(list: &mut [Placed]) {
 }
 
 /// A member attached by one side (`surface-attach`) to a vertical edge of
-/// the plain union shape it touches (a rail tab against its container), as
+/// the plain union shape it touches (a tab against its container), as
 /// ONE exact outline: the member's free corners keep its own radii, the two
 /// places where its top and bottom edges meet the target's edge carry
 /// concave fillets of radius `join`, and a strip running along the inside of

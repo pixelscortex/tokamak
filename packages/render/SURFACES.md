@@ -88,8 +88,8 @@ going through an attribute or JS:
   `surface-attach` (`left` | `right`, unions only: the member is attached
   by that side to a vertical edge of another union of the surface, as one
   exact outline with `join` as concave fillets at its top and bottom; level
-  with the other shape's top or bottom its edge runs straight into it. The
-  rail tab uses it).
+  with the other shape's top or bottom its edge runs straight into it: a
+  tab fused into the side of a panel).
 - Its shape is its border box relative to the surface element's box. Unions
   come before subtractions, each in node order.
 - A slanted member becomes an exact rounded outline whose two wide-end
@@ -107,7 +107,7 @@ Identity: every shape has a stable key (a member's node id; an entry of
 `shapes` its index). Animation and partial re-rendering match old and new
 shapes by key, never by list position, so members that appear or disappear
 in the same pass (a view switch taking a title notch and a composer out of
-the shell layers while the rail tab moves) neither stop nor redirect the
+the shell layers while another member moves) neither stop nor redirect the
 others. Dirty rects cover a moved shape's old and new area, an added
 shape's new area and a removed shape's old area.
 
@@ -137,15 +137,18 @@ that map for contact shading. The hook point is the atlas pass in
 For things that are each one plate (buttons, keycaps, trays, chips, cards,
 coloured boxes) there is a lighter way than one `Surface` per element: an
 element with a solid background colour, inside a region, is a **plate**. Our
-shader draws its fill and lit edge; Blitz paints no background for it.
-Authors write ordinary Tailwind:
+shader draws its fill and edges; Blitz paints no background for it. Authors
+write ordinary Tailwind:
 
 ```tsx
-<button class="bg-blue-600 bevel-2 rounded-md px-3 hover:bg-blue-500 active:bg-blue-700 active:recessed">Run</button>
+<button class="bg-blue-600 elevation-3 hover:sink-1 active:pressed rounded-md px-4">Run</button>
 <div class="material-tray flex gap-[3px] rounded-[10px] p-[3px]">
   <button class="material-key active:material-key-pressed rounded-[7px] px-3.5">Deny</button>
 </div>
 ```
+
+Buttons use elevation, not a bevel. The utilities are defined in
+`packages/ui/src/materials.css`, whose header lists them all.
 
 - **Fill.** Any solid `background-color`. The build gives each one a
   `--tk-fill` twin with the same value in the compiled stylesheet
@@ -153,24 +156,46 @@ Authors write ordinary Tailwind:
   (`packages/ui/src/materials.css`), so Stylo resolves theme variables,
   `oklch()`, hex and `color-mix()` into one computed colour, which the
   layout pass reads (alpha kept).
-- **Edge.** `bevel-<n>` (CSS px; `bevel-2.5`, `bevel-[3]`) adds the lit
-  edge band; without it the plate is flat. `raised` (default) or `recessed`.
 - **Shape.** The element's border box, as Blitz paints it (the rounded
   layout), with its computed `border-radius` (`rounded-*`; elliptical
   corners are drawn circular).
+- **Elevation.** `elevation-<n>` (CSS px) makes the plate stand off the
+  surface: the face is n px shorter and a strip under it shows the plate's
+  side. The strip's tone follows the fill: darker on a bright plate,
+  lighter on a dark one. Without a bevel the face also gets a faint line
+  all round; with a bevel that line is dropped (the band already draws the
+  edge).
+- **Sink and pressed.** `sink-<n>` pushes the face n px down into its
+  elevation (at most the elevation); `pressed` pushes it all the way, so no
+  strip shows. Both also translate the element down by the same amount
+  (CSS `translate`), so its text and icons go down with the face, and the
+  plate gives up that amount at its bottom, so its foot stays where it was.
+  A sheet does not follow transforms (below): there the plate is not
+  translated, so its face shortens from the bottom while the text moves
+  down.
+- **Bevel.** A lit edge band inside the outline: lighter on edges facing
+  the light, darker on edges facing away. `bevel` is 1.5 px; `bevel-<n>`
+  any width (`bevel-2.5`, `bevel-[0.75]`); without one the plate has no
+  band. The profile is sharp by default (full strength across the band,
+  ending in a crisp inner edge); `bevel-soft` fades it inward
+  (`bevel-sharp` names the default). `bevel-tilt-<degrees>` says how steep
+  the edge is, and so how strongly it is lit and shaded: the sine of the
+  angle, default 35; `bevel-tilt-15` is gentle, `bevel-tilt-90` a wall.
+  `raised` (the default) lights the band at the top; `recessed` swaps lit
+  and shaded edges (a well, a tray).
 - **States** are plain CSS variants on any of these: `hover:bg-…`,
-  `active:bg-…`, `aria-pressed:bg-…`, `active:recessed`, `active:bevel-1`,
+  `hover:sink-1`, `active:pressed`, `aria-pressed:bg-…`, `active:bevel-1`,
   `dark:bg-…` (Tailwind's default `dark:` is `prefers-color-scheme`). No JS
   state, no attribute.
-- **`material-*`** utilities are shortcuts for a fill, a bevel and an
-  elevation (`material-key` is `bg-chip bevel-2.5 raised`).
+- **`material-*`** utilities are shortcuts for a fill, a bevel and
+  `raised` or `recessed` (`material-key` is `bg-chip bevel-1.5 raised`).
 
 What is translated and what is not:
 
 | Class | Plate? |
 | --- | --- |
 | `bg-<theme colour>`, `bg-[#hex]`, `bg-[rgb(...)]`, `bg-(--var)`, `bg-white/50`, `bg-chip/[0.3]`, with any variant | yes, that colour |
-| `material-*` | yes, its fill, bevel and elevation |
+| `material-*` | yes, its fill and bevel |
 | `bg-transparent`, `bg-current` (and `/50`), `bg-inherit` | no: not a colour of the element's own; Blitz paints it |
 | gradients (`bg-linear-*`, `from-*`), images (`bg-[url(...)]`), `bg-none`, `bg-cover` and the other non-colour `bg-*` | no: Blitz paints them (an image over a translated colour sits above the plate) |
 | a solid `background-color` from hand-written CSS or `@apply` | only on a marked element (see "Finding plates"); `.tk-button` is not one |
@@ -198,6 +223,7 @@ The region chooses who draws its plates:
 | An ancestor's `opacity`, `transform`, `filter` | apply | do not apply; only the element's own `opacity` does |
 | Clipped by | every scroll container and `overflow` clip around it | the region's box only |
 | A plate while its content scrolls or the stage scrolls | not re-rendered (its shape is in its own box) | re-rendered where it moved |
+| `sink-*`, `pressed` (a translate) | the plate moves down with its element | the plate stays at its layout box; only the content moves |
 
 To choose for a part of a view, wrap that part in a `Sheet`:
 `<Sheet plates="sheet">…</Sheet>` is a region whose layer draws everything
@@ -264,8 +290,9 @@ system (its `src/styles.css`, else `@tokamak/ui/styles.css`) what each
 static class token compiles to, and adds `tk-plate` to every intrinsic JSX
 element with a token that compiles to a solid `background-color` or a
 `--tk-fill`. It fails the build, naming the file, line, token and the
-closest known name, on a `bg-*`, `bevel-*` or `material-*` token (or
-`raised` / `recessed`) that Tailwind generates nothing for (`bg-blu-600`,
+closest known name, on a `bg-*`, `bevel-*`, `elevation-*`, `sink-*` or
+`material-*` token (or `raised`, `recessed`, `pressed`) that Tailwind
+generates nothing for (`bg-blu-600`,
 an unknown variant), and on a malformed `bg-[#hex]`. Static covers a string
 attribute and the string literals inside a `class={...}` expression:
 template literal text, both branches of `?:`, operands of `+`, `&&`, `||`,
@@ -295,9 +322,10 @@ plate, changed or not, on screen or not:
 
 1. Before walking the tree, it copies the list of widget nodes and, for
    each one that has a size, reads the node's size, clones the reference to
-   its computed style and calls the widget's `paint`. Ours returns a Scene with one image fill
-   (bevelled) or one vector fill (flat), and does no GPU work when nothing
-   changed. Blitz keeps the Scene in a map by node.
+   its computed style and calls the widget's `paint`. Ours returns a Scene
+   with one image fill (bevelled or elevated) or one vector fill (flat),
+   and does no GPU work when nothing changed. Blitz keeps the Scene in a
+   map by node.
 2. While walking the tree it looks up that map for every element it paints
    (with or without a widget).
 3. When it reaches the plate's element, and only if the element is not
@@ -346,15 +374,18 @@ The sheet:
 
 Both:
 
-- `background-clip`, `background-origin` and borders: the plate is the
-  whole border box; Blitz still paints the border, above the plate.
+- `background-clip` and `background-origin`: the plate is the whole border
+  box. A CSS border on a plate is covered by a self-painting plate (Blitz
+  paints the element's border before its widget) and shows above a sheet's
+  plate.
 - A dynamic class mixing `bg-current` (or `bg-inherit`) with another `bg-*`
   token that makes it a plate loses the `currentcolor` background inside a
   region (the plate cannot draw it). Static classes are not affected (the
   build only marks translated tokens).
 
-Each row of the table is a pixel test on the lab's "Plate painters" rows
-(`lab/tests/fused_surface.rs`, `the_two_painters_differ_where_documented`);
+The covering, opacity, transform, clipping and z-index rows are pixel
+tests on the lab's fixtures view (`lab/tests/fused_surface.rs`,
+`the_two_painters_differ_where_documented`);
 `both_painters_draw_the_same_keycaps` checks that, where the sheet has no
 limit, the two draw the same pixels (to 1/255 on bevelled plates, 7/255 on
 the anti-aliased corners of flat ones, which Vello fills).
@@ -381,99 +412,15 @@ the anti-aliased corners of flat ones, which Vello fills).
   many small surfaces was per render pass (per target texture), about 16 us
   of submit each plus Vello's per-texture copy.
 
-## Measured cost
+## Cost checks
 
-Lab stress test (`lab/tests/fused_surface.rs`, `stress_bench`), release build,
-Apple M4 Pro, offscreen: the real lab document painted through blitz-paint and
-Vello on a wgpu device, 1160x900 CSS px at scale 2, 20 warm-up then 100 frames
-back to back. "Frame" includes a GPU-to-CPU readback of the whole 2320x1800
-frame that a window does not do (about 1.4 to 1.9 ms with nothing running).
-"Surfaces" is the CPU time spent in surface paints. A is N squares in one
-surface (fused), B is N separate one-square surfaces; "moving" is how many of
-the N move. Budget at 120 Hz: 8.3 ms.
-
-| Config | Before (first GPU version) | After (current) frame / surfaces |
-| --- | --- | --- |
-| A 16 / 50 / 100 / 200, all moving | 1.8 / 2.4 / 3.9 / 7.8 ms | 1.6 to 2.0 ms / under 0.1 ms |
-| A 1000 total, 10 or 100 moving | 32 ms | 2.0 to 3.2 ms / 0.1 to 0.9 ms |
-| A 1000 static, something else repainting | 33 ms | 1.5 to 2.0 ms / 0.01 ms |
-| B 16 / 50 / 100 / 200, all moving | 2.2 / 3.2 / 4.4 / 8.2 ms | 1.5 to 2.4 ms / under 0.1 ms |
-| B 1000 total, 10 or 100 moving | 42 ms | 2.4 to 3.4 ms / 0.1 ms |
-| B 1000 static, something else repainting | 47 ms | 2.6 to 3.1 ms / 0.1 ms |
-
-Ranges cover repeated runs. Idle (nothing moving) is zero repaints: no surface
-requests frames, verified by test and by the lab window idling at 0% CPU.
-These are offscreen numbers; the lab's on-screen readout (`<tk-fps>`) shows
-the live fps, frame time, surface time and re-rendered pixels.
-
-Plates, both painters (`keycap_grid_bench` and `lab_views_bench`), same
-setup: release build, Apple M4 Pro, offscreen, 1440x900 CSS px at scale 2,
-100 forced repaints per row. Ranges cover three runs of two passes each
-(2026-11-11, commit 33dc800). "Frame" includes the GPU-to-CPU readback of
-the whole frame (about 1.4 to 1.9 ms) that a window does not do, and is the
-noisiest number: its spread between runs (about 1.5 ms) is larger than any
-difference between the painters.
-
-300 keycaps (the Stress view's variant C: 300 `material-key` buttons in a
-`material-tray`, against variant A stopped; 303 plates with the two the
-view always has and the lab's switch):
-
-| | frame | scene build | surface paint | binding pass | re-rendered |
-| --- | --- | --- | --- | --- | --- |
-| without the grid, self-painting | 2.6 to 3.6 ms | 0.14 to 0.17 ms | 0.005 to 0.011 ms | 13 to 42 us | 0 px |
-| without the grid, sheet | 2.3 to 3.7 ms | 0.13 to 0.23 ms | 0.005 to 0.014 ms | 19 to 79 us | 0 px |
-| 300 plates static, self-painting | 4.3 to 6.1 ms | 1.22 to 1.35 ms | 0.044 to 0.067 ms | 72 to 145 us | 0 px |
-| 300 plates static, sheet | 3.9 to 5.7 ms | 1.07 to 1.29 ms | 0.011 to 0.016 ms | 95 to 197 us | 0 px |
-| one cap toggled, self-painting | 4.0 to 6.4 ms (worst 7.1 to 9.3) | 1.22 to 1.40 ms | 0.047 to 0.067 ms | | 4.6 kpx |
-| one cap toggled, sheet | 4.0 to 5.7 ms (worst 7.4 to 9.0) | 1.24 to 1.35 ms | 0.138 to 0.202 ms | | 7.1 kpx |
-
-- "Static" rows are forced repaints; left alone, the document requests no
-  frames and re-renders 0 px in both modes (asserted by both benches and by
-  `settled_sections_request_no_frames_and_render_nothing`).
-- Most of the static frame time of the grid is Blitz painting 300 buttons
-  and their text (scene build), in either mode.
-- Self-painting adds, per frame and per plate, about 0.15 us in the
-  widget's `paint` (surface paint: 0.05 ms for 300 against 0.013 ms for the
-  one layer) and about 0.4 us in all (scene build: Blitz's call, the Scene
-  it keeps and the clone it appends).
-- A toggle re-renders one cap (4.6 kpx) self-painting, and that cap's area
-  of the layer padded to the dirty grid (7.1 kpx) on the sheet.
-- A toggle is a click (pointer down and up, each with its restyle, layout
-  and binding pass: 5.3 to 6.0 ms for both together, the same in both
-  modes) plus the next frame. The worst single frame after a toggle is over
-  the 8.3 ms budget in some runs in both modes, readback included.
-- The binding pass in this table runs between frames, with cold caches.
-  In a tight loop (`keycap_grid_binding_pass_cost`, scale 1, 200 passes,
-  three runs) it is 54 to 55 us self-painting and 58 to 59 us with the
-  sheet, for the same 301 plates (57 to 63 us before plates could paint
-  themselves).
-
-Every lab view as it opens (static, forced repaints; all settled, requested
-no frames and re-rendered 0 px). "Sheet plates" are drawn by a layer,
-"own" paint themselves:
-
-| View | painter | layers | sheet plates | own | static frame | scene build | surface paint | binding pass |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Chat | self | 13 | 0 | 8 | 2.9 to 4.2 ms | 0.18 to 0.24 ms | 0.008 to 0.015 ms | 20 to 73 us |
-| Chat | sheet | 13 | 7 | 1 | 2.8 to 4.7 ms | 0.16 to 0.23 ms | 0.006 to 0.011 ms | 26 to 79 us |
-| Components | self | 12 | 0 | 1 | 2.6 to 4.2 ms | 0.14 to 0.19 ms | 0.004 to 0.009 ms | 13 to 67 us |
-| Components | sheet | 12 | 1 | 0 | 2.5 to 4.7 ms | 0.14 to 0.17 ms | 0.004 to 0.008 ms | 24 to 75 us |
-| Surfaces | self | 20 | 11 | 27 | 2.5 to 4.2 ms | 0.22 to 0.24 ms | 0.013 to 0.020 ms | 43 to 92 us |
-| Surfaces | sheet | 20 | 37 | 3 | 2.4 to 4.7 ms | 0.20 to 0.24 ms | 0.008 to 0.015 ms | 39 to 104 us |
-| Stress (A, stopped) | self | 10 | 0 | 3 | 2.4 to 3.6 ms | 0.14 to 0.16 ms | 0.005 to 0.010 ms | 17 to 69 us |
-| Stress (A, stopped) | sheet | 10 | 3 | 0 | 2.9 to 4.2 ms | 0.14 to 0.17 ms | 0.006 to 0.009 ms | 24 to 86 us |
-
-The lab's switch changes the shell regions only: the Surfaces view's 11
-sheet plates in "self" are its `plates="sheet"` comparison cells, and the
-"own" plates that remain in "sheet" are inside a `Surface` or a plain
-`Sheet` (regions of their own). The Surfaces view has more self-painting
-plates than the 27 counted: those below the fold hold no shape until they
-scroll in. The 8 more layers than before are the comparison cells.
-
-Before plates could paint themselves (commit 0c6d914, the sheet only, two
-runs each): the grid static 3.69 to 4.40 ms with 57 to 63 us of binding
-pass, one cap toggled 3.76 to 3.88 ms; Chat 2.86 to 2.91 ms, Components
-2.53 to 3.18 ms, Surfaces 2.76 to 3.65 ms, Stress 2.78 to 2.83 ms.
+What the lab's tests assert (`lab/tests/fused_surface.rs`): every section,
+idle, requests no frames (`idle_surfaces_request_no_frames`), and after a
+section switch settles, repainting re-renders no surface pixel with either
+painter (`settled_sections_request_no_frames_and_render_nothing`). A
+pressed key re-renders its own plate (self-painting) or its own area of the
+layer (the sheet). Frame-time measurements belong to the performance setup
+tracked in TKM-81, not to the lab.
 
 ## Known limits
 
@@ -527,5 +474,4 @@ pass, one cap toggled 3.76 to 3.88 ms; Chat 2.86 to 2.91 ms, Components
 `stroke`, `stroke-width`) as vector fills and strokes in the Scene. Colours can
 be `currentColor`, the element's computed CSS `color`, so text-colour
 utilities colour icons. It replaces enabling Blitz's `svg` feature (usvg) for
-icons. The whole of this round, including icons, the layout binding and the
-shell, grew the release lab binary from 11,712,720 to 11,795,440 bytes.
+icons.

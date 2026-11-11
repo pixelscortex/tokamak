@@ -42,9 +42,9 @@ presses, and our build step turns ordinary background colours into fills
 for that sheet. That way still exists, and an area can ask for it.
 
 **What we found when we adopted it** (on `feature/ui-shell`; each point is
-checked by a test that looks at the drawn pixels, and shown in the lab under
-Surfaces, "Plate painters", with the sheet on the left and the new way on
-the right):
+checked by a test that looks at the drawn pixels
+(`the_two_painters_differ_where_documented`, on the lab's fixtures view,
+which holds each case twice: with the sheet and the new way):
 
 - **A background that should cover what is under it now does.** A bar above
   a scrolling list hides the lines that scroll under it. With the sheet the

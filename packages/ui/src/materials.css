@@ -1,35 +1,48 @@
 /* Plates (render/SURFACES.md, "Plates").
  *
  * An element with a solid background colour, inside a region, is a plate:
- * its fill and lit edge are drawn by our shader, not by Blitz. Ordinary
- * Tailwind:
+ * its fill and edges are drawn by our shader, not by Blitz. The build gives
+ * every solid `background-color` a `--tk-fill` twin
+ * (packages/build/src/fills.ts), marks plates (`tk-plate`,
+ * packages/build/src/materials.ts) and fails on a plate class Tailwind does
+ * not know. A typical button:
  *
- *   <button class="bg-blue-600 bevel-2 rounded-md px-3 active:bg-blue-700 active:recessed">Run</button>
+ *   <button class="bg-blue-600 elevation-3 hover:sink-1 active:pressed rounded-md px-4">Run</button>
  *
- * - Fill: any solid `background-color`. The build gives every one a
- *   `--tk-fill` twin (packages/build/src/fills.ts), so `bg-<theme colour>`,
- *   `bg-[#hex]`, `bg-white/50` and their variants (`hover:`, `active:`,
- *   `aria-pressed:`, `dark:`) are plate fills, alpha included. Not solid,
- *   and painted by Blitz as before: gradients, images, `bg-transparent`,
- *   `bg-current`, `bg-inherit`.
- * - Edge: `bevel-<n>` (CSS px, `bevel-[2.5]` too) adds the lit edge band;
- *   without it the plate is flat. `raised` (the default: lit edge at the
- *   top, towards the light) or `recessed` (lit edge at the bottom: a well, a
- *   tray, a pressed key).
- * - Shape: the border box with its computed `border-radius` (`rounded-*`).
- * - `material-*`: shortcuts for a fill, a bevel and an elevation.
+ * Utilities (all take Tailwind variants: `hover:`, `active:`,
+ * `aria-pressed:`, `dark:`):
  *
- * The build marks plates (`tk-plate`, packages/build/src/materials.ts) and
- * fails on a `bg-*`, `bevel-*` or `material-*` class Tailwind does not
- * know. A region is an element holding a materials layer and marked
- * `tk-region` (the shell regions, `Surface`, `Sheet`); outside regions
- * nothing is translated and Blitz paints every background.
+ * - `bg-*`                 the fill: any solid colour, alpha kept (Tailwind's own).
+ * - `elevation-<n>`        the plate stands n px off the surface: a strip under the face shows its side.
+ * - `sink-<n>`             the face goes n px down into its elevation, and the element moves down with it.
+ * - `pressed`              the face goes all the way down (as `sink-<elevation>`).
+ * - `bevel`                a lit edge band, 1.5 px.
+ * - `bevel-<n>`            a lit edge band n px wide (`bevel-2.5`, `bevel-[0.75]`).
+ * - `bevel-sharp`          the band at full strength to a crisp inner edge (the default).
+ * - `bevel-soft`           the band fades inward.
+ * - `bevel-tilt-<deg>`     how strongly the band is lit and shaded, degrees from flat (default 35).
+ * - `raised`               the band lit at the top, towards the light (the default).
+ * - `recessed`             the band lit at the bottom: a well, a tray.
+ * - `material-key`         a key: chip fill, 1.5 px band, raised.
+ * - `material-key-bright`  a bright key: ink fill, 1.5 px band, raised.
+ * - `material-key-pressed` a key held down: card fill, 1 px band, tilt 15.
+ * - `material-tray`        what keys sit in: base fill, 1 px band, recessed.
+ * - `material-card`        card fill, 1.5 px band, raised.
+ * - `material-chip`        chip fill, 1 px band, raised.
+ * - `material-well`        well fill, 1 px band, recessed (a text field).
  *
- * Who draws a plate is the region's choice. By default each plate paints
- * itself, as part of its own element (so it covers, stacks, fades, moves
- * and clips like the element). In a `tk-region="sheet"` the region's
- * materials layer draws all of its plates in one pass below the region's
- * content (`plates="sheet"` on `Shell`, `Surface` and `Sheet`). */
+ * The shape is the border box with its computed `border-radius`
+ * (`rounded-*`). The elevation strip takes its tone from the fill (darker
+ * on a bright plate, lighter on a dark one); without a bevel the face also
+ * gets a faint line all round.
+ *
+ * A region is an element holding a materials layer and marked `tk-region`
+ * (the shell regions, `Surface`, `Sheet`); outside regions nothing is
+ * translated and Blitz paints every background. By default each plate
+ * paints itself, as part of its own element (so it covers, stacks, fades,
+ * moves and clips like the element). With `plates="sheet"` on `Shell`,
+ * `Surface` or `Sheet` (`tk-region="sheet"`) the region's materials layer
+ * draws all of its plates in one pass below the region's content. */
 
 /* Registered and not inherited, so a cap inside a tray does not pick up the
  * tray's material. `--tk-fill` is a `<color>`: Stylo resolves `var()`,
@@ -86,8 +99,8 @@
  * whose base colour shows as the seam between caps. */
 @utility material-key { @apply bg-chip bevel-1.5 raised; }
 @utility material-key-bright { @apply bg-ink bevel-1.5 raised; }
-/* A pressed key: the face sinks (recessed bevel, the lit edge moves to the
- * bottom) and darkens a step. */
+/* A key held down: a step darker, with a thinner, gentler band. It stays
+ * raised (pressing does not turn the key inside out). */
 @utility material-key-pressed { @apply bg-card bevel-1 bevel-tilt-15 raised; }
 @utility material-tray { @apply bg-base bevel-1 recessed; }
 

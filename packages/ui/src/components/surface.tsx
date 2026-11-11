@@ -176,7 +176,7 @@ export interface ShapeProps {
   /** Animate when this shape's box moves (window resizes never animate). */
   animate?: boolean;
   /** Union only: this side of the shape meets a vertical edge of another
-   * union shape of the same surface (a rail tab against its container). The
+   * union shape of the same surface (a tab against its container). The
    * shape becomes one exact outline with the join as concave fillets where
    * its top and bottom meet that edge; level with the other shape's top (or
    * bottom) its edge runs straight into it, no step. */

@@ -574,11 +574,11 @@ mod binding {
         widget.target()[i].clone()
     }
 
-    /// A view switch: the rail tab moves while two members (the chat view's
-    /// title notch and composer) leave and another arrives, all in one pass.
-    /// The tab animates between its own two boxes; nothing else moves.
+    /// One animated member moves while two others leave and another
+    /// arrives, all in one pass (a view switch). The moving member animates
+    /// between its own two boxes; nothing else moves.
     #[test]
-    fn a_tab_moving_while_members_come_and_go_animates_between_its_own_boxes() {
+    fn a_member_moving_while_others_come_and_go_animates_between_its_own_boxes() {
         let mut f = Fixture::with(&["plate", "tab", "notch", "composer"]);
         f.frame();
         let mut widget = f.widget();
@@ -654,7 +654,7 @@ mod binding {
         assert_eq!(shown(&widget, &f, "tab").rect[0], 220.0);
     }
 
-    /// A rail tab attached to the left edge of its container (x = 46,
+    /// A tab attached to the left edge of its container (x = 46,
     /// top 0, corner 12) with 10 px fillets, the tab 39 x 32 with 10 px
     /// free corners, its top `d` px below the container's top.
     fn tab(d: f32) -> [super::Shape; 2] {

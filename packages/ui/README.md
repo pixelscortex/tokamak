@@ -1,8 +1,8 @@
 # Native UI elements
 
 `@tokamak/ui/elements` exports Solid `Button`, `Input` and `Icon` for QuickJS +
-the universal renderer. `@tokamak/ui/components` exports `Surface` and `Shell`
-(used by the lab only so far; the app's shell frame and plugin slots are
+the universal renderer. `@tokamak/ui/components` exports `Surface`, `Sheet` and
+`Shell` (used by the lab only so far; the app's shell frame and plugin slots are
 separate). No DOM globals, React dependency, overlays, or accessibility-host claims.
 
 ## Styling
@@ -15,7 +15,7 @@ Still on the older class pattern, pending a separate decision: `Button` and
 `Input` (`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
 `src/styles.css`). Do not add to that pattern.
 
-## Surface, Shell, Icon
+## Surface, Sheet, Shell, plates, Icon
 
 ```tsx
 import { Shell, Surface } from "@tokamak/ui/components";
@@ -50,6 +50,13 @@ import { Icon } from "@tokamak/ui/elements";
   teleport content into regions with `Shell.TopBar` (`at`: start, center, end,
   stage), `Shell.Rail`, `Shell.Sidebar`, `Shell.Stage`, `Shell.BottomBar`, and
   join the shell's layers with `layer` (base, sidebar, stage).
+- `Sheet` is a region of its own anywhere: a floating piece (a menu) or a
+  part of a view that chooses who draws its plates (`plates="sheet"`).
+- Plates: inside any region (shell regions, `Surface`, `Sheet`), an element
+  with a solid `bg-*` or a `material-*` class is drawn by the render host,
+  with no component: `bg-blue-600 elevation-3 hover:sink-1 active:pressed`
+  for a button, `material-key` in a `material-tray` for keycaps. The
+  utilities are listed in `src/materials.css`.
 - `Icon` draws SVG path data natively; colour follows CSS `color`.
 
 See `packages/render/SURFACES.md` for the renderer side.
