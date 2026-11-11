@@ -5,6 +5,7 @@ mod icon;
 mod js;
 mod layout;
 mod mailbox;
+mod overscroll;
 mod shell;
 mod surface;
 mod wire;
@@ -451,6 +452,14 @@ impl EventHandler for Handler<'_> {
             if let Some(error) = response.error {
                 eprintln!("UI listener: {error}");
                 bridge.error = Some(Error(error));
+            }
+            // `overscroll-contain`: the wheel stays inside that scroller
+            // instead of chaining to the page (see overscroll.rs).
+            if let DomEventData::Wheel(wheel) = &event.data
+                && !state.is_cancelled()
+                && overscroll::wheel(&mut doc.inner_mut(), chain, wheel)
+            {
+                state.prevent_default();
             }
             let target = event.target;
             // Disabled fields reject keyboard defaults except Tab. Readonly

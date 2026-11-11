@@ -166,6 +166,92 @@ fn wheel_over_a_surface_scrolls_the_page() {
     );
 }
 
+/// Moves the pointer to a point of the window and turns the wheel there
+/// (Blitz scrolls by minus the wheel delta: negative scrolls down).
+fn wheel_at(doc: &mut NativeDocument, x: f32, y: f32, delta_y: f64) {
+    use blitz_traits::events::*;
+    use keyboard_types::Modifiers;
+    let coords = PointerCoords {
+        page_x: x,
+        page_y: y,
+        screen_x: x,
+        screen_y: y,
+        client_x: x,
+        client_y: y,
+    };
+    doc.handle_ui_event(UiEvent::PointerMove(BlitzPointerEvent {
+        id: BlitzPointerId::Mouse,
+        is_primary: true,
+        coords,
+        button: MouseEventButton::Main,
+        buttons: MouseEventButtons::None,
+        mods: Modifiers::empty(),
+        details: Default::default(),
+        element: Default::default(),
+        active_pointers: Default::default(),
+    }));
+    doc.handle_ui_event(UiEvent::Wheel(BlitzWheelEvent {
+        delta: BlitzWheelDelta::Pixels(0.0, delta_y),
+        coords,
+        buttons: MouseEventButtons::None,
+        mods: Modifiers::empty(),
+        element: Default::default(),
+    }));
+}
+
+/// A select's list keeps the wheel (`overscroll-contain`): it scrolls to
+/// its end and stops there; the box around it and the page do not move,
+/// in one big turn or in a turn at the end. Blitz alone would hand what the
+/// list could not use to the next scroller up.
+#[test]
+fn a_select_list_at_its_end_does_not_scroll_the_page() {
+    let mut doc = document(1.0, 520.0); // short enough that the page scrolls
+    open(&mut doc, "select");
+    scroll_to(&mut doc, "lab-select-flip-box");
+    doc.layout_surfaces();
+    let list = doc
+        .inner()
+        .query_selector("#lab-select-flip-box [role=listbox]")
+        .unwrap()
+        .expect("the open list");
+    let offset = |doc: &NativeDocument, id| doc.inner().get_node(id).unwrap().scroll_offset().y;
+    let around = [stage(&doc), support::id(&doc, "lab-select-flip-box")];
+    let before = around.map(|id| offset(&doc, id));
+    assert!(
+        before[0] > 0.0,
+        "the page is scrolled, so it could move back"
+    );
+    let rect = doc.inner().get_client_bounding_rect(list).unwrap();
+    let (x, y) = (
+        (rect.x + rect.width / 2.0) as f32,
+        (rect.y + rect.height / 2.0) as f32,
+    );
+    // One turn far larger than the list: it ends at its end, nothing leaks.
+    wheel_at(&mut doc, x, y, -4000.0);
+    let end = offset(&doc, list);
+    assert!(end > 0.0, "the list scrolled");
+    assert_eq!(
+        around.map(|id| offset(&doc, id)),
+        before,
+        "nothing else moved"
+    );
+    // At the end, more of the same turn moves nothing at all.
+    wheel_at(&mut doc, x, y, -120.0);
+    assert_eq!(offset(&doc, list), end);
+    assert_eq!(around.map(|id| offset(&doc, id)), before);
+    // Back to the top and past it: the same.
+    wheel_at(&mut doc, x, y, 4000.0);
+    assert_eq!(offset(&doc, list), 0.0, "back at the top");
+    assert_eq!(around.map(|id| offset(&doc, id)), before);
+    // Outside the list the page scrolls as ever.
+    wheel_at(&mut doc, 700.0, 300.0, 60.0);
+    assert!(
+        offset(&doc, around[0]) < before[0],
+        "the page scrolls elsewhere"
+    );
+    assert!(doc.take_error().is_none());
+}
+
 /// The shell schedules frames only while `is_animating()`: every view,
 /// idle, requests none (nothing in the lab animates).
 #[test]

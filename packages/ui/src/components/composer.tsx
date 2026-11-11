@@ -287,7 +287,7 @@ export function Composer(props: ComposerProps): JSX.Element {
               <div
                 id={ids("commands")}
                 role="listbox"
-                class="-mx-2 flex flex-col overflow-y-auto"
+                class="-mx-2 flex flex-col overflow-y-auto overscroll-contain"
                 style={`max-height: ${COMMAND_ROWS * COMMAND_ROW}px`}
               >
                 <For each={matches()}>

@@ -57,6 +57,7 @@
 @property --tk-side { syntax: "*"; inherits: false; }
 @property --tk-pressed { syntax: "*"; inherits: false; }
 @property --tk-sink { syntax: "*"; inherits: false; }
+@property --tk-overscroll { syntax: "*"; inherits: false; }
 
 /* The plate draws the background; Blitz must not paint it under or over
  * the plate (or over the plates of the element's children). Only for plates
@@ -111,3 +112,11 @@
 @utility material-card { @apply bg-card bevel-1.5 raised; }
 @utility material-chip { @apply bg-chip bevel-1 raised; }
 @utility material-well { @apply bg-well bevel-1 recessed; }
+
+/* A scroller that keeps the wheel: at its end the page behind it does not
+ * move. The CSS property itself is not known to Blitz, so the render host
+ * reads the custom property (render/src/overscroll.rs). */
+@utility overscroll-contain {
+  overscroll-behavior: contain;
+  --tk-overscroll: contain;
+}

@@ -333,7 +333,7 @@ export function Select(props: SelectProps): JSX.Element {
                   </Show>
                 </div>
               </Show>
-              <div role="listbox" ref={observeList} class="flex max-h-[264px] min-h-0 flex-col overflow-y-auto">
+              <div role="listbox" ref={observeList} class="flex max-h-[264px] min-h-0 flex-col overflow-y-auto overscroll-contain">
                 <div ref={observeContent} class="flex shrink-0 flex-col">
                   <For each={rows()}>
                     {(row) =>
