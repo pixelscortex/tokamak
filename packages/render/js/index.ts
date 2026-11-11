@@ -196,6 +196,64 @@ export function onHostEvent<T>(topic: string, handler: (payload: T) => void): vo
   });
 }
 
+/** Where an observed element is, as the host reports it after layout
+ * (render/src/layout.rs). CSS px, window coordinates. */
+export interface Layout {
+  /** The element's border box (scrolling included, transforms not). */
+  rect: Rect;
+  /** The part of the window it can show in: the window cut by every
+   * ancestor that clips its overflow (a scroller, a clipped panel). */
+  clip: Rect;
+}
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const observers = new Map<number, Set<(layout: Layout) => void>>();
+
+/** Call `callback` with `node`'s layout after the layout that first places
+ * it, and again after every layout that moves or resizes it or its visible
+ * area (scrolling, a window resize, content changing around it). Nothing is
+ * reported while it does not change. The host lays out again when a
+ * callback changes the document, before painting, so a placement computed
+ * here is in the first frame that shows it. Stops when the calling owner
+ * is disposed, or when the returned function is called. */
+export function observeLayout(node: NativeNode, callback: (layout: Layout) => void): () => void {
+  let set = observers.get(node.id);
+  if (!set) {
+    observers.set(node.id, (set = new Set()));
+    pending.push({ op: "attribute", id: node.id, name: "tk-observe", value: "" });
+  }
+  const listener = owned(callback);
+  set.add(listener);
+  let done = false;
+  const stop = () => {
+    if (done) return;
+    done = true;
+    set.delete(listener);
+    if (!set.size && observers.get(node.id) === set) {
+      observers.delete(node.id);
+      if (!disposed && nodes.get(node.id) === node) {
+        pending.push({ op: "attribute", id: node.id, name: "tk-observe", value: null });
+      }
+    }
+  };
+  if (getOwner()) onCleanup(stop);
+  return stop;
+}
+
+function reportLayout(changes: ({ id: number; rect: number[]; clip: number[] })[]) {
+  const box = (r: number[]): Rect => ({ x: r[0], y: r[1], width: r[2], height: r[3] });
+  for (const change of changes) {
+    for (const listener of [...(observers.get(change.id) ?? [])]) {
+      listener({ rect: box(change.rect), clip: box(change.clip) });
+    }
+  }
+}
+
 function drain() {
   flushRejections();
   const mutations = pending;
@@ -319,6 +377,7 @@ Object.defineProperty(globalThis, "__tokamak", {
     },
     host(json: string): void {
       const { topic, payload } = JSON.parse(json) as { topic: string; payload: unknown };
+      if (topic === "tk:layout") return reportLayout(payload as Parameters<typeof reportLayout>[0]);
       for (const handler of [...(subscriptions.get(topic) ?? [])]) handler(payload);
     },
     dispose(): void {
@@ -329,6 +388,7 @@ Object.defineProperty(globalThis, "__tokamak", {
       } finally {
         dispose = undefined;
         subscriptions.clear();
+        observers.clear();
         rejections.clear();
         hookFailures.length = 0;
         nodes.clear();

@@ -70,7 +70,18 @@ Manual gate:
   share generic attribute transport, not app-specific native operations.
 - [`NativeEvent`](js/jsx-runtime.ts) exposes numeric document-local `target` and
   `currentTarget`, `value` for input, keyboard fields, `isComposing`, and synchronous
-  `preventDefault()` / `stopPropagation()`. There are no DOM objects or measurement APIs.
+  `preventDefault()` / `stopPropagation()`. There are no DOM objects, and no
+  synchronous measurement: events carry no coordinates and JS cannot ask where a
+  node is during its turn (its own mutations are not laid out yet).
+- [`observeLayout(node, callback)`](js/index.ts) is the one way JS learns about
+  layout ([`layout.rs`](src/layout.rs)). The node gets `tk-observe`; after each layout
+  the host reports, for observed nodes whose layout changed, `rect` (border box,
+  window coordinates, scrolling included, transforms not) and `clip` (the window cut
+  by the padding box of every ancestor that clips its overflow). `NativeDocument::
+  resolve_layout(time)` lays out, reports, and lays out again while a report changes
+  the document (at most 4 rounds), so a placement made in the callback is in the
+  first painted frame. A document whose observed boxes do not move calls no JS.
+  Embedders call `resolve_layout` where they called `resolve`; the window does.
   `readonly`, `disabled` and `hidden` use HTML presence semantics; ARIA/data booleans
   become literal strings, so `aria-disabled={false}` does not disable an editor.
 - [`wire.rs`](src/wire.rs) decodes tagged, closed-shape commands, validates a complete

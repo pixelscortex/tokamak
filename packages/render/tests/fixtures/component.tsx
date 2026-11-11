@@ -1,7 +1,8 @@
 /** Acceptance fixture compiled as universal JSX, then executed only by the
  * renderer's real engine::QuickJsContext. No browser globals or test JS engine. */
 import { createSignal, For, Show } from "solid-js";
-import { mount, onHostEvent } from "@tokamak/render";
+import { mount, observeLayout, onHostEvent } from "@tokamak/render";
+import type { Layout, NativeNode } from "@tokamak/render";
 
 function App() {
   const [count, setCount] = createSignal(0);
@@ -18,6 +19,14 @@ function App() {
   const [items, setItems] = createSignal(["a", "b", "c"]);
   const [visible, setVisible] = createSignal(true);
   const [deliveries, setDeliveries] = createSignal(0);
+  // Layout reports (render/src/layout.rs).
+  const [observing, setObserving] = createSignal(false);
+  const [tall, setTall] = createSignal(false);
+  const [layout, setLayout] = createSignal<Layout>();
+  const [reports, setReports] = createSignal(0);
+  let observed: NativeNode | undefined;
+  onHostEvent<boolean>("observe", setObserving);
+  onHostEvent<boolean>("tall", setTall);
 
   onHostEvent<{ label: string; count: number }>("update", (p) => {
     setHost(p.label);
@@ -131,6 +140,24 @@ function App() {
       <Show when={visible()}>
         <Subscriber />
       </Show>
+      <div id="clipper" style="height: 60px; width: 300px; overflow: auto; border: 2px solid black">
+        <div style="height: 40px" />
+        <div id="observed" ref={(node) => (observed = node)} style={`width: 100px; height: ${tall() ? 50 : 20}px`} />
+        <div style="height: 200px" />
+      </div>
+      <Show when={observing() && observed}>
+        {(() => {
+          observeLayout(observed!, (next) => {
+            setLayout(next);
+            setReports((n) => n + 1);
+          });
+          return null;
+        })()}
+      </Show>
+      {/* Sized from the report: laid out before the frame that shows it. */}
+      <div id="follower" style={`height: 4px; width: ${Math.round(layout()?.rect.y ?? 0)}px`} />
+      <p id="layout">{JSON.stringify(layout() ?? null)}</p>
+      <p id="reports">{reports()}</p>
     </main>
   );
 }

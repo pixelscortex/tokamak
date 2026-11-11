@@ -753,3 +753,88 @@ fn actual_host_mailbox_discards_stale_generation_and_closes_on_document_drop() {
     assert!(replacement_sender.send("ping", Value::Null).is_err());
     drop(replacement_mailbox);
 }
+
+/// Layout reports (src/layout.rs): an observed element's box and visible
+/// area reach JS after layout; a report that changes the document is laid
+/// out before `resolve_layout` returns; nothing is reported while nothing
+/// moves; scrolling and resizing are reported; stopping ends the reports.
+#[test]
+fn observed_layout_reaches_js_after_layout_and_only_when_it_changes() {
+    let mut doc = document();
+    let reports = |doc: &NativeDocument| text(doc, "reports").parse::<u32>().unwrap();
+    let layout =
+        |doc: &NativeDocument| serde_json::from_str::<Value>(&text(doc, "layout")).unwrap();
+    let rect = |doc: &NativeDocument, name: &str| {
+        doc.inner().get_client_bounding_rect(id(doc, name)).unwrap()
+    };
+    let close = |v: &Value, want: f64| (v.as_f64().unwrap() - want).abs() < 0.01;
+    doc.resolve_layout(0.0);
+    assert_eq!(reports(&doc), 0, "nothing observed, nothing reported");
+    host(&mut doc, "observe", json!(true));
+    doc.resolve_layout(0.0);
+    assert_eq!(reports(&doc), 1);
+    let clipper = rect(&doc, "clipper");
+    let observed = rect(&doc, "observed");
+    let got = layout(&doc);
+    for (i, want) in [observed.x, observed.y, observed.width, observed.height]
+        .iter()
+        .enumerate()
+    {
+        assert!(
+            close(&got["rect"][["x", "y", "width", "height"][i]], *want),
+            "rect {got}"
+        );
+    }
+    // The clip is the scroller's padding box (inside its 2 px border).
+    let clip = &got["clip"];
+    assert!(
+        close(&clip["x"], clipper.x + 2.0) && close(&clip["y"], clipper.y + 2.0),
+        "{clip}"
+    );
+    assert!(
+        close(&clip["width"], clipper.width - 4.0) && close(&clip["height"], clipper.height - 4.0),
+        "{clip}"
+    );
+    // The follower was sized from the report in the same call.
+    assert_eq!(rect(&doc, "follower").width.round(), observed.y.round());
+    // Idle: no further report.
+    for _ in 0..3 {
+        doc.resolve_layout(0.0);
+    }
+    assert_eq!(reports(&doc), 1, "unchanged layouts are not reported");
+    // Scrolling the clipping ancestor moves the box.
+    let scroller = id(&doc, "clipper");
+    doc.inner_mut()
+        .scroll_by(scroller, 0.0, 30.0, Default::default());
+    doc.resolve_layout(0.0);
+    assert_eq!(reports(&doc), 2);
+    assert!(
+        close(&layout(&doc)["rect"]["y"], observed.y - 30.0),
+        "{}",
+        layout(&doc)
+    );
+    // A size change is reported.
+    host(&mut doc, "tall", json!(true));
+    doc.resolve_layout(0.0);
+    assert_eq!(reports(&doc), 3);
+    assert!(close(&layout(&doc)["rect"]["height"], 50.0));
+    // A smaller window cuts the clip.
+    let window = (clipper.y + 20.0) as u32;
+    doc.inner_mut().set_viewport(Viewport {
+        window_size: (800, window),
+        ..Default::default()
+    });
+    doc.resolve_layout(0.0);
+    assert_eq!(reports(&doc), 4);
+    let clip = &layout(&doc)["clip"];
+    let bottom = clip["y"].as_f64().unwrap() + clip["height"].as_f64().unwrap();
+    assert_eq!(bottom, window as f64, "ends at the window's bottom: {clip}");
+    // Stopped: the attribute is gone and nothing more is reported.
+    host(&mut doc, "observe", json!(false));
+    assert_eq!(attr(&doc, "observed", "tk-observe"), None);
+    doc.inner_mut()
+        .scroll_by(scroller, 0.0, -30.0, Default::default());
+    doc.resolve_layout(0.0);
+    assert_eq!(reports(&doc), 4);
+    assert!(doc.take_error().is_none());
+}

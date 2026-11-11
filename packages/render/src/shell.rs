@@ -194,15 +194,16 @@ impl ApplicationHandler for Host {
     fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         if let Some(view) = self.0.windows.get_mut(&id) {
             match &event {
-                // Layout-bound surfaces: read member boxes after layout and
-                // before Blitz paints (surface/bind.rs). Blitz resolves again
-                // in its redraw, which is then a no-op.
+                // Layout reports to JS (layout.rs), then layout-bound
+                // surfaces: read member boxes after layout and before Blitz
+                // paints (surface/bind.rs). Blitz resolves again in its
+                // redraw, which is then a no-op.
                 WindowEvent::RedrawRequested => {
                     #[cfg(target_os = "macos")]
                     place_window_buttons(&self.2, &*view.window);
                     let time = view.current_animation_time();
                     let doc = view.downcast_doc_mut::<NativeDocument>();
-                    doc.inner_mut().resolve(time);
+                    doc.resolve_layout(time);
                     doc.layout_surfaces();
                 }
                 WindowEvent::PointerButton {
