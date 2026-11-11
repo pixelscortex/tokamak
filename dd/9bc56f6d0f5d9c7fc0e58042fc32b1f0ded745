@@ -1,0 +1,40 @@
+packages/render/CSS_OVERLAP.md
+  s_ae26a73a5cbf75::t_8c1f09332f1d3e 16,18,22,25-26
+packages/ui/src/components/surface.tsx
+  s_ae26a73a5cbf75::t_8c7a731aed6d9d 179
+packages/render/src/surface/bind.rs
+  s_ae26a73a5cbf75::t_8c7a731aed6d9d 1109
+packages/ui/src/components/shell.tsx
+  s_ae26a73a5cbf75::t_325c1de74fcc8e 31-32,127-128,133-136,160
+packages/render/SURFACES.md
+  s_ae26a73a5cbf75::t_404bdceb57469a 91-92,110,140-141,144,150-152,162-164,168-185,187,190-191,198,226,386-388,415,417-423,477
+  s_ae26a73a5cbf75::t_9e87a272e6ea46 293-295
+  s_ae26a73a5cbf75::t_86364c35a3e772 165-167
+  s_ae26a73a5cbf75::t_8c1f09332f1d3e 325-328
+  s_ae26a73a5cbf75::t_40dcea42868460 377-380
+packages/ui/README.md
+  s_ae26a73a5cbf75::t_372d5257face4c 4-5,18,53-59
+packages/render/src/surface/tests.rs
+  s_ae26a73a5cbf75::t_8c7a731aed6d9d 577-579,581,657
+packages/ui/src/materials.css
+  s_ae26a73a5cbf75::t_39bbd49f0f592f 15-27,29-32,102-103
+  s_ae26a73a5cbf75::t_7b564ea0e0f007 4-8,10,12-13,28,34-45
+packages/render/BLITZ_CHANGES.md
+  s_ae26a73a5cbf75::t_8c7a731aed6d9d 45-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd9bc56f6d0f5d9c7fc0e58042fc32b1f0ded745",
+  "prompts": {},
+  "sessions": {
+    "s_ae26a73a5cbf75": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e3825f6-2ae2-4024-a106-a4b32f432d0c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
