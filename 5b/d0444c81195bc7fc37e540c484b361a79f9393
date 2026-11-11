@@ -1,0 +1,35 @@
+lab/Cargo.toml
+  s_ae26a73a5cbf75::t_ab38b18e24aee2 16
+packages/render/Cargo.toml
+  s_ae26a73a5cbf75::t_18618a5e47937b 11-14
+packages/render/src/lib.rs
+  s_ae26a73a5cbf75::t_24edcfdea49a17 25,31-32,107,109,114,117,125-126,131,133
+packages/render/src/surface/bind.rs
+  s_ae26a73a5cbf75::t_dbdb7d98ba3a72 132,381,429,470,478,490
+packages/render/src/surface/frame.rs
+  s_ae26a73a5cbf75::t_4e9fe9946a8a01 6-7
+packages/render/src/surface/mod.rs
+  s_ae26a73a5cbf75::t_dd34b9fc6cc9f6 20-21,33,37,40,65
+packages/render/src/surface/plate.rs
+  s_ae26a73a5cbf75::t_12cad9c2e3b665 118,151,188
+packages/render/src/surface/stats.rs
+  s_ae26a73a5cbf75::t_4e651749655a7e 1-4,6-7,10-13,15,20,25
+packages/render/src/surface/widget.rs
+  s_ae26a73a5cbf75::t_c72e2d61a2c023 313,369
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5bd0444c81195bc7fc37e540c484b361a79f9393",
+  "prompts": {},
+  "sessions": {
+    "s_ae26a73a5cbf75": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e3825f6-2ae2-4024-a106-a4b32f432d0c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
