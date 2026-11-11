@@ -28,3 +28,6 @@ export type {
   ComposerRun,
 } from "./composer";
 export { dismissOutside } from "./dismiss";
+/** Floating pieces: where a menu, popover or tooltip opens (place.ts). */
+export { place, trackLayout } from "./floating";
+export type { Box, Layout, PlaceOptions, Placement, Side } from "./floating";

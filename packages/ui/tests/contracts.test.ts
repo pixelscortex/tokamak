@@ -12,7 +12,8 @@ test("native library preserves its public element and component exports", async 
   // beside the shell pieces; elements keeps the older class-based Button.
   assert.deepEqual(Object.keys(await import(componentsPath)).sort(), [
     "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Sheet", "Shell", "Surface", "Textarea",
-    "dismissOutside", "materials", "rail", "railItemTop", "shellGroups", "textareaLine", "topBar",
+    "dismissOutside", "materials", "place", "rail", "railItemTop", "shellGroups", "textareaLine", "topBar",
+    "trackLayout",
   ]);
   let library = "";
   for (const file of await readdir(dist)) {
