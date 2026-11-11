@@ -95,8 +95,9 @@ function TitleNotch(props: { slant: number; context: boolean }) {
 /** The composer, rising from the bottom: base material with 18 px top
  * corners and 22 px fillets into the stage's bottom edge. The surface layer
  * paints below the stage's content, so the composer (and the title notch)
- * also carry an opaque base background over their box: messages scrolling
- * under them are hidden instead of showing through. */
+ * also carry an opaque base background over their box: a plate in the
+ * bottom bar's own layer, which floats over the scroller, so messages
+ * scrolling under them are hidden instead of showing through. */
 function Composer(props: { context: boolean }) {
   const [draft, setDraft] = createSignal("");
   return (

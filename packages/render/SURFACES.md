@@ -132,61 +132,95 @@ once per frame from all surfaces' fields. Each surface's pass would sample
 that map for contact shading. The hook point is the atlas pass in
 `frame::end_frame`, which already runs once per frame before Vello.
 
-## Plates (materials from classes)
+## Plates (backgrounds and materials from classes)
 
-For things that are each one plate (keycaps, trays, chips, cards) there is a
-lighter way than one `Surface` per element: a plain element with a
-`material-*` utility is a **plate**, and one **materials layer** per region
-draws every plate of that region.
+For things that are each one plate (buttons, keycaps, trays, chips, cards,
+coloured boxes) there is a lighter way than one `Surface` per element: an
+element with a solid background colour, inside a region, is a **plate**,
+and one **materials layer** per region draws every plate of that region.
+Authors write ordinary Tailwind:
 
 ```tsx
+<button class="bg-blue-600 bevel-2 rounded-md px-3 hover:bg-blue-500 active:bg-blue-700 active:recessed">Run</button>
 <div class="material-tray flex gap-[3px] rounded-[10px] p-[3px]">
   <button class="material-key active:material-key-pressed rounded-[7px] px-3.5">Deny</button>
-  <button class="material-key-bright active:bevel-1 rounded-[7px] px-3.5">Allow once</button>
 </div>
 ```
 
-- **Material.** The utilities (`packages/ui/src/materials.css`) set three
-  registered, non-inherited custom properties: `--tk-fill` (a theme colour;
-  without it nothing is drawn), `--tk-bevel` (CSS px) and `--tk-elevation`
-  (`raised` | `recessed`). The layout pass reads them from the element's
-  computed style, so states are plain CSS variants: `hover:`, `active:`,
-  `aria-pressed:material-key-pressed`, `active:bevel-1`. No JS state, no
-  attribute.
+- **Fill.** Any solid `background-color`. The build gives each one a
+  `--tk-fill` twin with the same value in the compiled stylesheet
+  (`packages/build/src/fills.ts`); `--tk-fill` is a registered `<color>`
+  (`packages/ui/src/materials.css`), so Stylo resolves theme variables,
+  `oklch()`, hex and `color-mix()` into one computed colour, which the
+  layout pass reads (alpha kept, times the element's own `opacity`).
+- **Edge.** `bevel-<n>` (CSS px; `bevel-2.5`, `bevel-[3]`) adds the lit
+  edge band; without it the plate is flat. `raised` (default) or `recessed`.
 - **Shape.** The element's border box with its computed `border-radius`
   (`rounded-*`; elliptical corners are drawn circular).
+- **States** are plain CSS variants on any of these: `hover:bg-…`,
+  `active:bg-…`, `aria-pressed:bg-…`, `active:recessed`, `active:bevel-1`,
+  `dark:bg-…` (Tailwind's default `dark:` is `prefers-color-scheme`). No JS
+  state, no attribute.
+- **`material-*`** utilities are shortcuts for a fill, a bevel and an
+  elevation (`material-key` is `bg-chip bevel-2.5 raised`).
+
+What is translated and what is not:
+
+| Class | Plate? |
+| --- | --- |
+| `bg-<theme colour>`, `bg-[#hex]`, `bg-[rgb(...)]`, `bg-(--var)`, `bg-white/50`, `bg-chip/[0.3]`, with any variant | yes, that colour |
+| `material-*` | yes, its fill, bevel and elevation |
+| `bg-transparent`, `bg-current` (and `/50`), `bg-inherit` | no: not a colour of the element's own; Blitz paints it |
+| gradients (`bg-linear-*`, `from-*`), images (`bg-[url(...)]`), `bg-none`, `bg-cover` and the other non-colour `bg-*` | no: Blitz paints them (an image over a translated colour sits above the plate) |
+| a solid `background-color` from hand-written CSS or `@apply` | only on a marked element (see "Finding plates"); `.tk-button` is not one |
+| any background outside a region (the window root, `body`) | no: nothing draws it there, Blitz paints it |
+
 - **Layer.** `<tk-surface materials>` draws the plates of the element that
-  holds it (its parent): every plate whose nearest such element, starting
-  at the plate itself, is that parent. Shapes in a layer do not fuse: each
-  is shaded with its own material and painted over the ones before it, outer
-  elements first (a tray, then the caps in it), then in document order. All
-  of a region's plates paint below all of its content.
+  holds it (its parent), which carries `tk-region`: every plate whose nearest
+  such element, starting at the plate itself, is that parent. Shapes in a
+  layer do not fuse: each is shaded with its own material and painted over
+  the ones before it, outer elements first (a box, then the caps in it),
+  then in document order. All of a region's plates paint below all of its
+  content. Inside a region, materials.css sets a plate's own
+  `background-color` to transparent (`[tk-region] [tk-plate]`), so Blitz
+  paints nothing over the plates it holds. That is what fixes ordering: a
+  cap inside a box with a plain `bg-*` used to lose its cap under the box's
+  Blitz background; now the box is a plate drawn first.
 - **Regions own the layers.** Views never write one. `@tokamak/ui`'s shell
-  puts one in every region: the top bar, the rail, the sidebar, the stage,
-  and the two overlays on the stage (`TopBar at="stage"`, `BottomBar`),
-  which float over the scrolled content and so need their own. The stage's
-  layer is a sibling of the scroller, the size of the visible stage: plates
-  are placed by their on-screen boxes after scrolling, a plate half out of
-  view is cut at the stage edge (the texture ends there), and one out of
-  view is skipped. Something floating outside the regions or above other
-  content (a menu, a popover) is a `Sheet`: an element with its own layer,
-  so it and its plates paint where the sheet sits in the stacking order.
-  The sheet's own `material-*` class is its bottom plate.
+  puts one in every region: the top bar, the rail, the sidebar, the two
+  overlays on the stage (`TopBar at="stage"`, `BottomBar`), which float over
+  the scrolled content and so need their own; and every `Surface` holds one
+  over its own fill, so plates inside a surface are drawn above it (the
+  stage's layer is the stage `Surface`'s). The stage's layer is a sibling of
+  the scroller, the size of the visible stage: plates are placed by their
+  on-screen boxes after scrolling, a plate half out of view is cut at the
+  stage edge (the texture ends there), and one out of view is skipped.
+  Something floating outside the regions or above other content (a menu, a
+  popover) is a `Sheet`: an element with its own layer, so it and its plates
+  paint where the sheet sits in the stacking order. The sheet's own
+  background or `material-*` class is its bottom plate.
 - **Finding plates.** The render host tracks plates when attributes arrive
   (`wire.rs`), never by scanning the document. The build marks them: the
-  `tokamak` Vite plugin (`packages/build/src/materials.ts`) adds `tk-plate`
-  to every intrinsic JSX element whose `class` uses a `material-*` utility
-  as a static string, and fails the build on a material name that
-  `materials.css` does not define (naming the file, line, the bad name and
-  the closest defined one). Static covers a string attribute and the string
-  literals inside a `class={...}` expression: template literal text, both
-  branches of `?:`, operands of `+`, `&&`, `||`, `??`, and `classList`
-  keys; variants (`active:material-…`) included. Not covered, and found at
-  run time instead by scanning the `class` of unmarked elements for a
-  `material-*` token: classes built from variables or calls, a token cut by
-  a substitution (`material-${name}`), spreads, and a component's `class`
-  prop (checked by the build, not marked: the component decides where it
-  lands). Marked elements skip that scan.
+  `tokamak` Vite plugin (`packages/build/src/materials.ts`) asks the
+  project's Tailwind design system (its `src/styles.css`, else
+  `@tokamak/ui/styles.css`) what each static class token compiles to, and
+  adds `tk-plate` to every intrinsic JSX element with a token that compiles
+  to a solid `background-color` or a `--tk-fill`. It fails the build, naming
+  the file, line, token and the closest known name, on a `bg-*`, `bevel-*`
+  or `material-*` token (or `raised` / `recessed`) that Tailwind generates
+  nothing for (`bg-blu-600`, an unknown variant), and on a malformed
+  `bg-[#hex]`. Static covers a string attribute and the string literals
+  inside a `class={...}` expression: template literal text, both branches of
+  `?:`, operands of `+`, `&&`, `||`, `??`, and `classList` keys. Not
+  covered, and found at run time instead by scanning the `class` of unmarked
+  elements for a `material-*` or `bg-*` token (other than `bg-transparent`,
+  `bg-current*`, `bg-inherit`): classes built from variables or calls, a
+  token cut by a substitution (`bg-${tone}`), spreads, and a component's
+  `class` prop (checked by the build, not marked: the component decides
+  where it lands). The host then sets `tk-plate` on the element natively, so
+  the stylesheet treats it like a marked one. Marked elements skip that scan.
+  Whatever found it, the computed `--tk-fill` decides whether anything is
+  drawn.
 - **Cost.** A layer renders only the part of its box its plates reach,
   snapped out to a 64 device px grid, and nothing (no texture) without
   plates; plates outside the layer's box are skipped. A plate's material is
@@ -198,10 +232,24 @@ draws every plate of that region.
 `Surface`, `Surface.Union` and `Surface.Subtract` remain the way to make
 fused shapes, joins and cuts; plates are separate pieces.
 
-Limits: within one region, plates paint below all of the region's content,
-whatever its z-index (overlapping pieces that must stack go in a `Sheet`).
-A plate whose box changes only through a CSS transform is not seen (boxes
-are layout boxes, as for members).
+Limits:
+
+- Within one region, plates paint below all of the region's content,
+  whatever its z-index. A background that must cover other content of its
+  region (a sticky header over scrolled text, a positioned panel over
+  siblings) does not any more: put it in a `Sheet` or give it its own
+  region. Overlapping sibling plates paint by depth, then document order,
+  not by z-index.
+- An ancestor's `opacity`, any `transform` (boxes are layout boxes) and
+  `filter` do not apply to a plate; the element's own `opacity` does.
+- A plate inside a nested scroll container (other than the stage) is not
+  clipped by that container.
+- `background-clip`, `background-origin` and borders: the plate is the
+  whole border box; Blitz still paints the border, above the plate.
+- A dynamic class mixing `bg-current` (or `bg-inherit`) with another `bg-*`
+  token that makes it a plate loses the `currentcolor` background inside a
+  region (the plate cannot draw it). Static classes are not affected (the
+  build only marks translated tokens).
 
 ## How it stays cheap
 
@@ -265,6 +313,23 @@ frames (asserted). Most of the extra static frame time is Blitz painting
 300 buttons and their text (scene build), not the layer. A toggle is a
 click (pointer down and up, each with its restyle, layout and binding
 pass: 5.0 ms for both together) plus the next frame.
+
+Backgrounds as plates (`lab_views_bench` and `keycap_grid_bench`, same
+setup, two runs each; before = commit fd9f1e4, after = 0c6d914, which
+also adds 7 plates to the Surfaces view). Plates and layers are those drawn
+on the view as it opens; static frames are forced repaints, and every view
+settled, requested no frames and re-rendered 0 px:
+
+| View | plates before / after | layers before / after | static frame before | static frame after | binding pass before / after |
+| --- | --- | --- | --- | --- | --- |
+| Chat | 0 / 7 | 6 / 13 | 2.88 / 2.56 ms | 2.91 / 2.86 ms | 13 / 18 us |
+| Components | 0 / 0 | 6 / 12 | 2.35 / 2.42 ms | 3.18 / 2.53 ms | 9 / 14 us |
+| Surfaces | 17 / 26 | 7 / 12 | 2.99 / 3.09 ms | 3.65 / 2.76 ms | 18 / 21-26 us |
+| Stress (A, stopped) | 0 / 2 | 6 / 10 | 2.78 / 2.63 ms | 2.78 / 2.83 ms | 12 / 14 us |
+| Stress, 300 keycaps | 301 / 301 | | 4.22 / 4.12 ms | 3.69-4.40 ms | 62-67 / 57-63 us |
+
+The extra layers are the empty ones every `Surface` now holds (no texture,
+no GPU work). Run-to-run spread on these frames is about 0.5 ms.
 
 ## Known limits
 

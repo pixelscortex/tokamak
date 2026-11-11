@@ -36,15 +36,18 @@
 //! cut always cuts every plate of its group.
 //!
 //! Plates (materials from CSS): an element marked `tk-plate` (added by the
-//! build to elements whose static `class` has a `material-*` utility, see
-//! `packages/build/src/materials.ts`), or, as the fallback for classes built
-//! at run time, an unmarked one whose `class` has a `material-*` token. Its material is
-//! whatever its computed style says: `--tk-fill`, `--tk-bevel` and
-//! `--tk-elevation` (registered, non-inherited custom properties set by the
-//! utilities in `packages/ui/src/materials.css`, so `hover:`, `active:` and
+//! build to elements whose static `class` compiles to a solid background
+//! colour or a `material-*` utility, see `packages/build/src/materials.ts`),
+//! or, as the fallback for classes built at run time, an unmarked one whose
+//! `class` has a `material-*` or `bg-*` token (`has_plate_class`; the host
+//! then sets the marker natively). Its material is whatever its computed
+//! style says: `--tk-fill` (a registered `<color>`, the twin the build gives
+//! every solid `background-color`), `--tk-bevel` and `--tk-elevation`
+//! (registered, non-inherited custom properties, see
+//! `packages/ui/src/materials.css`, so `hover:`, `active:` and
 //! `aria-pressed:` variants work through CSS alone), and its shape is its
-//! border box with its computed `border-radius`. A plate whose style sets no
-//! `--tk-fill` (a conditional class that is off) is not drawn.
+//! border box with its computed `border-radius`. A plate whose fill is
+//! transparent (a conditional class that is off) is not drawn.
 //!
 //! A plate is drawn by the materials layer of its region: the nearest
 //! element, the plate itself or an ancestor, that directly holds a
