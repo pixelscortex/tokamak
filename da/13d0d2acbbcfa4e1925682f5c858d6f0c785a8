@@ -1,0 +1,34 @@
+packages/render/CSS_OVERLAP.md
+  s_e3d99f9a782059::t_1f3d535d609312 26
+packages/render/src/lib.rs
+  s_e3d99f9a782059::t_e436b7292149d0 8,456-462
+  s_e3d99f9a782059::t_0f5c7fefb46692 463
+packages/render/src/overscroll.rs
+  s_e3d99f9a782059::t_e436b7292149d0 1-43,45,53-84
+  s_e3d99f9a782059::t_50c0c510523016 44,46-52
+packages/ui/src/components/select.tsx
+  s_e3d99f9a782059::t_e436b7292149d0 336
+packages/ui/src/materials.css
+  s_e3d99f9a782059::t_e436b7292149d0 60,115-122
+packages/ui/src/components/composer.tsx
+  s_e3d99f9a782059::t_e436b7292149d0 290
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_a4cd80aa94acf7 169-246,252-254
+  s_e3d99f9a782059::t_50c0c510523016 247-251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da13d0d2acbbcfa4e1925682f5c858d6f0c785a8",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
