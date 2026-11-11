@@ -209,34 +209,38 @@ function NotchCase() {
   </div>;
 }
 
-/** `elevation-<n>`: the plate stands off the surface. The face has a faint
- * line all round and a darker strip under it shows the plate's side;
- * `active:pressed` sends the face down. The first button is the same look
- * written in ordinary CSS (a gradient, a bottom border and an inset ring,
- * all drawn by Blitz), for comparison. */
+/** `elevation-<n>`: the plate stands off the surface, with a strip under
+ * the face showing its side (tone taken from the fill). `hover:sink-1`
+ * pushes the face down a step and `active:pressed` all the way. The first
+ * button is the same look in ordinary CSS, drawn by Blitz, for comparison. */
 function Elevation() {
   const b = "flex h-9 items-center rounded-md border-0 px-4 text-[14px] font-medium";
-  const press = "active:pressed aria-pressed:pressed";
-  return <div id="lab-elevation" class="flex flex-col gap-3 rounded-[12px] bg-[#0c0c0c] p-6">
+  const state = "elevation-3 hover:sink-1 active:pressed aria-pressed:pressed";
+  return <div id="lab-elevation" class="flex flex-col gap-4 rounded-[12px] bg-[#0c0c0c] p-6">
     <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">CSS only</span>
+      <span class="w-28 text-[12px] text-ink-3">CSS only</span>
       <button class="h-9 rounded-md border-0 border-b-2 border-zinc-950/50 bg-linear-to-t from-blue-600 to-blue-600/85 px-4 text-[14px] font-medium text-white ring-1 ring-white/5 ring-inset">Primary</button>
     </div>
     <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">elevation-2</span>
-      <button id="lab-elev-blue" class={`bg-blue-600 active:bg-blue-700 elevation-2 ${press} ${b} text-white`}>Primary</button>
-      <button class={`bg-zinc-200 active:bg-zinc-300 elevation-2 ${press} ${b} text-zinc-900`}>Primary</button>
-      <button class={`bg-[#141414] active:bg-[#101010] elevation-2 ${press} ${b} text-white`}>Outline</button>
-      <button class={`bg-red-600 active:bg-red-700 elevation-2 ${press} ${b} text-white`}>Destructive</button>
+      <span class="w-28 text-[12px] text-ink-3">elevation-3</span>
+      <button id="lab-elev-blue" class={`bg-blue-600 active:bg-blue-700 ${state} ${b} text-white`}>Primary</button>
+      <button class={`bg-zinc-200 active:bg-zinc-300 ${state} ${b} text-zinc-900`}>Primary</button>
+      <button class={`bg-[#141414] ${state} ${b} text-white`}>Outline</button>
+      <button class={`bg-red-600 active:bg-red-700 ${state} ${b} text-white`}>Destructive</button>
     </div>
     <div class="flex items-center gap-4">
-      <span class="w-24 text-[12px] text-ink-3">Heights</span>
-      <button class={`bg-blue-600 elevation-1 ${b} text-white`}>1</button>
-      <button class={`bg-blue-600 elevation-2 ${b} text-white`}>2</button>
-      <button class={`bg-blue-600 elevation-3 ${b} text-white`}>3</button>
-      <button class={`bg-blue-600 elevation-4 ${b} text-white`}>4</button>
-      <button class={`bg-blue-600 elevation-2 pressed ${b} text-white`}>pressed</button>
-      <button class={`bg-blue-600 elevation-2 bevel ${b} text-white`}>with bevel</button>
+      <span class="w-28 text-[12px] text-ink-3">Rest, hover, pressed</span>
+      <button class={`bg-blue-600 elevation-3 ${b} text-white`}>rest</button>
+      <button class={`bg-blue-600 elevation-3 sink-1 ${b} text-white`}>hover</button>
+      <button class={`bg-blue-600 elevation-3 pressed ${b} text-white`}>pressed</button>
+      <button class={`bg-[#141414] elevation-3 ${b} text-white`}>rest</button>
+      <button class={`bg-[#141414] elevation-3 sink-1 ${b} text-white`}>hover</button>
+      <button class={`bg-[#141414] elevation-3 pressed ${b} text-white`}>pressed</button>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="w-28 text-[12px] text-ink-3">With a bevel</span>
+      <button class={`bg-blue-600 elevation-3 bevel ${b} text-white`}>bevel</button>
+      <button class={`bg-[#141414] elevation-3 bevel ${b} text-white`}>bevel</button>
     </div>
   </div>;
 }

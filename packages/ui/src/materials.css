@@ -43,6 +43,7 @@
 @property --tk-bevel-tilt { syntax: "*"; inherits: false; }
 @property --tk-side { syntax: "*"; inherits: false; }
 @property --tk-pressed { syntax: "*"; inherits: false; }
+@property --tk-sink { syntax: "*"; inherits: false; }
 
 /* The plate draws the background; Blitz must not paint it under or over
  * the plate (or over the plates of the element's children). Only for plates
@@ -61,11 +62,14 @@
  * edge. `bevel-soft` fades it inward. */
 @utility bevel-sharp { --tk-bevel-profile: sharp; }
 @utility bevel-soft { --tk-bevel-profile: soft; }
-/* How far the plate stands off the surface, CSS px. The face gets a faint
- * line all round and a darker strip under it shows the plate's side:
- * `elevation-2`. `pressed` (for example `active:pressed`) sends the face
- * down: the strip moves above it. Works with or without a bevel. */
+/* How far the plate stands off the surface, CSS px: `elevation-3`. A strip
+ * under the face shows the plate's side, in a tone taken from the fill
+ * (darker on a bright plate, lighter on a dark one). Without a bevel the
+ * face also gets a faint line all round.
+ * `sink-<n>` pushes the face down by n px (`hover:sink-1`); `pressed` pushes
+ * it all the way (`active:pressed`): the strip is gone, as at elevation 0. */
 @utility elevation-* { --tk-side: --value(number, [number]); }
+@utility sink-* { --tk-sink: --value(number, [number]); }
 @utility pressed { --tk-pressed: 1; }
 @utility raised { --tk-elevation: raised; }
 @utility recessed { --tk-elevation: recessed; }

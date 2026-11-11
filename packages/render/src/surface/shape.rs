@@ -186,10 +186,12 @@ pub(super) struct Paint {
     /// edge's tilt (`bevel-tilt-<degrees>`).
     pub strength: f32,
     /// `elevation-<n>`: the plate stands `side` CSS px off the surface. The
-    /// face is that much shorter and a darker strip under it shows the
-    /// plate's side. Negative when `pressed`: the strip is above the face,
-    /// which has gone down into the surface.
+    /// face is that much shorter and a strip under it shows the plate's
+    /// side.
     pub side: f32,
+    /// How far the face is pushed down into that height, CSS px, 0 to
+    /// `side` (`sink-<n>`; `pressed` is all the way).
+    pub sink: f32,
 }
 
 impl Shape {

@@ -18,7 +18,8 @@
 //   9 + 5i: op (0 add, 1 sub), join (<0 = default), gap (<0 = default), kind (0 box, 1 poly);
 //           in a materials layer: bevel profile and strength (strength 0..1, plus 2 when soft), bevel (device px), elevation sign, kind
 //  10 + 5i: poly: first corner slot, corner count, orientation (+1 clockwise on screen);
-//           a box in a materials layer: elevation side (CSS px, negative when pressed)
+//           a box in a materials layer: elevation strip still showing (CSS px),
+//           how far the face is pushed down (CSS px), elevation on (1) or off
 //  11 + 5i: materials layer only: the shape's fill rgba
 //   then poly corners, 2 slots each: (centre x, centre y, radius, convex),
 //   (tangent-in x, y, tangent-out x, y).
@@ -193,15 +194,15 @@ fn shape_at(p: vec2<f32>, base: u32) -> f32 {
     return rounded_box(p, P(base), P(base + 1u));
 }
 
-// The face of an elevated plate: its box without the strip of `side` CSS px
-// that shows the plate's side (under the face, or above it when pressed).
-fn face_at(p: vec2<f32>, base: u32, side: f32) -> f32 {
+// A plate's box with `top` CSS px taken off its top and `bottom` off its
+// bottom (an elevated plate: pushed down by `top`, with a strip of `bottom`
+// under the face showing its side).
+fn plate_box(p: vec2<f32>, base: u32, top: f32, bottom: f32) -> f32 {
     var rect = P(base);
-    let h = min(abs(side), rect.w * 0.5);
-    rect.w = rect.w - h;
-    if (side < 0.0) {
-        rect.y = rect.y + h;
-    }
+    let cut = min(top + bottom, rect.w * 0.5);
+    let t = min(top, cut);
+    rect.y = rect.y + t;
+    rect.w = rect.w - cut;
     return rounded_box(p, rect, P(base + 1u));
 }
 
@@ -213,31 +214,42 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
     let light = P(1).yz;
     for (var k = 0u; k < count; k = k + 1u) {
         let base = HEADER + W(start + k) * STRIDE;
-        let s = shape_at(p, base);
+        let info = P(base + 2u);
+        let boxy = info.w < 0.5;
+        let el = P(base + 3u);
+        // Elevation (boxes only): the strip still showing under the face,
+        // how far the face is pushed down, and whether it is on.
+        let strip = select(0.0, el.x, boxy);
+        let sink = select(0.0, el.y, boxy);
+        let elevated = boxy && el.z > 0.5;
+        var s = 0.0;
+        if (sink > 0.0) {
+            s = plate_box(p, base, sink, 0.0);
+        } else {
+            s = shape_at(p, base);
+        }
         let d = s * scale;
         let a = clamp(0.5 - d, 0.0, 1.0);
         if (a <= 0.0) {
             continue;
         }
-        let info = P(base + 2u);
         let fill = P(base + 4u);
         var c = fill.rgb;
         let bevel = info.y;
-        // Elevation: the bevel belongs to the face; outside the face, inside
-        // the outline, is the plate's side.
-        let side = select(0.0, P(base + 3u).x, info.w < 0.5);
+        // The bevel belongs to the face; under the face, inside the
+        // outline, is the plate's side.
         var sf = s;
-        if (side != 0.0) {
-            sf = face_at(p, base, side);
+        if (elevated) {
+            sf = plate_box(p, base, sink, strip);
         }
         let df = sf * scale;
         if (bevel > 0.0 && df > -bevel - 1.0) {
             let e = 0.5 / scale;
             var g = vec2<f32>(0.0);
-            if (side != 0.0) {
+            if (elevated) {
                 g = vec2<f32>(
-                    face_at(p + vec2<f32>(e, 0.0), base, side) - sf,
-                    face_at(p + vec2<f32>(0.0, e), base, side) - sf,
+                    plate_box(p + vec2<f32>(e, 0.0), base, sink, strip) - sf,
+                    plate_box(p + vec2<f32>(0.0, e), base, sink, strip) - sf,
                 );
             } else {
                 g = vec2<f32>(
@@ -252,14 +264,21 @@ fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
                 c = tone(c, facing * profile(t, bevel, info.x), P(2).y, P(2).z);
             }
         }
-        if (side != 0.0) {
-            // A faint line all round the face, then the side strip in a
-            // darker tone of the fill (darker still when pressed: a hole).
+        if (elevated) {
+            // The edge takes its tone from the fill: lighter on a dark
+            // plate, darker on a bright one. Without a bevel the face also
+            // gets a faint line all round; a bevel already draws the edge.
+            let dim = dot(fill.rgb, vec3<f32>(0.299, 0.587, 0.114)) < 0.14;
             let face = clamp(0.5 - df, 0.0, 1.0);
-            let hair = clamp(df + scale, 0.0, 1.0);
-            c = c + (vec3<f32>(1.0) - c) * (0.09 * hair);
-            let dark = select(0.58, 0.40, side < 0.0);
-            c = mix(fill.rgb * dark, c, face);
+            if (bevel <= 0.0) {
+                let hair = clamp(df + scale, 0.0, 1.0);
+                c = c + (vec3<f32>(1.0) - c) * (select(0.09, 0.13, dim) * hair);
+            }
+            var edge = fill.rgb * 0.58;
+            if (dim) {
+                edge = fill.rgb + (vec3<f32>(1.0) - fill.rgb) * 0.15;
+            }
+            c = mix(edge, c, face);
         }
         let fa = a * fill.a;
         acc = vec4<f32>(c * fa, fa) + acc * (1.0 - fa);

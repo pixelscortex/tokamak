@@ -328,17 +328,21 @@ fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])
         .unwrap_or(0.0)
         .max(0.0);
     let recessed = text("tk-elevation").as_deref() == Some("recessed");
-    // `elevation-<n>`; `pressed` puts the side strip above the face.
-    let side = text("tk-side")
-        .and_then(|v| v.parse::<f32>().ok())
-        .filter(|v| v.is_finite())
-        .unwrap_or(0.0)
-        .max(0.0)
-        * if text("tk-pressed").as_deref() == Some("1") {
-            -1.0
-        } else {
-            1.0
-        };
+    // `elevation-<n>`, and how far the face is pushed down into it:
+    // `sink-<n>`, or all the way with `pressed`.
+    let number = |name: &str| {
+        text(name)
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| v.is_finite())
+            .unwrap_or(0.0)
+            .max(0.0)
+    };
+    let side = number("tk-side");
+    let sink = if text("tk-pressed").as_deref() == Some("1") {
+        side
+    } else {
+        number("tk-sink").min(side)
+    };
     let soft = text("tk-bevel-profile").as_deref() == Some("soft");
     let strength = super::shape::tilt_strength(
         text("tk-bevel-tilt")
@@ -368,6 +372,7 @@ fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])
             soft,
             strength,
             side,
+            sink,
         },
         radii,
     ))

@@ -267,14 +267,22 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
                 soft: look.soft,
                 strength: look.strength,
                 side: 0.0,
+                sink: 0.0,
             });
             params[base + 2][0] = super::shape::bevel_slot(paint.soft, paint.strength);
             params[base + 2][1] = paint.bevel * scale;
             params[base + 2][2] = if paint.recessed { -1.0 } else { 1.0 };
             params[base + 4] = paint.fill;
-            // A box has no poly record: its slot carries the elevation side.
+            // A box has no poly record: its slot carries the elevation (the
+            // strip still showing, how far the face is pushed down, on/off).
             if s.poly.is_none() {
-                params[base + 3][0] = paint.side;
+                let sink = paint.sink.clamp(0.0, paint.side);
+                params[base + 3] = [
+                    paint.side - sink,
+                    sink,
+                    if paint.side > 0.0 { 1.0 } else { 0.0 },
+                    0.0,
+                ];
             }
         }
         if let Some(poly) = &s.poly {
