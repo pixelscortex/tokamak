@@ -71,10 +71,13 @@ notified of pull requests inside a fork.
   answers" with the issue's number and title, its state, and the relevant
   item in their words. If no upstream issue exists, say so plainly and say
   what was searched for.
-- Write that reference in code formatting, for example
-  `` `DioxusLabs/blitz#233` ``, never as `#233`, `DioxusLabs/blitz#233`
-  outside code formatting, or a `github.com/DioxusLabs/...` link. GitHub only
-  adds a "mentioned" note on the upstream issue for the plain forms. Commit
+- Write that reference as a link through GitHub's redirect address, for
+  example
+  `[DioxusLabs/blitz#233](https://redirect.github.com/DioxusLabs/blitz/issues/233)`.
+  It opens the issue when clicked, and GitHub adds no "mentioned" note on the
+  upstream issue for it (checked on draft pull request 1). Never write
+  `#233`, a bare `DioxusLabs/blitz#233`, or a direct
+  `github.com/DioxusLabs/...` link in the fork: those do add a note. Commit
   messages in the fork carry no upstream reference at all.
 - Clickable links to upstream issues belong in Linear and in
   `BLITZ_CHANGES.md`. The Tokamak repository is private, so links from it and
