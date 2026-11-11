@@ -1,0 +1,35 @@
+packages/render/BLITZ_CHANGES.md
+  s_66c6253f68fd42::t_913d34173e42fd 12-14,22-23,26,29-30,38-67,73-78,85-86,88
+  s_66c6253f68fd42::t_27e647d786e05e 79-84
+  s_66c6253f68fd42::t_326eeb6cd881bc 68-72
+packages/render/SURFACES.md
+  s_66c6253f68fd42::t_182054dd3240cd 139-140,155,158-160,179-222,224-225,229-296,299-307,315-325,335-341,346-348,356-360
+  s_66c6253f68fd42::t_ab2963a0b398a9 330
+  s_66c6253f68fd42::t_0629a1091aba3c 409-419,423-476
+  s_66c6253f68fd42::t_708657853829ee 487-491,505-506,513-514
+  s_66c6253f68fd42::t_27e647d786e05e 308-314,329,331-334
+  s_66c6253f68fd42::t_d393647c8315ee 297-298
+  s_66c6253f68fd42::t_9dd9e77b2c8c87 223,226-228,326-328,361
+lab/tests/fused_surface.rs
+  s_66c6253f68fd42::t_c9334540a043fd 10-11
+packages/render/BLITZ_FORK.md
+  s_66c6253f68fd42::t_27e647d786e05e 30-33
+packages/render/src/surface/shape.rs
+  s_66c6253f68fd42::t_c9334540a043fd 396-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7eb7a10ef7b7bd3908ca2e90ce09f28fde0c9ebf",
+  "prompts": {},
+  "sessions": {
+    "s_66c6253f68fd42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff863479-5fdb-4dfe-b68e-409d3fab0e1c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
