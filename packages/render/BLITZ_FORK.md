@@ -5,8 +5,11 @@ changed Blitz. The list of changes and their status lives in Linear, issue
 TKM-76 ("Blitz fork: rules and list of changes"), with one sub-issue per
 change. If this file and TKM-76 differ, TKM-76 wins; fix this file.
 
-Status: no fork exists yet. Blitz is pinned to `=0.3.0-beta.4` from crates.io
-across the workspace.
+Status: the fork repository exists at `github.com/pixelscortex/blitz` and holds
+none of our changes yet. Tokamak still uses Blitz `=0.3.0-beta.4` from
+crates.io across the workspace. Our changes start from the branch
+`tokamak/base-0.3.0-beta.4` (upstream commit `92b11f1`, the 0.3.0-beta.4
+release), once that branch has been pushed.
 
 ## Rules
 
