@@ -1,0 +1,48 @@
+packages/ui/src/components/index.ts
+  s_bb7b798e16a141::t_b1c3efa4949889 3-4
+packages/ui/tests/contracts.test.ts
+  s_bb7b798e16a141::t_36744b006d7a90 11
+lab/tests/fused_surface.rs
+  s_bb7b798e16a141::t_40be3ca13a3a40 902-905,1048-1049,1061-1062,1070-1071
+  s_bb7b798e16a141::t_d4d2d5272fc2db 911
+  s_bb7b798e16a141::t_ea9013378efa0c 894
+  s_bb7b798e16a141::t_c6e55b83c92182 828-833,845,857,862-872,874,885-890,1143-1147,1150-1155,1170
+  s_bb7b798e16a141::t_f48a50d61d3e8a 899-901,907-910,916-917,960,1187-1198
+  s_bb7b798e16a141::t_85998eea6ffbac 893,895-898,1032-1034,1037,1106
+  s_bb7b798e16a141::t_c72a6f87da6409 912,915
+  s_bb7b798e16a141::t_b3e789867320e9 891,1125-1126,1128-1142,1148-1149,1156-1169,1171-1176
+  s_bb7b798e16a141::t_b5386bc9123eff 913-914,1020-1031,1035-1036,1038-1040,1046,1050-1060,1063-1069,1072-1105,1107-1124
+  s_bb7b798e16a141::t_1d34a38afd9154 1041-1045,1047
+  s_bb7b798e16a141::t_7742a4e71d0603 892,1127
+packages/render/src/surface/bind.rs
+  s_bb7b798e16a141::t_ea9013378efa0c 481-484,500
+packages/render/SURFACES.md
+  s_bb7b798e16a141::t_36744b006d7a90 164-174,189-192
+  s_bb7b798e16a141::t_f886effb10a97e 193
+packages/ui/src/components/shell.tsx
+  s_bb7b798e16a141::t_5174165eb40634 36-42,51,170,177,205,208,212-213,225-229,237-239,242-243
+packages/ui/src/components/surface.tsx
+  s_bb7b798e16a141::t_b1c3efa4949889 20-28,219-251
+  s_bb7b798e16a141::t_4d8069a8e19e2d 252
+lab/src/surfaces.tsx
+  s_bb7b798e16a141::t_6708daf085060e 255-257,267
+  s_bb7b798e16a141::t_f48a50d61d3e8a 320-321,338-342
+  s_bb7b798e16a141::t_b3e789867320e9 7,259,301-314
+  s_bb7b798e16a141::t_e5d4194b7b83e3 315-316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "76687e96b98d631857f200845aa8d6b86c0189d1",
+  "prompts": {},
+  "sessions": {
+    "s_bb7b798e16a141": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f414b8cf-b8cd-4f02-ac52-77f4365731e2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
