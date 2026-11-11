@@ -24,6 +24,7 @@ reviewed it.
 | Size | One commit: 41 lines added, 22 removed, 6 files |
 | Linear | TKM-77 |
 | Needed right now | No |
+| Blitz issue it answers | [Issue 233, "Custom widget support"](https://github.com/DioxusLabs/blitz/issues/233), open. The unchecked item "Event result" on that list describes this exact gap. |
 
 **The problem.** Tokamak draws its own bevelled backgrounds ("plates"). The
 simplest way would be to attach our drawing code to the button itself. But
@@ -72,6 +73,9 @@ owner's agreement first.
 
 - **Keep the scroll position in range when content gets shorter** (TKM-78).
   Fixes the "page looks scrolled but cannot scroll" problem. Can also be
-  solved on our side.
+  solved on our side. Blitz issue: not searched for yet; that comes first.
 - **Redraw custom elements only when they change** (TKM-79). Saves power when
-  the window is idle. Blitz is already working on this themselves.
+  the window is idle. Blitz issue: the item "Paint invalidation" on
+  [issue 233](https://github.com/DioxusLabs/blitz/issues/233); Blitz is
+  already working in this area themselves
+  ([pull request 1323](https://github.com/DioxusLabs/blitz/pull/1323)).

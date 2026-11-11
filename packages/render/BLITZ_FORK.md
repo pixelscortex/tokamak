@@ -65,11 +65,20 @@ notified of pull requests inside a fork.
 - Always pass the base repository explicitly
   (`gh pr create --repo pixelscortex/blitz --base tokamak/base-0.3.0-beta.4 ...`).
   Without it, GitHub targets the upstream project.
-- Do not write upstream issue or pull request numbers or links (for example
-  `#233` or a `github.com/DioxusLabs/...` URL) in commit messages, branch
-  descriptions or pull request text in the fork. GitHub can show such
-  references on the upstream issue. Describe the upstream item in words, and
-  keep the links in Linear.
+- Every draft pull request names the Blitz issue it answers, so we are not
+  inventing problems. Search Blitz's issues and pull requests before building
+  a change. In the pull request text, write a section "The Blitz issue this
+  answers" with the issue's number and title, its state, and the relevant
+  item in their words. If no upstream issue exists, say so plainly and say
+  what was searched for.
+- Write that reference in code formatting, for example
+  `` `DioxusLabs/blitz#233` ``, never as `#233`, `DioxusLabs/blitz#233`
+  outside code formatting, or a `github.com/DioxusLabs/...` link. GitHub only
+  adds a "mentioned" note on the upstream issue for the plain forms. Commit
+  messages in the fork carry no upstream reference at all.
+- Clickable links to upstream issues belong in Linear and in
+  `BLITZ_CHANGES.md`. The Tokamak repository is private, so links from it and
+  from its mirrored Linear issues are not visible to people outside it.
 - A draft pull request on the upstream project is public and notifies its
   maintainers. It is not a private place to park work.
 
