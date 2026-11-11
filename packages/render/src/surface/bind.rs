@@ -129,7 +129,7 @@ pub(super) struct Bound {
 pub(super) type Handle = Rc<RefCell<Bound>>;
 
 /// One bound shape as the lab's tests see it (`Registry::shapes_of`).
-#[cfg(feature = "surface-demo")]
+#[cfg(feature = "lab-probes")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct MaterialShape {
     pub rect: [f32; 4],
@@ -378,7 +378,7 @@ fn material_of(style: &Style, width: f32, own: bool) -> Option<(Paint, [f32; 4])
     ))
 }
 
-#[cfg(feature = "surface-demo")]
+#[cfg(feature = "lab-probes")]
 fn material_shape(s: &Shape) -> MaterialShape {
     MaterialShape {
         rect: s.rect,
@@ -426,7 +426,7 @@ impl Registry {
 
     /// Lab test probe: the shapes last handed to surface `node`; a shape
     /// without its own material (a group member) reports None for it.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn shapes_of(&self, node: NodeId) -> Vec<MaterialShape> {
         let Some(entry) = self.surfaces.get(&node) else {
             return Vec::new();
@@ -467,7 +467,7 @@ impl Registry {
 
     /// Lab test probe: the shape a self-painting plate last drew, in its own
     /// border box; None if `node` does not paint itself.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn own_shape(&self, node: NodeId) -> Option<MaterialShape> {
         let (_, s) = self.own.get(&node)?.last.iter().find(|(n, _)| *n == node)?;
         Some(material_shape(s))
@@ -475,7 +475,7 @@ impl Registry {
 
     /// Lab test probe: the self-painting plate that draws `node`'s plate as
     /// a guest, and the shape it draws, in that plate's border box.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn hosted_shape(&self, node: NodeId) -> Option<(NodeId, MaterialShape)> {
         self.own
             .iter()
@@ -487,7 +487,7 @@ impl Registry {
     }
 
     /// Lab test probe: how many plates paint themselves.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn own_count(&self) -> usize {
         self.own
             .iter()

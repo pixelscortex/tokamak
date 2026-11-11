@@ -22,14 +22,14 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
-#[cfg(feature = "surface-demo")]
+#[cfg(feature = "lab-probes")]
 pub use surface::MaterialShape;
 /// Embedders that paint a document without `launch_window` (e.g. offscreen
 /// rendering) must call this once per frame after `paint_scene`; see
 /// `surface/frame.rs`.
 pub use surface::end_frame as surface_end_frame;
-/// Lab-only paint statistics (benchmark hooks), `surface-demo` feature.
-#[cfg(feature = "surface-demo")]
+/// Lab-only paint counters (`lab-probes` feature).
+#[cfg(feature = "lab-probes")]
 #[doc(hidden)]
 pub use surface::stats::{dirty_pixels as surface_dirty_pixels, paint_work as surface_paint_work};
 
@@ -104,17 +104,17 @@ impl NativeDocument {
         self.bridge.tree.surfaces.bind(&mut self.html.inner_mut());
     }
 
-    /// Lab probe (surface-demo): the shape the self-painting plate `node`
+    /// Lab probe (lab-probes): the shape the self-painting plate `node`
     /// last drew, in its own border box; None if it does not paint itself.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn own_plate_shape(&self, node: blitz_traits::NodeId) -> Option<surface::MaterialShape> {
         self.bridge.tree.surfaces.own_shape(node)
     }
 
-    /// Lab probe (surface-demo): for a plate that cannot carry a widget and
+    /// Lab probe (lab-probes): for a plate that cannot carry a widget and
     /// sits in a self-painting plate: that plate's node, and the shape it
     /// draws for `node`, in its own border box.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn hosted_plate_shape(
         &self,
         node: blitz_traits::NodeId,
@@ -122,15 +122,15 @@ impl NativeDocument {
         self.bridge.tree.surfaces.hosted_shape(node)
     }
 
-    /// Lab probe (surface-demo): how many plates paint themselves.
-    #[cfg(feature = "surface-demo")]
+    /// Lab probe (lab-probes): how many plates paint themselves.
+    #[cfg(feature = "lab-probes")]
     pub fn own_plate_count(&self) -> usize {
         self.bridge.tree.surfaces.own_count()
     }
 
-    /// Lab probe (surface-demo): the shapes the last layout pass handed to
+    /// Lab probe (lab-probes): the shapes the last layout pass handed to
     /// the `<tk-surface>` element `node`, with each shape's own material.
-    #[cfg(feature = "surface-demo")]
+    #[cfg(feature = "lab-probes")]
     pub fn surface_shapes(&self, node: blitz_traits::NodeId) -> Vec<surface::MaterialShape> {
         self.bridge.tree.surfaces.shapes_of(node)
     }

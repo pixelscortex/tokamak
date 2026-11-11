@@ -360,18 +360,6 @@ fn shape_changes_animate_by_index_and_stop_requesting_redraws() {
     assert_eq!(surface.shown(), surface.target());
 }
 
-#[cfg(feature = "surface-demo")]
-#[test]
-fn a_demo_with_nothing_moving_requests_no_frames() {
-    let mut surface = Surface::new();
-    surface.attribute_changed("demo", None, Some("bounce"));
-    surface.attribute_changed("count", None, Some("1000"));
-    surface.attribute_changed("running", None, Some("true"));
-    assert!(surface.requires_redraw());
-    surface.attribute_changed("moving", None, Some("0"));
-    assert!(!surface.requires_redraw());
-}
-
 // ---------------------------------------------------------------- layout binding
 
 mod binding {

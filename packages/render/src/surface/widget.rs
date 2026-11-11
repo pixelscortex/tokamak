@@ -62,8 +62,6 @@ pub(super) struct Surface {
     /// Materials layer only: the part of the box its plates cover, device
     /// px (x, y, w, h), as last rendered (see `crop`).
     crop: Option<[u32; 4]>,
-    #[cfg(feature = "surface-demo")]
-    demo: super::demo::Driver,
 }
 
 impl Surface {
@@ -84,8 +82,6 @@ impl Surface {
             border_var: None,
             resolved_for: 0,
             crop: None,
-            #[cfg(feature = "surface-demo")]
-            demo: Default::default(),
         }
     }
 
@@ -210,10 +206,6 @@ impl Surface {
     }
 
     fn moving(&self) -> bool {
-        #[cfg(feature = "surface-demo")]
-        if self.demo.moves() {
-            return true;
-        }
         // A layout change waiting to start an animation counts: the shell asks
         // `requires_redraw` before painting, and paint is where it starts.
         let pending = self.bound.as_ref().is_some_and(|b| {
@@ -227,10 +219,6 @@ impl Surface {
 
 impl Widget for Surface {
     fn attribute_changed(&mut self, name: &str, _old: Option<&str>, new: Option<&str>) {
-        #[cfg(feature = "surface-demo")]
-        if self.demo.set(name, new) {
-            return;
-        }
         if name == "shapes" {
             match parse_shapes(new.unwrap_or("[]")) {
                 Ok(shapes) => {
@@ -289,7 +277,6 @@ impl Widget for Surface {
         scale: f64,
     ) -> Scene {
         let started = Instant::now();
-        let active = self.moving();
         self.sync_bound();
         // `var(--token)` colours follow the theme (computed custom properties).
         // Blitz hands the same computed style object while the element's
@@ -313,10 +300,6 @@ impl Widget for Surface {
         }
         self.scale = scale as f32;
         self.step();
-        #[cfg(feature = "surface-demo")]
-        if let Some(next) = self.demo.shapes(width, height, scale, &self.shown) {
-            self.shown = next;
-        }
         // A materials layer renders only the part of its box its plates
         // cover (most of a region is empty), and nothing at all without them.
         let crop = if self.look.layered {
@@ -327,7 +310,7 @@ impl Widget for Surface {
                         gpu.release(render_ctx);
                     }
                     self.crop = None;
-                    stats::record(started.elapsed(), 0, active);
+                    stats::record(started.elapsed(), 0);
                     return Scene::new();
                 }
             }
@@ -383,7 +366,7 @@ impl Widget for Surface {
             scale as f32,
         );
         let scene = gpu.scene(width, height, [x as f64, y as f64]);
-        stats::record(started.elapsed(), dirty, active);
+        stats::record(started.elapsed(), dirty);
         scene
     }
 }

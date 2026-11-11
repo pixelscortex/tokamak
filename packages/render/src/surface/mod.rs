@@ -17,8 +17,8 @@
 //!   draws each plate).
 //! - `widget`: the Blitz widget (attributes, animation, paint).
 //! - `plate`: the widget of a self-painting plate, on the element itself.
-//! - `demo`, `stats`, `fps`: lab-only stress demo and readout
-//!   (`surface-demo` feature, not in product builds).
+//! - `stats`: lab-only paint counters (`lab-probes` feature, not in
+//!   product builds).
 //! - `surface.wgsl`: the distance field and shading, on the GPU.
 //! - `reference`, `tests`: the same maths on the CPU as a test oracle, and
 //!   the tests (test builds only).
@@ -30,18 +30,14 @@ mod shape;
 mod tiles;
 mod widget;
 
-#[cfg(feature = "surface-demo")]
-mod demo;
-#[cfg(feature = "surface-demo")]
-mod fps;
-#[cfg(feature = "surface-demo")]
+#[cfg(feature = "lab-probes")]
 pub mod stats;
 
 /// Without the lab feature, recording paint statistics compiles to nothing.
-#[cfg(not(feature = "surface-demo"))]
+#[cfg(not(feature = "lab-probes"))]
 mod stats {
     #[inline(always)]
-    pub(super) fn record(_work: std::time::Duration, _dirty_px: u64, _active: bool) {}
+    pub(super) fn record(_work: std::time::Duration, _dirty_px: u64) {}
 }
 
 #[cfg(test)]
@@ -66,7 +62,7 @@ pub use frame::end_frame;
 pub(crate) const UA_CSS: &str = "tk-surface, tk-icon { display: block; flex-shrink: 0; \
      pointer-events: none; } tk-surface { pointer-events: none !important; }";
 
-#[cfg(feature = "surface-demo")]
+#[cfg(feature = "lab-probes")]
 pub use bind::MaterialShape;
 pub(crate) use bind::Registry;
 pub(crate) use shape::parse_colour;
@@ -84,8 +80,6 @@ pub(crate) fn widget_for(
         "tk-surface" => Some(registry.surface(node)),
         // Not a surface; dispatched here so wire.rs has one widget hook.
         "tk-icon" => Some(crate::icon::widget()),
-        #[cfg(feature = "surface-demo")]
-        fps::TAG => Some(fps::widget()),
         _ => None,
     }
 }

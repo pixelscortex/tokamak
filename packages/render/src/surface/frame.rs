@@ -3,8 +3,8 @@
 //! the device's atlas job list). `end_frame` then renders all atlas jobs in
 //! one pass and submits once per device.
 //!
-//! Why: measured on the lab stress test (200 small surfaces moving, release),
-//! one encoder + `queue.submit` per surface cost ~16 us of submit each, and
+//! Why: measured with 200 small surfaces moving (release build), one
+//! encoder + `queue.submit` per surface cost ~16 us of submit each, and
 //! batching those per-surface render passes into one submit did not help
 //! either: the cost is per render pass, i.e. per target texture. One pass
 //! into a shared atlas is what removes it (see `gpu`).

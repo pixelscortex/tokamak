@@ -8,9 +8,10 @@ publish.workspace = true
 [features]
 # Opt-in upstream successful-present timings; normal product builds stay quiet.
 gpu-diagnostics = ["anyrender_vello/log_frame_times"]
-# Lab-only `<tk-surface>` stress demo, `<tk-fps>` readout and benchmark hooks
-# (surface/demo.rs, fps.rs, stats.rs). Product builds leave it off.
-surface-demo = []
+# Lab-only test probes: the shapes surfaces and plates last drew
+# (`NativeDocument::surface_shapes` and friends) and paint counters
+# (surface/stats.rs), for lab/tests. Product builds leave it off.
+lab-probes = []
 
 [dependencies]
 engine = { path = "../engine" }

@@ -115,7 +115,7 @@ impl Widget for Plate {
             if let Some(gpu) = &mut self.gpu {
                 gpu.release(render_ctx);
             }
-            stats::record(started.elapsed(), 0, false);
+            stats::record(started.elapsed(), 0);
             return Scene::new();
         }
         // A flat plate (no bevel) with no guests is a plain rounded box: a
@@ -148,7 +148,7 @@ impl Widget for Plate {
                 None,
                 &outline,
             );
-            stats::record(started.elapsed(), 0, false);
+            stats::record(started.elapsed(), 0);
             return scene;
         }
         if self.gpu.is_none() {
@@ -185,7 +185,7 @@ impl Widget for Plate {
                 shift[1] as f64 * scale - self.sub[1] as f64,
             ],
         );
-        stats::record(started.elapsed(), dirty, false);
+        stats::record(started.elapsed(), dirty);
         scene
     }
 }
