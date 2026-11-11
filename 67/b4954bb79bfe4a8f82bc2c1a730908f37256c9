@@ -1,0 +1,31 @@
+lab/src/surfaces.tsx
+  s_bb7b798e16a141::t_036d27be009bcd 210-217,220,222-224,226,230-231,233,239-240,243-244,251-253,256,297-298
+  s_bb7b798e16a141::t_22fd722a251a86 299
+lab/tests/fused_surface.rs
+  s_bb7b798e16a141::t_27676ec8776309 1190-1196,1198,1200,1202-1206,1226,1233,1238,1244,1247-1248,1250,1252,1254,1258-1262,1268,1270-1272,1298,1311
+  s_bb7b798e16a141::t_1f5c26fadec387 1018-1029
+  s_bb7b798e16a141::t_ef3a5ccbf519c8 1234-1235
+  s_bb7b798e16a141::t_d9900a9d4c936b 955,1006,1306-1309,1336
+  s_bb7b798e16a141::t_0f4872536ed3e6 958,975,978,985-986,993,995,1001-1002,1005,1009-1010,1012,1015,1041,1055,1059,1064,1077,1122,1245-1246,1249,1251
+  s_bb7b798e16a141::t_20c778a9bc3e5f 1310
+lab/src/stress.tsx
+  s_bb7b798e16a141::t_e7a3d0c2f386f1 48-68,70-73,79,92-93,119-121,132
+packages/render/SURFACES.md
+  s_bb7b798e16a141::t_f4bf5bdcd2057a 253-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "67b4954bb79bfe4a8f82bc2c1a730908f37256c9",
+  "prompts": {},
+  "sessions": {
+    "s_bb7b798e16a141": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f414b8cf-b8cd-4f02-ac52-77f4365731e2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
