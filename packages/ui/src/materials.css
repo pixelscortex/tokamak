@@ -1,0 +1,43 @@
+/* Materials from classes (render/SURFACES.md, "Plates").
+ *
+ * A `material-*` utility makes a plain element a plate: it sets the custom
+ * properties below, the render host reads them from the element's computed
+ * style and draws the element's border box, with its computed
+ * `border-radius`, in the materials layer of its region (the shell regions
+ * and `Sheet` hold one). Variants change the drawn material through CSS
+ * alone: `hover:`, `active:material-key-pressed`, `aria-pressed:...`,
+ * `active:bevel-1`.
+ *
+ *   <button class="material-key active:material-key-pressed rounded-[7px] px-3.5">Deny</button>
+ *
+ * Every material is an `@utility material-<name>` rule in this file: the
+ * build marks elements that use one (`tk-plate`) and rejects a name that is
+ * not defined here (packages/build/src/materials.ts reads this file).
+ *
+ * The properties are registered and not inherited, so a cap inside a tray
+ * does not pick up the tray's material. `syntax: "*"` keeps them as text
+ * with `var(--color-*)` substituted, the hex the GPU widget parses.
+ * - `--tk-fill`: face colour (a theme token). Without it nothing is drawn.
+ * - `--tk-bevel`: width of the lit edge band, CSS px.
+ * - `--tk-elevation`: `raised` (lit edge at the top, towards the light) or
+ *   `recessed` (lit edge at the bottom: a well, a tray, a pressed key). */
+@property --tk-fill { syntax: "*"; inherits: false; }
+@property --tk-bevel { syntax: "*"; inherits: false; }
+@property --tk-elevation { syntax: "*"; inherits: false; }
+
+/* Things you press: a flat face with a lit edge band, sitting in a `tray`
+ * whose base colour shows as the seam between caps. */
+@utility material-key { --tk-fill: var(--color-chip); --tk-bevel: 2.5; --tk-elevation: raised; }
+@utility material-key-bright { --tk-fill: var(--color-ink); --tk-bevel: 2.5; --tk-elevation: raised; }
+/* A pressed key: the face sinks (recessed bevel, the lit edge moves to the
+ * bottom) and darkens a step. */
+@utility material-key-pressed { --tk-fill: var(--color-card); --tk-bevel: 2; --tk-elevation: recessed; }
+@utility material-tray { --tk-fill: var(--color-base); --tk-bevel: 1.5; --tk-elevation: recessed; }
+
+/* The same looks as the `Surface` component's card, chip and well. */
+@utility material-card { --tk-fill: var(--color-card); --tk-bevel: 2; --tk-elevation: raised; }
+@utility material-chip { --tk-fill: var(--color-chip); --tk-bevel: 1.5; --tk-elevation: raised; }
+@utility material-well { --tk-fill: var(--color-well); --tk-bevel: 1.5; --tk-elevation: recessed; }
+
+/* The bevel alone, over any material: `bevel-1`, `active:bevel-1`. */
+@utility bevel-* { --tk-bevel: --value(number); }

@@ -56,10 +56,15 @@ pub use frame::end_frame;
 /// custom-widget node to `Widget::handle_event` and returns (blitz-dom
 /// events/mod.rs, "Handle event forwarding for custom widget"), so wheel
 /// scrolling stopped over a surface. Surfaces are background layers with no
-/// children, so hit testing passes through to the element underneath.
-pub(crate) const UA_CSS: &str =
-    "tk-surface, tk-icon { display: block; flex-shrink: 0; pointer-events: none; }";
+/// children, so hit testing passes through to the element underneath. For
+/// `tk-surface` it is `!important`, which in the user-agent origin no author
+/// rule can override: a region's materials layer sits among the region's
+/// children, where a utility such as `*:pointer-events-auto` reaches it.
+pub(crate) const UA_CSS: &str = "tk-surface, tk-icon { display: block; flex-shrink: 0; \
+     pointer-events: none; } tk-surface { pointer-events: none !important; }";
 
+#[cfg(feature = "surface-demo")]
+pub use bind::MaterialShape;
 pub(crate) use bind::Registry;
 pub(crate) use shape::parse_colour;
 

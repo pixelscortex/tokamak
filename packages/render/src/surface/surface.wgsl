@@ -11,11 +11,13 @@
 //   3: fill rgba (straight alpha, sRGB-encoded values, no linearisation)
 //   4: border outer edge, inner edge (CSS px from the silhouette), lit, enabled
 //   5: border rgba
-//   6: culling tiles across, tile size (device px)
-//   7 + 4i: rect x, y, w, h (CSS px; a poly's bounding box)
-//   8 + 4i: corner radii tl, tr, br, bl
-//   9 + 4i: op (0 add, 1 sub), join (<0 = default), gap (<0 = default), kind (0 box, 1 poly)
-//  10 + 4i: poly: first corner slot, corner count, orientation (+1 clockwise on screen)
+//   6: culling tiles across, tile size (device px), materials layer (1 = layered)
+//   7 + 5i: rect x, y, w, h (CSS px; a poly's bounding box)
+//   8 + 5i: corner radii tl, tr, br, bl
+//   9 + 5i: op (0 add, 1 sub), join (<0 = default), gap (<0 = default), kind (0 box, 1 poly);
+//           in a materials layer: unused, bevel (device px), elevation sign, kind
+//  10 + 5i: poly: first corner slot, corner count, orientation (+1 clockwise on screen)
+//  11 + 5i: materials layer only: the shape's fill rgba
 //   then poly corners, 2 slots each: (centre x, centre y, radius, convex),
 //   (tangent-in x, y, tangent-out x, y).
 // Binding 1, per-tile shape lists: [start, count] per tile, then indices.
@@ -52,7 +54,7 @@ struct VOut {
 };
 
 const HEADER: u32 = 7u;
-const STRIDE: u32 = 4u;
+const STRIDE: u32 = 5u;
 const BORDER_LIT_GAIN: f32 = 0.30;
 const BORDER_SHADE_GAIN: f32 = 0.55;
 
@@ -180,6 +182,55 @@ fn field(p: vec2<f32>, start: u32, count: u32) -> f32 {
     return d;
 }
 
+// One shape's own signed distance (materials layer).
+fn shape_at(p: vec2<f32>, base: u32) -> f32 {
+    if (P(base + 2u).w > 0.5) {
+        let poly = P(base + 3u);
+        return poly_distance(p, u32(poly.x), u32(poly.y), poly.z);
+    }
+    return rounded_box(p, P(base), P(base + 1u));
+}
+
+// Materials layer: no CSG. Each shape of the tile, in order, is shaded with
+// its own fill, bevel and elevation, then painted over what is below it
+// (premultiplied "over"). A tray and the caps in it are one layer.
+fn layered(p: vec2<f32>, start: u32, count: u32, scale: f32) -> vec4<f32> {
+    var acc = vec4<f32>(0.0);
+    let light = P(1).yz;
+    for (var k = 0u; k < count; k = k + 1u) {
+        let base = HEADER + W(start + k) * STRIDE;
+        let s = shape_at(p, base);
+        let d = s * scale;
+        let a = clamp(0.5 - d, 0.0, 1.0);
+        if (a <= 0.0) {
+            continue;
+        }
+        let info = P(base + 2u);
+        let fill = P(base + 4u);
+        var c = fill.rgb;
+        let bevel = info.y;
+        if (bevel > 0.0 && d > -bevel - 1.0) {
+            let e = 0.5 / scale;
+            let g = vec2<f32>(
+                shape_at(p + vec2<f32>(e, 0.0), base) - s,
+                shape_at(p + vec2<f32>(0.0, e), base) - s,
+            );
+            let len = length(g);
+            if (len > 1e-6) {
+                let facing = dot(g / len, light) * info.z;
+                let t = clamp(-d / bevel, 0.0, 1.0);
+                c = tone(c, facing * (1.0 - t) * (1.0 - t), P(2).y, P(2).z);
+            }
+        }
+        let fa = a * fill.a;
+        acc = vec4<f32>(c * fa, fa) + acc * (1.0 - fa);
+    }
+    if (acc.a <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(acc.rgb / acc.a, acc.a);
+}
+
 fn tone(c: vec3<f32>, s: f32, lit: f32, shade: f32) -> vec3<f32> {
     if (s > 0.0) {
         return c + (vec3<f32>(1.0) - c) * (lit * s);
@@ -206,6 +257,9 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
         return vec4<f32>(0.0);
     }
     let p = pos.xy / scale;
+    if (tiling.z > 0.5) {
+        return layered(p, start, count, scale);
+    }
     let dc = field(p, start, count);
     let border = P(4);
     let a_total = clamp(0.5 - (dc - border.x) * scale, 0.0, 1.0);

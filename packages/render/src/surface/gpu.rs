@@ -44,7 +44,7 @@ pub(super) const SHADE_GAIN: f32 = 0.45;
 /// vec4 slots before the shapes, per shape and per poly corner; the layout
 /// is documented at the top of surface.wgsl.
 const HEADER_SLOTS: usize = 7;
-const SHAPE_SLOTS: usize = 4;
+const SHAPE_SLOTS: usize = 5;
 const CORNER_SLOTS: usize = 2;
 
 /// Surfaces at most this big (device px, each side) live in the atlas.
@@ -244,7 +244,12 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
         if look.border > 0.0 { 1.0 } else { 0.0 },
     ];
     params[5] = look.border_rgba();
-    params[6] = [tiles.nx as f32, CULL_TILE as f32, 0.0, 0.0];
+    params[6] = [
+        tiles.nx as f32,
+        CULL_TILE as f32,
+        if look.layered { 1.0 } else { 0.0 },
+        0.0,
+    ];
     let mut corner_slot = HEADER_SLOTS + SHAPE_SLOTS * shapes.len();
     for (i, s) in shapes.iter().enumerate() {
         let base = HEADER_SLOTS + i * SHAPE_SLOTS;
@@ -252,6 +257,18 @@ fn encode(shapes: &[Shape], look: &Look, width: u32, height: u32, scale: f32) ->
         params[base + 1] = s.radii;
         let kind = if s.poly.is_some() { 1.0 } else { 0.0 };
         params[base + 2] = [if s.sub { 1.0 } else { 0.0 }, s.join, s.gap, kind];
+        // Materials layer: the shape's own fill, and its bevel (device px)
+        // and elevation sign in place of join and gap (unused there).
+        if look.layered {
+            let paint = s.paint.unwrap_or(super::shape::Paint {
+                fill: look.fill,
+                bevel: look.bevel,
+                recessed: look.recessed,
+            });
+            params[base + 2][1] = paint.bevel * scale;
+            params[base + 2][2] = if paint.recessed { -1.0 } else { 1.0 };
+            params[base + 4] = paint.fill;
+        }
         if let Some(poly) = &s.poly {
             params[base + 3] = [
                 corner_slot as f32,
@@ -593,8 +610,23 @@ impl Gpu {
         if fits {
             return self.fit_tiles(render_ctx, width, height);
         }
-        // Release the old target. A slot from an older generation was
-        // already reclaimed by the repack.
+        self.release(render_ctx);
+        if small
+            && let Some(slot) = with_atlas(&self.device, &self.queue, |a| a.alloc(width, height))
+        {
+            self.target = Target::Slot(slot, width, height);
+            return true;
+        }
+        self.atlas_full = small;
+        let buffers = Buffers::new(&self.device, &self.shared, [1024, 1024, 256]);
+        self.target = Target::Own(Vec::new(), 0, Box::new(buffers));
+        self.fit_tiles(render_ctx, width, height)
+    }
+
+    /// Give up the target (its tiles or atlas slot); the next `update`
+    /// makes a new one. A slot from an older generation was already
+    /// reclaimed by the repack.
+    pub fn release(&mut self, render_ctx: &mut dyn RenderContext) {
         match std::mem::replace(&mut self.target, Target::None) {
             Target::Own(tiles, ..) => {
                 for tile in tiles {
@@ -608,16 +640,11 @@ impl Gpu {
             _ => {}
         }
         self.rendered = None;
-        if small
-            && let Some(slot) = with_atlas(&self.device, &self.queue, |a| a.alloc(width, height))
-        {
-            self.target = Target::Slot(slot, width, height);
-            return true;
-        }
-        self.atlas_full = small;
-        let buffers = Buffers::new(&self.device, &self.shared, [1024, 1024, 256]);
-        self.target = Target::Own(Vec::new(), 0, Box::new(buffers));
-        self.fit_tiles(render_ctx, width, height)
+    }
+
+    /// Forget what the target shows: the next `update` renders all of it.
+    pub fn invalidate(&mut self) {
+        self.rendered = None;
     }
 
     /// Size an own target's tile grid to the surface: reuse the tiles it
@@ -811,16 +838,18 @@ impl Gpu {
         self.settle > 0
     }
 
-    /// The Scene that draws the target at the widget's content box (an own
-    /// texture may be larger than the box: only its top-left part is used).
-    pub fn scene(&self, width: u32, height: u32) -> Scene {
+    /// The Scene that draws the target (`width` x `height` device px) at
+    /// `origin` in the widget's content box (an own texture may be larger
+    /// than that: only its top-left part is used).
+    pub fn scene(&self, width: u32, height: u32, origin: [u32; 2]) -> Scene {
         let mut scene = Scene::new();
+        let at = Affine::translate((origin[0] as f64, origin[1] as f64));
         let mut draw = |id: ResourceId, brush: Affine, rect: Rect| {
             let paint: anyrender::PaintRef<'_> = anyrender::Paint::Resource(ImageBrush {
                 image: id,
                 sampler: ImageSampler::new(),
             });
-            scene.fill(Fill::NonZero, Affine::IDENTITY, paint, Some(brush), &rect);
+            scene.fill(Fill::NonZero, at, paint, Some(brush), &rect);
         };
         match &self.target {
             Target::Own(tiles, cols, _) => {

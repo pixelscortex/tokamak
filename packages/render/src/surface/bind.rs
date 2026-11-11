@@ -34,12 +34,35 @@
 //!
 //! Order: unions before subtractions, each in document (node id) order, so a
 //! cut always cuts every plate of its group.
-use super::shape::{Key, Poly, Shape};
+//!
+//! Plates (materials from CSS): an element marked `tk-plate` (added by the
+//! build to elements whose static `class` has a `material-*` utility, see
+//! `packages/build/src/materials.ts`), or, as a fallback for classes built
+//! at run time, one whose `class` has a `material-*` token. Its material is
+//! whatever its computed style says: `--tk-fill`, `--tk-bevel` and
+//! `--tk-elevation` (registered, non-inherited custom properties set by the
+//! utilities in `packages/ui/src/materials.css`, so `hover:`, `active:` and
+//! `aria-pressed:` variants work through CSS alone), and its shape is its
+//! border box with its computed `border-radius`. A plate whose style sets no
+//! `--tk-fill` (a conditional class that is off) is not drawn.
+//!
+//! A plate is drawn by the materials layer of its region: the nearest
+//! element, the plate itself or an ancestor, that directly holds a
+//! `<tk-surface materials>` (the shell regions and `Sheet` hold one). In a
+//! layer, shapes do not fuse: each is shaded with its own material and
+//! painted over the ones before it, outer elements first (a tray, then the
+//! caps in it), then in document order. Plates whose box does not reach the
+//! layer's box (scrolled out of view) are skipped.
+//!
+//! Change detection: a plate's material is re-read only when Stylo gives it
+//! a new computed style object or its box changes size (`Seen` keeps the
+//! style alive, so the pointer compare cannot be fooled by a reused address).
+use super::shape::{Key, Paint, Poly, Shape};
 use blitz_dom::{BaseDocument, LocalName, Node};
 use blitz_traits::NodeId;
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     rc::Rc,
 };
 
@@ -63,9 +86,21 @@ pub(super) struct Bound {
 
 pub(super) type Handle = Rc<RefCell<Bound>>;
 
-/// A member's shape in one surface: sort key (subtract?, attached?, node),
+/// One bound shape as the lab's tests see it (`Registry::shapes_of`).
+#[cfg(feature = "surface-demo")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct MaterialShape {
+    pub rect: [f32; 4],
+    pub radii: [f32; 4],
+    pub fill: Option<[f32; 4]>,
+    pub bevel: Option<f32>,
+    pub recessed: bool,
+}
+
+/// A member's shape in one surface: sort key (subtract?, attached?, depth,
+/// node; depth orders plates in a materials layer and is 0 for members),
 /// shape, whether it asked to animate, and its attachment if any.
-type Placed = ((bool, bool, NodeId), Shape, bool, Option<Attach>);
+type Placed = ((bool, bool, u32, NodeId), Shape, bool, Option<Attach>);
 
 /// Which side of a member meets the edge it is attached to.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -97,6 +132,83 @@ struct Entry {
 pub(crate) struct Registry {
     surfaces: HashMap<NodeId, Entry>,
     members: BTreeSet<NodeId>,
+    /// Plates (see "Plates"), by how they were found.
+    plates: BTreeMap<NodeId, Plate>,
+    /// Per plate: the computed style its material was last read from, and
+    /// that material (None: the style sets no `--tk-fill`).
+    seen: HashMap<NodeId, Seen>,
+}
+
+/// How an element became a plate: the build's `tk-plate` marker, or a
+/// `material-*` token in its `class` (the run-time fallback).
+#[derive(Clone, Copy, Default)]
+struct Plate {
+    marked: bool,
+    classed: bool,
+}
+
+type Style = style::servo_arc::Arc<style::properties::ComputedValues>;
+
+struct Seen {
+    style: Style,
+    look: Option<(Paint, [f32; 4])>,
+    width: f32,
+    height: f32,
+}
+
+/// True if a `class` value has a `material-*` utility, bare or behind
+/// variants (`active:material-key-pressed`, `aria-pressed:material-…`).
+pub(crate) fn has_material_class(class: &str) -> bool {
+    class.split_whitespace().any(|token| {
+        token
+            .rsplit(':')
+            .next()
+            .is_some_and(|u| u.trim_start_matches('!').starts_with("material-"))
+    })
+}
+
+/// Paint and corner radii of a plate from its computed style.
+fn material_of(style: &Style, width: f32) -> Option<(Paint, [f32; 4])> {
+    use blitz_dom::Atom;
+    let props = style.custom_properties();
+    let text = |name: &str| -> Option<String> {
+        let atom = Atom::from(name);
+        let value = props
+            .non_inherited
+            .get(&atom)
+            .or_else(|| props.inherited.get(&atom))?;
+        Some(value.as_universal()?.css.trim().to_string())
+    };
+    let fill = super::shape::parse_colour(&text("tk-fill")?)?;
+    let bevel = text("tk-bevel")
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|v| v.is_finite())
+        .unwrap_or(2.0)
+        .max(0.0);
+    let recessed = text("tk-elevation").as_deref() == Some("recessed");
+    let border = style.get_border();
+    // A corner's horizontal radius (elliptical corners are drawn circular).
+    let r = |c: &style::values::computed::BorderCornerRadius| {
+        c.0.width
+            .0
+            .resolve(style::values::computed::Length::new(width))
+            .px()
+            .max(0.0)
+    };
+    let radii = [
+        r(&border.border_top_left_radius),
+        r(&border.border_top_right_radius),
+        r(&border.border_bottom_right_radius),
+        r(&border.border_bottom_left_radius),
+    ];
+    Some((
+        Paint {
+            fill,
+            bevel,
+            recessed,
+        },
+        radii,
+    ))
 }
 
 fn attr<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
@@ -134,6 +246,27 @@ impl Registry {
         Box::new(super::widget::Surface::bound(handle))
     }
 
+    /// Lab test probe: the shapes last handed to surface `node`; a shape
+    /// without its own material (a group member) reports None for it.
+    #[cfg(feature = "surface-demo")]
+    pub fn shapes_of(&self, node: NodeId) -> Vec<MaterialShape> {
+        let Some(entry) = self.surfaces.get(&node) else {
+            return Vec::new();
+        };
+        let bound = entry.handle.borrow();
+        bound
+            .shapes
+            .iter()
+            .map(|s| MaterialShape {
+                rect: s.rect,
+                radii: s.radii,
+                fill: s.paint.map(|p| p.fill),
+                bevel: s.paint.map(|p| p.bevel),
+                recessed: s.paint.is_some_and(|p| p.recessed),
+            })
+            .collect()
+    }
+
     #[cfg(test)]
     pub(super) fn handle(&self, node: NodeId) -> Handle {
         self.surfaces[&node].handle.clone()
@@ -148,6 +281,30 @@ impl Registry {
         }
     }
 
+    /// Track the build's `tk-plate` marker on an element.
+    pub fn plate_marker(&mut self, node: NodeId, present: bool) {
+        self.set_plate(node, |p| p.marked = present);
+    }
+
+    /// Track an element's `class` (the fallback: a `material-*` token makes
+    /// it a plate). Elements the build marked skip the scan.
+    pub fn plate_class(&mut self, node: NodeId, class: Option<&str>) {
+        if self.plates.get(&node).is_some_and(|p| p.marked) {
+            return;
+        }
+        let present = class.is_some_and(has_material_class);
+        self.set_plate(node, |p| p.classed = present);
+    }
+
+    fn set_plate(&mut self, node: NodeId, change: impl FnOnce(&mut Plate)) {
+        let plate = self.plates.entry(node).or_default();
+        change(plate);
+        if !plate.marked && !plate.classed {
+            self.plates.remove(&node);
+            self.seen.remove(&node);
+        }
+    }
+
     /// The layout pass. `doc` must be resolved (styles and layout current).
     pub fn bind(&mut self, doc: &BaseDocument) {
         let live = |id: NodeId| {
@@ -157,13 +314,22 @@ impl Registry {
         // Forget nodes Blitz has dropped; keep detached ones (they may return).
         self.surfaces.retain(|id, _| doc.get_node(*id).is_some());
         self.members.retain(|id| doc.get_node(*id).is_some());
+        self.plates.retain(|id, _| doc.get_node(*id).is_some());
+        self.seen.retain(|id, _| doc.get_node(*id).is_some());
 
         let mut groups: HashMap<&str, NodeId> = HashMap::new();
+        // Materials layers by region (the element holding the layer).
+        let mut regions: HashMap<NodeId, NodeId> = HashMap::new();
         let mut boxes: HashMap<NodeId, [f32; 4]> = HashMap::new();
         for &id in self.surfaces.keys() {
             if let (Some(node), Some(rect)) = (live(id), doc.get_client_bounding_rect(id)) {
                 if let Some(group) = attr(node, "group") {
                     groups.insert(group, id);
+                }
+                if attr(node, "materials").is_some()
+                    && let Some(region) = node.parent
+                {
+                    regions.insert(region, id);
                 }
                 boxes.insert(
                     id,
@@ -227,12 +393,15 @@ impl Registry {
                         .max(0.0),
                 });
                 lists.entry(surface).or_default().push((
-                    (shape.sub, attach.is_some(), id),
+                    (shape.sub, attach.is_some(), 0, id),
                     shape,
                     animate,
                     attach,
                 ));
             }
+        }
+        if !regions.is_empty() {
+            self.place_plates(doc, &regions, &boxes, &mut lists);
         }
         // Depth: ancestors that directly contain another registered surface
         // element (a `Surface` component's root holds its `<tk-surface>`).
@@ -262,7 +431,7 @@ impl Registry {
             resolve_attached(&mut list);
             let next: Vec<(NodeId, Shape)> = list
                 .iter()
-                .map(|((_, _, node), shape, ..)| (*node, shape.clone()))
+                .map(|((_, _, _, node), shape, ..)| (*node, shape.clone()))
                 .collect();
             if next != entry.last {
                 let resized = entry.size.is_some_and(|s| s != size);
@@ -270,7 +439,7 @@ impl Registry {
                 // and its own box changed.
                 let animate: Vec<bool> = list
                     .iter()
-                    .map(|((_, _, node), shape, wants, _)| {
+                    .map(|((_, _, _, node), shape, wants, _)| {
                         *wants
                             && !resized
                             && entry.last.iter().any(|(n, old)| n == node && old != shape)
@@ -286,6 +455,89 @@ impl Registry {
             entry.size = Some(size);
         }
     }
+
+    /// Plates into the lists of their regions' layers (see "Plates").
+    fn place_plates(
+        &mut self,
+        doc: &BaseDocument,
+        regions: &HashMap<NodeId, NodeId>,
+        boxes: &HashMap<NodeId, [f32; 4]>,
+        lists: &mut HashMap<NodeId, Vec<Placed>>,
+    ) {
+        for &id in self.plates.keys() {
+            let Some(node) = doc
+                .get_node(id)
+                .filter(|n| n.flags.is_in_document() && n.element_data().is_some())
+            else {
+                continue;
+            };
+            let Some(rect) = doc.get_client_bounding_rect(id) else {
+                continue;
+            };
+            let (w, h) = (rect.width as f32, rect.height as f32);
+            if w <= 0.0 || h <= 0.0 {
+                continue; // not rendered (display: none)
+            }
+            // The nearest region, starting at the plate itself (a `Sheet`
+            // with its own material draws in its own layer), and the plate's
+            // depth in the document (outer plates paint first).
+            let mut layer = None;
+            let mut depth = 0u32;
+            let mut current = Some(id);
+            while let Some(at) = current {
+                if layer.is_none() {
+                    layer = regions.get(&at).copied();
+                }
+                depth += 1;
+                current = doc.get_node(at).and_then(|n| n.parent);
+            }
+            let Some(layer) = layer else { continue };
+            let origin = boxes[&layer];
+            let local = [rect.x as f32 - origin[0], rect.y as f32 - origin[1], w, h];
+            // Out of the layer's box (scrolled away): nothing to draw.
+            if local[0] >= origin[2]
+                || local[1] >= origin[3]
+                || local[0] + w <= 0.0
+                || local[1] + h <= 0.0
+            {
+                continue;
+            }
+            let Some(style) = node.primary_styles().map(|s| (*s).clone()) else {
+                continue;
+            };
+            let look = match self.seen.get(&id) {
+                Some(seen)
+                    if Style::ptr_eq(&seen.style, &style)
+                        && seen.width == w
+                        && seen.height == h =>
+                {
+                    seen.look
+                }
+                _ => {
+                    let look = material_of(&style, w);
+                    self.seen.insert(
+                        id,
+                        Seen {
+                            style,
+                            look,
+                            width: w,
+                            height: h,
+                        },
+                    );
+                    look
+                }
+            };
+            let Some((paint, radii)) = look else { continue };
+            let shape = Shape {
+                paint: Some(paint),
+                ..Shape::rect(false, local, radii)
+            };
+            lists
+                .entry(layer)
+                .or_default()
+                .push(((false, false, depth, id), shape, false, None));
+        }
+    }
 }
 
 /// Replace each attached member's shape by its exact outline against the
@@ -294,7 +546,7 @@ impl Registry {
 fn resolve_attached(list: &mut [Placed]) {
     let targets: Vec<Shape> = list
         .iter()
-        .filter(|((sub, attached, _), s, ..)| !sub && !attached && s.poly.is_none())
+        .filter(|((sub, attached, ..), s, ..)| !sub && !attached && s.poly.is_none())
         .map(|(_, s, ..)| s.clone())
         .collect();
     for (_, shape, _, attach) in list.iter_mut() {

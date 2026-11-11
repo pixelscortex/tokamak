@@ -23,6 +23,9 @@ blitz-html = { version = "=0.3.0-beta.4", default-features = false }
 blitz-traits = "=0.3.0-beta.4"
 blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard", "custom-widget"] }
 blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
+# Stylo itself (blitz-dom's style engine, already in the lock graph): the
+# materials binding reads computed border radii (surface/bind.rs).
+style = { package = "stylo", version = "=0.22.0" }
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
 # Already in the lock graph through anyrender/vello; surfaces build image brushes.

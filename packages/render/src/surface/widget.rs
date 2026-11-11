@@ -53,6 +53,9 @@ pub(super) struct Surface {
     border_var: Option<String>,
     /// Address of the computed style the colours were last resolved from.
     resolved_for: usize,
+    /// Materials layer only: the part of the box its plates cover, device
+    /// px (x, y, w, h), as last rendered (see `crop`).
+    crop: Option<[u32; 4]>,
     #[cfg(feature = "surface-demo")]
     demo: super::demo::Driver,
 }
@@ -74,6 +77,7 @@ impl Surface {
             fill_var: None,
             border_var: None,
             resolved_for: 0,
+            crop: None,
             #[cfg(feature = "surface-demo")]
             demo: Default::default(),
         }
@@ -307,6 +311,23 @@ impl Widget for Surface {
         if let Some(next) = self.demo.shapes(width, height, scale, &self.shown) {
             self.shown = next;
         }
+        // A materials layer renders only the part of its box its plates
+        // cover (most of a region is empty), and nothing at all without them.
+        let crop = if self.look.layered {
+            match crop(&self.shown, &self.look, width, height, scale as f32) {
+                Some(crop) => Some(crop),
+                None => {
+                    if let Some(gpu) = &mut self.gpu {
+                        gpu.release(render_ctx);
+                    }
+                    self.crop = None;
+                    stats::record(started.elapsed(), 0, active);
+                    return Scene::new();
+                }
+            }
+        } else {
+            None
+        };
         if self.gpu.is_none() {
             // Same policy as shell.rs for a software adapter: no silent
             // fallback, the product renders surfaces on the GPU only.
@@ -326,19 +347,72 @@ impl Widget for Surface {
             index = index_keys(self.shown.len());
             &index
         };
+        let moved;
+        let (shapes, [x, y, width, height]) = match crop {
+            Some(c) => {
+                // Texture pixels are whole device pixels of the box, so
+                // moving the crop's origin makes every pixel stale.
+                if self.crop.is_some_and(|old| old[..2] != c[..2]) {
+                    gpu.invalidate();
+                }
+                self.crop = Some(c);
+                let s = scale as f32;
+                let (dx, dy) = (-(c[0] as f32) / s, -(c[1] as f32) / s);
+                moved = self
+                    .shown
+                    .iter()
+                    .map(|shape| shape.translated(dx, dy))
+                    .collect::<Vec<_>>();
+                (moved.as_slice(), c)
+            }
+            None => (self.shown.as_slice(), [0, 0, width, height]),
+        };
         let dirty = gpu.update(
             render_ctx,
             keys,
-            &self.shown,
+            shapes,
             &self.look,
             width,
             height,
             scale as f32,
         );
-        let scene = gpu.scene(width, height);
+        let scene = gpu.scene(width, height, [x, y]);
         stats::record(started.elapsed(), dirty, active);
         scene
     }
+}
+
+/// Grid (device px) the crop of a materials layer snaps to, so that it
+/// changes rarely (a scroll moves plates every frame; their crop moves only
+/// when they cross a grid line, or enter or leave the box).
+const CROP_GRID: u32 = 64;
+
+/// The part of a `width` x `height` device px box that `shapes` can paint
+/// (their influence, see `tiles`), snapped out to `CROP_GRID` and clipped to
+/// the box; None if they paint none of it.
+pub(super) fn crop(
+    shapes: &[Shape],
+    look: &Look,
+    width: u32,
+    height: u32,
+    scale: f32,
+) -> Option<[u32; 4]> {
+    let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+    for shape in shapes {
+        let [x0, y0, x1, y1] = super::tiles::influence(look, shape);
+        bounds = [
+            bounds[0].min(x0),
+            bounds[1].min(y0),
+            bounds[2].max(x1),
+            bounds[3].max(y1),
+        ];
+    }
+    let grid = CROP_GRID as f32;
+    let down = |v: f32, max: u32| ((v * scale / grid).floor() * grid).clamp(0.0, max as f32) as u32;
+    let up = |v: f32, max: u32| ((v * scale / grid).ceil() * grid).clamp(0.0, max as f32) as u32;
+    let (x0, y0) = (down(bounds[0], width), down(bounds[1], height));
+    let (x1, y1) = (up(bounds[2], width), up(bounds[3], height));
+    (x1 > x0 && y1 > y0).then(|| [x0, y0, x1 - x0, y1 - y0])
 }
 
 /// The CSS text of custom property `--name` in the computed style (theme

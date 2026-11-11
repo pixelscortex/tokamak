@@ -132,6 +132,49 @@ once per frame from all surfaces' fields. Each surface's pass would sample
 that map for contact shading. The hook point is the atlas pass in
 `frame::end_frame`, which already runs once per frame before Vello.
 
+## Plates (materials from classes)
+
+For things that are each one plate (keycaps, trays, chips, cards) there is a
+lighter way than one `Surface` per element: a plain element with a
+`material-*` utility is a **plate**, and one **materials layer** per region
+draws every plate of that region.
+
+```tsx
+<div class="material-tray flex gap-[3px] rounded-[10px] p-[3px]">
+  <button class="material-key active:material-key-pressed rounded-[7px] px-3.5">Deny</button>
+  <button class="material-key-bright active:bevel-1 rounded-[7px] px-3.5">Allow once</button>
+</div>
+```
+
+- **Material.** The utilities (`packages/ui/src/materials.css`) set three
+  registered, non-inherited custom properties: `--tk-fill` (a theme colour;
+  without it nothing is drawn), `--tk-bevel` (CSS px) and `--tk-elevation`
+  (`raised` | `recessed`). The layout pass reads them from the element's
+  computed style, so states are plain CSS variants: `hover:`, `active:`,
+  `aria-pressed:material-key-pressed`, `active:bevel-1`. No JS state, no
+  attribute.
+- **Shape.** The element's border box with its computed `border-radius`
+  (`rounded-*`; elliptical corners are drawn circular).
+- **Layer.** `<tk-surface materials>` draws the plates of the element that
+  holds it (its parent): every plate whose nearest such element, starting
+  at the plate itself, is that parent. Shapes in a layer do not fuse: each
+  is shaded with its own material and painted over the ones before it, outer
+  elements first (a tray, then the caps in it), then in document order. All
+  of a region's plates paint below all of its content.
+- **Finding plates.** The render host tracks plates when attributes arrive
+  (`wire.rs`), never by scanning the document: an element is a plate if its
+  `class` has a `material-*` token (bare or behind variants).
+- **Cost.** A layer renders only the part of its box its plates reach,
+  snapped out to a 64 device px grid, and nothing (no texture) without
+  plates; plates outside the layer's box are skipped. A plate's material is
+  re-read only when Stylo gives it a new computed style or its box changes
+  size; otherwise the pass costs a pointer compare and a box read per plate.
+  Static plates request no frames and re-render nothing; a pressed key
+  re-renders its own area.
+
+`Surface`, `Surface.Union` and `Surface.Subtract` remain the way to make
+fused shapes, joins and cuts; plates are separate pieces.
+
 ## How it stays cheap
 
 - **Caching.** Each surface keeps its rendered texture. A paint with nothing

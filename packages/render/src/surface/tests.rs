@@ -802,3 +802,54 @@ mod binding {
         }
     }
 }
+
+/// Plates are found by a `material-*` utility in `class`, bare or behind
+/// variants, and by nothing else (the run-time fallback for classes the
+/// build cannot see).
+#[test]
+fn material_classes_are_found_behind_variants() {
+    use super::bind::has_material_class;
+    for class in [
+        "material-key",
+        "flex material-tray rounded-[10px]",
+        "active:material-key-pressed px-2",
+        "aria-pressed:hover:material-key-pressed",
+        "!material-key",
+    ] {
+        assert!(has_material_class(class), "{class}");
+    }
+    for class in ["", "flex gap-2", "materials", "text-material-x", "bevel-1"] {
+        assert!(!has_material_class(class), "{class}");
+    }
+}
+
+/// A materials layer renders only the grid-snapped part of its box that its
+/// plates reach, clipped to the box, and nothing without plates.
+#[test]
+fn a_materials_layer_crops_to_its_plates() {
+    use super::widget::crop;
+    let look = Look {
+        layered: true,
+        ..Look::default()
+    };
+    let cap = Shape::rect(false, [100.0, 40.0, 60.0, 30.0], [7.0; 4]);
+    // Scale 2: influence 100 - 4 = 96 .. 164 CSS px wide -> 192..328 device
+    // px, snapped out to 64: 192..384.
+    assert_eq!(
+        crop(&[cap.clone()], &look, 2000, 1000, 2.0),
+        Some([192, 64, 192, 128])
+    );
+    // Clipped at the box edge (a plate scrolled half out of view).
+    let edge = Shape::rect(false, [-20.0, 980.0, 60.0, 30.0], [0.0; 4]);
+    assert_eq!(
+        crop(&[edge], &look, 2000, 1000, 1.0),
+        Some([0, 960, 64, 40])
+    );
+    assert_eq!(crop(&[], &look, 2000, 1000, 2.0), None);
+    // Moving a plate by a few px inside one grid cell keeps the crop.
+    let nudged = Shape::rect(false, [102.0, 41.0, 60.0, 30.0], [7.0; 4]);
+    assert_eq!(
+        crop(&[cap], &look, 2000, 1000, 2.0),
+        crop(&[nudged], &look, 2000, 1000, 2.0)
+    );
+}

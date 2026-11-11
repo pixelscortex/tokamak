@@ -171,6 +171,17 @@ impl Tree {
                     if name == "surface-groups" {
                         self.surfaces.member(self.native[&id], value.is_some());
                     }
+                    // Plates (surface/bind.rs, "Plates"): the build's marker,
+                    // and the `class` scan for classes built at run time.
+                    match name.as_str() {
+                        "tk-plate" => self
+                            .surfaces
+                            .plate_marker(self.native[&id], value.is_some()),
+                        "class" => self
+                            .surfaces
+                            .plate_class(self.native[&id], value.as_deref()),
+                        _ => {}
+                    }
                     let attribute = QualName::new(None, Namespace::from(""), name.into());
                     if let Some(value) = value {
                         dom.set_attribute(self.native[&id], attribute, &value);

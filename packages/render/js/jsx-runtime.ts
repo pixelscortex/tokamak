@@ -66,6 +66,10 @@ export namespace JSX {
     "surface-slant"?: string;
     "surface-animate"?: true;
     "surface-attach"?: "left" | "right";
+    /** A plate: drawn by its region's materials layer from its computed
+     * `material-*` style. Added by the build to elements whose static `class`
+     * has a `material-*` utility; authors do not write it. */
+    "tk-plate"?: true;
     /** With `WindowOptions::custom_titlebar`: pressing here drags the window. */
     "window-drag"?: true;
     "window-no-drag"?: true;
@@ -103,6 +107,10 @@ export namespace JSX {
     "border-align"?: "inside" | "center" | "outside";
     "border-lit"?: string | number;
     "border-mix"?: number;
+    /** Materials layer: draws the plates (`material-*` elements) of the
+     * region that holds it (its parent), each with its own computed material,
+     * no fusing. Written by `@tokamak/ui`'s shell regions and `Sheet`. */
+    materials?: true;
   }
 
   /** `<tk-icon>` (render/src/icon.rs): SVG path data drawn natively. */

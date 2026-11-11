@@ -22,6 +22,8 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
+#[cfg(feature = "surface-demo")]
+pub use surface::MaterialShape;
 /// Embedders that paint a document without `launch_window` (e.g. offscreen
 /// rendering) must call this once per frame after `paint_scene`; see
 /// `surface/frame.rs`.
@@ -99,6 +101,13 @@ impl NativeDocument {
     /// every redraw. Does nothing when no member box or setting changed.
     pub fn layout_surfaces(&mut self) {
         self.bridge.tree.surfaces.bind(&self.html.inner());
+    }
+
+    /// Lab probe (surface-demo): the shapes the last layout pass handed to
+    /// the `<tk-surface>` element `node`, with each shape's own material.
+    #[cfg(feature = "surface-demo")]
+    pub fn surface_shapes(&self, node: blitz_traits::NodeId) -> Vec<surface::MaterialShape> {
+        self.bridge.tree.surfaces.shapes_of(node)
     }
 
     pub fn take_error(&mut self) -> Option<Error> {

@@ -168,6 +168,18 @@ pub(super) struct Shape {
     pub join: f32,
     pub gap: f32,
     pub poly: Option<Arc<Poly>>,
+    /// Own look, for a materials layer (`Look::layered`): each shape is
+    /// shaded on its own and painted over the ones before it.
+    pub paint: Option<Paint>,
+}
+
+/// A shape's own material in a materials layer, read from the member's
+/// computed `--tk-fill`, `--tk-bevel` and `--tk-elevation`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Paint {
+    pub fill: [f32; 4],
+    pub bevel: f32,
+    pub recessed: bool,
 }
 
 impl Shape {
@@ -179,6 +191,7 @@ impl Shape {
             join: -1.0,
             gap: -1.0,
             poly: None,
+            paint: None,
         }
     }
 
@@ -187,6 +200,26 @@ impl Shape {
             rect: poly.bounds(),
             poly: Some(Arc::new(poly)),
             ..Shape::rect(sub, [0.0; 4], [0.0; 4])
+        }
+    }
+
+    /// The same shape moved by (dx, dy) CSS px.
+    pub fn translated(&self, dx: f32, dy: f32) -> Shape {
+        let [x, y, w, h] = self.rect;
+        // Moving keeps a valid polygon valid; keep the old one if rounding
+        // ever says otherwise.
+        let poly = self.poly.as_ref().map(|p| {
+            let points = p
+                .points
+                .iter()
+                .map(|q| [q[0] + dx, q[1] + dy, q[2]])
+                .collect();
+            Poly::new(points).map(Arc::new).unwrap_or_else(|| p.clone())
+        });
+        Shape {
+            rect: [x + dx, y + dy, w, h],
+            poly,
+            ..self.clone()
         }
     }
 
@@ -217,6 +250,7 @@ impl Shape {
                 mix(a.gap, b.gap)
             },
             poly,
+            paint: b.paint,
         }
     }
 }
@@ -359,6 +393,10 @@ pub(super) struct Look {
     /// this fraction of the way to white (a hairline "strength"), instead of
     /// `border_colour`. Follows the fill, so one number tunes every material.
     pub border_mix: f32,
+    /// `materials`: a materials layer. Shapes are not combined into one
+    /// field; each is shaded with its own `Paint` and painted over the
+    /// previous ones (see `bind`, "Materials").
+    pub layered: bool,
 }
 
 /// `var(--name)` -> `name` (custom property names are stored without `--`).
@@ -382,6 +420,7 @@ impl Default for Look {
             border_align: Align::Inside,
             border_lit: 0.0,
             border_mix: -1.0,
+            layered: false,
         }
     }
 }
@@ -432,6 +471,7 @@ impl Look {
                 }
             }
             "border-mix" => self.border_mix = number(-1.0).min(1.0),
+            "materials" => self.layered = value.is_some(),
             _ => return false,
         }
         true

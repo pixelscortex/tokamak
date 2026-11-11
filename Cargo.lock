@@ -4866,6 +4866,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "stylo",
  "winit",
 ]
 

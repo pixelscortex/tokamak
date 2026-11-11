@@ -822,3 +822,302 @@ fn sections_teleport_into_the_shell_regions() {
     assert!(title(&doc));
     assert!(doc.take_error().is_none());
 }
+
+// ---------------------------------------------------------------- plates (materials from classes)
+
+/// Pointer down (`up` false) or up over the centre of element `name`, without
+/// the other half of a click: `:active` holds between the two.
+fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
+    use blitz_traits::events::*;
+    use keyboard_types::Modifiers;
+    doc.inner_mut().resolve(0.0);
+    let rect = doc
+        .inner()
+        .get_client_bounding_rect(support::id(doc, name))
+        .unwrap();
+    let (x, y) = (
+        (rect.x + rect.width / 2.0) as f32,
+        (rect.y + rect.height / 2.0) as f32,
+    );
+    let event = BlitzPointerEvent {
+        id: BlitzPointerId::Mouse,
+        is_primary: true,
+        coords: PointerCoords {
+            page_x: x,
+            page_y: y,
+            screen_x: x,
+            screen_y: y,
+            client_x: x,
+            client_y: y,
+        },
+        button: MouseEventButton::Main,
+        buttons: if up {
+            MouseEventButtons::None
+        } else {
+            MouseEventButtons::Primary
+        },
+        mods: Modifiers::empty(),
+        details: Default::default(),
+        element: Default::default(),
+        active_pointers: Default::default(),
+    };
+    doc.handle_ui_event(UiEvent::PointerMove(event.clone()));
+    doc.handle_ui_event(if up {
+        UiEvent::PointerUp(event)
+    } else {
+        UiEvent::PointerDown(event)
+    });
+    doc.inner_mut().resolve(0.0);
+    doc.layout_surfaces();
+}
+
+/// The materials layer of a region: the `<tk-surface materials>` child of
+/// element `region`.
+fn layer_of(doc: &NativeDocument, region: &str) -> blitz_traits::NodeId {
+    doc.inner()
+        .query_selector(&format!("#{region} > tk-surface[materials]"))
+        .unwrap()
+        .unwrap()
+}
+
+/// The layer's shape for element `name` (matched by its box).
+fn material_shape(
+    doc: &NativeDocument,
+    layer: blitz_traits::NodeId,
+    name: &str,
+) -> render::MaterialShape {
+    let origin = doc.inner().get_client_bounding_rect(layer).unwrap();
+    let rect = doc
+        .inner()
+        .get_client_bounding_rect(support::id(doc, name))
+        .unwrap();
+    let want = [
+        (rect.x - origin.x) as f32,
+        (rect.y - origin.y) as f32,
+        rect.width as f32,
+        rect.height as f32,
+    ];
+    doc.surface_shapes(layer)
+        .into_iter()
+        .find(|s| s.rect.iter().zip(&want).all(|(a, b)| (a - b).abs() < 0.01))
+        .unwrap_or_else(|| panic!("{name}: no shape at {want:?}"))
+}
+
+fn hex(c: [f32; 4]) -> String {
+    let [r, g, b, _] = c.map(|v| (v * 255.0).round() as u8);
+    format!("#{r:02x}{g:02x}{b:02x}")
+}
+
+/// Keycaps from CSS: one materials layer draws every `material-*` element
+/// of its region, each with its computed fill, bevel, elevation and
+/// `border-radius` (from `rounded-*`, no attribute). Pressed states defined
+/// only in CSS change the bound shape: `active:` while the pointer is down,
+/// `aria-pressed:` when a click toggles it, `active:bevel-1` the bevel alone;
+/// and the document settles (requests no frames) after each change.
+#[test]
+fn css_materials_follow_computed_style_and_pressed_states() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-css-keycaps");
+    doc.layout_surfaces();
+    let layer = layer_of(&doc, "lab-css-keycaps");
+    let shapes = doc.surface_shapes(layer);
+    // 4 trays (one per row, two in the shortcut row) and 3 + 4 + 4 caps.
+    assert_eq!(shapes.len(), 4 + 11, "{shapes:#?}");
+    // Outer elements first: the trays paint below the caps they hold.
+    assert!(
+        shapes[..4].iter().all(|s| s.recessed),
+        "trays first: {shapes:#?}"
+    );
+    let tray = &shapes[0];
+    assert_eq!(tray.radii, [10.0; 4], "rounded-[10px] from computed style");
+    assert_eq!(hex(tray.fill.unwrap()), "#080808");
+    assert_eq!(tray.bevel, Some(1.5));
+
+    let deny = material_shape(&doc, layer, "lab-css-key-deny");
+    assert_eq!(deny.radii, [7.0; 4]);
+    assert_eq!(hex(deny.fill.unwrap()), "#2a2a2a");
+    assert_eq!((deny.bevel, deny.recessed), (Some(2.5), false));
+    assert!(!doc.inner().is_animating());
+
+    // `active:material-key-pressed`, CSS only (no JS state): down, then up.
+    pointer_half(&mut doc, "lab-css-key-deny", false);
+    let down = material_shape(&doc, layer, "lab-css-key-deny");
+    assert_eq!(hex(down.fill.unwrap()), "#252525", "pressed while :active");
+    assert_eq!((down.bevel, down.recessed), (Some(2.0), true));
+    assert!(
+        !doc.inner().is_animating(),
+        "a state change needs one frame"
+    );
+    pointer_half(&mut doc, "lab-css-key-deny", true);
+    assert_eq!(
+        material_shape(&doc, layer, "lab-css-key-deny"),
+        deny,
+        "released"
+    );
+
+    // `active:bevel-1`: only the bevel changes.
+    pointer_half(&mut doc, "lab-css-key-once", false);
+    let once = material_shape(&doc, layer, "lab-css-key-once");
+    assert_eq!((once.bevel, once.recessed), (Some(1.0), false));
+    assert_eq!(hex(once.fill.unwrap()), "#e8e8ea");
+    pointer_half(&mut doc, "lab-css-key-once", true);
+    assert_eq!(
+        material_shape(&doc, layer, "lab-css-key-once").bevel,
+        Some(2.5)
+    );
+
+    // `aria-pressed:material-key-pressed`: a click toggles the attribute.
+    pointer_half(&mut doc, "lab-css-key-always", false);
+    pointer_half(&mut doc, "lab-css-key-always", true);
+    assert_eq!(
+        support::attr(&doc, "lab-css-key-always", "aria-pressed").as_deref(),
+        Some("true")
+    );
+    let toggled = material_shape(&doc, layer, "lab-css-key-always");
+    assert_eq!((toggled.bevel, toggled.recessed), (Some(2.0), true));
+    assert!(!doc.inner().is_animating());
+    assert!(doc.take_error().is_none());
+}
+
+/// The layout pass with the 300-cap CSS grid on screen and nothing changing:
+/// every redraw runs it, so this is the static cost of change detection
+/// (one computed-style pointer compare and one box read per member).
+#[test]
+fn css_material_grid_binding_pass_cost() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "surfaces");
+    click(&mut doc, "lab-keycap-grid-mode-css");
+    scroll_to(&mut doc, "lab-keycap-grid");
+    doc.layout_surfaces();
+    let layer = layer_of_grid(&doc);
+    assert_eq!(doc.surface_shapes(layer).len(), 301, "tray + 300 caps");
+    let t = Instant::now();
+    for _ in 0..200 {
+        doc.layout_surfaces();
+    }
+    println!(
+        "binding pass, surfaces view with the 300-cap css grid, static: {:.1} us",
+        t.elapsed().as_secs_f64() * 1e6 / 200.0
+    );
+    assert!(!doc.inner().is_animating());
+    assert!(doc.take_error().is_none());
+}
+
+fn layer_of_grid(doc: &NativeDocument) -> blitz_traits::NodeId {
+    doc.inner()
+        .query_selector("#lab-keycap-grid tk-surface[materials]")
+        .unwrap()
+        .unwrap()
+}
+
+/// Both keycap cases side by side (Surface components above, CSS classes
+/// below), at rest and with caps pressed through CSS state.
+#[test]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
+fn capture_css_keycaps() {
+    let dir = capture_dir();
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    open(&mut doc, "surfaces");
+    scroll_to(&mut doc, "lab-keycaps");
+    out.save_settled(&mut doc, &dir, "css-keycaps-rest");
+    pointer_half(&mut doc, "lab-css-key-always", false);
+    pointer_half(&mut doc, "lab-css-key-always", true);
+    pointer_half(&mut doc, "lab-css-key-deny", false);
+    out.save_settled(&mut doc, &dir, "css-keycaps-pressed");
+    pointer_half(&mut doc, "lab-css-key-deny", true);
+    click(&mut doc, "lab-keycap-grid-mode-css");
+    scroll_to(&mut doc, "lab-keycap-grid");
+    out.save_settled(&mut doc, &dir, "css-keycap-grid");
+    click(&mut doc, "lab-keycap-grid-mode-surface");
+    scroll_to(&mut doc, "lab-keycap-grid");
+    out.save_settled(&mut doc, &dir, "surface-keycap-grid");
+    assert!(doc.take_error().is_none());
+}
+
+/// 300 caps on screen, `css` (one materials layer)
+/// against `surface` (300 `<Surface material="key">`). Static: the document
+/// must settle and request no frames; then 100 repaints with nothing
+/// changing. One cap changing state: a click toggles its pressed material,
+/// then the next frame is timed (40 toggles). Prints means; --nocapture.
+#[test]
+#[ignore = "GPU benchmark; run explicitly"]
+fn keycap_grid_bench() {
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    open(&mut doc, "surfaces");
+    let mean = |v: &[Duration]| v.iter().sum::<Duration>().as_secs_f64() * 1e3 / v.len() as f64;
+    for mode in ["off", "css", "surface", "css", "surface"] {
+        click(&mut doc, &format!("lab-keycap-grid-mode-{mode}"));
+        scroll_to(&mut doc, "lab-keycap-grid");
+        for _ in 0..10 {
+            out.frame(&mut doc);
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        for _ in 0..5 {
+            out.frame(&mut doc);
+        }
+        assert!(
+            !doc.inner().is_animating(),
+            "{mode}: static requests no frames"
+        );
+        let (mut totals, mut scenes, mut binds, mut work, mut dirty) =
+            (vec![], vec![], vec![], vec![], vec![]);
+        for _ in 0..100 {
+            let (w, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
+            let t = Instant::now();
+            doc.layout_surfaces();
+            binds.push(t.elapsed());
+            let (_, scene, total) = out.frame(&mut doc);
+            totals.push(total);
+            scenes.push(scene);
+            work.push(render::surface_paint_work() - w);
+            dirty.push(render::surface_dirty_pixels() - px);
+        }
+        println!(
+            "grid {mode} static: frame {:.2} ms, scene build {:.3} ms, surface paint {:.3} ms, \
+             binding pass {:.1} us, dirty {} px total",
+            mean(&totals),
+            mean(&scenes),
+            mean(&work),
+            mean(&binds) * 1e3,
+            dirty.iter().sum::<u64>(),
+        );
+        if mode == "off" {
+            continue;
+        }
+        let (mut totals, mut scenes, mut work, mut dirty, mut handle) =
+            (vec![], vec![], vec![], vec![], vec![]);
+        for i in 0..40 {
+            let cap = format!("lab-grid-cap-{}", 120 + i % 2);
+            let t = Instant::now();
+            // The click (JS handler, signal, attribute mutation) and the
+            // restyle and relayout it causes.
+            pointer_half(&mut doc, &cap, false);
+            pointer_half(&mut doc, &cap, true);
+            handle.push(t.elapsed());
+            let (w, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
+            let (_, scene, total) = out.frame(&mut doc);
+            totals.push(total);
+            scenes.push(scene);
+            work.push(render::surface_paint_work() - w);
+            dirty.push(render::surface_dirty_pixels() - px);
+            // Let any settle frames run out before the next toggle.
+            for _ in 0..4 {
+                out.frame(&mut doc);
+            }
+        }
+        println!(
+            "grid {mode} one cap toggled: frame {:.2} ms (worst {:.2}), scene build {:.3} ms, \
+             surface paint {:.3} ms, dirty {:.1} kpx/frame; click+restyle+bind {:.2} ms",
+            mean(&totals),
+            totals.iter().max().unwrap().as_secs_f64() * 1e3,
+            mean(&scenes),
+            mean(&work),
+            dirty.iter().sum::<u64>() as f64 / dirty.len() as f64 / 1e3,
+            mean(&handle),
+        );
+    }
+    assert!(doc.take_error().is_none());
+}
