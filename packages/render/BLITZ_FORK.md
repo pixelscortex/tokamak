@@ -9,12 +9,26 @@ changed Blitz. The list of changes and their status lives in Linear, issue
 TKM-76 ("Blitz fork: rules and list of changes"), with one sub-issue per
 change. If this file and TKM-76 differ, TKM-76 wins; fix this file.
 
-Status: the fork repository is `github.com/pixelscortex/blitz` and holds none
-of our changes yet. Its `main` follows upstream `main`. The branch
-`tokamak/base-0.3.0-beta.4` and the tag `v0.3.0-beta.4` mark upstream commit
-`92b11f1`, the release Tokamak uses; every change of ours is a branch on top
-of that base. Tokamak still uses Blitz `=0.3.0-beta.4` from crates.io across
-the workspace.
+Status: the fork repository is `github.com/pixelscortex/blitz`. Its `main`
+follows upstream `main`. The branch `tokamak/base-0.3.0-beta.4` and the tag
+`v0.3.0-beta.4` mark upstream commit `92b11f1`, the release Tokamak uses;
+every change of ours is a branch on top of that base.
+
+The branch `feature/ui-shell` builds against the fork, as a trial: the root
+`Cargo.toml` takes `blitz-dom`, `blitz-traits` and `debug_timer` from the
+fork's branch `blitz/widget-event-result` at commit
+`99c448f4d0100c604d0e807ddba429de60680cb0` (the base plus change 1), through
+`[patch.crates-io]` git entries pinned by `rev`. Only `blitz-dom` differs
+from the release; the other two are named so the build has one copy of each
+(`stylo_taffy` follows `blitz-dom` without an entry). `blitz-html`,
+`blitz-paint` and `blitz-shell` still come from crates.io at
+`=0.3.0-beta.4` and use the fork's `blitz-dom`. No Blitz source is checked
+in here. Every other branch still uses Blitz `=0.3.0-beta.4` from crates.io
+alone.
+
+To move the pin: push the new commit to the fork, replace the `rev` in all
+three entries, run `cargo update -p blitz-dom` once and commit `Cargo.lock`
+(builds use `--locked`).
 
 Pushing to the fork: use SSH (`git@github.com:pixelscortex/blitz.git`). Blitz's
 history contains GitHub workflow files, and an HTTPS push with the `gh` token
