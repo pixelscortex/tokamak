@@ -1345,3 +1345,69 @@ fn keycap_grid_bench() {
     }
     assert!(doc.take_error().is_none());
 }
+
+/// Plates bound in every materials layer of the document: (layers, plates).
+fn plate_count(doc: &NativeDocument) -> (usize, usize) {
+    let layers = doc
+        .inner()
+        .query_selector_all("tk-surface[materials]")
+        .unwrap();
+    let plates = layers.iter().map(|&l| doc.surface_shapes(l).len()).sum();
+    (layers.len(), plates)
+}
+
+/// Every lab view as it opens (the Stress view stopped on variant A): the
+/// number of plates its materials layers draw and its static frame cost,
+/// forced repaints with nothing changing. Each view must settle, request no
+/// frames and re-render no pixel. Prints means; --nocapture.
+#[test]
+#[ignore = "GPU benchmark; run explicitly"]
+fn lab_views_bench() {
+    let mut doc = document(2.0, 900.0);
+    let mut out = Offscreen::new(2.0);
+    let mean = |v: &[Duration]| v.iter().sum::<Duration>().as_secs_f64() * 1e3 / v.len() as f64;
+    for view in ["chat", "components", "surfaces", "stress"] {
+        open(&mut doc, view);
+        for _ in 0..10 {
+            out.frame(&mut doc);
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        for _ in 0..5 {
+            out.frame(&mut doc);
+        }
+        assert!(
+            !doc.inner().is_animating(),
+            "{view}: static requests no frames"
+        );
+        let (layers, plates) = plate_count(&doc);
+        let (mut totals, mut scenes, mut binds, mut work, mut dirty) =
+            (vec![], vec![], vec![], vec![], vec![]);
+        for _ in 0..100 {
+            let (w, px) = (render::surface_paint_work(), render::surface_dirty_pixels());
+            let t = Instant::now();
+            doc.layout_surfaces();
+            binds.push(t.elapsed());
+            let (_, scene, total) = out.frame(&mut doc);
+            totals.push(total);
+            scenes.push(scene);
+            work.push(render::surface_paint_work() - w);
+            dirty.push(render::surface_dirty_pixels() - px);
+        }
+        println!(
+            "view {view}: {layers} layers, {plates} plates; static frame {:.2} ms, \
+             scene build {:.3} ms, surface paint {:.3} ms, binding pass {:.1} us, \
+             dirty {} px total",
+            mean(&totals),
+            mean(&scenes),
+            mean(&work),
+            mean(&binds) * 1e3,
+            dirty.iter().sum::<u64>(),
+        );
+        assert_eq!(
+            dirty.iter().sum::<u64>(),
+            0,
+            "{view}: static re-renders nothing"
+        );
+    }
+    assert!(doc.take_error().is_none());
+}
