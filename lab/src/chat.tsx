@@ -1,11 +1,14 @@
-/** Chat section: the design file's chat view with static sample content. The
- * thread title hangs from the top bar and the composer rises from the bottom,
- * both as shapes of window-base material fused into the shell's layers. */
-import { For, Show, createSignal } from "solid-js";
-import { Icon, Input } from "@tokamak/ui/elements";
-import { Shell, Surface } from "@tokamak/ui/components";
+/** Chat view: the design file's chat view with sample content (mocks.ts).
+ * The thread title hangs from the top bar and the real `Composer` rises
+ * from the bottom, both as shapes of window-base material fused into the
+ * shell's layers. Sending adds the message to the thread; `/todo` opens
+ * its command form. */
+import { For, createSignal } from "solid-js";
+import { Icon } from "@tokamak/ui/elements";
+import { Button, Composer, Shell, Surface } from "@tokamak/ui/components";
+import type { ComposerForm } from "@tokamak/ui/components";
 import { stroke } from "./icons";
-import { IconButton, SidebarHeader, SidebarLabel, SidebarRow } from "./kit";
+import * as mocks from "./mocks";
 
 /** Responsive layout, in plain CSS layout (no measuring):
  * - The reading column is at most 640 px wide and shrinks with the stage.
@@ -25,34 +28,12 @@ const COLUMN = "w-full min-w-0 max-w-[640px]";
  * names for Tailwind. */
 function lane(context: boolean) {
   return context
-    ? "pointer-events-none! flex w-full justify-center px-12 pr-[340px] max-[1200px]:pr-12"
-    : "pointer-events-none! flex w-full justify-center px-12";
+    ? "pointer-events-none! flex min-h-0 w-full justify-center px-12 pr-[340px] max-[1200px]:pr-12"
+    : "pointer-events-none! flex min-h-0 w-full justify-center px-12";
 }
 
 /** The context column: shown when toggled on and the window is wide. */
 const CONTEXT_SHOWN = "flex max-[1200px]:hidden";
-
-function ThreadList() {
-  const today = [
-    { label: "Weekend groceries", meta: "11:40" },
-    { label: "Read this lease PDF", meta: "09:12" },
-  ];
-  const earlier = [
-    { label: "Dentist, move to next week", meta: "Sun" },
-    { label: "Fastest free model?", meta: "Sat" },
-    { label: "Summarise receipts folder", meta: "Nov 4" },
-  ];
-  return (
-    <Shell.Sidebar>
-      <SidebarHeader title="Chat" action={stroke.filter} />
-      <SidebarLabel first>Today</SidebarLabel>
-      <SidebarRow label="Milk, and a Friday nudge" selected dot />
-      <For each={today}>{(row) => <SidebarRow label={row.label} meta={row.meta} />}</For>
-      <SidebarLabel>Earlier</SidebarLabel>
-      <For each={earlier}>{(row) => <SidebarRow label={row.label} meta={row.meta} />}</For>
-    </Shell.Sidebar>
-  );
-}
 
 /** The thread title, hanging from the top bar: base material with 14 px
  * bottom corners and 14 px fillets into the stage's top edge. Its sides lean
@@ -77,13 +58,13 @@ function TitleNotch(props: { slant: number; context: boolean }) {
               id="lab-chat-title"
               class="min-w-0 truncate text-[14px] leading-5 font-semibold tracking-[-0.01em] text-ink"
             >
-              Milk, and a Friday nudge
+              {mocks.thread.title}
             </span>
             <span class="size-[3px] shrink-0 rounded-full bg-ink-6" />
-            <span class="shrink-0 text-[12px] leading-4 text-ink-4">Today at 14:02</span>
+            <span class="shrink-0 text-[12px] leading-4 text-ink-4">{mocks.thread.started}</span>
             <span class="flex shrink-0 items-center gap-1.5">
               <span class="size-1.5 rounded-full bg-ink" />
-              <span class="text-[12px] leading-4 text-ink-2">Working, 14s</span>
+              <span class="text-[12px] leading-4 text-ink-2">{mocks.thread.status}</span>
             </span>
           </Surface.Union>
         </div>
@@ -92,76 +73,71 @@ function TitleNotch(props: { slant: number; context: boolean }) {
   );
 }
 
-/** The composer, rising from the bottom: base material with 18 px top
- * corners and 22 px fillets into the stage's bottom edge. The surface layer
- * paints below the stage's content, so the composer (and the title notch)
- * also carry an opaque base background over their box: a plate in the
- * bottom bar's own layer, which floats over the scroller, so messages
- * scrolling under them are hidden instead of showing through. */
-function Composer(props: { context: boolean }) {
-  const [draft, setDraft] = createSignal("");
+/** The composer, rising from the bottom (`docked`: base material with 18 px
+ * top corners and 22 px fillets into the stage's bottom edge), in the
+ * lane of the reading column. */
+function ChatComposer(props: { context: boolean; send: (text: string) => void }) {
+  const [model, setModel] = createSignal("openrouter/free");
+  const [chips, setChips] = createSignal(mocks.context.slice(0, 2));
+  const [form, setForm] = createSignal(false);
+  const [list, setList] = createSignal("inbox");
+  const [due, setDue] = createSignal("friday");
+  const todoForm = (): ComposerForm => ({
+    tag: "/todo",
+    placeholder: "Task title",
+    fields: [
+      { id: "list", label: "List", options: mocks.lists, value: list(), onChange: setList },
+      { id: "due", label: "Due", options: mocks.due, value: due(), onChange: setDue },
+    ],
+    onSubmit: (title) => {
+      setForm(false);
+      if (title) props.send(`/todo ${title}`);
+    },
+    onCancel: () => setForm(false),
+  });
   return (
     <Shell.BottomBar>
       <div class={lane(props.context)}>
-      <Surface.Union
-        id="lab-chat-composer-shape"
-        layer="base"
-        radius={[18, 18, 0, 0]}
-        join={22}
-        class={`pointer-events-auto flex ${COLUMN} flex-col gap-3.5 rounded-t-[18px] bg-base py-3.5 pr-2.5 pl-4`}
-      >
-        <div class="relative h-6">
-          <Input
-            id="lab-chat-composer"
-            aria-label="Reply"
-            defaultValue=""
-            onValueChange={setDraft}
-            class="h-6! w-full! rounded-none! border-0! bg-transparent! p-0! text-[15px]! leading-6! text-ink! outline-none!"
-          />
-          <Show when={draft() === ""}>
-            <span class="pointer-events-none absolute top-0 left-0 text-[15px] leading-6 text-ink-4">
-              Reply…
-            </span>
-          </Show>
-        </div>
-        <div class="flex items-center gap-0.5">
-          <div class="-ml-1.5 flex">
-            <IconButton d={stroke.paperclip} label="Attach" />
-            <IconButton d={stroke.atSign} label="Mention" />
-          </div>
-          <div class="flex-1" />
-          <div class="flex h-7 items-center gap-1 px-2.5">
-            <span class="font-data text-[11px] leading-4 text-ink-3">openrouter/free</span>
-            <Icon d={stroke.chevronDown} strokeWidth={2} class="size-3 text-ink-4" />
-          </div>
-          <button
-            aria-label="Stop"
-            class="flex size-7 items-center justify-center rounded-full border-0 bg-ink p-0"
-          >
-            <span class="size-[9px] rounded-[2px] bg-[#0a0a0b]" />
-          </button>
-        </div>
-      </Surface.Union>
+        <Composer
+          id="lab-chat-composer"
+          docked
+          class={`pointer-events-auto ${COLUMN}`}
+          placeholder="Reply…"
+          onSubmit={props.send}
+          models={mocks.models}
+          model={model()}
+          onModelChange={setModel}
+          context={chips()}
+          onRemoveContext={(id) => setChips(chips().filter((c) => c.id !== id))}
+          commands={mocks.commands}
+          onCommand={(command) => (command.name === "todo" ? setForm(true) : props.send(`/${command.name}`))}
+          form={form() ? todoForm() : undefined}
+        />
       </div>
     </Shell.BottomBar>
   );
 }
 
-function Messages() {
+/** A message the user sent, on the right. */
+function Bubble(props: { id?: string; text: string }) {
   return (
-    <div id="lab-chat-column" class={`flex ${COLUMN} flex-col pt-5 pb-[180px]`}>
+    <div class="flex justify-end pb-7">
+      <Surface id={props.id} material="chip" radius={12} class="max-w-[75%] min-w-0 px-3.5 py-2">
+        <p class="m-0 text-[15px] leading-6 tracking-[-0.006em] whitespace-pre-wrap text-ink">{props.text}</p>
+      </Surface>
+    </div>
+  );
+}
+
+function Messages(props: { sent: string[] }) {
+  return (
+    <div id="lab-chat-column" class={`flex ${COLUMN} flex-col pt-5 pb-[220px]`}>
       <div class="h-[52px] shrink-0" />
-      <div class="flex justify-end pb-7">
-        <Surface id="lab-chat-bubble" material="chip" radius={12} class="max-w-[75%] min-w-0 px-3.5 py-2">
-          <p class="m-0 text-[15px] leading-6 tracking-[-0.006em] text-ink">
-            Add a todo to buy milk and remind me Friday
-          </p>
-        </Surface>
-      </div>
+      <Bubble id="lab-chat-bubble" text={mocks.thread.ask} />
       <div class="flex h-6 items-center gap-2.5">
         <Icon d={stroke.check} class="size-4 text-ink-4" />
-        <span class="text-[13px] leading-4 text-ink-2">Created a task in Todo</span>
-        <span class="font-data text-[11px] leading-4 text-ink-5">0.4s</span>
+        <span class="text-[13px] leading-4 text-ink-2">{mocks.thread.tool.label}</span>
+        <span class="font-data text-[11px] leading-4 text-ink-5">{mocks.thread.tool.time}</span>
       </div>
       <div class="h-3 shrink-0" />
       <Surface id="lab-chat-card" material="card" radius={10} class="flex flex-col gap-2.5 px-4 pt-3.5 pb-4">
@@ -177,21 +153,21 @@ function Messages() {
         </div>
         <div class="flex items-center gap-3">
           <span class="size-4 shrink-0 rounded-full border-[1.5px] border-solid border-ink-4" />
-          <span class="min-w-0 flex-1 truncate text-[15px] leading-6 font-medium tracking-[-0.006em] text-ink">Buy milk</span>
-          <span class="shrink-0 text-[13px] leading-4 text-ink-2">Fri 13 Nov, 09:00</span>
+          <span class="min-w-0 flex-1 truncate text-[15px] leading-6 font-medium tracking-[-0.006em] text-ink">{mocks.thread.task.title}</span>
+          <span class="shrink-0 text-[13px] leading-4 text-ink-2">{mocks.thread.task.due}</span>
         </div>
       </Surface>
       <div class="h-6 shrink-0" />
       <div id="lab-chat-reply" class="flex flex-col gap-3.5 text-[15px] leading-[26px] tracking-[-0.006em] text-ink-body">
         <p class="m-0">
-          Done. <span class="font-semibold text-ink">Buy milk</span> is in your Todo inbox, due Friday
-          13 November at 09:00, and I’ll nudge you that morning.
+          Done. <span class="font-semibold text-ink">{mocks.thread.task.title}</span> {mocks.thread.reply[0]}
         </p>
         <p class="m-0">
-          You also have “Weekend groceries” from this morning with six open items. Want me to fold milk
-          into that list instead, so there is one shop to do<span class="text-ink"> ▏</span>
+          {mocks.thread.reply[1]}<span class="text-ink"> ▏</span>
         </p>
       </div>
+      <div class="h-7 shrink-0" />
+      <For each={props.sent}>{(text, i) => <Bubble id={`lab-chat-sent-${i()}`} text={text} />}</For>
     </div>
   );
 }
@@ -250,33 +226,38 @@ const NOTCH_SLANT = 22;
 
 export default function ChatView() {
   const [context, setContext] = createSignal(true);
+  const [sent, setSent] = createSignal<string[]>([]);
   return (
     <>
       <Shell.TopBar at="end">
-        <button class="flex h-7 items-center gap-1.5 rounded-sm border-0 bg-transparent px-2.5">
-          <Icon d={stroke.squarePen} class="size-4 text-ink-3" />
-          <span class="text-[13px] leading-4 font-medium text-ink-2">New chat</span>
-        </button>
-        <IconButton d={stroke.dots} label="More" />
-        <IconButton
+        <Button variant="ghost" size="sm">
+          <Icon d={stroke.squarePen} class="size-4" />
+          New chat
+        </Button>
+        <Button variant="ghost" size="icon" label="More">
+          <Icon d={stroke.dots} class="size-4" />
+        </Button>
+        <Button
           id="lab-chat-context-toggle"
-          d={stroke.sidebarRight}
+          variant="ghost"
+          size="icon"
           label="Toggle context"
-          active={context()}
+          pressed={context()}
           onClick={() => setContext(!context())}
-        />
+        >
+          <Icon d={stroke.sidebarRight} class="size-4" />
+        </Button>
       </Shell.TopBar>
-      <ThreadList />
       <TitleNotch slant={NOTCH_SLANT} context={context()} />
       <Shell.Stage>
         <div id="lab-chat" class="flex min-h-full">
           <div class="flex min-w-0 flex-1 flex-col items-center px-12">
-            <Messages />
+            <Messages sent={sent()} />
           </div>
           <ContextColumn shown={context()} />
         </div>
       </Shell.Stage>
-      <Composer context={context()} />
+      <ChatComposer context={context()} send={(text) => setSent([...sent(), text])} />
     </>
   );
 }

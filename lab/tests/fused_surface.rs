@@ -10,9 +10,10 @@
 //! Captures go to `$TK_CAPTURE_DIR` (default `/tmp/tkm-fused-poc`) as PNG.
 //!
 //! Markup that only these tests need lives in the lab's fixtures view
-//! (lab/src/fixtures.tsx), which has no rail item: `open(doc, "fixtures")`
-//! asks for it with the `lab-test` host event, as `painter` does for the
-//! plate painter of the shell regions (lab/src/app.tsx).
+//! (lab/src/fixtures.tsx), which the sidebar does not list:
+//! `open(doc, "fixtures")` asks for it with the `lab-test` host event, as
+//! `painter` does for the plate painter of the shell regions
+//! (lab/src/app.tsx).
 #[allow(dead_code)]
 #[path = "../../packages/render/tests/support/mod.rs"]
 mod support;
@@ -23,8 +24,8 @@ use blitz_traits::shell::Viewport;
 use render::NativeDocument;
 use std::time::{Duration, Instant};
 
-/// The lab sections in the rail.
-const SECTIONS: [&str; 3] = ["chat", "components", "surfaces"];
+/// The lab's views, as the plugin sidebar lists them (lab/src/app.tsx).
+const VIEWS: [&str; 5] = ["chat", "composer", "select", "buttons", "surfaces"];
 
 fn document(scale: f32, height: f32) -> NativeDocument {
     let mut doc = NativeDocument::new(
@@ -69,12 +70,12 @@ fn lab_test(doc: &mut NativeDocument, request: serde_json::Value) {
     doc.inner_mut().resolve(0.0);
 }
 
-/// Open a lab section: from the rail, or the fixtures view (no rail item).
-fn open(doc: &mut NativeDocument, section: &str) {
-    if section == "fixtures" {
-        lab_test(doc, serde_json::json!({ "section": "fixtures" }));
+/// Open a lab view: from the sidebar, or the fixtures view (not listed).
+fn open(doc: &mut NativeDocument, view: &str) {
+    if view == "fixtures" {
+        lab_test(doc, serde_json::json!({ "view": "fixtures" }));
     } else {
-        click(doc, &format!("lab-rail-{section}"));
+        click(doc, &format!("lab-view-{view}"));
         doc.inner_mut().resolve(0.0);
     }
 }
@@ -165,17 +166,17 @@ fn wheel_over_a_surface_scrolls_the_page() {
     );
 }
 
-/// The shell schedules frames only while `is_animating()`: every section,
+/// The shell schedules frames only while `is_animating()`: every view,
 /// idle, requests none (nothing in the lab animates).
 #[test]
 fn idle_surfaces_request_no_frames() {
     let mut doc = document(1.0, 900.0);
-    for section in SECTIONS.iter().chain(&["fixtures"]) {
-        open(&mut doc, section);
+    for view in VIEWS.iter().chain(&["fixtures"]) {
+        open(&mut doc, view);
         doc.layout_surfaces();
         assert!(
             !doc.inner().is_animating(),
-            "{section}: idle requests no frames"
+            "{view}: idle requests no frames"
         );
     }
     assert!(doc.take_error().is_none());
@@ -189,14 +190,13 @@ fn a_view_switch_lands_without_animating() {
     let mut doc = document(1.0, 900.0);
     doc.layout_surfaces();
     assert!(!doc.inner().is_animating());
-    for section in ["components", "surfaces", "chat", "surfaces", "chat"] {
-        support::pointer(&mut doc, &format!("lab-rail-{section}"));
+    for view in [
+        "composer", "surfaces", "chat", "select", "chat", "buttons", "chat",
+    ] {
+        support::pointer(&mut doc, &format!("lab-view-{view}"));
         doc.inner_mut().resolve(0.0);
         doc.layout_surfaces();
-        assert!(
-            !doc.inner().is_animating(),
-            "to {section}: nothing animates"
-        );
+        assert!(!doc.inner().is_animating(), "to {view}: nothing animates");
     }
     assert!(doc.take_error().is_none());
 }
@@ -393,13 +393,13 @@ fn resize_frames_match_fresh_renders() {
     assert_eq!(worst.0, 0, "worst frame at {} css px", worst.1);
 }
 
-/// No continuous redraws: after a section switch settles, the document
+/// No continuous redraws: after a view switch settles, the document
 /// requests no frames (the shell's frame counter stops) and repainting it
-/// re-renders no surface pixel, in every section and the fixtures view,
+/// re-renders no surface pixel, in every view and the fixtures view,
 /// with either painter, and after a resize.
 #[test]
 #[ignore = "offscreen GPU frames; run explicitly"]
-fn settled_sections_request_no_frames_and_render_nothing() {
+fn settled_views_request_no_frames_and_render_nothing() {
     let mut doc = document(2.0, 900.0);
     let mut out = Offscreen::new(2.0);
     let settle = |doc: &mut NativeDocument, out: &mut Offscreen| {
@@ -418,7 +418,7 @@ fn settled_sections_request_no_frames_and_render_nothing() {
     // With each painter: every plate painting itself, then the sheets.
     for mode in PAINTERS {
         painter(&mut doc, mode);
-        for section in SECTIONS.iter().chain(&["fixtures", "chat"]) {
+        for section in VIEWS.iter().chain(&["fixtures", "chat"]) {
             open(&mut doc, section);
             let frames = settle(&mut doc, &mut out);
             assert!(
@@ -562,48 +562,52 @@ fn full_screen_sizes_draw_every_shell_surface() {
     assert!(doc.take_error().is_none());
 }
 
-/// Every rail section at the lab window's width (1440 CSS px at scale 2),
-/// for comparing against the design file: `section-<name>.png`. The window
-/// is made tall enough (900 px or more) for the whole stage to show.
+/// Every lab view at the lab window's width (1440 CSS px at scale 2), for
+/// comparing against the design file: `view-<name>.png`. The window is
+/// made tall enough (900 px or more) for the whole stage to show.
 #[test]
 #[ignore = "writes offscreen GPU captures; run explicitly"]
-fn capture_sections() {
+fn capture_views() {
     let dir = capture_dir();
     let mut doc = document(2.0, 900.0);
     let mut out = Offscreen::new(2.0);
-    for section in SECTIONS {
+    for view in VIEWS {
         out.resize(&mut doc, 1440, 900);
-        open(&mut doc, section);
+        open(&mut doc, view);
         // How far the stage scrolls at 900 px is what it is short by.
         scroll_stage(&mut doc, 1e6);
         let short = doc.inner().get_node(stage(&doc)).unwrap().scroll_offset().y;
         scroll_stage(&mut doc, 0.0);
         out.resize(&mut doc, 1440, 900 + short.ceil() as u32);
-        out.save_settled(&mut doc, &dir, &format!("section-{section}"));
+        out.save_settled(&mut doc, &dir, &format!("view-{view}"));
     }
     assert!(doc.take_error().is_none());
 }
 
 /// Views teleport their parts into the shell's fixed regions: switching the
-/// rail section replaces the sidebar and stage content, the view-specific top
+/// view replaces the stage and bottom bar content, the view-specific top
 /// bar parts and the title that hangs from the top bar, while the frame stays.
 #[test]
-fn sections_teleport_into_the_shell_regions() {
+fn views_teleport_into_the_shell_regions() {
     let mut doc = document(1.0, 900.0);
     let title = |doc: &NativeDocument| doc.inner().get_element_by_id("lab-chat-title").is_some();
     assert!(title(&doc), "the chat view starts open");
     assert!(doc.inner().get_element_by_id("lab-chat-composer").is_some());
     let stage = stage(&doc);
-    open(&mut doc, "components");
+    open(&mut doc, "buttons");
     assert!(!title(&doc), "the chat title left the top bar");
-    assert!(support::text(&doc, "lab").contains("Component lab"));
+    assert!(
+        doc.inner().get_element_by_id("lab-chat-composer").is_none(),
+        "the composer left the bottom bar"
+    );
+    assert!(support::text(&doc, "lab-buttons").contains("Variants and states"));
     assert_eq!(
         stage,
         self::stage(&doc),
         "the frame's stage is the same element"
     );
     // The chat view's content lives in the stage region, not where the view is.
-    let lab = support::id(&doc, "lab");
+    let lab = support::id(&doc, "lab-buttons");
     assert!(doc.inner().node_chain(lab).contains(&stage));
     open(&mut doc, "chat");
     assert!(title(&doc));
@@ -1155,7 +1159,7 @@ fn self_painting_plates_survive_leaving_and_returning() {
         assert_eq!(doc.own_plate_shape(deny), Some(shape));
         assert_eq!(doc.own_plate_count(), count);
     }
-    open(&mut doc, "components");
+    open(&mut doc, "chat");
     doc.layout_surfaces();
     let elsewhere = doc.own_plate_count();
     assert!(elsewhere < count, "{elsewhere} of {count} left");

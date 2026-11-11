@@ -1,60 +1,52 @@
 /** The lab window as the application shell (Paper "R3b · Double sidebar"):
- * a 40 px top bar that is also the title bar, a rail with one item per lab
- * section (the active one is simply brighter), the section's list in the
- * plugin sidebar, and the section in the stage. Each section is a view that
- * teleports its parts into the shell regions.
+ * a 40 px top bar that is also the title bar, a rail with one section
+ * (Chat), the lab's views listed in the plugin sidebar, and the picked
+ * view in the stage. Each view teleports its parts into the shell regions.
  *
  * Tests reach two things the window does not show, through the `lab-test`
  * host event (lab/tests/fused_surface.rs): the fixtures view (markup that
- * only tests need, no rail item) and the painter of the shell regions'
+ * only tests need, not listed) and the painter of the shell regions'
  * plates. The window never sends that event. */
 import { For, Match, Switch, createSignal } from "solid-js";
 import { onHostEvent } from "@tokamak/render";
 import { Icon } from "@tokamak/ui/elements";
-import { Shell, Surface, rail } from "@tokamak/ui/components";
+import { Button, Kbd, Shell, Surface, rail } from "@tokamak/ui/components";
 import type { PlatePainter } from "@tokamak/ui/components";
 import { fill, stroke } from "./icons";
-import { IconButton } from "./kit";
+import { SidebarHeader, SidebarLabel, SidebarRow } from "./kit";
 import ChatView from "./chat";
-import ComponentsView from "./cases";
+import ComposerStatesView from "./composer-states";
+import SelectView from "./select";
+import ButtonsView from "./buttons";
 import SurfacesView from "./surfaces";
 import FixturesView from "./fixtures";
 
-const sections = [
-  { id: "chat", label: "Chat", icon: fill.chat },
-  { id: "components", label: "Components", icon: fill.checkSquare },
-  { id: "surfaces", label: "Surfaces", icon: fill.kanban },
+/** The views in the plugin sidebar, in order. */
+export const views = [
+  { id: "chat", label: "Chat", meta: "live" },
+  { id: "composer", label: "Composer states", meta: "6" },
+  { id: "select", label: "Select" },
+  { id: "buttons", label: "Buttons and keys" },
+  { id: "surfaces", label: "Surfaces", meta: "ref" },
 ] as const;
 
-type Section = (typeof sections)[number]["id"] | "fixtures";
+type View = (typeof views)[number]["id"] | "fixtures";
 
 /** Each rail item's square hit area (the shell's rail metrics). */
 const item = `width: ${rail.item}px; height: ${rail.item}px`;
 
-function Rail(props: { active: Section; select: (section: Section) => void }) {
+function Rail() {
   return (
     <Shell.Rail>
-      {/* Kept plain for now: every icon at 50% white, the active one at 75%. */}
-      <For each={sections}>
-        {(section) => (
-          <button
-            id={`lab-rail-${section.id}`}
-            aria-label={section.label}
-            aria-pressed={props.active === section.id}
-            onClick={() => props.select(section.id)}
-            class="relative flex shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-[#808080] aria-pressed:text-[#bfbfbf]"
-            style={item}
-          >
-            <Icon d={section.icon} view={256} fill class="size-5" />
-          </button>
-        )}
-      </For>
+      {/* One section; the active icon is simply brighter (75% white). */}
       <button
-        aria-label="New section"
-        class="flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-[#808080]"
+        id="lab-rail-chat"
+        aria-label="Chat"
+        aria-pressed={true}
+        class="relative flex shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-[#808080] aria-pressed:text-[#bfbfbf]"
         style={item}
       >
-        <Icon d={stroke.plus} strokeWidth={2} class="size-[18px]" />
+        <Icon d={fill.chat} view={256} fill class="size-5" />
       </button>
       <div class="flex-1" />
       <button
@@ -68,67 +60,95 @@ function Rail(props: { active: Section; select: (section: Section) => void }) {
   );
 }
 
-/** Top bar parts every section shares: navigation and the command search. */
+/** The plugin sidebar: the lab's views. */
+function Views(props: { active: View; select: (view: View) => void }) {
+  return (
+    <Shell.Sidebar>
+      <SidebarHeader title="Lab" />
+      <SidebarLabel first>Views</SidebarLabel>
+      <For each={views}>
+        {(view) => (
+          <SidebarRow
+            id={`lab-view-${view.id}`}
+            label={view.label}
+            meta={"meta" in view ? view.meta : undefined}
+            selected={props.active === view.id}
+            onClick={() => props.select(view.id)}
+          />
+        )}
+      </For>
+    </Shell.Sidebar>
+  );
+}
+
+/** Top bar parts every view shares: navigation and the command search. */
 function TopBar() {
+  const nav = (id: string | undefined, d: string, label: string) => (
+    <Button id={id} variant="ghost" size="icon" label={label}>
+      <Icon d={d} class="size-4" />
+    </Button>
+  );
   return (
     <>
       <Shell.TopBar at="start">
-        <IconButton d={stroke.sidebarLeft} label="Toggle sidebar" />
-        <IconButton id="lab-back" d={stroke.chevronLeft} label="Back" />
-        <IconButton d={stroke.chevronRight} label="Forward" dim />
+        {nav(undefined, stroke.sidebarLeft, "Toggle sidebar")}
+        {nav("lab-back", stroke.chevronLeft, "Back")}
+        {nav(undefined, stroke.chevronRight, "Forward")}
       </Shell.TopBar>
       <Shell.TopBar at="center">
         <div window-no-drag class="flex w-[400px] max-w-full min-w-0">
-        <Surface
-          id="lab-search"
-          material="well"
-          radius={8}
-          class="flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
-        >
-          <Icon d={stroke.search} class="size-3.5 text-ink-4" />
-          <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-4">Search or run a command</span>
-          {/* A text run containing ⌘ draws nothing in this Blitz/parley setup
-           * (no per-glyph fallback), so ⌘ is an icon and K is text. */}
-          <Surface material="chip" radius={4} class="flex items-center gap-px px-1.5 py-0.5 text-ink-3">
-            <Icon d={stroke.command} strokeWidth={2.25} class="size-2.5" />
-            <span class="font-data text-[11px] leading-[14px]">K</span>
+          <Surface
+            id="lab-search"
+            material="well"
+            radius={8}
+            class="flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
+          >
+            <Icon d={stroke.search} class="size-3.5 text-ink-4" />
+            <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-4">Search or run a command</span>
+            <Kbd keys={["cmd", "K"]} />
           </Surface>
-        </Surface>
         </div>
       </Shell.TopBar>
     </>
   );
 }
 
-/** What tests may ask for (see the header): open a section, including the
+/** What tests may ask for (see the header): open a view, including the
  * fixtures view, and choose who draws the shell regions' plates. */
 interface TestRequest {
-  section?: Section;
+  view?: View;
   plates?: PlatePainter;
 }
 
 export default function App() {
-  const [section, setSection] = createSignal<Section>("chat");
+  const [view, setView] = createSignal<View>("chat");
   const [plates, setPlates] = createSignal<PlatePainter>("self");
   onHostEvent<TestRequest>("lab-test", (request) => {
-    if (request.section) setSection(request.section);
+    if (request.view) setView(request.view);
     if (request.plates) setPlates(request.plates);
   });
   return (
     <Shell plates={plates()}>
       <TopBar />
-      <Rail active={section()} select={setSection} />
+      <Rail />
+      <Views active={view()} select={setView} />
       <Switch>
-        <Match when={section() === "chat"}>
+        <Match when={view() === "chat"}>
           <ChatView />
         </Match>
-        <Match when={section() === "components"}>
-          <ComponentsView />
+        <Match when={view() === "composer"}>
+          <ComposerStatesView />
         </Match>
-        <Match when={section() === "surfaces"}>
+        <Match when={view() === "select"}>
+          <SelectView />
+        </Match>
+        <Match when={view() === "buttons"}>
+          <ButtonsView />
+        </Match>
+        <Match when={view() === "surfaces"}>
           <SurfacesView />
         </Match>
-        <Match when={section() === "fixtures"}>
+        <Match when={view() === "fixtures"}>
           <FixturesView />
         </Match>
       </Switch>

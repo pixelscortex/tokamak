@@ -1,52 +1,9 @@
-/** Small lab pieces shared by the sections: icon buttons, sidebar list rows,
- * and section titles. */
+/** Small lab pieces shared by the views: sidebar list rows and section
+ * titles. Controls come from `@tokamak/ui/components`. */
 import { Show } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Icon } from "@tokamak/ui/elements";
-import { Surface } from "@tokamak/ui/components";
-
-/** 28 px square icon button (top bar, composer). */
-export function IconButton(props: {
-  d: string;
-  label: string;
-  id?: string;
-  active?: boolean;
-  dim?: boolean;
-  onClick?: () => void;
-}) {
-  const icon = () => (
-    <Icon
-      d={props.d}
-      class={`size-4 ${props.active ? "text-ink" : props.dim ? "text-ink-6" : "text-ink-3"}`}
-    />
-  );
-  return (
-    <Show
-      when={props.active}
-      fallback={
-        <button
-          id={props.id}
-          aria-label={props.label}
-          onClick={props.onClick}
-          class="flex size-7 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0"
-        >
-          {icon()}
-        </button>
-      }
-    >
-      <Surface material="chip" radius={6} class="size-7 shrink-0">
-        <button
-          id={props.id}
-          aria-label={props.label}
-          onClick={props.onClick}
-          class="flex size-7 items-center justify-center border-0 bg-transparent p-0"
-        >
-          {icon()}
-        </button>
-      </Surface>
-    </Show>
-  );
-}
+import { Button, Surface } from "@tokamak/ui/components";
 
 /** Sidebar header: section title and an optional trailing icon. */
 export function SidebarHeader(props: { title: string; action?: string }) {
@@ -57,7 +14,9 @@ export function SidebarHeader(props: { title: string; action?: string }) {
           {props.title}
         </span>
         <Show when={props.action}>
-          <IconButton d={props.action ?? ""} label="Filter" />
+          <Button variant="ghost" size="icon" label="Filter">
+            <Icon d={props.action ?? ""} class="size-4" />
+          </Button>
         </Show>
       </div>
       <div class="h-3 shrink-0" />

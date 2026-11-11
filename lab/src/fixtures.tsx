@@ -1,11 +1,10 @@
-/** Fixtures: markup that tests need and the lab does not show. It has no
- * rail item; `lab/tests/fused_surface.rs` opens it with the `lab-test` host
+/** Fixtures: markup that tests need and the lab does not show. It is not
+ * listed in the sidebar; `lab/tests/fused_surface.rs` opens it with the `lab-test` host
  * event (see app.tsx). Each block is named after what it guards. */
 import { For, createSignal } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Sheet, Shell } from "@tokamak/ui/components";
 import type { PlatePainter } from "@tokamak/ui/components";
-import { SidebarHeader } from "./kit";
 
 /** Plain backgrounds are plates: a box with an ordinary `bg-[#...]` under
  * the caps it holds (`a_plain_background_is_a_plate_under_the_plates_it_holds`),
@@ -112,9 +111,6 @@ function Painters() {
 
 export default function FixturesView() {
   return <>
-    <Shell.Sidebar>
-      <SidebarHeader title="Fixtures" />
-    </Shell.Sidebar>
     <Shell.Stage>
       <div id="lab-fixtures" class="flex flex-col gap-7 px-8 pt-8 pb-10">
         <Backgrounds />

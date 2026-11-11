@@ -1,11 +1,11 @@
-/** Surfaces section: a short reference of the styling system
+/** Surfaces view: a short reference of the styling system
  * (render/SURFACES.md). Plates are ordinary elements with a solid
  * background or a `material-*` class; each paints its own plate. Fused
  * shapes are `Surface` with `Surface.Subtract`. */
 import { For, createSignal } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Shell, Surface } from "@tokamak/ui/components";
-import { SectionTitle, SidebarHeader, SidebarLabel, SidebarRow } from "./kit";
+import { SectionTitle } from "./kit";
 
 /** One labelled row of samples. */
 function Row(props: { label: string; children: JSX.Element }) {
@@ -144,14 +144,6 @@ function FusedShapes() {
 
 export default function SurfacesView() {
   return <>
-    <Shell.Sidebar>
-      <SidebarHeader title="Surfaces" />
-      <SidebarLabel first>Reference</SidebarLabel>
-      <SidebarRow label="Elevation" meta="buttons" selected />
-      <SidebarRow label="Bevel" meta="edge" />
-      <SidebarRow label="Materials" meta="keys" />
-      <SidebarRow label="Fused shapes" meta="cuts" />
-    </Shell.Sidebar>
     <Shell.Stage>
       <div id="lab-surfaces" class="flex flex-col gap-7 px-8 pt-8 pb-10">
         <SectionTitle eyebrow="ELEVATION" title="Buttons stand off the surface">
