@@ -19,6 +19,20 @@ packages/render/src/lib.rs
   s_e9fd07ae4e5f95::t_ea8f01467f3c10 155
 packages/render/README.md
   s_e9fd07ae4e5f95::t_c86c38259ea5ff 73-84
+packages/ui/src/components/surface.tsx
+  s_e3d99f9a782059::t_7b1c59e84afe86 39,191-192,228
+packages/ui/src/components/select.tsx
+  s_e3d99f9a782059::t_7b1c59e84afe86 2-3,23-49,51,55,57-70,92-94,113-132,235-380,397,399-400,409
+lab/tests/native.rs
+  s_e3d99f9a782059::t_7b1c59e84afe86 24,26,37,77,88,94,104,214-217,293-296,304-413,628,685,687
+packages/render/js/jsx-runtime.ts
+  s_e3d99f9a782059::t_7b1c59e84afe86 68
+lab/src/select.tsx
+  s_e3d99f9a782059::t_7b1c59e84afe86 1-6,30-31,36-37,40,43,55-57,60-61,63-64,69-80
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_7b1c59e84afe86 41,56,70,79,197,253,587-672,713,758,767,906,1091,1119,1646-1877
+packages/render/tests/support/mod.rs
+  s_e3d99f9a782059::t_7b1c59e84afe86 27,91,104
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -26,6 +40,14 @@ packages/render/README.md
   "base_commit_sha": "008261cf5dad320ca1187488d3424cecc8c59a6f",
   "prompts": {},
   "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
     "s_e9fd07ae4e5f95": {
       "agent_id": {
         "tool": "claude",
