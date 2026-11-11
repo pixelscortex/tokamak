@@ -36,7 +36,7 @@
  * container, `layer="stage"` into the stage panel.
  */
 import { createContext, createUniqueId, splitProps, useContext } from "solid-js";
-import type { JSX } from "@tokamak/render";
+import type { JSX, NativeNode } from "@tokamak/render";
 
 interface MaterialLook {
   fill: string;
@@ -188,6 +188,8 @@ export interface ShapeProps {
   id?: string;
   class?: string;
   style?: string;
+  /** The shape's element (to observe its layout, for one). */
+  ref?: (node: NativeNode) => void;
   children?: JSX.Element;
 }
 
@@ -223,6 +225,7 @@ function shape(op: "union" | "subtract") {
     return (
       <div
         id={rest.id}
+        ref={(node) => rest.ref?.(node)}
         class={positioned(rest.class)}
         style={rest.style}
         surface-groups={groups()}

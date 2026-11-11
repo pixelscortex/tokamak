@@ -65,7 +65,7 @@ export namespace JSX {
     "surface-gap"?: number;
     "surface-slant"?: string;
     "surface-animate"?: true;
-    "surface-attach"?: "left" | "right";
+    "surface-attach"?: "left" | "right" | "top" | "bottom";
     /** A plate: an element drawn from its computed fill (a solid background
      * colour or a `material-*` utility) and bevel instead of a Blitz
      * background. Added by the build to elements whose static `class` makes

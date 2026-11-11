@@ -1,7 +1,9 @@
-/** Select view: the field size closed and open (with groups and search),
- * the compact size of toolbars and the composer, and a menu that opens
- * upward. Every select is live; the open one starts open (`defaultOpen`)
- * and closes like any other. */
+/** Select view: the field size closed, open below (with groups and
+ * search) and open above, both fused to their trigger by the bridge; the
+ * compact size, bridged (models) and merged (a trigger too narrow for a
+ * bridge); and a select at the bottom of a short scrolling box that opens
+ * upward by itself. Every select is live; the open ones start open
+ * (`defaultOpen`) and close like any other. */
 import { createSignal } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Select, Shell } from "@tokamak/ui/components";
@@ -25,18 +27,20 @@ export default function SelectView() {
   const [open, setOpen] = createSignal("groceries");
   const [model, setModel] = createSignal("openrouter/free");
   const [up, setUp] = createSignal("normal");
+  const [merged, setMerged] = createSignal("normal");
+  const [flip, setFlip] = createSignal("today");
   return (
     <Shell.Stage>
       <div id="lab-select" class="flex flex-col gap-8 px-8 pt-8 pb-16">
         <SectionTitle eyebrow="SELECT" title="Field size, 34 px">
-          A trigger button and a menu in a sheet of its own, 4 px below it. Up and Down move, Enter picks,
-          Escape or a click outside closes.
+          Open, the trigger and its menu are one plate: 6 px apart, joined by a bridge 80% as wide as the
+          narrower of the two. Up and Down move, Enter picks, Escape or a click outside closes.
         </SectionTitle>
         <div class="flex flex-wrap items-start gap-8">
-          <Case title="Closed" value={list()} id="lab-select-field-value" class="w-[260px]">
+          <Case title="Closed" value={list()} id="lab-select-field-value" class="w-[240px]">
             <Select id="lab-select-field" label="List" placeholder="Pick a list" options={mocks.lists} value={list()} onValueChange={setList} />
           </Case>
-          <Case title="Open, with groups and search" value={open()} id="lab-select-open-value" class="h-[380px] w-[280px]">
+          <Case title="Open below, with search" value={open()} id="lab-select-open-value" class="h-[330px] w-[260px]">
             <Select
               id="lab-select-open"
               label="List"
@@ -48,18 +52,32 @@ export default function SelectView() {
               defaultOpen
             />
           </Case>
+          <Case title="Open above" value={up()} id="lab-select-up-value" class="h-[330px] w-[240px]">
+            <Select id="lab-select-up" class="mt-auto" label="Priority" side="top" options={mocks.priorities} value={up()} onValueChange={setUp} defaultOpen />
+          </Case>
         </div>
         <SectionTitle eyebrow="COMPACT" title="Compact size, 26 px">
-          For toolbars and the composer: no plate until hover, values in the data font.
+          For toolbars and the composer: no plate until hover. Under a 64 px bridge the menu merges onto the
+          trigger. At the bottom of a scrolling box the menu opens upward by itself.
         </SectionTitle>
-        <div class="flex flex-wrap items-end gap-8">
-          <Case title="Compact" value={model()} id="lab-select-compact-value" class="w-[260px]">
+        <div class="flex flex-wrap items-start gap-8">
+          <Case title="Compact, bridged" value={model()} id="lab-select-compact-value" class="w-[260px]">
             <div class="flex">
               <Select id="lab-select-compact" label="Model" size="compact" mono search options={mocks.models} value={model()} onValueChange={setModel} />
             </div>
           </Case>
-          <Case title="Opening upward" value={up()} id="lab-select-up-value" class="w-[260px] pt-[150px]">
-            <Select id="lab-select-up" label="Priority" side="top" options={mocks.priorities} value={up()} onValueChange={setUp} />
+          <Case title="Compact, merged" value={merged()} id="lab-select-merged-value" class="h-[170px] w-[260px]">
+            <div class="flex">
+              <Select id="lab-select-merged" label="Priority" size="compact" options={mocks.priorities} value={merged()} onValueChange={setMerged} defaultOpen />
+            </div>
+          </Case>
+          <Case title="Flips up in a scrolling box" value={flip()} id="lab-select-flip-value" class="w-[260px]">
+            <div id="lab-select-flip-box" class="flex h-[150px] flex-col gap-2 overflow-y-auto rounded-md bg-well p-2">
+              <span class="text-[12px] leading-4 text-ink-4">A short scrolling box.</span>
+              <span class="text-[12px] leading-4 text-ink-4">The select sits at its bottom.</span>
+              <div class="flex-1" />
+              <Select id="lab-select-flip" label="List" options={mocks.lists} value={flip()} onValueChange={setFlip} defaultOpen />
+            </div>
           </Case>
           <Case title="Disabled" class="w-[200px]">
             <Select id="lab-select-disabled" label="List" options={mocks.lists} value="inbox" disabled />

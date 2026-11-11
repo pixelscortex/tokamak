@@ -38,7 +38,7 @@ fn document(scale: f32, height: f32) -> NativeDocument {
         hidpi_scale: scale,
         ..Default::default()
     });
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc
 }
 
@@ -53,7 +53,7 @@ fn scroll_stage(doc: &mut NativeDocument, y: f64) {
     let current = doc.inner().get_node(stage).unwrap().scroll_offset().y;
     doc.inner_mut()
         .scroll_by(stage, 0.0, y - current, Default::default());
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 fn click(doc: &mut NativeDocument, name: &str) {
@@ -67,7 +67,7 @@ fn lab_test(doc: &mut NativeDocument, request: serde_json::Value) {
         doc.host_event(doc.generation(), "lab-test", request)
             .unwrap()
     );
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 /// Open a lab view: from the sidebar, or the fixtures view (not listed).
@@ -76,7 +76,7 @@ fn open(doc: &mut NativeDocument, view: &str) {
         lab_test(doc, serde_json::json!({ "view": "fixtures" }));
     } else {
         click(doc, &format!("lab-view-{view}"));
-        doc.inner_mut().resolve(0.0);
+        doc.resolve_layout(0.0);
     }
 }
 
@@ -194,7 +194,7 @@ fn a_view_switch_lands_without_animating() {
         "composer", "surfaces", "chat", "select", "chat", "buttons", "chat",
     ] {
         support::pointer(&mut doc, &format!("lab-view-{view}"));
-        doc.inner_mut().resolve(0.0);
+        doc.resolve_layout(0.0);
         doc.layout_surfaces();
         assert!(!doc.inner().is_animating(), "to {view}: nothing animates");
     }
@@ -250,7 +250,7 @@ impl Offscreen {
         let start = Instant::now();
         // What the window does on each redraw: layout, then the surface
         // layout pass, then paint.
-        doc.inner_mut().resolve(0.0);
+        doc.resolve_layout(0.0);
         doc.layout_surfaces();
         let mut pixels = Vec::new();
         let mut scene_time = Duration::ZERO;
@@ -584,6 +584,92 @@ fn capture_views() {
     assert!(doc.take_error().is_none());
 }
 
+/// The select view offscreen (scale 2), with close crops of the bridge
+/// below and above a field trigger and of the merged compact form, in
+/// `$TK_CAPTURE_DIR/select/`. The bridge's centre is the trigger's fill
+/// (no seam: one surface); beside it, in the gap, the background shows.
+#[test]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
+fn capture_select() {
+    let dir = format!("{}/select", capture_dir());
+    std::fs::create_dir_all(&dir).unwrap();
+    let scale = 2.0;
+    let mut doc = document(scale, 900.0);
+    let mut out = Offscreen::new(scale);
+    open(&mut doc, "select");
+    out.save_settled(&mut doc, &dir, "view-select");
+    let (pixels, _, _) = out.frame(&mut doc);
+    let (width, height) = (out.width, out.height);
+    let at = |x: f64, y: f64| {
+        let i = (((y * scale as f64) as u32 * width + (x * scale as f64) as u32) * 4) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2]]
+    };
+    let rect = |name: &str| {
+        doc.inner()
+            .get_client_bounding_rect(support::id(&doc, name))
+            .unwrap()
+    };
+    let crop = |name: &str, r: [f64; 4]| {
+        let [x, y, w, h] = r.map(|v| (v * scale as f64).round() as u32);
+        let mut px = Vec::with_capacity((w * h * 4) as usize);
+        for row in y..y + h {
+            let start = ((row * width + x) * 4) as usize;
+            px.extend_from_slice(&pixels[start..start + (w * 4) as usize]);
+        }
+        write_png(&format!("{dir}/{name}.png"), w, h, &px);
+    };
+    let around = |a: blitz_dom::BoundingRect, b: blitz_dom::BoundingRect| {
+        let (x0, y0) = (a.x.min(b.x) - 16.0, a.y.min(b.y) - 16.0);
+        let (x1, y1) = (
+            (a.x + a.width).max(b.x + b.width) + 16.0,
+            (a.y + a.height).max(b.y + b.height) + 16.0,
+        );
+        [
+            x0,
+            y0.max(0.0),
+            x1 - x0,
+            (y1.min(height as f64 / scale as f64)) - y0.max(0.0),
+        ]
+    };
+    for (name, crop_name) in [
+        ("lab-select-open", "bridge-below"),
+        ("lab-select-up", "bridge-above"),
+    ] {
+        let (trigger, bridge) = (rect(name), rect(&format!("{name}-bridge")));
+        let middle = (
+            bridge.x + bridge.width / 2.0,
+            bridge.y + bridge.height / 2.0,
+        );
+        assert_eq!(
+            at(middle.0, middle.1),
+            [0x2a; 3],
+            "{name}: the bridge is the trigger's fill"
+        );
+        let beside = at(bridge.x - 4.0, middle.1);
+        assert_ne!(beside, [0x2a; 3], "{name}: the gap shows beside the bridge");
+        crop(crop_name, around(trigger, bridge));
+    }
+    let (trigger, menu) = (rect("lab-select-merged"), rect("lab-select-merged-menu"));
+    let seam = (trigger.x + trigger.width / 2.0, trigger.y + trigger.height);
+    assert_eq!(
+        at(seam.0, seam.1),
+        [0x2a; 3],
+        "merged: no seam between trigger and menu"
+    );
+    crop(
+        "merged",
+        around(
+            trigger,
+            blitz_dom::BoundingRect {
+                height: 40.0,
+                width: menu.width.min(140.0),
+                ..menu
+            },
+        ),
+    );
+    assert!(doc.take_error().is_none());
+}
+
 /// Views teleport their parts into the shell's fixed regions: switching the
 /// view replaces the stage and bottom bar content, the view-specific top
 /// bar parts and the title that hangs from the top bar, while the frame stays.
@@ -624,7 +710,7 @@ fn pointer_at(
 ) -> blitz_traits::events::BlitzPointerEvent {
     use blitz_traits::events::*;
     use keyboard_types::Modifiers;
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     let rect = doc
         .inner()
         .get_client_bounding_rect(support::id(doc, name))
@@ -669,7 +755,7 @@ fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
     } else {
         UiEvent::PointerDown(event)
     });
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc.layout_surfaces();
 }
 
@@ -678,7 +764,7 @@ fn hover(doc: &mut NativeDocument, name: &str) {
     use blitz_traits::events::{MouseEventButtons, UiEvent};
     let event = pointer_at(doc, name, MouseEventButtons::None);
     doc.handle_ui_event(UiEvent::PointerMove(event));
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 /// The visible stage: the box of the region the scroller fills.
@@ -817,7 +903,7 @@ fn scroll_node(doc: &mut NativeDocument, id: blitz_traits::NodeId, y: f64) {
     let current = doc.inner().get_node(id).unwrap().scroll_offset().y;
     doc.inner_mut()
         .scroll_by(id, 0.0, y - current, Default::default());
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc.layout_surfaces();
     assert_eq!(doc.inner().get_node(id).unwrap().scroll_offset().y, y);
 }
@@ -1002,7 +1088,7 @@ fn a_self_painting_button_is_still_a_real_button() {
     doc.inner_mut().set_focus_to(always);
     support::key(&mut doc, "Enter", false, false);
     support::key(&mut doc, "Enter", true, false);
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc.layout_surfaces();
     assert_eq!(
         support::attr(&doc, "lab-key-always", "aria-pressed").as_deref(),
@@ -1030,7 +1116,7 @@ fn a_self_painting_button_is_still_a_real_button() {
         let now = doc.inner().get_node(stage(&doc)).unwrap().scroll_offset().y;
         assert_ne!(now, offset, "the stage scrolled");
     }
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc.layout_surfaces();
     assert_eq!(plate_shape(&doc, "lab-key-deny"), before);
     assert!(!doc.inner().is_animating(), "settled: no frames requested");
@@ -1555,6 +1641,239 @@ fn the_ordering_case_draws_the_cap_on_the_box() {
         );
         assert!(doc.take_error().is_none());
     }
+}
+
+// ---------------------------------------------------------------- the select's fused menu
+
+/// The `<tk-surface>` of the `Surface` element `name`.
+fn surface_of(doc: &NativeDocument, name: &str) -> blitz_traits::NodeId {
+    let inner = doc.inner();
+    let root = inner.get_node(support::id(doc, name)).unwrap();
+    root.children
+        .iter()
+        .copied()
+        .find(|&id| {
+            inner.get_node(id).unwrap().element_data().is_some_and(|e| {
+                &*e.name.local == "tk-surface"
+                    && e.attr(blitz_dom::LocalName::from("group")).is_some()
+            })
+        })
+        .expect("a Surface holds its tk-surface")
+}
+
+/// True if element `id` is moved by a CSS `translate` (`sink-*`, `pressed`).
+fn translated(doc: &NativeDocument, id: blitz_traits::NodeId) -> bool {
+    let inner = doc.inner();
+    let style = inner.get_node(id).unwrap().primary_styles().unwrap();
+    format!("{:?}", style.clone_translate()) != "None"
+}
+
+/// Element `name`'s painted box relative to `origin`'s.
+fn local_box(doc: &NativeDocument, origin: blitz_traits::NodeId, name: &str) -> [f32; 4] {
+    let o = painted_box(doc, origin);
+    let [x, y, w, h] = painted_box(doc, support::id(doc, name));
+    [x - o[0], y - o[1], w, h]
+}
+
+fn near_box(a: [f32; 4], b: [f32; 4]) -> bool {
+    a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 0.01)
+}
+
+/// Closed, the field trigger is a raised plate that does not move on
+/// hover (its fill lifts a step; the plate keeps its shape, nothing is
+/// translated) and sinks while pressed. Open, hover and press change
+/// nothing: the trigger's own plate is off (the fused surface draws it).
+#[test]
+fn the_select_trigger_keeps_its_box_on_hover() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "select");
+    doc.layout_surfaces();
+    let trigger = "lab-select-field";
+    let id = support::id(&doc, trigger);
+    let before = (painted_box(&doc, id), plate_shape(&doc, trigger));
+    hover(&mut doc, trigger);
+    doc.layout_surfaces();
+    let after = (painted_box(&doc, id), plate_shape(&doc, trigger));
+    assert_eq!(before.0, after.0, "the box stays");
+    assert_eq!(
+        before.1.rect, after.1.rect,
+        "the plate keeps its shape (no dip)"
+    );
+    assert_ne!(before.1.fill, after.1.fill, "the fill lifts a step");
+    assert_eq!(hex(after.1.fill.unwrap()), "#313131", "lift");
+    assert!(!translated(&doc, id), "nothing moves on hover");
+    // Pressed (closed): the button sinks (translated with its face).
+    pointer_half(&mut doc, trigger, false);
+    assert!(translated(&doc, id), "pressed sinks");
+    pointer_half(&mut doc, trigger, true);
+    // Now open: no plate of its own (the fused surface draws the trigger);
+    // hover and press move nothing.
+    assert_eq!(
+        support::attr(&doc, trigger, "aria-expanded").as_deref(),
+        Some("true")
+    );
+    doc.layout_surfaces();
+    assert!(
+        doc.own_plate_shape(id)
+            .is_none_or(|s| s.fill.is_none_or(|f| f[3] == 0.0)),
+        "no plate of its own while open"
+    );
+    let open_box = painted_box(&doc, id);
+    hover(&mut doc, trigger);
+    pointer_half(&mut doc, trigger, false);
+    assert_eq!(painted_box(&doc, id), open_box);
+    assert!(!translated(&doc, id), "no press while open");
+    pointer_half(&mut doc, trigger, true);
+    assert!(doc.take_error().is_none());
+}
+
+/// Open, trigger, bridge and menu are one fused group (one `<tk-surface>`
+/// with three union shapes): the menu 6 px from the trigger, the bridge
+/// filling the gap, 80% as wide as the narrower plate, centred on the
+/// trigger, joined with 3 px fillets. Below and above alike.
+#[test]
+fn an_open_select_is_one_fused_group() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "select");
+    doc.layout_surfaces();
+    for (name, below) in [("lab-select-open", true), ("lab-select-up", false)] {
+        let surface = surface_of(&doc, &format!("{name}-fused"));
+        let shapes = doc.surface_shapes(surface);
+        assert_eq!(shapes.len(), 3, "{name}: trigger, bridge and menu");
+        let face = local_box(&doc, surface, &format!("{name}-face"));
+        let bridge = local_box(&doc, surface, &format!("{name}-bridge"));
+        let menu = local_box(&doc, surface, &format!("{name}-menu"));
+        let trigger = local_box(&doc, surface, name);
+        assert!(
+            near_box(face, trigger),
+            "{name}: the face is the trigger's box: {face:?} {trigger:?}"
+        );
+        for (what, b) in [("face", face), ("bridge", bridge), ("menu", menu)] {
+            assert!(
+                shapes.iter().any(|s| near_box(s.rect, b)),
+                "{name}: {what} {b:?} in {shapes:?}"
+            );
+        }
+        let narrower = trigger[2].min(menu[2]);
+        assert!(
+            (bridge[2] - 0.8 * narrower).abs() < 0.01,
+            "{name}: 80% wide: {bridge:?}"
+        );
+        let centre = |b: [f32; 4]| b[0] + b[2] / 2.0;
+        assert!(
+            (centre(bridge) - centre(trigger)).abs() < 0.01,
+            "{name}: centred"
+        );
+        assert_eq!(bridge[3], 6.0, "{name}: spans the gap");
+        if below {
+            assert_eq!(bridge[1], trigger[1] + trigger[3]);
+            assert_eq!(menu[1], bridge[1] + 6.0);
+        } else {
+            assert_eq!(bridge[1] + 6.0, trigger[1]);
+            assert_eq!(menu[1] + menu[3], bridge[1]);
+        }
+        // One material (the surface's: chip), joined with 3 px fillets.
+        assert_eq!(
+            support::attr(&doc, &format!("{name}-fused"), "id")
+                .map(|_| {
+                    let inner = doc.inner();
+                    let node = inner.get_node(surface).unwrap();
+                    node.attr(blitz_dom::LocalName::from("fill"))
+                        .map(str::to_owned)
+                })
+                .flatten()
+                .as_deref(),
+            Some("var(--color-chip)"),
+            "{name}: chip"
+        );
+        let join = support::attr(&doc, &format!("{name}-fused"), "id").map(|_| {
+            let inner = doc.inner();
+            let node = inner.get_node(surface).unwrap();
+            node.attr(blitz_dom::LocalName::from("join"))
+                .map(str::to_owned)
+        });
+        assert_eq!(join.flatten().as_deref(), Some("3"), "{name}: 3 px fillets");
+    }
+    assert!(doc.take_error().is_none());
+}
+
+/// Under a 64 px bridge there is none: the menu sits directly on the
+/// trigger, which is attached to it by that edge (one exact outline: two
+/// shapes, no bridge). The compact priority select in the lab, and the
+/// command form's selects in the composer; the model picker in the
+/// composer is wide enough for a bridge.
+#[test]
+fn a_narrow_select_merges_onto_its_menu() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "select");
+    doc.layout_surfaces();
+    // Whichever side it opened on (room decides).
+    let check_merged = |doc: &NativeDocument, name: &str| {
+        let surface = surface_of(doc, &format!("{name}-fused"));
+        let trigger = local_box(doc, surface, name);
+        let menu = local_box(doc, surface, &format!("{name}-menu"));
+        let below = menu[1] > trigger[1];
+        assert!(
+            0.8 * trigger[2].min(menu[2]) < 64.0,
+            "{name}: narrow: {trigger:?}"
+        );
+        assert!(
+            doc.inner()
+                .get_element_by_id(&format!("{name}-bridge"))
+                .is_none(),
+            "{name}: no bridge"
+        );
+        assert_eq!(
+            doc.surface_shapes(surface).len(),
+            2,
+            "{name}: trigger and menu"
+        );
+        if below {
+            assert_eq!(menu[1], trigger[1] + trigger[3], "{name}: on the trigger");
+        } else {
+            assert_eq!(menu[1] + menu[3], trigger[1], "{name}: on the trigger");
+        }
+        let attach = support::attr(doc, &format!("{name}-face"), "surface-attach");
+        assert_eq!(
+            attach.as_deref(),
+            Some(if below { "bottom" } else { "top" })
+        );
+    };
+    check_merged(&doc, "lab-select-merged");
+    // The composer: the command form's selects merge.
+    open(&mut doc, "composer");
+    scroll_to(&mut doc, "lab-state-form");
+    let field = doc
+        .inner()
+        .query_selector("#lab-form-form button[aria-haspopup]")
+        .unwrap()
+        .expect("a form select");
+    let name = doc
+        .inner()
+        .get_node(field)
+        .unwrap()
+        .attr(blitz_dom::LocalName::from("id"))
+        .unwrap()
+        .to_owned();
+    support::pointer(&mut doc, &name);
+    doc.resolve_layout(0.0);
+    doc.layout_surfaces();
+    check_merged(&doc, &name);
+    // The model picker: bridged, opening upward.
+    scroll_to(&mut doc, "lab-state-idle");
+    support::pointer(&mut doc, "lab-idle-model");
+    doc.resolve_layout(0.0);
+    doc.layout_surfaces();
+    let surface = surface_of(&doc, "lab-idle-model-fused");
+    let trigger = local_box(&doc, surface, "lab-idle-model");
+    let bridge = local_box(&doc, surface, "lab-idle-model-bridge");
+    assert!(bridge[2] >= 64.0, "wide enough for a bridge: {bridge:?}");
+    assert!(
+        bridge[1] + 6.0 == trigger[1] || bridge[1] == trigger[1] + trigger[3],
+        "against the trigger: {bridge:?} {trigger:?}"
+    );
+    assert_eq!(doc.surface_shapes(surface).len(), 3);
+    assert!(doc.take_error().is_none());
 }
 
 // ---------------------------------------------------------------- the two painters, as pixels

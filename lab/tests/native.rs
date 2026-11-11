@@ -21,9 +21,9 @@ fn view_at(width: u32, height: u32, name: &str) -> NativeDocument {
         window_size: (width, height),
         ..Default::default()
     });
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     support::pointer(&mut doc, &format!("lab-view-{name}"));
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc
 }
 
@@ -34,7 +34,7 @@ fn view(name: &str) -> NativeDocument {
 /// Tab focus like `support::focus`, with room for the shell's top bar,
 /// rail and sidebar controls, which come before the view's in tab order.
 fn focus(doc: &mut NativeDocument, name: &str) {
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     for _ in 0..96 {
         if doc.inner().get_focussed_node_id() == Some(support::id(doc, name)) {
             return;
@@ -74,7 +74,7 @@ fn press(doc: &mut NativeDocument, key: Key, shift: bool) {
             KeyState::Released => UiEvent::KeyUp(event),
         });
     }
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 fn enter(doc: &mut NativeDocument, shift: bool) {
@@ -85,13 +85,13 @@ fn enter(doc: &mut NativeDocument, shift: bool) {
 /// layout or an input method delivers).
 fn commit(doc: &mut NativeDocument, text: &str) {
     doc.handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 /// A pointer click on `name`, then the layout the next frame would see.
 fn click(doc: &mut NativeDocument, name: &str) {
     support::pointer(doc, name);
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 /// Delete the character before the caret. Blitz edits text with the
@@ -101,7 +101,7 @@ fn backspace(doc: &mut NativeDocument) {
     doc.handle_ui_event(UiEvent::AppleStandardKeybinding("deleteBackward:".into()));
     #[cfg(not(target_os = "macos"))]
     press(doc, Key::Named(NamedKey::Backspace), false);
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
 }
 
 fn exists(doc: &NativeDocument, name: &str) -> bool {
@@ -211,11 +211,11 @@ fn the_select_opens_moves_picks_and_closes() {
         Some("true")
     );
     let (trigger, sheet) = (rect(&doc, "lab-select-field"), rect(&doc, menu));
-    assert!(
-        sheet.y >= trigger.y + trigger.height,
-        "below the trigger: {trigger:?} {sheet:?}"
+    assert_eq!(
+        sheet.y - (trigger.y + trigger.height),
+        GAP,
+        "below the trigger, 6 px apart: {trigger:?} {sheet:?}"
     );
-    assert!(sheet.y - (trigger.y + trigger.height) <= 4.5, "a small gap");
     click(&mut doc, "lab-select-field-option-1");
     assert_eq!(value(&doc), "today");
     assert!(!exists(&doc, menu), "a pick closes it");
@@ -290,14 +290,124 @@ fn the_select_searches_and_opens_upward() {
         rect(&doc, "lab-select-up"),
         rect(&doc, "lab-select-up-menu"),
     );
-    assert!(sheet.y + sheet.height <= trigger.y, "above the trigger");
-    assert!(
-        trigger.y - (sheet.y + sheet.height) <= 4.5,
-        "a small gap: {trigger:?} {sheet:?}"
+    assert_eq!(
+        trigger.y - (sheet.y + sheet.height),
+        GAP,
+        "above the trigger, 6 px apart: {trigger:?} {sheet:?}"
     );
     // A disabled select does not open.
     click(&mut doc, "lab-select-disabled");
     assert!(!exists(&doc, "lab-select-disabled-menu"));
+    assert!(doc.take_error().is_none());
+}
+
+/// The gap between a select's trigger and its menu, bridged (CSS px).
+const GAP: f64 = 6.0;
+
+/// The rect of the first element matching `selector`.
+fn rect_of(doc: &NativeDocument, selector: &str) -> blitz_dom::BoundingRect {
+    let inner = doc.inner();
+    let id = inner.query_selector(selector).unwrap().expect(selector);
+    inner.get_client_bounding_rect(id).unwrap()
+}
+
+/// A select opens on the side that has room, measured inside its clipping
+/// ancestor: one at the bottom of a short scrolling box opens upward by
+/// itself, stays inside the box, and its height is limited to the room
+/// above (the list scrolls inside); one with room below opens downward.
+#[test]
+fn the_select_opens_on_the_side_with_room() {
+    let mut doc = view("select");
+    let (trigger, menu, area) = (
+        rect(&doc, "lab-select-flip"),
+        rect(&doc, "lab-select-flip-menu"),
+        rect(&doc, "lab-select-flip-box"),
+    );
+    assert_eq!(
+        trigger.y - (menu.y + menu.height),
+        GAP,
+        "opened upward by itself: {trigger:?} {menu:?}"
+    );
+    // The room above: from 8 px inside the box's top to 6 px above the trigger.
+    let room = trigger.y - GAP - (area.y + 8.0);
+    assert!(
+        menu.y >= area.y + 8.0 - 0.01,
+        "inside the box: {menu:?} {area:?}"
+    );
+    assert!(
+        (menu.height - room).abs() < 0.01,
+        "as tall as the room: {menu:?}, room {room}"
+    );
+    let list = rect_of(&doc, "#lab-select-flip-menu [role=listbox]");
+    let rows = rect_of(&doc, "#lab-select-flip-menu [role=listbox] > div");
+    assert!(
+        rows.height > list.height,
+        "the list scrolls inside: {rows:?} in {list:?}"
+    );
+    // Its options still pick (the first one is in view).
+    click(&mut doc, "lab-select-flip-option-0");
+    assert_eq!(support::text(&doc, "lab-select-flip-value"), "inbox");
+    assert!(!exists(&doc, "lab-select-flip-menu"));
+    // With room below, the default side.
+    click(&mut doc, "lab-select-field");
+    let (trigger, menu) = (
+        rect(&doc, "lab-select-field"),
+        rect(&doc, "lab-select-field-menu"),
+    );
+    assert_eq!(menu.y - (trigger.y + trigger.height), GAP, "below");
+    assert!(doc.take_error().is_none());
+}
+
+/// An open select is placed again when its room changes: a window resize
+/// that leaves no room below flips it upward, and scrolling the stage so
+/// an upward menu has no room above flips it down.
+#[test]
+fn an_open_select_is_placed_again_on_resize_and_scroll() {
+    let mut doc = view("select");
+    click(&mut doc, "lab-select-field");
+    let trigger = rect(&doc, "lab-select-field");
+    let below = rect(&doc, "lab-select-field-menu");
+    assert_eq!(below.y - (trigger.y + trigger.height), GAP);
+    // A window that ends 60 px below the trigger.
+    doc.inner_mut().set_viewport(Viewport {
+        window_size: (1440, (trigger.y + trigger.height + 60.0) as u32),
+        ..Default::default()
+    });
+    doc.resolve_layout(0.0);
+    let trigger = rect(&doc, "lab-select-field");
+    let menu = rect(&doc, "lab-select-field-menu");
+    assert_eq!(
+        trigger.y - (menu.y + menu.height),
+        GAP,
+        "flipped above on resize: {trigger:?} {menu:?}"
+    );
+    // The upward select (open from the start), scrolled to the top of a
+    // short stage: no room above it any more, so it opens below.
+    let mut doc = view_at(1440, min_window().1, "select");
+    let (trigger, menu) = (
+        rect(&doc, "lab-select-up"),
+        rect(&doc, "lab-select-up-menu"),
+    );
+    assert_eq!(
+        trigger.y - (menu.y + menu.height),
+        GAP,
+        "above, as preferred"
+    );
+    let stage = support::id(&doc, "shell-stage");
+    let top = rect(&doc, "shell-stage").y;
+    doc.inner_mut()
+        .scroll_by(stage, 0.0, trigger.y - top - 20.0, Default::default());
+    doc.resolve_layout(0.0);
+    let (trigger, menu) = (
+        rect(&doc, "lab-select-up"),
+        rect(&doc, "lab-select-up-menu"),
+    );
+    assert!(trigger.y - top < 60.0, "scrolled near the top: {trigger:?}");
+    assert_eq!(
+        menu.y - (trigger.y + trigger.height),
+        GAP,
+        "flipped below on scroll: {trigger:?} {menu:?}"
+    );
     assert!(doc.take_error().is_none());
 }
 
@@ -515,7 +625,7 @@ fn chat_fits_wide_and_narrow_stages() {
             window_size: (width, height),
             ..Default::default()
         });
-        doc.inner_mut().resolve(0.0);
+        doc.resolve_layout(0.0);
         let stage = rect(&doc, "shell-stage");
         let column = rect(&doc, "lab-chat-column");
         let context = rect(&doc, "lab-chat-context");
@@ -572,9 +682,9 @@ fn chat_fits_wide_and_narrow_stages() {
         window_size: (1440, 900),
         ..Default::default()
     });
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     support::pointer(&mut doc, "lab-chat-context-toggle");
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     assert_eq!(rect(&doc, "lab-chat-context").width, 0.0);
     assert!(doc.take_error().is_none());
 }

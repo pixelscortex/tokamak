@@ -24,7 +24,7 @@ pub fn document() -> NativeDocument {
         window_size: (800, 1400),
         ..Default::default()
     });
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     doc
 }
 pub fn id(doc: &NativeDocument, name: &str) -> NodeId {
@@ -88,7 +88,7 @@ pub fn key(doc: &mut NativeDocument, value: &str, up: bool, repeat: bool) {
 pub fn focus(doc: &mut NativeDocument, name: &str) {
     // Match a native redraw after reactive disabled/tabindex changes: Blitz
     // rebuilds its tab-order cache during resolve, just as hit testing does.
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     for _ in 0..16 {
         if doc.inner().get_focussed_node_id() == Some(id(doc, name)) {
             return;
@@ -101,7 +101,7 @@ pub fn pointer(doc: &mut NativeDocument, name: &str) {
     pointer_node(doc, id(doc, name));
 }
 pub fn pointer_node(doc: &mut NativeDocument, target: NodeId) {
-    doc.inner_mut().resolve(0.0);
+    doc.resolve_layout(0.0);
     let rect = doc.inner().get_client_bounding_rect(target).unwrap();
     assert!(rect.width > 0.0 && rect.height > 0.0);
     let (x, y) = (
