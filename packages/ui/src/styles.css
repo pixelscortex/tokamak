@@ -6,6 +6,13 @@
 @import "./theme.css";
 @import "./materials.css";
 
+/* A button's label is not text to select: dragging across a button should
+ * never highlight it. A component that wants selectable text inside a button
+ * says so with `select-text`. */
+button {
+  user-select: none;
+}
+
 .tk-button,
 .tk-input {
   @apply font-sans bg-surface text-foreground rounded-control p-3;
