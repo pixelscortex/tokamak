@@ -9,49 +9,69 @@ packages/render/src/surface/widget.rs
 lab/src/surfaces.tsx
   s_bb7b798e16a141::t_d9f03f96ff0563 254
   s_bb7b798e16a141::t_26fc0d59605a71 255-345,365-367
+  s_e9593949284022::t_7493e32c5e326e 255-345,365-367
 packages/render/js/jsx-runtime.ts
   s_bb7b798e16a141::t_c86301f5d78263 69-72,110-113
 packages/ui/src/components/surface.tsx
   s_bb7b798e16a141::t_26b53f5d2feed7 60-61
+  s_e9593949284022::t_7493e32c5e326e 60-61
 packages/render/SURFACES.md
   s_bb7b798e16a141::t_daaf4cac851f6b 135-177
 packages/render/src/lib.rs
   s_bb7b798e16a141::t_26fc0d59605a71 25-26,106-110
   s_bb7b798e16a141::t_c2d9bc7cff6b03 111-112
+  s_e9593949284022::t_308256367a0158 106-110
+  s_e9593949284022::t_e25daab8b642e2 111-112
+  s_e9593949284022::t_f9c8952a85cbce 25-26
 packages/ui/src/materials.css
   s_bb7b798e16a141::t_354a0a635b607b 1-23,28-29,35-42
   s_bb7b798e16a141::t_26fc0d59605a71 24-27,30-34,43
+  s_e9593949284022::t_982e1c00551627 2,24-27,30-31,32-34,43
 lab/tests/fused_surface.rs
   s_bb7b798e16a141::t_d9f03f96ff0563 826,1039
   s_bb7b798e16a141::t_26fc0d59605a71 825,827-1038,1040-1123
+  s_e9593949284022::t_11daafbb654f59 825,827-883,889-927,932-947,952,958-1038,1040-1060,1065-1123
+  s_e9593949284022::t_f9c8952a85cbce 884-888,928-931,948-951,953-957,1061-1064
 packages/render/src/surface/surface.wgsl
   s_bb7b798e16a141::t_26fc0d59605a71 14-20,57,185-233,260-262
+  s_e9593949284022::t_0fd0e7df040097 14-20,57,185-233,260-262
 packages/render/src/surface/gpu.rs
   s_bb7b798e16a141::t_26fc0d59605a71 47,247-252,260-271
   s_bb7b798e16a141::t_e7263f414c823d 613-629,643-647,841-844,846,852
+  s_e9593949284022::t_239d4c257f468c 47,247-252,260-271
 packages/render/src/surface/shape.rs
   s_bb7b798e16a141::t_26fc0d59605a71 171-182,194,253,396-399,423,474
   s_bb7b798e16a141::t_daaf4cac851f6b 212-216
   s_bb7b798e16a141::t_6d111f4fe452c4 206-208,211,218-225
   s_bb7b798e16a141::t_40edc3fe9f7948 209-210,217
+  s_e9593949284022::t_239d4c257f468c 171-182,194,253,396-399,423,474
 packages/ui/src/styles.css
   s_bb7b798e16a141::t_26fc0d59605a71 7
+  s_e9593949284022::t_982e1c00551627 7
 packages/render/src/surface/mod.rs
   s_bb7b798e16a141::t_a28e5352b547d7 59-64
   s_bb7b798e16a141::t_26fc0d59605a71 66-67
+  s_e9593949284022::t_308256367a0158 66-67
+  s_e9593949284022::t_f9c8952a85cbce 68
 packages/render/src/wire.rs
   s_bb7b798e16a141::t_ba8c7e26cd31a8 174-183
   s_bb7b798e16a141::t_26fc0d59605a71 184
+  s_e9593949284022::t_980cc4cc43806e 184
 packages/render/src/surface/bind.rs
   s_bb7b798e16a141::t_ba8c7e26cd31a8 171,517
   s_bb7b798e16a141::t_daaf4cac851f6b 510-512
   s_bb7b798e16a141::t_26fc0d59605a71 37,60,90-99,103,139-141,152,154-158,172-211,251-269,304,318,322,329,331,333,396,403,434,442,549
   s_bb7b798e16a141::t_b68c0752345b4b 38-59,65,89,100-101,135-138,142-151,153,159-170,249-250,284-303,305-306,317,321,330,332,404-405,458-509,513-516,518-540
   s_bb7b798e16a141::t_ffe2e30fef7fa0 307
+  s_e9593949284022::t_308256367a0158 90-99,251-267
+  s_e9593949284022::t_980cc4cc43806e 37,60,103,139-141,152,154-158,172,173-211,304-307,318,322,329,331,333,396,403,405,434,442,549
+  s_e9593949284022::t_b4ffd19c520f66 268-269
 packages/render/Cargo.toml
   s_bb7b798e16a141::t_26fc0d59605a71 26-28
+  s_e9593949284022::t_980cc4cc43806e 26-28
 Cargo.lock
   s_bb7b798e16a141::t_530aef72e2a13a 4869
+  s_e9593949284022::t_f83b96a1b36a9d 4869
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -63,6 +83,14 @@ Cargo.lock
       "agent_id": {
         "tool": "claude",
         "id": "f414b8cf-b8cd-4f02-ac52-77f4365731e2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_e9593949284022": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e6a396-0bd5-4d14-9ecf-53727156b0c7",
         "model": "claude-opus-5-5"
       },
       "human_author": "JustKira <shighgamerhg@gmail.com>"
