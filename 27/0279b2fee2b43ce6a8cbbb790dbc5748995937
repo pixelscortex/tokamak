@@ -1,0 +1,27 @@
+lab/src/stress.tsx
+  s_ef483fea3c151e::t_d4eea28783ad74 58-71,89,108,132,152
+lab/tests/fused_surface.rs
+  s_ef483fea3c151e::t_d4eea28783ad74 1974-2045
+lab/src/surfaces.tsx
+  s_ef483fea3c151e::t_674694fa13694c 445,447-448,465
+  s_ef483fea3c151e::t_a696077a17d4c9 444,454
+  s_ef483fea3c151e::t_d4eea28783ad74 469
+  s_ef483fea3c151e::t_f8a45207b1c716 446
+  s_ef483fea3c151e::t_2888c784f05060 449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "270279b2fee2b43ce6a8cbbb790dbc5748995937",
+  "prompts": {},
+  "sessions": {
+    "s_ef483fea3c151e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "101e35c4-4f7c-43f0-af0d-2b064a915d86",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
