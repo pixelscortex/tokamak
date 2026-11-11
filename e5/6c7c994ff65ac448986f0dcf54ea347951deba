@@ -1,0 +1,28 @@
+packages/ui/src/components/button.tsx
+  s_e3d99f9a782059::t_855bbe551ac1a7 51-57
+  s_e3d99f9a782059::t_dc718f6a4f0133 7-9
+packages/ui/src/materials.css
+  s_e3d99f9a782059::t_dc718f6a4f0133 10,78-81
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_a8cb206ed45da2 117,952
+lab/src/buttons.tsx
+  s_e3d99f9a782059::t_dc718f6a4f0133 5,19-24,40
+packages/ui/src/components/select.tsx
+  s_e3d99f9a782059::t_855bbe551ac1a7 194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e56c7c994ff65ac448986f0dcf54ea347951deba",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
