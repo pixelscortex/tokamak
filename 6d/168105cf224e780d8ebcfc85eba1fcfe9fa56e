@@ -1,0 +1,35 @@
+packages/ui/src/components/kbd.tsx
+  s_0f23ea53ec4091::t_0b5c4157b2b3b0 7-9
+  s_0f23ea53ec4091::t_0c0aaefbf24bc3 1-6,10-37
+packages/ui/tests/contracts.test.ts
+  s_0f23ea53ec4091::t_8ba19a0fb69702 11,14-15
+  s_0f23ea53ec4091::t_ed53e3010e302c 12-13,16,41-46
+  s_0f23ea53ec4091::t_fc6ff9fb54c467 47
+packages/ui/src/components/icons.ts
+  s_0f23ea53ec4091::t_a1b544e40a9a90 1-17
+packages/ui/src/components/chip.tsx
+  s_0f23ea53ec4091::t_bec1b723a0ad93 1-72
+packages/ui/src/components/button.tsx
+  s_0f23ea53ec4091::t_0ac636e2120172 1-70
+packages/ui/src/theme.css
+  s_0f23ea53ec4091::t_5831d0c86c6c40 40,43
+  s_0f23ea53ec4091::t_ec7ad9ad985d57 38-39,41-42,44-47
+packages/ui/src/components/index.ts
+  s_0f23ea53ec4091::t_c3b55edeecba58 7-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6d168105cf224e780d8ebcfc85eba1fcfe9fa56e",
+  "prompts": {},
+  "sessions": {
+    "s_0f23ea53ec4091": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47b6de38-ec07-4bc8-b925-b723e9144ff3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
