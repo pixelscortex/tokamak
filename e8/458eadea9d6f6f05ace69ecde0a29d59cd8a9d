@@ -1,0 +1,21 @@
+packages/render/BLITZ_CHANGES.md
+  s_e3d99f9a782059::t_b9db06ac3e62a5 1-77
+packages/render/BLITZ_FORK.md
+  s_e3d99f9a782059::t_39683ba6618cfe 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e8458eadea9d6f6f05ace69ecde0a29d59cd8a9d",
+  "prompts": {},
+  "sessions": {
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
