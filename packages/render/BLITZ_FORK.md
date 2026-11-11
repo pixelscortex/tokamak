@@ -1,5 +1,9 @@
 # Blitz fork: rules
 
+For a plain-language list of every change, why it exists and whether Tokamak
+needs it, see `BLITZ_CHANGES.md` next to this file. Keep it up to date in the
+same commit as any change to the fork.
+
 Read this before changing anything in Blitz, or anything that depends on a
 changed Blitz. The list of changes and their status lives in Linear, issue
 TKM-76 ("Blitz fork: rules and list of changes"), with one sub-issue per
