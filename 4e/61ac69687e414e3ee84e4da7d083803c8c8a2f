@@ -1,0 +1,35 @@
+packages/render/src/surface/gpu.rs
+  s_ef483fea3c151e::t_dd26f4e4fece4f 47,286,297
+  s_ef483fea3c151e::t_bc3ea6855b7386 298
+packages/ui/src/materials.css
+  s_ef483fea3c151e::t_dd26f4e4fece4f 73-86,103-106,108,125-131
+  s_ef483fea3c151e::t_bc3ea6855b7386 62-64,107,118
+packages/render/src/surface/shape.rs
+  s_ef483fea3c151e::t_bc3ea6855b7386 217-220,243
+  s_ef483fea3c151e::t_dd26f4e4fece4f 202-216,238-242,244-254
+packages/render/src/surface/bind.rs
+  s_ef483fea3c151e::t_dd26f4e4fece4f 269-273,297-300,310-320,788-789
+  s_ef483fea3c151e::t_bc3ea6855b7386 274
+packages/render/src/surface/tiles.rs
+  s_ef483fea3c151e::t_dd26f4e4fece4f 38-40
+packages/render/src/surface/surface.wgsl
+  s_ef483fea3c151e::t_bc3ea6855b7386 28,394-406
+  s_ef483fea3c151e::t_c0d3fbab903a8e 341-343,345-349,481-487
+  s_ef483fea3c151e::t_dd26f4e4fece4f 16-23,25-27,66,92-118,227,336-340,344,350-351,375-381,416-426,479-480,488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e61ac69687e414e3ee84e4da7d083803c8c8a2f",
+  "prompts": {},
+  "sessions": {
+    "s_ef483fea3c151e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "101e35c4-4f7c-43f0-af0d-2b064a915d86",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
