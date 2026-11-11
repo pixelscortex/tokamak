@@ -1,0 +1,19 @@
+packages/render/CSS_OVERLAP.md
+  s_0f23ea53ec4091::t_0b5c4157b2b3b0 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29dde4b391a253130c96b1848dd3a56503cb558d",
+  "prompts": {},
+  "sessions": {
+    "s_0f23ea53ec4091": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47b6de38-ec07-4bc8-b925-b723e9144ff3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
