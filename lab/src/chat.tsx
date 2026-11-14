@@ -46,10 +46,9 @@ function TitleNotch(props: { slant: number; context: boolean }) {
     <Shell.TopBar at="stage">
       <div class={lane(props.context)}>
         <div class={`flex ${COLUMN}`}>
-          <Surface.Union
+          <Surface.Add
             id="lab-chat-notch"
             layer="base"
-            radius={[0, 0, 14, 14]}
             join={14}
             slant={props.slant}
             class="pointer-events-auto -ml-4 flex h-10 max-w-full min-w-0 items-center gap-2.5 rounded-b-[14px] bg-base pr-[18px] pb-0.5 pl-4"
@@ -66,7 +65,7 @@ function TitleNotch(props: { slant: number; context: boolean }) {
               <span class="size-1.5 rounded-full bg-ink" />
               <span class="text-[12px] leading-4 text-ink-2">{mocks.thread.status}</span>
             </span>
-          </Surface.Union>
+          </Surface.Add>
         </div>
       </div>
     </Shell.TopBar>
@@ -122,9 +121,9 @@ function ChatComposer(props: { context: boolean; send: (text: string) => void })
 function Bubble(props: { id?: string; text: string }) {
   return (
     <div class="flex justify-end pb-7">
-      <Surface id={props.id} material="chip" radius={12} class="max-w-[75%] min-w-0 px-3.5 py-2">
+      <div id={props.id} class="bg-chip bevel-1 rounded-[12px] max-w-[75%] min-w-0 px-3.5 py-2">
         <p class="m-0 text-[15px] leading-6 tracking-[-0.006em] whitespace-pre-wrap text-ink">{props.text}</p>
-      </Surface>
+      </div>
     </div>
   );
 }
@@ -140,7 +139,7 @@ function Messages(props: { sent: string[] }) {
         <span class="font-data text-[11px] leading-4 text-ink-5">{mocks.thread.tool.time}</span>
       </div>
       <div class="h-3 shrink-0" />
-      <Surface id="lab-chat-card" material="card" radius={10} class="flex flex-col gap-2.5 px-4 pt-3.5 pb-4">
+      <div id="lab-chat-card" class="bg-card bevel-1 rounded-[10px] flex flex-col gap-2.5 px-4 pt-3.5 pb-4">
         <div class="flex items-center gap-1.5">
           <span class="text-[12px] leading-4 font-medium text-ink-3">Todo</span>
           <Icon d={stroke.chevronRight} class="size-3 text-ink-5" />
@@ -156,7 +155,7 @@ function Messages(props: { sent: string[] }) {
           <span class="min-w-0 flex-1 truncate text-[15px] leading-6 font-medium tracking-[-0.006em] text-ink">{mocks.thread.task.title}</span>
           <span class="shrink-0 text-[13px] leading-4 text-ink-2">{mocks.thread.task.due}</span>
         </div>
-      </Surface>
+      </div>
       <div class="h-6 shrink-0" />
       <div id="lab-chat-reply" class="flex flex-col gap-3.5 text-[15px] leading-[26px] tracking-[-0.006em] text-ink-body">
         <p class="m-0">

@@ -12,8 +12,6 @@ render = { path = "../packages/render" }
 tokamak-build = { path = "../packages/build" }
 
 [dev-dependencies]
-# The tests read what surfaces and plates drew (render's lab probes).
-render = { path = "../packages/render", features = ["lab-probes"] }
 serde_json = "1.0.154"
 blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts"] }
 blitz-traits = "=0.3.0-beta.4"

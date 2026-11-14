@@ -3,7 +3,7 @@
 import { Show } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Icon } from "@tokamak/ui/elements";
-import { Button, Surface } from "@tokamak/ui/components";
+import { Button } from "@tokamak/ui/components";
 
 /** Sidebar header: section title and an optional trailing icon. */
 export function SidebarHeader(props: { title: string; action?: string }) {
@@ -72,14 +72,13 @@ export function SidebarRow(props: {
         </div>
       }
     >
-      <Surface
+      <div
         id={props.id}
-        material="chip"
-        radius={6}
-        class="flex h-[30px] shrink-0 items-center gap-2.5 px-2"
+        onClick={props.onClick}
+        class="bg-chip bevel-1 rounded-[6px] flex h-[30px] shrink-0 items-center gap-2.5 px-2"
       >
         {content()}
-      </Surface>
+      </div>
     </Show>
   );
 }

@@ -3,15 +3,11 @@
  * (Chat), the lab's views listed in the plugin sidebar, and the picked
  * view in the stage. Each view teleports its parts into the shell regions.
  *
- * Tests reach two things the window does not show, through the `lab-test`
- * host event (lab/tests/fused_surface.rs): the fixtures view (markup that
- * only tests need, not listed) and the painter of the shell regions'
- * plates. The window never sends that event. */
+ * Tests can open the unlisted fixtures view through `lab-test`. */
 import { For, Match, Switch, createSignal } from "solid-js";
 import { onHostEvent } from "@tokamak/render";
 import { Icon } from "@tokamak/ui/elements";
-import { Button, Kbd, Shell, Surface, rail } from "@tokamak/ui/components";
-import type { PlatePainter } from "@tokamak/ui/components";
+import { Button, Kbd, Shell, rail } from "@tokamak/ui/components";
 import { fill, stroke } from "./icons";
 import { SidebarHeader, SidebarLabel, SidebarRow } from "./kit";
 import ChatView from "./chat";
@@ -97,38 +93,32 @@ function TopBar() {
       </Shell.TopBar>
       <Shell.TopBar at="center">
         <div window-no-drag class="flex w-[400px] max-w-full min-w-0">
-          <Surface
+          <div
             id="lab-search"
-            material="well"
-            radius={8}
-            class="flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
+            class="bg-well bevel-inset bevel-1 rounded-[8px] flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
           >
             <Icon d={stroke.search} class="size-3.5 text-ink-4" />
             <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-4">Search or run a command</span>
             <Kbd keys={["cmd", "K"]} />
-          </Surface>
+          </div>
         </div>
       </Shell.TopBar>
     </>
   );
 }
 
-/** What tests may ask for (see the header): open a view, including the
- * fixtures view, and choose who draws the shell regions' plates. */
+/** Test-only view selection. */
 interface TestRequest {
   view?: View;
-  plates?: PlatePainter;
 }
 
 export default function App() {
   const [view, setView] = createSignal<View>("chat");
-  const [plates, setPlates] = createSignal<PlatePainter>("self");
   onHostEvent<TestRequest>("lab-test", (request) => {
     if (request.view) setView(request.view);
-    if (request.plates) setPlates(request.plates);
   });
   return (
-    <Shell plates={plates()}>
+    <Shell>
       <TopBar />
       <Rail />
       <Views active={view()} select={setView} />

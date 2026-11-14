@@ -755,3 +755,41 @@ fn window_buttons_follow_the_shell_top_bar() {
         "lab/src/main.rs TOP_BAR must equal topBar.height {height} and topBar.left {left}"
     );
 }
+
+#[test]
+fn views_teleport_into_the_shell_regions() {
+    let mut doc = view("chat");
+    let title = |doc: &NativeDocument| doc.inner().get_element_by_id("lab-chat-title").is_some();
+    assert!(title(&doc), "the chat view starts open");
+    assert!(doc.inner().get_element_by_id("lab-chat-composer").is_some());
+    let stage = support::id(&doc, "shell-stage");
+    click(&mut doc, "lab-view-buttons");
+    assert!(!title(&doc), "the chat title left the top bar");
+    assert!(
+        doc.inner().get_element_by_id("lab-chat-composer").is_none(),
+        "the composer left the bottom bar"
+    );
+    assert!(support::text(&doc, "lab-buttons").contains("Variants and states"));
+    assert_eq!(
+        stage,
+        support::id(&doc, "shell-stage"),
+        "the frame's stage is the same element"
+    );
+    // The chat view's content lives in the stage region, not where the view is.
+    let lab = support::id(&doc, "lab-buttons");
+    assert!(doc.inner().node_chain(lab).contains(&stage));
+    click(&mut doc, "lab-view-chat");
+    assert!(title(&doc));
+    assert!(doc.take_error().is_none());
+}
+
+#[test]
+fn the_stage_scroller_owns_its_content_paint_order() {
+    let doc = view("surfaces");
+    assert!(
+        doc.inner()
+            .get_node(support::id(&doc, "shell-stage"))
+            .unwrap()
+            .is_stacking_context_root(false)
+    );
+}
