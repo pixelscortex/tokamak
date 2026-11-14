@@ -1,0 +1,27 @@
+packages/build/tests/css.test.ts
+  s_3cbe90dd00fac3::t_17ac0b081f8d9c 31
+  s_3cbe90dd00fac3::t_79b0ecca90094e 43-56
+  s_3cbe90dd00fac3::t_00b423929e8376 57-58
+packages/build/tests/run.sh
+  s_3cbe90dd00fac3::t_17ac0b081f8d9c 4
+packages/build/src/css.ts
+  s_3cbe90dd00fac3::t_418c46662251c0 18
+packages/build/src/vite.ts
+  s_3cbe90dd00fac3::t_f87e3335f0b041 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3acb4fc0218e90d9fee22f7ea379c4131d7f0504",
+  "prompts": {},
+  "sessions": {
+    "s_3cbe90dd00fac3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbd4-6c80-77b0-85f2-36be0c404aed",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
