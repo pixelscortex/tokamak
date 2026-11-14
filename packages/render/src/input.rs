@@ -92,80 +92,10 @@ impl EventHandler for Handler<'_> {
                 eprintln!("UI listener: {error}");
                 bridge.error = Some(Error(error));
             }
-            // `overscroll-contain`: the wheel stays inside that scroller
-            // instead of chaining to the page (see input.rs).
-            if let DomEventData::Wheel(wheel) = &event.data
-                && !state.is_cancelled()
-                && overscroll_wheel(&mut doc.inner_mut(), chain, wheel)
-            {
-                state.prevent_default();
-            }
-            let target = event.target;
-            // Disabled fields reject keyboard defaults except Tab. Readonly
-            // fields still permit caret movement, selection and copying; only
-            // operations which can change text are canceled before Blitz edits.
-            if tag(doc, target, "input") {
-                let tab = matches!(&event.data, DomEventData::KeyDown(key) if key.key == Key::Named(NamedKey::Tab));
-                let disabled_edit = attribute(doc, target, "disabled")
-                    && !tab
-                    && matches!(
-                        event.data,
-                        DomEventData::KeyDown(_)
-                            | DomEventData::KeyPress(_)
-                            | DomEventData::Ime(_)
-                            | DomEventData::AppleStandardKeybinding(_)
-                    );
-                let readonly_edit = attribute(doc, target, "readonly") && mutates_text(&event.data);
-                if disabled_edit || readonly_edit {
-                    state.prevent_default();
-                }
-            }
-            if matches!(event.data, DomEventData::Blur(_)) {
-                bridge.space = None;
-                bridge.composition = Composition::Idle;
-            }
-            // beta.4 does not supply button Enter/Space activation. Own it once,
-            // suppressing repeats, IME confirmation and canceled/disabled keys.
-            if tag(doc, target, "button") {
-                let disabled = attribute(doc, target, "disabled");
-                match &event.data {
-                    DomEventData::KeyDown(key)
-                        if !bridge.composition.active() && !key.is_composing =>
-                    {
-                        if key.key == Key::Character(" ".into()) {
-                            if !key.is_auto_repeating {
-                                bridge.space = if !state.is_cancelled() && !disabled {
-                                    Some(target)
-                                } else {
-                                    None
-                                };
-                            }
-                            state.prevent_default();
-                        } else if key.key == Key::Named(NamedKey::Enter)
-                            && !key.is_auto_repeating
-                            && !state.is_cancelled()
-                            && !disabled
-                        {
-                            state.prevent_default();
-                            bridge.activate(doc, target)?;
-                        }
-                    }
-                    DomEventData::KeyUp(key) if key.key == Key::Character(" ".into()) => {
-                        let armed = bridge.space.take() == Some(target);
-                        if armed
-                            && !state.is_cancelled()
-                            && !disabled
-                            && !bridge.composition.active()
-                            && !key.is_composing
-                            && doc.inner().get_focussed_node_id() == Some(target)
-                        {
-                            bridge.activate(doc, target)?;
-                        }
-                        state.prevent_default();
-                    }
-                    _ => {}
-                }
-            }
+            contain_wheel(doc, chain, event, state);
+            protect_input(doc, event, state);
+            reset_on_blur(bridge, event);
+            activate_button(bridge, doc, event, state)?;
             state.request_redraw();
             Ok(())
         })();
@@ -175,6 +105,102 @@ impl EventHandler for Handler<'_> {
             state.prevent_default();
         }
     }
+}
+
+fn contain_wheel(
+    doc: &mut dyn Document,
+    chain: &[NodeId],
+    event: &DomEvent,
+    state: &mut EventState,
+) {
+    // `overscroll-contain`: the wheel stays inside that scroller
+    // instead of chaining to the page (see input.rs).
+    if let DomEventData::Wheel(wheel) = &event.data
+        && !state.is_cancelled()
+        && overscroll_wheel(&mut doc.inner_mut(), chain, wheel)
+    {
+        state.prevent_default();
+    }
+}
+
+fn protect_input(doc: &dyn Document, event: &DomEvent, state: &mut EventState) {
+    let target = event.target;
+    // Disabled fields reject keyboard defaults except Tab. Readonly
+    // fields still permit caret movement, selection and copying; only
+    // operations which can change text are canceled before Blitz edits.
+    if tag(doc, target, "input") {
+        let tab = matches!(&event.data, DomEventData::KeyDown(key) if key.key == Key::Named(NamedKey::Tab));
+        let disabled_edit = attribute(doc, target, "disabled")
+            && !tab
+            && matches!(
+                event.data,
+                DomEventData::KeyDown(_)
+                    | DomEventData::KeyPress(_)
+                    | DomEventData::Ime(_)
+                    | DomEventData::AppleStandardKeybinding(_)
+            );
+        let readonly_edit = attribute(doc, target, "readonly") && mutates_text(&event.data);
+        if disabled_edit || readonly_edit {
+            state.prevent_default();
+        }
+    }
+}
+
+fn reset_on_blur(bridge: &mut Bridge, event: &DomEvent) {
+    if matches!(event.data, DomEventData::Blur(_)) {
+        bridge.space = None;
+        bridge.composition = Composition::Idle;
+    }
+}
+
+fn activate_button(
+    bridge: &mut Bridge,
+    doc: &mut dyn Document,
+    event: &DomEvent,
+    state: &mut EventState,
+) -> Result<()> {
+    let target = event.target;
+    // beta.4 does not supply button Enter/Space activation. Own it once,
+    // suppressing repeats, IME confirmation and canceled/disabled keys.
+    if tag(doc, target, "button") {
+        let disabled = attribute(doc, target, "disabled");
+        match &event.data {
+            DomEventData::KeyDown(key) if !bridge.composition.active() && !key.is_composing => {
+                if key.key == Key::Character(" ".into()) {
+                    if !key.is_auto_repeating {
+                        bridge.space = if !state.is_cancelled() && !disabled {
+                            Some(target)
+                        } else {
+                            None
+                        };
+                    }
+                    state.prevent_default();
+                } else if key.key == Key::Named(NamedKey::Enter)
+                    && !key.is_auto_repeating
+                    && !state.is_cancelled()
+                    && !disabled
+                {
+                    state.prevent_default();
+                    bridge.activate(doc, target)?;
+                }
+            }
+            DomEventData::KeyUp(key) if key.key == Key::Character(" ".into()) => {
+                let armed = bridge.space.take() == Some(target);
+                if armed
+                    && !state.is_cancelled()
+                    && !disabled
+                    && !bridge.composition.active()
+                    && !key.is_composing
+                    && doc.inner().get_focussed_node_id() == Some(target)
+                {
+                    bridge.activate(doc, target)?;
+                }
+                state.prevent_default();
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 // Mirror the public editor's mutation categories, not every platform shortcut.
