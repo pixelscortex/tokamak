@@ -1,0 +1,25 @@
+packages/render/src/layout.rs
+  s_18bc7f3b1654bd::t_8e9aab9153537c 87,89,91,96
+  s_18bc7f3b1654bd::t_3c7d178bdce8c5 23-25,28-29,32-84
+packages/render/src/wire.rs
+  s_18bc7f3b1654bd::t_8e9aab9153537c 55
+  s_18bc7f3b1654bd::t_cc68732433eecb 71,179
+packages/render/src/document.rs
+  s_18bc7f3b1654bd::t_8e3086dcedb62c 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3585256edea7ff639f12a6775e6c774a99f6ab8c",
+  "prompts": {},
+  "sessions": {
+    "s_18bc7f3b1654bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db5f-9a43-70f0-8183-827215422bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
