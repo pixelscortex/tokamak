@@ -20,23 +20,80 @@
 //! no frames. `NativeDocument::resolve_layout` lays out, reports, and lays
 //! out again if the report changed the document (a menu re-placed), a few
 //! rounds at most, so a frame is painted with the placement already done.
-use blitz_dom::BaseDocument;
+use crate::{Result, bridge::Bridge};
+use blitz_dom::{BaseDocument, Document};
+use blitz_html::HtmlDocument;
 use blitz_traits::NodeId;
 use serde::Serialize;
+use serde_json::json;
+use std::{collections::BTreeMap, sync::atomic::Ordering};
 use style::values::computed::Overflow;
+
+#[derive(Default)]
+pub(super) struct Observed {
+    /// Elements marked `tk-observe` (layout.rs): their JS handle, and the
+    /// layout last reported to JS (None: not reported yet, or it left the
+    /// document and must be reported again when it returns).
+    observed: BTreeMap<NodeId, (u32, Option<Report>)>,
+}
+
+impl Observed {
+    pub(super) fn observe(&mut self, node: NodeId, handle: u32, enabled: bool) {
+        if enabled {
+            self.observed.entry(node).or_insert((handle, None));
+        } else {
+            self.observed.remove(&node);
+        }
+    }
+}
+
+/// Send JS the layouts of observed elements that changed since the last
+/// report (one `tk:layout` host event). Ok(true) if any were sent.
+pub(super) fn report_layout(bridge: &mut Bridge, html: &mut HtmlDocument) -> Result<bool> {
+    if !bridge.alive.load(Ordering::Acquire) || bridge.tree.layout.observed.is_empty() {
+        return Ok(false);
+    }
+    let mut changed = Vec::new();
+    {
+        let doc = html.inner();
+        // Forget nodes Blitz has dropped.
+        bridge
+            .tree
+            .layout
+            .observed
+            .retain(|id, _| doc.get_node(*id).is_some());
+        for (node, (handle, last)) in bridge.tree.layout.observed.iter_mut() {
+            let now = report(&doc, *node);
+            if now != *last {
+                *last = now;
+                if let Some(r) = now {
+                    changed.push(json!({"id": handle, "rect": r.rect, "clip": r.clip}));
+                }
+            }
+        }
+    }
+    if changed.is_empty() {
+        return Ok(false);
+    }
+    let json = json!({"topic": "tk:layout", "payload": changed}).to_string();
+    let result = bridge.js.call("host", Some(&json));
+    bridge.flush(html)?;
+    result?;
+    Ok(true)
+}
 
 /// One observed element's layout, as JS receives it (`id` is its JS handle).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-pub(crate) struct Report {
+struct Report {
     /// Border box: x, y, width, height (CSS px, window coordinates).
-    pub rect: [f32; 4],
+    rect: [f32; 4],
     /// Visible area: x, y, width, height (CSS px, window coordinates).
-    pub clip: [f32; 4],
+    clip: [f32; 4],
 }
 
 /// The layout of `node` now; None if it is not laid out (not in the
 /// document, or `display: none`).
-pub(crate) fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
+fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
     let n = doc.get_node(node)?;
     if !n.flags.is_in_document() {
         return None;

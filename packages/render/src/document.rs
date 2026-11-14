@@ -71,7 +71,7 @@ impl NativeDocument {
     pub fn resolve_layout(&mut self, time: f64) {
         for _ in 0..4 {
             self.html.inner_mut().resolve(time);
-            match self.report_layout() {
+            match layout::report_layout(&mut self.bridge, &mut self.html) {
                 Ok(true) => {}
                 Ok(false) => return,
                 Err(error) => {
@@ -83,40 +83,6 @@ impl NativeDocument {
         }
         // Still changing after the last round: lay out what it left.
         self.html.inner_mut().resolve(time);
-    }
-
-    /// Send JS the layouts of observed elements that changed since the last
-    /// report (one `tk:layout` host event). Ok(true) if any were sent.
-    fn report_layout(&mut self) -> Result<bool> {
-        if !self.alive.load(Ordering::Acquire) || self.bridge.tree.observed.is_empty() {
-            return Ok(false);
-        }
-        let mut changed = Vec::new();
-        {
-            let doc = self.html.inner();
-            // Forget nodes Blitz has dropped.
-            self.bridge
-                .tree
-                .observed
-                .retain(|id, _| doc.get_node(*id).is_some());
-            for (node, (handle, last)) in self.bridge.tree.observed.iter_mut() {
-                let now = layout::report(&doc, *node);
-                if now != *last {
-                    *last = now;
-                    if let Some(r) = now {
-                        changed.push(json!({"id": handle, "rect": r.rect, "clip": r.clip}));
-                    }
-                }
-            }
-        }
-        if changed.is_empty() {
-            return Ok(false);
-        }
-        let json = json!({"topic": "tk:layout", "payload": changed}).to_string();
-        let result = self.bridge.js.call("host", Some(&json));
-        self.bridge.flush(&mut self.html)?;
-        result?;
-        Ok(true)
     }
 
     /// Hand layout-bound shapes to `<tk-surface>` widgets and attach the

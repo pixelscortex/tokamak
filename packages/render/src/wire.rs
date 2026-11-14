@@ -52,10 +52,7 @@ pub(crate) struct Tree {
     handles: HashMap<NodeId, u32>,
     /// `<tk-surface>` widgets and the elements bound to them (surface/bind.rs).
     pub surfaces: crate::surface::Registry,
-    /// Elements marked `tk-observe` (layout.rs): their JS handle, and the
-    /// layout last reported to JS (None: not reported yet, or it left the
-    /// document and must be reported again when it returns).
-    pub observed: std::collections::BTreeMap<NodeId, (u32, Option<crate::layout::Report>)>,
+    pub(super) layout: crate::layout::Observed,
 }
 
 impl Tree {
@@ -71,7 +68,7 @@ impl Tree {
             native: HashMap::from([(0, root)]),
             handles: HashMap::from([(root, 0)]),
             surfaces: Default::default(),
-            observed: Default::default(),
+            layout: Default::default(),
         }
     }
 
@@ -179,12 +176,7 @@ impl Tree {
                     // Layout observation (layout.rs): reported from the next
                     // layout on, whatever the attribute's value.
                     if name == "tk-observe" {
-                        let native = self.native[&id];
-                        if value.is_some() {
-                            self.observed.entry(native).or_insert((id, None));
-                        } else {
-                            self.observed.remove(&native);
-                        }
+                        self.layout.observe(self.native[&id], id, value.is_some());
                     }
                     // Plates (surface/bind.rs, "Plates"): the build's marker,
                     // and the `class` scan for classes built at run time. A
