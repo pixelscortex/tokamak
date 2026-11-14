@@ -295,7 +295,16 @@ fn capture_views() {
         scroll_stage(&mut doc, 0.0);
         out.resize(&mut doc, 1440, 900 + short.ceil() as u32);
         out.save_settled(&mut doc, &dir, &format!("view-{view}"));
-
+        let pixels = out.frame(&mut doc);
+        let stage = doc.inner().get_client_bounding_rect(stage(&doc)).unwrap();
+        let x = (stage.x * 2.0) as u32;
+        for y in [stage.y + 1.0, stage.y + stage.height - 2.0] {
+            let i = (((y * 2.0) as u32 * out.width + x) * 4) as usize;
+            assert!(
+                pixels[i] > 27,
+                "{view}: straight, visible stage edge at {y}"
+            );
+        }
     }
     assert!(doc.take_error().is_none());
 }

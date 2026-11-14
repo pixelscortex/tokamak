@@ -89,7 +89,7 @@ fn inside(region: &geo::MultiPolygon<f64>, x: f64, y: f64) -> bool {
 #[test]
 fn root_add_cut_and_registered_root_style() {
     let f = Fixture::new(
-        r#"<div id="root" tk-group="g" style="border-radius:0;--tk-bevel:2;--tk-bevel-strength:.4;--tk-bevel-inset:1">
+        r#"<div id="root" tk-group="g" style="border-radius:0;--tk-bevel:2;--tk-bevel-strength:.4;--tk-bevel-base:.055;--tk-bevel-inset:1">
       <tk-surface id="surface" group="g" fill='#ff0000' bevel="99"></tk-surface>
       <div id="add" surface-groups="g" surface-op="add" style="left:100px;top:0"></div>
       <div id="cut" surface-groups="g" surface-op="cut" style="left:40px;top:40px"></div>
@@ -109,6 +109,7 @@ fn root_add_cut_and_registered_root_style() {
         (state.look.bevel, state.look.strength, state.look.inset),
         (2.0, 0.4, true)
     );
+    assert_eq!(state.look.base, 0.055);
     assert!(!f.moving());
 }
 
@@ -362,6 +363,7 @@ fn edge_strokes_are_clipped_inside_outer_and_hole_contours_at_both_scales() {
                 fill: [0.5, 0.5, 0.5, 0.4],
                 bevel: 2.0,
                 strength: 1.0,
+                base: 0.0,
                 inset: false,
             },
             scale,
@@ -439,4 +441,29 @@ fn a_cut_join_preserves_distant_square_corners() {
         assert!(inside(&r, x, y));
     }
     assert!(!inside(&r, 150.0, 190.0));
+}
+
+#[test]
+fn uniform_bevel_lift_is_visible_on_every_side() {
+    let scene = draw(
+        &[Shape::rect(false, [0.0, 0.0, 100.0, 100.0], [0.0; 4])],
+        Look {
+            fill: [0.5, 0.5, 0.5, 1.0],
+            bevel: 1.0,
+            base: 0.055,
+            ..Default::default()
+        },
+        1.0,
+    );
+    let mut sides = 0;
+    for command in &scene.commands {
+        if let RenderCommand::Stroke(edge) = command {
+            let anyrender::Paint::Solid(colour) = edge.brush else {
+                panic!("solid edge")
+            };
+            assert!((colour.components[0] - 0.5275).abs() < 0.0001);
+            sides += 1;
+        }
+    }
+    assert_eq!(sides, 4);
 }

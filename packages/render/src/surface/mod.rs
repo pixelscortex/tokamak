@@ -52,6 +52,7 @@ struct Look {
     fill: [f32; 4],
     bevel: f32,
     strength: f32,
+    base: f32,
     inset: bool,
 }
 struct Tween {
@@ -281,6 +282,7 @@ fn material_of(style: &Style) -> Look {
     Look {
         fill,
         bevel: number("tk-bevel", 0.0).max(0.0),
+        base: number("tk-bevel-base", 0.0).clamp(0.0, 1.0),
         strength: number("tk-bevel-strength", 1.0).clamp(0.0, 1.0),
         inset: number("tk-bevel-inset", 0.0) == 1.0,
     }
@@ -458,6 +460,10 @@ fn draw(shapes: &[Shape], look: Look, scale: f64) -> Scene {
     );
     if look.bevel > 0.0 {
         let stroke = Stroke::new(2.0 * look.bevel as f64).with_caps(Cap::Round);
+        let mut edge_fill = look.fill;
+        for v in &mut edge_fill[..3] {
+            *v += (1.0 - *v) * look.base;
+        }
         for poly in &region.0 {
             for (ring, hole) in std::iter::once((poly.exterior(), false))
                 .chain(poly.interiors().iter().map(|r| (r, true)))
@@ -482,7 +488,7 @@ fn draw(shapes: &[Shape], look: Look, scale: f64) -> Scene {
                     scene.stroke(
                         &stroke,
                         transform,
-                        edge_colour(look.fill, amount),
+                        edge_colour(edge_fill, amount),
                         None,
                         &Line::new((a.x, a.y), (b.x, b.y)),
                     );

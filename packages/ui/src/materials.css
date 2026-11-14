@@ -1,6 +1,7 @@
 @property --tk-fill { syntax: "<color>"; inherits: false; initial-value: transparent; }
 @property --tk-bevel { syntax: "<number>"; inherits: false; initial-value: 0; }
 @property --tk-bevel-inset { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --tk-bevel-base { syntax: "<number>"; inherits: false; initial-value: 0; }
 @property --tk-bevel-strength { syntax: "<number>"; inherits: false; initial-value: 1; }
 @property --tw-inset-shadow { syntax: "*"; inherits: false; initial-value: 0 0 #0000; }
 @property --tk-overscroll { syntax: "*"; inherits: false; }
@@ -16,13 +17,15 @@
   --tk-bevel: 1.5;
   --tw-inset-shadow:
     inset 0 calc((1 - 2 * var(--tk-bevel-inset)) * var(--tk-bevel) * 1px) 0 rgb(255 255 255 / calc(0.18 * var(--tk-bevel-strength))),
-    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength)));
+    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength))),
+    inset 0 0 0 calc(var(--tk-bevel) * 1px) rgb(255 255 255 / var(--tk-bevel-base));
   box-shadow: var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
 }
 @utility bevel-* {
   --tw-inset-shadow:
     inset 0 calc((1 - 2 * var(--tk-bevel-inset)) * var(--tk-bevel) * 1px) 0 rgb(255 255 255 / calc(0.18 * var(--tk-bevel-strength))),
-    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength)));
+    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength))),
+    inset 0 0 0 calc(var(--tk-bevel) * 1px) rgb(255 255 255 / var(--tk-bevel-base));
   box-shadow: var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
   --tk-bevel: --value(number, [number]);
 }
@@ -30,11 +33,12 @@
   --tk-bevel: 1.5;
   --tw-inset-shadow:
     inset 0 calc((1 - 2 * var(--tk-bevel-inset)) * var(--tk-bevel) * 1px) 0 rgb(255 255 255 / calc(0.18 * var(--tk-bevel-strength))),
-    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength)));
+    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength))),
+    inset 0 0 0 calc(var(--tk-bevel) * 1px) rgb(255 255 255 / var(--tk-bevel-base));
   box-shadow: var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
   --tk-bevel-inset: 1;
 }
-@utility bevel-quiet { --tk-bevel-strength: 0.2; }
+@utility bevel-quiet { --tk-bevel-strength: 0.075; --tk-bevel-base: 0.055; }
 
 [tk-group] { box-shadow: none !important; }
 

@@ -19,6 +19,7 @@ The root's computed style supplies the group's appearance:
 - `border-radius`: horizontal radius of each corner of the root's border box.
 - `--tk-bevel`: inside edge width in CSS pixels; default 0.
 - `--tk-bevel-inset`: 1 reverses the lighting; default 0.
+- `--tk-bevel-base`: uniform edge lift towards white from 0 to 1; default 0.
 - `--tk-bevel-strength`: lighting strength from 0 to 1; default 1.
 
 Root attributes:
@@ -58,9 +59,10 @@ for adds and opening for cuts. The correction is limited to within twice the
 join radius of the member. Buffer arcs have at most 0.01 CSS px sagitta.
 
 The scene fills the outline, then strokes its flattened segments with twice
-the bevel width, clipped to the outline. Outward normals facing straight up
-lighten towards white (gain 0.18); downward normals darken towards black
-(gain 0.45); horizontal normals keep the fill. Holes reverse their normals.
+the bevel width, clipped to the outline. The uniform base lift applies on
+every side. Outward normals facing straight up lighten towards white (gain
+0.18); downward normals darken towards black (gain 0.45); horizontal normals
+keep the uniformly lifted fill. Holes reverse their normals.
 One opacity layer preserves the fill's alpha across overlapping edge strokes.
 Segment colours approximate smooth lighting; overlapping round caps can show
 small changes at joins. No raster or physical-display acceptance is implied
