@@ -277,7 +277,13 @@ fn material_of(style: &Style) -> Look {
             .unwrap_or(default)
     };
     let fill = text("tk-fill")
-        .and_then(|v| css_colour(&v))
+        .and_then(|v| {
+            if v.trim().eq_ignore_ascii_case("currentcolor") {
+                Some(*style.clone_color().raw_components())
+            } else {
+                css_colour(&v)
+            }
+        })
         .unwrap_or([0.0; 4]);
     Look {
         fill,

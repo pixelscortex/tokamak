@@ -521,3 +521,15 @@ fn asymmetric_css_radii_and_pills() {
     assert!(!inside(&pill, 2.0, 2.0));
     assert!(inside(&pill, 20.0, 1.0) && inside(&pill, 99.0, 20.0));
 }
+
+#[test]
+fn currentcolor_fill_uses_the_roots_computed_color() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" style="color:#123456;--tk-fill:currentColor"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        &[],
+    );
+    assert_eq!(
+        f.state().look.fill,
+        [18.0 / 255.0, 52.0 / 255.0, 86.0 / 255.0, 1.0]
+    );
+}
