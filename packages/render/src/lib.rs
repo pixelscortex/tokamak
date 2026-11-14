@@ -7,6 +7,8 @@ mod icon;
 mod input;
 mod js;
 mod layout;
+#[cfg(target_os = "macos")]
+mod macos;
 mod mailbox;
 mod shell;
 mod surface;
