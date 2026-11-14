@@ -1,0 +1,23 @@
+packages/render/BLITZ_FORK.md
+  s_53b03d1897b939::t_51bba2e9914068 23-31
+packages/render/src/surface/bind.rs
+  s_53b03d1897b939::t_ea69a73e87649b 62-64
+packages/render/src/surface/plate.rs
+  s_53b03d1897b939::t_ed65ce5b2b1747 7-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1503243864332c0883111dff092e023996d6b609",
+  "prompts": {},
+  "sessions": {
+    "s_53b03d1897b939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "212c447b-632b-452e-a09e-5714fe13b94a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
