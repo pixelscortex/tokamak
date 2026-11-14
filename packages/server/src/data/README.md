@@ -42,7 +42,12 @@ back to tables after 256 fine dependencies / 64 KiB, and individual filters
 above 8 KiB are broad. Broadcast lag also invalidates conservatively. These are
 retained-notification/tracking bounds, not total-process allocation/RSS limits.
 Mutation snapshots can transiently allocate during conversion. Rollback and
-failed commits still publish no notification.
+failed commits still publish no notification. Once a commit is polled, an owned
+Tokio task completes it and publishes its footprint exactly once on success, even
+if the caller drops its waiting future. Epochs advance only after storage success;
+the task retains the database and catalog gate until then. Rollback cleanup also
+runs to completion after caller cancellation. The Tokio runtime must remain alive
+until these tasks finish; close returns Busy while they retain the database.
 
 ## Rust indexes
 
@@ -77,7 +82,9 @@ exclusive guard and a snapshot that predates no committed writes. Conflicts
 return the same typed retryable storage error instead of waiting on another
 call-owned transaction. This protects empty-table definitions from concurrent
 inserts without making independent record inserts conflict. Read-only snapshots
-need no guard. Rollback discards catalog, index and record writes.
+need no guard. A cancelled commit caller cannot release the gate early or advance
+an epoch ahead of storage publication. Rollback discards catalog, index and record
+writes without advancing epochs.
 
 The exact 4.0.0 storage APIs are internal: factory/sequences ownership, catalog
 providers, record envelopes/key encoding, IndexEnv/IndexOperation and

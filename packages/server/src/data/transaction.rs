@@ -1,7 +1,9 @@
 //! A call-owned storage transaction, retained across separate operations/awaits.
 //! Failed operations poison the whole call so catching a host error cannot save
 //! earlier writes. The write set is local until commit succeeds, then published
-//! synchronously before returning. Rollback and failed commits publish nothing.
+//! before returning, even if the caller stops awaiting commit. Once polled,
+//! commit and rollback run in owned tasks; cancelling the caller cannot interrupt
+//! storage finalization. Rollback and failed commits publish nothing.
 
 use super::{
     ChangeEvent, DatabaseState, Document, Error, Id, Query, RecordChange, Result, Table,
@@ -35,27 +37,6 @@ use surrealdb_kvs::key::KVKeyDecode;
 enum CatalogGuard {
     Read { _guard: OwnedRwLockReadGuard<()> },
     Write { _guard: OwnedRwLockWriteGuard<()> },
-}
-
-// A storage commit can apply before its future is cancelled. Advance on every
-// exit from an attempted commit, including cancellation and ambiguous errors,
-// while the transaction still holds its catalog guard. This may force a harmless
-// retry after a failed commit; it cannot let a stale snapshot miss durable DDL
-// or rows. Updating only after await would leave that cancellation window open.
-struct CommitEpoch<'a> {
-    core: &'a super::storage::StorageCore,
-    catalog: bool,
-    writes: bool,
-}
-impl Drop for CommitEpoch<'_> {
-    fn drop(&mut self) {
-        if self.catalog {
-            self.core.catalog_epoch.fetch_add(1, Ordering::Release);
-        }
-        if self.writes {
-            self.core.write_epoch.fetch_add(1, Ordering::Release);
-        }
-    }
 }
 
 #[must_use = "commit or roll back the transaction before closing its database"]
@@ -521,16 +502,21 @@ impl Transaction {
 
     /// Consume the handle: neither a second commit nor late JS writes are possible.
     /// No automatic retry: only the invocation owner can safely replay JS logic.
+    /// Once polled, finalization runs to completion on the Tokio runtime even if
+    /// this future is dropped. A successful commit still publishes exactly one
+    /// change event when it has row changes, regardless of caller cancellation.
+    /// The runtime must remain running until finalization completes.
     pub async fn commit(self) -> Result<()> {
+        tokio::spawn(self.commit_owned())
+            .await
+            .map_err(|error| Error::Database(error.into()))?
+    }
+
+    async fn commit_owned(self) -> Result<()> {
         if self.failed {
             self.inner.cancel().await?;
             return Err(Error::FailedTransaction);
         }
-        let epoch = CommitEpoch {
-            core: &self.state.storage,
-            catalog: self.catalog_changed,
-            writes: !self.written.is_empty(),
-        };
         if self.read_only {
             // Read transactions have nothing to flush; the backend rejects a
             // read-only commit, while the application API permits it.
@@ -538,8 +524,20 @@ impl Transaction {
         } else {
             self.inner.commit().await?;
         }
-        drop(epoch);
+        // This task owns self, including the catalog guard and database owner,
+        // through the actual storage outcome. Dropping the caller's JoinHandle
+        // does not cancel it. Publish epochs ONLY after storage success and
+        // BEFORE releasing the gate, with no intervening await. Thus an epoch
+        // captured before opening a snapshot can never be newer than its data.
+        // A snapshot opened during commit either conflicts at the held gate or
+        // observes the changed epoch on its next mutation and must retry.
+        let core = &self.state.storage;
+        if self.catalog_changed {
+            core.catalog_epoch.fetch_add(1, Ordering::Release);
+        }
         if !self.written.is_empty() {
+            core.write_epoch.fetch_add(1, Ordering::Release);
+            // One owner sends once after success, including cancelled callers.
             // No receivers is normal before live subscriptions are installed.
             let _ = self.state.changes.send(ChangeEvent {
                 tables: self.written.into_iter().collect(),
@@ -549,10 +547,17 @@ impl Transaction {
         Ok(())
     }
 
-    /// Await rollback explicitly; dropping the backend transaction is only a
-    /// cancellation safety net, never a way to publish successful writes.
+    /// Consume the handle and discard its writes without publishing changes.
+    /// Once polled, cleanup retains the database and catalog gate until storage
+    /// cancellation resolves, even if the caller drops this future.
     pub async fn rollback(self) -> Result<()> {
-        self.inner.cancel().await?;
-        Ok(())
+        tokio::spawn(async move {
+            let result = self.inner.cancel().await.map_err(Error::from);
+            // Retain ALL of self, not just inner, through the cleanup await.
+            drop(self);
+            result
+        })
+        .await
+        .map_err(|error| Error::Database(error.into()))?
     }
 }
