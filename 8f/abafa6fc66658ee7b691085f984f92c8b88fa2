@@ -1,0 +1,19 @@
+packages/render/src/macos.rs
+  s_18bc7f3b1654bd::t_d669e3651c5744 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fabafa6fc66658ee7b691085f984f92c8b88fa2",
+  "prompts": {},
+  "sessions": {
+    "s_18bc7f3b1654bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db5f-9a43-70f0-8183-827215422bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
