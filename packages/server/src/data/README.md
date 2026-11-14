@@ -67,8 +67,13 @@ let rows = transaction.query(&messages)
 Equalities follow the index's leading field order. At most one lower and one
 upper bound constrain the next field. Indexed queries walk field/ID order;
 unindexed queries scan IDs, filter in Rust, then sort by creation time and ID.
-An unknown index or invalid bound poisons the transaction, including limit-zero
-queries. Index definitions are idempotent only when their fields and uniqueness
+Native `eq` uses strict value equality for both access paths, without regex
+matching or other SQL coercions. Operands of `eq`, `gt`, `gte`, `lt` and `lte` must
+be JSON-like, recursively, with finite numbers; NONE remains the missing-value
+sentinel, distinct from null. Regexes, closures, record IDs and other non-JSON-like
+values return `Error::Invalid` and poison the transaction at query execution.
+An unknown index or invalid bound also poisons the transaction, including
+limit-zero queries; all operands are validated before any empty-query shortcut. Index definitions are idempotent only when their fields and uniqueness
 match. New definitions on tables with rows are rejected: no backfill is run.
 All document mutations maintain every table index in the same transaction.
 Every mutation (insert, keyed insert, patch, replace, delete and index definition)

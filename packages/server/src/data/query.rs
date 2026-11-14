@@ -1,7 +1,8 @@
 //! Queries share their caller's snapshot. Unindexed reads scan storage IDs,
 //! filter in Rust, and retain the application order: creation time, then ID.
 use super::{
-    Document, Error, Id, Order, Result, SurrealValue, Table, Transaction, Value, types::check_field,
+    Document, Error, Id, Order, Result, SurrealValue, Table, Transaction, Value,
+    types::{check_field, normalize},
 };
 use surrealdb_idx::{
     catalog::providers::TableProvider,
@@ -33,6 +34,10 @@ impl<'tx> Query<'tx> {
         }
     }
 
+    /// Match strict value equality on JSON-like values, with the same semantics
+    /// for indexed and unindexed reads. NONE represents a missing value.
+    /// Non-JSON-like operands (including nested values) return Error::Invalid
+    /// and poison the transaction when the query executes, even with limit(0).
     pub fn eq(mut self, field: impl Into<String>, value: impl SurrealValue) -> Self {
         self.conditions.push((field.into(), value.into_value()));
         self
@@ -46,15 +51,27 @@ impl<'tx> Query<'tx> {
         self
     }
 
+    /// Constrain the indexed field to values greater than this JSON-like operand.
+    /// Non-JSON-like operands return Error::Invalid and poison the transaction
+    /// at execution, including limit(0); NONE is the missing-value sentinel.
     pub fn gt(self, field: impl Into<String>, value: impl SurrealValue) -> Self {
         self.bound(field, BinaryOperator::MoreThan, value)
     }
+    /// Constrain the indexed field to values greater than or equal to this JSON-like operand.
+    /// Non-JSON-like operands return Error::Invalid and poison the transaction
+    /// at execution, including limit(0); NONE is the missing-value sentinel.
     pub fn gte(self, field: impl Into<String>, value: impl SurrealValue) -> Self {
         self.bound(field, BinaryOperator::MoreThanEqual, value)
     }
+    /// Constrain the indexed field to values less than this JSON-like operand.
+    /// Non-JSON-like operands return Error::Invalid and poison the transaction
+    /// at execution, including limit(0); NONE is the missing-value sentinel.
     pub fn lt(self, field: impl Into<String>, value: impl SurrealValue) -> Self {
         self.bound(field, BinaryOperator::LessThan, value)
     }
+    /// Constrain the indexed field to values less than or equal to this JSON-like operand.
+    /// Non-JSON-like operands return Error::Invalid and poison the transaction
+    /// at execution, including limit(0); NONE is the missing-value sentinel.
     pub fn lte(self, field: impl Into<String>, value: impl SurrealValue) -> Self {
         self.bound(field, BinaryOperator::LessThanEqual, value)
     }
@@ -88,6 +105,20 @@ impl<'tx> Query<'tx> {
     pub async fn collect(self) -> Result<Vec<Document>> {
         let result = async {
             self.tx.ready(false)?;
+            // Validate every operand before choosing an access path or taking
+            // an empty-query exit. Reuse document validation (including nested
+            // values and finite numbers), without changing the operand itself.
+            for value in self
+                .conditions
+                .iter()
+                .map(|(_, value)| value)
+                .chain(self.bounds.iter().map(|(_, _, value)| value))
+            {
+                normalize(value.clone(), 0).map_err(|error| match error {
+                    Error::Invalid(_) => Error::Invalid("query operands must be JSON-like"),
+                    error => error,
+                })?;
+            }
             for (field, value) in &self.conditions {
                 check_field(field)?;
                 if field == "_id" {
