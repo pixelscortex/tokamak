@@ -3,7 +3,7 @@ use blitz_dom::Document;
 use blitz_traits::{NodeId, events::*};
 use keyboard_types::Modifiers;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -53,13 +53,8 @@ impl Bridge {
         chain: &[NodeId],
         event: &DomEvent,
     ) -> Result<Response> {
-        let handles: Vec<_> = chain
-            .iter()
-            .filter_map(|id| self.tree.handle(*id))
-            .collect();
-        let mut data = json!({ "type":event.name(), "target": self.tree.handle(event.target).unwrap_or(0),
-            "chain": handles, "bubbles": event.bubbles, "cancelable": event.cancelable,
-            "isComposing":self.composition.active() });
+        let mut data = json!({ "type":event.name(), "bubbles": event.bubbles,
+            "cancelable": event.cancelable, "isComposing":self.composition.active() });
         match &event.data {
             DomEventData::Input(input) => data["value"] = json!(input.value),
             DomEventData::AppleStandardKeybinding(command) => {
@@ -81,37 +76,45 @@ impl Bridge {
             }
             _ => {}
         }
-        let result = self.js.call("dispatch", Some(&data.to_string()));
-        // Even a throwing listener may have changed Solid signals. Never let
-        // those changes wait for another interaction or paint a stale frame.
-        self.flush(doc)?;
-        let response: Response = serde_json::from_str(&result?.unwrap_or_default())
-            .map_err(|e| Error(format!("Invalid event response: {e}")))?;
-        Ok(response)
+        self.send_event(doc, chain, event.target, data, "Invalid event response: ")
     }
 
     pub(super) fn activate(&mut self, doc: &mut dyn Document, target: NodeId) -> Result<()> {
         let chain = doc.inner().node_chain(target);
         // Keyboard activation is a JS click with the same bubbling and
         // cancellation contract as a native pointer click, not a second input.
-        let handles: Vec<_> = chain
-            .iter()
-            .filter_map(|id| self.tree.handle(*id))
-            .collect();
-        let result = self.js.call(
-            "dispatch",
-            Some(
-                &json!({"type":"click","target":self.tree.handle(target).unwrap_or(0),
-            "chain":handles,"bubbles":true,"cancelable":true,"isComposing":false})
-                .to_string(),
-            ),
-        );
-        self.flush(doc)?;
-        let response: Response =
-            serde_json::from_str(&result?.unwrap_or_default()).map_err(|e| Error(e.to_string()))?;
+        let response = self.send_event(
+            doc,
+            &chain,
+            target,
+            json!({"type":"click","bubbles":true,"cancelable":true,"isComposing":false}),
+            "",
+        )?;
         if let Some(error) = response.error {
             return Err(Error(error));
         }
         Ok(())
+    }
+
+    fn send_event(
+        &mut self,
+        doc: &mut dyn Document,
+        chain: &[NodeId],
+        target: NodeId,
+        mut data: Value,
+        response_error_prefix: &str,
+    ) -> Result<Response> {
+        let handles: Vec<_> = chain
+            .iter()
+            .filter_map(|id| self.tree.handle(*id))
+            .collect();
+        data["target"] = json!(self.tree.handle(target).unwrap_or(0));
+        data["chain"] = json!(handles);
+        let result = self.js.call("dispatch", Some(&data.to_string()));
+        // Even a throwing listener may have changed Solid signals. Never let
+        // those changes wait for another interaction or paint a stale frame.
+        self.flush(doc)?;
+        serde_json::from_str(&result?.unwrap_or_default())
+            .map_err(|e| Error(format!("{response_error_prefix}{e}")))
     }
 }
