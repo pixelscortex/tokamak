@@ -1,0 +1,19 @@
+lab/tests/vector_experiment/mod.rs
+  s_9f5f9a68567564::t_b35f611fbf9d3c 321-336,361-369
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "22189cb4512f1b6245ecb09ecdd22bf6d8caddb3",
+  "prompts": {},
+  "sessions": {
+    "s_9f5f9a68567564": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db4e-af04-7b50-a071-701445d6e4db",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
