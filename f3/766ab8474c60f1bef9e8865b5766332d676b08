@@ -1,0 +1,21 @@
+packages/server/Cargo.toml
+  s_822cb42a004075::t_96d4119efbebd9 36-43
+packages/server/src/data/storage.rs
+  s_822cb42a004075::t_9d5dd332acd19a 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3766ab8474c60f1bef9e8865b5766332d676b08",
+  "prompts": {},
+  "sessions": {
+    "s_822cb42a004075": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db58-b48d-7cf0-beab-4168541f978d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
