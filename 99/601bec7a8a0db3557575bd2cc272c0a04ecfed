@@ -1,0 +1,19 @@
+packages/render/SURFACES.md
+  s_aed503d94420a0::t_eddce799c0e066 144,165-166,224-225,242-261,276-281,336,341-342,349-354,368,372,374-375,382-383,399-401,454-458,473,479-481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99601bec7a8a0db3557575bd2cc272c0a04ecfed",
+  "prompts": {},
+  "sessions": {
+    "s_aed503d94420a0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1da7a-0793-7b32-909e-4fb9fb864656",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
