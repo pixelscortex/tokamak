@@ -149,10 +149,10 @@ fn explicit_owner_and_tracked_share_native_storage_and_transactions() {
     });
 }
 
-// Acceptance: typed conflicts are native transaction conflicts on this supplied
-// storage, not message matching or errors manufactured by a test engine.
+// Acceptance: typed conflicts come from real storage transactions, without
+// message matching or a test engine.
 #[test]
-fn native_owner_commit_conflicts_with_attached_tracked_snapshot() {
+fn native_owner_commit_conflicts_with_tracked_snapshot() {
     run(|| {
         Box::pin(async {
             let mut db = Database::open(Storage::Memory).await.unwrap();

@@ -37,6 +37,27 @@ enum CatalogGuard {
     Write { _guard: OwnedRwLockWriteGuard<()> },
 }
 
+// A storage commit can apply before its future is cancelled. Advance on every
+// exit from an attempted commit, including cancellation and ambiguous errors,
+// while the transaction still holds its catalog guard. This may force a harmless
+// retry after a failed commit; it cannot let a stale snapshot miss durable DDL
+// or rows. Updating only after await would leave that cancellation window open.
+struct CommitEpoch<'a> {
+    core: &'a super::storage::StorageCore,
+    catalog: bool,
+    writes: bool,
+}
+impl Drop for CommitEpoch<'_> {
+    fn drop(&mut self) {
+        if self.catalog {
+            self.core.catalog_epoch.fetch_add(1, Ordering::Release);
+        }
+        if self.writes {
+            self.core.write_epoch.fetch_add(1, Ordering::Release);
+        }
+    }
+}
+
 #[must_use = "commit or roll back the transaction before closing its database"]
 pub struct Transaction {
     pub(super) inner: Arc<StorageTransaction>,
@@ -505,6 +526,11 @@ impl Transaction {
             self.inner.cancel().await?;
             return Err(Error::FailedTransaction);
         }
+        let epoch = CommitEpoch {
+            core: &self.state.storage,
+            catalog: self.catalog_changed,
+            writes: !self.written.is_empty(),
+        };
         if self.read_only {
             // Read transactions have nothing to flush; the backend rejects a
             // read-only commit, while the application API permits it.
@@ -512,19 +538,8 @@ impl Transaction {
         } else {
             self.inner.commit().await?;
         }
-        // Advance while still holding the guard: a definition cannot inspect
-        // stale row presence, and later writers cannot miss committed indexes.
-        if self.catalog_changed {
-            self.state
-                .storage
-                .catalog_epoch
-                .fetch_add(1, Ordering::Release);
-        }
+        drop(epoch);
         if !self.written.is_empty() {
-            self.state
-                .storage
-                .write_epoch
-                .fetch_add(1, Ordering::Release);
             // No receivers is normal before live subscriptions are installed.
             let _ = self.state.changes.send(ChangeEvent {
                 tables: self.written.into_iter().collect(),

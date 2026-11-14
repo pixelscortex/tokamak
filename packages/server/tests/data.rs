@@ -657,8 +657,8 @@ async fn failed_calls(disk: bool) {
     db.close().await.unwrap();
 }
 
-// Failure mode: errors returned by public-SDK validation (before SQL executes)
-// must poison a call just like wrapper validation and engine statement errors.
+// Failure mode: excessive value depth must poison a call at the value
+// boundary, just as it did under the former SDK request validation.
 async fn sdk_validation_failure(disk: bool) {
     let fixture = Fixture::new(disk);
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
