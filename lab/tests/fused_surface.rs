@@ -568,3 +568,219 @@ fn every_attachment_touches_a_plain_target() {
         }
     }
 }
+
+fn pointer_at(
+    doc: &mut NativeDocument,
+    name: &str,
+    buttons: blitz_traits::events::MouseEventButtons,
+) -> blitz_traits::events::BlitzPointerEvent {
+    use blitz_traits::events::*;
+    use keyboard_types::Modifiers;
+    doc.resolve_layout(0.0);
+    let rect = doc
+        .inner()
+        .get_client_bounding_rect(support::id(doc, name))
+        .unwrap();
+    let (x, y) = (
+        (rect.x + rect.width / 2.0) as f32,
+        (rect.y + rect.height / 2.0) as f32,
+    );
+    BlitzPointerEvent {
+        id: BlitzPointerId::Mouse,
+        is_primary: true,
+        coords: PointerCoords {
+            page_x: x,
+            page_y: y,
+            screen_x: x,
+            screen_y: y,
+            client_x: x,
+            client_y: y,
+        },
+        button: MouseEventButton::Main,
+        buttons,
+        mods: Modifiers::empty(),
+        details: Default::default(),
+        element: Default::default(),
+        active_pointers: Default::default(),
+    }
+}
+
+/// Pointer down (`up` false) or up over the centre of element `name`, without
+/// the other half of a click: `:active` holds between the two.
+fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
+    use blitz_traits::events::{MouseEventButtons, UiEvent};
+    let buttons = if up {
+        MouseEventButtons::None
+    } else {
+        MouseEventButtons::Primary
+    };
+    let event = pointer_at(doc, name, buttons);
+    doc.handle_ui_event(UiEvent::PointerMove(event.clone()));
+    doc.handle_ui_event(if up {
+        UiEvent::PointerUp(event)
+    } else {
+        UiEvent::PointerDown(event)
+    });
+    doc.resolve_layout(0.0);
+    doc.layout_surfaces();
+}
+
+/// The pointer moves over the centre of element `name` (`:hover`).
+fn hover(doc: &mut NativeDocument, name: &str) {
+    use blitz_traits::events::{MouseEventButtons, UiEvent};
+    let event = pointer_at(doc, name, MouseEventButtons::None);
+    doc.handle_ui_event(UiEvent::PointerMove(event));
+    doc.resolve_layout(0.0);
+}
+
+#[test]
+fn idle_surfaces_request_no_frames() {
+    for scale in [1.0, 2.0] {
+        let mut doc = document(scale, 900.0);
+        for view in VIEWS.iter().chain(&["fixtures"]) {
+            open(&mut doc, view);
+            for (w, h) in [(1440, 900), (1160, 780)] {
+                doc.inner_mut().set_viewport(Viewport {
+                    window_size: ((w as f32 * scale) as u32, (h as f32 * scale) as u32),
+                    hidpi_scale: scale,
+                    ..Default::default()
+                });
+                doc.resolve_layout(0.0);
+                doc.layout_surfaces();
+                assert!(!doc.inner().is_animating(), "{view} scale {scale} {w}x{h}");
+            }
+        }
+        assert!(doc.take_error().is_none());
+    }
+}
+
+#[test]
+fn a_view_switch_lands_without_animating() {
+    for scale in [1.0, 2.0] {
+        let mut doc = document(scale, 900.0);
+        for view in [
+            "composer", "surfaces", "chat", "select", "chat", "buttons", "chat",
+        ] {
+            open(&mut doc, view);
+            doc.layout_surfaces();
+            assert!(!doc.inner().is_animating(), "to {view} scale {scale}");
+        }
+        assert!(doc.take_error().is_none());
+    }
+}
+
+#[test]
+fn the_select_trigger_keeps_its_box_on_hover() {
+    let mut doc = document(1.0, 900.0);
+    open(&mut doc, "select");
+    let name = "lab-select-field";
+    let rect = |doc: &NativeDocument| {
+        let r = doc
+            .inner()
+            .get_client_bounding_rect(support::id(doc, name))
+            .unwrap();
+        let inner = doc.inner();
+        let style = inner
+            .get_node(support::id(doc, name))
+            .unwrap()
+            .primary_styles()
+            .unwrap();
+        assert_eq!(format!("{:?}", style.clone_translate()), "None");
+        [r.x, r.y, r.width, r.height]
+    };
+    let before = rect(&doc);
+    for open in [false, true] {
+        hover(&mut doc, name);
+        assert_eq!(rect(&doc), before, "hover open={open}");
+        pointer_half(&mut doc, name, false);
+        assert_eq!(rect(&doc), before, "press open={open}");
+        pointer_half(&mut doc, name, true);
+        assert_eq!(rect(&doc), before, "release open={open}");
+        assert_eq!(
+            support::attr(&doc, name, "aria-expanded").as_deref(),
+            Some(if open { "false" } else { "true" })
+        );
+    }
+    assert!(doc.take_error().is_none());
+}
+
+fn compare_resize(
+    doc: &mut NativeDocument,
+    out: &mut Offscreen,
+    view: &str,
+    w: u32,
+    h: u32,
+    fullscreen: bool,
+) {
+    let set_full = |doc: &mut NativeDocument| {
+        let root = doc.inner().root_element().id;
+        let attr = blitz_dom::QualName::new(
+            None,
+            blitz_dom::Namespace::from(""),
+            blitz_dom::LocalName::from("data-fullscreen"),
+        );
+        if fullscreen {
+            doc.inner_mut().mutate().set_attribute(root, attr, "");
+        } else {
+            doc.inner_mut().mutate().clear_attribute(root, attr);
+        }
+    };
+    out.resize(doc, w, h);
+    set_full(doc);
+    let live = out.frame(doc);
+    let mut fresh = document(out.scale, 900.0);
+    open(&mut fresh, view);
+    out.resize(&mut fresh, w, h);
+    set_full(&mut fresh);
+    let want = out.frame(&mut fresh);
+    let differing = live
+        .iter()
+        .zip(&want)
+        .filter(|(a, b)| a.abs_diff(**b) > 1)
+        .count();
+    assert_eq!(differing, 0, "{view} {w}x{h} full={fullscreen}");
+    let stage = doc.inner().get_client_bounding_rect(stage(doc)).unwrap();
+    let at = |x: f64, y: f64| {
+        let i = (((y * out.scale as f64) as u32 * out.width + (x * out.scale as f64) as u32) * 4)
+            as usize;
+        [live[i], live[i + 1], live[i + 2]]
+    };
+    let y = stage.y + stage.height * 0.5 + 100.0;
+    assert_eq!(at(stage.x + 20.0, y), [0x1b; 3], "stage drawn");
+    assert_eq!(at(stage.x - 100.0, y), [0x17; 3], "sidebar drawn");
+}
+
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn resize_frames_match_fresh_renders() {
+    let mut out = Offscreen::new(2.0);
+    for view in VIEWS {
+        let mut doc = document(2.0, 900.0);
+        open(&mut doc, view);
+        out.resize(&mut doc, 1440, 900);
+        out.frame(&mut doc);
+        for w in [1400, 1300, 1160, 1320, 1440] {
+            compare_resize(&mut doc, &mut out, view, w, 900, false);
+        }
+    }
+}
+
+#[test]
+#[ignore = "offscreen GPU frames; run explicitly"]
+fn full_screen_sizes_draw_every_shell_surface() {
+    let mut out = Offscreen::new(2.0);
+    for view in VIEWS {
+        let mut doc = document(2.0, 900.0);
+        open(&mut doc, view);
+        out.resize(&mut doc, 1440, 900);
+        out.frame(&mut doc);
+        for (w, h, full) in [
+            (1728, 1117, true),
+            (1428, 917, false),
+            (1440, 900, false),
+            (1728, 1117, true),
+        ] {
+            compare_resize(&mut doc, &mut out, view, w, h, full);
+        }
+    }
+}

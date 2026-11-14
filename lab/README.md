@@ -24,8 +24,7 @@ Files:
 - `src/mocks.ts`: all sample data (models, chips, commands, the run, the
   thread). Components take it through props; nothing in it is real.
 - `src/fixtures.tsx`: markup only the tests need. It is not listed; tests
-  open it with the `lab-test` host event (`src/app.tsx`), which also
-  switches who draws the shell regions' plates.
+  open it with the `lab-test` host event (`src/app.tsx`), uses the same shell and surface renderer.
 - `src/kit.tsx`: sidebar rows and section titles; `src/icons.ts`: icon
   paths (Lucide ISC, Phosphor MIT).
 - `src/styles.css`: imports, dark values for the older `.tk-button` /
@@ -43,7 +42,7 @@ Tests:
   with the keyboard, picks, searches, opens upward and closes on Escape and
   on a click outside; each composer state; the composer stays within 60%
   of the stage; buttons; layout at wide and narrow windows.
-- `tests/fused_surface.rs`: surfaces, plates and shell behaviour, and
+- `tests/fused_surface.rs`: surface interactions, attachment geometry, stable control boxes, shell resize frames, and
   every view settling without requesting frames. The ignored GPU tests
   render offscreen frames (pixel checks, and one capture of each view with
   `capture_views`, written to `$TK_CAPTURE_DIR`, default
