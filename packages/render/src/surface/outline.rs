@@ -1,6 +1,6 @@
 //! Rounded geometry builders and ordered boolean outlines.
 use super::{Placed, Side};
-use geo::{Area, BooleanOps, Buffer, Coord, LineString, MultiPolygon, Polygon};
+use geo::{Area, BooleanOps, Buffer, Coord, LineString, MultiPolygon, Polygon, Simplify};
 use peniko::kurbo::{Arc as CurveArc, BezPath, PathEl};
 use std::sync::Arc;
 pub(super) type V2 = [f32; 2];
@@ -340,6 +340,8 @@ pub(super) fn slanted(
     Some(Shape::from_poly(sub, Poly::new(points)?))
 }
 fn normalized_radii([_, _, w, h]: [f32; 4], r: [f32; 4]) -> [f32; 4] {
+    let [w, h] = [w as f64, h as f64];
+    let r = r.map(f64::from);
     let f = [
         (w, r[0] + r[1]),
         (h, r[1] + r[2]),
@@ -348,10 +350,10 @@ fn normalized_radii([_, _, w, h]: [f32; 4], r: [f32; 4]) -> [f32; 4] {
     ]
     .into_iter()
     .fold(
-        1.0f32,
+        1.0f64,
         |f, (side, sum)| if sum > 0.0 { f.min(side / sum) } else { f },
     );
-    r.map(|r| r.max(0.0) * f)
+    r.map(|r| (r.max(0.0) * f) as f32)
 }
 
 pub(super) fn polygon(s: &Shape) -> MultiPolygon<f64> {
@@ -449,7 +451,8 @@ pub(super) fn region(shapes: &[Shape]) -> MultiPolygon<f64> {
         *p = Polygon::new(outer, holes);
         p.unsigned_area() >= 1e-6
     });
-    result
+    // Boolean roundoff can also retrace a straight edge; do not amplify those spikes into miters.
+    result.simplify(1e-5)
 }
 
 pub(super) fn bands(region: &MultiPolygon<f64>, width: f64) -> Vec<(MultiPolygon<f64>, f32)> {

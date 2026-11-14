@@ -360,6 +360,17 @@ fn edge_bands_stay_inside_the_real_contours_at_both_scales() {
     assert_eq!(r.0.len(), 1);
     assert_eq!(r.0[0].interiors().len(), 1);
     let bands = outline::bands(&r, 2.0);
+    use geo::{CoordsIter, Distance, Euclidean};
+    for (band, _) in &bands {
+        for c in band.coords_iter() {
+            let point = Point::new(c.x, c.y);
+            let nearest = std::iter::once(r.0[0].exterior())
+                .chain(r.0[0].interiors())
+                .map(|ring| Euclidean.distance(&point, ring))
+                .fold(f64::INFINITY, f64::min);
+            assert!(nearest <= 2.02, "band escaped its width: {nearest}");
+        }
+    }
     let band = bands
         .iter()
         .fold(geo::MultiPolygon::new(vec![]), |r, (p, _)| r.union(p));
@@ -609,4 +620,18 @@ fn attached_and_slanted_members_keep_large_asymmetric_corners() {
     assert!(!inside(&polygon(&tab), 20.0, 20.0));
     let slant = slanted(false, [0.0, 0.0, 100.0, 100.0], r, 0.0, [-1.0; 2]).unwrap();
     assert!(!inside(&polygon(&slant), 20.0, 20.0));
+}
+
+#[test]
+fn rounded_full_css_keeps_its_pill_radius() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" style="height:40px;border-radius:calc(infinity * 1px)"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        &[],
+    );
+    assert!(
+        !inside(&f.region(), 2.0, 2.0),
+        "radii {:?}",
+        f.state().shown[0].radii
+    );
+    assert!(inside(&f.region(), 20.0, 1.0));
 }
