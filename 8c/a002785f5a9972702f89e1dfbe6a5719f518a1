@@ -1,0 +1,25 @@
+packages/render/SURFACES.md
+  s_bef2713774a71d::t_ea5ee6fc90e0d1 15-16,63-71
+packages/render/src/surface/mod.rs
+  s_bef2713774a71d::t_cd64bee7d87951 14,473-481
+packages/render/src/surface/outline.rs
+  s_bef2713774a71d::t_6d017f9124ebf3 455-513
+packages/render/tests/surface/mod.rs
+  s_bef2713774a71d::t_88fe182df3d615 6,351,353-357,360-373,378,381,388,390,424,428,432,537-612
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ca002785f5a9972702f89e1dfbe6a5719f518a1",
+  "prompts": {},
+  "sessions": {
+    "s_bef2713774a71d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dc13-9c90-7272-9e09-e6f8216ba342",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
