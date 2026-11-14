@@ -210,13 +210,17 @@ fn numbers(node: &Node, name: &str) -> Vec<f32> {
         .collect()
 }
 fn box_of(doc: &BaseDocument, node: &Node) -> Option<[f32; 4]> {
-    let rect = doc.get_client_bounding_rect(node.id)?;
-    (rect.width > 0.0 && rect.height > 0.0).then_some([
-        rect.x as f32,
-        rect.y as f32,
-        rect.width as f32,
-        rect.height as f32,
-    ])
+    let mut ancestor = Some(node);
+    while let Some(n) = ancestor {
+        if n.primary_styles()
+            .is_some_and(|s| s.get_box().display == style::values::specified::Display::None)
+        {
+            return None;
+        }
+        ancestor = n.parent.and_then(|id| doc.get_node(id));
+    }
+    let rect = crate::layout::border_box(doc, node.id)?;
+    (rect[2] > 0.0 && rect[3] > 0.0).then_some(rect)
 }
 fn local(rect: [f32; 4], origin: [f32; 4]) -> [f32; 4] {
     [rect[0] - origin[0], rect[1] - origin[1], rect[2], rect[3]]

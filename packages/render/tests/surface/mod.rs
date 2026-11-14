@@ -533,3 +533,40 @@ fn currentcolor_fill_uses_the_roots_computed_color() {
         [18.0 / 255.0, 52.0 / 255.0, 86.0 / 255.0, 1.0]
     );
 }
+
+#[test]
+fn hidden_ancestors_remove_old_member_boxes() {
+    let mut f = Fixture::new(
+        r#"<div tk-group="g"><tk-surface id="surface" group="g"></tk-surface><div id="ancestor"><div id="member" surface-groups="g" surface-op="cut" style="left:40px;top:40px"></div></div></div>"#,
+        &["member"],
+    );
+    assert!(!inside(&f.region(), 50.0, 50.0));
+    f.attr("ancestor", "style", "display:none");
+    f.frame();
+    assert!(inside(&f.region(), 50.0, 50.0));
+    assert_eq!(f.state().shown.len(), 1);
+}
+
+#[test]
+fn scrolling_a_members_content_keeps_its_shape() {
+    let mut f = Fixture::new(
+        r#"<div tk-group="g"><tk-surface id="surface" group="g"></tk-surface><div id="member" surface-groups="g" surface-op="cut" style="left:40px;top:40px;overflow:auto"><div style="height:100px">content</div></div></div>"#,
+        &["member"],
+    );
+    let before = f.state().shown.clone();
+    let member = f.id("member");
+    f.doc
+        .inner_mut()
+        .scroll_by(member, 0.0, 10.0, Default::default());
+    f.frame();
+    assert_eq!(
+        f.doc
+            .inner()
+            .get_node(f.id("member"))
+            .unwrap()
+            .scroll_offset()
+            .y,
+        10.0
+    );
+    assert_eq!(f.state().shown, before);
+}

@@ -118,7 +118,7 @@ fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
 /// (blitz-dom 0.3.0-beta.4 `physical_unrounded_geometry` walks from the
 /// node itself), so a scrolled scroller would seem to move up with its
 /// content; that offset is added back.
-fn border_box(doc: &BaseDocument, node: NodeId) -> Option<[f32; 4]> {
+pub(crate) fn border_box(doc: &BaseDocument, node: NodeId) -> Option<[f32; 4]> {
     let r = doc.get_client_bounding_rect(node)?;
     let own = doc.get_node(node)?.scroll_offset();
     Some([
