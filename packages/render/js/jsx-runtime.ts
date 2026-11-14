@@ -55,29 +55,14 @@ export namespace JSX {
     onKeyUp?: EventHandler;
     onComposition?: EventHandler;
     onAppleKeybinding?: EventHandler;
-    /** Layout-bound surface member (render/SURFACES.md); set by
-     * `@tokamak/ui`'s Surface components. Presence flags: pass `true` or
-     * leave undefined (a string "false" would still be present). */
+    "tk-group"?: string;
+    "surface-own"?: "false";
     "surface-groups"?: string;
-    "surface-op"?: "union" | "subtract";
-    "surface-radius"?: string;
+    "surface-op"?: "add" | "cut";
     "surface-join"?: number;
-    "surface-gap"?: number;
     "surface-slant"?: string;
     "surface-animate"?: true;
     "surface-attach"?: "left" | "right" | "top" | "bottom";
-    /** A plate: an element drawn from its computed fill (a solid background
-     * colour or a `material-*` utility) and bevel instead of a Blitz
-     * background. Added by the build to elements whose static `class` makes
-     * them one; authors do not write it. */
-    "tk-plate"?: true;
-    /** A region: the element directly holding a `<tk-surface materials>`
-     * layer. Blitz paints no background under the plates inside it. Bare,
-     * each plate paints itself, at its own place in paint order; `"sheet"`
-     * makes the region's layer draw all of them, below the region's content
-     * (render/SURFACES.md, "Plates"). Written by `@tokamak/ui`'s shell
-     * regions, `Surface` and `Sheet`; views do not write it. */
-    "tk-region"?: true | "sheet";
     /** With `WindowOptions::custom_titlebar`: pressing here drags the window. */
     "window-drag"?: true;
     "window-no-drag"?: true;
@@ -109,31 +94,9 @@ export namespace JSX {
     readonly?: boolean;
   }
 
-  /** `<tk-surface>` (render/src/surface, render/SURFACES.md): a fused, lit
-   * surface painted natively on the GPU; it has no children. `shapes` is a
-   * JSON list of shapes in the element's CSS px. */
+  /** Background layer of a fused group; its root owns the computed look. */
   export interface SurfaceAttributes extends Attributes {
-    /** Members with this name in `surface-groups` add their boxes as shapes. */
-    group?: string;
-    shapes?: string;
-    join?: number;
-    gap?: number;
-    fill?: string;
-    bevel?: number;
-    light?: number;
-    elevation?: "raised" | "recessed";
-    border?: number;
-    "border-color"?: string;
-    "border-align"?: "inside" | "center" | "outside";
-    "border-lit"?: string | number;
-    "border-mix"?: number;
-    /** Materials layer ("the sheet") of the region that holds it (its
-     * parent, marked `tk-region`): draws the region's plates that do not
-     * paint themselves, each with its own computed material, no fusing: all
-     * of them in a `tk-region="sheet"`, otherwise only those on elements
-     * that cannot carry a widget (inputs, images, tables). Written by
-     * `@tokamak/ui`'s shell regions, `Surface` and `Sheet`. */
-    materials?: true;
+    group: string;
   }
 
   /** `<tk-icon>` (render/src/icon.rs): SVG path data drawn natively. */

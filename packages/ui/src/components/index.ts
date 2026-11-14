@@ -1,7 +1,7 @@
 /** Compositions over the native elements. Surface and Shell are used by the
  * lab only for now; the app's shell frame and plugin slots are separate. */
-export { Sheet, Surface, materials, shellGroups } from "./surface";
-export type { Material, PlatePainter, ShapeProps, SheetProps, ShellLayer, SurfaceProps } from "./surface";
+export { Surface } from "./surface";
+export type { AddProps, ShapeProps, ShellLayer, SurfaceProps } from "./surface";
 export { Shell, rail, railItemTop, topBar } from "./shell";
 export type { ShellProps } from "./shell";
 /** Plate controls (Tailwind utilities and theme tokens only). `Button` here

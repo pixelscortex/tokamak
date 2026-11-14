@@ -1,17 +1,7 @@
-/** Button: a plate you press (render/SURFACES.md, "Plates").
- *
- *   <Button variant="primary" onClick={run}>Run</Button>
- *   <Button variant="ghost" size="icon" label="Attach"><Icon d={…} class="size-4" /></Button>
- *   <Button pressed={always()} onClick={() => setAlways(!always())}>Always allow</Button>
- *
- * Flat plates: the fill changes on hover and while pressed, and a toggle
- * that is on keeps its pressed fill (`aria-pressed`). No bevel, no border,
- * no shadow, no movement. `ghost` has no
- * plate until hover. Keyboard focus shows a ring (`:focus`; Blitz has no
- * `:focus-visible`, so a click that focuses shows it too).
- *
- * This is the plate button. `@tokamak/ui/elements` still exports the older
- * class-based `Button` (`.tk-button`), which the todo plugin uses. */
+/** Buttons change fill on hover and press; focus uses a ring.
+ * <Button variant="primary" onClick={run}>Run</Button>
+ * <Button variant="ghost" size="icon" label="Attach">…</Button>
+ */
 import { splitProps } from "solid-js";
 import type { JSX } from "@tokamak/render";
 

@@ -8,11 +8,10 @@ test("native library preserves its public element and component exports", async 
   const elementsPath = new URL("elements.js", dist).href;
   const componentsPath = new URL("components.js", dist).href;
   assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
-  // The plate controls (Button, Kbd, Chip, Textarea, Select, Composer) sit
-  // beside the shell pieces; elements keeps the older class-based Button.
+  assert.deepEqual(Object.keys((await import(componentsPath)).Surface).sort(), ["Add", "Cut"]);
   assert.deepEqual(Object.keys(await import(componentsPath)).sort(), [
-    "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Sheet", "Shell", "Surface", "Textarea",
-    "dismissOutside", "materials", "place", "rail", "railItemTop", "shellGroups", "textareaLine", "topBar",
+    "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Shell", "Surface", "Textarea",
+    "dismissOutside", "place", "rail", "railItemTop", "textareaLine", "topBar",
     "trackLayout",
   ]);
   let library = "";

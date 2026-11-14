@@ -30,7 +30,7 @@
  *
  * What sits above the message is separated from it by a faint divider;
  * the composer is one shape that grows taller. `docked` makes that shape
- * rise out of the window base (a `Surface.Union` of the base layer, with
+ * rise out of the window base (a `Surface.Add` of the base layer, with
  * fillets into the stage's bottom edge); put it in `Shell.BottomBar`.
  * Otherwise it is a free base-coloured plate (galleries).
  *
@@ -445,15 +445,14 @@ export function Composer(props: ComposerProps): JSX.Element {
         </div>
       }
     >
-      <Surface.Union
+      <Surface.Add
         id={props.id}
         layer="base"
-        radius={[18, 18, 0, 0]}
         join={22}
         class={`${frame} pointer-events-auto rounded-t-[18px] bg-base ${props.class ?? ""}`}
       >
         {body()}
-      </Surface.Union>
+      </Surface.Add>
     </Show>
   );
 }

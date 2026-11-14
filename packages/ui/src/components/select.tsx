@@ -1,52 +1,12 @@
-/** Select: a trigger button that shows the current value, and a menu of
- * options that opens below or above it, fused with the trigger into one
- * plate while open.
+/** A trigger and menu fused while open. Field and compact sizes; placement
+ * follows available space above/below the trigger and updates with layout.
  *
- *   <Select id="model" size="compact" side="top" mono
- *     options={[{ value: "openrouter/free", label: "openrouter/free", group: "OpenRouter" }]}
- *     value={model()} onValueChange={setModel} />
+ * <Select options={models} value={model()} onValueChange={setModel} search />
  *
- * - Options may carry a `group` (a heading, in order of first appearance),
- *   `detail` (dim text on the right) and `disabled`. The selected option
- *   has a check.
- * - `search` adds a field at the top of the menu that filters by label and
- *   detail. Blitz gives scripts no way to move focus, so the field is not
- *   focused when the menu opens: typing on the focused trigger goes into
- *   it, and a click puts the caret in it.
- * - Sizes: `field` (34 px, a form row) and `compact` (26 px, toolbars and
- *   the composer: no plate until hover).
- * - Keyboard: on the trigger, Down or Up opens; Enter or Space toggles.
- *   While open, Up and Down move over the enabled options, Enter picks,
- *   Escape closes, Tab closes and moves on. A click outside closes it (the
- *   shell's root reports clicks; see dismiss.ts).
- *
- * Closed, the field trigger is a flat plate: its fill lifts a step on
- * hover and darkens while pressed; it never moves. Open,
- * the trigger, a bridge and the menu are ONE fused surface (`Surface` with
- * three `Surface.Union` shapes, chip material): the trigger's own plate is
- * off, the menu sits 6 px from the trigger, and the bridge spans 80% of
- * the narrower plate (where trigger and menu overlap), centred, with
- * concave 3 px fillets where it meets each plate. A bridge narrower than
- * 64 px is not drawn: the menu then sits directly on the trigger, and the
- * trigger is attached to it by that edge (`attach`), so the trigger's
- * corners there are square and its sides meet the menu's edge with 3 px
- * concave fillets (or run straight into it where they are flush). Nothing
- * moves while open: no hover dip, no press.
- *
- * Placement (`place`, place.ts): `side` is a preference (`bottom`, `top`,
- * or `auto`, which is `bottom`); the menu flips when the preferred side
- * lacks room and the other has more, its height is limited to the room
- * on its side (the list scrolls inside), and it shifts sideways to stay
- * inside the trigger's clipping area (the stage scroller, a scrolling box,
- * the window). It is placed again whenever the trigger moves or its
- * visible area changes while open (scrolling, a resize). The boxes come
- * from host layout reports (`trackLayout`): the menu appears after the
- * layout that places the trigger, in the same frame.
- *
- * Ids: the trigger has `id`; the fused surface `${id}-fused`, its trigger
- * shape `${id}-face`, the bridge `${id}-bridge`, the menu `${id}-menu`, the
- * search field `${id}-search`, each option `${id}-option-${index}` (index
- * in `options`). */
+ * Arrow keys open/navigate; Enter picks; Escape and Tab close. Typing on the
+ * focused trigger filters a searchable menu because Blitz cannot focus it
+ * programmatically. Shell dismisses clicks outside the menu.
+ */
 import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { JSX, NativeEvent, NativeNode } from "@tokamak/render";
@@ -66,8 +26,6 @@ const MIN_BRIDGE = 64;
 const MARGIN = 8;
 /** The list's own height limit (the menu may get less room). */
 const LIST_MAX = 264;
-/** Corner radii: field trigger (rounded-md), compact trigger (rounded-sm), menu. */
-const RADIUS = { field: 8, compact: 6, menu: 10 };
 
 export interface SelectOption {
   value: string;
@@ -288,32 +246,29 @@ export function Select(props: SelectProps): JSX.Element {
         {(g: Accessor<Geometry>) => (
           <Surface
             id={sub("fused")}
-            material="chip"
-            plate={false}
+            own={false}
             join={JOIN}
-            class={`pointer-events-none absolute z-30 flex items-start ${g().side === "top" ? "flex-col-reverse" : "flex-col"}`}
+            class={`surface-chip bevel-1 pointer-events-none absolute z-30 flex items-start ${g().side === "top" ? "flex-col-reverse" : "flex-col"}`}
             style={`left: ${g().left}px; ${g().side === "top" ? "bottom" : "top"}: 0; width: ${g().width}px`}
           >
             {/* The trigger's face: the real button sits above it (z-31). */}
-            <Surface.Union
+            <Surface.Add
               id={sub("face")}
-              radius={compact() ? RADIUS.compact : RADIUS.field}
               attach={g().merged ? (g().side === "top" ? "top" : "bottom") : undefined}
-              class="shrink-0"
+              class={compact() ? "shrink-0 rounded-sm" : "shrink-0 rounded-md"}
               style={`margin-left: ${g().tx}px; width: ${g().tw}px; height: ${g().th}px`}
             />
             <Show when={!g().merged}>
-              <Surface.Union
+              <Surface.Add
                 id={sub("bridge")}
                 class="pointer-events-auto shrink-0"
                 style={`margin-left: ${g().bx}px; width: ${g().bw}px; height: ${GAP}px`}
               />
             </Show>
-            <Surface.Union
+            <Surface.Add
               id={sub("menu")}
               ref={observeMenu}
-              radius={RADIUS.menu}
-              class="pointer-events-auto flex shrink-0 flex-col gap-1 p-1"
+              class="pointer-events-auto flex shrink-0 flex-col gap-1 rounded-[10px] p-1"
               style={`margin-left: ${g().mx}px; width: ${g().mw}px; max-height: ${g().maxHeight}px`}
             >
               <Show when={props.search}>
@@ -371,7 +326,7 @@ export function Select(props: SelectProps): JSX.Element {
                   </Show>
                 </div>
               </div>
-            </Surface.Union>
+            </Surface.Add>
           </Surface>
         )}
       </Show>

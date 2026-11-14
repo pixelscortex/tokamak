@@ -15,16 +15,13 @@
   --spacing: 4px;
   --font-sans: system-ui, sans-serif;
 
-  /* Surface materials (Surface component, render/SURFACES.md): pure neutral
-   * greys, darkest at the window base. Hex only: the GPU widget parses them. */
+  /* Neutral backgrounds, darkest at the window base. */
   --color-base: #080808;
   --color-sidebar: #171717;
   --color-panel: #1b1b1b;
   --color-card: #252525;
   --color-chip: #2a2a2a;
   --color-well: #151515;
-  /* The big shell surfaces' hairline is derived from their fill (strength
-   * and light modulation live in the material, components/surface.tsx). */
 
   /* Text and icon tones on the dark surfaces, strongest first. */
   --color-ink: #e8e8ea;

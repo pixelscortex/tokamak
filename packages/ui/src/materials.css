@@ -1,121 +1,47 @@
-/* Plates (render/SURFACES.md, "Plates").
- *
- * An element with a solid background colour, inside a region, is a plate:
- * its fill and edges are drawn by our shader, not by Blitz. The build gives
- * every solid `background-color` a `--tk-fill` twin
- * (packages/build/src/fills.ts), marks plates (`tk-plate`,
- * packages/build/src/materials.ts) and fails on a plate class Tailwind does
- * not know. A typical button:
- *
- *   <button class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-md px-4">Run</button>
- *
- * Utilities (all take Tailwind variants: `hover:`, `active:`,
- * `aria-pressed:`, `dark:`):
- *
- * - `bg-*`                 the fill: any solid colour, alpha kept (Tailwind's own).
- * - `elevation-<n>`        the plate stands n px off the surface: a strip under the face shows its side.
- * - `sink-<n>`             the face goes n px down into its elevation, and the element moves down with it.
- * - `pressed`              the face goes all the way down (as `sink-<elevation>`).
- * - `bevel`                a lit edge band, 1.5 px.
- * - `bevel-<n>`            a lit edge band n px wide (`bevel-2.5`, `bevel-[0.75]`).
- * - `bevel-sharp`          the band at full strength to a crisp inner edge (the default).
- * - `bevel-soft`           the band fades inward.
- * - `bevel-tilt-<deg>`     how strongly the band is lit and shaded, degrees from flat (default 35).
- * - `raised`               the band lit at the top, towards the light (the default).
- * - `recessed`             the band lit at the bottom: a well, a tray.
- * - `material-key`         a key: chip fill, 1.5 px band, raised.
- * - `material-key-bright`  a bright key: ink fill, 1.5 px band, raised.
- * - `material-key-pressed` a key held down: card fill, 1 px band, tilt 15.
- * - `material-tray`        what keys sit in: base fill, 1 px band, recessed.
- * - `material-card`        card fill, 1.5 px band, raised.
- * - `material-chip`        chip fill, 1 px band, raised.
- * - `material-well`        well fill, 1 px band, recessed (a text field).
- *
- * The shape is the border box with its computed `border-radius`
- * (`rounded-*`). The elevation strip takes its tone from the fill (darker
- * on a bright plate, lighter on a dark one); without a bevel the face also
- * gets a faint line all round.
- *
- * A region is an element holding a materials layer and marked `tk-region`
- * (the shell regions, `Surface`, `Sheet`); outside regions nothing is
- * translated and Blitz paints every background. By default each plate
- * paints itself, as part of its own element (so it covers, stacks, fades,
- * moves and clips like the element). With `plates="sheet"` on `Shell`,
- * `Surface` or `Sheet` (`tk-region="sheet"`) the region's materials layer
- * draws all of its plates in one pass below the region's content. */
-
-/* Registered and not inherited, so a cap inside a tray does not pick up the
- * tray's material. `--tk-fill` is a `<color>`: Stylo resolves `var()`,
- * `oklch()` and `color-mix()` into one computed colour, which the render
- * host reads; transparent (the initial value) draws nothing. The others
- * stay text. */
 @property --tk-fill { syntax: "<color>"; inherits: false; initial-value: transparent; }
-@property --tk-bevel { syntax: "*"; inherits: false; }
-@property --tk-elevation { syntax: "*"; inherits: false; }
-@property --tk-bevel-profile { syntax: "*"; inherits: false; }
-@property --tk-bevel-tilt { syntax: "*"; inherits: false; }
-@property --tk-side { syntax: "*"; inherits: false; }
-@property --tk-pressed { syntax: "*"; inherits: false; }
-@property --tk-sink { syntax: "*"; inherits: false; }
+@property --tk-bevel { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --tk-bevel-inset { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --tk-bevel-strength { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --tw-inset-shadow { syntax: "*"; inherits: false; initial-value: 0 0 #0000; }
 @property --tk-overscroll { syntax: "*"; inherits: false; }
 
-/* The plate draws the background; Blitz must not paint it under or over
- * the plate (or over the plates of the element's children). Only for plates
- * inside a region: elsewhere nothing would draw it. */
-:where([tk-region] [tk-plate], [tk-region][tk-plate]) { background-color: transparent !important; }
-
-/* The lit edge band, CSS px: `bevel-2`, `bevel-2.5`, `active:bevel-1`. */
-/* `bevel` alone is the default band, 1.5 px. */
-@utility bevel { --tk-bevel: 1.5; }
-@utility bevel-* { --tk-bevel: --value(number, [number]); }
-/* How steep the edge is, in degrees from flat (default 35). A steeper edge
- * is lit and shaded harder: `bevel-tilt-15` is gentle, `bevel-tilt-90` is
- * a vertical wall. */
-@utility bevel-tilt-* { --tk-bevel-tilt: --value(number, [number]); }
-/* The band's profile. Sharp is the default: an even band with a crisp inner
- * edge. `bevel-soft` fades it inward. */
-@utility bevel-sharp { --tk-bevel-profile: sharp; }
-@utility bevel-soft { --tk-bevel-profile: soft; }
-/* PARKED (Linear TKM-80): not used by any component since 2026-11-11; the
- * owner set elevation aside to keep buttons simple. Kept working for the
- * revisit.
- * How far the plate stands off the surface, CSS px: `elevation-3`. A strip
- * under the face shows the plate's side, in a tone taken from the fill
- * (darker on a bright plate, lighter on a dark one). Without a bevel the
- * face also gets a faint line all round.
- * `sink-<n>` pushes the face down by n px (`hover:sink-1`); `pressed` pushes
- * it all the way (`active:pressed`): the strip is gone, as at elevation 0.
- * Both also move the element down by the same amount, so its text and icons
- * go down with the face, while the plate's foot stays where it was. */
-@utility elevation-* { --tk-side: --value(number, [number]); }
-@utility sink-* {
-  --tk-sink: --value(number, [number]);
-  translate: 0 calc(--value(number, [number]) * 1px);
+@utility surface-* {
+  --tk-fill: --value(--color-*, [color], [*]);
+  --tk-fill: color-mix(in srgb, --value(--color-*, [color], [*]) --modifier([percentage]), transparent);
+  --tk-fill: color-mix(in srgb, --value(--color-*, [color], [*]) calc(--modifier(number) * 1%), transparent);
 }
-@utility pressed {
-  --tk-pressed: 1;
-  translate: 0 calc(var(--tk-side, 0) * 1px);
+
+/* Use Tailwind's inset slot so focus rings and outer shadows compose. */
+@utility bevel {
+  --tk-bevel: 1.5;
+  --tw-inset-shadow:
+    inset 0 calc((1 - 2 * var(--tk-bevel-inset)) * var(--tk-bevel) * 1px) 0 rgb(255 255 255 / calc(0.18 * var(--tk-bevel-strength))),
+    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength)));
+  box-shadow: var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
 }
-@utility raised { --tk-elevation: raised; }
-@utility recessed { --tk-elevation: recessed; }
+@utility bevel-* {
+  --tw-inset-shadow:
+    inset 0 calc((1 - 2 * var(--tk-bevel-inset)) * var(--tk-bevel) * 1px) 0 rgb(255 255 255 / calc(0.18 * var(--tk-bevel-strength))),
+    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength)));
+  box-shadow: var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
+  --tk-bevel: --value(number, [number]);
+}
+@utility bevel-inset {
+  --tk-bevel: 1.5;
+  --tw-inset-shadow:
+    inset 0 calc((1 - 2 * var(--tk-bevel-inset)) * var(--tk-bevel) * 1px) 0 rgb(255 255 255 / calc(0.18 * var(--tk-bevel-strength))),
+    inset 0 calc((2 * var(--tk-bevel-inset) - 1) * var(--tk-bevel) * 1px) 0 rgb(0 0 0 / calc(0.45 * var(--tk-bevel-strength)));
+  box-shadow: var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
+  --tk-bevel-inset: 1;
+}
+@utility bevel-quiet { --tk-bevel-strength: 0.2; }
 
-/* Things you press: a flat face with a lit edge band, sitting in a `tray`
- * whose base colour shows as the seam between caps. */
-@utility material-key { @apply bg-chip bevel-1.5 raised; }
-@utility material-key-bright { @apply bg-ink bevel-1.5 raised; }
-/* A key held down: a step darker, with a thinner, gentler band. It stays
- * raised (pressing does not turn the key inside out). */
-@utility material-key-pressed { @apply bg-card bevel-1 bevel-tilt-15 raised; }
-@utility material-tray { @apply bg-base bevel-1 recessed; }
+[tk-group] { box-shadow: none !important; }
 
-/* The same looks as the `Surface` component's card, chip and well. */
-@utility material-card { @apply bg-card bevel-1.5 raised; }
-@utility material-chip { @apply bg-chip bevel-1 raised; }
-@utility material-well { @apply bg-well bevel-1 recessed; }
+@utility material-chip { @apply bg-chip bevel-1; }
+@utility material-well { @apply bg-well bevel-inset bevel-1; }
 
-/* A scroller that keeps the wheel: at its end the page behind it does not
- * move. The CSS property itself is not known to Blitz, so the render host
- * reads the custom property (render/src/overscroll.rs). */
+/* Blitz reads the custom property to contain wheel chaining. */
 @utility overscroll-contain {
   overscroll-behavior: contain;
   --tk-overscroll: contain;

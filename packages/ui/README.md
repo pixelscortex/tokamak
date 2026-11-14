@@ -1,72 +1,68 @@
 # Native UI elements
 
 `@tokamak/ui/elements` exports Solid `Button`, `Input` and `Icon` for QuickJS +
-the universal renderer. `@tokamak/ui/components` exports `Surface`, `Sheet` and
-`Shell` (used by the lab only so far; the app's shell frame and plugin slots are
-separate) and the plate controls `Button`, `Kbd`, `Chip`, `ChipMore`,
+the universal renderer. `@tokamak/ui/components` exports `Surface` and `Shell` (used by the lab only so far; the app's shell frame and plugin slots are
+separate) and the controls `Button`, `Kbd`, `Chip`, `ChipMore`,
 `Textarea`, `Select` and `Composer`. No DOM globals, React dependency, or
 accessibility-host claims.
 
 ## Styling
 
 One system: Tailwind v4 utilities written in the component, as complete static
-class names, with tokens in `src/theme.css` (colours, radii, fonts). Surface
-materials name the same tokens (`var(--color-panel)`), which the native widget
-resolves from computed style, so the GPU surfaces and the CSS cannot drift.
+class names, with tokens in `src/theme.css` (colours, radii, fonts). Ordinary
+backgrounds and edges are CSS; fused groups read the same theme colours through
+`surface-*` utilities.
 Still on the older class pattern: the elements `Button` and `Input`
 (`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
 `src/styles.css`); the todo plugin uses them. Do not add to that pattern: new
-controls are in `@tokamak/ui/components`, where `Button` is the plate button.
+controls are in `@tokamak/ui/components`.
 
-## Surface, Sheet, Shell, plates, Icon
+## Surfaces and shell
 
 ```tsx
 import { Shell, Surface } from "@tokamak/ui/components";
-import { Icon } from "@tokamak/ui/elements";
 
-<Surface material="card" radius={10} class="flex flex-col gap-2 p-4">
-  <Surface.Subtract class="absolute top-4 right-4 size-10" radius={20} gap={3}>
-    <button aria-label="Capture" />
-  </Surface.Subtract>
-  Card content
+<button class="bg-blue-600 rounded-md bevel px-3 py-2">Run</button>;
+<div class="bg-card rounded-lg bevel p-4">
+  <input class="bg-well rounded-md bevel-inset px-2" aria-label="Name" />
+</div>;
+
+<Surface class="surface-panel rounded-xl bevel p-4" join={10}>
+  <Surface.Add attach="right" class="absolute -left-10 top-6 h-10 w-12 rounded-l-lg" />
+  <Surface.Cut class="absolute right-4 top-4 size-10 rounded-full">
+    <button class="size-10 rounded-full bg-chip bevel" aria-label="Run">Run</button>
+  </Surface.Cut>
+  Panel content
 </Surface>;
-
-<Shell>
-  <Shell.Sidebar>…</Shell.Sidebar>
-  <Shell.Stage>…</Shell.Stage>
-  <Shell.BottomBar>
-    <Surface.Union layer="base" radius={[18, 18, 0, 0]} join={22} class="w-[640px]">…</Surface.Union>
-  </Shell.BottomBar>
-</Shell>;
-
-<Icon d={paths.search} class="size-4 text-ink-3" />;
 ```
 
-- `Surface` is one fused, lit layer (`material`: base, sidebar, panel, card,
-  chip, well). Its box is the painted area and, by default, its first shape.
-  `Surface.Union` / `Surface.Subtract` are ordinary elements laid out by CSS;
-  the render host turns their boxes into shapes of the nearest Surface
-  (`radius`, `join`, `gap`, `slant`, `animate`). Their children render above
-  the surface. `Surface.Intersect` is reserved for masking.
-- `Shell` is the fixed frame: top bar (the title bar with a custom title bar),
-  rail, plugin sidebar, stage (the only scrolling part) and bottom bar. Views
-  teleport content into regions with `Shell.TopBar` (`at`: start, center, end,
-  stage), `Shell.Rail`, `Shell.Sidebar`, `Shell.Stage`, `Shell.BottomBar`, and
-  join the shell's layers with `layer` (base, sidebar, stage).
-- `Sheet` is a region of its own anywhere: a floating piece (a menu) or a
-  part of a view that chooses who draws its plates (`plates="sheet"`).
-- Plates: inside any region (shell regions, `Surface`, `Sheet`), an element
-  with a solid `bg-*` or a `material-*` class is drawn by the render host,
-  with no component: `bg-blue-600 elevation-3 hover:sink-1 active:pressed`
-  for a button, `material-key` in a `material-tray` for keycaps. The
-  utilities are listed in `src/materials.css`.
-- `Icon` draws SVG path data natively; colour follows CSS `color`.
+`Surface` takes `class`, `style`, `id`, `ref`, `children`, `join` and `own`
+(default true). Its first child paints one fused outline. `Surface.Add` and
+`Surface.Cut` take the same element props plus `join`, `slant` (one angle or
+[left, right]), `animate` (220 ms) and `layer` (base, sidebar, stage). Only
+`Add` takes `attach` (left, right, top, bottom). Corners come from CSS.
+`own={false}` uses only members. Member children stay above the shape.
 
-See `packages/render/SURFACES.md` for the renderer side.
+`surface-*` sets the fused fill: theme colours, arbitrary colours, custom
+properties and opacity (`surface-panel`, `surface-[#1b1b1b]`,
+`surface-(--my-var)`, `surface-white/10`). Use `bg-*` on ordinary elements.
+`bevel` adds a 1.5 px edge; `bevel-2` / `bevel-[0.75]` set its width,
+`bevel-inset` reverses the light, and `bevel-quiet` reduces strength to 0.2.
+Ordinary edges use Tailwind's inset shadow slot and compose with rings and
+outer shadows. An explicit Tailwind inset shadow replaces that slot.
+Fused roots suppress CSS shadows because the renderer follows their outline.
+`material-chip` and `material-well` are ordinary CSS shortcuts for the controls.
+
+`Shell` provides the fixed top bar, rail, sidebar, scrolling stage and bottom
+bar. Views teleport content with `Shell.TopBar` (`at`: start, center, end,
+stage), `Shell.Rail`, `Shell.Sidebar`, `Shell.Stage` and `Shell.BottomBar`.
+Members with `layer="base"` cut the layers above the window background;
+`sidebar` and `stage` join those shell groups from anywhere under the shell.
+`Icon` from `@tokamak/ui/elements` draws SVG path data, coloured by CSS.
 
 ## Controls (`@tokamak/ui/components`)
 
-Plates (a solid `bg-*`) with Tailwind utilities and theme tokens only. Each
+Ordinary CSS backgrounds with Tailwind utilities and theme tokens. Each
 file starts with its usage and the details; the short version:
 
 ```tsx
@@ -83,10 +79,9 @@ file starts with its usage and the details; the short version:
 </Shell.BottomBar>
 ```
 
-- Buttons stand off the surface (`elevation-3 hover:sink-1 active:pressed`,
-  toggles `aria-pressed:pressed`); no bevel, border or shadow. Focus shows
+- Buttons change fill on hover and press without moving. Focus uses
   `focus:ring-2` (`:focus`; Blitz has no `:focus-visible`).
-- Fields are recessed wells; menus are a `Sheet`.
+- Fields use `bg-well bevel-inset`; open Select menus are fused groups.
 - `Textarea` grows by layout, not measuring: an invisible copy of its text
   in the same grid cell sizes it (Blitz's `<textarea>` keeps a fixed
   `rows` height and reports no content height).
