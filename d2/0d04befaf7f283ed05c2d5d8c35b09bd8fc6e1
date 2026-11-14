@@ -1,0 +1,22 @@
+lab/tests/fused_surface.rs
+  s_aed503d94420a0::t_c694be094eba34 987-1148
+  s_aed503d94420a0::t_70cb6769baa2f0 347,962,1725-1731
+lab/src/fixtures.tsx
+  s_aed503d94420a0::t_c694be094eba34 112-128,133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d20d04befaf7f283ed05c2d5d8c35b09bd8fc6e1",
+  "prompts": {},
+  "sessions": {
+    "s_aed503d94420a0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1da7a-0793-7b32-909e-4fb9fb864656",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
