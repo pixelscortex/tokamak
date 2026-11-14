@@ -1,0 +1,19 @@
+lab/src/fixtures.tsx
+  s_232ef268e6011d::t_01afc2e90a3022 114-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ba3f5aa67a360ad4d777036f6294ac32aa084ed",
+  "prompts": {},
+  "sessions": {
+    "s_232ef268e6011d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db01-67b4-71f3-a123-f16fc10ec829",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
