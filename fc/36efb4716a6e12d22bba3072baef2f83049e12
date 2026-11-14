@@ -1,0 +1,21 @@
+packages/render/BLITZ_CHANGES.md
+  s_16998c1ca918cd::t_2659838436b35e 13-18
+packages/render/SURFACES.md
+  s_16998c1ca918cd::t_2659838436b35e 145,224-225,242-275,313-332,338-341,364-365,382-384,395,420-424,439
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc36efb4716a6e12d22bba3072baef2f83049e12",
+  "prompts": {},
+  "sessions": {
+    "s_16998c1ca918cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dab4-0ef5-7981-9a3f-e480c9367003",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
