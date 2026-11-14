@@ -43,7 +43,15 @@ pub fn launch_connected(
     send: Option<crate::MessageSender>,
     connect: impl FnOnce(HostSender),
 ) -> Result<()> {
-    launch_window(shell, bundle, title, (680, 820), send, connect)
+    launch_window_with(
+        shell,
+        bundle,
+        title,
+        (680, 820),
+        WindowOptions::default(),
+        send,
+        connect,
+    )
 }
 
 /// Window options beyond title and size. The default is the platform's own
@@ -81,27 +89,7 @@ pub struct TrafficLights {
     pub center_y: f64,
 }
 
-/// Configurable native surface used by the reusable runtime host.
-pub fn launch_window(
-    shell: &str,
-    bundle: &str,
-    title: &str,
-    window_size: (u32, u32),
-    send: Option<crate::MessageSender>,
-    connect: impl FnOnce(HostSender),
-) -> Result<()> {
-    launch_window_with(
-        shell,
-        bundle,
-        title,
-        window_size,
-        WindowOptions::default(),
-        send,
-        connect,
-    )
-}
-
-/// `launch_window` with `WindowOptions`.
+/// Configurable native window used by the runtime host.
 pub fn launch_window_with(
     shell: &str,
     bundle: &str,
