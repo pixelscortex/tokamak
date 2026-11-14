@@ -10,8 +10,8 @@ mod storage;
 mod transaction;
 mod types;
 
-// Internal ownership checks can inspect the supplied datastore without exposing
-// an untracked raw-write capability in the public or feature-facing API.
+// Internal ownership checks inspect raw storage without exposing an untracked
+// write capability in the public or feature-facing API.
 #[cfg(test)]
 #[path = "../../tests/internal/datastore_owner.rs"]
 mod ownership_tests;
@@ -84,13 +84,12 @@ impl Database {
                     .ok_or(Error::Invalid("database path must be UTF-8"))?
             ),
         };
-        let storage = StorageCore::open(&path).await.map_err(|e| Error::Startup(e.to_string()))?;
+        let storage = StorageCore::open(&path)
+            .await
+            .map_err(|e| Error::Startup(e.to_string()))?;
         let (changes, _) = broadcast::channel(256);
         Ok(Self {
-            state: Lifecycle::Open(Arc::new(DatabaseState {
-                storage,
-                changes,
-            })),
+            state: Lifecycle::Open(Arc::new(DatabaseState { storage, changes })),
         })
     }
 
@@ -121,15 +120,25 @@ impl Database {
     /// feature service replays the WHOLE invocation on a typed conflict.
     pub async fn begin(&self) -> Result<Transaction> {
         let state = self.state()?;
-        let tx = state.storage.factory.transaction(TransactionType::Write, state.storage.sequences.clone()).await?;
-        Ok(Transaction::new(tx, Arc::clone(state), false))
+        let epochs = state.storage.epochs();
+        let tx = state
+            .storage
+            .factory
+            .transaction(TransactionType::Write, state.storage.sequences.clone())
+            .await?;
+        Ok(Transaction::new(tx, Arc::clone(state), false, epochs))
     }
 
     /// Both the wrapper and the engine reject writes in a read-only call.
     pub async fn read_only(&self) -> Result<Transaction> {
         let state = self.state()?;
-        let tx = state.storage.factory.transaction(TransactionType::Read, state.storage.sequences.clone()).await?;
-        Ok(Transaction::new(tx, Arc::clone(state), true))
+        let epochs = state.storage.epochs();
+        let tx = state
+            .storage
+            .factory
+            .transaction(TransactionType::Read, state.storage.sequences.clone())
+            .await?;
+        Ok(Transaction::new(tx, Arc::clone(state), true, epochs))
     }
 
     /// Busy leaves the database open. Once shutdown starts, data operations
@@ -147,7 +156,12 @@ impl Database {
                 std::mem::replace(&mut self.state, Lifecycle::Closed(Ok(())))
             {
                 self.state = Lifecycle::Closing(Mutex::new(Box::pin(async move {
-                    let result = state.storage.factory.shutdown().await.map_err(|e| e.to_string());
+                    let result = state
+                        .storage
+                        .factory
+                        .shutdown()
+                        .await
+                        .map_err(|e| e.to_string());
                     // Shutdown alone is not a disk-lock barrier while retained
                     // Arc references still own the storage engine.
                     drop(state);
@@ -157,7 +171,11 @@ impl Database {
         }
         let result = match &mut self.state {
             Lifecycle::Closing(shutdown) => shutdown.get_mut().as_mut().await,
-            Lifecycle::Closed(result) => return result.clone().map_err(|e| Error::Database(anyhow::anyhow!(e))),
+            Lifecycle::Closed(result) => {
+                return result
+                    .clone()
+                    .map_err(|e| Error::Database(anyhow::anyhow!(e)));
+            }
             Lifecycle::Open(_) => unreachable!("open state was moved to shutdown above"),
         };
         // Drop the completed future and its storage owner before reporting success;

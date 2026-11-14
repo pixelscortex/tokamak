@@ -231,9 +231,11 @@ pub(crate) fn check_field(field: &str) -> Result<()> {
 /// Normalize before comparing or indexing, so NONE-only edits remain no-ops.
 /// The depth bound also prevents untrusted host values exhausting the Rust stack.
 pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
-    if depth > 128 {
+    // Leave headroom for the private record envelope inside the storage
+    // value layer's 256-level ceiling, as the old bound request did.
+    if depth > 253 {
         return Err(Error::Database(anyhow::anyhow!(
-            "document nesting exceeds 128 levels"
+            "document nesting exceeds 253 levels"
         )));
     }
     Ok(match value {
@@ -254,7 +256,7 @@ pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
                 .into(),
         ),
         Value::None | Value::Null | Value::Bool(_) | Value::String(_) => value,
-        Value::Number(Number::Int(_)) => value,
+        Value::Number(Number::Int(_) | Number::Decimal(_)) => value,
         Value::Number(Number::Float(number)) if number.is_finite() => value,
         _ => return Err(Error::Invalid("document values must be JSON-like")),
     })

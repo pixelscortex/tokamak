@@ -12,6 +12,9 @@ use super::{
     types::{check_field, normalize},
 };
 use std::borrow::Cow;
+use std::sync::atomic::Ordering;
+use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard};
+
 use std::{
     collections::BTreeSet,
     sync::Arc,
@@ -27,6 +30,13 @@ use surrealdb_idx::{
 };
 use surrealdb_kvs::key::KVKeyDecode;
 
+// Hold the catalog stable from a writer's first mutation through its outcome.
+// Read guards coexist; only defining a new index needs exclusive access.
+enum CatalogGuard {
+    Read { _guard: OwnedRwLockReadGuard<()> },
+    Write { _guard: OwnedRwLockWriteGuard<()> },
+}
+
 #[must_use = "commit or roll back the transaction before closing its database"]
 pub struct Transaction {
     pub(super) inner: Arc<StorageTransaction>,
@@ -38,6 +48,9 @@ pub struct Transaction {
     change_bytes: usize,
     read_only: bool,
     failed: bool,
+    epochs: (u64, u64),
+    catalog_guard: Option<CatalogGuard>,
+    catalog_changed: bool,
 }
 
 #[cfg(test)]
@@ -67,6 +80,7 @@ impl Transaction {
         inner: StorageTransaction,
         state: Arc<DatabaseState>,
         read_only: bool,
+        epochs: (u64, u64),
     ) -> Self {
         Self {
             inner: Arc::new(inner),
@@ -76,7 +90,47 @@ impl Transaction {
             change_bytes: 0,
             read_only,
             failed: false,
+            epochs,
+            catalog_guard: None,
+            catalog_changed: false,
         }
+    }
+
+    fn catalog(&mut self, define: bool) -> Result<()> {
+        let core = &self.state.storage;
+        let conflict = || {
+            Error::Database(anyhow::Error::new(
+                surrealdb_kvs::err::Error::TransactionConflict(
+                    "catalog changed or is in use; retry with a fresh snapshot".into(),
+                ),
+            ))
+        };
+        if define && !matches!(self.catalog_guard, Some(CatalogGuard::Write { .. })) {
+            // Upgrade by releasing our read guard. Never wait on another
+            // call-owned transaction: its owner may be awaiting this operation.
+            // Epoch validation below makes a non-atomic upgrade safe.
+            self.catalog_guard = None;
+            self.catalog_guard = Some(CatalogGuard::Write {
+                _guard: core
+                    .catalog_gate
+                    .clone()
+                    .try_write_owned()
+                    .map_err(|_| conflict())?,
+            });
+        } else if self.catalog_guard.is_none() {
+            self.catalog_guard = Some(CatalogGuard::Read {
+                _guard: core
+                    .catalog_gate
+                    .clone()
+                    .try_read_owned()
+                    .map_err(|_| conflict())?,
+            });
+        }
+        let (catalog, writes) = core.epochs();
+        if catalog != self.epochs.0 || (define && writes != self.epochs.1) {
+            return Err(conflict());
+        }
+        Ok(())
     }
 
     fn record(&mut self, before: Option<&Document>, after: Option<&Document>) {
@@ -171,7 +225,7 @@ impl Transaction {
     }
 
     /// Kernel metadata uses deterministic keys for direct lookup. This is not a
-    /// JavaScript capability; CREATE still rejects duplicates and poisons the
+    /// JavaScript capability; keyed insertion rejects duplicates and poisons the
     /// transaction rather than silently replacing existing data.
     pub(crate) async fn insert_keyed(&mut self, id: &Id, value: Object) -> Result<Id> {
         self.create(id.table(), Some(id), value).await
@@ -194,6 +248,7 @@ impl Transaction {
                 Some(id) => id.clone(),
                 None => Id::new(table.clone(), uuid::Uuid::new_v4().simple().to_string())?,
             };
+            self.catalog(false)?;
             let rid = id.record();
             let core = &self.state.storage;
             self.inner
@@ -249,6 +304,7 @@ impl Transaction {
             if fields == old.fields {
                 return Ok(());
             }
+            self.catalog(false)?;
             let persisted = Document {
                 id: id.clone(),
                 creation_time: old.creation_time,
@@ -281,6 +337,7 @@ impl Transaction {
             let Some(old) = self.get(id).await? else {
                 return Ok(());
             };
+            self.catalog(false)?;
             let rid = id.record();
             let core = &self.state.storage;
             self.indexes(Some(&old), None).await?;
@@ -295,7 +352,7 @@ impl Transaction {
         self.finish(result)
     }
 
-    /// Define a scalar b-tree index on application fields (including metadata).
+    /// Define a b-tree value index on application fields (including metadata).
     /// Existing rows cannot be backfilled here: a new definition on a nonempty
     /// table is rejected. Repeating the identical definition is a no-op.
     pub async fn define_index(
@@ -326,9 +383,13 @@ impl Transaction {
             let cols = fields
                 .iter()
                 .map(|field| {
-                    surrealdb_idx::expr::Idiom(vec![surrealdb_idx::expr::Part::Field(
-                        (*field).into(),
-                    )])
+                    // IndexOperation otherwise fans arrays out into element
+                    // entries. Its trailing Flatten marker stores one whole
+                    // value, keeping indexed eq consistent with Rust filtering.
+                    surrealdb_idx::expr::Idiom(vec![
+                        surrealdb_idx::expr::Part::Field((*field).into()),
+                        surrealdb_idx::expr::Part::Flatten,
+                    ])
                 })
                 .collect::<Vec<_>>();
             let kind = if unique { Index::Uniq } else { Index::Idx };
@@ -345,12 +406,8 @@ impl Transaction {
                     ))
                 };
             }
-            // These two fences close the empty-table DDL/insert race without
-            // serializing updates of unrelated records. Writers validate schema;
-            // DDL validates inserts that might invalidate its no-backfill check.
-            let schema = fence(table, "schema");
-            self.inner.getu_raw(schema.clone().into()).await?;
-            self.inner.getu_raw(fence(table, "insert").into()).await?;
+            self.catalog(true)?;
+            let core = &self.state.storage;
             if self.inner.tb_has_records(core.ns, core.db, &tb).await? {
                 return Err(Error::Invalid(
                     "cannot define an index on a table with rows; backfill is unsupported",
@@ -375,9 +432,7 @@ impl Transaction {
             self.inner
                 .put_tb_index(core.ns, core.db, &tb, &index)
                 .await?;
-            self.inner
-                .set(schema.into(), uuid::Uuid::new_v4().as_bytes().to_vec())
-                .await?;
+            self.catalog_changed = true;
             Ok(())
         }
         .await;
@@ -388,17 +443,6 @@ impl Transaction {
         let row = after.or(before).expect("a mutation has a document");
         let core = &self.state.storage;
         let rid = row.id.record();
-        self.inner
-            .getu_raw(fence(row.id.table(), "schema").into())
-            .await?;
-        if before.is_none() {
-            self.inner
-                .set(
-                    fence(row.id.table(), "insert").into(),
-                    uuid::Uuid::new_v4().as_bytes().to_vec(),
-                )
-                .await?;
-        }
         let indexes = self
             .inner
             .all_tb_indexes(core.ns, core.db, &rid.table, None)
@@ -417,8 +461,12 @@ impl Transaction {
                     .cols
                     .iter()
                     .map(|column| {
-                        let [surrealdb_idx::expr::Part::Field(field)] = column.0.as_slice() else {
-                            return Err(Error::Invalid("index is not a TokamakDB scalar index"));
+                        let [
+                            surrealdb_idx::expr::Part::Field(field),
+                            surrealdb_idx::expr::Part::Flatten,
+                        ] = column.0.as_slice()
+                        else {
+                            return Err(Error::Invalid("index is not a TokamakDB value index"));
                         };
                         Ok(StoredValue::from(super::query::field_value(
                             document,
@@ -464,7 +512,19 @@ impl Transaction {
         } else {
             self.inner.commit().await?;
         }
+        // Advance while still holding the guard: a definition cannot inspect
+        // stale row presence, and later writers cannot miss committed indexes.
+        if self.catalog_changed {
+            self.state
+                .storage
+                .catalog_epoch
+                .fetch_add(1, Ordering::Release);
+        }
         if !self.written.is_empty() {
+            self.state
+                .storage
+                .write_epoch
+                .fetch_add(1, Ordering::Release);
             // No receivers is normal before live subscriptions are installed.
             let _ = self.state.changes.send(ChangeEvent {
                 tables: self.written.into_iter().collect(),
@@ -480,10 +540,4 @@ impl Transaction {
         self.inner.cancel().await?;
         Ok(())
     }
-}
-
-// Private host keys live outside the engine's '/' keyspace and cannot collide
-// with user records. They belong to this fixed namespace/database owner.
-fn fence(table: &Table, kind: &str) -> Vec<u8> {
-    format!("tokamak/fence/{}/{kind}", table.as_str()).into_bytes()
 }

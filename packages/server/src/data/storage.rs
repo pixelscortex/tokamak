@@ -1,12 +1,16 @@
 //! The storage owner has no query engine, node bootstrap, or maintenance loop.
 //! Catalog IDs are resolved once at open; every application operation afterwards
 //! shares its caller's storage transaction and snapshot.
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 use surrealdb_datastore::{
     factory::TransactionFactory, sequences::Sequences, triggers::CommitTriggers,
 };
 use surrealdb_idx::catalog::{DatabaseId, NamespaceId, providers::DatabaseProvider};
 use surrealdb_kvs::TransactionType;
+use tokio::sync::RwLock;
 
 pub(super) struct StorageCore {
     pub factory: TransactionFactory,
@@ -16,9 +20,22 @@ pub(super) struct StorageCore {
     pub config: surrealdb_idx::config::IdxConfig,
     pub stores: surrealdb_idx::trees::store::IndexStores,
     pub node: uuid::Uuid,
+    pub catalog_gate: Arc<RwLock<()>>,
+    pub catalog_epoch: AtomicU64,
+    pub write_epoch: AtomicU64,
 }
 
 impl StorageCore {
+    // Capture before opening the storage snapshot, never afterwards: a catalog
+    // commit between those steps must cause a conservative retry, not let an
+    // old snapshot claim to contain the new definitions.
+    pub fn epochs(&self) -> (u64, u64) {
+        (
+            self.catalog_epoch.load(Ordering::Acquire),
+            self.write_epoch.load(Ordering::Acquire),
+        )
+    }
+
     pub async fn open(path: &str) -> anyhow::Result<Self> {
         let builder = surrealdb_kvs_any::Backends::community()
             .new_transaction_builder(path, Default::default(), Default::default())
@@ -58,6 +75,9 @@ impl StorageCore {
                 node,
                 config,
                 stores,
+                catalog_gate: Arc::new(RwLock::new(())),
+                catalog_epoch: AtomicU64::new(0),
+                write_epoch: AtomicU64::new(0),
             }),
             Err(error) => {
                 // A failed open must release the disk lock too. Retain both
@@ -73,7 +93,7 @@ impl StorageCore {
     }
 }
 
-/// Only scalar b-tree indexes are exposed, but IndexOperation requires this
+/// Only b-tree value indexes are exposed, but IndexOperation requires this
 /// environment even when no analyzer, vector tree, or compaction is used.
 pub(super) struct IndexContext<'a> {
     pub tx: Arc<surrealdb_datastore::Transaction>,

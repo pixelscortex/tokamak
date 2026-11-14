@@ -2,9 +2,12 @@
 
 This module is the concrete storage facade: ownership/lifecycle, transactions,
 documents, constrained query plans, change footprints and plugin namespaces.
-SurrealDB initialization, attachment, SDK transaction types and all statement
-construction remain here. Native compatibility types are still reexported for
-the original conformance tests; plugin authors receive only the portable SDK.
+TokamakDB opens SurrealDB's storage backends directly and uses its catalog,
+record and b-tree index APIs. It has no SurrealQL parser, planner, SDK client,
+node bootstrap or maintenance task. `Object`, `Value` and `SurrealValue` are
+reexported from `surrealdb-types`; conversion to internal storage values is
+explicit. Documents accept JSON-like values; NONE object fields are omitted.
+Plugin authors receive only the portable SDK.
 There is no raw-SQL or native-client capability in feature code.
 
 Do not add an unused generic `Store` trait with one implementation. A future
@@ -30,7 +33,8 @@ Reads track whole tables, exact IDs (including missing IDs), or conjunctions of
 JSON equality clauses (including empty query results). Post-commit footprints
 contain both old/new row images, so moves and deletes invalidate correctly.
 Numeric equality and missing-versus-null follow the SDK's existing semantics.
-No indexes/schema enforcement are introduced.
+Schema assertions are not evaluated. Rust callers can define named indexes;
+this does not introduce a plugin schema registry or change the JS API.
 
 Record notifications retain at most 64 changes / 32 KiB encoded images. Larger
 transactions fall back to broad changed-table invalidation. Read tracking falls
@@ -39,3 +43,45 @@ above 8 KiB are broad. Broadcast lag also invalidates conservatively. These are
 retained-notification/tracking bounds, not total-process allocation/RSS limits.
 Mutation snapshots can transiently allocate during conversion. Rollback and
 failed commits still publish no notification.
+
+## Rust indexes
+
+Define indexes inside a write transaction before inserting table rows:
+
+```rust,ignore
+transaction.define_index(&messages, "by_channel_time", &["channel", "time"], false).await?;
+let rows = transaction.query(&messages)
+    .with_index("by_channel_time")
+    .eq("channel", "room1")
+    .gte("time", 15i64)
+    .lt("time", 30i64)
+    .order(Order::Desc)
+    .take(10).await?;
+```
+
+Equalities follow the index's leading field order. At most one lower and one
+upper bound constrain the next field. Indexed queries walk field/ID order;
+unindexed queries scan IDs, filter in Rust, then sort by creation time and ID.
+An unknown index or invalid bound poisons the transaction, including limit-zero
+queries. Index definitions are idempotent only when their fields and uniqueness
+match. New definitions on tables with rows are rejected: no backfill is run.
+All document mutations maintain every table index in the same transaction.
+Array values occupy one index entry, preserving equality on the entire array.
+The catalog uses the internal trailing `Part::Flatten` marker to suppress
+IndexOperation's default array fan-out; no expression evaluator is involved.
+Unique failures return `Error::UniqueViolation { index }` and poison the call.
+
+A process-local catalog gate keeps definitions stable through a writer's
+outcome. Ordinary writers hold shared guards; index definitions require an
+exclusive guard and a snapshot that predates no committed writes. Conflicts
+return the same typed retryable storage error instead of waiting on another
+call-owned transaction. This protects empty-table definitions from concurrent
+inserts without making independent record inserts conflict. Read-only snapshots
+need no guard. Rollback discards catalog, index and record writes.
+
+The exact 4.0.0 storage APIs are internal: factory/sequences ownership, catalog
+providers, record envelopes/key encoding, IndexEnv/IndexOperation and
+IndexKeyspace must be reviewed together on an upgrade. The idx feature selection
+follows the proven 4.0.0 probe (`vector-index` enabled); TokamakDB exposes and
+runs only ordinary/unique b-tree operations. Full-text and
+CJK features are disabled. There is no storage-version migration in this layer.

@@ -691,36 +691,27 @@ async fn sdk_validation_failure(disk: bool) {
     db.close().await.unwrap();
 }
 
-// Failure injection only, not schema feature coverage: prepare a rejecting
-// ASSERT through the public SDK, close it, then exercise the normal data API.
-// This forces an actual SQL statement error inside an otherwise successful SDK
-// response, proving that catching it cannot commit the earlier successful write.
+// The SQL engine's field ASSERT injection no longer exists. A real storage
+// index constraint supplies the same partial-call failure/poisoning scenario.
 #[test]
-fn disk_statement_error_cannot_commit_partial_call() {
-    run(disk_statement_error);
+fn disk_constraint_error_cannot_commit_partial_call() {
+    run(disk_constraint_error);
 }
 
-async fn disk_statement_error() {
+async fn disk_constraint_error() {
     let fixture = Fixture::new(true);
-    let Storage::Disk(path) = &fixture.storage else {
-        unreachable!()
-    };
-    let setup =
-        surrealdb::Surreal::new::<surrealdb::engine::local::SurrealKv>(path.to_str().unwrap())
-            .await
-            .unwrap();
-    setup.use_ns("tokamak").use_db("tokamak").await.unwrap();
-    setup
-        .query("DEFINE TABLE todos SCHEMALESS; DEFINE FIELD data ON TABLE todos TYPE object; DEFINE FIELD data.reject ON TABLE todos TYPE option<bool> ASSERT $value != true;")
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
-    setup.shutdown().await.unwrap();
-    drop(setup);
-
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
+    let mut setup = db.begin().await.unwrap();
+    setup
+        .define_index(&todos, "by_reject", &["reject"], true)
+        .await
+        .unwrap();
+    setup
+        .insert(&todos, fields(&[("reject", Value::Bool(true))]))
+        .await
+        .unwrap();
+    setup.commit().await.unwrap();
     let mut events = db.subscribe();
     let mut tx = db.begin().await.unwrap();
     let id = tx.insert(&todos, Object::new()).await.unwrap();
@@ -728,16 +719,15 @@ async fn disk_statement_error() {
         .insert(&todos, fields(&[("reject", Value::Bool(true))]))
         .await
         .unwrap_err();
-    assert!(matches!(&error, Error::Database(_)), "{error:?}");
     assert!(
-        error.to_string().contains("data.reject"),
-        "expected injected field assertion: {error:?}"
+        matches!(&error, Error::UniqueViolation { index } if index == "by_reject"),
+        "{error:?}"
     );
     assert!(!error.is_retryable_conflict());
     assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
     let mut read = db.read_only().await.unwrap();
     assert_eq!(read.get(&id).await.unwrap(), None);
-    assert!(read.query(&todos).collect().await.unwrap().is_empty());
+    assert_eq!(read.query(&todos).collect().await.unwrap().len(), 1);
     read.commit().await.unwrap();
     let mut barrier = db.begin().await.unwrap();
     barrier
@@ -796,7 +786,7 @@ async fn snapshots_and_conflicts(disk: bool) {
     let conflict = loser.commit().await.unwrap_err();
     assert!(conflict.is_retryable_conflict(), "{conflict:?}");
     assert!(
-        matches!(&conflict, Error::Database(error) if error.query_details() == Some(&surrealdb::types::QueryError::TransactionConflict))
+        matches!(&conflict, Error::Database(error) if matches!(error.downcast_ref::<surrealdb_kvs::err::Error>(), Some(surrealdb_kvs::err::Error::TransactionConflict(_))))
     );
     assert_eq!(snapshot.get(&id).await.unwrap(), Some(old.clone()));
     assert_eq!(snapshot.query(&todos).collect().await.unwrap(), vec![old]);

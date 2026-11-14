@@ -139,8 +139,8 @@ impl<'tx> Query<'tx> {
             .cols
             .iter()
             .map(|column| {
-                let [Part::Field(field)] = column.0.as_slice() else {
-                    return Err(Error::Invalid("index is not a TokamakDB scalar index"));
+                let [Part::Field(field), Part::Flatten] = column.0.as_slice() else {
+                    return Err(Error::Invalid("index is not a TokamakDB value index"));
                 };
                 Ok(field.as_str())
             })
