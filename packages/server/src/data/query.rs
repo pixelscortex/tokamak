@@ -102,19 +102,21 @@ impl<'tx> Query<'tx> {
         Ok(self.limit(limit).collect().await?.into_iter().next())
     }
 
-    pub async fn collect(self) -> Result<Vec<Document>> {
+    pub async fn collect(mut self) -> Result<Vec<Document>> {
         let result = async {
             self.tx.ready(false)?;
             // Validate every operand before choosing an access path or taking
-            // an empty-query exit. Reuse document validation (including nested
-            // values and finite numbers), without changing the operand itself.
+            // an empty-query exit, and replace it with its canonical form: the
+            // same normalization documents get before they are stored. Without
+            // that, a hand-built narrow number (an i32 or f32 variant) would be
+            // rejected or would fail to equal the stored canonical value.
             for value in self
                 .conditions
-                .iter()
+                .iter_mut()
                 .map(|(_, value)| value)
-                .chain(self.bounds.iter().map(|(_, _, value)| value))
+                .chain(self.bounds.iter_mut().map(|(_, _, value)| value))
             {
-                normalize(value.clone(), 0).map_err(|error| match error {
+                *value = normalize(value.clone(), 0).map_err(|error| match error {
                     Error::Invalid(_) => Error::Invalid("query operands must be JSON-like"),
                     error => error,
                 })?;

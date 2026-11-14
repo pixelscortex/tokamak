@@ -189,7 +189,11 @@ async fn assert_index_complete(db: &Database, table: &Table, index: &str) -> boo
             read.commit().await.unwrap();
             true
         }
-        Err(_) => false,
+        // Only a missing index may be reported as "no index". Any other error
+        // (a dangling or corrupt entry, say) is exactly the damage this
+        // invariant exists to catch, so it must fail the test.
+        Err(Error::Invalid("the requested index does not exist")) => false,
+        Err(error) => panic!("{table:?} index {index} unreadable: {error:?}"),
     }
 }
 

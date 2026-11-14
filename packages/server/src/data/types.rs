@@ -258,6 +258,30 @@ pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
         Value::None | Value::Null | Value::Bool(_) | Value::String(_) => value,
         Value::Number(Number::Int(_) | Number::Decimal(_)) => value,
         Value::Number(Number::Float(number)) if number.is_finite() => value,
+        // The public number type also carries narrow variants that Rust callers
+        // can build by hand (the JS bridge and primitive conversions never do).
+        // Widen them to the two canonical kinds, so the same finite number is
+        // accepted, stored, indexed and compared identically whatever its
+        // in-memory width. Widening is exact for every case below.
+        Value::Number(Number::I8(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::U8(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::I16(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::U16(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::I32(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::U32(number)) => Value::Number(Number::Int(number.into())),
+        // Above i64::MAX there is no exact canonical integer; reject rather
+        // than round, as JSON consumers could not represent it either.
+        Value::Number(Number::U64(number)) if i64::try_from(number).is_ok() => {
+            Value::Number(Number::Int(number as i64))
+        }
+        Value::Number(Number::F32(number)) if number.is_finite() => {
+            Value::Number(Number::Float(number.into()))
+        }
+        Value::Number(Number::F16(number)) if number.is_finite() => {
+            Value::Number(Number::Float(number.into()))
+        }
+        // Everything else (non-finite floats, arbitrary-precision decimals,
+        // record ids, regexes, closures, ...) is outside the JSON-like contract.
         _ => return Err(Error::Invalid("document values must be JSON-like")),
     })
 }

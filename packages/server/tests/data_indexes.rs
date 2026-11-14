@@ -2209,3 +2209,123 @@ async fn non_json_operands_rejected(disk: bool) {
     barrier(&db, &mut events).await;
     db.close().await.unwrap();
 }
+
+backends!(
+    memory_number_widths_are_one_number,
+    disk_number_widths_are_one_number,
+    number_widths_are_one_number
+);
+
+// A finite number is the same value whatever width a Rust caller built it
+// with. The public number type has narrow variants (i32, f32, ...) that the
+// JS bridge never produces but a host caller can; rejecting them, or storing
+// them un-widened so they miss the canonical index key, would make the same
+// query answer differently depending on an in-memory detail. Documents and
+// operands of every width must be accepted and must find each other, with
+// and without an index. Values with no exact canonical form stay rejected.
+async fn number_widths_are_one_number(disk: bool) {
+    use surrealdb_types::Number;
+    let fixture = Fixture::new(disk);
+    let mut db = Database::open(fixture.storage.clone()).await.unwrap();
+    let items = table("items");
+    let two_ints = || {
+        vec![
+            Value::Number(Number::Int(2)),
+            Value::Number(Number::I8(2)),
+            Value::Number(Number::U8(2)),
+            Value::Number(Number::I16(2)),
+            Value::Number(Number::U16(2)),
+            Value::Number(Number::I32(2)),
+            Value::Number(Number::U32(2)),
+            Value::Number(Number::U64(2)),
+        ]
+    };
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(&items, "by_k", &["k"], false)
+        .await
+        .unwrap();
+    // Stored through every integer width, plus one f32 row and one neighbour.
+    for value in two_ints() {
+        tx.insert(&items, fields(&[("k", value)])).await.unwrap();
+    }
+    tx.insert(&items, fields(&[("k", Value::Number(Number::F32(1.5)))]))
+        .await
+        .unwrap();
+    tx.insert(&items, fields(&[("k", int(3))])).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let mut tx = db.read_only().await.unwrap();
+    // Every stored width comes back as the canonical integer.
+    for row in tx.query(&items).eq("k", int(2)).collect().await.unwrap() {
+        assert_eq!(row.fields.get("k"), Some(&int(2)));
+    }
+    // Every operand width finds all eight rows, on both access paths.
+    for operand in two_ints() {
+        let scanned = tx
+            .query(&items)
+            .eq("k", operand.clone())
+            .collect()
+            .await
+            .unwrap();
+        let indexed = tx
+            .query(&items)
+            .with_index("by_k")
+            .eq("k", operand.clone())
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(scanned.len(), 8, "scan with {operand:?}");
+        assert_eq!(
+            sorted_keys(&indexed),
+            sorted_keys(&scanned),
+            "index with {operand:?}"
+        );
+    }
+    // A narrow float operand finds the narrow float row and bounds a range.
+    let half = Value::Number(Number::F32(1.5));
+    assert_eq!(
+        tx.query(&items)
+            .eq("k", half.clone())
+            .collect()
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    let above = tx
+        .query(&items)
+        .with_index("by_k")
+        .gt("k", half)
+        .collect()
+        .await
+        .unwrap();
+    assert_eq!(above.len(), 9, "eight 2s and one 3 lie above 1.5");
+    tx.commit().await.unwrap();
+
+    // No exact canonical form: still outside the contract, and poisoning.
+    for bad in [
+        Value::Number(Number::U64(u64::MAX)),
+        Value::Number(Number::F32(f32::INFINITY)),
+        Value::Number(Number::F32(f32::NAN)),
+    ] {
+        let mut tx = db.begin().await.unwrap();
+        assert!(
+            matches!(
+                tx.query(&items).eq("k", bad.clone()).collect().await,
+                Err(Error::Invalid(_))
+            ),
+            "operand {bad:?}"
+        );
+        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
+        let mut tx = db.begin().await.unwrap();
+        assert!(
+            matches!(
+                tx.insert(&items, fields(&[("k", bad.clone())])).await,
+                Err(Error::Invalid(_))
+            ),
+            "document {bad:?}"
+        );
+        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
+    }
+    db.close().await.unwrap();
+}
