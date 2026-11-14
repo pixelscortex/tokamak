@@ -1,0 +1,27 @@
+packages/render/BLITZ_FORK.md
+  s_520aa74b63c14d::t_75cd2301e01922 1,3
+packages/render/SURFACES.md
+  s_520aa74b63c14d::t_db66f3f60a0195 1,3,5-8,12-14,16,18-22,24,26-27,29,31-33,36-71
+packages/render/BLITZ_CHANGES.md
+  s_520aa74b63c14d::t_75cd2301e01922 1,3-5
+packages/render/README.md
+  s_520aa74b63c14d::t_db66f3f60a0195 7-9,25
+packages/render/CSS_OVERLAP.md
+  s_520aa74b63c14d::t_90b72fccdd4c72 1,3-4,6-9,11-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c54d2499bfa7a0bba5c47b650e1cb9cc03040212",
+  "prompts": {},
+  "sessions": {
+    "s_520aa74b63c14d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbd3-533f-7320-bd95-8655d9a8c388",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
