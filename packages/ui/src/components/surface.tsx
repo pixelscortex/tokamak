@@ -4,7 +4,7 @@
  *
  * <Surface class="surface-panel rounded-xl bevel p-4" join={10}>
  *   <Surface.Add
- *     class="absolute -left-10 top-6 h-10 w-12 rounded-l-lg"
+ *     class="absolute -left-12 top-6 h-10 w-12 rounded-l-lg"
  *     attach="right"
  *   />
  *   <Surface.Cut class="absolute right-4 top-4 size-10 rounded-full">

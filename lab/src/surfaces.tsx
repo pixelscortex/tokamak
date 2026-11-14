@@ -30,7 +30,7 @@ export default function SurfacesView() {
       </SectionTitle>
       <div id="lab-fused" class="flex flex-wrap gap-12 pl-10">
         <Surface id="lab-notch" class="surface-panel rounded-[16px] bevel-[1] bevel-quiet h-[200px] w-[420px]" join={10}>
-          <Surface.Add attach="right" class="absolute -left-10 top-16 h-10 w-12 rounded-l-lg" />
+          <Surface.Add attach="right" class="absolute -left-12 top-16 h-10 w-12 rounded-l-lg" />
           <Surface.Cut slant={[0, 45]} join={14}
             class="absolute top-0 left-[150px] flex h-[42px] w-[140px] items-center justify-center rounded-b-[14px] text-[12px] text-ink-2">
             Session · Today

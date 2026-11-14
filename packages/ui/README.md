@@ -28,7 +28,7 @@ import { Shell, Surface } from "@tokamak/ui/components";
 </div>;
 
 <Surface class="surface-panel rounded-xl bevel p-4" join={10}>
-  <Surface.Add attach="right" class="absolute -left-10 top-6 h-10 w-12 rounded-l-lg" />
+  <Surface.Add attach="right" class="absolute -left-12 top-6 h-10 w-12 rounded-l-lg" />
   <Surface.Cut class="absolute right-4 top-4 size-10 rounded-full">
     <button class="size-10 rounded-full bg-chip bevel" aria-label="Run">Run</button>
   </Surface.Cut>
