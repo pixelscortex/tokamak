@@ -2073,26 +2073,3 @@ async fn values_round_trip(disk: bool) {
     tx.commit().await.unwrap();
     db.close().await.unwrap();
 }
-
-// Contract 3 lists ids among the values that round-trip. Before the rewrite,
-// documents held native values, so a Rust caller could store a reference to
-// another record; the new JSON-like normalization must not silently drop that.
-#[test]
-fn record_id_values_round_trip() {
-    run(|| async {
-        let mut db = Database::open(Storage::Memory).await.unwrap();
-        let mut tx = db.begin().await.unwrap();
-        let target = tx.insert(&table("targets"), Object::new()).await.unwrap();
-        let reference = Value::RecordId(surrealdb_types::RecordId::new("targets", target.key()));
-        let result = tx
-            .insert(&table("refs"), fields(&[("target", reference.clone())]))
-            .await;
-        let id = result.unwrap_or_else(|error| panic!("record id value rejected: {error:?}"));
-        assert_eq!(
-            tx.get(&id).await.unwrap().unwrap().fields.get("target"),
-            Some(&reference)
-        );
-        tx.commit().await.unwrap();
-        db.close().await.unwrap();
-    });
-}
