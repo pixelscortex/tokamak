@@ -1,0 +1,22 @@
+packages/ui/src/components/select.tsx
+  s_47ab5ec39ea064::t_9aea25e1dfd803 360
+  s_47ab5ec39ea064::t_d1995ae63c96d9 258,265,268-270,275
+lab/tests/fused_surface.rs
+  s_47ab5ec39ea064::t_a8309681864850 298,350-354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "874474067df575bf3d9ad71e7edc114d0e507fce",
+  "prompts": {},
+  "sessions": {
+    "s_47ab5ec39ea064": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbf2-b417-7903-8c17-976604240c78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
