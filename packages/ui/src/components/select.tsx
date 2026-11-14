@@ -255,19 +255,24 @@ export function Select(props: SelectProps): JSX.Element {
             <Surface.Add
               id={sub("face")}
               attach={g().merged ? (g().side === "top" ? "top" : "bottom") : undefined}
+              join={g().merged ? undefined : 0}
               class={compact() ? "shrink-0 rounded-sm" : "shrink-0 rounded-md"}
               style={`margin-left: ${g().tx}px; width: ${g().tw}px; height: ${g().th}px`}
             />
             <Show when={!g().merged}>
               <Surface.Add
                 id={sub("bridge")}
+                attach="top"
                 class="pointer-events-auto shrink-0"
                 style={`margin-left: ${g().bx}px; width: ${g().bw}px; height: ${GAP}px`}
-              />
+              >
+                <Surface.Add attach="bottom" class="absolute inset-0" />
+              </Surface.Add>
             </Show>
             <Surface.Add
               id={sub("menu")}
               ref={observeMenu}
+              join={0}
               class="pointer-events-auto flex shrink-0 flex-col gap-1 rounded-[10px] p-1"
               style={`margin-left: ${g().mx}px; width: ${g().mw}px; max-height: ${g().maxHeight}px`}
             >
@@ -352,7 +357,7 @@ export function Select(props: SelectProps): JSX.Element {
         class={`relative flex min-w-0 items-center gap-1.5 border-0 font-ui outline-none focus:ring-2 focus:ring-ink-5 aria-disabled:opacity-40 aria-expanded:z-[31] ${
           compact()
             ? "h-[26px] rounded-sm bg-transparent px-2 text-ink-3 not-aria-disabled:hover:text-ink not-aria-disabled:not-aria-expanded:hover:bg-chip aria-expanded:text-ink"
-            : "h-[34px] w-full justify-between rounded-md px-3 text-ink not-aria-expanded:bg-chip not-aria-disabled:not-aria-expanded:hover:bg-lift not-aria-disabled:not-aria-expanded:active:bg-card"
+            : "h-[34px] w-full justify-between rounded-md bg-transparent px-3 text-ink not-aria-expanded:bg-chip not-aria-disabled:not-aria-expanded:hover:bg-lift not-aria-disabled:not-aria-expanded:active:bg-card"
         }`}
       >
         <span class={`min-w-0 truncate ${type()} ${selected() ? "" : "text-ink-4"}`}>

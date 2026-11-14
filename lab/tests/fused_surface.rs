@@ -295,6 +295,7 @@ fn capture_views() {
         scroll_stage(&mut doc, 0.0);
         out.resize(&mut doc, 1440, 900 + short.ceil() as u32);
         out.save_settled(&mut doc, &dir, &format!("view-{view}"));
+
     }
     assert!(doc.take_error().is_none());
 }
@@ -346,6 +347,11 @@ fn capture_select() {
         ("lab-select-up", "bridge-above"),
     ] {
         let (trigger, bridge) = (rect(name), rect(&format!("{name}-bridge")));
+        assert_eq!(
+            at(trigger.x + 12.0, trigger.y + trigger.height / 2.0),
+            [0x2a; 3],
+            "{name}: the open trigger keeps its dark fill"
+        );
         let middle = (
             bridge.x + bridge.width / 2.0,
             bridge.y + bridge.height / 2.0,
