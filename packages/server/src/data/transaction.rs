@@ -7,16 +7,25 @@ use super::{
     ChangeEvent, DatabaseState, Document, Error, Id, Query, RecordChange, Result, Table,
     changes::encoded_size, types::check_fields,
 };
+use super::{
+    Object, Value,
+    types::{check_field, normalize},
+};
+use std::borrow::Cow;
 use std::{
     collections::BTreeSet,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
-use super::{Object, Value, types::normalize};
-use surrealdb_datastore::{Transaction as StorageTransaction, key::schema::{RecordKey, RecordPrefix}};
-use surrealdb_idx::{catalog::{Record, providers::*}, val::{TableName, Value as StoredValue}};
-use surrealdb_kvs::key::{KVKeyDecode, KVRange};
-use std::borrow::Cow;
+use surrealdb_datastore::{
+    Transaction as StorageTransaction,
+    key::schema::{RecordKey, RecordPrefix},
+};
+use surrealdb_idx::{
+    catalog::{Index, IndexDefinition, Record, providers::*},
+    val::{TableName, Value as StoredValue},
+};
+use surrealdb_kvs::key::KVKeyDecode;
 
 #[must_use = "commit or roll back the transaction before closing its database"]
 pub struct Transaction {
@@ -120,10 +129,16 @@ impl Transaction {
             self.ready(false)?;
             let core = &self.state.storage;
             let rid = id.record();
-            let record = self.inner.get_record(core.ns, core.db, &rid.table, &rid.key, None).await?;
-            if record.data == StoredValue::None { return Ok(None); }
+            let record = self
+                .inner
+                .get_record(core.ns, core.db, &rid.table, &rid.key, None)
+                .await?;
+            if record.data == StoredValue::None {
+                return Ok(None);
+            }
             Ok(Some(Document::decode(record.data.clone())?))
-        }.await;
+        }
+        .await;
         self.finish(result)
     }
 
@@ -132,12 +147,20 @@ impl Transaction {
     pub(super) async fn scan_table(&self, table: &Table) -> Result<Vec<Document>> {
         let core = &self.state.storage;
         let table = TableName::from(table.as_str());
-        let range = RecordPrefix { ns: core.ns, db: core.db, tb: Cow::Borrowed(&table) }.range()?;
+        let range = RecordPrefix {
+            ns: core.ns,
+            db: core.db,
+            tb: Cow::Borrowed(&table),
+        }
+        .range()?;
         let keys = self.inner.keys_raw(range, u32::MAX, 0, None).await?;
         let mut documents = Vec::with_capacity(keys.len());
         for key in keys {
             let key = RecordKey::decode_key(&key)?;
-            let record = self.inner.get_record(core.ns, core.db, &table, &key.id, None).await?;
+            let record = self
+                .inner
+                .get_record(core.ns, core.db, &table, &key.id, None)
+                .await?;
             documents.push(Document::decode(record.data.clone())?);
         }
         Ok(documents)
@@ -158,23 +181,44 @@ impl Transaction {
         let result = async {
             self.ready(true)?;
             check_fields(&value)?;
-            let Value::Object(fields) = normalize(Value::Object(value), 0)? else { unreachable!() };
-            let millis = SystemTime::now().duration_since(UNIX_EPOCH)
-                .map_err(|_| Error::Invalid("clock is before the Unix epoch"))?.as_millis();
-            let millis = i64::try_from(millis).map_err(|_| Error::Invalid("clock is out of range"))?;
+            let Value::Object(fields) = normalize(Value::Object(value), 0)? else {
+                unreachable!()
+            };
+            let millis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| Error::Invalid("clock is before the Unix epoch"))?
+                .as_millis();
+            let millis =
+                i64::try_from(millis).map_err(|_| Error::Invalid("clock is out of range"))?;
             let id = match id {
                 Some(id) => id.clone(),
                 None => Id::new(table.clone(), uuid::Uuid::new_v4().simple().to_string())?,
             };
             let rid = id.record();
             let core = &self.state.storage;
-            self.inner.get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None).await?;
-            let row = Document { id: id.clone(), creation_time: millis, fields };
-            self.inner.put_record(core.ns, core.db, &rid.table, &rid.key, Arc::new(Record::new(row.stored()))).await?;
+            self.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
+                .await?;
+            let row = Document {
+                id: id.clone(),
+                creation_time: millis,
+                fields,
+            };
+            self.indexes(None, Some(&row)).await?;
+            self.inner
+                .put_record(
+                    core.ns,
+                    core.db,
+                    &rid.table,
+                    &rid.key,
+                    Arc::new(Record::new(row.stored())),
+                )
+                .await?;
             self.written.insert(table.clone());
             self.record(None, Some(&row));
             Ok(id)
-        }.await;
+        }
+        .await;
         self.finish(result)
     }
 
@@ -199,12 +243,29 @@ impl Transaction {
             for (key, value) in value {
                 fields.insert(key, value);
             }
-            let Value::Object(fields) = normalize(Value::Object(fields), 0)? else { unreachable!() };
-            if fields == old.fields { return Ok(()); }
-            let persisted = Document { id: id.clone(), creation_time: old.creation_time, fields };
+            let Value::Object(fields) = normalize(Value::Object(fields), 0)? else {
+                unreachable!()
+            };
+            if fields == old.fields {
+                return Ok(());
+            }
+            let persisted = Document {
+                id: id.clone(),
+                creation_time: old.creation_time,
+                fields,
+            };
             let rid = id.record();
             let core = &self.state.storage;
-            self.inner.set_record(core.ns, core.db, &rid.table, &rid.key, Arc::new(Record::new(persisted.stored()))).await?;
+            self.indexes(Some(&old), Some(&persisted)).await?;
+            self.inner
+                .set_record(
+                    core.ns,
+                    core.db,
+                    &rid.table,
+                    &rid.key,
+                    Arc::new(Record::new(persisted.stored())),
+                )
+                .await?;
             self.written.insert(id.table().clone());
             self.record(Some(&old), Some(&persisted));
             Ok(())
@@ -222,13 +283,167 @@ impl Transaction {
             };
             let rid = id.record();
             let core = &self.state.storage;
-            self.inner.del_record(core.ns, core.db, &rid.table, &rid.key).await?;
+            self.indexes(Some(&old), None).await?;
+            self.inner
+                .del_record(core.ns, core.db, &rid.table, &rid.key)
+                .await?;
             self.written.insert(id.table().clone());
             self.record(Some(&old), None);
             Ok(())
         }
         .await;
         self.finish(result)
+    }
+
+    /// Define a scalar b-tree index on application fields (including metadata).
+    /// Existing rows cannot be backfilled here: a new definition on a nonempty
+    /// table is rejected. Repeating the identical definition is a no-op.
+    pub async fn define_index(
+        &mut self,
+        table: &Table,
+        name: &str,
+        fields: &[&str],
+        unique: bool,
+    ) -> Result<()> {
+        let result = async {
+            self.ready(true)?;
+            check_field(name)?;
+            if fields.is_empty() {
+                return Err(Error::Invalid("an index needs at least one field"));
+            }
+            let mut seen = BTreeSet::new();
+            for field in fields {
+                check_field(field)?;
+                if !seen.insert(*field) {
+                    return Err(Error::Invalid("index fields must be distinct"));
+                }
+            }
+            let core = &self.state.storage;
+            let tb = TableName::from(table.as_str());
+            self.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &tb, None)
+                .await?;
+            let cols = fields
+                .iter()
+                .map(|field| {
+                    surrealdb_idx::expr::Idiom(vec![surrealdb_idx::expr::Part::Field(
+                        (*field).into(),
+                    )])
+                })
+                .collect::<Vec<_>>();
+            let kind = if unique { Index::Uniq } else { Index::Idx };
+            if let Some(existing) = self
+                .inner
+                .get_tb_index(core.ns, core.db, &tb, name, None)
+                .await?
+            {
+                return if existing.cols == cols && existing.index == kind {
+                    Ok(())
+                } else {
+                    Err(Error::Invalid(
+                        "a different index definition already uses that name",
+                    ))
+                };
+            }
+            // These two fences close the empty-table DDL/insert race without
+            // serializing updates of unrelated records. Writers validate schema;
+            // DDL validates inserts that might invalidate its no-backfill check.
+            let schema = fence(table, "schema");
+            self.inner.getu_raw(schema.clone().into()).await?;
+            self.inner.getu_raw(fence(table, "insert").into()).await?;
+            if self.inner.tb_has_records(core.ns, core.db, &tb).await? {
+                return Err(Error::Invalid(
+                    "cannot define an index on a table with rows; backfill is unsupported",
+                ));
+            }
+            let index_id = core
+                .sequences
+                .next_index_id(None, core.ns, core.db, tb.clone())
+                .await?;
+            let index = IndexDefinition {
+                index_id,
+                name: name.into(),
+                table_name: tb.clone(),
+                cols,
+                index: kind,
+                count_cond: None,
+                prepare_remove: false,
+                format_version: surrealdb_idx::catalog::INDEX_FORMAT_VERSION,
+                comment: None,
+                nulls_not_distinct: false,
+            };
+            self.inner
+                .put_tb_index(core.ns, core.db, &tb, &index)
+                .await?;
+            self.inner
+                .set(schema.into(), uuid::Uuid::new_v4().as_bytes().to_vec())
+                .await?;
+            Ok(())
+        }
+        .await;
+        self.finish(result)
+    }
+
+    async fn indexes(&self, before: Option<&Document>, after: Option<&Document>) -> Result<()> {
+        let row = after.or(before).expect("a mutation has a document");
+        let core = &self.state.storage;
+        let rid = row.id.record();
+        self.inner
+            .getu_raw(fence(row.id.table(), "schema").into())
+            .await?;
+        if before.is_none() {
+            self.inner
+                .set(
+                    fence(row.id.table(), "insert").into(),
+                    uuid::Uuid::new_v4().as_bytes().to_vec(),
+                )
+                .await?;
+        }
+        let indexes = self
+            .inner
+            .all_tb_indexes(core.ns, core.db, &rid.table, None)
+            .await?;
+        if indexes.is_empty() {
+            return Ok(());
+        }
+        let table = self.inner.expect_tb(core.ns, core.db, &rid.table).await?;
+        let env = super::storage::IndexContext {
+            tx: self.inner.clone(),
+            core,
+        };
+        for index in indexes.iter() {
+            let values = |document: &Document| -> Result<Vec<StoredValue>> {
+                index
+                    .cols
+                    .iter()
+                    .map(|column| {
+                        let [surrealdb_idx::expr::Part::Field(field)] = column.0.as_slice() else {
+                            return Err(Error::Invalid("index is not a TokamakDB scalar index"));
+                        };
+                        Ok(StoredValue::from(super::query::field_value(
+                            document,
+                            field.as_str(),
+                        )))
+                    })
+                    .collect()
+            };
+            let old = before.map(values).transpose()?;
+            let new = after.map(values).transpose()?;
+            let mut compaction = false;
+            surrealdb_idx::index::IndexOperation::new(
+                &env,
+                core.ns,
+                core.db,
+                table.table_id,
+                index,
+                old,
+                new,
+                &rid,
+            )
+            .compute(&super::storage::NoAnalyzer, &mut compaction)
+            .await?;
+        }
+        Ok(())
     }
 
     pub fn query(&mut self, table: &Table) -> Query<'_> {
@@ -265,4 +480,10 @@ impl Transaction {
         self.inner.cancel().await?;
         Ok(())
     }
+}
+
+// Private host keys live outside the engine's '/' keyspace and cannot collide
+// with user records. They belong to this fixed namespace/database owner.
+fn fence(table: &Table, kind: &str) -> Vec<u8> {
+    format!("tokamak/fence/{}/{kind}", table.as_str()).into_bytes()
 }

@@ -4,8 +4,8 @@
 //! storage boundary explicitly; no parser or execution engine is involved.
 
 use std::{fmt, str::FromStr};
+use surrealdb_idx::val::{RecordId, Value as StoredValue};
 use surrealdb_types::{Number, Object, Value};
-use surrealdb_idx::val::{RecordId, RecordIdKey, Value as StoredValue};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -34,9 +34,14 @@ impl Error {
 
 impl From<anyhow::Error> for Error {
     fn from(error: anyhow::Error) -> Self {
-        if let Some(surrealdb_idx::error::Error::IndexExists { index, .. }
-            | surrealdb_idx::error::Error::IndexExistsHidden { index }) = error.downcast_ref() {
-            return Self::UniqueViolation { index: index.clone() };
+        if let Some(
+            surrealdb_idx::Error::IndexExists { index, .. }
+            | surrealdb_idx::Error::IndexExistsHidden { index },
+        ) = error.downcast_ref()
+        {
+            return Self::UniqueViolation {
+                index: index.clone(),
+            };
         }
         Self::Database(error)
     }
@@ -46,7 +51,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(error) => error.fmt(f),
-            Self::UniqueViolation { index } => write!(f, "unique index `{index}` already contains that value"),
+            Self::UniqueViolation { index } => {
+                write!(f, "unique index `{index}` already contains that value")
+            }
             Self::Startup(message) => f.write_str(message),
             Self::Invalid(message) => f.write_str(message),
             Self::ReadOnly => f.write_str("read-only transactions cannot write"),
@@ -121,10 +128,11 @@ impl Id {
     }
 
     pub(crate) fn record(&self) -> RecordId {
-        RecordId { table: self.table.as_str().into(), key: self.key.clone().into() }
+        RecordId {
+            table: self.table.as_str().into(),
+            key: self.key.clone().into(),
+        }
     }
-
-
 }
 
 impl fmt::Display for Id {
@@ -180,7 +188,13 @@ impl Document {
             return Err(Error::Invalid("stored document has no data object"));
         };
         Ok(Self {
-            id: Id::new(Table::new(id.table.as_str())?, match id.key { surrealdb_types::RecordIdKey::String(key) => key, _ => return Err(Error::Invalid("stored record has a non-string key")) })?,
+            id: Id::new(
+                Table::new(id.table.as_str())?,
+                match id.key {
+                    surrealdb_types::RecordIdKey::String(key) => key,
+                    _ => return Err(Error::Invalid("stored record has a non-string key")),
+                },
+            )?,
             creation_time,
             fields,
         })
@@ -218,7 +232,9 @@ pub(crate) fn check_field(field: &str) -> Result<()> {
 /// The depth bound also prevents untrusted host values exhausting the Rust stack.
 pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
     if depth > 128 {
-        return Err(Error::Database(anyhow::anyhow!("document nesting exceeds 128 levels")));
+        return Err(Error::Database(anyhow::anyhow!(
+            "document nesting exceeds 128 levels"
+        )));
     }
     Ok(match value {
         Value::Object(object) => {
@@ -230,7 +246,13 @@ pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
             }
             Value::Object(normalized)
         }
-        Value::Array(array) => Value::Array(array.into_iter().map(|value| normalize(value, depth + 1)).collect::<Result<Vec<_>>>()?.into()),
+        Value::Array(array) => Value::Array(
+            array
+                .into_iter()
+                .map(|value| normalize(value, depth + 1))
+                .collect::<Result<Vec<_>>>()?
+                .into(),
+        ),
         Value::None | Value::Null | Value::Bool(_) | Value::String(_) => value,
         Value::Number(Number::Int(_)) => value,
         Value::Number(Number::Float(number)) if number.is_finite() => value,
@@ -241,7 +263,13 @@ pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
 impl Document {
     pub(crate) fn stored(&self) -> StoredValue {
         let mut envelope = Object::new();
-        envelope.insert("id", Value::RecordId(surrealdb_types::RecordId::new(self.id.table().as_str(), self.id.key())));
+        envelope.insert(
+            "id",
+            Value::RecordId(surrealdb_types::RecordId::new(
+                self.id.table().as_str(),
+                self.id.key(),
+            )),
+        );
         envelope.insert("_creationTime", self.creation_time);
         envelope.insert("data", self.fields.clone());
         StoredValue::from(Value::Object(envelope))
