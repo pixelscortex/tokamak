@@ -4,10 +4,9 @@
 Blitz and Vello/wgpu. JS and Blitz stay on the window event-loop thread; host
 workers exchange owned JSON through a bounded, generation-scoped mailbox.
 
-The root Cargo manifest patches Blitz to the pinned Tokamak fork so a custom
-widget can ignore an event and let the element’s default action run. See
-[BLITZ_FORK.md](BLITZ_FORK.md), [BLITZ_CHANGES.md](BLITZ_CHANGES.md) and
-[SURFACES.md](SURFACES.md) for the surface renderer’s contracts and limitations.
+Blitz comes from crates.io at `=0.3.0-beta.4`; no Blitz fork is in use.
+See [SURFACES.md](SURFACES.md) for fused vector groups and
+[BLITZ_FORK.md](BLITZ_FORK.md) for rules governing future fork changes.
 QuickJS’s heap ceiling defaults to half of physical memory, with a 256 MiB floor
 and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overrides it.
 
@@ -23,8 +22,7 @@ and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overri
   admission; `launch_window_with` accepts size and `WindowOptions` (including
   `TrafficLights`). The connect callback receives a host sender and must not block.
 - Headless embedders use Blitz’s `Document` trait, call `resolve_layout`, then
-  `layout_surfaces` before painting, and `surface_end_frame` after `paint_scene`.
-  `take_error` returns deferred UI errors. `lab-probes` exposes shape and paint probes.
+  `layout_surfaces` before painting. `take_error` returns deferred UI errors.
 - `Error`, `Result`, `MessageSender` and `MAX_WIRE_MESSAGE_BYTES` are exported at the crate root.
 - [`@tokamak/render`](js/index.ts) exports the universal JSX runtime, `mount`,
   `onHostEvent` and `observeLayout`. Events cancel synchronously; layout reports
@@ -47,9 +45,6 @@ and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overri
 | Keep late Metal frames unscaled during live resize and colour the uncovered strip. | [`src/macos.rs:33`](src/macos.rs#L33) |
 | AppKit offers no traffic-light position setting; place the native button container. | [`src/macos.rs:137`](src/macos.rs#L137) |
 | Draw icon paths with kurbo/Vello without enabling Blitz’s full SVG parser stack. | [`src/icon.rs:12`](src/icon.rs#L12) |
-| Elements with built-in node data cannot carry plate widgets; use an ancestor or sheet. | [`src/surface/bind.rs:751`](src/surface/bind.rs#L751) |
-| Attach plate widgets after insertion so Blitz still initializes the element’s built-in state. | [`src/surface/bind.rs:781`](src/surface/bind.rs#L781) |
-| Background custom widgets must pass hit testing through to their controls. | [`src/surface/mod.rs:60`](src/surface/mod.rs#L60) |
 
 ## Checks
 
