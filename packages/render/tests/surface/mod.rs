@@ -428,3 +428,15 @@ fn edge_strokes_are_clipped_inside_outer_and_hole_contours_at_both_scales() {
     assert_eq!(edge_colour([0.5; 4], 0.0).components[0], 0.5);
     assert!(outline.area() > 0.0);
 }
+
+#[test]
+fn a_cut_join_preserves_distant_square_corners() {
+    let base = Shape::rect(false, [0.0, 0.0, 300.0, 200.0], [0.0; 4]);
+    let mut cut = Shape::rect(true, [100.0, 160.0, 100.0, 60.0], [18.0; 4]);
+    cut.join = 22.0;
+    let r = region(&[base, cut]);
+    for (x, y) in [(0.1, 0.1), (299.9, 0.1), (0.1, 199.9), (299.9, 199.9)] {
+        assert!(inside(&r, x, y));
+    }
+    assert!(!inside(&r, 150.0, 190.0));
+}

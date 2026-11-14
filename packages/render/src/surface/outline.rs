@@ -276,7 +276,8 @@ fn attached_points(
     let st = room(y - top, ct);
     let sb = room(bottom - (y + h), cb);
     let strip = edge + (2.0 * join.max(ct).max(cb) + 2.0).min(tw);
-    let (yt, yb) = (top.min(y), bottom.max(y + h));
+    let yt = top.max(y - 2.0 * join.max(ct)).min(y);
+    let yb = bottom.min(y + h + 2.0 * join.max(cb)).max(y + h);
     let mut points = vec![
         [x, y, tl],
         [edge, y, join * st],
@@ -405,9 +406,13 @@ pub(super) fn region(shapes: &[Shape]) -> MultiPolygon<f64> {
             result.union(&member)
         };
         if k > 0.0 {
-            // Whole-region opening/closing can also round unrelated narrow features.
+            // Keep a member's join from rounding distant corners.
             let radius = if shape.sub { -k } else { k };
-            result = offset(&offset(&result, radius), -radius);
+            let joined = offset(&offset(&result, radius), -radius);
+            let neighbourhood = offset(&member, 2.0 * k);
+            result = result
+                .difference(&neighbourhood)
+                .union(&joined.intersection(&neighbourhood));
         }
     }
     result

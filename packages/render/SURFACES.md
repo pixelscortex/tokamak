@@ -54,8 +54,8 @@ Only running tweens request further frames. In-flight positions snap to device p
 Each paint rebuilds one outline with contours and holes. Rounded polygons,
 attachments and slants retain the exact builders; paths flatten at 0.02 CSS px
 for `geo` ordered union/difference. General joins use round-buffer closing
-for adds and opening for cuts. This acts on the whole intermediate region,
-so it can change unrelated narrow features. Buffer arcs have at most 0.01 CSS px sagitta.
+for adds and opening for cuts. The correction is limited to within twice the
+join radius of the member. Buffer arcs have at most 0.01 CSS px sagitta.
 
 The scene fills the outline, then strokes its flattened segments with twice
 the bevel width, clipped to the outline. Outward normals facing straight up
