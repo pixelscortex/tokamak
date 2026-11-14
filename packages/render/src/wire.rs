@@ -50,7 +50,7 @@ pub(crate) struct Tree {
     topology: HashMap<u32, Entry>,
     native: HashMap<u32, NodeId>,
     handles: HashMap<NodeId, u32>,
-    pub surfaces: crate::surface::Registry,
+    pub surfaces: crate::surface::Surfaces,
     pub(super) layout: crate::layout::Observed,
 }
 
@@ -155,7 +155,7 @@ impl Tree {
                     // Native widgets (`<tk-surface>`, `<tk-icon>`) attach before
                     // attributes arrive, so each one reaches attribute_changed.
                     let widget = match tag.as_str() {
-                        "tk-surface" => Some(self.surfaces.surface(native)),
+                        "tk-surface" => Some(self.surfaces.widget(native)),
                         "tk-icon" => Some(crate::icon::widget()),
                         _ => None,
                     };
@@ -179,33 +179,6 @@ impl Tree {
                     // layout on, whatever the attribute's value.
                     if name == "tk-observe" {
                         self.layout.observe(self.native[&id], id, value.is_some());
-                    }
-                    // Plates (surface/bind.rs, "Plates"): the build's marker,
-                    // and the `class` scan for classes built at run time. A
-                    // plate found by the scan gets the marker here, natively
-                    // (JS never sees it), so the stylesheet treats it like a
-                    // marked one.
-                    match name.as_str() {
-                        "tk-plate" => self
-                            .surfaces
-                            .plate_marker(self.native[&id], value.is_some()),
-                        // `tk-region="sheet"`: the region's layer draws its
-                        // plates instead of each plate painting itself.
-                        "tk-region" => self.surfaces.region(self.native[&id], value.as_deref()),
-                        "class" => {
-                            let native = self.native[&id];
-                            if let Some(plate) = self.surfaces.plate_class(native, value.as_deref())
-                            {
-                                let marker =
-                                    QualName::new(None, Namespace::from(""), "tk-plate".into());
-                                if plate {
-                                    dom.set_attribute(native, marker, "");
-                                } else {
-                                    dom.clear_attribute(native, marker);
-                                }
-                            }
-                        }
-                        _ => {}
                     }
                     let attribute = QualName::new(None, Namespace::from(""), name.into());
                     if let Some(value) = value {

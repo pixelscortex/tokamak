@@ -123,9 +123,7 @@ pub fn launch_window_with(
     }
     app.add_window(WindowConfig::with_attributes(
         Box::new(document),
-        // Vello plus the per-frame hook that renders and submits surface
-        // work once per frame (surface/frame.rs).
-        crate::surface::FrameRenderer(VelloWindowRenderer::new()),
+        VelloWindowRenderer::new(),
         attributes,
     ));
     connect(sender);
@@ -135,7 +133,7 @@ pub fn launch_window_with(
 }
 
 struct Host(
-    BlitzApplication<crate::surface::FrameRenderer>,
+    BlitzApplication<VelloWindowRenderer>,
     HostMailbox,
     WindowOptions,
 );
@@ -172,7 +170,7 @@ impl ApplicationHandler for Host {
             match &event {
                 // Layout reports to JS (layout.rs), then layout-bound
                 // surfaces: read member boxes after layout and before Blitz
-                // paints (surface/bind.rs). Blitz resolves again in its
+                // paints (surface/mod.rs). Blitz resolves again in its
                 // redraw, which is then a no-op.
                 WindowEvent::RedrawRequested => {
                     #[cfg(target_os = "macos")]

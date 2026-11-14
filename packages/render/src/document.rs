@@ -88,35 +88,9 @@ impl NativeDocument {
         self.html.inner_mut().resolve(time);
     }
 
-    /// Hand layout-bound shapes to `<tk-surface>` widgets and attach the
-    /// widgets of self-painting plates (surface/bind.rs). Call after
-    /// `resolve` and before painting; the window does this on every redraw.
-    /// Changes nothing when no member box, plate or setting changed.
+    /// Read fused-group boxes after layout and before painting.
     pub fn layout_surfaces(&mut self) {
-        self.bridge.tree.surfaces.bind(&mut self.html.inner_mut());
-    }
-
-    #[cfg(feature = "lab-probes")]
-    pub fn own_plate_shape(&self, node: blitz_traits::NodeId) -> Option<surface::MaterialShape> {
-        self.bridge.tree.surfaces.own_shape(node)
-    }
-
-    #[cfg(feature = "lab-probes")]
-    pub fn hosted_plate_shape(
-        &self,
-        node: blitz_traits::NodeId,
-    ) -> Option<(blitz_traits::NodeId, surface::MaterialShape)> {
-        self.bridge.tree.surfaces.hosted_shape(node)
-    }
-
-    #[cfg(feature = "lab-probes")]
-    pub fn own_plate_count(&self) -> usize {
-        self.bridge.tree.surfaces.own_count()
-    }
-
-    #[cfg(feature = "lab-probes")]
-    pub fn surface_shapes(&self, node: blitz_traits::NodeId) -> Vec<surface::MaterialShape> {
-        self.bridge.tree.surfaces.shapes_of(node)
+        self.bridge.tree.surfaces.after_layout(&self.html.inner());
     }
 
     pub fn take_error(&mut self) -> Option<Error> {

@@ -17,16 +17,6 @@ pub use document::{MessageSender, NativeDocument};
 pub use engine::MAX_WIRE_MESSAGE_BYTES;
 pub use mailbox::{HostMailbox, HostSender};
 pub use shell::{TrafficLights, WindowOptions, launch, launch_connected, launch_window_with};
-#[cfg(feature = "lab-probes")]
-pub use surface::MaterialShape;
-/// Embedders that paint a document without `launch_window_with` (e.g. offscreen
-/// rendering) must call this once per frame after `paint_scene`; see
-/// `surface/frame.rs`.
-pub use surface::end_frame as surface_end_frame;
-#[cfg(feature = "lab-probes")]
-#[doc(hidden)]
-pub use surface::stats::{dirty_pixels as surface_dirty_pixels, paint_work as surface_paint_work};
-
 #[derive(Debug)]
 pub struct Error(pub String);
 
