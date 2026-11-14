@@ -1,0 +1,19 @@
+lab/tests/fused_surface.rs
+  s_53b03d1897b939::t_5be22d7047f0b3 1754
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "196e27dbc47b207df71d29237ea7ba1fa6a18477",
+  "prompts": {},
+  "sessions": {
+    "s_53b03d1897b939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "212c447b-632b-452e-a09e-5714fe13b94a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
