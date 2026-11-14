@@ -1,0 +1,19 @@
+packages/render/src/bridge.rs
+  s_18bc7f3b1654bd::t_2986aa6e9f801c 6,56-57,79,86-106,111-115,117-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c7d46a582ed2f7d7a06d396387390085cfe0172",
+  "prompts": {},
+  "sessions": {
+    "s_18bc7f3b1654bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db5f-9a43-70f0-8183-827215422bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
