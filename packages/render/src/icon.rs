@@ -1,15 +1,5 @@
-//! `<tk-icon>`: an icon drawn from SVG path data as vector fills and strokes
-//! in the Scene, without enabling Blitz's `svg` feature (usvg and its parser,
-//! text and filter stack). Icons only need paths, so the path is parsed once
-//! with kurbo's `BezPath::from_svg` and drawn by Vello like any other shape.
-//!
-//! Attributes: `d` (path data; several sub-paths may be concatenated), `view`
-//! (the square viewBox edge, default 24), `fill` and/or `stroke` (`#rgb`,
-//! `#rrggbb`, `#rrggbbaa`, or `currentColor` for the element's computed CSS
-//! `color`, so text-colour utilities colour icons), `stroke-width` (viewBox units, default 1.75; round
-//! caps and joins, as Lucide-style stroke icons expect). The element's CSS
-//! width sets the drawn size; it has no children and no pointer events (see
-//! the user-agent rule in this module).
+//! Draw SVG icon paths as vector fills and strokes without Blitz's SVG stack.
+//! Paint accepts currentColor and #rgb/#rrggbb/#rrggbbaa.
 use anyrender::{PaintScene, RenderContext, Scene};
 use blitz_dom::node::{ComputedStyles, Widget};
 use peniko::{
@@ -94,7 +84,6 @@ impl Widget for Icon {
         height: u32,
         _scale: f64,
     ) -> Scene {
-        // Fit the square viewBox into the box (device px), centred.
         let side = width.min(height) as f64;
         let transform =
             Affine::translate(((width as f64 - side) / 2.0, (height as f64 - side) / 2.0))

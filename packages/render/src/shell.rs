@@ -54,8 +54,6 @@ pub fn launch_connected(
     )
 }
 
-/// Window options beyond title and size. The default is the platform's own
-/// title bar, so existing callers are unchanged.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowOptions {
     /// macOS: hide the title and draw the document under a transparent title
@@ -82,14 +80,12 @@ pub struct WindowOptions {
     pub traffic_lights: Option<TrafficLights>,
 }
 
-/// See `WindowOptions::traffic_lights`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrafficLights {
     pub left: f64,
     pub center_y: f64,
 }
 
-/// Configurable native window used by the runtime host.
 pub fn launch_window_with(
     shell: &str,
     bundle: &str,
@@ -291,8 +287,7 @@ impl ApplicationHandler for Host {
         self.0.macos_handler()
     }
 }
-/// Whether a press at page (x, y) should drag the window: the hit element or
-/// an ancestor carries `window-drag`, and none of them is interactive.
+
 fn drags_window(doc: &blitz_dom::BaseDocument, x: f32, y: f32) -> bool {
     let Some(hit) = doc.hit(x, y) else {
         return false;
@@ -315,7 +310,6 @@ fn drags_window(doc: &blitz_dom::BaseDocument, x: f32, y: f32) -> bool {
     drag
 }
 
-/// `data-fullscreen` on the root element while the window is full screen.
 fn mark_fullscreen(doc: &mut blitz_dom::BaseDocument, full: bool) {
     let root = doc.root_element().id;
     let name = blitz_dom::QualName::new(

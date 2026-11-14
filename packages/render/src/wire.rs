@@ -50,7 +50,6 @@ pub(crate) struct Tree {
     topology: HashMap<u32, Entry>,
     native: HashMap<u32, NodeId>,
     handles: HashMap<NodeId, u32>,
-    /// `<tk-surface>` widgets and the elements bound to them (surface/bind.rs).
     pub surfaces: crate::surface::Registry,
     pub(super) layout: crate::layout::Observed,
 }

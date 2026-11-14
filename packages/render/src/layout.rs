@@ -1,25 +1,5 @@
-//! Layout reports: what JS can learn about where things are.
-//!
-//! JS has no layout of its own: the tree it builds is laid out by Blitz, in
-//! Rust, after the JS turn ends. To place a floating piece (a menu, a
-//! popover, a tooltip) it needs boxes, so an element marked `tk-observe`
-//! (`observeLayout` in js/index.ts) is reported to JS after layout:
-//!
-//! - `rect`: its border box, CSS px, relative to the window (what
-//!   `getBoundingClientRect` would say: scrolling included, transforms not);
-//! - `clip`: the part of the window it can show in: the window, cut by the
-//!   padding box of every ancestor that clips its overflow (a scroller, an
-//!   `overflow: hidden` panel). Its nearest clipping ancestor is the one
-//!   that usually decides.
-//!
-//! Push, not pull: a synchronous "where is this node" call from JS would
-//! read a layout that does not yet contain the mutations of the JS turn
-//! asking, so the answer would be stale exactly when it matters (a menu
-//! that has just been opened). Instead the host reports after each layout,
-//! and only what changed: a static document reports nothing, so this costs
-//! no frames. `NativeDocument::resolve_layout` lays out, reports, and lays
-//! out again if the report changed the document (a menu re-placed), a few
-//! rounds at most, so a frame is painted with the placement already done.
+//! Report observed element boxes to JS after Blitz layout.
+//! Push reports avoid measuring before the JS turn's mutations are laid out.
 use crate::{Result, bridge::Bridge};
 use blitz_dom::{BaseDocument, Document};
 use blitz_html::HtmlDocument;
@@ -47,8 +27,6 @@ impl Observed {
     }
 }
 
-/// Send JS the layouts of observed elements that changed since the last
-/// report (one `tk:layout` host event). Ok(true) if any were sent.
 pub(super) fn report_layout(bridge: &mut Bridge, html: &mut HtmlDocument) -> Result<bool> {
     if !bridge.alive.load(Ordering::Acquire) || bridge.tree.layout.observed.is_empty() {
         return Ok(false);
@@ -56,7 +34,6 @@ pub(super) fn report_layout(bridge: &mut Bridge, html: &mut HtmlDocument) -> Res
     let mut changed = Vec::new();
     {
         let doc = html.inner();
-        // Forget nodes Blitz has dropped.
         bridge
             .tree
             .layout
@@ -82,7 +59,6 @@ pub(super) fn report_layout(bridge: &mut Bridge, html: &mut HtmlDocument) -> Res
     Ok(true)
 }
 
-/// One observed element's layout, as JS receives it (`id` is its JS handle).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 struct Report {
     /// Border box: x, y, width, height (CSS px, window coordinates).
@@ -91,8 +67,6 @@ struct Report {
     clip: [f32; 4],
 }
 
-/// The layout of `node` now; None if it is not laid out (not in the
-/// document, or `display: none`).
 fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
     let n = doc.get_node(node)?;
     if !n.flags.is_in_document() {
@@ -155,7 +129,6 @@ fn border_box(doc: &BaseDocument, node: NodeId) -> Option<[f32; 4]> {
     ])
 }
 
-/// The overlap of two rects (x, y, w, h); empty ones keep a zero size.
 fn intersect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     let x0 = a[0].max(b[0]);
     let y0 = a[1].max(b[1]);

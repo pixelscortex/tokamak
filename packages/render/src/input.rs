@@ -1,3 +1,4 @@
+//! Supply the input default actions missing from Blitz.
 use crate::{Error, Result, bridge::Bridge};
 use blitz_dom::{BaseDocument, Document, EventHandler, ScrollBehavior};
 use blitz_traits::{NodeId, events::*};
@@ -113,8 +114,6 @@ fn contain_wheel(
     event: &DomEvent,
     state: &mut EventState,
 ) {
-    // `overscroll-contain`: the wheel stays inside that scroller
-    // instead of chaining to the page (see input.rs).
     if let DomEventData::Wheel(wheel) = &event.data
         && !state.is_cancelled()
         && overscroll_wheel(&mut doc.inner_mut(), chain, wheel)
@@ -266,8 +265,6 @@ fn attribute(doc: &dyn Document, id: NodeId, name: &str) -> bool {
         })
 }
 
-// `overscroll-contain`: a scroller that keeps the wheel to itself.
-//
 // Blitz always hands the scroll a box could not use to the next scroller
 // up (it has no `overscroll-behavior`), so a list at its end scrolls the
 // page behind it. The `overscroll-contain` utility (ui/materials.css)
@@ -275,10 +272,6 @@ fn attribute(doc: &dyn Document, id: NodeId, name: &str) -> bool {
 // passes through such an element is handled here instead of by Blitz:
 // the nearest box at or inside it that can still move in the wheel's
 // direction scrolls, and what is left over is dropped.
-
-/// Handles `wheel` if an element of `chain` (target first) contains
-/// overscroll. Returns whether it did; the caller then cancels Blitz's own
-/// (chaining) scroll.
 fn overscroll_wheel(doc: &mut BaseDocument, chain: &[NodeId], wheel: &BlitzWheelEvent) -> bool {
     let Some(container) = chain.iter().position(|id| contains(doc, *id)) else {
         return false;

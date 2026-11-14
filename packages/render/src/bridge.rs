@@ -1,3 +1,4 @@
+//! Dispatch JS events and apply mutation batches to Blitz.
 use crate::{Error, Result, input::Composition, js, wire};
 use blitz_dom::Document;
 use blitz_traits::{NodeId, events::*};

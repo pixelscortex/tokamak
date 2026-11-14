@@ -23,7 +23,6 @@ pub use surface::MaterialShape;
 /// rendering) must call this once per frame after `paint_scene`; see
 /// `surface/frame.rs`.
 pub use surface::end_frame as surface_end_frame;
-/// Lab-only paint counters (`lab-probes` feature).
 #[cfg(feature = "lab-probes")]
 #[doc(hidden)]
 pub use surface::stats::{dirty_pixels as surface_dirty_pixels, paint_work as surface_paint_work};

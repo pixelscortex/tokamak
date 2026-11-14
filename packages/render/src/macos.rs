@@ -1,6 +1,6 @@
+//! Anchor late Metal frames and place custom title bar buttons on macOS.
 use crate::{TrafficLights, WindowOptions};
 
-/// `WindowOptions::traffic_lights`, outside full screen.
 pub(super) fn place_window_buttons(options: &WindowOptions, window: &dyn winit::window::Window) {
     if let (true, Some(at)) = (options.custom_titlebar, options.traffic_lights)
         && window.fullscreen().is_none()
@@ -30,11 +30,6 @@ pub(super) fn place_window_buttons(options: &WindowOptions, window: &dyn winit::
 /// wgpu-hal's `configure` or raw-window-metal's bounds observer resets either
 /// property, so setting them once after the renderer creates the layer is
 /// enough.
-///
-/// (Presenting with `presentsWithTransaction` instead also removes the
-/// stretch, but those presents wait for the window server's resize
-/// transaction: while dragging, the content froze for seconds and then
-/// jumped.)
 pub(super) fn anchor_layer(window: &dyn winit::window::Window, background: Option<u32>) {
     use objc2::{
         Encode, Encoding, RefEncode, msg_send,
@@ -121,7 +116,6 @@ pub(super) fn anchor_layer(window: &dyn winit::window::Window, background: Optio
     }
 }
 
-/// An `NSString` for `text` (the `kCAGravity*` constants are these strings).
 unsafe fn objc2_foundation_string(text: &std::ffi::CStr) -> *mut objc2::runtime::AnyObject {
     use objc2::{msg_send, runtime::AnyClass};
     let Some(class) = AnyClass::get(c"NSString") else {
@@ -131,9 +125,6 @@ unsafe fn objc2_foundation_string(text: &std::ffi::CStr) -> *mut objc2::runtime:
     unsafe { msg_send![class, stringWithUTF8String: text.as_ptr()] }
 }
 
-/// Moves the macOS window buttons (close, minimise, zoom) so they sit at
-/// `at` within a custom title bar (`WindowOptions::traffic_lights`).
-///
 /// AppKit has no setting for this. Like Electron's `trafficLightPosition`,
 /// this resizes the buttons' title bar container (the superview of their
 /// superview) to twice the wanted centre height, pinned to the window's top,

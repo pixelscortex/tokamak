@@ -1,3 +1,4 @@
+//! Own a document generation, host delivery and layout coordination.
 use crate::{
     Error, Result,
     bridge::Bridge,
@@ -36,7 +37,6 @@ impl NativeDocument {
 
     pub fn new_connected(shell: &str, bundle: &str, send: Option<MessageSender>) -> Result<Self> {
         let mut html = HtmlDocument::from_html(shell, Default::default());
-        // `<tk-surface>` element defaults (see surface/mod.rs).
         html.inner_mut()
             .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(surface::UA_CSS));
         html.inner_mut()
@@ -96,16 +96,11 @@ impl NativeDocument {
         self.bridge.tree.surfaces.bind(&mut self.html.inner_mut());
     }
 
-    /// Lab probe (lab-probes): the shape the self-painting plate `node`
-    /// last drew, in its own border box; None if it does not paint itself.
     #[cfg(feature = "lab-probes")]
     pub fn own_plate_shape(&self, node: blitz_traits::NodeId) -> Option<surface::MaterialShape> {
         self.bridge.tree.surfaces.own_shape(node)
     }
 
-    /// Lab probe (lab-probes): for a plate that cannot carry a widget and
-    /// sits in a self-painting plate: that plate's node, and the shape it
-    /// draws for `node`, in its own border box.
     #[cfg(feature = "lab-probes")]
     pub fn hosted_plate_shape(
         &self,
@@ -114,14 +109,11 @@ impl NativeDocument {
         self.bridge.tree.surfaces.hosted_shape(node)
     }
 
-    /// Lab probe (lab-probes): how many plates paint themselves.
     #[cfg(feature = "lab-probes")]
     pub fn own_plate_count(&self) -> usize {
         self.bridge.tree.surfaces.own_count()
     }
 
-    /// Lab probe (lab-probes): the shapes the last layout pass handed to
-    /// the `<tk-surface>` element `node`, with each shape's own material.
     #[cfg(feature = "lab-probes")]
     pub fn surface_shapes(&self, node: blitz_traits::NodeId) -> Vec<surface::MaterialShape> {
         self.bridge.tree.surfaces.shapes_of(node)
@@ -131,8 +123,6 @@ impl NativeDocument {
         self.bridge.error.take()
     }
 
-    /// Explicit generation check is also useful to embedders that own a mailbox.
-    /// A closed window drops this document and invalidates all its senders.
     pub fn host_event(&mut self, generation: u64, topic: &str, payload: Value) -> Result<bool> {
         self.host_json(
             generation,
