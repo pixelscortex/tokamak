@@ -47,7 +47,7 @@ import { Shell, Surface } from "@tokamak/ui/components";
 properties and opacity (`surface-panel`, `surface-[#1b1b1b]`,
 `surface-(--my-var)`, `surface-white/10`). Use `bg-*` on ordinary elements.
 `bevel` adds a 1.5 px edge; `bevel-2` / `bevel-[0.75]` set its width,
-`bevel-inset` reverses the light, and `bevel-quiet` reduces strength to 0.2.
+`bevel-inset` reverses the light, and `bevel-quiet` uses strength 0.075 and a uniform edge lift of 0.055.
 Ordinary edges use Tailwind's inset shadow slot and compose with rings and
 outer shadows. An explicit Tailwind inset shadow replaces that slot.
 Fused roots suppress CSS shadows because the renderer follows their outline.

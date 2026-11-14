@@ -49,8 +49,13 @@ test("surface colours and bevels compile without changing ordinary backgrounds",
     await writeFile(path, `@import "${sheet}"; @source inline("bg-blue-600 surface-panel surface-[#1b1b1b] surface-(--my-var) surface-white/10 bevel bevel-2 bevel-[0.75] bevel-inset bevel-quiet focus:ring-2 hover:bg-blue-500 active:bevel-1 aria-pressed:bevel-inset");`);
     const css = await compileCss(path);
     for (const rule of ["--tk-fill: var(--color-panel)", "--tk-fill: #1b1b1b", "--tk-fill: var(--my-var)",
-      "--tk-bevel: 0.75", "--tk-bevel-inset: 1", "--tk-bevel-strength: 0.2", "--tw-inset-shadow:",
+      "--tk-bevel: 0.75", "--tk-bevel-inset: 1", "--tw-inset-shadow:",
       "--tw-ring-shadow", "box-shadow: none !important", "--color-white) calc(10 * 1%)"]) assert(css.includes(rule), rule);
+    const quiet = css.match(/\.bevel-quiet\s*\{([^}]+)\}/)?.[1];
+    for (const property of ["strength", "base"]) {
+      const value = quiet?.match(new RegExp(`--tk-bevel-${property}: ([0-9.]+)`))?.[1];
+      assert(value && Number(value) > 0 && Number(value) < 0.1, `quiet ${property}`);
+    }
     const background = css.match(/\.bg-blue-600\s*\{([^}]+)\}/)?.[1];
     assert(background?.includes("background-color:"));
     assert(!background.includes("--tk-fill"));
