@@ -399,6 +399,12 @@ fn edge_bands_stay_inside_the_real_contours_at_both_scales() {
         assert_eq!(clip.clip, path(&r));
         assert_eq!(clip.transform, Affine::scale(scale));
         assert_eq!(scene.commands.len(), bands.len() + 3);
+        for (command, (band, _)) in scene.commands[2..].iter().zip(&bands) {
+            let RenderCommand::Fill(edge) = command else {
+                panic!("an edge band is a fill")
+            };
+            assert_eq!(edge.shape, path(band));
+        }
         assert!(matches!(
             scene.commands.last(),
             Some(RenderCommand::PopLayer)
@@ -594,6 +600,8 @@ fn an_attached_tab_changes_continuously_as_it_leaves_the_top() {
             .unwrap(),
         ])
     };
+    let moved = at(0.0).xor(&at(80.0)).unsigned_area();
+    assert!(moved > 500.0, "the tab moves: {moved}");
     let mut previous = at(0.0);
     for step in 1..=320 {
         let next = at(step as f32 * 0.25);

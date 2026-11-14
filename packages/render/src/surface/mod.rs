@@ -207,6 +207,14 @@ fn numbers(node: &Node, name: &str) -> Vec<f32> {
         .collect()
 }
 fn box_of(doc: &BaseDocument, node: &Node) -> Option<[f32; 4]> {
+    use style::properties::longhands::visibility::computed_value::T as Visibility;
+    // `visibility` is inherited, so the member's own value covers its ancestors.
+    if node
+        .primary_styles()
+        .is_some_and(|s| s.get_inherited_box().visibility != Visibility::Visible)
+    {
+        return None;
+    }
     let mut ancestor = Some(node);
     while let Some(n) = ancestor {
         if n.primary_styles()
@@ -280,7 +288,12 @@ fn material_of(style: &Style) -> Look {
     let fill = text("tk-fill")
         .and_then(|v| {
             if v.trim().eq_ignore_ascii_case("currentcolor") {
-                Some(*style.clone_color().raw_components())
+                Some(
+                    *style
+                        .clone_color()
+                        .to_color_space(style::color::ColorSpace::Srgb)
+                        .raw_components(),
+                )
             } else {
                 css_colour(&v)
             }

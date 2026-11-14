@@ -89,7 +89,12 @@ impl Widget for Icon {
             Affine::translate(((width as f64 - side) / 2.0, (height as f64 - side) / 2.0))
                 * Affine::scale(side / self.view);
         // Hex colours compute to sRGB, so the raw components are sRGB here.
-        let current = Color::new(*styles.clone_color().raw_components());
+        let current = Color::new(
+            *styles
+                .clone_color()
+                .to_color_space(style::color::ColorSpace::Srgb)
+                .raw_components(),
+        );
         let resolve = |p: Paint| match p {
             Paint::Fixed(c) => c,
             Paint::Current => current,

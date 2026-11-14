@@ -19,7 +19,7 @@ The root's computed style supplies the group's appearance:
 
 - `--tk-fill`: registered `<color>`; unset or transparent draws nothing.
 - `border-radius`: horizontal radius of each corner of the root's border box.
-- `--tk-bevel`: inside edge width in CSS pixels; default 0.
+- `--tk-bevel`: inside edge width in CSS pixels; default 0. Keep it at most half the thinnest part of the shape: where two opposite edges are closer than twice the width, their bands overlap and the later one wins.
 - `--tk-bevel-inset`: 1 reverses the lighting; default 0.
 - `--tk-bevel-base`: uniform edge lift towards white from 0 to 1; default 0.
 - `--tk-bevel-strength`: lighting strength from 0 to 1; default 1.
