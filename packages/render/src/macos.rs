@@ -26,7 +26,7 @@ pub(super) fn place_window_buttons(options: &WindowOptions, window: &dyn winit::
 /// The gravity names refer to the layer's own coordinates, where "top" is the
 /// larger y. winit's view is flipped (y down), so on screen the top-left is
 /// `kCAGravityBottomLeft` when the layer's contents are flipped, which
-/// `contentsAreFlipped` reports; `TK_DEBUG_LAYER` logs the choice. Nothing in
+/// `contentsAreFlipped` reports. Nothing in
 /// wgpu-hal's `configure` or raw-window-metal's bounds observer resets either
 /// property, so setting them once after the renderer creates the layer is
 /// enough.
@@ -66,7 +66,6 @@ pub(super) fn anchor_layer(window: &dyn winit::window::Window, background: Optio
     else {
         return;
     };
-    let debug = std::env::var_os("TK_DEBUG_LAYER").is_some();
     // SAFETY: called on the main thread (winit's event loop) with the live
     // NSView of an open window; every object is checked before use, and the
     // only changes are documented CALayer / NSWindow properties.
@@ -117,18 +116,6 @@ pub(super) fn anchor_layer(window: &dyn winit::window::Window, background: Optio
             if let Some(color) = color {
                 let cg: CgColor = msg_send![color, CGColor];
                 let _: () = msg_send![layer, setBackgroundColor: cg];
-            }
-            if debug {
-                eprintln!(
-                    "tk layer: contentsAreFlipped {}, gravity {}, background {:?}",
-                    flipped.as_bool(),
-                    if flipped.as_bool() {
-                        "bottomLeft"
-                    } else {
-                        "topLeft"
-                    },
-                    background.map(|c| format!("#{c:06x}"))
-                );
             }
         }
     }
@@ -244,10 +231,6 @@ fn place_traffic_lights(window: &dyn winit::window::Window, at: TrafficLights) {
             if b.origin.x != origin.x || b.origin.y != origin.y {
                 let _: () = msg_send![*button, setFrameOrigin: origin];
             }
-        }
-        if std::env::var_os("TK_DEBUG_LAYER").is_some() {
-            let close_now: Frame = msg_send![close, frame];
-            eprintln!("tk window buttons: container {frame:?}, close {close_now:?}");
         }
     }
 }
