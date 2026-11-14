@@ -13,7 +13,7 @@ sidebar lists the lab's views; picking one swaps what the stage shows.
 | Composer states | Each state of the one `Composer` as its own live composer, labelled: idle, with context, running, commands, command form, approval. |
 | Select | The field size closed and open (with groups and search), the compact size, a menu that opens upward, a disabled select. |
 | Buttons and keys | Every `Button` variant in each state (rest, hover, pressed, focused, disabled, live), the sizes, a toggle, `Kbd`, `Chip`. |
-| Surfaces | A short reference of the styling system: elevation, bevel, materials, fused shapes. |
+| Surfaces | A short reference of CSS bevels, fields on cards, and fused shapes. |
 
 Files:
 
@@ -24,7 +24,8 @@ Files:
 - `src/mocks.ts`: all sample data (models, chips, commands, the run, the
   thread). Components take it through props; nothing in it is real.
 - `src/fixtures.tsx`: markup only the tests need. It is not listed; tests
-  open it with the `lab-test` host event (`src/app.tsx`), uses the same shell and surface renderer.
+  open it with the `lab-test` host event (`src/app.tsx`). It uses the same
+  shell and surface renderer.
 - `src/kit.tsx`: sidebar rows and section titles; `src/icons.ts`: icon
   paths (Lucide ISC, Phosphor MIT).
 - `src/styles.css`: imports, dark values for the older `.tk-button` /
@@ -42,7 +43,8 @@ Tests:
   with the keyboard, picks, searches, opens upward and closes on Escape and
   on a click outside; each composer state; the composer stays within 60%
   of the stage; buttons; layout at wide and narrow windows.
-- `tests/fused_surface.rs`: surface interactions, attachment geometry, stable control boxes, shell resize frames, and
+- `tests/fused_surface.rs`: surface interactions, attachment geometry,
+  stable control boxes, shell resize frames, and
   every view settling without requesting frames. The ignored GPU tests
   render offscreen frames (pixel checks, and one capture of each view with
   `capture_views`, written to `$TK_CAPTURE_DIR`, default
