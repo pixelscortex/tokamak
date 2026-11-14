@@ -1,6 +1,6 @@
 //! Rounded geometry builders and ordered boolean outlines.
 use super::{Placed, Side};
-use geo::{BooleanOps, Buffer, Coord, LineString, MultiPolygon, Polygon};
+use geo::{Area, BooleanOps, Buffer, Coord, LineString, MultiPolygon, Polygon};
 use peniko::kurbo::{
     Arc as CurveArc, BezPath, PathEl, Rect, RoundedRect, RoundedRectRadii, Shape as _,
 };
@@ -406,15 +406,24 @@ pub(super) fn region(shapes: &[Shape]) -> MultiPolygon<f64> {
             result.union(&member)
         };
         if k > 0.0 {
-            // Keep a member's join from rounding distant corners.
+            // Apply only the local correction; splicing two rounded copies creates slivers.
             let radius = if shape.sub { -k } else { k };
             let joined = offset(&offset(&result, radius), -radius);
             let neighbourhood = offset(&member, 2.0 * k);
-            result = result
-                .difference(&neighbourhood)
-                .union(&joined.intersection(&neighbourhood));
+            result = if shape.sub {
+                result.difference(&result.difference(&joined).intersection(&neighbourhood))
+            } else {
+                result.union(&joined.difference(&result).intersection(&neighbourhood))
+            };
         }
     }
+    // Below a 0.001 px square, boolean roundoff is far below our 0.02 px flattening tolerance.
+    result.0.retain_mut(|p| {
+        let (outer, mut holes) = p.clone().into_inner();
+        holes.retain(|r| Polygon::new(r.clone(), vec![]).unsigned_area() >= 1e-6);
+        *p = Polygon::new(outer, holes);
+        p.unsigned_area() >= 1e-6
+    });
     result
 }
 

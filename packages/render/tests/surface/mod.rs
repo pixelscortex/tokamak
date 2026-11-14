@@ -467,3 +467,39 @@ fn uniform_bevel_lift_is_visible_on_every_side() {
     }
     assert_eq!(sides, 4);
 }
+
+#[test]
+fn joined_cuts_have_only_real_contours() {
+    let root = Shape::rect(false, [0.0, 0.0, 420.0, 200.0], [20.0; 4]);
+    let mut cut = Shape::rect(true, [280.0, 60.0, 80.0, 80.0], [40.0; 4]);
+    cut.join = 6.0;
+    for extra in [false, true] {
+        let mut shapes = vec![root.clone()];
+        if extra {
+            shapes.push(Shape::rect(false, [420.0, 80.0, 40.0, 40.0], [0.0; 4]));
+        }
+        shapes.push(cut.clone());
+        if extra {
+            shapes.push(Shape {
+                rect: [100.0, 60.0, 80.0, 80.0],
+                ..cut.clone()
+            });
+        }
+        let raw = shapes.iter().fold(geo::MultiPolygon::new(vec![]), |r, s| {
+            if s.sub {
+                r.difference(&polygon(s))
+            } else {
+                r.union(&polygon(s))
+            }
+        });
+        let r = region(&shapes);
+        assert_eq!(r.0.len(), 1);
+        assert_eq!(r.0[0].interiors().len(), if extra { 2 } else { 1 });
+        assert!(
+            (r.unsigned_area() - raw.unsigned_area()).abs() < 2.0,
+            "area {} vs {}",
+            r.unsigned_area(),
+            raw.unsigned_area()
+        );
+    }
+}
