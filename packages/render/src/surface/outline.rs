@@ -37,7 +37,6 @@ pub(super) struct Poly {
 const MIN_ARC: f32 = 0.01;
 
 impl Poly {
-    // Adjacent arcs share each edge without passing its midpoint.
     pub fn new(points: Vec<[f32; 3]>) -> Option<Poly> {
         let n = points.len();
         if n < 3 {
