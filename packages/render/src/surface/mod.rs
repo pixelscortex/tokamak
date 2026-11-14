@@ -11,10 +11,7 @@ use blitz_dom::{
 };
 use blitz_traits::NodeId;
 use outline::{Poly, Shape, resolve_attached};
-use peniko::{
-    BlendMode, Color, Fill,
-    kurbo::{Affine, Cap, Line, Stroke},
-};
+use peniko::{BlendMode, Color, Fill, kurbo::Affine};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -469,41 +466,19 @@ fn draw(shapes: &[Shape], look: Look, scale: f64) -> Scene {
         &path,
     );
     if look.bevel > 0.0 {
-        let stroke = Stroke::new(2.0 * look.bevel as f64).with_caps(Cap::Round);
         let mut edge_fill = look.fill;
         for v in &mut edge_fill[..3] {
             *v += (1.0 - *v) * look.base;
         }
-        for poly in &region.0 {
-            for (ring, hole) in std::iter::once((poly.exterior(), false))
-                .chain(poly.interiors().iter().map(|r| (r, true)))
-            {
-                let sign = ring
-                    .0
-                    .windows(2)
-                    .map(|p| p[0].x * p[1].y - p[1].x * p[0].y)
-                    .sum::<f64>()
-                    .signum()
-                    * if hole { -1.0 } else { 1.0 };
-                for pair in ring.0.windows(2) {
-                    let (a, b) = (pair[0], pair[1]);
-                    let (dx, dy) = (b.x - a.x, b.y - a.y);
-                    let len = dx.hypot(dy);
-                    if len == 0.0 {
-                        continue;
-                    }
-                    let amount = (dx / len * sign) as f32
-                        * look.strength
-                        * if look.inset { -1.0 } else { 1.0 };
-                    scene.stroke(
-                        &stroke,
-                        transform,
-                        edge_colour(edge_fill, amount),
-                        None,
-                        &Line::new((a.x, a.y), (b.x, b.y)),
-                    );
-                }
-            }
+        for (band, normal) in outline::bands(&region, look.bevel as f64) {
+            let amount = normal * look.strength * if look.inset { -1.0 } else { 1.0 };
+            scene.fill(
+                Fill::EvenOdd,
+                transform,
+                edge_colour(edge_fill, amount),
+                None,
+                &outline::path(&band),
+            );
         }
     }
     scene.pop_layer();

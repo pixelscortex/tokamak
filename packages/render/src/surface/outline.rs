@@ -452,6 +452,65 @@ pub(super) fn region(shapes: &[Shape]) -> MultiPolygon<f64> {
     result
 }
 
+pub(super) fn bands(region: &MultiPolygon<f64>, width: f64) -> Vec<(MultiPolygon<f64>, f32)> {
+    use geo::BoundingRect;
+    let mut bands = vec![];
+    for poly in &region.0 {
+        for (ring, hole) in std::iter::once((poly.exterior(), false))
+            .chain(poly.interiors().iter().map(|r| (r, true)))
+        {
+            let sign = ring
+                .0
+                .windows(2)
+                .map(|p| p[0].x * p[1].y - p[1].x * p[0].y)
+                .sum::<f64>()
+                .signum()
+                * if hole { -1.0 } else { 1.0 };
+            let bounds = ring.bounding_rect().unwrap();
+            let width = width.min(bounds.width().min(bounds.height()) * 0.5);
+            let points: Vec<_> = ring
+                .0
+                .windows(2)
+                .filter(|p| p[0] != p[1])
+                .map(|p| p[0])
+                .collect();
+            let n = points.len();
+            let normals: Vec<_> = (0..n)
+                .map(|i| {
+                    let (a, b) = (points[i], points[(i + 1) % n]);
+                    let (dx, dy) = (b.x - a.x, b.y - a.y);
+                    let len = dx.hypot(dy);
+                    (-dy / len * sign, dx / len * sign)
+                })
+                .collect();
+            let inset: Vec<_> = (0..n)
+                .map(|i| {
+                    let (a, b) = (normals[(i + n - 1) % n], normals[i]);
+                    let d = 1.0 + a.0 * b.0 + a.1 * b.1;
+                    let p = points[i];
+                    Coord {
+                        x: p.x + width * (a.0 + b.0) / d.max(1e-6),
+                        y: p.y + width * (a.1 + b.1) / d.max(1e-6),
+                    }
+                })
+                .collect();
+            for i in 0..n {
+                let j = (i + 1) % n;
+                // Adjacent strips meet at their angle bisector rather than painting over each other.
+                let band = Polygon::new(
+                    LineString::new(vec![points[i], points[j], inset[j], inset[i], points[i]]),
+                    vec![],
+                );
+                bands.push((
+                    MultiPolygon(vec![band]).intersection(region),
+                    normals[i].1 as f32,
+                ));
+            }
+        }
+    }
+    bands
+}
+
 pub(super) fn path(region: &MultiPolygon<f64>) -> BezPath {
     let mut outline = BezPath::new();
     for poly in &region.0 {

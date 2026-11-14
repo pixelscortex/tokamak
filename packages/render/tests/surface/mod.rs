@@ -3,9 +3,8 @@ use anyrender::recording::RenderCommand;
 use blitz_dom::{Document, Namespace, QualName};
 use blitz_html::HtmlDocument;
 use blitz_traits::shell::Viewport;
-use geo::{Area, BooleanOps, Buffer, Contains, Point};
+use geo::{Area, BooleanOps, Contains, Point};
 use outline::{attached, path, polygon, region, slanted};
-use peniko::kurbo::Shape as _;
 
 struct Fixture {
     doc: HtmlDocument,
@@ -349,86 +348,51 @@ fn general_join_rounds_the_intersection() {
 }
 
 #[test]
-fn edge_strokes_are_clipped_inside_outer_and_hole_contours_at_both_scales() {
+fn edge_bands_stay_inside_the_real_contours_at_both_scales() {
     let shapes = [
-        Shape::rect(false, [0.0, 0.0, 100.0, 100.0], [8.0; 4]),
-        Shape::rect(true, [30.0, 30.0, 40.0, 40.0], [4.0; 4]),
+        Shape::rect(false, [0.0, 0.0, 420.0, 200.0], [20.0; 4]),
+        Shape {
+            join: 6.0,
+            ..Shape::rect(true, [280.0, 60.0, 80.0, 80.0], [40.0; 4])
+        },
     ];
     let r = region(&shapes);
-    let outline = path(&r);
+    assert_eq!(r.0.len(), 1);
+    assert_eq!(r.0[0].interiors().len(), 1);
+    let bands = outline::bands(&r, 2.0);
+    let band = bands
+        .iter()
+        .fold(geo::MultiPolygon::new(vec![]), |r, (p, _)| r.union(p));
+    assert!(
+        band.difference(&r).unsigned_area() < 1e-4,
+        "spill {}",
+        band.difference(&r).unsigned_area()
+    );
+    assert!(inside(&band, 1.0, 100.0) && inside(&band, 279.0, 100.0));
+    assert!(!inside(&band, -1.0, 100.0) && !inside(&band, 281.0, 100.0));
+    assert!(!inside(&band, 3.0, 100.0) && !inside(&band, 277.0, 100.0));
     for scale in [1.0, 2.0] {
         let scene = draw(
             &shapes,
             Look {
-                fill: [0.5, 0.5, 0.5, 0.4],
+                fill: [0.5; 4],
                 bevel: 2.0,
                 strength: 1.0,
-                base: 0.0,
-                inset: false,
+                ..Default::default()
             },
             scale,
         );
         let RenderCommand::PushLayer(clip) = &scene.commands[0] else {
             panic!("missing outline clip")
         };
-        assert_eq!(clip.clip, outline);
+        assert_eq!(clip.clip, path(&r));
         assert_eq!(clip.transform, Affine::scale(scale));
-        let mut strokes = 0;
-        let mut band = geo::MultiPolygon::new(vec![]);
-        let mut lit_edges = 0;
-        for command in &scene.commands {
-            if let RenderCommand::Stroke(edge) = command {
-                strokes += 1;
-                assert_eq!(edge.style.width, 4.0);
-                assert_eq!(edge.transform, Affine::scale(scale));
-                let points: Vec<_> = edge
-                    .shape
-                    .elements()
-                    .iter()
-                    .filter_map(|el| match el {
-                        peniko::kurbo::PathEl::MoveTo(p) | peniko::kurbo::PathEl::LineTo(p) => {
-                            Some((p.x, p.y))
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                if (points[0].1 - points[1].1).abs() < 0.001 {
-                    let y = points[0].1;
-                    let anyrender::Paint::Solid(colour) = edge.brush else {
-                        panic!("expected solid edge")
-                    };
-                    let expected = if (y - 0.0).abs() < 0.001 || (y - 70.0).abs() < 0.001 {
-                        Some(0.59)
-                    } else if (y - 100.0).abs() < 0.001 || (y - 30.0).abs() < 0.001 {
-                        Some(0.275)
-                    } else {
-                        None
-                    };
-                    if let Some(expected) = expected {
-                        assert!((colour.components[0] - expected).abs() < 0.001);
-                        lit_edges += 1;
-                    }
-                }
-                band = band.union(&geo::LineString::from(points).buffer(2.0));
-            }
-        }
-        assert!(strokes > 8 && lit_edges == 4);
-        let band = band.intersection(&r);
-        assert!(band.difference(&r).unsigned_area() < 0.001);
-        assert!(inside(&band, 1.0, 50.0) && inside(&band, 29.0, 50.0));
-        assert!(!inside(&band, -1.0, 50.0) && !inside(&band, 31.0, 50.0));
-        assert!(!inside(&band, 3.0, 50.0) && !inside(&band, 27.0, 50.0));
-        assert!(!inside(&band, 50.0, 50.0));
+        assert_eq!(scene.commands.len(), bands.len() + 3);
         assert!(matches!(
             scene.commands.last(),
             Some(RenderCommand::PopLayer)
         ));
     }
-    let top = edge_colour([0.5; 4], 1.0).components[0];
-    let bottom = edge_colour([0.5; 4], -1.0).components[0];
-    assert!((top - 0.59).abs() < 0.0001 && (bottom - 0.275).abs() < 0.0001);
-    assert_eq!(edge_colour([0.5; 4], 0.0).components[0], 0.5);
-    assert!(outline.area() > 0.0);
 }
 
 #[test]
@@ -457,15 +421,15 @@ fn uniform_bevel_lift_is_visible_on_every_side() {
     );
     let mut sides = 0;
     for command in &scene.commands {
-        if let RenderCommand::Stroke(edge) = command {
+        if let RenderCommand::Fill(edge) = command {
             let anyrender::Paint::Solid(colour) = edge.brush else {
                 panic!("solid edge")
             };
-            assert!((colour.components[0] - 0.5275).abs() < 0.0001);
+            assert!((colour.components[0] - if sides == 0 { 0.5 } else { 0.5275 }).abs() < 0.0001);
             sides += 1;
         }
     }
-    assert_eq!(sides, 4);
+    assert_eq!(sides, 5);
 }
 
 #[test]
@@ -569,4 +533,80 @@ fn scrolling_a_members_content_keeps_its_shape() {
         10.0
     );
     assert_eq!(f.state().shown, before);
+}
+
+#[test]
+#[ignore = "offscreen GPU raster; run explicitly"]
+fn a_thin_bevel_uses_the_nearest_boundary_tone() {
+    use anyrender::ImageRenderer;
+    let mut renderer = anyrender_vello::VelloImageRenderer::new(100, 4);
+    let mut pixels = vec![];
+    renderer.render_to_vec(
+        |p| {
+            p.append_scene(
+                draw(
+                    &[Shape::rect(false, [0.0, 0.0, 100.0, 4.0], [0.0; 4])],
+                    Look {
+                        fill: [0.5, 0.5, 0.5, 1.0],
+                        bevel: 6.0,
+                        strength: 1.0,
+                        ..Default::default()
+                    },
+                    1.0,
+                ),
+                Affine::IDENTITY,
+            )
+        },
+        &mut pixels,
+    );
+    let rows: Vec<_> = (0..4).map(|y| pixels[(y * 100 + 50) * 4]).collect();
+    assert!(
+        rows[0] > 128 && rows[1] > 128 && rows[2] < 128 && rows[3] < 128,
+        "row tones {rows:?}"
+    );
+}
+
+#[test]
+fn an_attached_tab_changes_continuously_as_it_leaves_the_top() {
+    let root = Shape::rect(false, [48.0, 0.0, 300.0, 200.0], [20.0; 4]);
+    let at = |y| {
+        region(&[
+            root.clone(),
+            attached(
+                Side::Right,
+                [0.0, y, 48.0, 40.0],
+                [10.0; 4],
+                10.0,
+                root.rect,
+                root.radii,
+            )
+            .unwrap(),
+        ])
+    };
+    let mut previous = at(0.0);
+    for step in 1..=320 {
+        let next = at(step as f32 * 0.25);
+        let changed = previous.xor(&next).unsigned_area();
+        assert!(changed < 60.0, "step {step}: discontinuity {changed}");
+        assert_eq!(next.0.len(), 1);
+        assert!(next.0[0].interiors().is_empty());
+        previous = next;
+    }
+}
+
+#[test]
+fn attached_and_slanted_members_keep_large_asymmetric_corners() {
+    let r = [80.0, 0.0, 0.0, 0.0];
+    let tab = attached(
+        Side::Right,
+        [0.0, 0.0, 100.0, 100.0],
+        r,
+        0.0,
+        [100.0, 0.0, 100.0, 100.0],
+        [0.0; 4],
+    )
+    .unwrap();
+    assert!(!inside(&polygon(&tab), 20.0, 20.0));
+    let slant = slanted(false, [0.0, 0.0, 100.0, 100.0], r, 0.0, [-1.0; 2]).unwrap();
+    assert!(!inside(&polygon(&slant), 20.0, 20.0));
 }

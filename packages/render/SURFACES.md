@@ -12,6 +12,8 @@ A group is an ordinary root with one background widget as its first child:
 The layer must absolutely fill the root, behind its content. User-agent CSS
 keeps `pointer-events: none !important` on it: Blitz swallows events that hit
 custom widgets. Ordinary elements keep their CSS backgrounds and events.
+A `bg-*` class on a `Surface` root paints an ordinary rectangle; use `surface-*` for the fused fill.
+The vector outline can extend outside the layer’s box, subject to ancestor clipping; member shapes use layout boxes and do not follow CSS transforms.
 
 The root's computed style supplies the group's appearance:
 
@@ -58,15 +60,15 @@ for `geo` ordered union/difference. General joins use round-buffer closing
 for adds and opening for cuts. The correction is limited to within twice the
 join radius of the member. Buffer arcs have at most 0.01 CSS px sagitta.
 
-The scene fills the outline, then strokes its flattened segments with twice
-the bevel width, clipped to the outline. The uniform base lift applies on
-every side. Outward normals facing straight up lighten towards white (gain
-0.18); downward normals darken towards black (gain 0.45); horizontal normals
-keep the uniformly lifted fill. Holes reverse their normals.
-One opacity layer preserves the fill's alpha across overlapping edge strokes.
-Segment colours approximate smooth lighting; overlapping round caps can show
-small changes at joins. No raster or physical-display acceptance is implied
-by the geometry and scene-command tests at device scales 1 and 2.
+The scene fills the outline, then fills inward edge strips clipped to it.
+Adjacent strips meet at angle bisectors; the width is capped at half each
+contour's smallest bounding dimension so opposing bands do not overlap.
+The uniform base lift applies on every side. Outward normals facing straight
+up lighten towards white (gain 0.18); downward normals darken towards black
+(gain 0.45); horizontal normals keep the uniformly lifted fill. Holes reverse
+their normals. One opacity layer preserves the fill's alpha across the band.
+Segment colours approximate smooth lighting. Ignored GPU tests cover thin
+bands and lab resize frames at device scale 2.
 
 There are no surface textures, shaders, atlas, caches, renderer resources,
 plates, sheets, guests, regions, per-shape materials, or end-of-frame hook.
