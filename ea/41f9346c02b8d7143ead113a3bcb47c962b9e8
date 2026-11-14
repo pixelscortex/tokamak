@@ -1,0 +1,32 @@
+packages/render/Cargo.toml
+  s_add16778c6b665::t_dad1654517b822 22-26,29-31,34-36
+app/Cargo.toml
+  s_add16778c6b665::t_dad1654517b822 28-29
+Cargo.toml
+  s_add16778c6b665::t_1bca3131acc2d8 39-41
+  s_add16778c6b665::t_dad1654517b822 35,38
+  s_add16778c6b665::t_cb8ae0fe2da9a8 36-37
+  s_add16778c6b665::t_0bff96c180d976 32-33
+lab/Cargo.toml
+  s_add16778c6b665::t_dad1654517b822 18-19,22-24
+packages/runtime/Cargo.toml
+  s_add16778c6b665::t_dad1654517b822 25
+Cargo.lock
+  s_add16778c6b665::t_be72cd8548cb9b 23,25,180,191,561,606,617,636,655,1340,4810,5398-5399,5404,5513-5514,5879-5880,5891,5906,5937-5938,5946-5947,5958-5959,5967-5968,5973,5986-5987,5995,6005-6006,6876-6877,6926-6928,7053-7054,7057,7067-7068,8125,8128-8129,8426,8428,8453,8455,8469,8471,8492,8494,8511,8513,8526,8528,8543,8545,8564,8566,8592,8594,8615,8617,8622,8634,8636,8699,8701,8715,8717
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea41f9346c02b8d7143ead113a3bcb47c962b9e8",
+  "prompts": {},
+  "sessions": {
+    "s_add16778c6b665": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1da49-771b-70b2-957b-51a3eadc16b9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
