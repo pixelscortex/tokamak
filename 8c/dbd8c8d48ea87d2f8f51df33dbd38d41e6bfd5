@@ -1,0 +1,25 @@
+packages/render/SURFACES.md
+  s_53b03d1897b939::t_bc3b50e91752fe 22
+packages/render/src/icon.rs
+  s_53b03d1897b939::t_20e05d484ad839 92-97
+packages/render/src/surface/mod.rs
+  s_53b03d1897b939::t_e651c78c916239 210-217,291-296
+packages/render/tests/surface/mod.rs
+  s_53b03d1897b939::t_e8ca232b9367db 402-407,603-604
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8cdbd8c8d48ea87d2f8f51df33dbd38d41e6bfd5",
+  "prompts": {},
+  "sessions": {
+    "s_53b03d1897b939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "212c447b-632b-452e-a09e-5714fe13b94a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
