@@ -2073,3 +2073,139 @@ async fn values_round_trip(disk: bool) {
     tx.commit().await.unwrap();
     db.close().await.unwrap();
 }
+
+// ---------------------------------------------------------------------------
+// Query operands must be JSON-like.
+// ---------------------------------------------------------------------------
+
+backends!(
+    memory_non_json_operands_rejected,
+    disk_non_json_operands_rejected,
+    non_json_operands_rejected
+);
+
+// Contract C: comparison operands are data, compared by strict value
+// equality. Before e902f4f a regex operand made `eq("name", /^ali/)` match
+// "alice" (the storage layer's SQL `=` semantics), so a caller could turn an
+// equality filter into a pattern match and get different rows than a JSON
+// client would. Every non-JSON-like operand, top-level or nested, on every
+// comparison, with and without an index and through every terminal, must be
+// `Error::Invalid` and poison the call so its earlier writes are discarded.
+async fn non_json_operands_rejected(disk: bool) {
+    let fixture = Fixture::new(disk);
+    let mut db = Database::open(fixture.storage.clone()).await.unwrap();
+    let people = table("people");
+    let mut setup = db.begin().await.unwrap();
+    setup
+        .define_index(&people, "by_name", &["name"], false)
+        .await
+        .unwrap();
+    let alice = setup
+        .insert(&people, fields(&[("name", text("alice"))]))
+        .await
+        .unwrap();
+    setup.commit().await.unwrap();
+    let mut events = db.subscribe();
+
+    let regex = || Value::Regex("^ali".parse().unwrap());
+    let operands: Vec<(&str, Value)> = vec![
+        ("regex", regex()),
+        (
+            "record id",
+            Value::RecordId(surrealdb_types::RecordId::new("people", alice.key())),
+        ),
+        (
+            "object holding a regex",
+            Value::Object(fields(&[("bad", regex())])),
+        ),
+        (
+            "array holding a regex",
+            Value::Array(vec![text("alice"), regex()].into()),
+        ),
+        ("infinity", float(f64::INFINITY)),
+        ("nan", float(f64::NAN)),
+    ];
+    let mut rejected = 0;
+    for (label, operand) in &operands {
+        for indexed in [false, true] {
+            for op in ["eq", "gt", "gte", "lt", "lte"] {
+                for terminal in ["collect", "limit0", "first"] {
+                    let mut tx = db.begin().await.unwrap();
+                    let staged = tx
+                        .insert(&people, fields(&[("name", text("staged"))]))
+                        .await
+                        .unwrap();
+                    let mut query = tx.query(&people);
+                    if indexed {
+                        query = query.with_index("by_name");
+                    }
+                    let value = operand.clone();
+                    query = match op {
+                        "eq" => query.eq("name", value),
+                        "gt" => query.gt("name", value),
+                        "gte" => query.gte("name", value),
+                        "lt" => query.lt("name", value),
+                        _ => query.lte("name", value),
+                    };
+                    let result = match terminal {
+                        "collect" => query.collect().await.map(|rows| rows.len()),
+                        "limit0" => query.limit(0).collect().await.map(|rows| rows.len()),
+                        _ => query.first().await.map(|row| row.into_iter().count()),
+                    };
+                    let case = format!("{label} {op} indexed={indexed} {terminal}");
+                    assert!(
+                        matches!(result, Err(Error::Invalid(_))),
+                        "{case}: {result:?}"
+                    );
+                    assert!(
+                        matches!(tx.get(&alice).await, Err(Error::FailedTransaction)),
+                        "{case}: not poisoned"
+                    );
+                    assert!(
+                        matches!(tx.commit().await, Err(Error::FailedTransaction)),
+                        "{case}"
+                    );
+                    let mut read = db.read_only().await.unwrap();
+                    assert_eq!(
+                        read.get(&staged).await.unwrap(),
+                        None,
+                        "{case}: earlier write saved"
+                    );
+                    read.commit().await.unwrap();
+                    rejected += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(rejected, operands.len() * 2 * 5 * 3);
+
+    // Strict equality: no pattern, prefix or case matching, and the same rows
+    // with and without the index.
+    let mut read = db.read_only().await.unwrap();
+    for (probe, expected) in [
+        ("alice", vec![alice.to_string()]),
+        ("ali", vec![]),
+        ("ALICE", vec![]),
+        ("^ali", vec![]),
+    ] {
+        let scanned = read
+            .query(&people)
+            .eq("name", probe)
+            .collect()
+            .await
+            .unwrap();
+        let indexed = read
+            .query(&people)
+            .with_index("by_name")
+            .eq("name", probe)
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(sorted_keys(&scanned), expected, "{probe}");
+        assert_eq!(sorted_keys(&indexed), expected, "{probe} indexed");
+    }
+    assert_eq!(read.query(&people).collect().await.unwrap().len(), 1);
+    read.commit().await.unwrap();
+    barrier(&db, &mut events).await;
+    db.close().await.unwrap();
+}
