@@ -1,0 +1,19 @@
+packages/server/src/data/query.rs
+  s_822cb42a004075::t_f9a042d9d8a105 1-4,16,24-26,33-37,41-42,44-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b071be17c1a51af68945533f3e64bfef7c6f3d2",
+  "prompts": {},
+  "sessions": {
+    "s_822cb42a004075": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db58-b48d-7cf0-beab-4168541f978d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
