@@ -1,4 +1,4 @@
-//! A call-owned SDK transaction, retained across separate operations/awaits.
+//! A call-owned storage transaction, retained across separate operations/awaits.
 //! Failed operations poison the whole call so catching a host error cannot save
 //! earlier writes. The write set is local until commit succeeds, then published
 //! synchronously before returning. Rollback and failed commits publish nothing.
@@ -12,17 +12,18 @@ use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
-use surrealdb::{
-    engine::local::Db,
-    types::{NotFoundError, Object, Value},
-};
+use super::{Object, Value, types::normalize};
+use surrealdb_datastore::{Transaction as StorageTransaction, key::schema::{RecordKey, RecordPrefix}};
+use surrealdb_idx::{catalog::{Record, providers::*}, val::{TableName, Value as StoredValue}};
+use surrealdb_kvs::key::{KVKeyDecode, KVRange};
+use std::borrow::Cow;
 
 #[must_use = "commit or roll back the transaction before closing its database"]
 pub struct Transaction {
-    inner: surrealdb::method::Transaction<Db>,
+    pub(super) inner: Arc<StorageTransaction>,
     // Keep the database alive and block close until this invocation finishes.
     // Unlike a borrowed sender, this fits a 'static runtime callback safely.
-    state: Arc<DatabaseState>,
+    pub(super) state: Arc<DatabaseState>,
     written: BTreeSet<Table>,
     changes: Option<Vec<RecordChange>>,
     change_bytes: usize,
@@ -54,12 +55,12 @@ mod keyed_tests {
 
 impl Transaction {
     pub(super) fn new(
-        inner: surrealdb::method::Transaction<Db>,
+        inner: StorageTransaction,
         state: Arc<DatabaseState>,
         read_only: bool,
     ) -> Self {
         Self {
-            inner,
+            inner: Arc::new(inner),
             state,
             written: BTreeSet::new(),
             changes: Some(Vec::new()),
@@ -114,44 +115,32 @@ impl Transaction {
         result
     }
 
-    /// Only our fixed statements reach here. Even names/IDs/limits are bindings.
-    /// An absent table is an empty read in a schemaless application, not DDL.
-    pub(crate) async fn rows(
-        &mut self,
-        sql: String,
-        bindings: Object,
-        write: bool,
-    ) -> Result<Vec<Document>> {
+    pub async fn get(&mut self, id: &Id) -> Result<Option<Document>> {
         let result = async {
-            self.ready(write)?;
-            let response = self.inner.query(sql).bind(bindings).await?;
-            let mut response = match response.check() {
-                Ok(response) => response,
-                Err(error)
-                    if !write
-                        && matches!(
-                            error.not_found_details(),
-                            Some(NotFoundError::Table { .. })
-                        ) =>
-                {
-                    return Ok(Vec::new());
-                }
-                Err(error) => return Err(error.into()),
-            };
-            let rows: Vec<Value> = response.take(0)?;
-            rows.into_iter().map(Document::decode).collect()
-        }
-        .await;
+            self.ready(false)?;
+            let core = &self.state.storage;
+            let rid = id.record();
+            let record = self.inner.get_record(core.ns, core.db, &rid.table, &rid.key, None).await?;
+            if record.data == StoredValue::None { return Ok(None); }
+            Ok(Some(Document::decode(record.data.clone())?))
+        }.await;
         self.finish(result)
     }
 
-    pub async fn get(&mut self, id: &Id) -> Result<Option<Document>> {
-        let mut bindings = Object::new();
-        bindings.insert("id", id.record());
-        Ok(self
-            .rows("SELECT * FROM $id".into(), bindings, false)
-            .await?
-            .pop())
+    /// Scan keys in storage ID order, then decode through get_record so the
+    /// catalog's record envelope and canonical identity remain authoritative.
+    pub(super) async fn scan_table(&self, table: &Table) -> Result<Vec<Document>> {
+        let core = &self.state.storage;
+        let table = TableName::from(table.as_str());
+        let range = RecordPrefix { ns: core.ns, db: core.db, tb: Cow::Borrowed(&table) }.range()?;
+        let keys = self.inner.keys_raw(range, u32::MAX, 0, None).await?;
+        let mut documents = Vec::with_capacity(keys.len());
+        for key in keys {
+            let key = RecordKey::decode_key(&key)?;
+            let record = self.inner.get_record(core.ns, core.db, &table, &key.id, None).await?;
+            documents.push(Document::decode(record.data.clone())?);
+        }
+        Ok(documents)
     }
 
     pub async fn insert(&mut self, table: &Table, value: Object) -> Result<Id> {
@@ -169,35 +158,23 @@ impl Transaction {
         let result = async {
             self.ready(true)?;
             check_fields(&value)?;
-            // Epoch milliseconds are immutable metadata, not a user-supplied sort key.
-            let millis = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|_| Error::Invalid("clock is before the Unix epoch"))?
-                .as_millis();
-            let millis =
-                i64::try_from(millis).map_err(|_| Error::Invalid("clock is out of range"))?;
-            let mut stored = Object::new();
-            stored.insert("_creationTime", millis);
-            stored.insert("data", value);
-            let mut bindings = Object::new();
-            let statement = if let Some(id) = id {
-                bindings.insert("id", id.record());
-                "CREATE $id CONTENT $value RETURN AFTER"
-            } else {
-                bindings.insert("table", table.as_str());
-                "CREATE type::table($table) CONTENT $value RETURN AFTER"
+            let Value::Object(fields) = normalize(Value::Object(value), 0)? else { unreachable!() };
+            let millis = SystemTime::now().duration_since(UNIX_EPOCH)
+                .map_err(|_| Error::Invalid("clock is before the Unix epoch"))?.as_millis();
+            let millis = i64::try_from(millis).map_err(|_| Error::Invalid("clock is out of range"))?;
+            let id = match id {
+                Some(id) => id.clone(),
+                None => Id::new(table.clone(), uuid::Uuid::new_v4().simple().to_string())?,
             };
-            bindings.insert("value", stored);
-            let row = self
-                .rows(statement.into(), bindings, true)
-                .await?
-                .pop()
-                .ok_or(Error::Invalid("insert returned no document"))?;
+            let rid = id.record();
+            let core = &self.state.storage;
+            self.inner.get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None).await?;
+            let row = Document { id: id.clone(), creation_time: millis, fields };
+            self.inner.put_record(core.ns, core.db, &rid.table, &rid.key, Arc::new(Record::new(row.stored()))).await?;
             self.written.insert(table.clone());
             self.record(None, Some(&row));
-            Ok(row.id)
-        }
-        .await;
+            Ok(id)
+        }.await;
         self.finish(result)
     }
 
@@ -222,31 +199,14 @@ impl Transaction {
             for (key, value) in value {
                 fields.insert(key, value);
             }
-            // Do not claim a table write when the document would be unchanged.
-            if fields == old.fields {
-                return Ok(());
-            }
-            let mut stored = Object::new();
-            stored.insert("_creationTime", old.creation_time);
-            stored.insert("data", fields);
-            let mut bindings = Object::new();
-            bindings.insert("id", id.record());
-            bindings.insert("value", stored);
-            let mut rows = self
-                .rows(
-                    "UPDATE $id CONTENT $value RETURN AFTER".into(),
-                    bindings,
-                    true,
-                )
-                .await?;
-            let persisted = rows.pop().ok_or(Error::MissingRecord)?;
-            // The engine can normalize distinct inputs to the same document
-            // (for example, omitting NONE-valued fields). Its returned data,
-            // not our pre-storage payload, decides whether observers changed.
-            if persisted.fields != old.fields {
-                self.written.insert(id.table().clone());
-                self.record(Some(&old), Some(&persisted));
-            }
+            let Value::Object(fields) = normalize(Value::Object(fields), 0)? else { unreachable!() };
+            if fields == old.fields { return Ok(()); }
+            let persisted = Document { id: id.clone(), creation_time: old.creation_time, fields };
+            let rid = id.record();
+            let core = &self.state.storage;
+            self.inner.set_record(core.ns, core.db, &rid.table, &rid.key, Arc::new(Record::new(persisted.stored()))).await?;
+            self.written.insert(id.table().clone());
+            self.record(Some(&old), Some(&persisted));
             Ok(())
         }
         .await;
@@ -260,15 +220,11 @@ impl Transaction {
             let Some(old) = self.get(id).await? else {
                 return Ok(());
             };
-            let mut bindings = Object::new();
-            bindings.insert("id", id.record());
-            let rows = self
-                .rows("DELETE $id RETURN BEFORE".into(), bindings, true)
-                .await?;
-            if !rows.is_empty() {
-                self.written.insert(id.table().clone());
-                self.record(Some(&old), None);
-            }
+            let rid = id.record();
+            let core = &self.state.storage;
+            self.inner.del_record(core.ns, core.db, &rid.table, &rid.key).await?;
+            self.written.insert(id.table().clone());
+            self.record(Some(&old), None);
             Ok(())
         }
         .await;
@@ -286,7 +242,13 @@ impl Transaction {
             self.inner.cancel().await?;
             return Err(Error::FailedTransaction);
         }
-        self.inner.commit().await?;
+        if self.read_only {
+            // Read transactions have nothing to flush; the backend rejects a
+            // read-only commit, while the application API permits it.
+            self.inner.cancel().await?;
+        } else {
+            self.inner.commit().await?;
+        }
         if !self.written.is_empty() {
             // No receivers is normal before live subscriptions are installed.
             let _ = self.state.changes.send(ChangeEvent {
@@ -297,8 +259,8 @@ impl Transaction {
         Ok(())
     }
 
-    /// Await rollback explicitly; SDK drop rollback is asynchronous and requires
-    /// a live Tokio runtime, so it is only a cancellation safety net.
+    /// Await rollback explicitly; dropping the backend transaction is only a
+    /// cancellation safety net, never a way to publish successful writes.
     pub async fn rollback(self) -> Result<()> {
         self.inner.cancel().await?;
         Ok(())
