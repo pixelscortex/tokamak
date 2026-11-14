@@ -1,0 +1,23 @@
+Cargo.lock
+  s_53b03d1897b939::t_18979c117718e6 23,25,180,191,1438,1707,3569,4511,5194,5251,5392,6899,8124,8154
+lab/Cargo.toml
+  s_53b03d1897b939::t_4f5416d069c296 23-24
+packages/render/Cargo.toml
+  s_53b03d1897b939::t_8d4a4183ea1b73 30-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adec0dec9c6e60341c31274fe8a0f9af4c655b2f",
+  "prompts": {},
+  "sessions": {
+    "s_53b03d1897b939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "212c447b-632b-452e-a09e-5714fe13b94a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
