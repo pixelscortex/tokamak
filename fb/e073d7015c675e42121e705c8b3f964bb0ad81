@@ -1,0 +1,41 @@
+lab/src/chat.tsx
+  s_3cbe90dd00fac3::t_c422c14bdd73ce 124,126,158
+  s_3cbe90dd00fac3::t_012a92a66cdb04 49,68
+  s_3cbe90dd00fac3::t_ca81fad6781198 142
+lab/tests/fused_surface.rs
+  s_3cbe90dd00fac3::t_ca81fad6781198 12,223,235,251,312
+  s_3cbe90dd00fac3::t_ada267a20120d2 1-3,286,303,385,387-390,408-409,424-426,436,450,452-454,476-477,479,484
+  s_3cbe90dd00fac3::t_9f9452747e9595 85
+  s_3cbe90dd00fac3::t_1dcbbffe69094b 391-393,396-397,399-401,405-406,411-412,415-416,419,421,427-430,432-433,437-440,443-444,456-457,460-461,464-466,468-470,480-483,485-488
+  s_3cbe90dd00fac3::t_4cbf0983b1483b 44,117
+lab/src/surfaces.tsx
+  s_3cbe90dd00fac3::t_c422c14bdd73ce 1-2,6-21,23-24,26,28-51,53-54
+lab/src/kit.tsx
+  s_3cbe90dd00fac3::t_f047dc4677cb84 6,75,77-78,81
+lab/src/app.tsx
+  s_3cbe90dd00fac3::t_f047dc4677cb84 6,10,96,98,103,110,121
+lab/tests/native.rs
+  s_3cbe90dd00fac3::t_cbffe36af50987 789-794
+  s_3cbe90dd00fac3::t_1009ecd3a762ca 785-788,795
+  s_3cbe90dd00fac3::t_e9791ce34bbe0b 775
+  s_3cbe90dd00fac3::t_ada267a20120d2 758-774,776-784
+lab/src/fixtures.tsx
+  s_3cbe90dd00fac3::t_ccb32557d86b0f 8,10
+  s_3cbe90dd00fac3::t_c422c14bdd73ce 1-3,6-7,9,11-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fbe073d7015c675e42121e705c8b3f964bb0ad81",
+  "prompts": {},
+  "sessions": {
+    "s_3cbe90dd00fac3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbd4-6c80-77b0-85f2-36be0c404aed",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
