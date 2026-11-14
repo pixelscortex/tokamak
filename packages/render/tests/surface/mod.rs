@@ -503,3 +503,21 @@ fn joined_cuts_have_only_real_contours() {
         );
     }
 }
+
+#[test]
+fn asymmetric_css_radii_and_pills() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" style="border-radius:80px 0 0 0"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        &[],
+    );
+    assert!(!inside(&f.region(), 20.0, 20.0));
+    assert!(inside(&f.region(), 30.0, 30.0));
+    let f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><tk-surface id="surface" group="g"></tk-surface><div id="member" surface-groups="g" style="width:100px;height:100px;border-radius:80px 0 0 0"></div></div>"#,
+        &["member"],
+    );
+    assert!(!inside(&f.region(), 20.0, 20.0));
+    let pill = polygon(&Shape::rect(false, [0.0, 0.0, 100.0, 40.0], [9999.0; 4]));
+    assert!(!inside(&pill, 2.0, 2.0));
+    assert!(inside(&pill, 20.0, 1.0) && inside(&pill, 99.0, 20.0));
+}

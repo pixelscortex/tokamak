@@ -1,9 +1,7 @@
 //! Rounded geometry builders and ordered boolean outlines.
 use super::{Placed, Side};
 use geo::{Area, BooleanOps, Buffer, Coord, LineString, MultiPolygon, Polygon};
-use peniko::kurbo::{
-    Arc as CurveArc, BezPath, PathEl, Rect, RoundedRect, RoundedRectRadii, Shape as _,
-};
+use peniko::kurbo::{Arc as CurveArc, BezPath, PathEl};
 use std::sync::Arc;
 pub(super) type V2 = [f32; 2];
 
@@ -51,6 +49,17 @@ impl Poly {
             return None;
         }
         let orient = area2.signum();
+        let tangents: Vec<_> = (0..n)
+            .map(|i| {
+                let (p, v, nx) = (at(i + n - 1), at(i), at(i + 1));
+                let (a, b) = (sub2(p, v), sub2(nx, v));
+                let half = (dot2(a, b) / (len2(a) * len2(b))).clamp(-1.0, 1.0).acos() * 0.5;
+                points[i][2].max(MIN_ARC) / half.tan()
+            })
+            .collect();
+        let factor = (0..n).fold(1.0f32, |f, i| {
+            f.min(len2(sub2(at(i + 1), at(i))) / (tangents[i] + tangents[(i + 1) % n]))
+        });
         let corners = (0..n)
             .map(|i| {
                 let (p, v, nx) = (at(i + n - 1), at(i), at(i + 1));
@@ -71,13 +80,8 @@ impl Poly {
                 if half > std::f32::consts::FRAC_PI_2 - 1e-4 {
                     return flat; // collinear: no corner to round
                 }
-                let mut r = points[i][2].max(MIN_ARC);
-                let mut t = r / half.tan();
-                let t_max = 0.5 * l1.min(l2);
-                if t > t_max {
-                    t = t_max;
-                    r = t * half.tan();
-                }
+                let r = points[i][2].max(MIN_ARC) * factor;
+                let t = r / half.tan();
                 let bis = [e1[0] + e2[0], e1[1] + e2[1]];
                 let bl = len2(bis);
                 let reach = r / half.sin();
@@ -136,7 +140,7 @@ impl Shape {
         Shape {
             sub,
             rect,
-            radii,
+            radii: normalized_radii(rect, radii),
             join: 0.0,
             poly: None,
         }
@@ -206,6 +210,8 @@ pub(super) fn attached(
     target: [f32; 4],
     target_radii: [f32; 4],
 ) -> Option<Shape> {
+    let radii = normalized_radii(rect, radii);
+    let target_radii = normalized_radii(target, target_radii);
     let points = match side {
         Side::Left | Side::Right => attached_points(side, rect, radii, join, target, target_radii),
         Side::Top | Side::Bottom => {
@@ -230,9 +236,7 @@ pub(super) fn attached(
             points
         }
     };
-    let mut shape = Shape::from_poly(false, Poly::new(points)?);
-    shape.join = 0.0;
-    Some(shape)
+    Some(Shape::from_poly(false, Poly::new(points)?))
 }
 
 fn attached_points(
@@ -303,6 +307,7 @@ pub(super) fn slanted(
     join: f32,
     slant: [f32; 2],
 ) -> Option<Shape> {
+    let radii = normalized_radii(rect, radii);
     let [x, y, w, h] = rect;
     let [tl, tr] = slant.map(|a| a.to_radians().tan());
     let ext = join * 3.0 + 4.0;
@@ -332,10 +337,23 @@ pub(super) fn slanted(
             [jl - ext, b + ext, 0.0],
         ]
     };
-    let mut shape = Shape::from_poly(sub, Poly::new(points)?);
-    shape.join = 0.0;
-    Some(shape)
+    Some(Shape::from_poly(sub, Poly::new(points)?))
 }
+fn normalized_radii([_, _, w, h]: [f32; 4], r: [f32; 4]) -> [f32; 4] {
+    let f = [
+        (w, r[0] + r[1]),
+        (h, r[1] + r[2]),
+        (w, r[2] + r[3]),
+        (h, r[3] + r[0]),
+    ]
+    .into_iter()
+    .fold(
+        1.0f32,
+        |f, (side, sum)| if sum > 0.0 { f.min(side / sum) } else { f },
+    );
+    r.map(|r| r.max(0.0) * f)
+}
+
 pub(super) fn polygon(s: &Shape) -> MultiPolygon<f64> {
     let curve = if let Some(poly) = &s.poly {
         let mut p = BezPath::new();
@@ -367,16 +385,23 @@ pub(super) fn polygon(s: &Shape) -> MultiPolygon<f64> {
         p
     } else {
         let [x, y, w, h] = s.rect.map(f64::from);
-        RoundedRect::from_rect(
-            Rect::new(x, y, x + w, y + h),
-            RoundedRectRadii::new(
-                s.radii[0] as f64,
-                s.radii[1] as f64,
-                s.radii[2] as f64,
-                s.radii[3] as f64,
-            ),
-        )
-        .to_path(0.001)
+        let [tl, tr, br, bl] = normalized_radii(s.rect, s.radii).map(f64::from);
+        let mut p = BezPath::new();
+        p.move_to((x + tl, y));
+        for (cx, cy, r, start) in [
+            (x + w - tr, y + tr, tr, -std::f64::consts::FRAC_PI_2),
+            (x + w - br, y + h - br, br, 0.0),
+            (x + bl, y + h - bl, bl, std::f64::consts::FRAC_PI_2),
+            (x + tl, y + tl, tl, std::f64::consts::PI),
+        ] {
+            p.line_to((cx + r * start.cos(), cy + r * start.sin()));
+            p.extend(
+                CurveArc::new((cx, cy), (r, r), start, std::f64::consts::FRAC_PI_2, 0.0)
+                    .append_iter(0.001),
+            );
+        }
+        p.close_path();
+        p
     };
     let mut points = vec![];
     peniko::kurbo::flatten(curve, 0.02, |el| match el {
