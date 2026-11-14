@@ -1,0 +1,40 @@
+lab/tests/fused_surface.rs
+  s_47ab5ec39ea064::t_a96a2baa7b1aad 298-307
+packages/ui/src/materials.css
+  s_47ab5ec39ea064::t_9aea25e1dfd803 4
+  s_47ab5ec39ea064::t_77294ad6c059ea 20-21,27-28,36-37,41
+packages/render/src/surface/mod.rs
+  s_47ab5ec39ea064::t_9aea25e1dfd803 55,285
+  s_47ab5ec39ea064::t_a9d5d7923cc1eb 463-466,491
+packages/render/SURFACES.md
+  s_520aa74b63c14d::t_db66f3f60a0195 62-63
+  s_47ab5ec39ea064::t_9aea25e1dfd803 22,64-65
+packages/render/tests/surface/mod.rs
+  s_47ab5ec39ea064::t_4eebb8080c6103 92,112,469
+  s_47ab5ec39ea064::t_9aea25e1dfd803 366
+  s_47ab5ec39ea064::t_c33b1effe357ae 445-468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9b622828cf11a1dd9b89a3da7ce105800a4c7d6",
+  "prompts": {},
+  "sessions": {
+    "s_47ab5ec39ea064": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbf2-b417-7903-8c17-976604240c78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_520aa74b63c14d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbd3-533f-7320-bd95-8655d9a8c388",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
