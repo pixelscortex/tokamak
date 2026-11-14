@@ -1,0 +1,61 @@
+Cargo.lock
+  s_9f5f9a68567564::t_854b4b5e53059f 4819
+packages/render/Cargo.toml
+  s_9f5f9a68567564::t_2d26dd01e93ddc 14,17-18
+packages/render/src/lib.rs
+  s_9f5f9a68567564::t_9a3f30508684c0 646-648
+packages/render/src/surface/frame.rs
+  s_18bc7f3b1654bd::t_6f81328da38688 138-140
+packages/render/src/surface/gpu.rs
+  s_18bc7f3b1654bd::t_d13d52f8b3163e 986-987
+packages/render/src/surface/mod.rs
+  s_9f5f9a68567564::t_14ad42212d906c 40,42-45,57-58,101-116
+packages/render/src/surface/painter.rs
+  s_822cb42a004075::t_658dac79e3cefb 134-153,185-187
+packages/render/src/surface/reference.rs
+  s_33621bd1759d01::t_3c598db0f4d04c 13,203
+packages/render/src/surface/vector.rs
+  s_822cb42a004075::t_801708e614bb2e 1-323
+packages/render/src/surface/widget.rs
+  s_9f5f9a68567564::t_88efa76853463d 311-332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d1558d143842b902446394ce116386588500d7c9",
+  "prompts": {},
+  "sessions": {
+    "s_18bc7f3b1654bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db5f-9a43-70f0-8183-827215422bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_33621bd1759d01": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db4a-eece-78d1-b91d-efd4ffc2cf05",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_822cb42a004075": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db58-b48d-7cf0-beab-4168541f978d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_9f5f9a68567564": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db4e-af04-7b50-a071-701445d6e4db",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
