@@ -1,0 +1,21 @@
+lab/tests/fused_surface.rs
+  s_9f5f9a68567564::t_8a8b1f14c12686 3710-3712
+lab/tests/vector_experiment/mod.rs
+  s_9f5f9a68567564::t_7d03732266cc83 1-535
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c812831514ed741d469b582678300d7cb1030755",
+  "prompts": {},
+  "sessions": {
+    "s_9f5f9a68567564": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db4e-af04-7b50-a071-701445d6e4db",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
