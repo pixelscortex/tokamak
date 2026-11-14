@@ -1,0 +1,21 @@
+lab/README.md
+  s_bef2713774a71d::t_cb33a3ed58ba37 27,45
+lab/tests/fused_surface.rs
+  s_bef2713774a71d::t_078780200cc3c8 571-786
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33b10369289416c6a7b660246c11e67caa1d878a",
+  "prompts": {},
+  "sessions": {
+    "s_bef2713774a71d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dc13-9c90-7272-9e09-e6f8216ba342",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
