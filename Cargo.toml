@@ -29,19 +29,3 @@ codegen-units = 1
 # Details and the exact diff: vendor/rquickjs-sys/TOKAMAK_PATCHES.md
 [patch.crates-io]
 rquickjs-sys = { path = "vendor/rquickjs-sys" }
-
-# Blitz from our fork (github.com/pixelscortex/blitz), branch
-# `blitz/widget-event-result`: the v0.3.0-beta.4 tag plus one commit, which
-# lets a custom widget ignore an input event so the element's default action
-# runs (self-painting plates, packages/render/SURFACES.md). Pinned by `rev`;
-# rules and the list of changes: packages/render/BLITZ_FORK.md and
-# BLITZ_CHANGES.md.
-# Only blitz-dom is changed. blitz-traits and debug_timer are unchanged, but
-# the fork's blitz-dom takes them from its own checkout while blitz-paint,
-# blitz-html and blitz-shell (crates.io) ask crates.io for them: without
-# these two entries the build has two copies of each and their types do not
-# unify. stylo_taffy needs no entry (only blitz-dom depends on it, so it
-# follows blitz-dom into the fork).
-blitz-dom = { git = "https://github.com/pixelscortex/blitz", rev = "99c448f4d0100c604d0e807ddba429de60680cb0" }
-blitz-traits = { git = "https://github.com/pixelscortex/blitz", rev = "99c448f4d0100c604d0e807ddba429de60680cb0" }
-debug_timer = { git = "https://github.com/pixelscortex/blitz", rev = "99c448f4d0100c604d0e807ddba429de60680cb0" }

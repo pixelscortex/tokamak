@@ -8,28 +8,22 @@ publish.workspace = true
 [features]
 # Opt-in upstream successful-present timings; normal product builds stay quiet.
 gpu-diagnostics = ["anyrender_vello/log_frame_times"]
-# Lab-only test probes: the shapes surfaces and plates last drew
-# (`NativeDocument::surface_shapes` and friends) and paint counters
-# (surface/stats.rs), for lab/tests. Product builds leave it off.
+# Compatibility for the lab's existing dev-dependency; exposes no probes.
 lab-probes = []
 
 [dependencies]
 engine = { path = "../engine" }
-# `custom-widget` (dom, shell, paint) backs `<tk-surface>` (src/surface):
-# dom attaches widgets, paint draws their scenes, shell creates and frees
-# their GPU resources. blitz-dom's feature also enables its `accessibility`
-# feature, which pulls in `accesskit`.
+# Blitz attaches surface/icon widgets and paints their ordinary vector scenes.
 blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts", "custom-widget"] }
 blitz-html = { version = "=0.3.0-beta.4", default-features = false }
 blitz-traits = "=0.3.0-beta.4"
 blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard", "custom-widget"] }
-blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
-# Stylo itself (blitz-dom's style engine, already in the lock graph): the
-# materials binding reads computed border radii (surface/bind.rs).
+# Read computed border radii and registered custom properties.
 style = { package = "stylo", version = "=0.22.0" }
+geo = { version = "=0.32.0", default-features = false }
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
-# Already in the lock graph through anyrender/vello; surfaces build image brushes.
+# Vector widgets share the scene colour and geometry types.
 peniko = "=0.6.1"
 winit = "=0.31.0-beta.3"
 keyboard-types = "=0.8.0"

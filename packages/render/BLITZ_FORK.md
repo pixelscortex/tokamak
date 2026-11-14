@@ -1,40 +1,6 @@
-# Blitz fork: rules
+# Blitz fork
 
-For a plain-language list of every change, why it exists and whether Tokamak
-needs it, see `BLITZ_CHANGES.md` next to this file. Keep it up to date in the
-same commit as any change to the fork.
-
-Read this before changing anything in Blitz, or anything that depends on a
-changed Blitz. The list of changes and their status lives in Linear, issue
-TKM-76 ("Blitz fork: rules and list of changes"), with one sub-issue per
-change. If this file and TKM-76 differ, TKM-76 wins; fix this file.
-
-Status: the fork repository is `github.com/pixelscortex/blitz`. Its `main`
-follows upstream `main`. The branch `tokamak/base-0.3.0-beta.4` and the tag
-`v0.3.0-beta.4` mark upstream commit `92b11f1`, the release Tokamak uses;
-every change of ours is a branch on top of that base.
-
-The branch `feature/ui-shell` builds against the fork, as a trial: the root
-`Cargo.toml` takes `blitz-dom`, `blitz-traits` and `debug_timer` from the
-fork's branch `blitz/widget-event-result` at commit
-`99c448f4d0100c604d0e807ddba429de60680cb0` (the base plus change 1), through
-`[patch.crates-io]` git entries pinned by `rev`. Only `blitz-dom` differs
-from the release; the other two are named so the build has one copy of each
-(`stylo_taffy` follows `blitz-dom` without an entry). `blitz-html`,
-`blitz-paint` and `blitz-shell` still come from crates.io at
-`=0.3.0-beta.4` and use the fork's `blitz-dom`. No Blitz source is checked
-in here. Every other branch still uses Blitz `=0.3.0-beta.4` from crates.io
-alone.
-
-To move the pin: push the new commit to the fork, replace the `rev` in all
-three entries, run one Cargo command without `--locked` (for example
-`cargo tree -p render`) so that Cargo rewrites the four `source` lines in
-`Cargo.lock`, and commit it (builds use `--locked`). `cargo update` is not
-needed, and also moves unrelated crates.
-
-Pushing to the fork: use SSH (`git@github.com:pixelscortex/blitz.git`). Blitz's
-history contains GitHub workflow files, and an HTTPS push with the `gh` token
-is refused without the `workflow` scope.
+No fork is in use on this branch. Blitz comes from crates.io at `=0.3.0-beta.4`.
 
 ## Rules
 
@@ -65,40 +31,3 @@ is refused without the `workflow` scope.
    and the result is recorded on its sub-issue.
 8. The same Blitz pin is used by other branches. Switching the workspace to a
    fork is a workspace-wide change and must be agreed before it lands.
-
-## Steps a change goes through
-
-Proposed, Trying, In the fork, Ready to offer, Approved to offer, Offered,
-Accepted or declined. See TKM-76 for what each means.
-
-## Where changes wait for review
-
-A change that is not approved for upstream is parked as a draft pull request
-inside our own fork: head `blitz/<short-name>`, base
-`tokamak/base-0.3.0-beta.4`, in `pixelscortex/blitz`. The Blitz project is not
-notified of pull requests inside a fork.
-
-- Always pass the base repository explicitly
-  (`gh pr create --repo pixelscortex/blitz --base tokamak/base-0.3.0-beta.4 ...`).
-  Without it, GitHub targets the upstream project.
-- Every draft pull request names the Blitz issue it answers, so we are not
-  inventing problems. Search Blitz's issues and pull requests before building
-  a change. In the pull request text, write a section "The Blitz issue this
-  answers" with the issue's number and title, its state, and the relevant
-  item in their words. If no upstream issue exists, say so plainly and say
-  what was searched for.
-- Write that reference as a link through GitHub's redirect address, for
-  example
-  `[DioxusLabs/blitz#233](https://redirect.github.com/DioxusLabs/blitz/issues/233)`.
-  It opens the issue when clicked, and GitHub adds no "mentioned" note on the
-  upstream issue for it (checked on draft pull request 1). Never write
-  `#233`, a bare `DioxusLabs/blitz#233`, or a direct
-  `github.com/DioxusLabs/...` link in the fork: those do add a note. Commit
-  messages in the fork carry no upstream reference at all.
-- Clickable links to upstream issues belong in Linear and in
-  `BLITZ_CHANGES.md`. The Tokamak repository is private, so links from it and
-  from its mirrored Linear issues are not visible to people outside it.
-- A draft pull request on the upstream project is public and notifies its
-  maintainers. It is not a private place to park work.
-
-Current: change 1 is draft pull request 1 in the fork (Linear TKM-77).
