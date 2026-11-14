@@ -8,8 +8,6 @@ publish.workspace = true
 [features]
 # Opt-in upstream successful-present timings; normal product builds stay quiet.
 gpu-diagnostics = ["anyrender_vello/log_frame_times"]
-# Compatibility for the lab's existing dev-dependency; exposes no probes.
-lab-probes = []
 
 [dependencies]
 engine = { path = "../engine" }

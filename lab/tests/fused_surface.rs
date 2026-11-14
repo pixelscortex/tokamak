@@ -228,7 +228,6 @@ impl Offscreen {
         self.renderer.render_to_vec(
             |scene| {
                 blitz_paint::paint_scene(scene, &mut doc.inner_mut(), scale, width, height, 0, 0);
-                render::surface_end_frame();
             },
             &mut pixels,
         );
@@ -283,7 +282,7 @@ fn write_png(path: &str, width: u32, height: u32, rgba: &[u8]) {
 }
 
 #[test]
-#[ignore = "needs the merged renderer"]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
 fn capture_views() {
     let dir = capture_dir();
     let mut doc = document(2.0, 900.0);
@@ -300,7 +299,7 @@ fn capture_views() {
     assert!(doc.take_error().is_none());
 }
 #[test]
-#[ignore = "needs the merged renderer"]
+#[ignore = "writes offscreen GPU captures; run explicitly"]
 fn capture_select() {
     let dir = format!("{}/select", capture_dir());
     std::fs::create_dir_all(&dir).unwrap();
