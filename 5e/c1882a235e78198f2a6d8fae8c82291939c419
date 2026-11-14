@@ -1,0 +1,21 @@
+packages/render/src/lib.rs
+  s_18bc7f3b1654bd::t_9f5b7483c80bcd 19,22
+packages/render/src/shell.rs
+  s_18bc7f3b1654bd::t_1eccc4bbadf924 46-54,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ec1882a235e78198f2a6d8fae8c82291939c419",
+  "prompts": {},
+  "sessions": {
+    "s_18bc7f3b1654bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db5f-9a43-70f0-8183-827215422bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
