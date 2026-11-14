@@ -1,0 +1,21 @@
+packages/render/src/icon.rs
+  s_add16778c6b665::t_c57647aae4d96d 14
+packages/render/src/overscroll.rs
+  s_add16778c6b665::t_c23232d47b12e3 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af76d262af04b614ed6a9f5594640364b2b8fb0c",
+  "prompts": {},
+  "sessions": {
+    "s_add16778c6b665": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1da49-771b-70b2-957b-51a3eadc16b9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
