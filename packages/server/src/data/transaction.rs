@@ -1,5 +1,7 @@
 //! A call-owned storage transaction, retained across separate operations/awaits.
-//! Failed operations poison the whole call so catching a host error cannot save
+//! Failed or interrupted mutations poison the whole call; failed reads do too.
+//! Dropping a read does not poison: reads stage no record/index/catalog writes.
+//! Catching a host error cannot save
 //! earlier writes. The write set is local until commit succeeds, then published
 //! before returning, even if the caller stops awaiting commit. Once polled,
 //! commit and rollback run in owned tasks; cancelling the caller cannot interrupt
@@ -37,6 +39,37 @@ use surrealdb_kvs::key::KVKeyDecode;
 enum CatalogGuard {
     Read { _guard: OwnedRwLockReadGuard<()> },
     Write { _guard: OwnedRwLockWriteGuard<()> },
+}
+
+// Arm before any mutation work (including catalog creation and index updates).
+// Only a successful return disarms this guard. Errors, panics and dropped
+// futures all poison the retained transaction, so partial writes cannot commit.
+// Keeping the exclusive borrow here also covers nested reads during a mutation.
+struct Mutation<'a> {
+    tx: &'a mut Transaction,
+    complete: bool,
+}
+
+impl<'a> Mutation<'a> {
+    fn new(tx: &'a mut Transaction) -> Self {
+        Self {
+            tx,
+            complete: false,
+        }
+    }
+
+    fn finish<T>(mut self, result: Result<T>) -> Result<T> {
+        self.complete = result.is_ok();
+        result
+    }
+}
+
+impl Drop for Mutation<'_> {
+    fn drop(&mut self) {
+        if !self.complete {
+            self.tx.failed = true;
+        }
+    }
 }
 
 #[must_use = "commit or roll back the transaction before closing its database"]
@@ -180,6 +213,8 @@ impl Transaction {
         result
     }
 
+    /// Cancelling a read leaves the transaction usable: reads stage no writes.
+    /// A returned read error still poisons the transaction.
     pub async fn get(&mut self, id: &Id) -> Result<Option<Document>> {
         let result = async {
             self.ready(false)?;
@@ -222,6 +257,8 @@ impl Transaction {
         Ok(documents)
     }
 
+    /// Mutations that error or are dropped after polling poison the transaction.
+    /// Only rollback is then allowed; commit discards all staged writes.
     pub async fn insert(&mut self, table: &Table, value: Object) -> Result<Id> {
         self.create(table, None, value).await
     }
@@ -234,8 +271,10 @@ impl Transaction {
     }
 
     async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Id> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
+            tx.ready(true)?;
             check_fields(&value)?;
             let Value::Object(fields) = normalize(Value::Object(value), 0)? else {
                 unreachable!()
@@ -250,10 +289,10 @@ impl Transaction {
                 Some(id) => id.clone(),
                 None => Id::new(table.clone(), uuid::Uuid::new_v4().simple().to_string())?,
             };
-            self.catalog(false)?;
+            tx.catalog(false)?;
             let rid = id.record();
-            let core = &self.state.storage;
-            self.inner
+            let core = &tx.state.storage;
+            tx.inner
                 .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
                 .await?;
             let row = Document {
@@ -261,8 +300,8 @@ impl Transaction {
                 creation_time: millis,
                 fields,
             };
-            self.indexes(None, Some(&row)).await?;
-            self.inner
+            tx.indexes(None, Some(&row)).await?;
+            tx.inner
                 .put_record(
                     core.ns,
                     core.db,
@@ -271,12 +310,12 @@ impl Transaction {
                     Arc::new(Record::new(row.stored())),
                 )
                 .await?;
-            self.written.insert(table.clone());
-            self.record(None, Some(&row));
+            tx.written.insert(table.clone());
+            tx.record(None, Some(&row));
             Ok(id)
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
     }
 
     pub async fn patch(&mut self, id: &Id, value: Object) -> Result<()> {
@@ -288,10 +327,12 @@ impl Transaction {
     }
 
     async fn update(&mut self, id: &Id, value: Object, replace: bool) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
+            tx.ready(true)?;
             check_fields(&value)?;
-            let old = self.get(id).await?.ok_or(Error::MissingRecord)?;
+            let old = tx.get(id).await?.ok_or(Error::MissingRecord)?;
             let mut fields = if replace {
                 Object::new()
             } else {
@@ -306,16 +347,16 @@ impl Transaction {
             if fields == old.fields {
                 return Ok(());
             }
-            self.catalog(false)?;
+            tx.catalog(false)?;
             let persisted = Document {
                 id: id.clone(),
                 creation_time: old.creation_time,
                 fields,
             };
             let rid = id.record();
-            let core = &self.state.storage;
-            self.indexes(Some(&old), Some(&persisted)).await?;
-            self.inner
+            let core = &tx.state.storage;
+            tx.indexes(Some(&old), Some(&persisted)).await?;
+            tx.inner
                 .set_record(
                     core.ns,
                     core.db,
@@ -324,34 +365,36 @@ impl Transaction {
                     Arc::new(Record::new(persisted.stored())),
                 )
                 .await?;
-            self.written.insert(id.table().clone());
-            self.record(Some(&old), Some(&persisted));
+            tx.written.insert(id.table().clone());
+            tx.record(Some(&old), Some(&persisted));
             Ok(())
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
     }
 
     /// Deleting an absent record is a no-op and must not report its table.
     pub async fn delete(&mut self, id: &Id) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
-            let Some(old) = self.get(id).await? else {
+            tx.ready(true)?;
+            let Some(old) = tx.get(id).await? else {
                 return Ok(());
             };
-            self.catalog(false)?;
+            tx.catalog(false)?;
             let rid = id.record();
-            let core = &self.state.storage;
-            self.indexes(Some(&old), None).await?;
-            self.inner
+            let core = &tx.state.storage;
+            tx.indexes(Some(&old), None).await?;
+            tx.inner
                 .del_record(core.ns, core.db, &rid.table, &rid.key)
                 .await?;
-            self.written.insert(id.table().clone());
-            self.record(Some(&old), None);
+            tx.written.insert(id.table().clone());
+            tx.record(Some(&old), None);
             Ok(())
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
     }
 
     /// Define a b-tree value index on application fields (including metadata).
@@ -364,8 +407,10 @@ impl Transaction {
         fields: &[&str],
         unique: bool,
     ) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
+            tx.ready(true)?;
             check_field(name)?;
             if fields.is_empty() {
                 return Err(Error::Invalid("an index needs at least one field"));
@@ -377,9 +422,9 @@ impl Transaction {
                     return Err(Error::Invalid("index fields must be distinct"));
                 }
             }
-            let core = &self.state.storage;
+            let core = &tx.state.storage;
             let tb = TableName::from(table.as_str());
-            self.inner
+            tx.inner
                 .get_or_add_tb(None, "tokamak", "tokamak", &tb, None)
                 .await?;
             let cols = fields
@@ -395,7 +440,7 @@ impl Transaction {
                 })
                 .collect::<Vec<_>>();
             let kind = if unique { Index::Uniq } else { Index::Idx };
-            if let Some(existing) = self
+            if let Some(existing) = tx
                 .inner
                 .get_tb_index(core.ns, core.db, &tb, name, None)
                 .await?
@@ -408,9 +453,9 @@ impl Transaction {
                     ))
                 };
             }
-            self.catalog(true)?;
-            let core = &self.state.storage;
-            if self.inner.tb_has_records(core.ns, core.db, &tb).await? {
+            tx.catalog(true)?;
+            let core = &tx.state.storage;
+            if tx.inner.tb_has_records(core.ns, core.db, &tb).await? {
                 return Err(Error::Invalid(
                     "cannot define an index on a table with rows; backfill is unsupported",
                 ));
@@ -431,14 +476,12 @@ impl Transaction {
                 comment: None,
                 nulls_not_distinct: false,
             };
-            self.inner
-                .put_tb_index(core.ns, core.db, &tb, &index)
-                .await?;
-            self.catalog_changed = true;
+            tx.inner.put_tb_index(core.ns, core.db, &tb, &index).await?;
+            tx.catalog_changed = true;
             Ok(())
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
     }
 
     async fn indexes(&self, before: Option<&Document>, after: Option<&Document>) -> Result<()> {

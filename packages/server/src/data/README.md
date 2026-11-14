@@ -71,6 +71,14 @@ An unknown index or invalid bound poisons the transaction, including limit-zero
 queries. Index definitions are idempotent only when their fields and uniqueness
 match. New definitions on tables with rows are rejected: no backfill is run.
 All document mutations maintain every table index in the same transaction.
+Every mutation (insert, keyed insert, patch, replace, delete and index definition)
+is guarded before doing work: an error, panic or cancellation before successful
+completion poisons the transaction. Later operations and commit reject it with
+FailedTransaction, and commit discards all staged changes, including partial index
+writes. This also covers plugin-space writes, which use the same native methods.
+Dropping an unpolled operation stages nothing. Dropping a read leaves the
+transaction usable because reads stage no record, index or catalog writes;
+returned read errors still poison it.
 Array values occupy one index entry, preserving equality on the entire array.
 The catalog uses the internal trailing `Part::Flatten` marker to suppress
 IndexOperation's default array fan-out; no expression evaluator is involved.
