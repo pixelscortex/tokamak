@@ -155,9 +155,12 @@ impl Tree {
                     );
                     // Native widgets (`<tk-surface>`, `<tk-icon>`) attach before
                     // attributes arrive, so each one reaches attribute_changed.
-                    if let Some(widget) =
-                        crate::surface::widget_for(&tag, native, &mut self.surfaces)
-                    {
+                    let widget = match tag.as_str() {
+                        "tk-surface" => Some(self.surfaces.surface(native)),
+                        "tk-icon" => Some(crate::icon::widget()),
+                        _ => None,
+                    };
+                    if let Some(widget) = widget {
                         dom.set_custom_widget(native, widget);
                     }
                     self.native.insert(id, native);

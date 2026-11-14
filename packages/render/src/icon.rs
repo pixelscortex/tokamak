@@ -9,7 +9,7 @@
 //! `color`, so text-colour utilities colour icons), `stroke-width` (viewBox units, default 1.75; round
 //! caps and joins, as Lucide-style stroke icons expect). The element's CSS
 //! width sets the drawn size; it has no children and no pointer events (see
-//! the user-agent rule in `surface/mod.rs`).
+//! the user-agent rule in this module).
 use anyrender::{PaintScene, RenderContext, Scene};
 use blitz_dom::node::{ComputedStyles, Widget};
 use peniko::{
@@ -17,7 +17,9 @@ use peniko::{
     kurbo::{Affine, BezPath, Cap, Join, Stroke},
 };
 
-pub(crate) fn widget() -> Box<dyn Widget> {
+pub(super) const UA_CSS: &str = "tk-icon { display: block; flex-shrink: 0; pointer-events: none; }";
+
+pub(super) fn widget() -> Box<dyn Widget> {
     Box::new(Icon {
         path: BezPath::new(),
         view: 24.0,
@@ -46,8 +48,20 @@ fn colour(value: Option<&str>) -> Option<Paint> {
     if value.trim().eq_ignore_ascii_case("currentcolor") {
         return Some(Paint::Current);
     }
-    let [r, g, b, a] = crate::surface::parse_colour(value)?;
+    let [r, g, b, a] = parse_colour(value)?;
     Some(Paint::Fixed(Color::new([r, g, b, a])))
+}
+
+fn parse_colour(text: &str) -> Option<[f32; 4]> {
+    let hex = text.trim().strip_prefix('#')?;
+    let digit = |i: usize, n: usize| u8::from_str_radix(hex.get(i..i + n)?, 16).ok();
+    let (r, g, b, a) = match hex.len() {
+        3 => (digit(0, 1)? * 17, digit(1, 1)? * 17, digit(2, 1)? * 17, 255),
+        6 => (digit(0, 2)?, digit(2, 2)?, digit(4, 2)?, 255),
+        8 => (digit(0, 2)?, digit(2, 2)?, digit(4, 2)?, digit(6, 2)?),
+        _ => return None,
+    };
+    Some([r, g, b, a].map(|c| c as f32 / 255.0))
 }
 
 impl Widget for Icon {

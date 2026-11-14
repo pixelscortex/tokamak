@@ -45,8 +45,6 @@ mod reference;
 #[cfg(test)]
 mod tests;
 
-use blitz_dom::node::Widget;
-
 pub(crate) use frame::FrameRenderer;
 pub use frame::end_frame;
 
@@ -59,27 +57,9 @@ pub use frame::end_frame;
 /// `tk-surface` it is `!important`, which in the user-agent origin no author
 /// rule can override: a region's materials layer sits among the region's
 /// children, where a utility such as `*:pointer-events-auto` reaches it.
-pub(crate) const UA_CSS: &str = "tk-surface, tk-icon { display: block; flex-shrink: 0; \
+pub(crate) const UA_CSS: &str = "tk-surface { display: block; flex-shrink: 0; \
      pointer-events: none; } tk-surface { pointer-events: none !important; }";
 
 #[cfg(feature = "lab-probes")]
 pub use bind::MaterialShape;
 pub(crate) use bind::Registry;
-pub(crate) use shape::parse_colour;
-
-/// The widget for an element tag, if the tag is one of ours. Attached when
-/// the element is created, before its attributes arrive, so every attribute
-/// reaches `Widget::attribute_changed`. Surfaces register with `registry` so
-/// the layout pass can hand them member shapes.
-pub(crate) fn widget_for(
-    tag: &str,
-    node: blitz_traits::NodeId,
-    registry: &mut Registry,
-) -> Option<Box<dyn Widget>> {
-    match tag {
-        "tk-surface" => Some(registry.surface(node)),
-        // Not a surface; dispatched here so wire.rs has one widget hook.
-        "tk-icon" => Some(crate::icon::widget()),
-        _ => None,
-    }
-}

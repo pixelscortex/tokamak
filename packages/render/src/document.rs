@@ -1,6 +1,7 @@
 use crate::{
     Error, Result,
     bridge::Bridge,
+    icon,
     input::{Composition, Handler},
     js, layout, surface, wire,
 };
@@ -38,6 +39,8 @@ impl NativeDocument {
         // `<tk-surface>` element defaults (see surface/mod.rs).
         html.inner_mut()
             .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(surface::UA_CSS));
+        html.inner_mut()
+            .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(icon::UA_CSS));
         let root = html
             .get_element_by_id("app")
             .ok_or_else(|| Error("Shell needs #app".into()))?;
