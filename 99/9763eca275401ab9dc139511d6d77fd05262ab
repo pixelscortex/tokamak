@@ -1,0 +1,31 @@
+Cargo.lock
+  s_53b03d1897b939::t_f01a1a64090b27 561,606,617,636,655,1340,5994
+Cargo.toml
+  s_53b03d1897b939::t_f22854d6a2020e 33
+app/Cargo.toml
+  s_53b03d1897b939::t_ae07ed03de36cc 28-29
+lab/Cargo.toml
+  s_53b03d1897b939::t_8dbb05a9c5c3c7 18-19,22
+packages/render/BLITZ_FORK.md
+  s_53b03d1897b939::t_33ce1df1de9445 19
+packages/render/Cargo.toml
+  s_53b03d1897b939::t_106f4895a63593 22-26
+packages/runtime/Cargo.toml
+  s_53b03d1897b939::t_ac7cf9972bf041 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "999763eca275401ab9dc139511d6d77fd05262ab",
+  "prompts": {},
+  "sessions": {
+    "s_53b03d1897b939": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "212c447b-632b-452e-a09e-5714fe13b94a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
