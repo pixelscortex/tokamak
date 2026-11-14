@@ -507,63 +507,74 @@ fn ordinary_background_buttons_keep_their_native_clicks() {
 fn every_attachment_touches_a_plain_target() {
     for scale in [1.0, 2.0] {
         let mut doc = document(scale, 900.0);
-        for view in VIEWS {
-            open(&mut doc, view);
-            let d = doc.inner();
-            for id in d.query_selector_all("[surface-attach]").unwrap() {
-                let n = d.get_node(id).unwrap();
-                let a = |name: &str| n.attr(blitz_dom::LocalName::from(name));
-                let side = a("surface-attach").unwrap();
-                let group = a("surface-groups").unwrap();
-                let r = d.get_client_bounding_rect(id).unwrap();
-                let found = d
-                    .query_selector_all("[tk-group], [surface-groups]")
-                    .unwrap()
-                    .into_iter()
-                    .any(|target| {
-                        if target == id {
-                            return false;
-                        }
-                        let t = d.get_node(target).unwrap();
-                        let attr = |name: &str| t.attr(blitz_dom::LocalName::from(name));
-                        let root =
-                            attr("tk-group") == Some(group) && attr("surface-own") != Some("false");
-                        let member = attr("surface-groups") == Some(group)
-                            && attr("surface-op") != Some("cut")
-                            && attr("surface-attach").is_none();
-                        if !root && !member {
-                            return false;
-                        }
-                        let t = d.get_client_bounding_rect(target).unwrap();
-                        match side {
-                            "right" => {
-                                (t.x - r.x - r.width).abs() < 0.5
-                                    && t.y < r.y + r.height
-                                    && t.y + t.height > r.y
+        for (width, height) in [(1440, 900), (1160, 900), (1728, 1117)] {
+            doc.inner_mut().set_viewport(Viewport {
+                window_size: (
+                    (width as f32 * scale) as u32,
+                    (height as f32 * scale) as u32,
+                ),
+                hidpi_scale: scale,
+                ..Default::default()
+            });
+            doc.resolve_layout(0.0);
+            for view in VIEWS {
+                open(&mut doc, view);
+                let d = doc.inner();
+                for id in d.query_selector_all("[surface-attach]").unwrap() {
+                    let n = d.get_node(id).unwrap();
+                    let a = |name: &str| n.attr(blitz_dom::LocalName::from(name));
+                    let side = a("surface-attach").unwrap();
+                    let group = a("surface-groups").unwrap();
+                    let r = d.get_client_bounding_rect(id).unwrap();
+                    let found = d
+                        .query_selector_all("[tk-group], [surface-groups]")
+                        .unwrap()
+                        .into_iter()
+                        .any(|target| {
+                            if target == id {
+                                return false;
                             }
-                            "left" => {
-                                (t.x + t.width - r.x).abs() < 0.5
-                                    && t.y < r.y + r.height
-                                    && t.y + t.height > r.y
+                            let t = d.get_node(target).unwrap();
+                            let attr = |name: &str| t.attr(blitz_dom::LocalName::from(name));
+                            let root = attr("tk-group") == Some(group)
+                                && attr("surface-own") != Some("false");
+                            let member = attr("surface-groups") == Some(group)
+                                && attr("surface-op") != Some("cut")
+                                && attr("surface-attach").is_none();
+                            if !root && !member {
+                                return false;
                             }
-                            "bottom" => {
-                                (t.y - r.y - r.height).abs() < 0.5
-                                    && t.x < r.x + r.width
-                                    && t.x + t.width > r.x
+                            let t = d.get_client_bounding_rect(target).unwrap();
+                            match side {
+                                "right" => {
+                                    (t.x - r.x - r.width).abs() < 0.5
+                                        && t.y < r.y + r.height
+                                        && t.y + t.height > r.y
+                                }
+                                "left" => {
+                                    (t.x + t.width - r.x).abs() < 0.5
+                                        && t.y < r.y + r.height
+                                        && t.y + t.height > r.y
+                                }
+                                "bottom" => {
+                                    (t.y - r.y - r.height).abs() < 0.5
+                                        && t.x < r.x + r.width
+                                        && t.x + t.width > r.x
+                                }
+                                "top" => {
+                                    (t.y + t.height - r.y).abs() < 0.5
+                                        && t.x < r.x + r.width
+                                        && t.x + t.width > r.x
+                                }
+                                _ => false,
                             }
-                            "top" => {
-                                (t.y + t.height - r.y).abs() < 0.5
-                                    && t.x < r.x + r.width
-                                    && t.x + t.width > r.x
-                            }
-                            _ => false,
-                        }
-                    });
-                assert!(
-                    found,
-                    "{view} scale {scale}: node {id:?} ({:?}) attach {side} has no touching target",
-                    a("id")
-                );
+                        });
+                    assert!(
+                        found,
+                        "{view} scale {scale}: node {id:?} ({:?}) attach {side} has no touching target",
+                        a("id")
+                    );
+                }
             }
         }
     }
