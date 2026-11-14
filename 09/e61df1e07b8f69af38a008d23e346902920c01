@@ -1,0 +1,19 @@
+lab/tests/fused_surface.rs
+  s_16998c1ca918cd::t_848fff7a751f63 25-31,317-329,334,345,365-370,381-382,527-530,543,550,582,1745,2297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "09e61df1e07b8f69af38a008d23e346902920c01",
+  "prompts": {},
+  "sessions": {
+    "s_16998c1ca918cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dab4-0ef5-7981-9a3f-e480c9367003",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
