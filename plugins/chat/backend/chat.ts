@@ -16,6 +16,7 @@ export const send = action({
     const controller = new AbortController();
     let pending = "";
     let flushedAt = Date.now();
+    const activeTools = new Set<string>();
     const acknowledgements = new Map<string, {
       promise: Promise<unknown>; resolve: (status: unknown) => void; reject: (error: unknown) => void;
     }>();
@@ -87,20 +88,25 @@ export const send = action({
               checkToolArgs(part.input);
               const target = targets.get(part.toolName);
               if (!target) throw new Error("Unknown tool");
-              ack.resolve(await update({ type: "tool", callId: part.toolCallId, ...target,
-                args: part.input as import("@tokamak/sdk").JsonValue, status: "running" }));
+              const status = await update({ type: "tool", callId: part.toolCallId, ...target,
+                args: part.input as import("@tokamak/sdk").JsonValue, status: "running" });
+              if (status === "running") activeTools.add(part.toolCallId);
+              ack.resolve(status);
             } catch (error) { ack.reject(error); }
           }
           if (part.type === "tool-result" || part.type === "tool-error") {
             const target = targets.get(part.toolName);
+            const error = part.type === "tool-error" ? await safeErrorMessage(ctx, part.error) : undefined;
+            // A duplicate's rejection must not settle the original call.
+            const duplicate = error?.includes(`Duplicate tool callId: ${part.toolCallId}`);
             // Invalid/oversized calls never get persisted, including their args.
-            if (target) {
+            if (target && !duplicate && activeTools.delete(part.toolCallId)) {
               try {
                 checkToolArgs(part.input);
                 await update({ type: "tool", callId: part.toolCallId, ...target,
                   args: part.input as import("@tokamak/sdk").JsonValue,
                   ...(part.type === "tool-error"
-                    ? { status: "error", error: await safeErrorMessage(ctx, part.error) }
+                    ? { status: "error", error: error! }
                     : { ...(part.output as import("@tokamak/sdk").ToolOutput), status: "done" }),
                 });
               } catch (error) {

@@ -77,8 +77,17 @@ export const update = mutation({
         if (jsonBytes(patch.result) > 8 * 1024) patch.result = { truncated: true };
       }
       const existing = parts.find(part => part.type === "tool" && part.callId === patch.callId);
-      if (existing) Object.assign(existing, patch);
+      if (existing?.type === "tool") {
+        if (patch.status === "running") throw new Error(`Duplicate tool callId: ${patch.callId}`);
+        if (existing.status !== "running") throw new Error("Tool is already settled");
+        if ((patch.plugin !== undefined && patch.plugin !== existing.plugin) ||
+            (patch.toolName !== undefined && patch.toolName !== existing.toolName))
+          throw new Error("Tool identity is immutable");
+        const { callId: _callId, plugin: _plugin, toolName: _toolName, args: _args, ...completion } = patch;
+        Object.assign(existing, completion);
+      }
       else {
+        if (patch.status !== "running") throw new Error("New tool part must be running");
         if (patch.plugin === undefined || patch.toolName === undefined || patch.args === undefined)
           throw new Error("New tool part requires plugin, toolName and args");
         parts.push({ type: "tool", ...patch } as ToolPart);

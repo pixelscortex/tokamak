@@ -15,6 +15,7 @@ export async function discoverTools(
   const tools: ToolSet = {};
   const targets = new Map<string, ToolTarget>();
   let lock = Promise.resolve();
+  const seen = new Set<string>();
   for (const provider of await ctx.providers<ToolsApi>("chat.tools")) {
     const plugin = provider.tools.describe[functionName].split("/")[0]!;
     for (const description of await ctx.runQuery(provider.tools.describe, {})) {
@@ -24,13 +25,19 @@ export async function discoverTools(
       targets.set(name, target);
       tools[name] = dynamicTool({
         description: description.description, inputSchema: jsonSchema(description.parameters),
+        toModelOutput: ({ output }) => {
+          const out = output as ToolOutput;
+          return { type: "text", value: out.model ?? JSON.stringify(out.result) };
+        },
         execute: (args, { toolCallId }) => {
+          if (seen.has(toolCallId)) throw new Error(`Duplicate tool callId: ${toolCallId}`);
+          seen.add(toolCallId);
           const execute = async () => {
             checkToolArgs(args);
             if (!await running()) throw new Error("cancelled");
             if (await acknowledged(toolCallId) !== "running") throw new Error("cancelled");
             const out = await ctx.runMutation(provider.tools.invoke, { name: description.name, args: args as JsonValue, threadId });
-            return out.model ?? JSON.stringify(out.result);
+            return out;
           };
           const result = lock.then(execute);
           lock = result.then(() => {}, () => {});
