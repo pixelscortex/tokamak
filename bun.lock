@@ -110,6 +110,18 @@
         "vite-plugin-solid": "2.11.15",
       },
     },
+    "plugins/chat": {
+      "name": "chat",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ai-sdk/openai": "4.0.111",
+        "@tokamak/sdk": "workspace:*",
+        "ai": "7.0.166",
+      },
+      "devDependencies": {
+        "@tokamak/build": "workspace:*",
+      },
+    },
     "plugins/todo": {
       "name": "todo",
       "version": "0.1.0",
@@ -588,6 +600,8 @@
     "character-entities-legacy": ["character-entities-legacy@3.0.0", "", {}, "sha512-RpPp0asT/6ufRm//AJVwpViZbGM/MkjQFxJccQRHmISF/22NBtsHqAWmL+/pmkPWoIUJdWyeVleTl1wydHATVQ=="],
 
     "character-reference-invalid": ["character-reference-invalid@2.0.1", "", {}, "sha512-iBZ4F4wRbyORVsu0jPV7gXkOsGYjGHPmAyv+HiHG8gi5PtC9KI2j1+v8/tlibRvjoWX027ypmG/n0HtO5t7unw=="],
+
+    "chat": ["chat@workspace:plugins/chat"],
 
     "chokidar": ["chokidar@6.0.0", "", { "dependencies": { "readdirp": "^5.1.1" } }, "sha512-Ec2Z7wpcKBiMpR7DxteoqS/sq5G5d2A4fpxzPv6+fD7xNNdrTghn7L11YwV5EN1B3i72Erc3XVT5FkWIDx90+A=="],
 
