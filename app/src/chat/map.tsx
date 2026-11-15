@@ -36,7 +36,7 @@ export function useMap(chat: ChatState, close: () => void) {
     } else if (key === "Enter") {
       event.preventDefault();
       if (!event.repeat) open(rows()[index()]);
-    } else if (/^[1-9]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    } else if (!query() && /^[1-9]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
       if (!event.repeat) open(rows()[Number(key) - 1]);
     }

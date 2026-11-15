@@ -1197,7 +1197,11 @@ fn chat_screen_socket_workflow() {
     type_text(&mut window, "draft to keep");
     key(&mut window, Key::Named(NamedKey::Tab), false);
     assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
-    type_text(&mut window, "no matching title");
+    type_text(&mut window, "Plan ");
+    key(&mut window, Key::Character("2".into()), false);
+    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
+    assert_eq!(support::editor(window.doc(), "chat-input"), "Plan 2");
+    type_text(&mut window, "026");
     assert!(support::text(window.doc(), "chat-map").contains("No threads found"));
     key(&mut window, Key::Named(NamedKey::Escape), false);
     assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
