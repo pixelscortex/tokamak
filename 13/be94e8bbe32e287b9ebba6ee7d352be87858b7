@@ -1,0 +1,21 @@
+lab/tests/native.rs
+  s_204cc97e0716fe::t_dcb70db68027f2 524-562
+packages/ui/src/components/composer.tsx
+  s_204cc97e0716fe::t_2fef6824c80416 222-224,228-261,377-378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13be94e8bbe32e287b9ebba6ee7d352be87858b7",
+  "prompts": {},
+  "sessions": {
+    "s_204cc97e0716fe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1debd-e7af-7e10-849f-88bf3656be6f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
