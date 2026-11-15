@@ -54,32 +54,32 @@ export function flushRejections() {
 }
 
 export const promiseHooks = {
-    resetPromiseScope() {
-      asyncScope = undefined;
-      scopeStack.length = 0;
-    },
-    promiseHook(kind: string, promise: object, parent: object) {
-      if (kind === "init") {
-        const scope = currentScope() ?? promiseScopes.get(parent);
-        if (scope) promiseScopes.set(promise, scope);
-      } else if (kind === "before") {
-        scopeStack.push(asyncScope);
-        asyncScope = promiseScopes.get(promise);
-      } else if (kind === "after") asyncScope = scopeStack.pop();
-    },
-    promiseRejection(promise: object, cause: unknown, handled: boolean) {
-      if (handled) rejections.delete(promise);
-      else {
-        const scope = promiseScopes.get(promise);
-        if (scope?.alive) rejections.set(promise, { scope, cause });
-      }
-    },
-    promiseHookError(promise: object, cause: unknown): boolean {
-      const scope = promiseScopes.get(promise) ?? currentScope();
-      if (!scope?.alive || hookFailures.length >= 16) return false;
-      hookFailures.push({ scope, cause });
-      return true;
-    },
+  resetPromiseScope() {
+    asyncScope = undefined;
+    scopeStack.length = 0;
+  },
+  promiseHook(kind: string, promise: object, parent: object) {
+    if (kind === "init") {
+      const scope = currentScope() ?? promiseScopes.get(parent);
+      if (scope) promiseScopes.set(promise, scope);
+    } else if (kind === "before") {
+      scopeStack.push(asyncScope);
+      asyncScope = promiseScopes.get(promise);
+    } else if (kind === "after") asyncScope = scopeStack.pop();
+  },
+  promiseRejection(promise: object, cause: unknown, handled: boolean) {
+    if (handled) rejections.delete(promise);
+    else {
+      const scope = promiseScopes.get(promise);
+      if (scope?.alive) rejections.set(promise, { scope, cause });
+    }
+  },
+  promiseHookError(promise: object, cause: unknown): boolean {
+    const scope = promiseScopes.get(promise) ?? currentScope();
+    if (!scope?.alive || hookFailures.length >= 16) return false;
+    hookFailures.push({ scope, cause });
+    return true;
+  },
 };
 
 export function clearRejections() {

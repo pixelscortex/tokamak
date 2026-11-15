@@ -27,11 +27,7 @@ pub(crate) fn operations(
     let mut ops = OpRegistry::new();
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         ops.set_network_permissions(
-            loaded.catalog.plugins[owner]
-                .manifest
-                .plugin
-                .permissions
-                .clone(),
+            loaded.catalog.plugins[owner].manifest.plugin.permissions.clone(),
         );
     }
     let environment = generation.clone();
@@ -39,10 +35,9 @@ pub(crate) fn operations(
     ops.register_sync("action.env", move |payload| {
         environment_value(&environment, &caller, &payload)
     })?;
-    for (operation, kind) in [
-        ("action.runQuery", FunctionKind::Query),
-        ("action.runMutation", FunctionKind::Mutation),
-    ] {
+    for (operation, kind) in
+        [("action.runQuery", FunctionKind::Query), ("action.runMutation", FunctionKind::Mutation)]
+    {
         let commands = commands.clone();
         let generation = generation.clone();
         let owner = owner.clone();
@@ -55,10 +50,7 @@ pub(crate) fn operations(
                     .as_str()
                     .ok_or("nested call requires a function name")?
                     .to_owned();
-                let args = payload
-                    .get("args")
-                    .ok_or("nested call requires args")?
-                    .clone();
+                let args = payload.get("args").ok_or("nested call requires args")?.clone();
                 let (reply, wait) = oneshot::channel();
                 commands
                     .upgrade()
@@ -74,16 +66,14 @@ pub(crate) fn operations(
                     .map_err(|e| format!("nested call not admitted: {e}"))?;
                 // Once admitted, disconnect/shutdown cannot retract a mutation's
                 // commit. The coordinator owns finalization and the writer barrier.
-                wait.await
-                    .map_err(|_| "server closed before nested call completed".to_owned())?
+                wait.await.map_err(|_| "server closed before nested call completed".to_owned())?
             }
         })?;
     }
     if let (Some(loaded), Some(owner)) = (generation, owner) {
         ops.register_sync("plugin.providers", move |payload| {
-            let interface = payload["interface"]
-                .as_str()
-                .ok_or("providers requires an interface")?;
+            let interface =
+                payload["interface"].as_str().ok_or("providers requires an interface")?;
             loaded
                 .catalog
                 .providers(&owner, interface)
@@ -94,21 +84,18 @@ pub(crate) fn operations(
     Ok(Arc::new(ops))
 }
 
-fn environment_value(environment: &Option<Arc<Loaded>>, caller: &Option<String>, payload: &Json) -> Result<Json, String> {
-        let name = payload["name"].as_str().ok_or("env requires a name")?;
-        let grant = format!("env:{name}");
-        let loaded = environment
-            .as_ref()
-            .ok_or("env requires an installed plugin")?;
-        let owner = caller.as_ref().ok_or("env requires an installed plugin")?;
-        if !loaded.catalog.plugins[owner]
-            .manifest
-            .plugin
-            .permissions
-            .contains(&grant)
-        {
-            return Err(format!("environment permission denied: requires {grant}"));
-        }
-        crate::environment::get(name, &loaded.catalog.environment)
-            .map(|value| value.map(Json::String).unwrap_or(Json::Null))
+fn environment_value(
+    environment: &Option<Arc<Loaded>>,
+    caller: &Option<String>,
+    payload: &Json,
+) -> Result<Json, String> {
+    let name = payload["name"].as_str().ok_or("env requires a name")?;
+    let grant = format!("env:{name}");
+    let loaded = environment.as_ref().ok_or("env requires an installed plugin")?;
+    let owner = caller.as_ref().ok_or("env requires an installed plugin")?;
+    if !loaded.catalog.plugins[owner].manifest.plugin.permissions.contains(&grant) {
+        return Err(format!("environment permission denied: requires {grant}"));
+    }
+    crate::environment::get(name, &loaded.catalog.environment)
+        .map(|value| value.map(Json::String).unwrap_or(Json::Null))
 }

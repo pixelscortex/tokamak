@@ -183,14 +183,14 @@ export function createSelectState(props: SelectProps) {
   function typeSearch(event: NativeEvent) {
     if (!props.search || !trigger || event.target !== trigger.id || event.metaKey || event.ctrlKey) return;
     const key = event.key;
-      // Typing on the trigger goes into the search field.
-      if (key === "Backspace") {
-        event.preventDefault();
-        search(query().slice(0, -1));
-      } else if (key && key.length === 1 && key !== " ") {
-        event.preventDefault();
-        search(query() + key);
-      }
+    // Typing on the trigger goes into the search field.
+    if (key === "Backspace") {
+      event.preventDefault();
+      search(query().slice(0, -1));
+    } else if (key && key.length === 1 && key !== " ") {
+      event.preventDefault();
+      search(query() + key);
+    }
   }
 
   function search(next: string) {
@@ -202,8 +202,8 @@ export function createSelectState(props: SelectProps) {
   const type = () => (props.mono ? "font-data text-[11px] leading-4" : compact() ? "text-[12px] leading-4" : "text-[13px] leading-4");
   const sub = (part: string) => (props.id ? `${props.id}-${part}` : undefined);
 
-
-  return { value, selected, open, query, active, rows, compact, type, sub, setOpen, pick, search, keydown,
+  return {
+    value, selected, open, query, active, rows, compact, type, sub, setOpen, pick, search, keydown,
     trigger: () => trigger, setTrigger: (node: NativeNode) => { trigger = node; },
     setLayer: (next: { mark(): void }) => { layer = next; }, mark: () => layer?.mark(),
   };

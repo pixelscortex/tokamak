@@ -29,7 +29,7 @@ impl Drop for ChildGuard {
 
 #[path = "support/sdk.rs"]
 mod sdk;
-use sdk::{bundle, bun_script, root};
+use sdk::{bun_script, bundle, root};
 
 fn run(f: impl Future<Output = ()>) {
     sdk::run(f, 120);
@@ -52,10 +52,8 @@ fn config(storage: Storage) -> BackendConfig {
 fn actual_sdk_over_native_sessions_without_a_port() {
     run(async {
         let backend = Backend::start(config(Storage::Memory)).await.unwrap();
-        let mut sessions = [
-            Some(backend.connect().await.unwrap()),
-            Some(backend.connect().await.unwrap()),
-        ];
+        let mut sessions =
+            [Some(backend.connect().await.unwrap()), Some(backend.connect().await.unwrap())];
         let mut child = ChildGuard(
             bun_script("sdk-transport-driver.mjs")
                 .args(["native"])
@@ -97,10 +95,7 @@ fn actual_sdk_over_native_sessions_without_a_port() {
             }
         }
         drop(stdin);
-        assert!(
-            child.0.wait().unwrap().success(),
-            "native SDK acceptance failed"
-        );
+        assert!(child.0.wait().unwrap().success(), "native SDK acceptance failed");
         reader.join().unwrap();
         backend.close().await.unwrap();
     });
@@ -111,8 +106,7 @@ fn actual_sdk_over_native_sessions_without_a_port() {
 #[test]
 fn headless_binary_two_real_sdk_clients_and_disk_reopen() {
     let result = bun_script("sdk-transport-driver.mjs")
-                .args(["headless",
-            env!("CARGO_BIN_EXE_tokamak")])
+        .args(["headless", env!("CARGO_BIN_EXE_tokamak")])
         .output()
         .unwrap();
     assert!(
@@ -142,26 +136,19 @@ fn startup_failure_and_cancelled_repeated_shutdown_release_disk() {
             )
             .unwrap(),
         );
-        let failure = Backend::start(invalid)
-            .await
-            .err()
-            .expect("invalid startup succeeded");
-        assert!(
-            failure.to_string().contains("TKM7 startup sentinel"),
-            "{failure}"
-        );
+        let failure = Backend::start(invalid).await.err().expect("invalid startup succeeded");
+        assert!(failure.to_string().contains("TKM7 startup sentinel"), "{failure}");
         let backend = Backend::start(config(storage.clone())).await.unwrap();
         let mut session = backend.connect().await.unwrap();
         session
-            .call(
-                1,
-                "probe:insert",
-                json!({"table":"items","value":{"persisted":true}}),
-            )
+            .call(1, "probe:insert", json!({"table":"items","value":{"persisted":true}}))
             .unwrap();
         assert!(matches!(
             session.recv().await.unwrap(),
-            Some(server::Event::Response { result: Ok(_), .. })
+            Some(server::Event::Response {
+                result: Ok(_),
+                ..
+            })
         ));
         let mut closing = Box::pin(backend.close());
         std::future::poll_fn(|cx| {
@@ -182,12 +169,11 @@ fn startup_failure_and_cancelled_repeated_shutdown_release_disk() {
         assert!(session.recv().await.unwrap().is_none());
         let reopened = Backend::start(config(storage)).await.unwrap();
         let mut check = reopened.connect().await.unwrap();
-        check
-            .call(2, "probe:list", json!({"table":"items"}))
-            .unwrap();
+        check.call(2, "probe:list", json!({"table":"items"})).unwrap();
         match check.recv().await.unwrap().unwrap() {
             server::Event::Response {
-                result: Ok(rows), ..
+                result: Ok(rows),
+                ..
             } => assert_eq!(rows[0]["persisted"], true),
             event => panic!("unexpected reopen event: {event:?}"),
         }
@@ -258,21 +244,18 @@ fn dropped_native_and_closed_websocket_do_not_rerun_subscriptions() {
             .unwrap(),
         );
         let server = Arc::new(
-            Server::load(
-                Database::open(Storage::Memory).await.unwrap(),
-                pool,
-                bundle(),
-            )
-            .await
-            .unwrap(),
+            Server::load(Database::open(Storage::Memory).await.unwrap(), pool, bundle())
+                .await
+                .unwrap(),
         );
         let mut native = server.connect().await.unwrap();
-        native
-            .subscribe(1, "probe:list", json!({"table":"items"}))
-            .unwrap();
+        native.subscribe(1, "probe:list", json!({"table":"items"})).unwrap();
         assert!(matches!(
             native.recv().await.unwrap(),
-            Some(server::Event::Subscription { result: Ok(_), .. })
+            Some(server::Event::Subscription {
+                result: Ok(_),
+                ..
+            })
         ));
         drop(native);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -282,11 +265,7 @@ fn dropped_native_and_closed_websocket_do_not_rerun_subscriptions() {
             let _ = shutdown.await;
         }));
         let output = tokio::task::spawn_blocking(move || {
-            bun_script("sdk-transport-driver.mjs")
-                .args(["disconnect",
-                    &url])
-                .output()
-                .unwrap()
+            bun_script("sdk-transport-driver.mjs").args(["disconnect", &url]).output().unwrap()
         })
         .await
         .unwrap();
@@ -296,24 +275,17 @@ fn dropped_native_and_closed_websocket_do_not_rerun_subscriptions() {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        assert_eq!(
-            lists.load(Ordering::SeqCst),
-            2,
-            "both subscriptions actually executed"
-        );
+        assert_eq!(lists.load(Ordering::SeqCst), 2, "both subscriptions actually executed");
         // Peer close is acknowledged only after the socket/session owner drops;
         // connecting and the mutation reply are coordinator barriers, not sleeps.
         let mut writer = server.connect().await.unwrap();
-        writer
-            .call(
-                2,
-                "probe:insert",
-                json!({"table":"items","value":{"value":1}}),
-            )
-            .unwrap();
+        writer.call(2, "probe:insert", json!({"table":"items","value":{"value":1}})).unwrap();
         assert!(matches!(
             writer.recv().await.unwrap(),
-            Some(server::Event::Response { result: Ok(_), .. })
+            Some(server::Event::Response {
+                result: Ok(_),
+                ..
+            })
         ));
         assert_eq!(
             lists.load(Ordering::SeqCst),
@@ -342,8 +314,7 @@ fn headless_shutdown_bounds_partial_websocket_upgrade_peer() {
 
 fn shutdown_driver(scenario: &str) {
     let output = bun_script("shutdown-driver.mjs")
-                .args([scenario,
-            env!("CARGO_BIN_EXE_tokamak")])
+        .args([scenario, env!("CARGO_BIN_EXE_tokamak")])
         .output()
         .unwrap();
     assert!(
@@ -360,10 +331,7 @@ struct PauseFirstInsert {
     engine: QuickJsEngine,
     gate: Arc<
         std::sync::Mutex<
-            Option<(
-                tokio::sync::oneshot::Sender<()>,
-                tokio::sync::oneshot::Receiver<()>,
-            )>,
+            Option<(tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>)>,
         >,
     >,
 }
@@ -384,10 +352,7 @@ impl Engine for PauseFirstInsert {
         };
         if let Some((arrived, resume)) = gate {
             arrived.send(()).unwrap();
-            tokio::time::timeout(Duration::from_secs(15), resume)
-                .await
-                .unwrap()
-                .unwrap();
+            tokio::time::timeout(Duration::from_secs(15), resume).await.unwrap().unwrap();
         }
         result
     }
@@ -401,10 +366,9 @@ impl Engine for PauseFirstInsert {
 fn shutdown_drains_admitted_queued_mutations_after_session_owner_drops() {
     run(async {
         for retain_session in [true, false] {
-            let directory = root().join("packages/server/target").join(format!(
-                "tkm7-admitted-{}-{retain_session}",
-                std::process::id()
-            ));
+            let directory = root()
+                .join("packages/server/target")
+                .join(format!("tkm7-admitted-{}-{retain_session}", std::process::id()));
             std::fs::create_dir_all(&directory).unwrap();
             let storage = Storage::Disk(directory.join("db"));
             let (arrived, executing) = tokio::sync::oneshot::channel();
@@ -425,13 +389,10 @@ fn shutdown_drains_admitted_queued_mutations_after_session_owner_drops() {
                 )
                 .unwrap(),
             );
-            let server = Server::load(
-                Database::open(storage.clone()).await.unwrap(),
-                pool,
-                bundle(),
-            )
-            .await
-            .unwrap();
+            let server =
+                Server::load(Database::open(storage.clone()).await.unwrap(), pool, bundle())
+                    .await
+                    .unwrap();
             let mut session = Some(server.connect().await.unwrap());
             let sender = session.as_ref().unwrap().sender();
             sender
@@ -470,12 +431,11 @@ fn shutdown_drains_admitted_queued_mutations_after_session_owner_drops() {
             // are deliberately not required once their receiver has disappeared.
             let reopened = Backend::start(config(storage)).await.unwrap();
             let mut check = reopened.connect().await.unwrap();
-            check
-                .call(20, "probe:list", json!({"table":"items"}))
-                .unwrap();
+            check.call(20, "probe:list", json!({"table":"items"})).unwrap();
             let rows = match check.recv().await.unwrap().unwrap() {
                 server::Event::Response {
-                    result: Ok(rows), ..
+                    result: Ok(rows),
+                    ..
                 } => rows,
                 event => panic!("reopened list failed: {event:?}"),
             };

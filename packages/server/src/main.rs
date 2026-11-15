@@ -21,8 +21,7 @@ fn local_ownership(directory: &Path) -> Result<File, Box<dyn std::error::Error>>
         options.mode(0o600);
     }
     let file = options.open(directory.join("server-owner.lock"))?;
-    file.try_lock()
-        .map_err(|error| format!("Cannot acquire local server ownership: {error}"))?;
+    file.try_lock().map_err(|error| format!("Cannot acquire local server ownership: {error}"))?;
     Ok(file)
 }
 
@@ -84,8 +83,7 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
     {
         return Err("Only discovered loopback ws:// endpoints are supported".into());
     }
-    url.set_scheme("http")
-        .map_err(|_| "Invalid local URL scheme")?;
+    url.set_scheme("http").map_err(|_| "Invalid local URL scheme")?;
     url.set_path(&path);
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -139,9 +137,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             );
             return Ok(None);
         }
-        let value = args
-            .next()
-            .ok_or_else(|| format!("missing value for {flag}"))?;
+        let value = args.next().ok_or_else(|| format!("missing value for {flag}"))?;
         match flag.as_str() {
             "--data" => data = value.into(),
             "--listen" => listen = value.parse()?,
@@ -159,10 +155,22 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             _ => return Err(format!("unknown option {flag}").into()),
         }
     }
-    Ok(Some(Configuration { data, listen, bundle, plugins, local, javascript }))
+    Ok(Some(Configuration {
+        data,
+        listen,
+        bundle,
+        plugins,
+        local,
+        javascript,
+    }))
 }
 
-async fn start_backend(data: PathBuf, javascript: PoolConfig, plugins: Option<PathBuf>, source: Option<String>) -> Result<(Backend, String), Box<dyn std::error::Error>> {
+async fn start_backend(
+    data: PathBuf,
+    javascript: PoolConfig,
+    plugins: Option<PathBuf>,
+    source: Option<String>,
+) -> Result<(Backend, String), Box<dyn std::error::Error>> {
     let result = if let Some(root) = plugins {
         let backend = Backend::start_plugins(Storage::Disk(data), javascript, &root).await?;
         let hash = backend.server().plugins().await?["revision"]
@@ -184,9 +192,35 @@ async fn start_backend(data: PathBuf, javascript: PoolConfig, plugins: Option<Pa
     Ok(result)
 }
 
+async fn publish_identity(
+    directory: Option<&Path>,
+    identity: &serde_json::Value,
+    backend: &Backend,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(directory) = directory {
+        let temporary = directory.join(format!("server.json.{}.tmp", std::process::id()));
+        let published = std::fs::write(&temporary, identity.to_string())
+            .and_then(|_| std::fs::rename(&temporary, directory.join("server.json")));
+        if let Err(error) = published {
+            let _ = std::fs::remove_file(temporary);
+            backend.close().await?;
+            return Err(error.into());
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(Configuration { mut data, listen, bundle, plugins, local, javascript }) = configuration().await? else {
+    let Some(Configuration {
+        mut data,
+        listen,
+        bundle,
+        plugins,
+        local,
+        javascript,
+    }) = configuration().await?
+    else {
         return Ok(());
     };
     if !listen.ip().is_loopback() {
@@ -219,16 +253,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "bundleHash": bundle_hash,
         "pluginRoot": plugin_root,
     });
-    if let Some(directory) = &local {
-        let temporary = directory.join(format!("server.json.{}.tmp", std::process::id()));
-        let published = std::fs::write(&temporary, identity.to_string())
-            .and_then(|_| std::fs::rename(&temporary, directory.join("server.json")));
-        if let Err(error) = published {
-            let _ = std::fs::remove_file(temporary);
-            backend.close().await?;
-            return Err(error.into());
-        }
-    }
+    publish_identity(local.as_deref(), &identity, &backend).await?;
     println!(
         "Tokamak listening on ws://{}/ws ({}, no TLS)",
         listener.local_addr()?,
@@ -252,7 +277,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = tokio::signal::ctrl_c().await;
             }
         },
-        token.map(|token| websocket::LocalAccess { token, identity }),
+        token.map(|token| websocket::LocalAccess {
+            token,
+            identity,
+        }),
     )
     .await;
     let closed = backend.close().await;

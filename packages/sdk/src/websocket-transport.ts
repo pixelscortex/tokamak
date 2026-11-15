@@ -35,8 +35,8 @@ function decode(data: unknown): Event {
 }
 
 function validatePluginChange(event: Record<string, unknown>): void {
-    if (!Array.isArray(event.plugins) || event.plugins.some(id => typeof id !== "string")
-      || !event.catalog || typeof event.catalog !== "object" || Array.isArray(event.catalog)) throw new Error("invalid plugin change");
+  if (!Array.isArray(event.plugins) || event.plugins.some(id => typeof id !== "string")
+    || !event.catalog || typeof event.catalog !== "object" || Array.isArray(event.catalog)) throw new Error("invalid plugin change");
 }
 
 function validateResult(result: unknown): void {
@@ -54,35 +54,35 @@ function validateResult(result: unknown): void {
 }
 
 export function webSocketConnection(socket: ClientWebSocket): MessageConnection {
-    if (socket.readyState !== 1) throw new Error("WebSocket must already be open");
-    return {
-      send(request) {
-        const text = JSON.stringify(request);
-        // Bound the SDK's socket queue as well as the server queues. A failed
-        // send closes the whole connection; admitted mutation outcomes are unknown.
-        if (text.length > MAX_WIRE_MESSAGE_BYTES || socket.bufferedAmount > MAX_WIRE_MESSAGE_BYTES)
-          throw new Error("WebSocket buffer capacity exceeded");
-        socket.send(text);
-      },
-      listen(onEvent, onClose) {
-        const message = (event: { data: unknown }) => {
-          try {
-            onEvent(decode(event.data));
-          } catch (error) {
-            onClose(error instanceof Error ? error : new Error(String(error)));
-          }
-        };
-        const closed = () =>
-          onClose(new Error("WebSocket closed; mutation outcomes may be unknown"));
-        socket.addEventListener("message", message);
-        socket.addEventListener("close", closed);
-        socket.addEventListener("error", closed);
-        return () => {
-          socket.removeEventListener("message", message);
-          socket.removeEventListener("close", closed);
-          socket.removeEventListener("error", closed);
-        };
-      },
-      close: () => socket.close(),
-    };
+  if (socket.readyState !== 1) throw new Error("WebSocket must already be open");
+  return {
+    send(request) {
+      const text = JSON.stringify(request);
+      // Bound the SDK's socket queue as well as the server queues. A failed
+      // send closes the whole connection; admitted mutation outcomes are unknown.
+      if (text.length > MAX_WIRE_MESSAGE_BYTES || socket.bufferedAmount > MAX_WIRE_MESSAGE_BYTES)
+        throw new Error("WebSocket buffer capacity exceeded");
+      socket.send(text);
+    },
+    listen(onEvent, onClose) {
+      const message = (event: { data: unknown }) => {
+        try {
+          onEvent(decode(event.data));
+        } catch (error) {
+          onClose(error instanceof Error ? error : new Error(String(error)));
+        }
+      };
+      const closed = () =>
+        onClose(new Error("WebSocket closed; mutation outcomes may be unknown"));
+      socket.addEventListener("message", message);
+      socket.addEventListener("close", closed);
+      socket.addEventListener("error", closed);
+      return () => {
+        socket.removeEventListener("message", message);
+        socket.removeEventListener("close", closed);
+        socket.removeEventListener("error", closed);
+      };
+    },
+    close: () => socket.close(),
+  };
 }

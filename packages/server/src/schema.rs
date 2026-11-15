@@ -41,51 +41,47 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }
 fn identifier(name: &str) -> bool {
-    name.as_bytes()
-        .first()
-        .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+    name.as_bytes().first().is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
         && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
-fn validate_index<'a>(table: &str, definition: &TableSchema, index: &'a Index, names: &mut BTreeSet<&'a String>) -> Result<(), Error> {
-                if index.name.len() > MAX_NAME_BYTES {
-                    return Err(invalid(format!(
-                        "Invalid schema table {table}: index names are at most {MAX_NAME_BYTES} bytes"
-                    )));
-                }
-                let fail = |reason| {
-                    invalid(format!(
-                        "Invalid schema index {table}.{}: {reason}",
-                        index.name
-                    ))
-                };
-                if !identifier(&index.name) {
-                    return Err(fail("name must match [A-Za-z_][A-Za-z0-9_]*"));
-                }
-                if !names.insert(&index.name) {
-                    return Err(fail("duplicate name"));
-                }
-                if index.fields.is_empty() {
-                    return Err(fail("at least one field is required"));
-                }
-                if index.fields.len() > MAX_INDEX_FIELDS {
-                    return Err(fail("at most 16 fields are allowed"));
-                }
-                let mut fields = BTreeSet::new();
-                for field in &index.fields {
-                    if !identifier(field)
-                        || field == "_id"
-                        || field == "_creationTime"
-                        || definition.description["kind"] != "object"
-                        || !definition.description["fields"]
-                            .as_object()
-                            .is_some_and(|f| f.contains_key(field))
-                    {
-                        return Err(fail("fields must be declared top-level ASCII identifiers"));
-                    }
-                    if !fields.insert(field) {
-                        return Err(fail("repeated field"));
-                    }
-                }
+fn validate_index<'a>(
+    table: &str,
+    definition: &TableSchema,
+    index: &'a Index,
+    names: &mut BTreeSet<&'a String>,
+) -> Result<(), Error> {
+    if index.name.len() > MAX_NAME_BYTES {
+        return Err(invalid(format!(
+            "Invalid schema table {table}: index names are at most {MAX_NAME_BYTES} bytes"
+        )));
+    }
+    let fail = |reason| invalid(format!("Invalid schema index {table}.{}: {reason}", index.name));
+    if !identifier(&index.name) {
+        return Err(fail("name must match [A-Za-z_][A-Za-z0-9_]*"));
+    }
+    if !names.insert(&index.name) {
+        return Err(fail("duplicate name"));
+    }
+    if index.fields.is_empty() {
+        return Err(fail("at least one field is required"));
+    }
+    if index.fields.len() > MAX_INDEX_FIELDS {
+        return Err(fail("at most 16 fields are allowed"));
+    }
+    let mut fields = BTreeSet::new();
+    for field in &index.fields {
+        if !identifier(field)
+            || field == "_id"
+            || field == "_creationTime"
+            || definition.description["kind"] != "object"
+            || !definition.description["fields"].as_object().is_some_and(|f| f.contains_key(field))
+        {
+            return Err(fail("fields must be declared top-level ASCII identifiers"));
+        }
+        if !fields.insert(field) {
+            return Err(fail("repeated field"));
+        }
+    }
     Ok(())
 }
 

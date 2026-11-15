@@ -162,14 +162,10 @@ impl Pool {
             ops,
             reply,
         };
-        self.sender
-            .as_ref()
-            .ok_or(Error::Closed)?
-            .try_send(job)
-            .map_err(|error| match error {
-                mpsc::TrySendError::Full(_) => Error::Overloaded,
-                mpsc::TrySendError::Disconnected(_) => Error::Closed,
-            })?;
+        self.sender.as_ref().ok_or(Error::Closed)?.try_send(job).map_err(|error| match error {
+            mpsc::TrySendError::Full(_) => Error::Overloaded,
+            mpsc::TrySendError::Disconnected(_) => Error::Closed,
+        })?;
         Ok(PendingCall(receiver))
     }
 }
@@ -183,40 +179,33 @@ fn run_worker<E, F>(
     E: Engine + 'static,
     F: Fn() -> Result<E, Error>,
 {
-                    loop {
-                        // Only admission holds this lock. Execution happens after
-                        // releasing it, allowing all workers to run in parallel.
-                        let job = match receiver.lock() {
-                            Ok(receiver) => receiver.recv(),
-                            Err(_) => break,
-                        };
-                        let Ok(job) = job else {
-                            break;
-                        };
-                        if closing.load(Ordering::Acquire) {
-                            let _ = job.reply.send(Err(Error::Closed));
-                            break;
-                        }
-                        let result = catch_unwind(AssertUnwindSafe(|| {
-                            let mut engine = factory()?;
-                            executor.block_on(engine.invoke(
-                                &job.bundle,
-                                &job.export,
-                                job.args,
-                                job.ops,
-                            ))
-                        }))
-                        .unwrap_or_else(|_| {
-                            Err(Error::Engine(
-                                "JavaScript worker panicked; world discarded".into(),
-                            ))
-                        });
-                        let _ = job.reply.send(result);
-                    }
-                    // Aborting an async task cannot stop a running spawn_blocking
-                    // callback (notably getaddrinfo). Never join those callbacks.
-                    // They own their inputs and may finish after this worker exits.
-                    executor.shutdown_background();
+    loop {
+        // Only admission holds this lock. Execution happens after
+        // releasing it, allowing all workers to run in parallel.
+        let job = match receiver.lock() {
+            Ok(receiver) => receiver.recv(),
+            Err(_) => break,
+        };
+        let Ok(job) = job else {
+            break;
+        };
+        if closing.load(Ordering::Acquire) {
+            let _ = job.reply.send(Err(Error::Closed));
+            break;
+        }
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let mut engine = factory()?;
+            executor.block_on(engine.invoke(&job.bundle, &job.export, job.args, job.ops))
+        }))
+        .unwrap_or_else(|_| {
+            Err(Error::Engine("JavaScript worker panicked; world discarded".into()))
+        });
+        let _ = job.reply.send(result);
+    }
+    // Aborting an async task cannot stop a running spawn_blocking
+    // callback (notably getaddrinfo). Never join those callbacks.
+    // They own their inputs and may finish after this worker exits.
+    executor.shutdown_background();
 }
 
 impl Drop for Pool {

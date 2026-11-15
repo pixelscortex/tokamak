@@ -71,11 +71,7 @@ impl Drop for ModuleCall {
 /// Construct before sharing. Per-call registries can capture the server's
 /// transaction/readset without making the runtime aware of database semantics.
 #[derive(Default)]
-pub struct OpRegistry(
-    BTreeMap<String, Op>,
-    pub(crate) Option<Determinism>,
-    Vec<String>,
-);
+pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>, Vec<String>);
 
 impl OpRegistry {
     pub fn new() -> Self {
@@ -118,10 +114,7 @@ impl OpRegistry {
         F: Fn(Json) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = OpResult> + Send + 'static,
     {
-        self.insert(
-            name.into(),
-            Op::Async(Box::new(move |args| Box::pin(op(args)))),
-        )
+        self.insert(name.into(), Op::Async(Box::new(move |args| Box::pin(op(args)))))
     }
 
     /// Domain routing/authority belongs to the native resolver. The error
@@ -190,13 +183,17 @@ pub fn install_ops<'js>(
     registry: Arc<OpRegistry>,
     invocation: &Invocation,
 ) -> rquickjs::Result<Object<'js>> {
-    install_leased(ctx, registry, Lease {
-        active: invocation.active.clone(),
-        deadline: invocation.deadline,
-        modules: Arc::new(AtomicU64::new(0)),
-        depth: 0,
-        determinism: invocation.determinism,
-    })
+    install_leased(
+        ctx,
+        registry,
+        Lease {
+            active: invocation.active.clone(),
+            deadline: invocation.deadline,
+            modules: Arc::new(AtomicU64::new(0)),
+            depth: 0,
+            determinism: invocation.determinism,
+        },
+    )
 }
 
 #[derive(Clone)]
@@ -216,138 +213,135 @@ fn install_leased<'js>(
     let host = Object::new(ctx.clone())?;
     host.set(
         "op",
-        Function::new(
-            ctx.clone(),
-            move |ctx: Ctx<'js>, name: String, args: Value<'js>| {
-                check(&ctx, &lease.active, lease.deadline)?;
-                let args = decode(&ctx, args)?;
-                // Serialization can run application getters, so check again immediately
-                // before entering Rust, not just before converting the arguments.
-                check(&ctx, &lease.active, lease.deadline)?;
-                let op = registry.0.get(&name).ok_or_else(|| {
-                    Exception::throw_message(&ctx, &format!("unknown host op: {name}"))
-                })?;
-                match op {
-                    Op::Sync(op) => {
-                        let result = op(args).map_err(|e| Exception::throw_message(&ctx, &e))?;
-                        check(&ctx, &lease.active, lease.deadline)?;
-                        encode(&ctx, result)
-                    }
-                    Op::Module(resolve) => {
-                        let mut call = resolve(args)
-                            .map_err(|error| Exception::throw_message(&ctx, &error))?;
-                        let number = lease.modules.fetch_add(1, Ordering::Relaxed);
-                        if lease.depth >= 16 || number >= 256 {
-                            call.finish(Some(
-                                "delegated module depth/count budget exceeded".into(),
-                            ));
-                            return Err(Exception::throw_message(
-                                &ctx,
-                                "delegated module depth/count budget exceeded",
-                            ));
-                        }
-                        Ok(Promise::wrap_future(&ctx, invoke_module(ctx.clone(), call, lease.clone(), number))?.into_value())
-                    }
-                    Op::Async(op) => {
-                        let future = op(args);
-                        Ok(Promise::wrap_future(&ctx, await_operation(ctx.clone(), future, lease.clone()))?.into_value())
-                    }
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String, args: Value<'js>| {
+            check(&ctx, &lease.active, lease.deadline)?;
+            let args = decode(&ctx, args)?;
+            // Serialization can run application getters, so check again immediately
+            // before entering Rust, not just before converting the arguments.
+            check(&ctx, &lease.active, lease.deadline)?;
+            let op = registry.0.get(&name).ok_or_else(|| {
+                Exception::throw_message(&ctx, &format!("unknown host op: {name}"))
+            })?;
+            match op {
+                Op::Sync(op) => {
+                    let result = op(args).map_err(|e| Exception::throw_message(&ctx, &e))?;
+                    check(&ctx, &lease.active, lease.deadline)?;
+                    encode(&ctx, result)
                 }
-            },
-        )?,
+                Op::Module(resolve) => {
+                    let mut call =
+                        resolve(args).map_err(|error| Exception::throw_message(&ctx, &error))?;
+                    let number = lease.modules.fetch_add(1, Ordering::Relaxed);
+                    if lease.depth >= 16 || number >= 256 {
+                        call.finish(Some("delegated module depth/count budget exceeded".into()));
+                        return Err(Exception::throw_message(
+                            &ctx,
+                            "delegated module depth/count budget exceeded",
+                        ));
+                    }
+                    Ok(Promise::wrap_future(
+                        &ctx,
+                        invoke_module(ctx.clone(), call, lease.clone(), number),
+                    )?
+                    .into_value())
+                }
+                Op::Async(op) => {
+                    let future = op(args);
+                    Ok(Promise::wrap_future(
+                        &ctx,
+                        await_operation(ctx.clone(), future, lease.clone()),
+                    )?
+                    .into_value())
+                }
+            }
+        })?,
     )?;
     Ok(host)
 }
 
-async fn invoke_module<'js>(ctx: Ctx<'js>, mut call: ModuleCall, lease: Lease, number: u64) -> rquickjs::Result<Value<'js>> {
-                            let name = format!("tokamak-module-{number}.js");
-                            let child = lease.determinism.map(|inputs| inputs.child(number));
-                            let source =
-                                child.map(|inputs| inputs.module_source(&call.bundle.source));
-                            let result = async {
-                                check(&ctx, &lease.active, lease.deadline)?;
-                                let module = Module::declare(
-                                    ctx.clone(),
-                                    name.as_str(),
-                                    source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
-                                )
-                                .map_err(|error| {
-                                    let error = crate::engine::js_error_named(
-                                        &ctx,
-                                        error,
-                                        &call.bundle,
-                                        true,
-                                        &name,
-                                    );
-                                    Exception::throw_message(&ctx, &error.to_string())
-                                })?;
-                                let (module, evaluated) = module.eval()?;
-                                evaluated.into_future::<()>().await?;
-                                check(&ctx, &lease.active, lease.deadline)?;
-                                let namespace = module.namespace()?;
-                                let function: Function = namespace.get(call.export.as_str())?;
-                                let args = encode(&ctx, call.args.clone())?;
-                                let host = install_leased(
-                                    &ctx,
-                                    call.ops.clone(),
-                                    Lease {
-                                        active: lease.active.clone(),
-                                        deadline: lease.deadline,
-                                        modules: lease.modules,
-                                        depth: lease.depth + 1,
-                                        determinism: child,
-                                    },
-                                )?;
-                                let pending: MaybePromise = function.call((args, host))?;
-                                let result: Value = pending.into_future().await?;
-                                check(&ctx, &lease.active, lease.deadline)?;
-                                let result = decode(&ctx, result)?;
-                                encode(&ctx, result)
-                            }
-                            .await;
-                            match result {
-                                Ok(value) => {
-                                    call.finish(None);
-                                    Ok(value)
-                                }
-                                Err(error) => {
-                                    let error = crate::engine::js_error_named(
-                                        &ctx,
-                                        error,
-                                        &call.bundle,
-                                        false,
-                                        &name,
-                                    )
-                                    .to_string();
-                                    call.finish(Some(error.clone()));
-                                    Err(Exception::throw_message(&ctx, &error))
-                                }
-                            }
+async fn invoke_module<'js>(
+    ctx: Ctx<'js>,
+    mut call: ModuleCall,
+    lease: Lease,
+    number: u64,
+) -> rquickjs::Result<Value<'js>> {
+    let name = format!("tokamak-module-{number}.js");
+    let child = lease.determinism.map(|inputs| inputs.child(number));
+    let source = child.map(|inputs| inputs.module_source(&call.bundle.source));
+    let result = async {
+        check(&ctx, &lease.active, lease.deadline)?;
+        let module = Module::declare(
+            ctx.clone(),
+            name.as_str(),
+            source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
+        )
+        .map_err(|error| {
+            let error = crate::engine::js_error_named(&ctx, error, &call.bundle, true, &name);
+            Exception::throw_message(&ctx, &error.to_string())
+        })?;
+        let (module, evaluated) = module.eval()?;
+        evaluated.into_future::<()>().await?;
+        check(&ctx, &lease.active, lease.deadline)?;
+        let namespace = module.namespace()?;
+        let function: Function = namespace.get(call.export.as_str())?;
+        let args = encode(&ctx, call.args.clone())?;
+        let host = install_leased(
+            &ctx,
+            call.ops.clone(),
+            Lease {
+                active: lease.active.clone(),
+                deadline: lease.deadline,
+                modules: lease.modules,
+                depth: lease.depth + 1,
+                determinism: child,
+            },
+        )?;
+        let pending: MaybePromise = function.call((args, host))?;
+        let result: Value = pending.into_future().await?;
+        check(&ctx, &lease.active, lease.deadline)?;
+        let result = decode(&ctx, result)?;
+        encode(&ctx, result)
+    }
+    .await;
+    match result {
+        Ok(value) => {
+            call.finish(None);
+            Ok(value)
+        }
+        Err(error) => {
+            let error =
+                crate::engine::js_error_named(&ctx, error, &call.bundle, false, &name).to_string();
+            call.finish(Some(error.clone()));
+            Err(Exception::throw_message(&ctx, &error))
+        }
+    }
 }
 
-async fn await_operation<'js>(ctx: Ctx<'js>, mut future: OpFuture, lease: Lease) -> rquickjs::Result<Value<'js>> {
-                            // Check every poll, not just the first one. A UI
-                            // context can keep driving promises after the event
-                            // that created this operation has been retired.
-                            let result = std::future::poll_fn(|cx| {
-                                if let Err(error) = check(&ctx, &lease.active, lease.deadline) {
-                                    return std::task::Poll::Ready(Err(error));
-                                }
-                                future.as_mut().poll(cx).map(|result| {
-                                    result.map_err(|e| Exception::throw_message(&ctx, &e))
-                                })
-                            })
-                            .await?;
-                            check(&ctx, &lease.active, lease.deadline)?;
-                            encode(&ctx, result)
+async fn await_operation<'js>(
+    ctx: Ctx<'js>,
+    mut future: OpFuture,
+    lease: Lease,
+) -> rquickjs::Result<Value<'js>> {
+    // Check every poll, not just the first one. A UI
+    // context can keep driving promises after the event
+    // that created this operation has been retired.
+    let result = std::future::poll_fn(|cx| {
+        if let Err(error) = check(&ctx, &lease.active, lease.deadline) {
+            return std::task::Poll::Ready(Err(error));
+        }
+        future
+            .as_mut()
+            .poll(cx)
+            .map(|result| result.map_err(|e| Exception::throw_message(&ctx, &e)))
+    })
+    .await?;
+    check(&ctx, &lease.active, lease.deadline)?;
+    encode(&ctx, result)
 }
 
 fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Option<Instant>) -> rquickjs::Result<()> {
     if !active.load(Ordering::Acquire) || deadline.is_some_and(|end| Instant::now() >= end) {
-        return Err(Exception::throw_message(
-            ctx,
-            "stale invocation: host operation refused",
-        ));
+        return Err(Exception::throw_message(ctx, "stale invocation: host operation refused"));
     }
     Ok(())
 }

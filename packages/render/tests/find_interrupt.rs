@@ -108,25 +108,19 @@ fn find_deadline_child() {
         // inside promise hooks) into this one canonical deadline error, instead
         // of surfacing QuickJS's raw "interrupted" exception text.
         assert!(
-            error
-                .to_string()
-                .contains("UI JavaScript deadline exceeded"),
+            error.to_string().contains("UI JavaScript deadline exceeded"),
             "{method} round {round}: expected a clean deadline error, got {error}"
         );
         // Only the spin handler failed: the document is still alive and a
         // later event can still change what is on screen.
         assert!(
-            doc.host_event(doc.generation(), "mark", json!({ "round": round }))
-                .unwrap(),
+            doc.host_event(doc.generation(), "mark", json!({ "round": round })).unwrap(),
             "{method} round {round}: document refused events after the deadline"
         );
         let marker = doc
             .inner()
             .get_element_by_id(&format!("marker{round}"))
             .unwrap_or_else(|| panic!("{method} round {round}: no DOM update after the deadline"));
-        assert_eq!(
-            doc.inner().get_node(marker).unwrap().text_content(),
-            format!("alive{round}")
-        );
+        assert_eq!(doc.inner().get_node(marker).unwrap().text_content(), format!("alive{round}"));
     }
 }

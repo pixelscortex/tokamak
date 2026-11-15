@@ -84,36 +84,36 @@ function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
 }
 
 function contributionOptions(declaration: ts.Declaration, field: string, fail: () => never): Record<string, string> {
-    let initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer
-      : ts.isExportAssignment(declaration) ? declaration.expression : undefined;
-    while (initializer && (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer) || ts.isParenthesizedExpression(initializer))) initializer = initializer.expression;
-    if (!initializer || !ts.isCallExpression(initializer)) fail();
-    const call = initializer as ts.CallExpression;
-    let options = call.arguments[0];
-    while (options && (ts.isAsExpression(options) || ts.isSatisfiesExpression(options) || ts.isParenthesizedExpression(options))) options = options.expression;
-    if (!options || !ts.isObjectLiteralExpression(options)) fail();
-    const values: Record<string, string> = {};
-    for (const property of (options as ts.ObjectLiteralExpression).properties) {
-      if (!ts.isPropertyAssignment(property) || !property.name || (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))
-        || !ts.isStringLiteralLike(property.initializer)) fail();
-      const p = property as ts.PropertyAssignment;
-      const key = (p.name as ts.Identifier).text;
-      if (key !== field || key in values) fail();
-      values[key] = (p.initializer as ts.StringLiteral).text;
-    }
-    if (!values[field]) fail();
+  let initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer
+    : ts.isExportAssignment(declaration) ? declaration.expression : undefined;
+  while (initializer && (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer) || ts.isParenthesizedExpression(initializer))) initializer = initializer.expression;
+  if (!initializer || !ts.isCallExpression(initializer)) fail();
+  const call = initializer as ts.CallExpression;
+  let options = call.arguments[0];
+  while (options && (ts.isAsExpression(options) || ts.isSatisfiesExpression(options) || ts.isParenthesizedExpression(options))) options = options.expression;
+  if (!options || !ts.isObjectLiteralExpression(options)) fail();
+  const values: Record<string, string> = {};
+  for (const property of (options as ts.ObjectLiteralExpression).properties) {
+    if (!ts.isPropertyAssignment(property) || !property.name || (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))
+      || !ts.isStringLiteralLike(property.initializer)) fail();
+    const p = property as ts.PropertyAssignment;
+    const key = (p.name as ts.Identifier).text;
+    if (key !== field || key in values) fail();
+    values[key] = (p.initializer as ts.StringLiteral).text;
+  }
+  if (!values[field]) fail();
   return values;
 }
 
 function validateRoute(route: string, fail: () => never): void {
-      if (!route.startsWith("/") || route.startsWith("//") || /[\\\x00-\x20\x7f?#]/.test(route)) fail();
-      const names = new Set<string>();
-      const segments = route.slice(1).split("/");
-      for (const [index, part] of segments.entries()) {
-        if (!part.startsWith(":") && !part.startsWith("*")) continue;
-        const name = part.slice(1);
-        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || names.has(name)
-          || (part.startsWith("*") && index !== segments.length - 1)) fail();
-        names.add(name);
-      }
+  if (!route.startsWith("/") || route.startsWith("//") || /[\\\x00-\x20\x7f?#]/.test(route)) fail();
+  const names = new Set<string>();
+  const segments = route.slice(1).split("/");
+  for (const [index, part] of segments.entries()) {
+    if (!part.startsWith(":") && !part.startsWith("*")) continue;
+    const name = part.slice(1);
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || names.has(name)
+      || (part.startsWith("*") && index !== segments.length - 1)) fail();
+    names.add(name);
+  }
 }

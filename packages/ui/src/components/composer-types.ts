@@ -102,4 +102,3 @@ export interface ComposerProps {
   /** Extra footer content, after attach and mention. */
   tools?: JSX.Element;
 }
-

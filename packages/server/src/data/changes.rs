@@ -18,8 +18,7 @@ pub fn json_equal(a: &Value, b: &Value) -> bool {
         }
         (Value::Object(a), Value::Object(b)) => {
             a.len() == b.len()
-                && a.iter()
-                    .all(|(key, a)| b.get(key).is_some_and(|b| json_equal(a, b)))
+                && a.iter().all(|(key, a)| b.get(key).is_some_and(|b| json_equal(a, b)))
         }
         _ => a == b,
     }
@@ -42,7 +41,10 @@ pub(crate) fn encoded_size(value: &impl serde::Serialize, maximum: usize) -> Opt
             Ok(())
         }
     }
-    let mut count = Count { used: 0, maximum };
+    let mut count = Count {
+        used: 0,
+        maximum,
+    };
     serde_json::to_writer(&mut count, value).ok()?;
     Some(count.used)
 }
@@ -125,30 +127,27 @@ impl ReadSet {
             match dependency {
                 Dependency::Table(_) => true,
                 Dependency::Record(id) => records.iter().any(|change| &change.id == id),
-                Dependency::Filter(table, clauses) => records.iter().any(|change| {
-                    change.id.table() == table && matches_images(change, clauses)
-                }),
+                Dependency::Filter(table, clauses) => records
+                    .iter()
+                    .any(|change| change.id.table() == table && matches_images(change, clauses)),
             }
         })
     }
 }
 
 fn matches_images(change: &RecordChange, clauses: &[(String, Value)]) -> bool {
-    [change.before.as_ref(), change.after.as_ref()]
-        .into_iter()
-        .flatten()
-        .any(|image| clauses.iter().all(|(key, value)| {
-            image.get(key).is_some_and(|actual| json_equal(actual, value))
-        }))
+    [change.before.as_ref(), change.after.as_ref()].into_iter().flatten().any(|image| {
+        clauses
+            .iter()
+            .all(|(key, value)| image.get(key).is_some_and(|actual| json_equal(actual, value)))
+    })
 }
 
 impl Document {
     /// Storage's wire snapshot is used by both the host and dependency matcher.
     pub fn into_json(self) -> Value {
         let mut value = super::Value::Object(self.fields).into_json_value();
-        let fields = value
-            .as_object_mut()
-            .expect("native object converts to JSON object");
+        let fields = value.as_object_mut().expect("native object converts to JSON object");
         fields.insert("_id".into(), Value::String(self.id.to_string()));
         fields.insert("_creationTime".into(), Value::from(self.creation_time));
         value
@@ -176,17 +175,11 @@ mod tests {
         reads.record("items:missing".parse().unwrap());
         assert!(reads.affected(&change(None, Some(json!({"_id":"items:missing"})))));
         let mut reads = ReadSet::new();
-        reads.filter(
-            Table::new("items").unwrap(),
-            vec![("key".into(), json!({"n":[1.0]}))],
-        );
+        reads.filter(Table::new("items").unwrap(), vec![("key".into(), json!({"n":[1.0]}))]);
         assert!(reads.affected(&change(None, Some(json!({"key":{"n":[1]}})))));
         assert!(!reads.affected(&change(None, Some(json!({"other":null})))));
         let mut null = ReadSet::new();
-        null.filter(
-            Table::new("items").unwrap(),
-            vec![("key".into(), Value::Null)],
-        );
+        null.filter(Table::new("items").unwrap(), vec![("key".into(), Value::Null)]);
         assert!(!null.affected(&change(None, Some(json!({})))));
         assert!(null.affected(&change(None, Some(json!({"key":null})))));
     }

@@ -20,12 +20,7 @@ pub const ELEMENTS: u32 = 123_457;
 /// reported separately because it is the exact symptom of the upstream bug.
 pub fn assert_child_survives(child_test: &str, method: &str) {
     let mut child = Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--ignored",
-            "--exact",
-            child_test,
-            "--nocapture",
-        ])
+        .args(["--ignored", "--exact", child_test, "--nocapture"])
         .env(CHILD_ENV, method)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -75,4 +70,3 @@ fn killed_by_signal(status: &ExitStatus) -> bool {
 fn killed_by_signal(_: &ExitStatus) -> bool {
     false
 }
-

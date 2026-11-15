@@ -81,8 +81,7 @@ impl<'tx> Query<'tx> {
         operator: BinaryOperator,
         value: impl SurrealValue,
     ) -> Self {
-        self.bounds
-            .push((field.into(), operator, value.into_value()));
+        self.bounds.push((field.into(), operator, value.into_value()));
         self
     }
 
@@ -157,9 +156,7 @@ impl<'tx> Query<'tx> {
         let mut prefix = Vec::new();
         for (position, (field, value)) in self.conditions.iter().enumerate() {
             if fields.get(position).copied() != Some(field.as_str()) {
-                return Err(Error::Invalid(
-                    "index equalities must follow its leading field order",
-                ));
+                return Err(Error::Invalid("index equalities must follow its leading field order"));
             }
             prefix.push(StoredValue::from(value.clone()));
         }
@@ -200,9 +197,7 @@ impl<'tx> Query<'tx> {
                 _ => &mut upper,
             };
             if slot.is_some() {
-                return Err(Error::Invalid(
-                    "an index range accepts one lower and one upper bound",
-                ));
+                return Err(Error::Invalid("an index range accepts one lower and one upper bound"));
             }
             *slot = Some((operator, StoredValue::from(value.clone())));
         }
@@ -232,11 +227,8 @@ impl<'tx> Query<'tx> {
         };
         let mut rows = Vec::with_capacity(entries.len());
         for (_, entry) in entries {
-            let record = self
-                .tx
-                .inner
-                .get_record(core.ns, core.db, &table, &entry.rid.key, None)
-                .await?;
+            let record =
+                self.tx.inner.get_record(core.ns, core.db, &table, &entry.rid.key, None).await?;
             rows.push(Document::decode(record.data.clone())?);
         }
         Ok(rows)
@@ -244,13 +236,13 @@ impl<'tx> Query<'tx> {
 }
 
 fn validate_equality(field: &str, value: &Value) -> Result<()> {
-                check_field(field)?;
-                if field == "_id" {
-                    let Value::String(text) = value else {
-                        return Err(Error::Invalid("_id equality requires a table:key string"));
-                    };
-                    text.parse::<Id>()?;
-                }
+    check_field(field)?;
+    if field == "_id" {
+        let Value::String(text) = value else {
+            return Err(Error::Invalid("_id equality requires a table:key string"));
+        };
+        text.parse::<Id>()?;
+    }
     Ok(())
 }
 
