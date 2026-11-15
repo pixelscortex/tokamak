@@ -1,0 +1,108 @@
+plugins/chat/backend/parts.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 1-18
+plugins/chat/backend/send.ts
+  s_5090f2015e00ed::t_191ede24afbcae 66-89
+  s_5090f2015e00ed::t_05c808627dc0d8 2,39,56,58,91
+plugins/chat/backend/schema.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 3-4,14
+plugins/chat/README.md
+  s_5090f2015e00ed::t_bc41bf48dc1201 4,110,120-135
+  s_d0d6007df97f49::t_14a04ec91c1191 73,119
+packages/server/tests/fixtures/actions/b/api.ts
+  s_5090f2015e00ed::t_191ede24afbcae 2
+plugins/chat/vite.config.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 6-7
+plugins/chat/package.json
+  s_5090f2015e00ed::t_05c808627dc0d8 3
+plugins/chat/backend/runs.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 26-31
+plugins/chat/backend/model.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 3,9,16,19
+packages/server/tests/actions.rs
+  s_5090f2015e00ed::t_3e119df81e53a7 578-586
+  s_5090f2015e00ed::t_055fce018831fe 587-591
+  s_5090f2015e00ed::t_989203f2d97d73 114-118,129
+packages/server/tests/chat-driver.ts
+  s_5090f2015e00ed::t_191ede24afbcae 44-45,60-61,63-71,73-76,161-162,183-195,198
+  s_5090f2015e00ed::t_aa885842fb580a 5,19-23,25-37,62,72
+packages/server/tests/fixtures/actions/b/backend/tools.ts
+  s_5090f2015e00ed::t_191ede24afbcae 1-12
+packages/server/tests/build-actions.mjs
+  s_91af24b72fc58d::t_02641d2304c1c8 41
+  s_5090f2015e00ed::t_055fce018831fe 19-23,38-40,44
+plugins/chat/backend/chat.ts
+  s_5090f2015e00ed::t_7a6159b314fccf 6-7,20-23,25,27-30,62-63,71,73-79,83
+  s_5090f2015e00ed::t_191ede24afbcae 72
+  s_d0d6007df97f49::t_14a04ec91c1191 45,64
+  s_d0d6007df97f49::t_38a5dcafd0d42b 19,24,26
+packages/server/tests/fixtures/actions/a/backend/tools.ts
+  s_5090f2015e00ed::t_50d98189312032 1
+plugins/chat/backend/tools.ts
+  s_5090f2015e00ed::t_7a6159b314fccf 1-12,14-30,32-44
+  s_d0d6007df97f49::t_17c693b91596c9 13,31
+plugins/todo/backend/todo.ts
+  s_5090f2015e00ed::t_b8283656764f50 4-5,20,36-39
+  s_5090f2015e00ed::t_a1cb5bb81dc295 40
+plugins/todo/package.json
+  s_5090f2015e00ed::t_b8283656764f50 5
+plugins/todo/vite.config.ts
+  s_5090f2015e00ed::t_b8283656764f50 3
+plugins/todo/api.ts
+  s_5090f2015e00ed::t_b8283656764f50 1-2
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_5090f2015e00ed::t_055fce018831fe 2,23-35
+  s_5090f2015e00ed::t_f873d314815f2f 36
+packages/server/tests/actions-driver.ts
+  s_5090f2015e00ed::t_055fce018831fe 109-115,117
+  s_5090f2015e00ed::t_58ac29b268c60f 116
+plugins/todo/backend/createTodo.ts
+  s_5090f2015e00ed::t_b8283656764f50 1-19
+plugins/todo/backend/tools.ts
+  s_5090f2015e00ed::t_b8283656764f50 1-20
+plugins/todo/backend/_limits.ts
+  s_5090f2015e00ed::t_b8283656764f50 6
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_5090f2015e00ed::t_055fce018831fe 102-103
+bun.lock
+  s_5090f2015e00ed::t_2ba67c859dcf44 118,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ff2709e27e9de8e63073168b9a641d045315a19",
+  "prompts": {},
+  "sessions": {
+    "s_5090f2015e00ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e161-e2dd-7ec3-a3fa-afc4539f3db6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    },
+    "s_91af24b72fc58d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e0f9-ef30-76f0-bcad-1b5991cf0c07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_a41830f8568769": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf81-ffd7-7870-b190-f9144e5b5de4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_d0d6007df97f49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e174-f282-7032-b1f9-8a7a5dbb4bea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
