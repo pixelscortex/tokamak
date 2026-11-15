@@ -1,0 +1,23 @@
+lab/README.md
+  s_37590b8e9b99ee::t_f81ba70c79e6b3 46
+packages/ui/src/components/index.ts
+  s_37590b8e9b99ee::t_813c8e5c29eaec 1
+packages/ui/tests/contracts.test.ts
+  s_37590b8e9b99ee::t_4115527d815981 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3f918667e5d28ef165e8347a0a720f47dfc9e9e",
+  "prompts": {},
+  "sessions": {
+    "s_37590b8e9b99ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1df54-9078-7492-9721-2256f7e3c9a4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
