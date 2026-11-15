@@ -131,3 +131,18 @@ test("a terminal error delivered during subscribe still evicts the entry", () =>
   expect(wire.subscriptions).toHaveLength(2);
   cache.dispose();
 });
+
+// Actions must pass through the window cache to the same connected transport.
+test("the window query cache preserves action support and results", async () => {
+  const wire = fakeWire();
+  expect(retainSubscriptions(wire.transport).action).toBeUndefined();
+  const calls = [];
+  wire.transport.action = async (name, args) => {
+    calls.push({ name, args });
+    return { status: "done" };
+  };
+  const cache = retainSubscriptions(wire.transport);
+  expect(await cache.action("chat/chat:send", { threadId: "one", text: "hello" })).toEqual({ status: "done" });
+  expect(calls).toEqual([{ name: "chat/chat:send", args: { threadId: "one", text: "hello" } }]);
+  cache.dispose();
+});
