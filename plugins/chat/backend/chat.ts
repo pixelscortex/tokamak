@@ -83,6 +83,10 @@ export const send = action({
         if (chunk?.done) break;
         if (chunk) {
           const part = chunk.value;
+          if (part.type === "finish") {
+            if (source.error()) throw source.error();
+            return await finish("done");
+          }
           if (part.type === "text-delta") pending += part.text;
           if (part.type === "tool-call") {
             const ack = acknowledgement(part.toolCallId);

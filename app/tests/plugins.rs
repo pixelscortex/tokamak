@@ -1223,6 +1223,21 @@ fn chat_screen_socket_workflow() {
                 .unwrap()
                 .is_some()
         });
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+            doc.inner()
+                .query_selector("[data-role=assistant][data-status=complete], [data-role=assistant][data-status=error]")
+                .unwrap()
+                .is_some()
+        });
+        assert_eq!(
+            call(
+                &service,
+                "query",
+                "chat/runs:active",
+                json!({"threadId": thread})
+            ),
+            Value::Null
+        );
         let todos = call(&service, "query", "todo/todo:list", json!({}));
         assert!(
             todos
@@ -1240,7 +1255,7 @@ fn chat_screen_socket_workflow() {
         if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
             capture::save(
                 window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("tool-card.png"),
+                &Path::new(&directory).join("tool-card-2.png"),
             );
         }
         println!(

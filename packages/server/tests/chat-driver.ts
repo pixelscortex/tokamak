@@ -45,6 +45,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
   let history: unknown;
   const toolStates: string[] = [];
   let requests = 0;
+  let toolOnly = false;
   const growing: string[] = [];
   const mock = createServer(async (req, res) => {
     requested = true;
@@ -63,9 +64,9 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const request = JSON.parse(body);
       assert.deepEqual(request.tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ["todo__todos_create", "b__fixture_create"].sort());
       res.writeHead(200, { "content-type": "text/event-stream" });
-      if (requests++ === 0) {
-        res.end(completionChunk("Before.") + `data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
-          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call-1", type: "function",
+      if (requests++ === 0 || toolOnly) {
+        res.end((toolOnly ? "" : completionChunk("Before.")) + `data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: toolOnly ? `call-${requests}` : "call-1", type: "function",
             function: { name: "b__fixture_create", arguments: JSON.stringify({ title: scenario === "chat-tools-error" ? "fail" : "milk" }) } }] }, finish_reason: null }] })}\n\n` +
           `data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
             choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`);
@@ -172,6 +173,22 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const cancelled = (await client.query(api.messages.list, { threadId: testThread }))[1]!;
       assert.ok(cancelled.parts[2]!.type === "tool" && cancelled.parts[2]!.error === "cancelled");
       await client.mutation(api.threads.remove, { threadId: testThread });
+
+      // Five tool-only steps hit stopWhen without producing a final text step.
+      toolOnly = true;
+      requests = 0;
+      const toolThread = await client.mutation(api.threads.create, {});
+      const toolResult = await client.action(api.chat.send, { threadId: toolThread, text: "Tools only" });
+      const toolReply = (await client.query(api.messages.list, { threadId: toolThread }))[1]!;
+      assert.equal(toolResult.status, "done");
+      assert.equal(toolReply.status, "complete");
+      assert.equal(requests, 5);
+      assert.equal(toolReply.parts.length, 5);
+      assert.ok(toolReply.parts.every(part => part.type === "tool" && part.status === "done"));
+      assert.equal(await client.query(api.runs.active, { threadId: toolThread }), null);
+      await client.mutation(api.threads.remove, { threadId: toolThread });
+      toolOnly = false;
+      requests = 0;
     }
     const threadId = await client.mutation(api.threads.create, {});
     const input = { threadId, text: "Say hello" };
