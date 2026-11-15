@@ -1,0 +1,68 @@
+app/tests/native.rs
+  s_1ef1f4cb5ce556::t_fe2c7eeb4a05f7 1354-1371,1373-1400,1408-1412,1414-1418
+  s_1ef1f4cb5ce556::t_3b525c22d94953 1372,1401-1407,1413
+plugins/chat/backend/recovery.ts
+  s_1ef1f4cb5ce556::t_ec13f4dd6de16b 2-6,8-16
+  s_1ef1f4cb5ce556::t_bce2e91c9d07a6 1,7
+app/package.json
+  s_1ef1f4cb5ce556::t_b1cb51eac28f88 7,10-11
+plugins/chat/backend/runs.ts
+  s_1ef1f4cb5ce556::t_ec13f4dd6de16b 1,31-37
+  s_1ef1f4cb5ce556::t_d3abef3899bac3 38-39
+app/src/chat/message.tsx
+  s_1ef1f4cb5ce556::t_355277036194e3 2,15-19
+plugins/chat/backend/chat.ts
+  s_1ef1f4cb5ce556::t_ec13f4dd6de16b 1,17-20,22-24,26-43,50,54
+  s_1ef1f4cb5ce556::t_0a6cd9d08918e5 21,25
+app/src/chat/markdown.tsx
+  s_1ef1f4cb5ce556::t_f81e2b9b06a041 17-36
+  s_1ef1f4cb5ce556::t_355277036194e3 3-10,15-16,37
+  s_1ef1f4cb5ce556::t_d3749dee34159e 1-2,12-14
+  s_1ef1f4cb5ce556::t_fe2c7eeb4a05f7 11
+app/src/chat/use-chat.ts
+  s_1ef1f4cb5ce556::t_ec13f4dd6de16b 1,57-74
+  s_1ef1f4cb5ce556::t_0090a685e16b5f 75-76
+plugins/chat/backend/send.ts
+  s_1ef1f4cb5ce556::t_ec13f4dd6de16b 1,14-15,59-61
+packages/render/js/jsx-runtime.ts
+  s_1ef1f4cb5ce556::t_f81e2b9b06a041 129-139
+app/tests/plugins.rs
+  s_1ef1f4cb5ce556::t_6a295841152cc0 1193,1195,1197,1203,1234,1237,1241,1257-1263,1272,1274
+  s_1ef1f4cb5ce556::t_54455b8eb28b57 1084-1085
+  s_1ef1f4cb5ce556::t_ce5c43ecca3b68 1064-1083,1086-1089,1185-1192,1194,1196,1198-1202,1204-1233,1235-1236,1238-1240,1242-1256,1264-1271,1273,1275,1391-1400
+app/README.md
+  s_1ef1f4cb5ce556::t_d3749dee34159e 97-100
+plugins/chat/README.md
+  s_1ef1f4cb5ce556::t_d3749dee34159e 74-84,111-112,117-119
+  s_1ef1f4cb5ce556::t_877041ff0309a0 50,113-116
+app/tests/bridge.tsx
+  s_1ef1f4cb5ce556::t_fe2c7eeb4a05f7 8,12-13,58
+plugins/chat/backend/schema.ts
+  s_1ef1f4cb5ce556::t_ec13f4dd6de16b 21
+app/src/styles.css
+  s_1ef1f4cb5ce556::t_355277036194e3 76-89
+bun.lock
+  s_1ef1f4cb5ce556::t_cbaf28403469e9 24,857-858
+packages/server/tests/actions.rs
+  s_1ef1f4cb5ce556::t_029228389ed412 553-556
+packages/server/tests/build-actions.mjs
+  s_1ef1f4cb5ce556::t_5fc6553c5b9584 40-47
+packages/server/tests/chat-driver.ts
+  s_1ef1f4cb5ce556::t_55882e259cf009 8-9,31-32,44-49,76-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7936ac1650a7a3d45753034c24a2dcae97165240",
+  "prompts": {},
+  "sessions": {
+    "s_1ef1f4cb5ce556": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e15c-fbec-7810-a329-b5f96ab34a12",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
