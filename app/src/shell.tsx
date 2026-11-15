@@ -59,7 +59,7 @@ export function Shell(props: { modules: ModuleRegistry }) {
         <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
         <Show keyed when={activeKey()} fallback={
           <Show when={router.match("/chat") || router.match("/chat/:thread")} fallback={<p>View not found</p>}>
-            <Chat pathname={router.location().pathname} chat={chat} />
+            <Chat loader={loader} pathname={router.location().pathname} chat={chat} />
           </Show>
         }>
           {(_key: string) => <div class="shell-plugin"><Contribution loader={loader} contribution={active()!} componentProps={{ router }} /></div>}

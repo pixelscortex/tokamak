@@ -1139,6 +1139,23 @@ fn chat_screen_socket_workflow() {
         )
         .unwrap();
     }
+    let tools_live = live && std::env::var("TOKAMAK_CHAT_TOOLS").as_deref() == Ok("1");
+    if tools_live {
+        let todo = scratch.0.join("installation/todo/dist");
+        std::fs::create_dir_all(&todo).unwrap();
+        for file in [
+            "manifest.json",
+            "bundle.js",
+            "bundle.js.map",
+            "api.ts",
+            "ui.js",
+            "ui.js.map",
+            "shell.html",
+            "styles.css",
+        ] {
+            std::fs::copy(root().join("plugins/todo/dist").join(file), todo.join(file)).unwrap();
+        }
+    }
     if live {
         #[cfg(unix)]
         std::os::unix::fs::symlink(root().join(".env.local"), scratch.0.join(".env.local"))
@@ -1182,6 +1199,55 @@ fn chat_screen_socket_workflow() {
     key(&mut window, Key::Named(NamedKey::Tab), false);
     assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
     key(&mut window, Key::Named(NamedKey::Escape), false);
+    if tools_live {
+        let thread = selected(&window);
+        call(
+            &service,
+            "mutation",
+            "chat/threads:setModel",
+            json!({"threadId": thread, "model": "liquid/lfm-3-1.7b:free"}),
+        );
+        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+        type_text(&mut window, "Add a todo to buy milk tomorrow");
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+            doc.inner()
+                .query_selector("[data-todo-card] [role=checkbox]")
+                .unwrap()
+                .is_some()
+        });
+        window.click("role", "checkbox");
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-todo-card] [aria-checked=true]")
+                .unwrap()
+                .is_some()
+        });
+        let todos = call(&service, "query", "todo/todo:list", json!({}));
+        assert!(
+            todos
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|todo| todo["done"] == true
+                    && todo["title"]
+                        .as_str()
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("milk")),
+            "{todos}"
+        );
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("tool-card.png"),
+            );
+        }
+        println!(
+            "Live liquid/lfm-3-1.7b:free created a milk todo; card toggle persisted done=true."
+        );
+        return;
+    }
     if live {
         support::pointer(window.doc.as_mut().unwrap(), "chat-input");
         type_text(

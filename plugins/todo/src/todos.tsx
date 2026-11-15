@@ -98,7 +98,7 @@ function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
 export default function Todos() {
   const client = useClient();
   return (
-    <main>
+    <main class="todo-screen">
       <h1>Tokamak · Todo</h1>
       <p>Two live views of the same saved tasks. Edit in either panel.</p>
       <div class="panels">

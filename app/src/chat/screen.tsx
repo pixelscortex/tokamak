@@ -1,3 +1,4 @@
+import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { Show, createSignal, onCleanup, type Accessor } from "solid-js";
 import { ComposerInput } from "./composer-input";
 import type { Id } from "@tokamak/sdk";
@@ -7,7 +8,7 @@ import { Mark } from "./message";
 import { ThreadView } from "./thread-view";
 import { Map, MapHeader, useMap } from "./map";
 
-export function Chat(props: { pathname: string; chat: ChatState }) {
+export function Chat(props: { loader: PluginLoader; pathname: string; chat: ChatState }) {
   const [drafts, setDrafts] = createSignal<Record<string, string>>({});
   const [mapOpen, setMapOpen] = createSignal(false);
   const [sending, setSending] = createSignal<Record<string, boolean>>({});
@@ -81,7 +82,7 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
     class="flex min-h-0 min-w-0 flex-1 justify-center px-6 pb-6">
     <div class={`flex min-h-0 w-[560px] max-w-full flex-col gap-4 ${mapOpen() ? "pt-6" : ""}`}>
       <Show when={mapOpen()}><MapHeader /></Show>
-      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView chat={props.chat} threadId={threadId} hidden={mapOpen()} onCopyReady={copy => { copyReply = copy; }} />}</Show>
+      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView loader={props.loader} chat={props.chat} threadId={threadId} hidden={mapOpen()} onCopyReady={copy => { copyReply = copy; }} />}</Show>
       <Show when={props.chat.error() ?? props.chat.threads.error()?.message}>{(error: Accessor<string>) => <p role="alert" class="m-0 text-text-2">{error()}</p>}</Show>
       {/* Retire the focused native editor only while the row editor owns focus. */}
       <Show when={map.editing() !== "rename"}>

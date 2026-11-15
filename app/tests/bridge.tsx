@@ -5,6 +5,9 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { ArgsOf, Event, Request } from "@tokamak/sdk";
+import type { PluginLoader, SlotContribution } from "@tokamak/runtime/plugins";
+import { Message } from "../src/chat/message";
+import type { Message as ChatMessage } from "../src/chat/use-chat";
 import { Markdown } from "../src/chat/markdown";
 import { api } from "../dist/tests/todo/backend/_legacyApi";
 
@@ -55,6 +58,7 @@ function Trace() {
   });
   return (
     <div>
+      <ToolMessage />
       <div id="markdown"><Markdown text={markdown()} /></div>
       <p id="trace">{JSON.stringify(trace())}</p>
       <p id="first-titles">{JSON.stringify(firstTitles())}</p>
@@ -67,3 +71,16 @@ function Trace() {
   );
 }
 mount(Trace);
+
+function ToolMessage() {
+  const part = { type: "tool" as const, callId: "call-one", plugin: "todo", toolName: "todos.create", args: { title: "Buy milk" }, status: "done" as const, summary: "Created a task in Todo", result: { id: "todo-one" }, view: "todo.card" };
+  const [renderers, setRenderers] = createSignal<SlotContribution[]>([]);
+  onHostEvent<string>("tool:renderer", plugin => setRenderers(plugin ? [{ plugin, id: "Card", kind: "itemRenderer", options: { type: "todo.card" } }] : []));
+  const loader = {
+    contributions: () => renderers(), version: () => 0, onError: () => () => {},
+    load: async () => ({ Card: (props: { part: unknown; threadId: string }) => <p id="tool-card-props">{JSON.stringify(props)}</p> }),
+  } as unknown as PluginLoader;
+  const message = { _id: "message-one", role: "assistant", status: "complete", parts: [{ type: "text", text: "Before tool" }, part, { type: "text", text: "After tool" }] } as ChatMessage;
+
+  return <div id="tool-message"><Message loader={loader} threadId="thread-one" message={message} /></div>;
+}

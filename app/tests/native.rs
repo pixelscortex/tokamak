@@ -1428,3 +1428,49 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
     app.wait(|doc| support::text(doc, "markdown").contains('x'));
     assert!(app.doc_mut().take_error().is_none());
 }
+
+#[test]
+fn tool_renderer_missing_shows_line_and_expands() {
+    let store = Store::new();
+    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    // A different plugin cannot claim Todo's renderer type.
+    app.host.send("tool:renderer", "other").unwrap();
+    app.wait(|doc| support::text(doc, "tool-message").contains("Created a task in Todo"));
+    assert!(support::text(app.doc(), "tool-message").contains("Before toolCreated a task in Todo"));
+    let button = app
+        .doc()
+        .inner()
+        .query_selector("#tool-message button")
+        .unwrap()
+        .unwrap();
+    click(app.doc_mut(), button);
+    app.wait(|doc| support::text(doc, "tool-message").contains("Buy milk"));
+    let text = support::text(app.doc(), "tool-message");
+    assert!(text.contains("\n  \"args\": {"));
+    assert!(text.contains("todo-one"));
+    assert!(text.ends_with("After tool"));
+}
+
+#[test]
+fn tool_renderer_mounts_with_part_and_thread_id() {
+    let store = Store::new();
+    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    app.host.send("tool:renderer", "todo").unwrap();
+    app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_some());
+    let props: Value = serde_json::from_str(&support::text(app.doc(), "tool-card-props")).unwrap();
+    assert_eq!(props["threadId"], "thread-one");
+    assert_eq!(props["part"]["callId"], "call-one");
+    assert_eq!(props["part"]["result"]["id"], "todo-one");
+    assert!(!support::text(app.doc(), "tool-message").contains("Created a task in Todo›"));
+}
+
+#[test]
+fn tool_plugin_uninstalled_falls_back_to_line() {
+    let store = Store::new();
+    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    app.host.send("tool:renderer", "todo").unwrap();
+    app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_some());
+    app.host.send("tool:renderer", "").unwrap();
+    app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_none());
+    assert!(support::text(app.doc(), "tool-message").contains("Created a task in Todo"));
+}

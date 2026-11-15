@@ -98,3 +98,7 @@ contents on macOS, and stopping, and exercises Map search and thread switching.
 `recovery.png` captures a recovered thread after an abandoned run has aged 61
 seconds and the native app reopens. `ux-autoscroll.png` captures the completed
 long reply at the bottom. Captures use the production Blitz painter with the bundled fonts.
+
+Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the Todo card flow
+instead: `liquid/lfm-3-1.7b:free` creates a milk todo, the harness toggles the
+card, checks the saved task is done, and captures `tool-card.png`.
