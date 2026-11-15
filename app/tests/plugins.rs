@@ -1221,9 +1221,14 @@ fn chat_screen_socket_workflow() {
                             "streaming must follow the newest content"
                         );
                         if bottom > 180.0 && !resumed {
-                            scroll(&mut window, 120.0);
+                            for _ in 0..240 {
+                                scroll(&mut window, 0.5);
+                            }
                             let (held_top, held_bottom) = position(window.doc());
-                            assert!(held_top < top - 40.0, "wheel must scroll up");
+                            assert!(
+                                held_top < top - 40.0,
+                                "wheel must scroll up: {top} -> {held_top}, bottom {held_bottom}"
+                            );
                             paused = Some((held_top, held_bottom));
                         }
                     }

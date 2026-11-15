@@ -34,21 +34,18 @@ export function ThreadView(props: { chat: ChatState; threadId: Id<"threads">; hi
   }
 
   function follow(node: NativeNode) {
-    let sticking = true;
-    let previousTop = 0;
+    let previousBottom: number | undefined;
+    let following = true;
 
     observeLayout(node, ({ scroll, rect }: Layout) => {
       if (props.hidden || rect.height <= 0) return;
 
       const bottom = Math.max(0, scroll.height - scroll.clientHeight);
-      // Growth changes the bottom, wheel input changes the offset. A scroll
-      // we requested below is acknowledged at previousTop on the next layout.
-      if (Math.abs(scroll.top - previousTop) > 1) sticking = bottom - scroll.top <= 2;
-      previousTop = scroll.top;
-      if (sticking && Math.abs(bottom - scroll.top) > 1) {
-        node.scrollTo(bottom);
-        previousTop = bottom;
-      }
+      // Layout growth keeps the current follow mode; every scroll report
+      // evaluates its distance directly, including fractional offsets.
+      if (bottom === previousBottom) following = bottom - scroll.top <= 8;
+      else if (following) node.scrollTo(bottom);
+      previousBottom = bottom;
     });
   }
 
