@@ -1,0 +1,25 @@
+plugins/chat/backend/chat.ts
+  s_d0d6007df97f49::t_70396e4c0e4575 80-81
+app/src/chat/message.tsx
+  s_d0d6007df97f49::t_624626cdf8114c 16,18
+app/src/chat/thread-view.tsx
+  s_d0d6007df97f49::t_0e37e26b2a0825 22
+plugins/chat/README.md
+  s_d0d6007df97f49::t_438ed5d8e13a58 129-131,135-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7544769f39eae8532f6065086323ac337749fe9b",
+  "prompts": {},
+  "sessions": {
+    "s_d0d6007df97f49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e174-f282-7032-b1f9-8a7a5dbb4bea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
