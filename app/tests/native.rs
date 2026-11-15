@@ -1415,4 +1415,8 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
         .unwrap();
     app.wait(|doc| support::text(doc, "markdown").contains("After"));
     assert_eq!(code(app.doc()), "print(1)\nprint(2)");
+    let nested = format!("{}x", "> ".repeat(1000));
+    app.host.send("markdown:text", nested).unwrap();
+    app.wait(|doc| support::text(doc, "markdown").contains('x'));
+    assert!(app.doc_mut().take_error().is_none());
 }
