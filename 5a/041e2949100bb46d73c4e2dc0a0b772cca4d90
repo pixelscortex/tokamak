@@ -1,0 +1,19 @@
+app/src/chat/map.tsx
+  s_4f307e17b09e61::t_337b818cb4e32c 1,19,30-33,41-46,79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a041e2949100bb46d73c4e2dc0a0b772cca4d90",
+  "prompts": {},
+  "sessions": {
+    "s_4f307e17b09e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e152-45b2-75d3-aaeb-86306de2e06a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
