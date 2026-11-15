@@ -131,14 +131,6 @@ impl Document for NativeDocument {
         if !self.alive.load(Ordering::Acquire) {
             return;
         }
-        if matches!(event, UiEvent::Paste(_))
-            && self
-                .html
-                .get_focussed_node_id()
-                .is_some_and(|target| crate::input::blocks_paste(&self.html, target))
-        {
-            return;
-        }
         let ends_composition = self.bridge.composition.before(&event);
         // beta.4's UI route bypasses EventHandler for Apple commands. Route
         // through its public DOM driver so readonly/disabled and synchronous

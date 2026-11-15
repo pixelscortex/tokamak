@@ -12,17 +12,17 @@ gpu-diagnostics = ["anyrender_vello/log_frame_times"]
 [dependencies]
 engine = { path = "../engine" }
 # Blitz paints ordinary elements and SVG icon widgets.
-blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c", default-features = false, features = ["system-fonts", "custom-widget"] }
-blitz-html = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c", default-features = false }
-blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c" }
-blitz-shell = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c", default-features = false, features = ["custom-widget"] }
+blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts", "custom-widget"] }
+blitz-html = { version = "=0.3.0-beta.4", default-features = false }
+blitz-traits = "=0.3.0-beta.4"
+blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard", "custom-widget"] }
 # Read computed styles and registered custom properties.
-style = { package = "stylo", version = "=0.23.0", git = "https://github.com/servo/stylo", rev = "2dca34592ced37c6aa01733e94206a767194cf9d" }
-anyrender = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
-anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
+style = { package = "stylo", version = "=0.22.0" }
+anyrender = "=0.14.0"
+anyrender_vello = "=0.15.0"
 # Vector widgets share the scene colour and geometry types.
 peniko = "=0.6.1"
-winit = "=0.31.0-beta.4"
+winit = "=0.31.0-beta.3"
 keyboard-types = "=0.8.0"
 futures-lite = "=2.6.1"
 serde = { version = "1.0", features = ["derive"] }

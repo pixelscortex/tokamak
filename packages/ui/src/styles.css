@@ -12,11 +12,6 @@
   --tk-overscroll: contain;
 }
 
-/* Keep the established font metrics when Blitz applies optical sizing. */
-:root, button, input, textarea, select {
-  font-optical-sizing: none;
-}
-
 /* A button's label is not text to select: dragging across a button should
  * never highlight it. A component that wants selectable text inside a button
  * says so with `select-text`. */

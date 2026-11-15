@@ -149,7 +149,6 @@ impl ApplicationHandler for Host {
             let inner = Arc::new(blitz_shell::BlitzShellProvider::new(
                 view.window.clone(),
                 view.proxy.clone(),
-                view.doc.id(),
             ));
             view.doc.inner_mut().set_shell_provider(Arc::new(ImeShell {
                 inner,
@@ -344,8 +343,8 @@ impl ShellProvider for ImeShell {
         self.inner.set_window_title(title);
     }
 
-    fn request_clipboard_text(&self) -> std::result::Result<(), ClipboardError> {
-        self.inner.request_clipboard_text()
+    fn get_clipboard_text(&self) -> std::result::Result<String, ClipboardError> {
+        self.inner.get_clipboard_text()
     }
 
     fn set_clipboard_text(&self, text: String) -> std::result::Result<(), ClipboardError> {

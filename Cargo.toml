@@ -33,5 +33,3 @@ codegen-units = 1
 [patch.crates-io]
 rquickjs-sys = { git = "https://github.com/JustKira/rquickjs", rev = "f17e57e27b37a2c4d9ff12753f2b42067bf15394" }
 
-# Share the timer used by Blitz and AnyRender.
-debug_timer = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c" }

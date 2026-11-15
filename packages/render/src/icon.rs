@@ -1,7 +1,6 @@
 //! Draw SVG icon paths as vector fills and strokes without Blitz's SVG stack.
 //! Paint accepts currentColor and #rgb/#rrggbb/#rrggbbaa.
 use anyrender::{PaintScene, RenderContext, Scene};
-use blitz_dom::CopyStyleGetters;
 use blitz_dom::node::{ComputedStyles, Widget};
 use peniko::{
     Color, Fill,
