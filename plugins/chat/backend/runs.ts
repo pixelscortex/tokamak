@@ -1,6 +1,13 @@
 import { v } from "@tokamak/sdk";
 import { OWNER, mutation, query } from "./_functions";
 
+export const running = query({
+  handler: async ({ db }) => {
+    const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
+    return runs.map(run => ({ runId: run._id, threadId: run.threadId, model: run.model }));
+  },
+});
+
 export const active = query({
   args: { threadId: v.id("threads") },
   handler: async ({ db }, { threadId }) => {

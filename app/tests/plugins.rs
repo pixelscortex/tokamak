@@ -1236,4 +1236,6 @@ fn chat_screen_socket_workflow() {
             .is_some_and(|id| id != first && id != second)
     });
     assert_eq!(window.subscriptions_to("threads:list"), 1);
+    assert_eq!(window.subscriptions_to("runs:running"), 1);
+    assert_eq!(window.subscriptions_to("runs:active"), 0);
 }

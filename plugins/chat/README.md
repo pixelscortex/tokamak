@@ -30,6 +30,7 @@ All functions use one argument object. Wire names and results:
 | --- | --- | --- | --- |
 | Query | `chat/threads:list` | `{}` | `Thread[]`, newest updated first |
 | Query | `chat/messages:list` | `{threadId}` | `Message[]`, oldest first |
+| Query | `chat/runs:running` | `{}` | `{runId, threadId, model}[]`, all running runs |
 | Query | `chat/runs:active` | `{threadId}` | `Run \| null` |
 | Mutation | `chat/threads:create` | `{title?: string}` | thread ID |
 | Mutation | `chat/threads:rename` | `{threadId, title: string}` | `null` |
@@ -50,6 +51,9 @@ Documents include `_id: string` and `_creationTime: number`, plus:
 `"owner"`; assistant `Message.authorId` is `"assistant"`. `runs:cancel` sets
 `Run.cancelledBy` to `"owner"` when cancelling a running run. The shared `OWNER`
 constant becomes the host's member id when threads are shared.
+
+The shell uses one `runs:running` subscription for Map grouping and active-run state,
+regardless of thread count. This query uses the runs `by_status` index.
 
 IDs are SDK table IDs; timestamps are epoch milliseconds. Empty titles/text are
 refused. Only one run may be active per thread; another send is refused. The

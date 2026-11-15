@@ -18,5 +18,5 @@ export default defineSchema({
     status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),
     startedBy: v.string(), cancelledBy: v.optional(v.string()),
     model: v.string(), startedAt: v.number(), finishedAt: v.optional(v.number()),
-  }).index("by_threadId", ["threadId"]),
+  }).index("by_threadId", ["threadId"]).index("by_status", ["status"]),
 });
