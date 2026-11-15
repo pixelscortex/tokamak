@@ -49,7 +49,7 @@ import { v } from "@tokamak/sdk";
 import { mutation } from "./_functions";
 export const age = mutation({
   args: { runId: v.id("runs") },
-  handler: ({ db }, { runId }) => db.patch(runId, { startedAt: Date.now() - 61_000 }),
+  handler: ({ db }, { runId }) => db.patch(runId, { startedAt: Date.now() - 61_000, updatedAt: Date.now() - 61_000 }),
 });
 `);
     const child = Bun.spawn([process.execPath, join(workspace, "packages/build/src/build.ts"), path], {

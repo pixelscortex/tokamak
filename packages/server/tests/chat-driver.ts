@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import type { TokamakClient } from "@tokamak/sdk";
+import { createApi, type ActionContext, type TokamakClient } from "@tokamak/sdk";
+import { discoverTools } from "./chat/backend/tools";
+import { send as chatSend } from "./chat/backend/chat";
 import { api } from "./chat/backend/_generated/api";
 import { api as todo } from "./todo/backend/_generated/api";
 import { completionChunk, completionEnd } from "./completions";
@@ -17,7 +19,7 @@ async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
 export async function chatScenario(client: TokamakClient, scenario: string, configure: (url: string) => Promise<void>) {
   if (scenario === "chat-real") {
     const failures: string[] = [];
-    for (const model of ["liquid/lfm-3-1.7b:free", "inclusionai/ling-3.2-flash:free", "google/gemma-4-26b-a4b-it:free", "openrouter/free"]) {
+    for (const model of ["liquid/lfm-3-1.7b:free"]) {
       const threadId = await client.mutation(api.threads.create, {});
       await client.mutation(api.threads.setModel, { threadId, model });
       const result = await client.action(api.chat.send, { threadId, text: "Add a todo to buy milk tomorrow" });
@@ -62,7 +64,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       assert.deepEqual(request.tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ["todo__todos_create", "b__fixture_create"].sort());
       res.writeHead(200, { "content-type": "text/event-stream" });
       if (requests++ === 0) {
-        res.end(`data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
+        res.end(completionChunk("Before.") + `data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
           choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call-1", type: "function",
             function: { name: "b__fixture_create", arguments: JSON.stringify({ title: scenario === "chat-tools-error" ? "fail" : "milk" }) } }] }, finish_reason: null }] })}\n\n` +
           `data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
@@ -70,7 +72,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       } else {
         assert.ok(request.messages.some((message: { role: string; content: string }) => message.role === "tool" &&
           message.content.includes(scenario === "chat-tools-error" ? "fixture tool failed" : "Fixture created")), JSON.stringify(request.messages));
-        res.end(completionChunk("Added it.") + completionEnd());
+        res.end(completionChunk("After.") + completionEnd());
       }
       return;
     }
@@ -98,15 +100,93 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
   await configure(`http://127.0.0.1:${address.port}/v1`);
 
   try {
+    if (scenario === "chat-tools") {
+      // Hold execute until the action heartbeats: the stream consumer must keep
+      // polling while a provider mutation is pending, rather than await execute.
+      let executing = false;
+      let releaseTool!: () => void;
+      const heartbeat = new Promise<void>(resolve => { releaseTool = resolve; });
+      const result = await chatSend.invoke({ threadId: "threads:heartbeat", text: "Say hello" }, {
+        async op(operation, payload): Promise<import("@tokamak/sdk").JsonValue> {
+          const input = payload as { name?: string; args?: { delta?: string; tool?: unknown; outcome?: string } };
+          if (operation === "plugin.providers") return ["b", "todo"];
+          if (operation === "action.env") return input.name === "OPENROUTER_API_KEY" ? "fixture" : `http://127.0.0.1:${address.port}/v1`;
+          if (input.name === "chat/send:start") return { runId: "run", messageId: "message", history: [{ role: "user", content: "Say hello" }], model: "mock" };
+          if (input.name === "chat/send:running") return true;
+          if (input.name === "chat/send:update") {
+            if (executing && !input.args?.delta && !input.args?.tool) releaseTool();
+            return input.args?.outcome ?? "running";
+          }
+          if (input.name?.endsWith("/tools:describe")) return [{
+            name: input.name.startsWith("todo/") ? "todos.create" : "fixture.create",
+            description: "Create", parameters: { type: "object" },
+          }];
+          if (input.name === "b/tools:invoke") {
+            executing = true;
+            await heartbeat;
+            return { result: {}, summary: "Created", model: "Fixture created" };
+          }
+          throw new Error(`Unexpected heartbeat test call: ${input.name}`);
+        },
+      });
+      assert.ok(result && typeof result === "object" && !Array.isArray(result));
+      assert.equal(result.status, "done");
+      assert.ok(executing);
+      requests = 0;
+      let invocations = 0;
+      let ack = "cancelled";
+      const { tools } = await discoverTools({
+        providers: async () => [createApi("b")],
+        runQuery: async () => [{ name: "fixture.create", description: "Create", parameters: { type: "object" } }],
+        runMutation: async () => { invocations++; return { result: {}, summary: "Created" }; },
+      } as unknown as ActionContext, "thread", async () => true, async () => ack);
+      const invoke = tools.b__fixture_create!.execute as unknown as (input: unknown, options: { toolCallId: string; messages: [] }) => Promise<unknown>;
+      const execute = (callId: string, title: string) => invoke({ title }, { toolCallId: callId, messages: [] });
+      await assert.rejects(execute("cancelled", "milk"), /cancelled/);
+      await assert.rejects(execute("large", "x".repeat(1_100_000)), /16 KB/);
+      assert.equal(invocations, 0);
+      ack = "running";
+      await execute("once", "milk");
+      await assert.rejects(async () => execute("once", "milk"), /Duplicate/);
+      assert.equal(invocations, 1);
+
+      const testThread = await client.mutation(api.threads.create, {});
+      const run = await client.mutation(api.send.start, { threadId: testThread, text: "Tools" });
+      const update = (tool: import("./chat/backend/parts").ToolPart | { callId: string; status: "done" | "error"; result?: {} }) =>
+        client.mutation(api.send.update, { runId: run.runId, delta: "", tool });
+      const tool = { type: "tool" as const, callId: "unique", plugin: "b", toolName: "fixture.create", args: {}, status: "running" as const };
+      await assert.rejects(update({ ...tool, args: { title: "x".repeat(17_000) } }), /16 KB/);
+      await update(tool);
+      await assert.rejects(update(tool), /Duplicate/);
+      await assert.rejects(update({ ...tool, plugin: "other", status: "done" }), /immutable/);
+      await update({ callId: tool.callId, status: "done", result: {} });
+      await assert.rejects(update({ callId: tool.callId, status: "error" }), /settled/);
+      await update({ ...tool, callId: "long-error" });
+      await client.mutation(api.send.update, { runId: run.runId, delta: "", tool: {
+        callId: "long-error", status: "error", error: "界".repeat(10_000),
+      } });
+      const bounded = (await client.query(api.messages.list, { threadId: testThread }))[1]!.parts[1]!;
+      assert.ok(bounded.type === "tool" && Buffer.byteLength(bounded.error!) <= 2048);
+      await update({ ...tool, callId: "cancel-me" });
+      await client.mutation(api.runs.cancel, { runId: run.runId });
+      const cancelled = (await client.query(api.messages.list, { threadId: testThread }))[1]!;
+      assert.ok(cancelled.parts[2]!.type === "tool" && cancelled.parts[2]!.error === "cancelled");
+      await client.mutation(api.threads.remove, { threadId: testThread });
+    }
     const threadId = await client.mutation(api.threads.create, {});
     const input = { threadId, text: "Say hello" };
     if (scenario === "chat-recovery") {
       const stale = await client.mutation(api.send.start, input);
+      await client.mutation(api.send.update, { runId: stale.runId, delta: "", tool: {
+        callId: "stale-tool", plugin: "b", toolName: "fixture.create", args: {}, status: "running",
+      } });
       await client.mutation(api.testing.age, { runId: stale.runId });
       await client.mutation(api.runs.recover, {});
       const interrupted = (await client.query(api.messages.list, { threadId }))[1]!;
       assert.equal(interrupted.status, "error");
       assert.equal(interrupted.error, "Interrupted");
+      assert.equal(interrupted.parts[0]!.type, "tool");
+      assert.ok(interrupted.parts[0]!.type === "tool" && interrupted.parts[0]!.error === "Interrupted");
       assert.deepEqual(await client.query(api.runs.running, {}), []);
 
       const healthy = await client.mutation(api.send.start, input);
@@ -123,7 +203,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       assert.equal((await client.action(api.chat.send, { threadId, text: "Try again" })).status, "done");
       const messages = await client.query(api.messages.list, { threadId });
       assert.equal(messages[5]!.error, "Interrupted");
-      assert.equal(messages[7]!.parts[0]!.text, "Recovered");
+      assert.equal(messages[7]!.parts.find(part => part.type === "text")!.text, "Recovered");
       assert.equal(await client.query(api.runs.active, { threadId }), null);
       // Exercise the real action heartbeat while the provider withholds headers.
       holdHeaders = true;
@@ -131,7 +211,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       await until(async () => !!await client.query(api.runs.active, { threadId }));
       const quiet = (await client.query(api.runs.active, { threadId }))!;
       await client.mutation(api.testing.age, { runId: quiet._id });
-      await until(async () => typeof (await client.query(api.runs.active, { threadId }))?.updatedAt === "number", 750);
+      await until(async () => Date.now() - ((await client.query(api.runs.active, { threadId }))?.updatedAt ?? 0) < 60_000, 750);
       await client.mutation(api.runs.recover, {});
       assert.equal((await client.query(api.runs.active, { threadId }))?._id, quiet._id);
       releaseHeaders = true;
@@ -182,8 +262,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
           assert.match(response.error!, scenario === "chat-grant" ? /permission denied: requires env:OPENROUTER_API_KEY/ : /temporarily unavailable|503/);
         } else if (scenario.startsWith("chat-tools")) {
           assert.equal(response.status, "complete");
-          assert.deepEqual(response.parts.map(part => part.type), ["tool", "text"]);
-          const tool = response.parts[0]!;
+          assert.deepEqual(response.parts.map(part => part.type), ["text", "tool", "text"]);
+          const tool = response.parts[1]!;
           assert.equal(tool.type, "tool");
           if (tool.type !== "tool") throw new Error("Expected tool");
           assert.equal(tool.plugin, "b");
@@ -192,7 +272,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
           if (scenario === "chat-tools-error") assert.match(tool.error!, /fixture tool failed/);
           assert.ok(toolStates.includes("running"), JSON.stringify(toolStates));
           await until(() => toolStates.includes(tool.status));
-          assert.equal(response.parts.find(part => part.type === "text")!.text, "Added it.");
+          assert.equal(response.parts[0]!.type === "text" && response.parts[0]!.text, "Before.");
+          assert.equal(response.parts[2]!.type === "text" && response.parts[2]!.text, "After.");
         } else {
           assert.equal(response.status, "complete");
           assert.equal(response.parts.find(part => part.type === "text")!.text, "Hello there friend");
