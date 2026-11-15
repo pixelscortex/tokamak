@@ -1,13 +1,27 @@
-// Schemas describe tables for authoring types and host metadata. Persistence
-// enforcement and migrations are deferred; this module does not pretend to
-// install database constraints, nor accept an index it cannot implement.
+// Schemas install index metadata and provide authoring types. Field validation
+// and migrations remain deferred; declaring fields does not validate writes.
 import { assertTable } from "./values";
 import type { Fields, ObjectValue, ValidatorDescription } from "./validators";
 import { v } from "./validators";
 
-export interface TableDefinition<F extends Fields = Fields> {
+export interface IndexDefinition<F extends readonly string[] = readonly string[]> {
+  readonly name: string;
+  readonly fields: F;
+  readonly unique: boolean;
+}
+export type Indexes = Record<string, readonly string[]>;
+
+export interface TableDefinition<F extends Fields = Fields, I extends Indexes = Indexes> {
   readonly fields: F;
   readonly description: ValidatorDescription;
+  readonly indexes: readonly IndexDefinition[];
+  index<N extends string, const K extends readonly [Extract<keyof F, string>, ...Extract<keyof F, string>[]]>(
+    name: N, fields: K,
+  ): TableDefinition<F, I & Record<N, K>>;
+  unique<N extends string, const K extends readonly [Extract<keyof F, string>, ...Extract<keyof F, string>[]]>(
+    name: N, fields: K,
+  ): TableDefinition<F, I & Record<N, K>>;
+  readonly _indexes?: I;
 }
 
 export interface SchemaDefinition<
@@ -16,20 +30,51 @@ export interface SchemaDefinition<
   readonly tables: T;
 }
 export type DataModel = Record<string, object>;
-
+// Metadata lives on the model, never on stored documents or writable fields.
+declare const schemaIndexes: unique symbol;
 export type ModelFromSchema<S extends SchemaDefinition> = {
   [T in keyof S["tables"]]: ObjectValue<S["tables"][T]["fields"]>;
-};
+} & { readonly [schemaIndexes]: {
+  [T in keyof S["tables"]]: NonNullable<S["tables"][T]["_indexes"]>;
+} };
+export type IndexesFor<M extends DataModel, T extends keyof M> =
+  M extends { readonly [schemaIndexes]: infer I }
+    ? T extends keyof I ? Extract<I[T], Indexes> : never
+    : Indexes;
 
-export function defineTable<F extends Fields>(fields: F): TableDefinition<F> {
+export function assertIndexName(name: string): void {
+  if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error("Index name must match [A-Za-z_][A-Za-z0-9_]*");
+  }
+}
+
+export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Record<never, never>> {
   if (Object.hasOwn(fields, "_id") || Object.hasOwn(fields, "_creationTime")) {
     throw new Error("Table fields cannot declare _id or _creationTime: the host owns them");
   }
   const snapshot = Object.freeze({ ...fields });
-  return Object.freeze({
-    fields: snapshot,
-    description: v.object(snapshot).description,
-  });
+  const description = v.object(snapshot).description;
+  const table = (indexes: readonly IndexDefinition[]): TableDefinition<F, Indexes> => {
+    const add = (name: string, keys: readonly string[], unique: boolean) => {
+      assertIndexName(name);
+      if (indexes.some(index => index.name === name)) throw new Error(`Duplicate index: ${name}`);
+      if (!Array.isArray(keys) || keys.length === 0) throw new Error("An index needs at least one field");
+      const seen = new Set<string>();
+      for (const key of keys) {
+        if (typeof key !== "string" || !Object.hasOwn(snapshot, key)) throw new Error(`Undeclared index field: ${key}`);
+        // The native value index API accepts single ASCII identifiers only.
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid index field: ${key}`);
+        if (seen.has(key)) throw new Error(`Repeated index field: ${key}`);
+        seen.add(key);
+      }
+      return table(Object.freeze([...indexes, Object.freeze({ name, fields: Object.freeze([...keys]), unique })]));
+    };
+    return Object.freeze({ fields: snapshot, description, indexes,
+      index: (name: string, keys: readonly string[]) => add(name, keys, false),
+      unique: (name: string, keys: readonly string[]) => add(name, keys, true),
+    }) as TableDefinition<F, Indexes>;
+  };
+  return table(Object.freeze([])) as TableDefinition<F, Record<never, never>>;
 }
 
 export function defineSchema<T extends Record<string, TableDefinition>>(
@@ -37,4 +82,10 @@ export function defineSchema<T extends Record<string, TableDefinition>>(
 ): SchemaDefinition<T> {
   for (const table of Object.keys(tables)) assertTable(table);
   return Object.freeze({ tables: Object.freeze({ ...tables }) });
+}
+
+/** Inspect the same schema as handlers, without serializing builder methods. */
+export function schemaMetadata(schema: SchemaDefinition | null) {
+  return { tables: Object.fromEntries(Object.entries(schema?.tables ?? {}).map(([name, table]) =>
+    [name, { description: table.description, indexes: table.indexes }])) };
 }

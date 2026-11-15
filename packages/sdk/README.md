@@ -46,11 +46,45 @@ also have `insert`, `patch`, `replace`, `delete`. Writes return IDs (insert) or
 null (other writes). `get(id)` returns a document or null. Query builders are
 immutable, use repeated `.where(field, '=', value)` for equality AND, order by
 creation time with `.order('asc' | 'desc')` (default asc), and execute only with
-`take(n)`, `first()` or `collect()`. There is no `.index()`, SQL expression,
-pagination, implicit thenable or internal function API.
+`take(n)`, `first()` or `collect()`. There is no SQL expression, pagination,
+implicit thenable or internal function API.
 
-Schemas describe types and metadata, not enforced persistence constraints.
-Schema enforcement/migrations are outside this POC.
+Declare indexes on tables before loading the plugin:
+
+```ts
+const schema = defineSchema({
+  todos: defineTable({ owner: v.string(), text: v.string(), created: v.number() })
+    .index('by_owner_created', ['owner', 'created'])
+    .unique('by_owner_text', ['owner', 'text']),
+});
+const { query } = createFunctions(schema);
+const recent = query({
+  args: { owner: v.string(), since: v.number() },
+  handler: (ctx, { owner, since }) => ctx.db.query('todos')
+    .withIndex('by_owner_created', q => q.eq('owner', owner).gt('created', since))
+    .order('desc').take(20),
+});
+```
+
+Index names and indexed fields must match `[A-Za-z_][A-Za-z0-9_]*`. Fields must
+be declared top-level fields, nonempty and distinct; names are unique per table.
+Table builders are immutable, so keep the returned value when adding an index.
+Schema-bound queries check index names, field order and value types in TypeScript
+and validate the range builder at runtime. Equalities consume leading index
+fields in order. A range constrains the next field and ends the equality chain;
+it may have one lower (`gt`/`gte`) and one upper (`lt`/`lte`) bound on that same
+field. The callback can be omitted to scan the entire index. Indexed queries
+cannot combine with `where`. Ordering follows index fields then ID; the default
+is ascending. Indexed scans have the native `u32::MAX` row ceiling. Live indexed
+queries conservatively invalidate whenever their table changes.
+
+The loader installs ordinary and unique indexes in the plugin's data space.
+Unique violations reject the host operation with the index name and abort the
+invocation even if caught in JS. Reloading identical definitions is a no-op.
+New indexes on tables with rows, or changes to a named index, fail the load:
+index backfill is not supported yet. Removed indexes remain installed.
+Field descriptions provide types and metadata; field validation on persisted
+writes and schema migrations remain deferred.
 
 ## Actions
 

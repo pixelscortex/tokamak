@@ -12,6 +12,7 @@ pub mod data;
 mod host;
 pub mod plugins;
 pub mod protocol;
+mod schema;
 mod service;
 pub mod websocket;
 

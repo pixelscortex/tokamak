@@ -449,7 +449,7 @@ impl Transaction {
                     Ok(())
                 } else {
                     Err(Error::Invalid(
-                        "a different index definition already uses that name",
+                        "a different index definition already uses that name; index backfill is not supported yet",
                     ))
                 };
             }
@@ -457,7 +457,7 @@ impl Transaction {
             let core = &tx.state.storage;
             if tx.inner.tb_has_records(core.ns, core.db, &tb).await? {
                 return Err(Error::Invalid(
-                    "cannot define an index on a table with rows; backfill is unsupported",
+                    "cannot define an index on a table with rows; index backfill is not supported yet",
                 ));
             }
             let index_id = core

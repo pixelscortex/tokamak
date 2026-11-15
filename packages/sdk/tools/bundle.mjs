@@ -88,13 +88,13 @@ export async function bundleFeature(folder, namespace) {
     const entry = join(temporary, "entry.ts");
     const source =
       header +
-      'import { createRegistry, functionMetadata, invokeFunction, type HostBridge, type JsonValue } from "@tokamak/sdk";\n' +
+      'import { createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue } from "@tokamak/sdk";\n' +
       files
         .map((file, i) => `import * as m${i} from ${quote(join(root, file.slice(0, -3)))};\n`)
         .join("") +
       (hasSchema
-        ? `import schemaValue from ${quote(join(root, "schema"))};\nexport const schema = schemaValue;\n`
-        : "export const schema = null;\n") +
+        ? `import schemaValue from ${quote(join(root, "schema"))};\nexport const schema = schemaMetadata(schemaValue);\n`
+        : "export const schema = schemaMetadata(null);\n") +
       `export const functions = createRegistry({${modules.map((module, i) => `${quote(module)}: m${i}`).join(",")}});\n` +
       "export const metadata = functionMetadata(functions);\n" +
       // Pool invokes functions only. Inspect the SAME registry/schema values,

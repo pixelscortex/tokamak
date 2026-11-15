@@ -33,8 +33,10 @@ Reads track whole tables, exact IDs (including missing IDs), or conjunctions of
 JSON equality clauses (including empty query results). Post-commit footprints
 contain both old/new row images, so moves and deletes invalidate correctly.
 Numeric equality and missing-versus-null follow the SDK's existing semantics.
-Schema assertions are not evaluated. Rust callers can define named indexes;
-this does not introduce a plugin schema registry or change the JS API.
+Field schema assertions are not evaluated. Plugin schemas install declared
+ordinary/unique indexes on physical tables in the plugin's DataSpace. Indexed
+JS queries track whole tables conservatively, including empty/limited results;
+unindexed equality queries retain their existing precise dependencies.
 
 Record notifications retain at most 64 changes / 32 KiB encoded images. Larger
 transactions fall back to broad changed-table invalidation. Read tracking falls
@@ -48,6 +50,32 @@ if the caller drops its waiting future. Epochs advance only after storage succes
 the task retains the database and catalog gate until then. Rollback cleanup also
 runs to completion after caller cancellation. The Tokio runtime must remain alive
 until these tasks finish; close returns Busy while they retain the database.
+
+## Plugin schemas and queries
+
+The SDK bundle's `describe()` carries `{schema: {tables: {<name>:
+{description, indexes: [{name, fields, unique}]}}}, functions: [...]}`.
+The public builder packages that bundle unchanged: the manifest identifies and
+hashes its backend entry, rather than duplicating evaluated schema metadata.
+The loader validates declarations and installs indexes before publishing a
+plugin generation, in the same transaction as grant records. Aggregate metadata
+keys schemas by plugin ID, keeping logical table names separate. The legacy
+single-bundle loader applies the same registry in its selected DataSpace.
+Field descriptions travel as metadata; writes do not enforce them (TKM-92).
+
+Repeated identical declarations are no-ops even after rows exist. New indexes
+on nonempty tables and changes to an existing name fail the load explicitly:
+index backfill is not supported yet (TKM-91). Removed declarations leave indexes
+in storage; dropping and migrations are out of scope. Installation rollback uses
+the existing catalog gate, poisoning and cancellation-safe outcome handling.
+
+`db.query` retains `{table, where, order, limit}`. Indexed requests additionally
+carry `index: {name, eq: [{field, value}], range: [{field, operator, value}]}` and
+require `where: []`. Range operators are `gt`, `gte`, `lt`, `lte`, with at most one
+lower and one upper bound on the next field after the ordered equality prefix.
+Native query execution validates catalog existence and field order even for a
+zero limit. Indexed limits saturate at the native `u32::MAX` scan ceiling.
+Unindexed queries retain their JSON equality and creation-time ordering.
 
 ## Rust indexes
 
