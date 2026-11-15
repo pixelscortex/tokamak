@@ -1351,3 +1351,68 @@ fn native_close_diagnostics_distinguish_retirement_from_live_failure() {
         }
     }
 }
+
+#[test]
+fn markdown_renders_native_elements_and_unfinished_fences() {
+    let store = Store::new();
+    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    let markdown = "# Small heading\n\nA **bold** and *italic* paragraph with `code` and [link](https://example.com).\n\n- First\n- Second\n\n3. Third\n4. Fourth\n\n> Quote\n\n---\n\n<script>literal</script>\n\n```python\nprint(1)";
+    app.host.send("markdown:text", markdown).unwrap();
+    app.wait(|doc| support::text(doc, "markdown").contains("print(1)"));
+    for selector in [
+        "h3",
+        "strong",
+        "em",
+        "p code",
+        "ul li",
+        "ol li",
+        "blockquote",
+        "hr",
+        "pre code",
+        ".underline",
+    ] {
+        assert!(
+            app.doc()
+                .inner()
+                .query_selector(selector)
+                .unwrap()
+                .is_some(),
+            "{selector}"
+        );
+    }
+    assert!(
+        app.doc()
+            .inner()
+            .query_selector("script")
+            .unwrap()
+            .is_none()
+    );
+    let code = |doc: &NativeDocument| {
+        let inner = doc.inner();
+        let id = inner.query_selector("pre code").unwrap().unwrap();
+        inner.get_node(id).unwrap().text_content()
+    };
+    assert_eq!(code(app.doc()), "print(1)");
+    let pre = app.doc().inner().query_selector("pre").unwrap().unwrap();
+    for suffix in ["\nprint(2)\n`", "\nprint(2)\n``", "\nprint(2)\n```"] {
+        app.host
+            .send("markdown:text", format!("{markdown}{suffix}"))
+            .unwrap();
+        let expected = if suffix.ends_with("```") {
+            "print(1)\nprint(2)".to_owned()
+        } else {
+            format!("print(1){suffix}")
+        };
+        app.wait(|doc| code(doc) == expected);
+        assert_eq!(app.doc().inner().query_selector("pre").unwrap(), Some(pre));
+        assert!(app.doc_mut().take_error().is_none());
+    }
+    app.host
+        .send(
+            "markdown:text",
+            format!("{markdown}\nprint(2)\n```\n\nAfter"),
+        )
+        .unwrap();
+    app.wait(|doc| support::text(doc, "markdown").contains("After"));
+    assert_eq!(code(app.doc()), "print(1)\nprint(2)");
+}

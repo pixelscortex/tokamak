@@ -1061,6 +1061,32 @@ fn chat_screen_socket_workflow() {
             .unwrap()
             .handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
     }
+    fn call(service: &Service, kind: &str, name: &str, args: Value) -> Value {
+        use futures_util::{SinkExt, StreamExt};
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let mut socket = socket::connect(&service.directory).await.unwrap();
+                socket
+                    .send(tokio_tungstenite::tungstenite::Message::Text(
+                        json!({"type": kind, "id": 1, "name": name, "args": args})
+                            .to_string()
+                            .into(),
+                    ))
+                    .await
+                    .unwrap();
+                loop {
+                    let message = socket.next().await.unwrap().unwrap();
+                    let event: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                    if event["type"] == "response" && event["id"] == 1 {
+                        assert!(event["result"].get("Err").is_none(), "{event}");
+                        return event["result"]["Ok"].clone();
+                    }
+                }
+            })
+    }
     fn selected(window: &Window) -> String {
         support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap()
     }
@@ -1156,6 +1182,97 @@ fn chat_screen_socket_workflow() {
     key(&mut window, Key::Named(NamedKey::Tab), false);
     assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
     key(&mut window, Key::Named(NamedKey::Escape), false);
+    if live {
+        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+        type_text(
+            &mut window,
+            "Give me a short markdown list and a 3-line Python code block",
+        );
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+            doc.inner()
+                .query_selector("[data-role=assistant][data-status=complete] pre code")
+                .unwrap()
+                .is_some()
+        });
+        assert!(
+            window
+                .doc()
+                .inner()
+                .query_selector("[data-role=assistant] li")
+                .unwrap()
+                .is_some()
+        );
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("markdown.png"),
+            );
+        }
+
+        let thread = selected(&window);
+        call(
+            &service,
+            "mutation",
+            "chat/send:start",
+            json!({"threadId": thread, "text": "Simulated interrupted reply"}),
+        );
+        drop(window);
+        // No action owns this persisted run. Reopen after the stale threshold,
+        // as when the native app exits while a reply is abandoned.
+        std::thread::sleep(Duration::from_secs(61));
+        window = Window::open(&service.directory);
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .inner_mut()
+            .set_viewport(Viewport {
+                window_size: (680, 820),
+                ..Default::default()
+            });
+        window.wait(|doc| {
+            doc.inner().get_element_by_id("chat-messages").is_some()
+                && support::text(doc, "chat-messages").contains("Interrupted")
+        });
+        assert!(
+            call(&service, "query", "chat/runs:running", json!({}))
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+        type_text(&mut window, "Reply with one word: Recovered");
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |_| {
+            let messages = call(
+                &service,
+                "query",
+                "chat/messages:list",
+                json!({"threadId": thread}),
+            );
+            messages.as_array().unwrap().last().is_some_and(|message| {
+                message["role"] == "assistant" && message["status"] == "complete"
+            })
+        });
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=streaming]")
+                .unwrap()
+                .is_none()
+        });
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("recovery.png"),
+            );
+        }
+        println!("Interrupted run cleared after reopening; same thread completed another reply.");
+        key(&mut window, Key::Character("n".into()), true);
+        window.wait(|doc| {
+            support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != thread)
+        });
+    }
     let first = selected(&window);
     support::pointer(window.doc.as_mut().unwrap(), "chat-input");
     let prompt = if live {
@@ -1271,14 +1388,16 @@ fn chat_screen_socket_workflow() {
                 &Path::new(&directory).join("ux-autoscroll.png"),
             );
         }
-        let reply = {
-            let inner = window.doc().inner();
-            let id = inner
-                .query_selector("[data-role=assistant] p")
-                .unwrap()
-                .unwrap();
-            inner.get_node(id).unwrap().text_content()
-        };
+        let messages = call(
+            &service,
+            "query",
+            "chat/messages:list",
+            json!({"threadId": first}),
+        );
+        let reply = messages.as_array().unwrap().last().unwrap()["parts"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
         modified_key(
             &mut window,
             Key::Character("c".into()),

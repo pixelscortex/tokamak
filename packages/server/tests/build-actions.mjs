@@ -38,6 +38,14 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
         : { exports: "./api.ts", permissions: ["net:localhost", "net:loopback.tkm.test", "net:private.tkm.test", "net:metadata.tkm.test", "net:mapped.tkm.test", "net:held.tkm.test"] }),
     })} })] };
 `);
+    if (id === "chat") await writeFile(join(path, "backend/testing.ts"), `
+import { v } from "@tokamak/sdk";
+import { mutation } from "./_functions";
+export const age = mutation({
+  args: { runId: v.id("runs") },
+  handler: ({ db }, { runId }) => db.patch(runId, { startedAt: Date.now() - 61_000 }),
+});
+`);
     const child = Bun.spawn([process.execPath, join(workspace, "packages/build/src/build.ts"), path], {
       cwd: workspace, stdout: "inherit", stderr: "inherit",
     });

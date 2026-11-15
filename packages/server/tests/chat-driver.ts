@@ -5,8 +5,8 @@ import { api } from "./chat/backend/_generated/api";
 import { completionChunk, completionEnd } from "./completions";
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
-async function until(check: () => boolean | Promise<boolean>) {
-  for (let i = 0; i < 200; i++) {
+async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
+  for (let i = 0; i < attempts; i++) {
     if (await check()) return;
     await wait(20);
   }
@@ -28,6 +28,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     } finally { stop(); }
     return;
   }
+  let holdHeaders = false;
+  let releaseHeaders = false;
   let disconnected = false;
   let requested = false;
   let history: unknown;
@@ -39,6 +41,12 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     let body = "";
     for await (const chunk of req) body += chunk;
     history = JSON.parse(body).messages;
+    if (scenario === "chat-recovery") {
+      if (holdHeaders) await until(() => releaseHeaders, 750);
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(completionChunk("Recovered") + completionEnd());
+      return;
+    }
     if (scenario === "chat-error") {
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: { message: "Model is temporarily unavailable", type: "server_error" } }));
@@ -65,6 +73,45 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
   try {
     const threadId = await client.mutation(api.threads.create, {});
     const input = { threadId, text: "Say hello" };
+    if (scenario === "chat-recovery") {
+      const stale = await client.mutation(api.send.start, input);
+      await client.mutation(api.testing.age, { runId: stale.runId });
+      await client.mutation(api.runs.recover, {});
+      const interrupted = (await client.query(api.messages.list, { threadId }))[1]!;
+      assert.equal(interrupted.status, "error");
+      assert.equal(interrupted.error, "Interrupted");
+      assert.deepEqual(await client.query(api.runs.running, {}), []);
+
+      const healthy = await client.mutation(api.send.start, input);
+      await client.mutation(api.testing.age, { runId: healthy.runId });
+      await client.mutation(api.send.update, { runId: healthy.runId, delta: "" });
+      await client.mutation(api.runs.recover, {});
+      assert.equal((await client.query(api.runs.active, { threadId }))?._id, healthy.runId);
+      await client.mutation(api.runs.cancel, { runId: healthy.runId });
+      await client.mutation(api.runs.recover, {});
+      assert.equal((await client.query(api.messages.list, { threadId }))[3]!.status, "cancelled");
+
+      const abandoned = await client.mutation(api.send.start, input);
+      await client.mutation(api.testing.age, { runId: abandoned.runId });
+      assert.equal((await client.action(api.chat.send, { threadId, text: "Try again" })).status, "done");
+      const messages = await client.query(api.messages.list, { threadId });
+      assert.equal(messages[5]!.error, "Interrupted");
+      assert.equal(messages[7]!.parts[0]!.text, "Recovered");
+      assert.equal(await client.query(api.runs.active, { threadId }), null);
+      // Exercise the real action heartbeat while the provider withholds headers.
+      holdHeaders = true;
+      const silent = client.action(api.chat.send, { threadId, text: "Quiet provider" });
+      await until(async () => !!await client.query(api.runs.active, { threadId }));
+      const quiet = (await client.query(api.runs.active, { threadId }))!;
+      await client.mutation(api.testing.age, { runId: quiet._id });
+      await until(async () => typeof (await client.query(api.runs.active, { threadId }))?.updatedAt === "number", 750);
+      await client.mutation(api.runs.recover, {});
+      assert.equal((await client.query(api.runs.active, { threadId }))?._id, quiet._id);
+      releaseHeaders = true;
+      assert.equal((await silent).status, "done");
+      console.error("Stale run recovered: Interrupted; same thread accepted a new reply.");
+      return;
+    }
     if (scenario === "chat-crud") {
       const second = await client.mutation(api.threads.create, { title: "Second" });
       await client.mutation(api.threads.rename, { threadId, title: "Renamed" });

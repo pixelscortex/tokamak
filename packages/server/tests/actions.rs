@@ -550,6 +550,10 @@ fn chat_stream_persists_deltas_and_live_query_observes_growth() {
     acceptance("chat-stream");
 }
 #[test]
+fn chat_stale_runs_recover_without_cancelling_healthy_runs() {
+    acceptance("chat-recovery");
+}
+#[test]
 fn chat_cancel_stops_a_silent_upstream() {
     acceptance("chat-cancel");
 }

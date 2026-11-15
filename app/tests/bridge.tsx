@@ -5,9 +5,12 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { ArgsOf, Event, Request } from "@tokamak/sdk";
+import { Markdown } from "../src/chat/markdown";
 import { api } from "../dist/tests/todo/backend/_legacyApi";
 
 function Trace() {
+  const [markdown, setMarkdown] = createSignal("");
+  onHostEvent<string>("markdown:text", setMarkdown);
   const [trace, setTrace] = createSignal<string[]>([]);
   const [firstTitles, setFirstTitles] = createSignal<string[]>([]);
   const [secondTitles, setSecondTitles] = createSignal<string[]>([]);
@@ -52,6 +55,7 @@ function Trace() {
   });
   return (
     <div>
+      <div id="markdown"><Markdown text={markdown()} /></div>
       <p id="trace">{JSON.stringify(trace())}</p>
       <p id="first-titles">{JSON.stringify(firstTitles())}</p>
       <p id="second-titles">{JSON.stringify(secondTitles())}</p>

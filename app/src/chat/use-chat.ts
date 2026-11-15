@@ -1,3 +1,4 @@
+import { afterDelay } from "@tokamak/render";
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
@@ -51,6 +52,26 @@ export function useChat(client: TokamakClient) {
 
   onCleanup(() => {
     alive = false;
+  });
+
+  createEffect(() => {
+    const list = running.data();
+    if (!list?.length) return;
+    let stopped = false;
+    let cancelDelay: (() => void) | undefined;
+
+    async function recover() {
+      try {
+        await client.mutation(api.runs.recover, {});
+      } catch (cause) {
+        if (!stopped) setError(String(cause));
+      } finally {
+        if (!stopped) cancelDelay = afterDelay(30_000, () => void recover());
+      }
+    }
+
+    void recover();
+    onCleanup(() => { stopped = true; cancelDelay?.(); });
   });
 
   const thread = createMemo(() => threads.data()?.find(item => item._id === threadId()));

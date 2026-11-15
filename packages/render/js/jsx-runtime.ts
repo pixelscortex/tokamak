@@ -126,6 +126,17 @@ export namespace JSX {
     footer: Attributes;
     h1: Attributes;
     h2: Attributes;
+    h3: Attributes;
+    strong: Attributes;
+    em: Attributes;
+    code: Attributes;
+    pre: Attributes;
+    blockquote: Attributes;
+    ul: Attributes;
+    ol: Attributes & { start?: number };
+    li: Attributes;
+    br: Attributes;
+    hr: Attributes;
     label: Attributes;
     button: ButtonAttributes;
     input: InputAttributes;

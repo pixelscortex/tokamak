@@ -4,10 +4,11 @@
   "type": "module",
   "dependencies": {
     "@tokamak/render": "workspace:*",
+    "@tokamak/runtime": "workspace:*",
     "@tokamak/sdk": "workspace:*",
     "@tokamak/ui": "workspace:*",
-    "solid-js": "1.9.18",
-    "@tokamak/runtime": "workspace:*"
+    "marked": "18.2.0",
+    "solid-js": "1.9.18"
   },
   "devDependencies": {
     "@tokamak/build": "workspace:*",

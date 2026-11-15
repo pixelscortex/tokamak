@@ -94,4 +94,7 @@ TOKAMAK_CHAT_LIVE=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots \
 
 This uses the workspace `.env.local` and disposable storage, sends a long reply prompt, verifies streaming follow/pause/resume, clipboard
 contents on macOS, and stopping, and exercises Map search and thread switching.
-`ux-autoscroll.png` captures the completed reply at the bottom. Captures use the production Blitz painter with the bundled fonts.
+`markdown.png` captures a short list and a three-line Python block;
+`recovery.png` captures a recovered thread after an abandoned run has aged 61
+seconds and the native app reopens. `ux-autoscroll.png` captures the completed
+long reply at the bottom. Captures use the production Blitz painter with the bundled fonts.

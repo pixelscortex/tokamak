@@ -1,3 +1,4 @@
+import { interruptStale } from "./recovery";
 import { v } from "@tokamak/sdk";
 import { OWNER, mutation, query } from "./_functions";
 
@@ -25,5 +26,14 @@ export const cancel = mutation({
     await db.patch(run.messageId, { status: "cancelled" });
     await db.patch(run.threadId, { updatedAt: Date.now() });
     return db.patch(runId, { status: "cancelled", cancelledBy: OWNER, finishedAt: Date.now() });
+  },
+});
+
+// Queries stay read-only; clients sweep when observing running runs.
+export const recover = mutation({
+  handler: async ({ db }) => {
+    const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
+    await interruptStale(db, runs);
+    return null;
   },
 });

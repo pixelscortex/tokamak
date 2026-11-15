@@ -1,3 +1,4 @@
+import { interruptStale, STALE_AFTER_MS } from "./recovery";
 import { DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
@@ -10,7 +11,8 @@ export const start = mutation({
     const current = await thread(db, threadId);
     const model = current.model ?? DEFAULT_MODEL;
     const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
-    if (runs.some(run => run.status === "running")) throw new Error("Thread already has an active run");
+    await interruptStale(db, runs);
+    if (runs.some(run => run.status === "running" && Date.now() - (run.updatedAt ?? run.startedAt) < STALE_AFTER_MS)) throw new Error("Thread already has an active run");
 
     const history = await db.query("messages").withIndex("by_threadId_createdAt", q => q.eq("threadId", threadId)).collect();
     // Milliseconds can tie across consecutive sends. Keep user before assistant
@@ -54,6 +56,9 @@ export const update = mutation({
   handler: async ({ db }, { runId, delta, outcome, error }) => {
     const run = await db.get(runId);
     if (!run || run.status !== "running") return "cancelled" as const;
+    await db.patch(runId, { updatedAt: Date.now() });
+    if (!delta && !outcome) return "running" as const;
+
     const message = await db.get(run.messageId);
     if (!message) throw new Error("Response message no longer exists");
     const text = message.parts.map(part => part.text).join("") + delta;

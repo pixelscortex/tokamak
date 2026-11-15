@@ -47,7 +47,7 @@ Documents include `_id: string` and `_creationTime: number`, plus:
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
   `startedBy: string`, optional `cancelledBy: string`, `model`, `startedAt`,
-  optional `finishedAt` (present for terminal runs).
+  optional `updatedAt` (heartbeat), `error`, and `finishedAt` (present for terminal runs).
 
 `Thread.ownerId`, user `Message.authorId`, and `Run.startedBy` are currently
 `"owner"`; assistant `Message.authorId` is `"assistant"`. `runs:cancel` sets
@@ -71,9 +71,17 @@ a thread cascades through messages and runs; its in-flight action also stops.
 The `send:*` transaction steps are implementation details excluded from the
 cross-plugin export surface; use `chat:send` to send messages.
 
-No durable recovery, scheduler, retries, auth, multi-user isolation, tools,
-embedded UI, or ACP client is included. A host shutdown/reload can leave a run
-marked running; there is intentionally no recovery worker.
+No scheduler, retries, auth, multi-user isolation, tools, embedded UI, or ACP
+client is included. There is no plugin initialization hook today. Recovery is
+lazy: `send.start` checks stale runs before admitting a new reply; the native
+client calls `runs:recover` on observing running runs and every 30 seconds while
+they exist (queries themselves remain read-only). Actions heartbeat every 10
+seconds, including while waiting for HTTP headers or silent streams. Runs with
+no update for 60 seconds become `error` with `error: "Interrupted"`; their response
+messages also become `error` with `error: "Interrupted"`. Legacy runs without
+`updatedAt` use `startedAt`. Terminal runs are left alone. Recovery uses ordinary
+transactions and does not resume or retry work; durable runs (TKM-103) remain out
+of scope.
 
 Offline integration tests run in `cargo test -p server`. The ignored
 `chat_real_openrouter_smoke` test is a manual real-provider check with `.env.local`:
@@ -100,3 +108,12 @@ Conversation history uses a bounded native scroller in chronological order.
 Blitz currently clamps scroll offsets to zero or greater; reverse flex makes
 older messages unreachable. The UI bridge exposes no scroll command, so automatic
 bottom anchoring and opening at the newest message require a runtime extension.
+
+Assistant replies render CommonMark tokens as native Solid elements using
+`marked` 18.2.0's lexer, without HTML insertion or browser APIs. At implementation
+time, a standalone minified browser lexer bundle measured 49.9 kB (15.1 kB gzip),
+versus 87.5 kB (24.5 kB gzip) for `mdast-util-from-markdown` 2.1.0. Marked has no
+runtime dependencies; the package's unpacked size includes its CLI, types and maps. User messages
+remain plain text. Fences remain code blocks before their closing delimiter
+arrives; code uses Space Mono, a neutral background and horizontal scrolling.
+Links are underlined text only. HTML is displayed literally, never executed.
