@@ -1,0 +1,24 @@
+plugins/chat/backend/chat.ts
+  s_2297d4366353cf::t_9154467684fca4 5,46
+plugins/chat/backend/model.ts
+  s_2297d4366353cf::t_012a38f9cc654d 25-26
+  s_2297d4366353cf::t_9154467684fca4 21-24,27-29
+plugins/chat/backend/send.ts
+  s_2297d4366353cf::t_9154467684fca4 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b06329c80d9401155a9258cdc10dfbdf34be3e1a",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
