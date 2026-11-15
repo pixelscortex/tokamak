@@ -1,0 +1,19 @@
+app/src/chat/markdown.tsx
+  s_5d333dcb82c6ea::t_ceddb5505d4ddc 14,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1c9ae332dad0842dd42bc9fd4748a2cb77339a8d",
+  "prompts": {},
+  "sessions": {
+    "s_5d333dcb82c6ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e16d-c3c0-7933-bd6c-17594b624be2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
