@@ -2,10 +2,10 @@ use super::*;
 
 pub(super) fn sync(r: &mut Resources, p: &Json) -> Result<Json> {
     match text(p, "op")? {
-        "encode" => Ok(json!(text(&p, "text")?.as_bytes())),
+        "encode" => Ok(json!(text(p, "text")?.as_bytes())),
         "decoder" => {
             r.capacity()?;
-            let encoding = encoding_rs::Encoding::for_label(text(&p, "label")?.as_bytes())
+            let encoding = encoding_rs::Encoding::for_label(text(p, "label")?.as_bytes())
                 .ok_or("unsupported text encoding")?;
             let decoder = if p["ignoreBOM"].as_bool() == Some(true) {
                 encoding.new_decoder_without_bom_handling()
@@ -18,7 +18,7 @@ pub(super) fn sync(r: &mut Resources, p: &Json) -> Result<Json> {
         }
         "decode" => {
             let bytes = bytes(&p["bytes"])?;
-            let decoder = r.decoders.get_mut(&id(&p)?).ok_or("text decoder is closed")?;
+            let decoder = r.decoders.get_mut(&id(p)?).ok_or("text decoder is closed")?;
             let last = p["last"].as_bool() == Some(true);
             let mut output = String::with_capacity(
                 decoder.max_utf8_buffer_length(bytes.len()).ok_or("decoder input too large")?,
@@ -30,7 +30,7 @@ pub(super) fn sync(r: &mut Resources, p: &Json) -> Result<Json> {
             Ok(json!(output))
         }
         "closeDecoder" => {
-            r.decoders.remove(&id(&p)?);
+            r.decoders.remove(&id(p)?);
             Ok(Json::Null)
         }
         _ => unreachable!("dispatched web operation"),

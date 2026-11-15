@@ -5,10 +5,8 @@ impl Catalog {
         Self::read_reusing(root, None)
     }
     pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
-        let directories = if root.join("manifest.json").is_file() {
-            vec![root.to_owned()]
-        } else if root.join("dist/manifest.json").is_file() {
-            vec![root.join("dist")]
+        let directories = if let Some(directory) = artifact_directory(root) {
+            vec![directory]
         } else {
             let mut result = Vec::new();
             for entry in std::fs::read_dir(root).map_err(|e| invalid(e.to_string()))? {
@@ -17,10 +15,8 @@ impl Catalog {
                     continue;
                 }
                 let path = entry.path();
-                if path.join("manifest.json").is_file() {
-                    result.push(path);
-                } else if path.join("dist/manifest.json").is_file() {
-                    result.push(path.join("dist"));
+                if let Some(directory) = artifact_directory(&path) {
+                    result.push(directory);
                 } else if path.join("package.json").is_file() {
                     return Err(invalid(format!("Plugin has not been built: {}", path.display())));
                 }
@@ -32,10 +28,7 @@ impl Catalog {
         for directory in directories {
             // Read identity first to find reusable verified snapshots. The full
             // read still verifies changed files, detecting incomplete builds.
-            let identity: Manifest = serde_json::from_reader(std::io::BufReader::new(
-                File::open(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?,
-            ))
-            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))?;
+            let identity = Manifest::read(&directory)?;
             let old = previous.and_then(|p| p.plugins.get(&identity.plugin.id));
             let artifact = Artifact::read_reusing(&directory, old.map(AsRef::as_ref))?;
             let id = artifact.manifest.plugin.id.clone();
@@ -93,5 +86,15 @@ impl Catalog {
             // `net:*` wildcard; the set is TKM-44's precomputed manifest view.
             artifact.permissions.contains(&format!("net:{host}"))
         })
+    }
+}
+
+fn artifact_directory(root: &Path) -> Option<PathBuf> {
+    if root.join("manifest.json").is_file() {
+        Some(root.to_owned())
+    } else if root.join("dist/manifest.json").is_file() {
+        Some(root.join("dist"))
+    } else {
+        None
     }
 }

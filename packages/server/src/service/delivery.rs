@@ -1,6 +1,16 @@
 use super::*;
 
 impl Coordinator {
+    pub(super) fn respond(&mut self, session: u64, id: u64, result: Result<Json, String>) {
+        self.emit(
+            session,
+            Event::Response {
+                id,
+                result,
+            },
+        );
+    }
+
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
         // Count serialized bytes without allocating an unbounded transport buffer.
         // Native routing envelopes are accounted for separately by the mailbox.

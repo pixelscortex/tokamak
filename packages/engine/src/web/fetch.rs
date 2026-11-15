@@ -4,7 +4,7 @@ impl WebHost {
     pub(super) fn fetch_sync(&self, r: &mut Resources, p: &Json) -> Result<Json> {
         match text(p, "op")? {
             "open" => {
-                let mut url = Url::parse(text(&p, "url")?).map_err(|e| e.to_string())?;
+                let mut url = Url::parse(text(p, "url")?).map_err(|e| e.to_string())?;
                 self.permit(&mut url)?;
                 r.capacity()?;
                 let id = r.id();
@@ -27,7 +27,7 @@ impl WebHost {
                 Ok(json!(id))
             }
             "cancel" => {
-                if let Some(x) = r.requests.remove(&id(&p)?) {
+                if let Some(x) = r.requests.remove(&id(p)?) {
                     x.cancel.cancel();
                     if let Ok(mut response) = x.response.try_lock() {
                         response.take();
@@ -36,7 +36,7 @@ impl WebHost {
                 Ok(Json::Null)
             }
             "finish" => {
-                if let Some(x) = r.requests.get_mut(&id(&p)?) {
+                if let Some(x) = r.requests.get_mut(&id(p)?) {
                     x.upload.take();
                 }
                 Ok(Json::Null)
@@ -92,9 +92,9 @@ impl WebHost {
         request_id: u64,
         response: Arc<AsyncMutex<Option<reqwest::Response>>>,
     ) -> Result<Json> {
-        let mut url = Url::parse(text(&p, "url")?).map_err(|e| e.to_string())?;
+        let mut url = Url::parse(text(p, "url")?).map_err(|e| e.to_string())?;
         self.permit(&mut url)?;
-        let method = reqwest::Method::from_bytes(text(&p, "method")?.as_bytes())
+        let method = reqwest::Method::from_bytes(text(p, "method")?.as_bytes())
             .map_err(|e| e.to_string())?;
         let mut request = self.client.request(method, url);
         for pair in p["headers"].as_array().ok_or("invalid headers")? {

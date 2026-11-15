@@ -101,4 +101,34 @@ impl Coordinator {
             }
         }
     }
+    pub(super) async fn subscribe(&mut self, session: u64, id: u64, name: String, args: Json) {
+        let client = self.sessions.get_mut(&session).expect("checked session");
+        let error = if self.kinds.get(&name) != Some(&FunctionKind::Query) {
+            Some("subscriptions require a registered query")
+        } else if client.subscriptions.contains_key(&id) {
+            Some("subscription ID already in use")
+        } else if client.subscriptions.len() >= SUBSCRIPTIONS {
+            Some("subscription capacity exceeded")
+        } else {
+            None
+        };
+        if let Some(error) = error {
+            // Invalid registration never replaces an existing subscription.
+            self.respond(session, id, Err(error.into()));
+            return;
+        }
+        client.subscriptions.insert(
+            id,
+            Subscription {
+                name,
+                args,
+                reads: ReadSet::new(),
+                last: None,
+                dirty: true,
+                uncertain: true,
+            },
+        );
+        self.drain_changes();
+        self.refresh().await;
+    }
 }

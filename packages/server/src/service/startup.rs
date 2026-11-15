@@ -36,12 +36,7 @@ impl Server {
         let (descriptor, kinds) = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
-                return match Box::pin(database.close()).await {
-                    Ok(()) => Err(error),
-                    Err(close) => {
-                        Err(Error::Invalid(format!("{error}; startup cleanup failed: {close}")))
-                    }
-                };
+                return Err(startup_error(&mut database, error).await);
             }
         };
         Self::start(database, pool, Some(bundle), space, descriptor, kinds, None, None).await
@@ -64,12 +59,7 @@ impl Server {
         let loaded = match loaded {
             Ok(loaded) => loaded,
             Err(error) => {
-                return match Box::pin(database.close()).await {
-                    Ok(()) => Err(error),
-                    Err(close) => {
-                        Err(Error::Invalid(format!("{error}; startup cleanup failed: {close}")))
-                    }
-                };
+                return Err(startup_error(&mut database, error).await);
             }
         };
         let kinds =
@@ -103,10 +93,7 @@ impl Server {
         }) {
             Ok(pool) => Arc::new(pool),
             Err(error) => {
-                Box::pin(database.close())
-                    .await
-                    .map_err(|e| Error::Invalid(format!("{error}; startup cleanup failed: {e}")))?;
-                return Err(Error::Invalid(error.to_string()));
+                return Err(startup_error(&mut database, Error::Invalid(error.to_string())).await);
             }
         };
         let changes = database.subscribe(); // Before any initial subscription run.
@@ -183,4 +170,11 @@ pub(crate) async fn inspect(
     }
     crate::schema::Schema::parse(&descriptor["schema"])?;
     Ok((descriptor, kinds))
+}
+
+async fn startup_error(database: &mut Database, error: Error) -> Error {
+    match Box::pin(database.close()).await {
+        Ok(()) => error,
+        Err(close) => Error::Invalid(format!("{error}; startup cleanup failed: {close}")),
+    }
 }

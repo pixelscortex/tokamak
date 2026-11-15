@@ -124,4 +124,28 @@ impl Coordinator {
         self.refresh().await;
         self.metadata()
     }
+    pub(super) fn asset_page(
+        &mut self,
+        session: u64,
+        id: u64,
+        plugin: String,
+        name: String,
+        revision: String,
+        offset: u64,
+    ) {
+        let result = (|| {
+            let loaded = self.plugins.as_ref().ok_or("No plugin installation")?;
+            if loaded.catalog.revision != revision {
+                return Err("Plugin generation changed".to_owned());
+            }
+            let bytes = loaded
+                .catalog
+                .plugins
+                .get(&plugin)
+                .and_then(|p| p.ui_asset(&name))
+                .ok_or("Unknown plugin UI asset")?;
+            bytes.page(offset).map_err(|e| e.to_string())
+        })();
+        self.respond(session, id, result);
+    }
 }

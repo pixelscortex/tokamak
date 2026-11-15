@@ -9,7 +9,7 @@ pub(super) fn sync(r: &mut Resources, p: &Json) -> Result<Json> {
             Ok(json!(id))
         }
         "clearTimer" => {
-            if let Some(cancel) = r.timers.remove(&id(&p)?) {
+            if let Some(cancel) = r.timers.remove(&id(p)?) {
                 cancel.cancel();
             }
             Ok(Json::Null)
@@ -31,6 +31,6 @@ impl WebHost {
         let ms = p["ms"].as_u64().ok_or("invalid timer delay")?.min(2_147_483_647);
         let fired = tokio::select! { _ = tokio::time::sleep(Duration::from_millis(ms)) => true, _ = cancel.cancelled() => false };
         self.resources.lock().map_err(|_| "web resource lock poisoned")?.timers.remove(&request_id);
-        return Ok(json!(fired));
+        Ok(json!(fired))
     }
 }

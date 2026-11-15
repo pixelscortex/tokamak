@@ -109,27 +109,8 @@ impl Transaction {
             core,
         };
         for index in indexes.iter() {
-            let values = |document: &Document| -> Result<Vec<StoredValue>> {
-                index
-                    .cols
-                    .iter()
-                    .map(|column| {
-                        let [
-                            surrealdb_idx::expr::Part::Field(field),
-                            surrealdb_idx::expr::Part::Flatten,
-                        ] = column.0.as_slice()
-                        else {
-                            return Err(Error::Invalid("index is not a TokamakDB value index"));
-                        };
-                        Ok(StoredValue::from(crate::data::query::field_value(
-                            document,
-                            field.as_str(),
-                        )))
-                    })
-                    .collect()
-            };
-            let old = before.map(values).transpose()?;
-            let new = after.map(values).transpose()?;
+            let old = before.map(|document| index_values(index, document)).transpose()?;
+            let new = after.map(|document| index_values(index, document)).transpose()?;
             let mut compaction = false;
             surrealdb_idx::index::IndexOperation::new(
                 &env,
@@ -146,4 +127,19 @@ impl Transaction {
         }
         Ok(())
     }
+}
+
+fn index_values(index: &IndexDefinition, document: &Document) -> Result<Vec<StoredValue>> {
+    index
+        .cols
+        .iter()
+        .map(|column| {
+            let [surrealdb_idx::expr::Part::Field(field), surrealdb_idx::expr::Part::Flatten] =
+                column.0.as_slice()
+            else {
+                return Err(Error::Invalid("index is not a TokamakDB value index"));
+            };
+            Ok(StoredValue::from(crate::data::query::field_value(document, field.as_str())))
+        })
+        .collect()
 }

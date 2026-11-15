@@ -67,3 +67,81 @@ pub struct Manifest {
     pub public_functions: BTreeSet<String>,
     pub hashes: BTreeMap<String, String>,
 }
+
+impl Definition {
+    pub(super) fn dependencies(&self) -> impl DoubleEndedIterator<Item = (&String, &String)> {
+        self.depends.iter().chain(&self.optional)
+    }
+}
+
+impl Manifest {
+    pub(super) fn read(directory: &Path) -> Result<Self, Error> {
+        serde_json::from_reader(std::io::BufReader::new(
+            File::open(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?,
+        ))
+        .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+    }
+}
+
+impl Manifest {
+    pub(super) fn validate(&self) -> Result<BTreeSet<&String>, Error> {
+        if self.format_version != 1 {
+            return Err(invalid("Unsupported plugin artifact version"));
+        }
+        DataSpace::plugin(&self.plugin.id).map_err(|e| invalid(e.to_string()))?;
+        if self.plugin.id == "tokamak.host" {
+            return Err(invalid("tokamak.host is reserved for kernel metadata"));
+        }
+        Version::parse(&self.plugin.version)
+            .map_err(|e| invalid(format!("Invalid plugin version: {e}")))?;
+        let requirement = self
+            .plugin
+            .api
+            .strip_prefix("tokamak@")
+            .ok_or_else(|| invalid("Host API requirement must start with tokamak@"))?;
+        let requirement = VersionReq::parse(requirement)
+            .map_err(|e| invalid(format!("Invalid host API range: {e}")))?;
+        if !requirement
+            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).expect("package version"))
+        {
+            return Err(invalid(format!("Incompatible host API for {}", self.plugin.id)));
+        }
+        if !["hub", "runner", "hybrid"].contains(&self.plugin.placement.as_str()) {
+            return Err(invalid("Invalid plugin placement"));
+        }
+        for map in [&self.plugin.depends, &self.plugin.optional, &self.plugin.breaks] {
+            for (id, range) in map {
+                DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+                VersionReq::parse(range)
+                    .map_err(|e| invalid(format!("Invalid dependency range: {e}")))?;
+            }
+        }
+        for list in [&self.plugin.provides, &self.plugin.consumes, &self.plugin.permissions] {
+            let unique = list.iter().collect::<BTreeSet<_>>();
+            if unique.len() != list.len() || list.iter().any(|value| value.is_empty()) {
+                return Err(invalid("Invalid plugin capability/interface list"));
+            }
+        }
+        let mut names = BTreeSet::new();
+        let backend_paths = self
+            .entries
+            .backend
+            .as_ref()
+            .into_iter()
+            .flat_map(|entry| [&entry.code, &entry.map, &entry.api]);
+        let ui_paths = self
+            .entries
+            .ui
+            .as_ref()
+            .into_iter()
+            .flat_map(|entry| [&entry.code, &entry.map, &entry.css, &entry.shell]);
+        for name in backend_paths.chain(ui_paths) {
+            if !names.insert(name) {
+                return Err(invalid(
+                    "Artifact entry paths must be distinct; UI cannot alias backend files",
+                ));
+            }
+        }
+        Ok(names)
+    }
+}

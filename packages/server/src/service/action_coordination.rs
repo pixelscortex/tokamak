@@ -3,13 +3,7 @@ use super::*;
 impl Coordinator {
     pub(super) fn start_action(&mut self, session: u64, id: u64, name: String, args: Json) {
         if self.action_jobs.len() >= ACTIONS {
-            self.emit(
-                session,
-                Event::Response {
-                    id,
-                    result: Err("action capacity exceeded".into()),
-                },
-            );
+            self.respond(session, id, Err("action capacity exceeded".into()));
             return;
         }
         let (bundle, local_name, owner) = if let Some(loaded) = &self.plugins {
@@ -33,13 +27,7 @@ impl Coordinator {
                 self.action_jobs
                     .spawn(async move { (session, id, pending.await.map_err(|e| e.to_string())) });
             }
-            Err(error) => self.emit(
-                session,
-                Event::Response {
-                    id,
-                    result: Err(error.to_string()),
-                },
-            ),
+            Err(error) => self.respond(session, id, Err(error.to_string())),
         }
     }
 
@@ -47,75 +35,45 @@ impl Coordinator {
         self.action_pool.cancel_actions();
         while let Some(completion) = self.action_jobs.join_next().await {
             if let Ok((session, id, result)) = completion {
-                self.emit(
-                    session,
-                    Event::Response {
-                        id,
-                        result,
-                    },
-                );
+                self.respond(session, id, result);
             }
         }
     }
 
     pub(super) async fn run_function(&mut self, call: crate::actions::NestedCall) {
-        let valid = (|| {
-            match (&self.plugins, &call.generation, &call.owner) {
-                (Some(current), Some(generation), Some(owner))
-                    if Arc::ptr_eq(current, generation) =>
-                {
-                    let target = current.target(
-                        owner,
-                        &call.name,
-                        call.kind == FunctionKind::Mutation,
-                        &[],
-                    )?;
-                    if target.kind != call.kind {
-                        return Err("nested function kind does not match request".to_owned());
-                    }
-                }
-                (None, None, None) => {
-                    if self.kinds.get(&call.name) != Some(&call.kind) {
-                        return Err("nested function kind does not match request".to_owned());
-                    }
-                }
-                _ => return Err("action belongs to a retired plugin generation".to_owned()),
-            }
-            Ok(())
-        })();
-        let result = match valid {
+        let result = match self.validate_nested(&call) {
             Err(error) => Err(error),
             Ok(()) => {
-                let mutation = call.kind == FunctionKind::Mutation;
-                let mut result = Err("mutation conflict retry limit exceeded".into());
-                let determinism = engine::Determinism::default();
-                for attempt in 0..ATTEMPTS {
-                    let nested = host::invoke(
-                        &self.database,
-                        &self.pool,
-                        self.bundle.clone(),
+                let result = self
+                    .invoke_function(
                         &call.name,
                         call.args.clone(),
-                        mutation,
-                        &self.space,
-                        self.plugins.clone(),
-                        determinism,
+                        call.kind == FunctionKind::Mutation,
                     )
                     .await;
-                    if mutation && nested.conflict {
-                        if attempt + 1 == ATTEMPTS {
-                            break;
-                        }
-                        continue;
-                    }
-                    result = nested.result;
-                    break;
-                }
                 self.drain_changes();
                 self.refresh().await;
                 result
             }
         };
         let _ = call.reply.send(result);
+    }
+    fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
+        match (&self.plugins, &call.generation, &call.owner) {
+            (Some(current), Some(generation), Some(owner)) if Arc::ptr_eq(current, generation) => {
+                let target =
+                    current.target(owner, &call.name, call.kind == FunctionKind::Mutation, &[])?;
+                if target.kind != call.kind {
+                    return Err("nested function kind does not match request".to_owned());
+                }
+            }
+            (None, None, None) => {
+                if self.kinds.get(&call.name) != Some(&call.kind) {
+                    return Err("nested function kind does not match request".to_owned());
+                }
+            }
+            _ => return Err("action belongs to a retired plugin generation".to_owned()),
+        }
+        Ok(())
     }
 }

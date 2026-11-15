@@ -61,29 +61,7 @@ impl reqwest::dns::Resolve for PublicResolver {
                     (IpAddr::V6(Ipv6Addr::LOCALHOST), 0).into(),
                 ]
             } else {
-                let addresses = tokio::time::timeout(DNS_TIMEOUT, async move {
-                    let permit = DNS_LOOKUPS.acquire().await.map_err(std::io::Error::other)?;
-                    let task = tokio_util::task::AbortOnDropHandle::new(
-                        tokio::task::spawn_blocking(move || {
-                            // Only owned host/address data crosses this boundary;
-                            // no invocation, resource table or JS state is retained.
-                            let _permit = permit;
-                            (host.as_str(), 0)
-                                .to_socket_addrs()
-                                .map(|addresses| addresses.collect::<Vec<_>>())
-                        }),
-                    );
-                    // Abort queued work on timeout/cancellation. Running OS
-                    // lookups cannot be interrupted and retain their permits.
-                    task.await.map_err(std::io::Error::other)?
-                })
-                .await
-                .map_err(|_| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::TimedOut,
-                        "DNS resolution timed out after 10 seconds",
-                    )
-                })??;
+                let addresses = resolve_os(host).await?;
                 addresses.into_iter().filter(|address| public_address(address.ip())).collect()
             };
             if addresses.is_empty() {
@@ -126,4 +104,27 @@ fn public_address(ip: IpAddr) -> bool {
                 && !(s[0] == 0x3fff && s[1] < 0x1000)
         }
     }
+}
+
+async fn resolve_os(host: String) -> std::io::Result<Vec<std::net::SocketAddr>> {
+    tokio::time::timeout(DNS_TIMEOUT, async move {
+        let permit = DNS_LOOKUPS.acquire().await.map_err(std::io::Error::other)?;
+        let task =
+            tokio_util::task::AbortOnDropHandle::new(tokio::task::spawn_blocking(move || {
+                // Only owned host/address data crosses this boundary;
+                // no invocation, resource table or JS state is retained.
+                let _permit = permit;
+                (host.as_str(), 0).to_socket_addrs().map(|addresses| addresses.collect::<Vec<_>>())
+            }));
+        // Abort queued work on timeout/cancellation. Running OS
+        // lookups cannot be interrupted and retain their permits.
+        task.await.map_err(std::io::Error::other)?
+    })
+    .await
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "DNS resolution timed out after 10 seconds",
+        )
+    })?
 }

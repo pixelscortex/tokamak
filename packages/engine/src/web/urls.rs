@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn parse(p: &Json) -> Result<Json> {
-    let raw = text(&p, "url")?;
+    let raw = text(p, "url")?;
     let mut url = if let Some(base) = p["base"].as_str() {
         Url::parse(base).and_then(|u| u.join(raw))
     } else {
@@ -9,7 +9,7 @@ pub(super) fn parse(p: &Json) -> Result<Json> {
     }
     .map_err(|e| e.to_string())?;
     if let Some(key) = p["set"].as_str() {
-        let value = text(&p, "value")?;
+        let value = text(p, "value")?;
         match key {
             "protocol" => {
                 url.set_scheme(value.trim_end_matches(':')).map_err(|_| "invalid URL scheme")?
