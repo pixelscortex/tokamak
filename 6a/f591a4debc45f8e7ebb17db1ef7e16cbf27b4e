@@ -1,0 +1,25 @@
+packages/render/SURFACES.md
+  s_32e91805417f99::t_c510c99fbdef15 1,3,6-7,11-15,17,19-24,28,31-32,35-51,53-58,60-63,65-69,71
+packages/render/CSS_OVERLAP.md
+  s_32e91805417f99::t_c510c99fbdef15 6
+packages/render/README.md
+  s_32e91805417f99::t_c510c99fbdef15 7,9,25
+packages/render/BLITZ_FORK.md
+  s_32e91805417f99::t_c510c99fbdef15 3-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6af591a4debc45f8e7ebb17db1ef7e16cbf27b4e",
+  "prompts": {},
+  "sessions": {
+    "s_32e91805417f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de38-a74a-7550-9ba9-7b99f54d1679",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
