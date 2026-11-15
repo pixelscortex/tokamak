@@ -1,0 +1,83 @@
+READABILITY.md
+  s_d3722a4b772de5::t_048fdba2b1b526 13-128
+packages/engine/src/web/decoding.rs
+  s_d3722a4b772de5::t_c126658036fa9c 8,11,17,20,25,27,29,33,35,39,44
+packages/engine/src/web/fetch.rs
+  s_d3722a4b772de5::t_1caed317a266da 10,12,29,35,40,47,56,58,62,65,69,82,94,102,111,114,116,123,133,140,142,150,153,156,167,170,180,183,185,195,202,205,216,225,227
+packages/engine/src/web/mod.rs
+  s_d3722a4b772de5::t_e36b9a5a884144 35,41,57,60,65,81,90,104,118,120,127,133,142,145,168,172,191
+packages/engine/src/web/network.rs
+  s_d3722a4b772de5::t_5e01e1c4d67982 16,18,25,36,45,72,104,119
+packages/engine/src/web/timers.rs
+  s_d3722a4b772de5::t_78646cfcab6271 7,10,17,34,36,39
+packages/engine/src/web/urls.rs
+  s_d3722a4b772de5::t_cdcb771a286070 5,12,15,50
+packages/server/src/data/mod.rs
+  s_d3722a4b772de5::t_b6e7dbee697604 86,88,90,135,137,143,172
+packages/server/src/data/transaction.rs
+  s_d3722a4b772de5::t_07ae5c2d6f13cf 1-3,121,127,141,143,147,155,160,162,164,171,191,195,210-211,219,222,230-231,233,237,247
+packages/server/src/data/transaction/indexes.rs
+  s_d3722a4b772de5::t_ec804ec62711d7 18,20,24,28,30,33,38,40,45,58,60,75,77,83,88,103,116,118,120,122,126,128,133,136,138,153,168
+packages/server/src/data/transaction/records.rs
+  s_d3722a4b772de5::t_e6e6caeb5f84e2 23,25,27,30,34,45,47,54,56,58,61,65,84,86,90,94,99,102,108,110,113,131,148,150,154,156,162,166,170,175,181,183,197,207,209,212,217,219,225
+packages/server/src/host.rs
+  s_d3722a4b772de5::t_59932100bd5824 70,76,87,89,91,93,103,108,110,112,115,121,127,136,160,172,175,177,186,198,200,202,204,207,217,219,230
+packages/server/src/host/database_operations.rs
+  s_d3722a4b772de5::t_0ce8ab62e4a2d2 13,15,17,21,23,25,32,34,36,40,45,59,64,67,110,112,117,122,129
+packages/server/src/host/database_queries.rs
+  s_d3722a4b772de5::t_e6e4cd98665e69 11,18,26,43,45,51,53,58,61,66,73,75,92,94,99,103,105,114,118,130,162,164,168,177,179
+packages/server/src/plugins/artifact.rs
+  s_d3722a4b772de5::t_f2695fc38f9c16 7,13,15,17,19,31,48,53,55,57,59,69
+packages/server/src/plugins/assets.rs
+  s_d3722a4b772de5::t_0e22ef04bb2839 10,21,25,38,44,46,48,52,55,58,67,72,74,77,83,89,92,98,107,113,115,119,123,127,130,132,145,151,153,157,160,164,169,175,181,187
+packages/server/src/plugins/catalog.rs
+  s_d3722a4b772de5::t_5931e1a0ef38b3 7,13,16,20,22,32,34,39,41,43,45,50,52,54,60,62,68,77,81,84,88,91,96,100,107
+packages/server/src/plugins/dependencies.rs
+  s_d3722a4b772de5::t_9c018a15ed4f6e 6,16,23,35,37,39,42,50,54,59,61,69,75
+packages/server/src/plugins/grants.rs
+  s_d3722a4b772de5::t_f8b2929dc6af02 20,27,36,65,97,100
+packages/server/src/plugins/loading.rs
+  s_d3722a4b772de5::t_742b0a370dbd1c 7,14,16,18,21,25,35,41,49,64,76,78,82,84,103,107,109,116,120,124,128
+packages/server/src/plugins/manifest.rs
+  s_d3722a4b772de5::t_3f139b0a7251c7 6,45,54,63,96,102,108,111,117,121,129,132,137,139,146,153,161
+packages/server/src/plugins/mod.rs
+  s_d3722a4b772de5::t_1bf71c876e07ba 41,51
+packages/server/src/service/action_coordination.rs
+  s_d3722a4b772de5::t_ea637d4c2fa77d 9,16,27,33,40,64,67,73,85
+packages/server/src/service/command_loop.rs
+  s_d3722a4b772de5::t_104590d3cccf16 25-27,32-35,37,42,58-59,62,64,66,68,70-78,89
+packages/server/src/service/delivery.rs
+  s_d3722a4b772de5::t_c0324f59406b53 21,25,28,33,72,76
+packages/server/src/service/invocations.rs
+  s_d3722a4b772de5::t_0c57a28f4db142 11
+packages/server/src/service/mod.rs
+  s_d3722a4b772de5::t_34e5258c3bbc30 59-60,175
+packages/server/src/service/plugin_control.rs
+  s_d3722a4b772de5::t_dc47ae71f718fc 8,12,18,25,27,34,38,58,63,75,78,84,106,108,118,126,143,155,159
+packages/server/src/service/requests.rs
+  s_d3722a4b772de5::t_304c8ca9882814 11,60
+packages/server/src/service/server.rs
+  s_d3722a4b772de5::t_5864ac50225ad5 39,41,62,71,82
+packages/server/src/service/session.rs
+  s_d3722a4b772de5::t_7122a8d521556b 47,51,65,156,164
+packages/server/src/service/startup.rs
+  s_d3722a4b772de5::t_14d857555d4c39 21,23,26,33,37,41,61,66,73,108,111,113,115,117,139,159,161,171,182,187,192
+packages/server/src/service/subscriptions.rs
+  s_d3722a4b772de5::t_235ede195bc635 32,35,43,49,72,77,79,83,100,113,116,126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4994b9937807fcb46083de9c0b3fe7e5f20386a5",
+  "prompts": {},
+  "sessions": {
+    "s_d3722a4b772de5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e116-e282-78d3-a14b-24506a8c5e26",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
