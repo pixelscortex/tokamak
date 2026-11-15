@@ -1,0 +1,19 @@
+app/tests/plugins.rs
+  s_4f307e17b09e61::t_ffa2c29296a4e3 1370-1376,1383-1396
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d535a93c6f0abb9f4e2456227a9650558683359f",
+  "prompts": {},
+  "sessions": {
+    "s_4f307e17b09e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e152-45b2-75d3-aaeb-86306de2e06a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
