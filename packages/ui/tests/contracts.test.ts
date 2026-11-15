@@ -30,17 +30,16 @@ test("Tailwind theme retains shared color, radius, spacing and font variables an
   const theme = await readFile(new URL("theme.css", dist), "utf8");
   const css = await readFile(new URL("styles.css", dist), "utf8");
   assert.match(theme, /@theme\s+static/);
-  for (const token of ["color-surface", "color-foreground", "color-accent", "color-focus", "color-invalid", "radius-control", "spacing", "font-sans"]) {
-    assert(theme.includes(`--${token}:`), `${token} must be theme-owned`);
-    assert(css.includes(`var(--${token}`), `${token} must reach compiled native styles`);
+  const tokenGroups = [
+    [true, ["color-surface", "color-foreground", "color-accent", "color-focus", "color-invalid", "radius-control", "spacing", "font-sans"]],
+    [false, ["color-line", "color-lift", "color-danger", "color-well", "color-chip", "font-data"]],
+  ] as const;
+  for (const [compiled, tokens] of tokenGroups) {
+    for (const token of tokens) {
+      assert(theme.includes(`--${token}:`), `${token} must be theme-owned`);
+      if (compiled) assert(css.includes(`var(--${token}`), `${token} must reach compiled native styles`);
+    }
   }
   for (const selector of [".tk-button", ".tk-input", "[data-pressed]", "[data-disabled]", "[data-focused]", "[data-invalid]"]) assert(css.includes(selector), selector);
   assert(!/@apply|@import/.test(css), "QuickJS/Blitz must receive compiled CSS, not compiler directives");
-});
-
-test("the components' tokens are theme-owned", async () => {
-  const theme = await readFile(new URL("theme.css", dist), "utf8");
-  for (const token of ["color-line", "color-lift", "color-danger", "color-well", "color-chip", "font-data"]) {
-    assert(theme.includes(`--${token}:`), `${token} must be theme-owned`);
-  }
 });

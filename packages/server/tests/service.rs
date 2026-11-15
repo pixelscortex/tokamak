@@ -13,68 +13,19 @@ use std::{
     future::Future,
     path::PathBuf,
     sync::{
-        Arc, Mutex, OnceLock,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 use tokio::sync::oneshot;
 
-// Keep the host's default Tokio worker and QuickJS thread stacks: no global
-// RUST_MIN_STACK or enlarged test thread conceals a production stack failure.
-fn run(f: impl Future<Output = ()>) {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            tokio::time::timeout(Duration::from_secs(90), f)
-                .await
-                .expect("TKM5 outer timeout");
-        });
-}
+#[path = "support/sdk.rs"]
+mod sdk;
+use sdk::bundle;
 
-fn bundle() -> Arc<Bundle> {
-    static BUILT: OnceLock<Arc<Bundle>> = OnceLock::new();
-    BUILT
-        .get_or_init(|| {
-            let output = std::process::Command::new("proto")
-                .args([
-                    "run",
-                    "bun",
-                    "--",
-                    "packages/server/tests/build-feature.mjs",
-                    "--load",
-                ])
-                .current_dir(
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .parent()
-                        .unwrap()
-                        .parent()
-                        .unwrap(),
-                )
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "real SDK feature build failed:\n{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-            );
-            // The builder transfers the contents, then removes only its own
-            // temporary directory, even if loading/parsing here subsequently fails.
-            let stdout = String::from_utf8(output.stdout).unwrap();
-            let built: Json = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
-            Arc::new(
-                Bundle::new(
-                    built["code"].as_str().unwrap(),
-                    Some(built["map"].as_str().unwrap()),
-                )
-                .unwrap(),
-            )
-        })
-        .clone()
+fn run(f: impl Future<Output = ()>) {
+    sdk::run(f, 90);
 }
 
 struct Disk(PathBuf);

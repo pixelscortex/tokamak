@@ -10,10 +10,9 @@ use server::{
 use std::{
     future::Future,
     io::{BufRead, BufReader, Write},
-    path::PathBuf,
-    process::{Command, Stdio},
+    process::Stdio,
     sync::{
-        Arc, OnceLock,
+        Arc,
         atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
@@ -28,60 +27,14 @@ impl Drop for ChildGuard {
     }
 }
 
-fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .into()
-}
+#[path = "support/sdk.rs"]
+mod sdk;
+use sdk::{bundle, bun_script, root};
+
 fn run(f: impl Future<Output = ()>) {
-    // Production-sized host/QuickJS stacks: do not conceal worker stack failures.
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            tokio::time::timeout(Duration::from_secs(120), f)
-                .await
-                .expect("TKM7 outer timeout");
-        });
+    sdk::run(f, 120);
 }
-fn bundle() -> Arc<Bundle> {
-    static BUILT: OnceLock<Arc<Bundle>> = OnceLock::new();
-    BUILT
-        .get_or_init(|| {
-            let result = Command::new("proto")
-                .args([
-                    "run",
-                    "bun",
-                    "--",
-                    "packages/server/tests/build-feature.mjs",
-                    "--load",
-                ])
-                .current_dir(root())
-                .output()
-                .unwrap();
-            assert!(
-                result.status.success(),
-                "fixture build:\n{}\n{}",
-                String::from_utf8_lossy(&result.stdout),
-                String::from_utf8_lossy(&result.stderr)
-            );
-            let stdout = String::from_utf8(result.stdout).unwrap();
-            let built: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
-            Arc::new(
-                Bundle::new(
-                    built["code"].as_str().unwrap(),
-                    Some(built["map"].as_str().unwrap()),
-                )
-                .unwrap(),
-            )
-        })
-        .clone()
-}
+
 fn config(storage: Storage) -> BackendConfig {
     BackendConfig {
         storage,
@@ -104,15 +57,8 @@ fn actual_sdk_over_native_sessions_without_a_port() {
             Some(backend.connect().await.unwrap()),
         ];
         let mut child = ChildGuard(
-            Command::new("proto")
-                .args([
-                    "run",
-                    "bun",
-                    "--",
-                    "packages/server/tests/sdk-transport-driver.mjs",
-                    "native",
-                ])
-                .current_dir(root())
+            bun_script("sdk-transport-driver.mjs")
+                .args(["native"])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::inherit())
@@ -164,16 +110,9 @@ fn actual_sdk_over_native_sessions_without_a_port() {
 // SIGTERM barrier and persistence are validated together as a user would run it.
 #[test]
 fn headless_binary_two_real_sdk_clients_and_disk_reopen() {
-    let result = Command::new("proto")
-        .args([
-            "run",
-            "bun",
-            "--",
-            "packages/server/tests/sdk-transport-driver.mjs",
-            "headless",
-            env!("CARGO_BIN_EXE_tokamak"),
-        ])
-        .current_dir(root())
+    let result = bun_script("sdk-transport-driver.mjs")
+                .args(["headless",
+            env!("CARGO_BIN_EXE_tokamak")])
         .output()
         .unwrap();
     assert!(
@@ -343,16 +282,9 @@ fn dropped_native_and_closed_websocket_do_not_rerun_subscriptions() {
             let _ = shutdown.await;
         }));
         let output = tokio::task::spawn_blocking(move || {
-            Command::new("proto")
-                .args([
-                    "run",
-                    "bun",
-                    "--",
-                    "packages/server/tests/sdk-transport-driver.mjs",
-                    "disconnect",
-                    &url,
-                ])
-                .current_dir(root())
+            bun_script("sdk-transport-driver.mjs")
+                .args(["disconnect",
+                    &url])
                 .output()
                 .unwrap()
         })
@@ -409,16 +341,9 @@ fn headless_shutdown_bounds_partial_websocket_upgrade_peer() {
 }
 
 fn shutdown_driver(scenario: &str) {
-    let output = Command::new("proto")
-        .args([
-            "run",
-            "bun",
-            "--",
-            "packages/server/tests/shutdown-driver.mjs",
-            scenario,
-            env!("CARGO_BIN_EXE_tokamak"),
-        ])
-        .current_dir(root())
+    let output = bun_script("shutdown-driver.mjs")
+                .args([scenario,
+            env!("CARGO_BIN_EXE_tokamak")])
         .output()
         .unwrap();
     assert!(

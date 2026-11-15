@@ -1,6 +1,6 @@
 // TKM7 transport failure contracts. These narrow fake connections exercise
 // boundary failures impractical to force reliably with a kernel socket; real
-// SDK/backend parity is separately exercised by server/tests/tkm7.rs.
+// SDK/backend parity is separately exercised by server/tests/sdk_transport.rs.
 import { test, expect } from "bun:test";
 import { TokamakClient, InProcessTransport, WebSocketTransport, createApi } from "../src/index.ts";
 const api = createApi();

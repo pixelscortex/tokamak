@@ -32,7 +32,7 @@ There are no added dependencies or enlarged native stacks.
 
 ## TKM7 transport and ownership acceptance
 
-`tkm7.rs` runs the same `TokamakClient` workflow in
+`sdk_transport.rs` runs the same `TokamakClient` workflow in
 `sdk-transport-driver.mjs` through two real native sessions (a test-only stdio
 message bridge, no listener) and two real WebSockets connected to the shipped
 headless binary. It covers query/mutation kind enforcement, error correlation,
