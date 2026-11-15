@@ -2,7 +2,7 @@ import type {} from "@tokamak/sdk/web";
 import { v, type Id } from "@tokamak/sdk";
 import { action } from "./_functions";
 import { api } from "./_generated/api";
-import { DEFAULT_MODEL, modelStream } from "./model";
+import { DEFAULT_MODEL, modelStream, safeErrorMessage } from "./model";
 
 type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "error" | "cancelled" };
 
@@ -43,7 +43,7 @@ export const send = action({
       if (source.error()) throw source.error();
       return await finish("done");
     } catch (cause) {
-      return await finish("error", cause instanceof Error ? cause.message : String(cause));
+      return await finish("error", await safeErrorMessage(ctx, cause));
     } finally {
       controller.abort();
     }

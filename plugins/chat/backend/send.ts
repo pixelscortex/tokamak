@@ -27,7 +27,7 @@ export const start = mutation({
       threadId, messageId, startedBy: OWNER, status: "running", model, startedAt: Date.now(),
     });
 
-    const title = history.length === 0 && current.title === DEFAULT_TITLE ? text.slice(0, 80) : current.title;
+    const title = history.length === 0 && current.title === DEFAULT_TITLE ? Array.from(text).slice(0, 80).join("") : current.title;
     await db.patch(threadId, { title, updatedAt: Date.now() });
     return { runId, messageId, history: [
       ...history.filter(message => message.status === "complete").map(message => ({

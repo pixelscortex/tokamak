@@ -18,3 +18,12 @@ export async function modelStream(ctx: ActionContext, messages: ModelMessage[], 
   });
   return { stream: result.textStream, error: () => failure };
 }
+
+// Provider errors can echo request headers, so never store the key verbatim.
+export async function safeErrorMessage(ctx: ActionContext, cause: unknown) {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  // A missing grant is itself the error being reported, so it must not throw again.
+  const apiKey = await ctx.env("OPENROUTER_API_KEY").catch(() => undefined);
+
+  return apiKey ? message.replaceAll(apiKey, "[redacted]") : message;
+}
