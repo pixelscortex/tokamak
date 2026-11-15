@@ -1,0 +1,43 @@
+.oxlintrc.json
+  s_d3722a4b772de5::t_bbf1ffccc03564 1-37
+Cargo.toml
+  s_d3722a4b772de5::t_1ec857bf6493bc 6-9
+READABILITY.md
+  s_d3722a4b772de5::t_adfd098102b438 1-12
+bun.lock
+  s_d3722a4b772de5::t_65b68f9f81868b 12-13,302-339,794-811,992-993
+clippy.toml
+  s_d3722a4b772de5::t_a1d5cdc9b5e0d5 1-2
+lab/Cargo.toml
+  s_d3722a4b772de5::t_d01759241e8829 25-27
+moon.yml
+  s_d3722a4b772de5::t_4eebd818423fc7 37-52
+package.json
+  s_d3722a4b772de5::t_f0173a15535088 35-37
+packages/build/Cargo.toml
+  s_d3722a4b772de5::t_5316562aaadad7 10-12
+packages/engine/Cargo.toml
+  s_d3722a4b772de5::t_c5e117bca2d697 20-22
+packages/runtime/Cargo.toml
+  s_d3722a4b772de5::t_14cedbbfd58bd0 31-33
+packages/server/Cargo.toml
+  s_d3722a4b772de5::t_bbb5d1148d4324 46-48
+rustfmt.toml
+  s_d3722a4b772de5::t_c42086e7258e25 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a66020ea5e2ebdd69c49951c40b97eec6096100d",
+  "prompts": {},
+  "sessions": {
+    "s_d3722a4b772de5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e116-e282-78d3-a14b-24506a8c5e26",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
