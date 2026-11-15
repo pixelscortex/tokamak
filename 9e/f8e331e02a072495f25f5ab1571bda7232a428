@@ -1,0 +1,19 @@
+packages/ui/src/styles.css
+  s_32e91805417f99::t_10d51551b01a37 9-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ef8e331e02a072495f25f5ab1571bda7232a428",
+  "prompts": {},
+  "sessions": {
+    "s_32e91805417f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de38-a74a-7550-9ba9-7b99f54d1679",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
