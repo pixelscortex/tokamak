@@ -8,7 +8,7 @@ import { retainSubscriptions } from "@tokamak/runtime/subscriptions";
 import type { ModuleRegistry } from "@tokamak/runtime/modules";
 import { Contribution } from "./contribution";
 import { ShellFrame } from "./shell-frame";
-import { Chat } from "./chat";
+import { Chat } from "./chat/screen";
 import { useChat } from "./chat/use-chat";
 
 export function Shell(props: { modules: ModuleRegistry }) {

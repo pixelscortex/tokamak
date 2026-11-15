@@ -8,7 +8,7 @@ export function Mark(props: { user?: boolean }) {
 }
 
 export function Message(props: { message: ChatMessage }) {
-  return <div class="flex shrink-0 items-start gap-3" data-message={props.message._id} data-status={props.message.status}>
+  return <div class="flex shrink-0 items-start gap-3" data-role={props.message.role} data-message={props.message._id} data-status={props.message.status}>
     <Mark user={props.message.role === "user"} />
     <div class="min-w-0 flex-1">
       <p class={`m-0 whitespace-pre-wrap break-words ${props.message.role === "user" ? "text-text" : "text-text-2"}`}>

@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
+import { CHAT_MODELS, DEFAULT_MODEL } from "../../../plugins/chat/models";
 import { api } from "../../../plugins/chat/client";
 
 export { api };
@@ -65,5 +66,16 @@ export function useChat(client: TokamakClient) {
     }
   }
 
-  return { client, threads, threadId, thread, open: setThreadId, runs, active, error: () => error() ?? running.error()?.message, setError, creating, createThread, cancel };
+  async function cycleModel() {
+    const current = thread();
+    if (!current) return;
+    const index = CHAT_MODELS.findIndex(model => model === (current.model ?? DEFAULT_MODEL));
+    try {
+      await client.mutation(api.threads.setModel, { threadId: current._id, model: CHAT_MODELS[(index + 1) % CHAT_MODELS.length]! });
+    } catch (cause) {
+      if (alive) setError(String(cause));
+    }
+  }
+
+  return { cycleModel, client, threads, threadId, thread, open: setThreadId, runs, active, error: () => error() ?? running.error()?.message, setError, creating, createThread, cancel };
 }

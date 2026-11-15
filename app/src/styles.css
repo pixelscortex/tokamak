@@ -71,3 +71,5 @@ body {
 .plugin-error { padding: 16px; }
 
 .chat-input { color: var(--color-text); font-family: var(--font-read); --textarea-placeholder: var(--color-faint); --textarea-caret: var(--color-light); }
+
+.chat-input-busy { color: var(--color-text-3); --textarea-caret: var(--color-text-3); }
