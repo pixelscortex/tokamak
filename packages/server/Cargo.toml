@@ -18,6 +18,7 @@ required-features = ["protocol-codegen"]
 protocol-codegen = ["dep:ts-rs"]
 
 [dependencies]
+dotenvy = "0.15.7"
 tempfile = "3.27.0"
 futures-util = "0.3.34"
 directories = "=6.0.0"

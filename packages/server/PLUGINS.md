@@ -164,3 +164,14 @@ UTF-8-chunked `pluginasset` requests. Successful generation swaps emit
 `pluginchanged` with the new catalog before refreshing existing subscriptions.
 See [the client host contract](../runtime/PLUGINS.md) for the wire shape and lazy
 module lifecycle. The authenticated HTTP asset/control endpoints remain usable.
+
+### Action environment grants
+
+An installed plugin action can call `await ctx.env("NAME")` only with the exact
+`env:NAME` permission in its manifest. An undeclared read is refused; a declared
+but unset value returns `null`. Queries and mutations have no environment API.
+The host resolves its process environment first, then `.env.local` beside the
+installation directory (for the workspace `plugins/`, this is the workspace
+root). Local values are read without changing the process environment or adding
+secrets to catalog metadata. Malformed dotenv errors never include file contents.
+Changing permissions on an installed plugin requires a version bump as usual.

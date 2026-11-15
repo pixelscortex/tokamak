@@ -94,6 +94,7 @@ pub struct Catalog {
     pub plugins: BTreeMap<String, Arc<Artifact>>,
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
+    pub(crate) environment: PathBuf,
 }
 
 /// One immutable, fully inspected generation. Function lookup selects the owner;
@@ -707,6 +708,7 @@ impl Catalog {
             plugins,
             revision: format!("{:x}", hash.finalize()),
             providers,
+            environment: root.parent().unwrap_or(root).join(".env.local"),
         })
     }
     pub fn metadata(&self) -> Value {

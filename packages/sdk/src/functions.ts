@@ -37,6 +37,8 @@ export interface MutationContext<M extends DataModel> {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext {
+  /** Requires a manifest env:<name> grant; unset values return null. */
+  env(name: string): Promise<string | null>;
   runQuery<A, R>(reference: FunctionReference<"query", A, R>, args: NoInfer<A>): Promise<R>;
   runMutation<A, R>(reference: FunctionReference<"mutation", A, R>, args: NoInfer<A>): Promise<R>;
   providers<T>(interfaceName: string): Promise<readonly T[]>;
@@ -89,6 +91,7 @@ function builder<K extends FunctionKind, M extends DataModel>(kind: K, schema?: 
             name: reference[functionName], args: jsonSnapshot(input, "nested call args"),
           });
         const ctx = Object.freeze(kind === "action" ? {
+          env: (name: string) => callHost(host, "action.env", { name }),
           runQuery: (reference: { [functionName]: string }, args: unknown) => run("query", reference, args),
           runMutation: (reference: { [functionName]: string }, args: unknown) => run("mutation", reference, args),
           providers,
