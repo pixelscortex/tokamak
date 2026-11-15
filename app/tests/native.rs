@@ -1415,6 +1415,14 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
         .unwrap();
     app.wait(|doc| support::text(doc, "markdown").contains("After"));
     assert_eq!(code(app.doc()), "print(1)\nprint(2)");
+    app.host
+        .send(
+            "markdown:text",
+            "Entities: &amp; &lt; &copy; &#65; &#x1F600; `&amp;`",
+        )
+        .unwrap();
+    app.wait(|doc| support::text(doc, "markdown").contains("Entities:"));
+    assert!(support::text(app.doc(), "markdown").contains("Entities: & < © A 😀 &amp;"));
     let nested = format!("{}x", "> ".repeat(1000));
     app.host.send("markdown:text", nested).unwrap();
     app.wait(|doc| support::text(doc, "markdown").contains('x'));

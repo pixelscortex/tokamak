@@ -40,7 +40,22 @@ function renderToken(token: Token, depth: number) {
     case "link": return <span class="underline"><Tokens tokens={token.tokens} depth={depth + 1} /></span>;
     case "br": return <br />;
     case "hr": return <hr />;
-    case "text": return token.tokens ? <Tokens tokens={token.tokens} depth={depth + 1} /> : token.text;
+    case "text": return token.tokens ? <Tokens tokens={token.tokens} depth={depth + 1} /> : decodeEntities(token.text);
     default: return "text" in token ? token.text : token.raw;
   }
+}
+
+const entities: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0",
+  copy: "©", reg: "®", trade: "™", ndash: "–", mdash: "—", hellip: "…",
+};
+
+function decodeEntities(text: string) {
+  return text.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
+    if (!name.startsWith("#")) return Object.hasOwn(entities, name) ? entities[name]! : entity;
+    const hex = name[1]?.toLowerCase() === "x";
+    const point = Number.parseInt(name.slice(hex ? 2 : 1), hex ? 16 : 10);
+    return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff)
+      ? String.fromCodePoint(point) : "\ufffd";
+  });
 }
