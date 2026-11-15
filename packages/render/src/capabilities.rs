@@ -40,6 +40,9 @@ pub(crate) fn install(ctx: &Ctx<'_>, host: Host) -> Result<()> {
             })
             .map_err(|error| Exception::throw_message(ctx, &error.to_string()))?;
 
+        // Plugin UIs are trusted local code in this version and may write,
+        // but never read, the clipboard. A permission gate will be added when
+        // third-party plugins are supported.
         let clipboard_host = host.clone();
         ctx.globals().set(
             "__tokamakClipboard",
