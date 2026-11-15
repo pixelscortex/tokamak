@@ -1,0 +1,27 @@
+packages/ui/README.md
+  s_37590b8e9b99ee::t_57cb5da56076c6 4,12,18,46
+lab/README.md
+  s_37590b8e9b99ee::t_57cb5da56076c6 22,27,45,50-51
+packages/render/CSS_OVERLAP.md
+  s_37590b8e9b99ee::t_57cb5da56076c6 1,8
+packages/render/README.md
+  s_37590b8e9b99ee::t_57cb5da56076c6 7-17,33
+packages/ui/src/theme.css
+  s_37590b8e9b99ee::t_57cb5da56076c6 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ed3b350ea0363a696d412d010fda537f4465b10",
+  "prompts": {},
+  "sessions": {
+    "s_37590b8e9b99ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1df54-9078-7492-9721-2256f7e3c9a4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
