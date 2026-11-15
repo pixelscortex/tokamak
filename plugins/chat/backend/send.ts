@@ -59,7 +59,7 @@ export const update = mutation({
     const run = await db.get(runId);
     if (!run || run.status !== "running") return "cancelled" as const;
     await db.patch(runId, { updatedAt: Date.now() });
-    if (!delta && !outcome) return "running" as const;
+    if (!delta && !outcome && !tool) return "running" as const;
 
     const message = await db.get(run.messageId);
     if (!message) throw new Error("Response message no longer exists");
