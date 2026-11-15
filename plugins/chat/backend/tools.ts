@@ -10,7 +10,7 @@ export type ToolTarget = { plugin: string; toolName: string };
 
 export async function discoverTools(
   ctx: ActionContext, threadId: string, running: () => Promise<boolean>,
-  update: (part: ToolPart) => Promise<void>,
+  update: (part: ToolPart) => Promise<unknown>,
 ) {
   const tools: ToolSet = {};
   const targets = new Map<string, ToolTarget>();
@@ -28,7 +28,7 @@ export async function discoverTools(
           const execute = async () => {
             if (!await running()) throw new Error("cancelled");
             const part: ToolPart = { type: "tool", callId: toolCallId, ...target, args: args as JsonValue, status: "running" };
-            await update(part);
+            if (await update(part) !== "running") throw new Error("cancelled");
             const out = await ctx.runMutation(provider.tools.invoke, { name: description.name, args: args as JsonValue, threadId });
             await update({ ...part, ...out, status: "done" });
             return out.model ?? JSON.stringify(out.result);

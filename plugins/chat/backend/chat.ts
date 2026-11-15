@@ -16,13 +16,14 @@ export const send = action({
     const controller = new AbortController();
     let pending = "";
     let flushedAt = Date.now();
-    let writes = Promise.resolve();
+    let writes: Promise<unknown> = Promise.resolve();
     const update = (tool?: ToolPart) => {
       const write = async () => {
         const delta = pending;
         pending = "";
-        await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}) });
+        const status = await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}) });
         flushedAt = Date.now();
+        return status;
       };
       writes = writes.then(write);
       return writes;
