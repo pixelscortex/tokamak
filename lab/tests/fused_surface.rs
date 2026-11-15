@@ -26,6 +26,16 @@ fn document(scale: f32, height: f32) -> NativeDocument {
     doc.resolve_layout(0.0);
     doc
 }
+fn paint(doc: &mut NativeDocument) {
+    let viewport = doc.inner().viewport().clone();
+    render::paint_document(
+        &mut anyrender::NullScenePainter,
+        doc,
+        (viewport.hidpi_scale * viewport.zoom) as f64,
+        viewport.window_size.0,
+        viewport.window_size.1,
+    );
+}
 fn stage(doc: &NativeDocument) -> blitz_traits::NodeId {
     support::id(doc, "shell-stage")
 }
@@ -67,6 +77,36 @@ fn scroll_to(doc: &mut NativeDocument, name: &str) {
         .unwrap();
     scroll_stage(doc, rect.y - top - 16.0);
 }
+#[derive(Default)]
+struct Redraws(std::sync::atomic::AtomicUsize);
+impl blitz_traits::shell::ShellProvider for Redraws {
+    fn request_redraw(&self) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn only_icons_are_custom_widgets() {
+    let mut doc = document(1.0, 900.0);
+    for view in VIEWS {
+        open(&mut doc, view);
+        let inner = doc.inner();
+        assert!(inner.query_selector("tk-surface").unwrap().is_none());
+        for id in inner.custom_widget_node_ids() {
+            assert_eq!(
+                &*inner
+                    .get_node(id)
+                    .unwrap()
+                    .element_data()
+                    .unwrap()
+                    .name
+                    .local,
+                "tk-icon"
+            );
+        }
+    }
+}
+
 #[test]
 fn clicks_reach_controls_above_surfaces() {
     let mut doc = document(1.0, 900.0);
@@ -83,11 +123,7 @@ fn wheel_over_a_surface_scrolls_the_page() {
     let mut doc = document(1.0, 520.0); // short enough that the Surfaces page scrolls
     open(&mut doc, "surfaces");
     scroll_to(&mut doc, "lab-cutout");
-    let surface = doc
-        .inner()
-        .query_selector("#lab-cutout > tk-surface[group]")
-        .unwrap()
-        .expect("the cut-out's surface layer");
+    let surface = support::id(&doc, "lab-cutout");
     let rect = doc.inner().get_client_bounding_rect(surface).unwrap();
     let before = doc.inner().get_node(stage(&doc)).unwrap().scroll_offset().y;
     let (x, client_y) = ((rect.x + 12.0) as f32, (rect.y + rect.height - 12.0) as f32);
@@ -101,7 +137,10 @@ fn wheel_over_a_surface_scrolls_the_page() {
         client_y,
     };
     let hit = doc.inner().hit(x, page_y).map(|hit| hit.node_id);
-    assert_ne!(hit, Some(surface), "the surface layer is not a hit target");
+    assert!(
+        hit.is_some(),
+        "the ordinary group participates in hit testing"
+    );
     doc.handle_ui_event(UiEvent::PointerMove(BlitzPointerEvent {
         id: BlitzPointerId::Mouse,
         is_primary: true,
@@ -163,7 +202,7 @@ fn a_select_list_at_its_end_does_not_scroll_the_page() {
     let mut doc = document(1.0, 520.0); // short enough that the page scrolls
     open(&mut doc, "select");
     scroll_to(&mut doc, "lab-select-flip-box");
-    doc.layout_surfaces();
+    paint(&mut doc);
     let list = doc
         .inner()
         .query_selector("#lab-select-flip-box [role=listbox]")
@@ -222,12 +261,11 @@ impl Offscreen {
     }
     fn frame(&mut self, doc: &mut NativeDocument) -> Vec<u8> {
         doc.resolve_layout(0.0);
-        doc.layout_surfaces();
         let mut pixels = Vec::new();
         let (scale, width, height) = (self.scale as f64, self.width, self.height);
         self.renderer.render_to_vec(
             |scene| {
-                blitz_paint::paint_scene(scene, &mut doc.inner_mut(), scale, width, height, 0, 0);
+                render::paint_document(scene, doc, scale, width, height);
             },
             &mut pixels,
         );
@@ -410,15 +448,7 @@ fn an_open_select_has_one_group_for_trigger_bridge_and_menu() {
             support::attr(&doc, &root, "surface-join").as_deref(),
             Some("3")
         );
-        let layer = doc
-            .inner()
-            .query_selector(&format!("#{root} > tk-surface:first-child"))
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            doc.inner().get_node(layer).unwrap().attr("group".into()),
-            Some(group.as_str())
-        );
+        assert!(doc.inner().query_selector("tk-surface").unwrap().is_none());
         for part in ["face", "bridge", "menu"] {
             let member = format!("{name}-{part}");
             assert_eq!(
@@ -633,7 +663,7 @@ fn pointer_half(doc: &mut NativeDocument, name: &str, up: bool) {
         UiEvent::PointerDown(event)
     });
     doc.resolve_layout(0.0);
-    doc.layout_surfaces();
+    paint(doc);
 }
 
 /// The pointer moves over the centre of element `name` (`:hover`).
@@ -657,7 +687,14 @@ fn idle_surfaces_request_no_frames() {
                     ..Default::default()
                 });
                 doc.resolve_layout(0.0);
-                doc.layout_surfaces();
+                let redraws = std::sync::Arc::new(Redraws::default());
+                doc.inner_mut().set_shell_provider(redraws.clone());
+                paint(&mut doc);
+                assert_eq!(
+                    redraws.0.load(std::sync::atomic::Ordering::Relaxed),
+                    0,
+                    "{view} scale {scale} {w}x{h}"
+                );
                 assert!(!doc.inner().is_animating(), "{view} scale {scale} {w}x{h}");
             }
         }
@@ -673,7 +710,7 @@ fn a_view_switch_lands_without_animating() {
             "composer", "surfaces", "chat", "select", "chat", "buttons", "chat",
         ] {
             open(&mut doc, view);
-            doc.layout_surfaces();
+            paint(&mut doc);
             assert!(!doc.inner().is_animating(), "to {view} scale {scale}");
         }
         assert!(doc.take_error().is_none());

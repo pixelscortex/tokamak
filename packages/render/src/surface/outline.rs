@@ -1,7 +1,7 @@
 //! Rounded geometry builders and ordered boolean outlines.
 use super::{Placed, Side};
 use geo::{Area, BooleanOps, Buffer, Coord, LineString, MultiPolygon, Polygon, Simplify};
-use peniko::kurbo::{Arc as CurveArc, BezPath, PathEl};
+use peniko::kurbo::{Affine, Arc as CurveArc, BezPath, PathEl};
 use std::sync::Arc;
 pub(super) type V2 = [f32; 2];
 
@@ -132,6 +132,7 @@ pub(super) struct Shape {
     pub radii: [f32; 4],
     pub join: f32,
     pub poly: Option<Arc<Poly>>,
+    pub transform: Affine,
 }
 
 impl Shape {
@@ -142,6 +143,7 @@ impl Shape {
             radii: normalized_radii(rect, radii),
             join: 0.0,
             poly: None,
+            transform: Affine::IDENTITY,
         }
     }
 
@@ -169,6 +171,10 @@ impl Shape {
             radii: mix4(a.radii, b.radii),
             join: mix(a.join, b.join),
             poly,
+            transform: Affine::new(std::array::from_fn(|i| {
+                a.transform.as_coeffs()[i]
+                    + (b.transform.as_coeffs()[i] - a.transform.as_coeffs()[i]) * t as f64
+            })),
         }
     }
 }
@@ -176,7 +182,9 @@ impl Shape {
 pub(super) fn resolve_attached(list: &mut [Placed]) {
     let targets: Vec<Shape> = list
         .iter()
-        .filter(|((sub, attached, ..), s, ..)| !sub && !attached && s.poly.is_none())
+        .filter(|((sub, attached, ..), s, ..)| {
+            !sub && !attached && s.poly.is_none() && s.transform == Affine::IDENTITY
+        })
         .map(|(_, s, ..)| s.clone())
         .collect();
     for (_, shape, _, attach) in list.iter_mut() {
@@ -405,7 +413,7 @@ pub(super) fn polygon(s: &Shape) -> MultiPolygon<f64> {
         p
     };
     let mut points = vec![];
-    peniko::kurbo::flatten(curve, 0.02, |el| match el {
+    peniko::kurbo::flatten(s.transform * curve, 0.02, |el| match el {
         PathEl::MoveTo(p) | PathEl::LineTo(p) => points.push(Coord { x: p.x, y: p.y }),
         _ => {}
     });

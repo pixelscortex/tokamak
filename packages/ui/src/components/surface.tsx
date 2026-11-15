@@ -51,10 +51,9 @@ function SurfaceRoot(props: SurfaceProps): JSX.Element {
       tk-group={group}
       surface-own={props.own === false ? "false" : undefined}
       surface-join={props.join}
-      class={`isolate ${positioned(props.class)}`}
+      class={positioned(props.class)}
       style={props.style}
     >
-      <tk-surface group={group} class="absolute inset-0 -z-10" />
       <GroupContext.Provider value={group}>{props.children}</GroupContext.Provider>
     </div>
   );

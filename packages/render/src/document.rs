@@ -38,8 +38,6 @@ impl NativeDocument {
     pub fn new_connected(shell: &str, bundle: &str, send: Option<MessageSender>) -> Result<Self> {
         let mut html = HtmlDocument::from_html(shell, Default::default());
         html.inner_mut()
-            .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(surface::UA_CSS));
-        html.inner_mut()
             .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(icon::UA_CSS));
         let root = html
             .get_element_by_id("app")
@@ -88,9 +86,8 @@ impl NativeDocument {
         self.html.inner_mut().resolve(time);
     }
 
-    /// Read fused-group boxes after layout and before painting.
-    pub fn layout_surfaces(&mut self) {
-        self.bridge.tree.surfaces.after_layout(&self.html.inner());
+    pub fn surface_painter(&self) -> surface::SurfacePainter {
+        self.bridge.tree.surfaces.painter()
     }
 
     pub fn take_error(&mut self) -> Option<Error> {

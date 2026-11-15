@@ -18,28 +18,33 @@ impl Fixture {
           @property --tk-fill {{ syntax: '<color>'; inherits: false; initial-value: transparent; }}
           body {{ margin:0 }}
           [tk-group] {{ position:absolute;left:20px;top:30px;width:100px;height:100px;--tk-fill:#808080 }}
-          tk-surface {{ position:absolute;inset:0;width:100%;height:100% }}
           [surface-groups] {{ position:absolute;width:20px;height:20px }}
           </style></head><body>{content}</body></html>"#
         );
         let mut doc = HtmlDocument::from_html(&html, Default::default());
-        doc.inner_mut()
-            .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(UA_CSS));
         doc.inner_mut().set_viewport(Viewport {
             window_size: (400, 300),
             ..Default::default()
         });
-        let mut surfaces = Surfaces::default();
-        let layer = doc.get_element_by_id("surface").unwrap();
-        for name in ["surface", "second"] {
-            if let Some(id) = doc.get_element_by_id(name) {
-                doc.inner_mut()
-                    .mutate()
-                    .set_custom_widget(id, surfaces.widget(id));
+        let surfaces = Surfaces::default();
+        let layer = doc.inner().query_selector("[tk-group=g]").unwrap().unwrap();
+        for name in ["g", "h"] {
+            if let Some(id) = doc
+                .inner()
+                .query_selector(&format!("[tk-group={name}]"))
+                .unwrap()
+            {
+                surfaces.attribute(id, "tk-group", Some(name));
             }
         }
         for name in members {
-            surfaces.member(doc.get_element_by_id(name).unwrap(), true);
+            let id = doc.get_element_by_id(name).unwrap();
+            let inner = doc.inner();
+            surfaces.attribute(
+                id,
+                "surface-groups",
+                attr(inner.get_node(id).unwrap(), "surface-groups"),
+            );
         }
         let mut f = Self {
             doc,
@@ -60,21 +65,44 @@ impl Fixture {
             value,
         );
     }
+    fn register(&self, name: &str, present: bool) {
+        let inner = self.doc.inner();
+        self.surfaces.attribute(
+            self.id(name),
+            "surface-groups",
+            if present {
+                attr(inner.get_node(self.id(name)).unwrap(), "surface-groups")
+            } else {
+                None
+            },
+        );
+    }
     fn frame(&mut self) {
         self.doc.inner_mut().resolve(0.0);
-        self.surfaces.after_layout(&self.doc.inner());
+        let viewport = self.doc.inner().viewport().clone();
+        blitz_paint::paint_scene_with(
+            &mut anyrender::NullScenePainter,
+            &mut self.doc.inner_mut(),
+            (viewport.hidpi_scale * viewport.zoom) as f64,
+            viewport.window_size.0,
+            viewport.window_size.1,
+            0,
+            0,
+            &self.surfaces.painter(),
+        );
     }
     fn state(&self) -> std::cell::Ref<'_, Surface> {
-        self.surfaces.layers[&self.layer].borrow()
+        std::cell::Ref::map(self.surfaces.0.borrow(), |r| &r.states[&self.layer])
     }
     fn region(&self) -> geo::MultiPolygon<f64> {
         region(&self.state().shown)
     }
     fn moving(&self) -> bool {
-        Layer(self.surfaces.layers[&self.layer].clone()).requires_redraw()
+        !self.state().tweens.is_empty()
     }
     fn advance(&self, elapsed: Duration) {
-        let mut state = self.surfaces.layers[&self.layer].borrow_mut();
+        let mut registry = self.surfaces.0.borrow_mut();
+        let state = registry.states.get_mut(&self.layer).unwrap();
         for tween in state.tweens.values_mut() {
             tween.start = Instant::now() - elapsed;
         }
@@ -89,7 +117,7 @@ fn inside(region: &geo::MultiPolygon<f64>, x: f64, y: f64) -> bool {
 fn root_add_cut_and_registered_root_style() {
     let f = Fixture::new(
         r#"<div id="root" tk-group="g" style="border-radius:0;--tk-bevel:2;--tk-bevel-strength:.4;--tk-bevel-base:.055;--tk-bevel-inset:1">
-      <tk-surface id="surface" group="g" fill='#ff0000' bevel="99"></tk-surface>
+
       <div id="add" surface-groups="g" surface-op="add" style="left:100px;top:0"></div>
       <div id="cut" surface-groups="g" surface-op="cut" style="left:40px;top:40px"></div>
       </div>"#,
@@ -116,7 +144,7 @@ fn root_add_cut_and_registered_root_style() {
 fn external_members_attach_to_the_root_and_inherit_its_join() {
     let f = Fixture::new(
         r#"<div tk-group="g" surface-join="8" style="border-radius:10px 20px 30px 40px">
-      <tk-surface id="surface" group="g"></tk-surface></div>
+      </div>
       <div id="tab" surface-groups="g" surface-attach="right" style="left:0;top:60px;border-radius:4px"></div>
       <div id="plain" surface-groups="g" style="left:150px;top:30px"></div>
       <div id="override" surface-groups="g" surface-join="2" style="left:180px;top:30px"></div>"#,
@@ -135,13 +163,14 @@ fn external_members_attach_to_the_root_and_inherit_its_join() {
 #[test]
 fn own_false_and_one_member_in_two_groups() {
     let f = Fixture::new(
-        r#"<div tk-group="g" surface-own="false"><tk-surface id="surface" group="g"></tk-surface>
+        r#"<div tk-group="g" surface-own="false">
       <div id="member" surface-groups="g h g" style="left:10px;top:10px;border-radius:3px 4px 5px 6px"></div></div>
-      <div tk-group="h" surface-own="false" style="left:20px;top:30px"><tk-surface id="second" group="h"></tk-surface></div>"#,
+      <div id="second" tk-group="h" surface-own="false" style="left:20px;top:30px"></div>"#,
         &["member"],
     );
     let a = f.state();
-    let b = f.surfaces.layers[&f.id("second")].borrow();
+    let registry = f.surfaces.0.borrow();
+    let b = &registry.states[&f.id("second")];
     assert_eq!(a.target.len(), 1);
     assert_eq!(a.target, b.target);
     assert_eq!(a.target[0].radii, [3.0, 4.0, 5.0, 6.0]);
@@ -152,12 +181,12 @@ fn own_false_and_one_member_in_two_groups() {
 #[test]
 fn unregistered_and_removed_members_do_not_join() {
     let mut f = Fixture::new(
-        r#"<div tk-group="g" surface-own="false"><tk-surface id="surface" group="g"></tk-surface>
+        r#"<div tk-group="g" surface-own="false">
       <div id="a" surface-groups="g"></div><div id="b" surface-groups="g"></div></div>"#,
         &["a"],
     );
     assert_eq!(f.state().target.len(), 1);
-    f.surfaces.member(f.id("a"), false);
+    f.register("a", false);
     f.frame();
     assert!(f.state().target.is_empty());
 }
@@ -165,7 +194,7 @@ fn unregistered_and_removed_members_do_not_join() {
 #[test]
 fn ordering_is_plain_adds_attached_adds_cuts_in_document_order() {
     let mut f = Fixture::new(
-        r#"<div tk-group="g" surface-own="false"><tk-surface id="surface" group="g"></tk-surface>
+        r#"<div tk-group="g" surface-own="false">
       <div id="cut" surface-groups="g" surface-op="cut"></div>
       <div id="tab" surface-groups="g" surface-attach="left"></div>
       <div id="a" surface-groups="g"></div><div id="b" surface-groups="g"></div></div>"#,
@@ -181,7 +210,7 @@ fn ordering_is_plain_adds_attached_adds_cuts_in_document_order() {
 #[test]
 fn transparent_or_unset_fill_records_no_scene_commands() {
     let mut f = Fixture::new(
-        r#"<div id="root" tk-group="g" style="--tk-fill:transparent;--tk-bevel:3"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        r#"<div id="root" tk-group="g" style="--tk-fill:transparent;--tk-bevel:3"></div>"#,
         &[],
     );
     assert!(
@@ -198,7 +227,7 @@ fn transparent_or_unset_fill_records_no_scene_commands() {
     );
 }
 
-const MOVING: &str = r#"<div id="root" tk-group="g" surface-own="false"><tk-surface id="surface" group="g"></tk-surface>
+const MOVING: &str = r#"<div id="root" tk-group="g" surface-own="false">
     <div id="a" surface-groups="g" surface-animate style="left:0;top:0"></div>
     <div id="b" surface-groups="g" style="left:0;top:50px"></div></div>"#;
 
@@ -213,7 +242,7 @@ fn tween_lasts_220_ms_and_static_layout_does_not_restart_it() {
     f.advance(Duration::from_millis(100));
     let before = f.state().shown[0].rect[0];
     assert!(before > 0.0 && before < 80.0);
-    f.surfaces.member(f.id("b"), false);
+    f.register("b", false);
     f.frame();
     assert!(f.moving());
     assert!(f.state().shown[0].rect[0] >= before);
@@ -229,7 +258,7 @@ fn tween_lasts_220_ms_and_static_layout_does_not_restart_it() {
 #[test]
 fn appearing_members_and_resizing_layers_snap() {
     let mut f = Fixture::new(MOVING, &["b"]);
-    f.surfaces.member(f.id("a"), true);
+    f.register("a", true);
     f.frame();
     assert!(!f.moving());
     f.attr("a", "style", "left:80px;top:0");
@@ -488,13 +517,13 @@ fn joined_cuts_have_only_real_contours() {
 #[test]
 fn asymmetric_css_radii_and_pills() {
     let f = Fixture::new(
-        r#"<div tk-group="g" style="border-radius:80px 0 0 0"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        r#"<div tk-group="g" style="border-radius:80px 0 0 0"></div>"#,
         &[],
     );
     assert!(!inside(&f.region(), 20.0, 20.0));
     assert!(inside(&f.region(), 30.0, 30.0));
     let f = Fixture::new(
-        r#"<div tk-group="g" surface-own="false"><tk-surface id="surface" group="g"></tk-surface><div id="member" surface-groups="g" style="width:100px;height:100px;border-radius:80px 0 0 0"></div></div>"#,
+        r#"<div tk-group="g" surface-own="false"><div id="member" surface-groups="g" style="width:100px;height:100px;border-radius:80px 0 0 0"></div></div>"#,
         &["member"],
     );
     assert!(!inside(&f.region(), 20.0, 20.0));
@@ -506,7 +535,7 @@ fn asymmetric_css_radii_and_pills() {
 #[test]
 fn currentcolor_fill_uses_the_roots_computed_color() {
     let f = Fixture::new(
-        r#"<div tk-group="g" style="color:#123456;--tk-fill:currentColor"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        r#"<div tk-group="g" style="color:#123456;--tk-fill:currentColor"></div>"#,
         &[],
     );
     assert_eq!(
@@ -518,7 +547,7 @@ fn currentcolor_fill_uses_the_roots_computed_color() {
 #[test]
 fn hidden_ancestors_remove_old_member_boxes() {
     let mut f = Fixture::new(
-        r#"<div tk-group="g"><tk-surface id="surface" group="g"></tk-surface><div id="ancestor"><div id="member" surface-groups="g" surface-op="cut" style="left:40px;top:40px"></div></div></div>"#,
+        r#"<div tk-group="g"><div id="ancestor"><div id="member" surface-groups="g" surface-op="cut" style="left:40px;top:40px"></div></div></div>"#,
         &["member"],
     );
     assert!(!inside(&f.region(), 50.0, 50.0));
@@ -531,7 +560,7 @@ fn hidden_ancestors_remove_old_member_boxes() {
 #[test]
 fn scrolling_a_members_content_keeps_its_shape() {
     let mut f = Fixture::new(
-        r#"<div tk-group="g"><tk-surface id="surface" group="g"></tk-surface><div id="member" surface-groups="g" surface-op="cut" style="left:40px;top:40px;overflow:auto"><div style="height:100px">content</div></div></div>"#,
+        r#"<div tk-group="g"><div id="member" surface-groups="g" surface-op="cut" style="left:40px;top:40px;overflow:auto"><div style="height:100px">content</div></div></div>"#,
         &["member"],
     );
     let before = f.state().shown.clone();
@@ -633,7 +662,7 @@ fn attached_and_slanted_members_keep_large_asymmetric_corners() {
 #[test]
 fn rounded_full_css_keeps_its_pill_radius() {
     let f = Fixture::new(
-        r#"<div tk-group="g" style="height:40px;border-radius:calc(infinity * 1px)"><tk-surface id="surface" group="g"></tk-surface></div>"#,
+        r#"<div tk-group="g" style="height:40px;border-radius:calc(infinity * 1px)"></div>"#,
         &[],
     );
     assert!(
@@ -642,4 +671,227 @@ fn rounded_full_css_keeps_its_pill_radius() {
         f.state().shown[0].radii
     );
     assert!(inside(&f.region(), 20.0, 1.0));
+}
+#[test]
+fn members_follow_translated_and_scaled_ancestors_at_both_device_scales() {
+    for scale in [1.0, 2.0] {
+        for (transform, inside_point, outside_point) in [
+            ("translate(120px, 10px)", (130.0, 20.0), (100.0, 20.0)),
+            (
+                "translate(120px, 10px) scale(2)",
+                (150.0, 40.0),
+                (165.0, 40.0),
+            ),
+        ] {
+            let mut f = Fixture::new(
+                &format!(
+                    r#"<div tk-group="g" surface-own="false"><div style="position:absolute;transform-origin:0 0;transform:{transform}"><div id="member" surface-groups="g" style="border-radius:4px"></div></div></div>"#
+                ),
+                &["member"],
+            );
+            f.doc.inner_mut().set_viewport(Viewport {
+                window_size: ((400.0 * scale) as u32, (300.0 * scale) as u32),
+                hidpi_scale: scale,
+                ..Default::default()
+            });
+            f.frame();
+            let r = f.region();
+            assert!(
+                inside(&r, inside_point.0, inside_point.1),
+                "{transform} {scale} {r:?}"
+            );
+            assert!(
+                !inside(&r, outside_point.0, outside_point.1),
+                "{transform} {scale}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_member_follows_its_scrolled_ancestor() {
+    let mut f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div id="scroll" style="position:absolute;width:80px;height:80px;overflow:auto"><div style="height:200px"><div id="member" surface-groups="g" style="top:50px"></div></div></div></div>"#,
+        &["member"],
+    );
+    assert!(inside(&f.region(), 10.0, 60.0));
+    let scroll = f.id("scroll");
+    f.doc
+        .inner_mut()
+        .scroll_by(scroll, 0.0, 30.0, Default::default());
+    f.frame();
+    assert!(inside(&f.region(), 10.0, 30.0));
+    assert!(!inside(&f.region(), 10.0, 60.0));
+}
+
+#[test]
+fn a_hoisted_member_still_joins_its_named_group() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div><div id="member" surface-groups="g" style="z-index:5;left:120px"></div></div></div>"#,
+        &["member"],
+    );
+    assert!(inside(&f.region(), 130.0, 10.0));
+    assert!(f.doc.inner().custom_widget_node_ids().is_empty());
+}
+
+#[test]
+fn hidden_and_culled_groups_drop_state_but_a_paint_without_a_document_root_keeps_it() {
+    let mut f = Fixture::new(r#"<div id="root" tk-group="g"></div>"#, &[]);
+    assert_eq!(f.surfaces.0.borrow().states.len(), 1);
+    let root = f.doc.root_element().id;
+    f.doc.inner_mut().mutate().set_attribute(
+        root,
+        QualName::new(None, Namespace::from(""), "style".into()),
+        "display:none",
+    );
+    f.frame();
+    assert_eq!(f.surfaces.0.borrow().states.len(), 1);
+    let root = f.doc.root_element().id;
+    f.doc.inner_mut().mutate().clear_attribute(
+        root,
+        QualName::new(None, Namespace::from(""), "style".into()),
+    );
+    f.attr("root", "style", "display:none");
+    f.frame();
+    assert!(f.surfaces.0.borrow().states.is_empty());
+}
+
+#[test]
+fn removing_a_root_attribute_or_detaching_it_drops_its_state() {
+    let mut f = Fixture::new(r#"<div tk-group="g"></div>"#, &[]);
+    f.surfaces.attribute(f.layer, "tk-group", None);
+    assert!(f.surfaces.0.borrow().states.is_empty());
+    f.surfaces.attribute(f.layer, "tk-group", Some("g"));
+    f.frame();
+    f.doc.inner_mut().mutate().remove_node(f.layer);
+    f.surfaces.retain(&f.doc.inner());
+    assert!(f.surfaces.0.borrow().states.is_empty());
+}
+
+#[test]
+fn only_running_tweens_request_frames() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    #[derive(Default)]
+    struct Shell(AtomicUsize);
+    impl blitz_traits::shell::ShellProvider for Shell {
+        fn request_redraw(&self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let mut f = Fixture::new(MOVING, &["a", "b"]);
+    let shell = Arc::new(Shell::default());
+    f.doc.inner_mut().set_shell_provider(shell.clone());
+    f.frame();
+    assert_eq!(shell.0.load(Ordering::Relaxed), 0);
+    f.attr("a", "style", "left:80px");
+    f.frame();
+    assert!(shell.0.load(Ordering::Relaxed) > 0);
+    f.advance(ANIMATION);
+    shell.0.store(0, Ordering::Relaxed);
+    f.frame();
+    assert_eq!(shell.0.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn visibility_and_culling_remove_members_from_the_painted_outline() {
+    let mut f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div id="ancestor"><div id="member" surface-groups="g"></div></div></div>"#,
+        &["member"],
+    );
+    assert_eq!(f.state().shown.len(), 1);
+    f.attr("ancestor", "style", "visibility:hidden");
+    f.frame();
+    assert!(f.state().shown.is_empty());
+    f.attr(
+        "ancestor",
+        "style",
+        "visibility:visible;transform:translate(1000px)",
+    );
+    f.frame();
+    assert!(f.state().shown.is_empty());
+}
+
+#[test]
+fn transformed_members_ignore_attach_and_slant() {
+    let mut f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div id="member" surface-groups="g" surface-attach="left" surface-slant="45" style="transform-origin:0 0;transform:scale(2);left:120px"></div></div>"#,
+        &["member"],
+    );
+    let before = f.region();
+    f.attr("member", "surface-slant", "0");
+    f.attr("member", "surface-attach", "");
+    f.frame();
+    assert_eq!(f.region(), before);
+    assert!(inside(&before, 150.0, 30.0));
+    assert!(!inside(&before, 165.0, 30.0));
+}
+
+#[test]
+#[ignore = "offscreen GPU raster; run explicitly"]
+fn fused_background_obeys_root_opacity_and_ancestor_clip() {
+    use anyrender::ImageRenderer;
+    let mut f = Fixture::new(
+        r#"<div style="position:absolute;width:80px;height:80px;overflow:hidden"><div tk-group="g" style="opacity:.5;--tk-fill:red"></div></div>"#,
+        &[],
+    );
+    let mut renderer = anyrender_vello::VelloImageRenderer::new(400, 300);
+    let mut pixels = vec![];
+    renderer.render_to_vec(
+        |scene| {
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Color::WHITE,
+                None,
+                &peniko::kurbo::Rect::new(0.0, 0.0, 400.0, 300.0),
+            );
+            blitz_paint::paint_scene_with(
+                scene,
+                &mut f.doc.inner_mut(),
+                1.0,
+                400,
+                300,
+                0,
+                0,
+                &f.surfaces.painter(),
+            );
+        },
+        &mut pixels,
+    );
+    let pixel = |x: usize, y: usize| &pixels[(y * 400 + x) * 4..][..3];
+    assert_eq!(pixel(40, 50)[0], 255);
+    assert!((126..=129).contains(&pixel(40, 50)[1]));
+    assert_eq!(pixel(90, 50), &[255, 255, 255]);
+}
+
+#[test]
+fn wire_detachment_releases_state_before_another_paint() {
+    let mut doc = crate::NativeDocument::new(
+        r#"<html><body><div id="app"></div></body></html>"#,
+        r#"let pending = [{op:'element',id:1,tag:'div'}, {op:'attribute',id:1,name:'tk-group',value:'g'}, {op:'attribute',id:1,name:'style',value:'width:100px;height:100px;--tk-fill:red'}, {op:'insert',id:1,parent:0,before:null}];
+        globalThis.__tokamak = { dispatch() { return '{"prevented":false,"stopped":false,"error":null}'; }, host() { pending = [{op:'detach',id:1}]; }, drain() { const out = JSON.stringify(pending); pending = []; return out; }, dispose() {} };"#,
+    ).unwrap();
+    doc.inner_mut().set_viewport(Viewport {
+        window_size: (400, 300),
+        ..Default::default()
+    });
+    doc.resolve_layout(0.0);
+    crate::paint_document(&mut anyrender::NullScenePainter, &mut doc, 1.0, 400, 300);
+    let painter = doc.surface_painter();
+    assert_eq!(painter.0.borrow().states.len(), 1);
+    doc.host_event(doc.generation(), "remove", serde_json::Value::Null)
+        .unwrap();
+    assert!(painter.0.borrow().states.is_empty());
+}
+
+#[test]
+fn a_singular_root_transform_does_not_invert_or_keep_group_state() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" style="transform:scaleX(0)"><div id="member" surface-groups="g"></div></div>"#,
+        &["member"],
+    );
+    assert!(f.surfaces.0.borrow().states.is_empty());
 }

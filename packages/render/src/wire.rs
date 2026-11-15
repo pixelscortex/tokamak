@@ -152,15 +152,8 @@ impl Tree {
                         ),
                         vec![],
                     );
-                    // Native widgets (`<tk-surface>`, `<tk-icon>`) attach before
-                    // attributes arrive, so each one reaches attribute_changed.
-                    let widget = match tag.as_str() {
-                        "tk-surface" => Some(self.surfaces.widget(native)),
-                        "tk-icon" => Some(crate::icon::widget()),
-                        _ => None,
-                    };
-                    if let Some(widget) = widget {
-                        dom.set_custom_widget(native, widget);
+                    if tag == "tk-icon" {
+                        dom.set_custom_widget(native, crate::icon::widget());
                     }
                     self.native.insert(id, native);
                     self.handles.insert(native, id);
@@ -172,8 +165,9 @@ impl Tree {
                 }
                 Mutation::TextValue { id, value } => dom.set_node_text(self.native[&id], &value),
                 Mutation::Attribute { id, name, value } => {
-                    if name == "surface-groups" {
-                        self.surfaces.member(self.native[&id], value.is_some());
+                    if name == "surface-groups" || name == "tk-group" {
+                        self.surfaces
+                            .attribute(self.native[&id], &name, value.as_deref());
                     }
                     // Layout observation (layout.rs): reported from the next
                     // layout on, whatever the attribute's value.
@@ -200,6 +194,9 @@ impl Tree {
                 Mutation::Detach { id } => dom.remove_node(self.native[&id]),
             }
         }
+        drop(dom);
+        drop(inner);
+        self.surfaces.retain(&document.inner());
         self.topology = staged;
         Ok(())
     }

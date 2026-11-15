@@ -11,7 +11,7 @@ gpu-diagnostics = ["anyrender_vello/log_frame_times"]
 
 [dependencies]
 engine = { path = "../engine" }
-# Blitz attaches surface/icon widgets and paints their ordinary vector scenes.
+# Blitz paints fused groups through traversal and icons through vector widgets.
 blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["system-fonts", "custom-widget"] }
 blitz-html = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false }
 blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a" }

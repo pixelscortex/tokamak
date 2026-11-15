@@ -121,11 +121,11 @@ pub fn launch_window_with(
                 .with_fullsize_content_view(true),
         ));
     }
-    app.add_window(WindowConfig::with_attributes(
-        Box::new(document),
-        VelloWindowRenderer::new(),
-        attributes,
-    ));
+    let painter = document.surface_painter();
+    app.add_window(
+        WindowConfig::with_attributes(Box::new(document), VelloWindowRenderer::new(), attributes)
+            .with_element_painter(painter),
+    );
     connect(sender);
     event_loop
         .run_app(Host(app, mailbox, options))
@@ -169,17 +169,13 @@ impl ApplicationHandler for Host {
     fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         if let Some(view) = self.0.windows.get_mut(&id) {
             match &event {
-                // Layout reports to JS (layout.rs), then layout-bound
-                // surfaces: read member boxes after layout and before Blitz
-                // paints (surface/mod.rs). Blitz resolves again in its
-                // redraw, which is then a no-op.
+                // Observed boxes can move JS content before Blitz paints.
                 WindowEvent::RedrawRequested => {
                     #[cfg(target_os = "macos")]
                     place_window_buttons(&self.2, &*view.window);
                     let time = view.current_animation_time();
                     let doc = view.downcast_doc_mut::<NativeDocument>();
                     doc.resolve_layout(time);
-                    doc.layout_surfaces();
                 }
                 WindowEvent::PointerButton {
                     state: ElementState::Pressed,

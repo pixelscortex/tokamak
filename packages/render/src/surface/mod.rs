@@ -4,12 +4,10 @@ mod outline;
 #[path = "../../tests/surface/mod.rs"]
 mod tests;
 
-use anyrender::{PaintScene, RenderContext, Scene};
+use anyrender::{PaintScene, Scene};
 use blitz_dom::CopyStyleGetters;
-use blitz_dom::{
-    BaseDocument, LocalName, Node,
-    node::{ComputedStyles, Widget},
-};
+use blitz_dom::{BaseDocument, LocalName, Node};
+use blitz_paint::{ElementPaint, ElementPainter, Piece};
 use blitz_traits::NodeId;
 use outline::{Poly, Shape, resolve_attached};
 use peniko::{BlendMode, Color, Fill, kurbo::Affine};
@@ -20,8 +18,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-// Blitz swallows events on widget elements; layers must never be hit targets.
-pub(crate) const UA_CSS: &str = "tk-surface { display: block; flex-shrink: 0; pointer-events: none; } tk-surface { pointer-events: none !important; }";
 const ANIMATION: Duration = Duration::from_millis(220);
 type Style = style::properties::ComputedValues;
 type Placed = ((bool, bool, Vec<usize>, Key), Shape, bool, Option<Attach>);
@@ -59,6 +55,7 @@ struct Tween {
 }
 #[derive(Default)]
 struct Surface {
+    paint: u64,
     look: Look,
     keys: Vec<Key>,
     target: Vec<Shape>,
@@ -68,126 +65,241 @@ struct Surface {
     boxes: HashMap<NodeId, [f32; 4]>,
     scale: f32,
 }
-struct Layer(Rc<RefCell<Surface>>);
 #[derive(Default)]
-pub(crate) struct Surfaces {
-    layers: HashMap<NodeId, Rc<RefCell<Surface>>>,
+struct Group {
+    root: Option<NodeId>,
     members: HashSet<NodeId>,
 }
+#[derive(Default)]
+struct Registry {
+    groups: HashMap<String, Group>,
+    states: HashMap<NodeId, Surface>,
+    paint: u64,
+}
+#[derive(Clone, Default)]
+pub(crate) struct Surfaces(Rc<RefCell<Registry>>);
+#[derive(Clone)]
+pub struct SurfacePainter(Rc<RefCell<Registry>>);
 
 impl Surfaces {
-    pub(crate) fn widget(&mut self, layer: NodeId) -> Box<dyn Widget> {
-        let state = Rc::new(RefCell::new(Surface {
-            scale: 1.0,
-            ..Default::default()
-        }));
-        self.layers.insert(layer, state.clone());
-        Box::new(Layer(state))
+    pub(crate) fn painter(&self) -> SurfacePainter {
+        SurfacePainter(self.0.clone())
     }
 
-    pub(crate) fn member(&mut self, node: NodeId, present: bool) {
-        if present {
-            self.members.insert(node);
-        } else {
-            self.members.remove(&node);
+    pub(crate) fn attribute(&self, node: NodeId, name: &str, value: Option<&str>) {
+        let mut registry = self.0.borrow_mut();
+        for group in registry.groups.values_mut() {
+            if name == "tk-group" && group.root == Some(node) {
+                group.root = None;
+            } else if name == "surface-groups" {
+                group.members.remove(&node);
+            }
         }
+        if name == "tk-group" {
+            registry.states.remove(&node);
+            if let Some(value) = value {
+                registry.groups.entry(value.into()).or_default().root = Some(node);
+            }
+        } else if let Some(value) = value {
+            for name in value.split_whitespace() {
+                registry
+                    .groups
+                    .entry(name.into())
+                    .or_default()
+                    .members
+                    .insert(node);
+            }
+        }
+        registry
+            .groups
+            .retain(|_, g| g.root.is_some() || !g.members.is_empty());
     }
 
-    pub(crate) fn after_layout(&mut self, doc: &BaseDocument) {
-        self.layers.retain(|id, _| doc.get_node(*id).is_some());
-        self.members.retain(|id| doc.get_node(*id).is_some());
-        for (&id, state) in &self.layers {
-            let mut state = state.borrow_mut();
-            state.step();
-            let mut list = vec![];
-            let mut boxes = HashMap::new();
-            state.look = Look::default();
-            let layer = doc.get_node(id).filter(|n| n.flags.is_in_document());
-            if let Some(layer) = layer
-                && let Some(group) = attr(layer, "group")
-                && let Some(root) = layer.parent.and_then(|p| doc.get_node(p))
-                && attr(root, "tk-group") == Some(group)
-                && let Some(origin) = box_of(doc, layer)
+    pub(crate) fn retain(&self, doc: &BaseDocument) {
+        self.0
+            .borrow_mut()
+            .states
+            .retain(|id, _| doc.get_node(*id).is_some_and(|n| n.flags.is_in_document()));
+    }
+}
+
+impl<S: PaintScene> ElementPainter<S> for SurfacePainter {
+    fn paint_element(&self, el: &mut ElementPaint<'_, S>, scene: &mut S) {
+        let document_root = el.node().id == el.document().root_element().id;
+        if document_root {
+            self.0.borrow_mut().paint += 1;
+        }
+        el.paint_with(scene, |el, scene, piece| {
+            if piece == Piece::Background
+                && el.paints_own_box()
+                && let Some(group) = attr(el.node(), "tk-group")
             {
-                let size = [origin[2], origin[3]];
-                let resized = state.size.is_some_and(|old| old != size);
-                state.size = Some(size);
-                if resized {
-                    state.tweens.clear();
-                    state.shown = state.target.clone();
-                }
-                let join = number(root, "surface-join").unwrap_or(0.0).max(0.0);
-                if let Some(style) = root.primary_styles() {
-                    state.look = material_of(&style);
-                }
-                if attr(root, "surface-own") != Some("false")
-                    && let Some(rect) = box_of(doc, root)
-                {
-                    let rect = local(rect, origin);
-                    list.push((
-                        (false, false, vec![], Key::Root),
-                        Shape::rect(false, rect, radii_of(root, rect[2])),
-                        false,
-                        None,
-                    ));
-                }
-                for &member in &self.members {
-                    let Some(node) = doc.get_node(member).filter(|n| n.flags.is_in_document())
-                    else {
-                        continue;
-                    };
-                    if !attr(node, "surface-groups")
-                        .unwrap_or("")
-                        .split_whitespace()
-                        .any(|g| g == group)
-                    {
-                        continue;
+                let members = self
+                    .0
+                    .borrow()
+                    .groups
+                    .get(group)
+                    .filter(|g| g.root == Some(el.node().id))
+                    .map(|g| g.members.iter().copied().collect::<Vec<_>>());
+                if let Some(members) = members {
+                    let transform = el.transform() * Affine::scale(el.scale());
+                    if transform.determinant() != 0.0 {
+                        let picture = self.picture(el, &members, transform);
+                        scene.append_scene(picture, transform);
                     }
-                    let Some(rect) = box_of(doc, node) else {
-                        continue;
-                    };
-                    let rect = local(rect, origin);
-                    let shape = member_shape(node, rect, join);
-                    let attach = match attr(node, "surface-attach") {
-                        Some("left") => Some(Side::Left),
-                        Some("right") => Some(Side::Right),
-                        Some("top") => Some(Side::Top),
-                        Some("bottom") => Some(Side::Bottom),
-                        _ => None,
-                    }
-                    .filter(|_| !shape.sub)
-                    .map(|side| Attach {
-                        side,
-                        rect,
-                        radii: radii_of(node, rect[2]),
-                        join: number(node, "surface-join").unwrap_or(join).max(0.0),
-                    });
-                    let animate = !resized
-                        && attr(node, "surface-animate").is_some()
-                        && state.boxes.get(&member).is_some_and(|old| *old != rect);
-                    boxes.insert(member, rect);
-                    list.push((
-                        (
-                            shape.sub,
-                            attach.is_some(),
-                            document_order(doc, node),
-                            Key::Member(member),
-                        ),
-                        shape,
-                        animate,
-                        attach,
-                    ));
                 }
             }
-            list.sort_by(|a, b| a.0.cmp(&b.0));
-            resolve_attached(&mut list);
-            let keys = list.iter().map(|p| p.0.3).collect();
-            let shapes = list.iter().map(|p| p.1.clone()).collect();
-            let animate: Vec<_> = list.iter().map(|p| p.2).collect();
-            state.set_shapes(keys, shapes, &animate);
-            state.boxes = boxes;
+            el.piece(scene, piece);
+        });
+        if document_root {
+            let mut registry = self.0.borrow_mut();
+            let paint = registry.paint;
+            registry.states.retain(|_, state| state.paint == paint);
         }
     }
+}
+
+impl SurfacePainter {
+    fn picture<S: PaintScene>(
+        &self,
+        el: &ElementPaint<'_, S>,
+        members: &[NodeId],
+        root_transform: Affine,
+    ) -> Scene {
+        let root = el.node();
+        let scale = el.scale();
+        let size = css_rect(el.css_box(), scale);
+        let join = number(root, "surface-join").unwrap_or(0.0).max(0.0);
+        let look = root
+            .primary_styles()
+            .map(|s| material_of(&s))
+            .unwrap_or_default();
+        let mut list = vec![];
+        let mut boxes = HashMap::new();
+        if attr(root, "surface-own") != Some("false") {
+            list.push((
+                (false, false, vec![], Key::Root),
+                Shape::rect(false, size, radii_of(root, size[2])),
+                false,
+                None,
+            ));
+        }
+        for &member in members {
+            let Some(node) = el
+                .document()
+                .get_node(member)
+                .filter(|n| n.flags.is_in_document())
+            else {
+                continue;
+            };
+            let Some((transform, css_box)) = el.locate(member) else {
+                continue;
+            };
+            let relative = root_transform.inverse() * transform * Affine::scale(scale);
+            let [a, b, c, d, x, y] = relative.as_coeffs();
+            let translation = (a - 1.0).abs() < 1e-9
+                && b.abs() < 1e-9
+                && c.abs() < 1e-9
+                && (d - 1.0).abs() < 1e-9;
+            let mut rect = css_rect(css_box, scale);
+            if rect[2] <= 0.0 || rect[3] <= 0.0 {
+                continue;
+            }
+            let shape = if translation {
+                rect[0] += x as f32;
+                rect[1] += y as f32;
+                member_shape(node, rect, join)
+            } else {
+                let mut shape = Shape::rect(
+                    attr(node, "surface-op") == Some("cut"),
+                    rect,
+                    radii_of(node, rect[2]),
+                );
+                shape.transform = relative;
+                shape.join = number(node, "surface-join").unwrap_or(join).max(0.0);
+                let bounds = relative.transform_rect_bbox(peniko::kurbo::Rect::new(
+                    rect[0] as f64,
+                    rect[1] as f64,
+                    (rect[0] + rect[2]) as f64,
+                    (rect[1] + rect[3]) as f64,
+                ));
+                rect = [
+                    bounds.x0 as f32,
+                    bounds.y0 as f32,
+                    bounds.width() as f32,
+                    bounds.height() as f32,
+                ];
+                shape
+            };
+            let attach = match attr(node, "surface-attach") {
+                Some("left") => Some(Side::Left),
+                Some("right") => Some(Side::Right),
+                Some("top") => Some(Side::Top),
+                Some("bottom") => Some(Side::Bottom),
+                _ => None,
+            }
+            .filter(|_| translation && !shape.sub)
+            .map(|side| Attach {
+                side,
+                rect,
+                radii: radii_of(node, rect[2]),
+                join: number(node, "surface-join").unwrap_or(join).max(0.0),
+            });
+            boxes.insert(member, rect);
+            list.push((
+                (
+                    shape.sub,
+                    attach.is_some(),
+                    document_order(el.document(), node),
+                    Key::Member(member),
+                ),
+                shape,
+                attr(node, "surface-animate").is_some(),
+                attach,
+            ));
+        }
+        list.sort_by(|a, b| a.0.cmp(&b.0));
+        resolve_attached(&mut list);
+        let mut registry = self.0.borrow_mut();
+        let paint = registry.paint;
+        let state = registry.states.entry(root.id).or_default();
+        state.paint = paint;
+        state.scale = scale as f32;
+        state.step();
+        let size = [size[2], size[3]];
+        let resized = state.size.is_some_and(|old| old != size);
+        if resized {
+            state.tweens.clear();
+            state.shown = state.target.clone();
+        }
+        state.size = Some(size);
+        for ((_, _, _, key), _, animate, _) in &mut list {
+            *animate &= !resized
+                && match key {
+                    Key::Member(id) => state
+                        .boxes
+                        .get(id)
+                        .is_some_and(|old| boxes.get(id) != Some(old)),
+                    Key::Root => false,
+                };
+        }
+        state.look = look;
+        state.set_shapes(
+            list.iter().map(|p| p.0.3).collect(),
+            list.iter().map(|p| p.1.clone()).collect(),
+            &list.iter().map(|p| p.2).collect::<Vec<_>>(),
+        );
+        state.boxes = boxes;
+        if !state.tweens.is_empty() {
+            el.document().shell_provider.request_redraw();
+        }
+        draw(&state.shown, state.look, 1.0)
+    }
+}
+
+fn css_rect(css_box: &blitz_paint::CssBox, scale: f64) -> [f32; 4] {
+    let b = css_box.border_box;
+    [b.x0, b.y0, b.width(), b.height()].map(|v| (v / scale) as f32)
 }
 
 fn attr<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
@@ -206,30 +318,6 @@ fn numbers(node: &Node, name: &str) -> Vec<f32> {
         .split_whitespace()
         .filter_map(|v| v.parse::<f32>().ok().filter(|v| v.is_finite()))
         .collect()
-}
-fn box_of(doc: &BaseDocument, node: &Node) -> Option<[f32; 4]> {
-    use style::properties::longhands::visibility::computed_value::T as Visibility;
-    // `visibility` is inherited, so the member's own value covers its ancestors.
-    if node
-        .primary_styles()
-        .is_some_and(|s| s.get_inherited_box().visibility != Visibility::Visible)
-    {
-        return None;
-    }
-    let mut ancestor = Some(node);
-    while let Some(n) = ancestor {
-        if n.primary_styles()
-            .is_some_and(|s| s.get_box().display == style::values::specified::Display::None)
-        {
-            return None;
-        }
-        ancestor = n.parent.and_then(|id| doc.get_node(id));
-    }
-    let rect = crate::layout::border_box(doc, node.id)?;
-    (rect[2] > 0.0 && rect[3] > 0.0).then_some(rect)
-}
-fn local(rect: [f32; 4], origin: [f32; 4]) -> [f32; 4] {
-    [rect[0] - origin[0], rect[1] - origin[1], rect[2], rect[3]]
 }
 fn document_order(doc: &BaseDocument, node: &Node) -> Vec<usize> {
     let mut key = vec![];
@@ -420,25 +508,6 @@ impl Surface {
                 self.shown[i] = shape;
             }
         }
-    }
-}
-
-impl Widget for Layer {
-    fn requires_redraw(&self) -> bool {
-        !self.0.borrow().tweens.is_empty()
-    }
-    fn paint(
-        &mut self,
-        _ctx: &mut dyn RenderContext,
-        _styles: &ComputedStyles,
-        _width: u32,
-        _height: u32,
-        scale: f64,
-    ) -> Scene {
-        let mut surface = self.0.borrow_mut();
-        surface.scale = scale as f32;
-        surface.step();
-        draw(&surface.shown, surface.look, scale)
     }
 }
 

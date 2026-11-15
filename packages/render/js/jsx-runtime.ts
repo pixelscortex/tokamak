@@ -94,11 +94,6 @@ export namespace JSX {
     readonly?: boolean;
   }
 
-  /** Background layer of a fused group; its root owns the computed look. */
-  export interface SurfaceAttributes extends Attributes {
-    group: string;
-  }
-
   /** `<tk-icon>` (render/src/icon.rs): SVG path data drawn natively. */
   export interface IconAttributes extends Attributes {
     d: string;
@@ -109,7 +104,6 @@ export namespace JSX {
   }
 
   export interface IntrinsicElements {
-    "tk-surface": SurfaceAttributes;
     "tk-icon": IconAttributes;
     div: Attributes;
     span: Attributes;
