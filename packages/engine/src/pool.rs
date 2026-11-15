@@ -130,40 +130,7 @@ impl Pool {
             let worker = thread::Builder::new()
                 .name(format!("tokamak-js-{id}"))
                 .spawn(move || {
-                    loop {
-                        // Only admission holds this lock. Execution happens after
-                        // releasing it, allowing all workers to run in parallel.
-                        let job = match receiver.lock() {
-                            Ok(receiver) => receiver.recv(),
-                            Err(_) => break,
-                        };
-                        let Ok(job) = job else {
-                            break;
-                        };
-                        if closing.load(Ordering::Acquire) {
-                            let _ = job.reply.send(Err(Error::Closed));
-                            break;
-                        }
-                        let result = catch_unwind(AssertUnwindSafe(|| {
-                            let mut engine = factory()?;
-                            executor.block_on(engine.invoke(
-                                &job.bundle,
-                                &job.export,
-                                job.args,
-                                job.ops,
-                            ))
-                        }))
-                        .unwrap_or_else(|_| {
-                            Err(Error::Engine(
-                                "JavaScript worker panicked; world discarded".into(),
-                            ))
-                        });
-                        let _ = job.reply.send(result);
-                    }
-                    // Aborting an async task cannot stop a running spawn_blocking
-                    // callback (notably getaddrinfo). Never join those callbacks.
-                    // They own their inputs and may finish after this worker exits.
-                    executor.shutdown_background();
+                    run_worker(receiver, closing, factory, executor);
                 })
                 .map_err(|e| Error::Engine(format!("cannot start JS worker: {e}")))?;
             pool.threads.push(worker);
@@ -205,6 +172,51 @@ impl Pool {
             })?;
         Ok(PendingCall(receiver))
     }
+}
+
+fn run_worker<E, F>(
+    receiver: Arc<Mutex<mpsc::Receiver<Job>>>,
+    closing: Arc<AtomicBool>,
+    factory: Arc<F>,
+    executor: tokio::runtime::Runtime,
+) where
+    E: Engine + 'static,
+    F: Fn() -> Result<E, Error>,
+{
+                    loop {
+                        // Only admission holds this lock. Execution happens after
+                        // releasing it, allowing all workers to run in parallel.
+                        let job = match receiver.lock() {
+                            Ok(receiver) => receiver.recv(),
+                            Err(_) => break,
+                        };
+                        let Ok(job) = job else {
+                            break;
+                        };
+                        if closing.load(Ordering::Acquire) {
+                            let _ = job.reply.send(Err(Error::Closed));
+                            break;
+                        }
+                        let result = catch_unwind(AssertUnwindSafe(|| {
+                            let mut engine = factory()?;
+                            executor.block_on(engine.invoke(
+                                &job.bundle,
+                                &job.export,
+                                job.args,
+                                job.ops,
+                            ))
+                        }))
+                        .unwrap_or_else(|_| {
+                            Err(Error::Engine(
+                                "JavaScript worker panicked; world discarded".into(),
+                            ))
+                        });
+                        let _ = job.reply.send(result);
+                    }
+                    // Aborting an async task cannot stop a running spawn_blocking
+                    // callback (notably getaddrinfo). Never join those callbacks.
+                    // They own their inputs and may finish after this worker exits.
+                    executor.shutdown_background();
 }
 
 impl Drop for Pool {

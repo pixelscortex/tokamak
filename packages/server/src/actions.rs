@@ -37,22 +37,7 @@ pub(crate) fn operations(
     let environment = generation.clone();
     let caller = owner.clone();
     ops.register_sync("action.env", move |payload| {
-        let name = payload["name"].as_str().ok_or("env requires a name")?;
-        let grant = format!("env:{name}");
-        let loaded = environment
-            .as_ref()
-            .ok_or("env requires an installed plugin")?;
-        let owner = caller.as_ref().ok_or("env requires an installed plugin")?;
-        if !loaded.catalog.plugins[owner]
-            .manifest
-            .plugin
-            .permissions
-            .contains(&grant)
-        {
-            return Err(format!("environment permission denied: requires {grant}"));
-        }
-        crate::environment::get(name, &loaded.catalog.environment)
-            .map(|value| value.map(Json::String).unwrap_or(Json::Null))
+        environment_value(&environment, &caller, &payload)
     })?;
     for (operation, kind) in [
         ("action.runQuery", FunctionKind::Query),
@@ -107,4 +92,23 @@ pub(crate) fn operations(
         })?;
     }
     Ok(Arc::new(ops))
+}
+
+fn environment_value(environment: &Option<Arc<Loaded>>, caller: &Option<String>, payload: &Json) -> Result<Json, String> {
+        let name = payload["name"].as_str().ok_or("env requires a name")?;
+        let grant = format!("env:{name}");
+        let loaded = environment
+            .as_ref()
+            .ok_or("env requires an installed plugin")?;
+        let owner = caller.as_ref().ok_or("env requires an installed plugin")?;
+        if !loaded.catalog.plugins[owner]
+            .manifest
+            .plugin
+            .permissions
+            .contains(&grant)
+        {
+            return Err(format!("environment permission denied: requires {grant}"));
+        }
+        crate::environment::get(name, &loaded.catalog.environment)
+            .map(|value| value.map(Json::String).unwrap_or(Json::Null))
 }

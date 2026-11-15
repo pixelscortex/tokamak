@@ -107,8 +107,16 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+struct Configuration {
+    data: PathBuf,
+    listen: SocketAddr,
+    bundle: Option<PathBuf>,
+    plugins: Option<PathBuf>,
+    local: Option<PathBuf>,
+    javascript: PoolConfig,
+}
+
+async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Error>> {
     let mut data = PathBuf::from("tokamak.db");
     let mut listen: SocketAddr = "127.0.0.1:3000".parse()?;
     let mut bundle = None;
@@ -118,17 +126,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
         if flag == "plugin" {
-            return plugin_command(args.collect()).await;
+            plugin_command(args.collect()).await?;
+            return Ok(None);
         }
         if flag == "--local-path" {
             println!("{}", local_directory()?.display());
-            return Ok(());
+            return Ok(None);
         }
         if flag == "--help" {
             println!(
                 "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--data <path>] [--listen <127.0.0.1:3000>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
-            return Ok(());
+            return Ok(None);
         }
         let value = args
             .next()
@@ -150,6 +159,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err(format!("unknown option {flag}").into()),
         }
     }
+    Ok(Some(Configuration { data, listen, bundle, plugins, local, javascript }))
+}
+
+async fn start_backend(data: PathBuf, javascript: PoolConfig, plugins: Option<PathBuf>, source: Option<String>) -> Result<(Backend, String), Box<dyn std::error::Error>> {
+    let result = if let Some(root) = plugins {
+        let backend = Backend::start_plugins(Storage::Disk(data), javascript, &root).await?;
+        let hash = backend.server().plugins().await?["revision"]
+            .as_str()
+            .ok_or("Missing catalog revision")?
+            .to_owned();
+        (backend, hash)
+    } else {
+        let source = source.expect("validated legacy source");
+        let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+        let backend = Backend::start(BackendConfig {
+            storage: Storage::Disk(data),
+            bundle: Arc::new(Bundle::new(source, None)?),
+            javascript,
+        })
+        .await?;
+        (backend, hash)
+    };
+    Ok(result)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(Configuration { mut data, listen, bundle, plugins, local, javascript }) = configuration().await? else {
+        return Ok(());
+    };
     if !listen.ip().is_loopback() {
         return Err("unauthenticated POC must bind loopback".into());
     }
@@ -173,24 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let plugin_root = plugins.as_ref().map(std::fs::canonicalize).transpose()?;
-    let (backend, bundle_hash) = if let Some(root) = plugins {
-        let backend = Backend::start_plugins(Storage::Disk(data), javascript, &root).await?;
-        let hash = backend.server().plugins().await?["revision"]
-            .as_str()
-            .ok_or("Missing catalog revision")?
-            .to_owned();
-        (backend, hash)
-    } else {
-        let source = source.expect("validated legacy source");
-        let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
-        let backend = Backend::start(BackendConfig {
-            storage: Storage::Disk(data),
-            bundle: Arc::new(Bundle::new(source, None)?),
-            javascript,
-        })
-        .await?;
-        (backend, hash)
-    };
+    let (backend, bundle_hash) = start_backend(data, javascript, plugins, source).await?;
     let identity = serde_json::json!({
         "url": format!("ws://{}/ws", listener.local_addr()?),
         "pid": std::process::id(),

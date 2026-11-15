@@ -122,13 +122,7 @@ impl<'tx> Query<'tx> {
                 })?;
             }
             for (field, value) in &self.conditions {
-                check_field(field)?;
-                if field == "_id" {
-                    let Value::String(text) = value else {
-                        return Err(Error::Invalid("_id equality requires a table:key string"));
-                    };
-                    text.parse::<Id>()?;
-                }
+                validate_equality(field, value)?;
             }
             if let Some(name) = &self.index {
                 return self.indexed(name).await;
@@ -159,6 +153,19 @@ impl<'tx> Query<'tx> {
         .await;
         self.tx.finish(result)
     }
+    fn index_prefix(&self, fields: &[&str]) -> Result<Vec<StoredValue>> {
+        let mut prefix = Vec::new();
+        for (position, (field, value)) in self.conditions.iter().enumerate() {
+            if fields.get(position).copied() != Some(field.as_str()) {
+                return Err(Error::Invalid(
+                    "index equalities must follow its leading field order",
+                ));
+            }
+            prefix.push(StoredValue::from(value.clone()));
+        }
+        Ok(prefix)
+    }
+
     async fn indexed(&self, name: &str) -> Result<Vec<Document>> {
         let core = &self.tx.state.storage;
         let table = TableName::from(self.table.as_str());
@@ -178,15 +185,7 @@ impl<'tx> Query<'tx> {
                 Ok(field.as_str())
             })
             .collect::<Result<Vec<_>>>()?;
-        let mut prefix = Vec::new();
-        for (position, (field, value)) in self.conditions.iter().enumerate() {
-            if fields.get(position).copied() != Some(field.as_str()) {
-                return Err(Error::Invalid(
-                    "index equalities must follow its leading field order",
-                ));
-            }
-            prefix.push(StoredValue::from(value.clone()));
-        }
+        let prefix = self.index_prefix(&fields)?;
         let mut lower = None;
         let mut upper = None;
         for (field, operator, value) in &self.bounds {
@@ -242,6 +241,17 @@ impl<'tx> Query<'tx> {
         }
         Ok(rows)
     }
+}
+
+fn validate_equality(field: &str, value: &Value) -> Result<()> {
+                check_field(field)?;
+                if field == "_id" {
+                    let Value::String(text) = value else {
+                        return Err(Error::Invalid("_id equality requires a table:key string"));
+                    };
+                    text.parse::<Id>()?;
+                }
+    Ok(())
 }
 
 pub(super) fn field_value(row: &Document, field: &str) -> Value {

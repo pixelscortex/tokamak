@@ -190,25 +190,28 @@ pub fn install_ops<'js>(
     registry: Arc<OpRegistry>,
     invocation: &Invocation,
 ) -> rquickjs::Result<Object<'js>> {
-    install_leased(
-        ctx,
-        registry,
-        invocation.active.clone(),
-        invocation.deadline,
-        Arc::new(AtomicU64::new(0)),
-        0,
-        invocation.determinism,
-    )
+    install_leased(ctx, registry, Lease {
+        active: invocation.active.clone(),
+        deadline: invocation.deadline,
+        modules: Arc::new(AtomicU64::new(0)),
+        depth: 0,
+        determinism: invocation.determinism,
+    })
 }
 
-fn install_leased<'js>(
-    ctx: &Ctx<'js>,
-    registry: Arc<OpRegistry>,
+#[derive(Clone)]
+struct Lease {
     active: Arc<AtomicBool>,
     deadline: Option<Instant>,
     modules: Arc<AtomicU64>,
     depth: u8,
     determinism: Option<Determinism>,
+}
+
+fn install_leased<'js>(
+    ctx: &Ctx<'js>,
+    registry: Arc<OpRegistry>,
+    lease: Lease,
 ) -> rquickjs::Result<Object<'js>> {
     let host = Object::new(ctx.clone())?;
     host.set(
@@ -216,25 +219,25 @@ fn install_leased<'js>(
         Function::new(
             ctx.clone(),
             move |ctx: Ctx<'js>, name: String, args: Value<'js>| {
-                check(&ctx, &active, deadline)?;
+                check(&ctx, &lease.active, lease.deadline)?;
                 let args = decode(&ctx, args)?;
                 // Serialization can run application getters, so check again immediately
                 // before entering Rust, not just before converting the arguments.
-                check(&ctx, &active, deadline)?;
+                check(&ctx, &lease.active, lease.deadline)?;
                 let op = registry.0.get(&name).ok_or_else(|| {
                     Exception::throw_message(&ctx, &format!("unknown host op: {name}"))
                 })?;
                 match op {
                     Op::Sync(op) => {
                         let result = op(args).map_err(|e| Exception::throw_message(&ctx, &e))?;
-                        check(&ctx, &active, deadline)?;
+                        check(&ctx, &lease.active, lease.deadline)?;
                         encode(&ctx, result)
                     }
                     Op::Module(resolve) => {
                         let mut call = resolve(args)
                             .map_err(|error| Exception::throw_message(&ctx, &error))?;
-                        let number = modules.fetch_add(1, Ordering::Relaxed);
-                        if depth >= 16 || number >= 256 {
+                        let number = lease.modules.fetch_add(1, Ordering::Relaxed);
+                        if lease.depth >= 16 || number >= 256 {
                             call.finish(Some(
                                 "delegated module depth/count budget exceeded".into(),
                             ));
@@ -243,51 +246,63 @@ fn install_leased<'js>(
                                 "delegated module depth/count budget exceeded",
                             ));
                         }
-                        let active = active.clone();
-                        let modules = modules.clone();
-                        let future_ctx = ctx.clone();
-                        Ok(Promise::wrap_future(&ctx, async move {
+                        Ok(Promise::wrap_future(&ctx, invoke_module(ctx.clone(), call, lease.clone(), number))?.into_value())
+                    }
+                    Op::Async(op) => {
+                        let future = op(args);
+                        Ok(Promise::wrap_future(&ctx, await_operation(ctx.clone(), future, lease.clone()))?.into_value())
+                    }
+                }
+            },
+        )?,
+    )?;
+    Ok(host)
+}
+
+async fn invoke_module<'js>(ctx: Ctx<'js>, mut call: ModuleCall, lease: Lease, number: u64) -> rquickjs::Result<Value<'js>> {
                             let name = format!("tokamak-module-{number}.js");
-                            let child = determinism.map(|inputs| inputs.child(number));
+                            let child = lease.determinism.map(|inputs| inputs.child(number));
                             let source =
                                 child.map(|inputs| inputs.module_source(&call.bundle.source));
                             let result = async {
-                                check(&future_ctx, &active, deadline)?;
+                                check(&ctx, &lease.active, lease.deadline)?;
                                 let module = Module::declare(
-                                    future_ctx.clone(),
+                                    ctx.clone(),
                                     name.as_str(),
                                     source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
                                 )
                                 .map_err(|error| {
                                     let error = crate::engine::js_error_named(
-                                        &future_ctx,
+                                        &ctx,
                                         error,
                                         &call.bundle,
                                         true,
                                         &name,
                                     );
-                                    Exception::throw_message(&future_ctx, &error.to_string())
+                                    Exception::throw_message(&ctx, &error.to_string())
                                 })?;
                                 let (module, evaluated) = module.eval()?;
                                 evaluated.into_future::<()>().await?;
-                                check(&future_ctx, &active, deadline)?;
+                                check(&ctx, &lease.active, lease.deadline)?;
                                 let namespace = module.namespace()?;
                                 let function: Function = namespace.get(call.export.as_str())?;
-                                let args = encode(&future_ctx, call.args.clone())?;
+                                let args = encode(&ctx, call.args.clone())?;
                                 let host = install_leased(
-                                    &future_ctx,
+                                    &ctx,
                                     call.ops.clone(),
-                                    active.clone(),
-                                    deadline,
-                                    modules,
-                                    depth + 1,
-                                    child,
+                                    Lease {
+                                        active: lease.active.clone(),
+                                        deadline: lease.deadline,
+                                        modules: lease.modules,
+                                        depth: lease.depth + 1,
+                                        determinism: child,
+                                    },
                                 )?;
                                 let pending: MaybePromise = function.call((args, host))?;
                                 let result: Value = pending.into_future().await?;
-                                check(&future_ctx, &active, deadline)?;
-                                let result = decode(&future_ctx, result)?;
-                                encode(&future_ctx, result)
+                                check(&ctx, &lease.active, lease.deadline)?;
+                                let result = decode(&ctx, result)?;
+                                encode(&ctx, result)
                             }
                             .await;
                             match result {
@@ -297,7 +312,7 @@ fn install_leased<'js>(
                                 }
                                 Err(error) => {
                                     let error = crate::engine::js_error_named(
-                                        &future_ctx,
+                                        &ctx,
                                         error,
                                         &call.bundle,
                                         false,
@@ -305,39 +320,26 @@ fn install_leased<'js>(
                                     )
                                     .to_string();
                                     call.finish(Some(error.clone()));
-                                    Err(Exception::throw_message(&future_ctx, &error))
+                                    Err(Exception::throw_message(&ctx, &error))
                                 }
                             }
-                        })?
-                        .into_value())
-                    }
-                    Op::Async(op) => {
-                        let mut future = op(args);
-                        let active = active.clone();
-                        let future_ctx = ctx.clone();
-                        Ok(Promise::wrap_future(&ctx, async move {
+}
+
+async fn await_operation<'js>(ctx: Ctx<'js>, mut future: OpFuture, lease: Lease) -> rquickjs::Result<Value<'js>> {
                             // Check every poll, not just the first one. A UI
                             // context can keep driving promises after the event
                             // that created this operation has been retired.
                             let result = std::future::poll_fn(|cx| {
-                                if let Err(error) = check(&future_ctx, &active, deadline) {
+                                if let Err(error) = check(&ctx, &lease.active, lease.deadline) {
                                     return std::task::Poll::Ready(Err(error));
                                 }
                                 future.as_mut().poll(cx).map(|result| {
-                                    result.map_err(|e| Exception::throw_message(&future_ctx, &e))
+                                    result.map_err(|e| Exception::throw_message(&ctx, &e))
                                 })
                             })
                             .await?;
-                            check(&future_ctx, &active, deadline)?;
-                            encode(&future_ctx, result)
-                        })?
-                        .into_value())
-                    }
-                }
-            },
-        )?,
-    )?;
-    Ok(host)
+                            check(&ctx, &lease.active, lease.deadline)?;
+                            encode(&ctx, result)
 }
 
 fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Option<Instant>) -> rquickjs::Result<()> {

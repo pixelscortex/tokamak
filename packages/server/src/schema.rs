@@ -46,36 +46,7 @@ fn identifier(name: &str) -> bool {
         .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
         && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
-impl Schema {
-    pub(crate) fn parse(value: &Value) -> Result<Self, Error> {
-        // Legacy bundles without a schema exported null (or {}).
-        let schema: Self = if value.is_null() {
-            Self::default()
-        } else {
-            serde_json::from_value(value.clone())
-                .map_err(|e| invalid(format!("Invalid plugin schema: {e}")))?
-        };
-        if schema.tables.len() > MAX_TABLES {
-            return Err(invalid(format!(
-                "Invalid plugin schema: at most {MAX_TABLES} tables are allowed"
-            )));
-        }
-        for (table, definition) in &schema.tables {
-            // Checked before the name is echoed, so an oversized name cannot
-            // be copied into the error message.
-            if table.len() > MAX_NAME_BYTES {
-                return Err(invalid(format!(
-                    "Invalid plugin schema: table names are at most {MAX_NAME_BYTES} bytes"
-                )));
-            }
-            Table::new(table).map_err(|e| invalid(format!("Invalid schema table {table}: {e}")))?;
-            if definition.indexes.len() > MAX_INDEXES_PER_TABLE {
-                return Err(invalid(format!(
-                    "Invalid schema table {table}: at most {MAX_INDEXES_PER_TABLE} indexes are allowed"
-                )));
-            }
-            let mut names = BTreeSet::new();
-            for index in &definition.indexes {
+fn validate_index<'a>(table: &str, definition: &TableSchema, index: &'a Index, names: &mut BTreeSet<&'a String>) -> Result<(), Error> {
                 if index.name.len() > MAX_NAME_BYTES {
                     return Err(invalid(format!(
                         "Invalid schema table {table}: index names are at most {MAX_NAME_BYTES} bytes"
@@ -115,6 +86,40 @@ impl Schema {
                         return Err(fail("repeated field"));
                     }
                 }
+    Ok(())
+}
+
+impl Schema {
+    pub(crate) fn parse(value: &Value) -> Result<Self, Error> {
+        // Legacy bundles without a schema exported null (or {}).
+        let schema: Self = if value.is_null() {
+            Self::default()
+        } else {
+            serde_json::from_value(value.clone())
+                .map_err(|e| invalid(format!("Invalid plugin schema: {e}")))?
+        };
+        if schema.tables.len() > MAX_TABLES {
+            return Err(invalid(format!(
+                "Invalid plugin schema: at most {MAX_TABLES} tables are allowed"
+            )));
+        }
+        for (table, definition) in &schema.tables {
+            // Checked before the name is echoed, so an oversized name cannot
+            // be copied into the error message.
+            if table.len() > MAX_NAME_BYTES {
+                return Err(invalid(format!(
+                    "Invalid plugin schema: table names are at most {MAX_NAME_BYTES} bytes"
+                )));
+            }
+            Table::new(table).map_err(|e| invalid(format!("Invalid schema table {table}: {e}")))?;
+            if definition.indexes.len() > MAX_INDEXES_PER_TABLE {
+                return Err(invalid(format!(
+                    "Invalid schema table {table}: at most {MAX_INDEXES_PER_TABLE} indexes are allowed"
+                )));
+            }
+            let mut names = BTreeSet::new();
+            for index in &definition.indexes {
+                validate_index(table, definition, index, &mut names)?;
             }
         }
         Ok(schema)

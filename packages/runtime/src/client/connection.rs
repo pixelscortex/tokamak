@@ -145,6 +145,21 @@ fn complete(expected: &Option<(String, u64)>, event: &Value) -> bool {
     })
 }
 
+fn forward_event(sender: &HostSender, value: &Value) -> Result<(), Error> {
+    let Err(error) = sender.send("connection:event", value) else {
+        return Ok(());
+    };
+    // Size is a per-operation failure, never a transport failure.
+    if !error.to_string().contains("result too large") {
+        return Err(error.into());
+    }
+    let kind = value["type"].as_str().unwrap_or("response");
+    let failure = serde_json::json!({"type":kind,"id":value["id"],
+        "result":{"Err":"result too large (1 MiB limit)"}});
+    sender.send("connection:event", failure)?;
+    Ok(())
+}
+
 pub async fn serve(
     mut socket: Socket,
     mut requests: mpsc::Receiver<String>,
@@ -187,14 +202,8 @@ pub async fn serve(
                                 closing = true;
                                 requests.close();
                                 deadline = Instant::now() + Duration::from_secs(5);
-                            } else if let Err(error) = sender.send("connection:event", &value) {
-                                // Size is a per-operation failure, never a transport failure.
-                                if error.to_string().contains("result too large") {
-                                    let kind = value["type"].as_str().unwrap_or("response");
-                                    let failure = serde_json::json!({"type":kind,"id":value["id"],
-                                        "result":{"Err":"result too large (1 MiB limit)"}});
-                                    if sender.send("connection:event", failure).is_err() { break; }
-                                } else { break; }
+                            } else if forward_event(sender, &value).is_err() {
+                                break;
                             }
                         }
                     },

@@ -126,21 +126,20 @@ impl ReadSet {
                 Dependency::Table(_) => true,
                 Dependency::Record(id) => records.iter().any(|change| &change.id == id),
                 Dependency::Filter(table, clauses) => records.iter().any(|change| {
-                    change.id.table() == table
-                        && [change.before.as_ref(), change.after.as_ref()]
-                            .into_iter()
-                            .flatten()
-                            .any(|image| {
-                                clauses.iter().all(|(key, value)| {
-                                    image
-                                        .get(key)
-                                        .is_some_and(|actual| json_equal(actual, value))
-                                })
-                            })
+                    change.id.table() == table && matches_images(change, clauses)
                 }),
             }
         })
     }
+}
+
+fn matches_images(change: &RecordChange, clauses: &[(String, Value)]) -> bool {
+    [change.before.as_ref(), change.after.as_ref()]
+        .into_iter()
+        .flatten()
+        .any(|image| clauses.iter().all(|(key, value)| {
+            image.get(key).is_some_and(|actual| json_equal(actual, value))
+        }))
 }
 
 impl Document {
