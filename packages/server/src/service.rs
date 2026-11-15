@@ -84,7 +84,26 @@ impl Server {
         bundle: Arc<Bundle>,
         space: DataSpace,
     ) -> Result<Self, Error> {
-        let inspected = inspect(&pool, bundle.clone()).await;
+        let inspected = async {
+            let inspected = inspect(&pool, bundle.clone()).await?;
+            let schema = crate::schema::Schema::parse(&inspected.0["schema"])?;
+            let mut tx = Box::pin(database.begin())
+                .await
+                .map_err(|e| Error::Invalid(e.to_string()))?;
+            match Box::pin(schema.apply(&mut tx, &space)).await {
+                Ok(()) => Box::pin(tx.commit())
+                    .await
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
+                Err(error) => {
+                    Box::pin(tx.rollback()).await.map_err(|e| {
+                        Error::Invalid(format!("{error}; schema rollback failed: {e}"))
+                    })?;
+                    return Err(error);
+                }
+            }
+            Ok(inspected)
+        }
+        .await;
         let (descriptor, kinds) = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
@@ -339,6 +358,7 @@ pub(crate) async fn inspect(
             "bundle descriptor must include schema".into(),
         ));
     }
+    crate::schema::Schema::parse(&descriptor["schema"])?;
     Ok((descriptor, kinds))
 }
 
@@ -749,6 +769,7 @@ impl Coordinator {
         })?;
         let mut metadata = plugins.catalog.metadata();
         metadata["functions"] = plugins.descriptor["functions"].clone();
+        metadata["schema"] = plugins.descriptor["schema"].clone();
         Ok(metadata)
     }
 

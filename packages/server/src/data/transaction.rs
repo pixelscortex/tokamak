@@ -1,33 +1,91 @@
-//! A call-owned SDK transaction, retained across separate operations/awaits.
-//! Failed operations poison the whole call so catching a host error cannot save
+//! A call-owned storage transaction, retained across separate operations/awaits.
+//! Failed or interrupted mutations poison the whole call; failed reads do too.
+//! Dropping a read does not poison: reads stage no record/index/catalog writes.
+//! Catching a host error cannot save
 //! earlier writes. The write set is local until commit succeeds, then published
-//! synchronously before returning. Rollback and failed commits publish nothing.
+//! before returning, even if the caller stops awaiting commit. Once polled,
+//! commit and rollback run in owned tasks; cancelling the caller cannot interrupt
+//! storage finalization. Rollback and failed commits publish nothing.
 
 use super::{
     ChangeEvent, DatabaseState, Document, Error, Id, Query, RecordChange, Result, Table,
     changes::encoded_size, types::check_fields,
 };
+use super::{
+    Object, Value,
+    types::{check_field, normalize},
+};
+use std::borrow::Cow;
+use std::sync::atomic::Ordering;
+use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard};
+
 use std::{
     collections::BTreeSet,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
-use surrealdb::{
-    engine::local::Db,
-    types::{NotFoundError, Object, Value},
+use surrealdb_datastore::{
+    Transaction as StorageTransaction,
+    key::schema::{RecordKey, RecordPrefix},
 };
+use surrealdb_idx::{
+    catalog::{Index, IndexDefinition, Record, providers::*},
+    val::{TableName, Value as StoredValue},
+};
+use surrealdb_kvs::key::KVKeyDecode;
+
+// Hold the catalog stable from a writer's first mutation through its outcome.
+// Read guards coexist; only defining a new index needs exclusive access.
+enum CatalogGuard {
+    Read { _guard: OwnedRwLockReadGuard<()> },
+    Write { _guard: OwnedRwLockWriteGuard<()> },
+}
+
+// Arm before any mutation work (including catalog creation and index updates).
+// Only a successful return disarms this guard. Errors, panics and dropped
+// futures all poison the retained transaction, so partial writes cannot commit.
+// Keeping the exclusive borrow here also covers nested reads during a mutation.
+struct Mutation<'a> {
+    tx: &'a mut Transaction,
+    complete: bool,
+}
+
+impl<'a> Mutation<'a> {
+    fn new(tx: &'a mut Transaction) -> Self {
+        Self {
+            tx,
+            complete: false,
+        }
+    }
+
+    fn finish<T>(mut self, result: Result<T>) -> Result<T> {
+        self.complete = result.is_ok();
+        result
+    }
+}
+
+impl Drop for Mutation<'_> {
+    fn drop(&mut self) {
+        if !self.complete {
+            self.tx.failed = true;
+        }
+    }
+}
 
 #[must_use = "commit or roll back the transaction before closing its database"]
 pub struct Transaction {
-    inner: surrealdb::method::Transaction<Db>,
+    pub(super) inner: Arc<StorageTransaction>,
     // Keep the database alive and block close until this invocation finishes.
     // Unlike a borrowed sender, this fits a 'static runtime callback safely.
-    state: Arc<DatabaseState>,
+    pub(super) state: Arc<DatabaseState>,
     written: BTreeSet<Table>,
     changes: Option<Vec<RecordChange>>,
     change_bytes: usize,
     read_only: bool,
     failed: bool,
+    epochs: (u64, u64),
+    catalog_guard: Option<CatalogGuard>,
+    catalog_changed: bool,
 }
 
 #[cfg(test)]
@@ -54,19 +112,60 @@ mod keyed_tests {
 
 impl Transaction {
     pub(super) fn new(
-        inner: surrealdb::method::Transaction<Db>,
+        inner: StorageTransaction,
         state: Arc<DatabaseState>,
         read_only: bool,
+        epochs: (u64, u64),
     ) -> Self {
         Self {
-            inner,
+            inner: Arc::new(inner),
             state,
             written: BTreeSet::new(),
             changes: Some(Vec::new()),
             change_bytes: 0,
             read_only,
             failed: false,
+            epochs,
+            catalog_guard: None,
+            catalog_changed: false,
         }
+    }
+
+    fn catalog(&mut self, define: bool) -> Result<()> {
+        let core = &self.state.storage;
+        let conflict = || {
+            Error::Database(anyhow::Error::new(
+                surrealdb_kvs::err::Error::TransactionConflict(
+                    "catalog changed or is in use; retry with a fresh snapshot".into(),
+                ),
+            ))
+        };
+        if define && !matches!(self.catalog_guard, Some(CatalogGuard::Write { .. })) {
+            // Upgrade by releasing our read guard. Never wait on another
+            // call-owned transaction: its owner may be awaiting this operation.
+            // Epoch validation below makes a non-atomic upgrade safe.
+            self.catalog_guard = None;
+            self.catalog_guard = Some(CatalogGuard::Write {
+                _guard: core
+                    .catalog_gate
+                    .clone()
+                    .try_write_owned()
+                    .map_err(|_| conflict())?,
+            });
+        } else if self.catalog_guard.is_none() {
+            self.catalog_guard = Some(CatalogGuard::Read {
+                _guard: core
+                    .catalog_gate
+                    .clone()
+                    .try_read_owned()
+                    .map_err(|_| conflict())?,
+            });
+        }
+        let (catalog, writes) = core.epochs();
+        if catalog != self.epochs.0 || (define && writes != self.epochs.1) {
+            return Err(conflict());
+        }
+        Ok(())
     }
 
     fn record(&mut self, before: Option<&Document>, after: Option<&Document>) {
@@ -114,91 +213,109 @@ impl Transaction {
         result
     }
 
-    /// Only our fixed statements reach here. Even names/IDs/limits are bindings.
-    /// An absent table is an empty read in a schemaless application, not DDL.
-    pub(crate) async fn rows(
-        &mut self,
-        sql: String,
-        bindings: Object,
-        write: bool,
-    ) -> Result<Vec<Document>> {
+    /// Cancelling a read leaves the transaction usable: reads stage no writes.
+    /// A returned read error still poisons the transaction.
+    pub async fn get(&mut self, id: &Id) -> Result<Option<Document>> {
         let result = async {
-            self.ready(write)?;
-            let response = self.inner.query(sql).bind(bindings).await?;
-            let mut response = match response.check() {
-                Ok(response) => response,
-                Err(error)
-                    if !write
-                        && matches!(
-                            error.not_found_details(),
-                            Some(NotFoundError::Table { .. })
-                        ) =>
-                {
-                    return Ok(Vec::new());
-                }
-                Err(error) => return Err(error.into()),
-            };
-            let rows: Vec<Value> = response.take(0)?;
-            rows.into_iter().map(Document::decode).collect()
+            self.ready(false)?;
+            let core = &self.state.storage;
+            let rid = id.record();
+            let record = self
+                .inner
+                .get_record(core.ns, core.db, &rid.table, &rid.key, None)
+                .await?;
+            if record.data == StoredValue::None {
+                return Ok(None);
+            }
+            Ok(Some(Document::decode(record.data.clone())?))
         }
         .await;
         self.finish(result)
     }
 
-    pub async fn get(&mut self, id: &Id) -> Result<Option<Document>> {
-        let mut bindings = Object::new();
-        bindings.insert("id", id.record());
-        Ok(self
-            .rows("SELECT * FROM $id".into(), bindings, false)
-            .await?
-            .pop())
+    /// Scan keys in storage ID order, then decode through get_record so the
+    /// catalog's record envelope and canonical identity remain authoritative.
+    pub(super) async fn scan_table(&self, table: &Table) -> Result<Vec<Document>> {
+        let core = &self.state.storage;
+        let table = TableName::from(table.as_str());
+        let range = RecordPrefix {
+            ns: core.ns,
+            db: core.db,
+            tb: Cow::Borrowed(&table),
+        }
+        .range()?;
+        let keys = self.inner.keys_raw(range, u32::MAX, 0, None).await?;
+        let mut documents = Vec::with_capacity(keys.len());
+        for key in keys {
+            let key = RecordKey::decode_key(&key)?;
+            let record = self
+                .inner
+                .get_record(core.ns, core.db, &table, &key.id, None)
+                .await?;
+            documents.push(Document::decode(record.data.clone())?);
+        }
+        Ok(documents)
     }
 
+    /// Mutations that error or are dropped after polling poison the transaction.
+    /// Only rollback is then allowed; commit discards all staged writes.
     pub async fn insert(&mut self, table: &Table, value: Object) -> Result<Id> {
         self.create(table, None, value).await
     }
 
     /// Kernel metadata uses deterministic keys for direct lookup. This is not a
-    /// JavaScript capability; CREATE still rejects duplicates and poisons the
+    /// JavaScript capability; keyed insertion rejects duplicates and poisons the
     /// transaction rather than silently replacing existing data.
     pub(crate) async fn insert_keyed(&mut self, id: &Id, value: Object) -> Result<Id> {
         self.create(id.table(), Some(id), value).await
     }
 
     async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Id> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
+            tx.ready(true)?;
             check_fields(&value)?;
-            // Epoch milliseconds are immutable metadata, not a user-supplied sort key.
+            let Value::Object(fields) = normalize(Value::Object(value), 0)? else {
+                unreachable!()
+            };
             let millis = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_err(|_| Error::Invalid("clock is before the Unix epoch"))?
                 .as_millis();
             let millis =
                 i64::try_from(millis).map_err(|_| Error::Invalid("clock is out of range"))?;
-            let mut stored = Object::new();
-            stored.insert("_creationTime", millis);
-            stored.insert("data", value);
-            let mut bindings = Object::new();
-            let statement = if let Some(id) = id {
-                bindings.insert("id", id.record());
-                "CREATE $id CONTENT $value RETURN AFTER"
-            } else {
-                bindings.insert("table", table.as_str());
-                "CREATE type::table($table) CONTENT $value RETURN AFTER"
+            let id = match id {
+                Some(id) => id.clone(),
+                None => Id::new(table.clone(), uuid::Uuid::new_v4().simple().to_string())?,
             };
-            bindings.insert("value", stored);
-            let row = self
-                .rows(statement.into(), bindings, true)
-                .await?
-                .pop()
-                .ok_or(Error::Invalid("insert returned no document"))?;
-            self.written.insert(table.clone());
-            self.record(None, Some(&row));
-            Ok(row.id)
+            tx.catalog(false)?;
+            let rid = id.record();
+            let core = &tx.state.storage;
+            tx.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
+                .await?;
+            let row = Document {
+                id: id.clone(),
+                creation_time: millis,
+                fields,
+            };
+            tx.indexes(None, Some(&row)).await?;
+            tx.inner
+                .put_record(
+                    core.ns,
+                    core.db,
+                    &rid.table,
+                    &rid.key,
+                    Arc::new(Record::new(row.stored())),
+                )
+                .await?;
+            tx.written.insert(table.clone());
+            tx.record(None, Some(&row));
+            Ok(id)
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
     }
 
     pub async fn patch(&mut self, id: &Id, value: Object) -> Result<()> {
@@ -210,10 +327,12 @@ impl Transaction {
     }
 
     async fn update(&mut self, id: &Id, value: Object, replace: bool) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
+            tx.ready(true)?;
             check_fields(&value)?;
-            let old = self.get(id).await?.ok_or(Error::MissingRecord)?;
+            let old = tx.get(id).await?.ok_or(Error::MissingRecord)?;
             let mut fields = if replace {
                 Object::new()
             } else {
@@ -222,57 +341,202 @@ impl Transaction {
             for (key, value) in value {
                 fields.insert(key, value);
             }
-            // Do not claim a table write when the document would be unchanged.
+            let Value::Object(fields) = normalize(Value::Object(fields), 0)? else {
+                unreachable!()
+            };
             if fields == old.fields {
                 return Ok(());
             }
-            let mut stored = Object::new();
-            stored.insert("_creationTime", old.creation_time);
-            stored.insert("data", fields);
-            let mut bindings = Object::new();
-            bindings.insert("id", id.record());
-            bindings.insert("value", stored);
-            let mut rows = self
-                .rows(
-                    "UPDATE $id CONTENT $value RETURN AFTER".into(),
-                    bindings,
-                    true,
+            tx.catalog(false)?;
+            let persisted = Document {
+                id: id.clone(),
+                creation_time: old.creation_time,
+                fields,
+            };
+            let rid = id.record();
+            let core = &tx.state.storage;
+            tx.indexes(Some(&old), Some(&persisted)).await?;
+            tx.inner
+                .set_record(
+                    core.ns,
+                    core.db,
+                    &rid.table,
+                    &rid.key,
+                    Arc::new(Record::new(persisted.stored())),
                 )
                 .await?;
-            let persisted = rows.pop().ok_or(Error::MissingRecord)?;
-            // The engine can normalize distinct inputs to the same document
-            // (for example, omitting NONE-valued fields). Its returned data,
-            // not our pre-storage payload, decides whether observers changed.
-            if persisted.fields != old.fields {
-                self.written.insert(id.table().clone());
-                self.record(Some(&old), Some(&persisted));
-            }
+            tx.written.insert(id.table().clone());
+            tx.record(Some(&old), Some(&persisted));
             Ok(())
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
     }
 
     /// Deleting an absent record is a no-op and must not report its table.
     pub async fn delete(&mut self, id: &Id) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
         let result = async {
-            self.ready(true)?;
-            let Some(old) = self.get(id).await? else {
+            tx.ready(true)?;
+            let Some(old) = tx.get(id).await? else {
                 return Ok(());
             };
-            let mut bindings = Object::new();
-            bindings.insert("id", id.record());
-            let rows = self
-                .rows("DELETE $id RETURN BEFORE".into(), bindings, true)
+            tx.catalog(false)?;
+            let rid = id.record();
+            let core = &tx.state.storage;
+            tx.indexes(Some(&old), None).await?;
+            tx.inner
+                .del_record(core.ns, core.db, &rid.table, &rid.key)
                 .await?;
-            if !rows.is_empty() {
-                self.written.insert(id.table().clone());
-                self.record(Some(&old), None);
-            }
+            tx.written.insert(id.table().clone());
+            tx.record(Some(&old), None);
             Ok(())
         }
         .await;
-        self.finish(result)
+        mutation.finish(result)
+    }
+
+    /// Define a b-tree value index on application fields (including metadata).
+    /// Existing rows cannot be backfilled here: a new definition on a nonempty
+    /// table is rejected. Repeating the identical definition is a no-op.
+    pub async fn define_index(
+        &mut self,
+        table: &Table,
+        name: &str,
+        fields: &[&str],
+        unique: bool,
+    ) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
+        let result = async {
+            tx.ready(true)?;
+            check_field(name)?;
+            if fields.is_empty() {
+                return Err(Error::Invalid("an index needs at least one field"));
+            }
+            let mut seen = BTreeSet::new();
+            for field in fields {
+                check_field(field)?;
+                if !seen.insert(*field) {
+                    return Err(Error::Invalid("index fields must be distinct"));
+                }
+            }
+            let core = &tx.state.storage;
+            let tb = TableName::from(table.as_str());
+            tx.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &tb, None)
+                .await?;
+            let cols = fields
+                .iter()
+                .map(|field| {
+                    // IndexOperation otherwise fans arrays out into element
+                    // entries. Its trailing Flatten marker stores one whole
+                    // value, keeping indexed eq consistent with Rust filtering.
+                    surrealdb_idx::expr::Idiom(vec![
+                        surrealdb_idx::expr::Part::Field((*field).into()),
+                        surrealdb_idx::expr::Part::Flatten,
+                    ])
+                })
+                .collect::<Vec<_>>();
+            let kind = if unique { Index::Uniq } else { Index::Idx };
+            if let Some(existing) = tx
+                .inner
+                .get_tb_index(core.ns, core.db, &tb, name, None)
+                .await?
+            {
+                return if existing.cols == cols && existing.index == kind {
+                    Ok(())
+                } else {
+                    Err(Error::Invalid(
+                        "a different index definition already uses that name; index backfill is not supported yet",
+                    ))
+                };
+            }
+            tx.catalog(true)?;
+            let core = &tx.state.storage;
+            if tx.inner.tb_has_records(core.ns, core.db, &tb).await? {
+                return Err(Error::Invalid(
+                    "cannot define an index on a table with rows; index backfill is not supported yet",
+                ));
+            }
+            let index_id = core
+                .sequences
+                .next_index_id(None, core.ns, core.db, tb.clone())
+                .await?;
+            let index = IndexDefinition {
+                index_id,
+                name: name.into(),
+                table_name: tb.clone(),
+                cols,
+                index: kind,
+                count_cond: None,
+                prepare_remove: false,
+                format_version: surrealdb_idx::catalog::INDEX_FORMAT_VERSION,
+                comment: None,
+                nulls_not_distinct: false,
+            };
+            tx.inner.put_tb_index(core.ns, core.db, &tb, &index).await?;
+            tx.catalog_changed = true;
+            Ok(())
+        }
+        .await;
+        mutation.finish(result)
+    }
+
+    async fn indexes(&self, before: Option<&Document>, after: Option<&Document>) -> Result<()> {
+        let row = after.or(before).expect("a mutation has a document");
+        let core = &self.state.storage;
+        let rid = row.id.record();
+        let indexes = self
+            .inner
+            .all_tb_indexes(core.ns, core.db, &rid.table, None)
+            .await?;
+        if indexes.is_empty() {
+            return Ok(());
+        }
+        let table = self.inner.expect_tb(core.ns, core.db, &rid.table).await?;
+        let env = super::storage::IndexContext {
+            tx: self.inner.clone(),
+            core,
+        };
+        for index in indexes.iter() {
+            let values = |document: &Document| -> Result<Vec<StoredValue>> {
+                index
+                    .cols
+                    .iter()
+                    .map(|column| {
+                        let [
+                            surrealdb_idx::expr::Part::Field(field),
+                            surrealdb_idx::expr::Part::Flatten,
+                        ] = column.0.as_slice()
+                        else {
+                            return Err(Error::Invalid("index is not a TokamakDB value index"));
+                        };
+                        Ok(StoredValue::from(super::query::field_value(
+                            document,
+                            field.as_str(),
+                        )))
+                    })
+                    .collect()
+            };
+            let old = before.map(values).transpose()?;
+            let new = after.map(values).transpose()?;
+            let mut compaction = false;
+            surrealdb_idx::index::IndexOperation::new(
+                &env,
+                core.ns,
+                core.db,
+                table.table_id,
+                index,
+                old,
+                new,
+                &rid,
+            )
+            .compute(&super::storage::NoAnalyzer, &mut compaction)
+            .await?;
+        }
+        Ok(())
     }
 
     pub fn query(&mut self, table: &Table) -> Query<'_> {
@@ -281,13 +545,42 @@ impl Transaction {
 
     /// Consume the handle: neither a second commit nor late JS writes are possible.
     /// No automatic retry: only the invocation owner can safely replay JS logic.
+    /// Once polled, finalization runs to completion on the Tokio runtime even if
+    /// this future is dropped. A successful commit still publishes exactly one
+    /// change event when it has row changes, regardless of caller cancellation.
+    /// The runtime must remain running until finalization completes.
     pub async fn commit(self) -> Result<()> {
+        tokio::spawn(self.commit_owned())
+            .await
+            .map_err(|error| Error::Database(error.into()))?
+    }
+
+    async fn commit_owned(self) -> Result<()> {
         if self.failed {
             self.inner.cancel().await?;
             return Err(Error::FailedTransaction);
         }
-        self.inner.commit().await?;
+        if self.read_only {
+            // Read transactions have nothing to flush; the backend rejects a
+            // read-only commit, while the application API permits it.
+            self.inner.cancel().await?;
+        } else {
+            self.inner.commit().await?;
+        }
+        // This task owns self, including the catalog guard and database owner,
+        // through the actual storage outcome. Dropping the caller's JoinHandle
+        // does not cancel it. Publish epochs ONLY after storage success and
+        // BEFORE releasing the gate, with no intervening await. Thus an epoch
+        // captured before opening a snapshot can never be newer than its data.
+        // A snapshot opened during commit either conflicts at the held gate or
+        // observes the changed epoch on its next mutation and must retry.
+        let core = &self.state.storage;
+        if self.catalog_changed {
+            core.catalog_epoch.fetch_add(1, Ordering::Release);
+        }
         if !self.written.is_empty() {
+            core.write_epoch.fetch_add(1, Ordering::Release);
+            // One owner sends once after success, including cancelled callers.
             // No receivers is normal before live subscriptions are installed.
             let _ = self.state.changes.send(ChangeEvent {
                 tables: self.written.into_iter().collect(),
@@ -297,10 +590,17 @@ impl Transaction {
         Ok(())
     }
 
-    /// Await rollback explicitly; SDK drop rollback is asynchronous and requires
-    /// a live Tokio runtime, so it is only a cancellation safety net.
+    /// Consume the handle and discard its writes without publishing changes.
+    /// Once polled, cleanup retains the database and catalog gate until storage
+    /// cancellation resolves, even if the caller drops this future.
     pub async fn rollback(self) -> Result<()> {
-        self.inner.cancel().await?;
-        Ok(())
+        tokio::spawn(async move {
+            let result = self.inner.cancel().await.map_err(Error::from);
+            // Retain ALL of self, not just inner, through the cleanup await.
+            drop(self);
+            result
+        })
+        .await
+        .map_err(|error| Error::Database(error.into()))?
     }
 }

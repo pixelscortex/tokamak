@@ -129,6 +129,13 @@ impl Loaded {
             .await
             .map_err(|e| invalid(e.to_string()))?;
         let result = async {
+            // Install every schema before writing grants. A failure rolls back
+            // all catalog changes and grants for the candidate generation.
+            for (id, (descriptor, _)) in &self.inspected {
+                let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
+                let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+                Box::pin(schema.apply(&mut tx, &space)).await?;
+            }
             let mut granted = Vec::new();
             for id in &self.catalog.order {
                 let definition = &self.catalog.plugins[id].manifest.plugin;
@@ -249,9 +256,15 @@ impl Loaded {
                 functions.push(function);
             }
         }
-        let descriptor = json!({"schema":{},"functions":functions});
+        // Keep logical table names scoped by plugin in the aggregate metadata.
+        let schemas: BTreeMap<_, _> = inspected
+            .iter()
+            .map(|(id, (descriptor, _))| (id.clone(), descriptor["schema"].clone()))
+            .collect();
+        let descriptor = json!({"schema":schemas,"functions":functions});
         let mut metadata = catalog.metadata();
         metadata["functions"] = descriptor["functions"].clone();
+        metadata["schema"] = descriptor["schema"].clone();
         let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(Arc::new(Self {
             catalog,

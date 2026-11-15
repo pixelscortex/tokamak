@@ -291,6 +291,35 @@ fn text<'a>(payload: &'a Json, key: &str) -> data::Result<&'a str> {
     ))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IndexQuery {
+    name: String,
+    eq: Vec<IndexEquality>,
+    range: Vec<IndexRange>,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IndexEquality {
+    field: String,
+    value: Json,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IndexRange {
+    field: String,
+    operator: RangeOperator,
+    value: Json,
+}
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum RangeOperator {
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+}
+
 async fn operation_call(
     tx: &mut Transaction,
     reads: &mut ReadSet,
@@ -337,15 +366,11 @@ async fn operation_call(
                 }
                 clauses.push((name, value));
             }
-            match record_dependency {
-                Some(id) => reads.record(id),
-                None => reads.filter(table.clone(), clauses.clone()),
-            }
-            let query = tx.query(&table).order(match text(&payload, "order")? {
+            let order = match text(&payload, "order")? {
                 "asc" => Order::Asc,
                 "desc" => Order::Desc,
                 _ => return Err(data::Error::Invalid("order must be asc or desc")),
-            });
+            };
             let limit = field(&payload, "limit")?;
             let limit = if limit.is_null() {
                 usize::MAX
@@ -358,6 +383,48 @@ async fn operation_call(
                     ))?;
                 usize::try_from(count).unwrap_or(usize::MAX)
             };
+            if let Some(index) = payload.get("index") {
+                if !clauses.is_empty() {
+                    return Err(data::Error::Invalid(
+                        "indexed queries require an empty where array",
+                    ));
+                }
+                // Deserialize strictly before execution; the core validates index
+                // existence, ordered leading equalities and the next-field range,
+                // even for limit zero. It also poisons failed transactions.
+                let index: IndexQuery = serde_json::from_value(index.clone()).map_err(|_| {
+                    data::Error::Invalid(
+                        "index must contain name, eq and range arrays with valid clauses",
+                    )
+                })?;
+                // Range-aware dependencies can be added later. A whole-table read
+                // correctly invalidates empty, bounded and limited index scans.
+                reads.table(table.clone());
+                let mut query = tx.query(&table).with_index(&index.name).order(order);
+                for clause in index.eq {
+                    query = query.eq(clause.field, clause.value);
+                }
+                for clause in index.range {
+                    query = match clause.operator {
+                        RangeOperator::Gt => query.gt(clause.field, clause.value),
+                        RangeOperator::Gte => query.gte(clause.field, clause.value),
+                        RangeOperator::Lt => query.lt(clause.field, clause.value),
+                        RangeOperator::Lte => query.lte(clause.field, clause.value),
+                    };
+                }
+                let rows =
+                    Box::pin(query.limit(limit.min(u32::MAX as usize) as u32).collect()).await?;
+                return Ok(Json::Array(
+                    rows.into_iter()
+                        .map(|doc| space.document(doc))
+                        .collect::<data::Result<Vec<_>>>()?,
+                ));
+            }
+            match record_dependency {
+                Some(id) => reads.record(id),
+                None => reads.filter(table.clone(), clauses.clone()),
+            }
+            let query = tx.query(&table).order(order);
             // SDK fields are arbitrary TOP-LEVEL JSON keys, not SQL paths. Native
             // query equality has a narrower identifier/value language. Scan the
             // same snapshot in storage order, then apply SDK JSON equality and

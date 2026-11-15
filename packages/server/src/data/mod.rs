@@ -6,11 +6,12 @@
 mod changes;
 mod query;
 mod space;
+mod storage;
 mod transaction;
 mod types;
 
-// Internal ownership checks can inspect the supplied datastore without exposing
-// an untracked raw-write capability in the public or feature-facing API.
+// Internal ownership checks inspect raw storage without exposing an untracked
+// write capability in the public or feature-facing API.
 #[cfg(test)]
 #[path = "../../tests/internal/datastore_owner.rs"]
 mod ownership_tests;
@@ -18,13 +19,13 @@ mod ownership_tests;
 pub use changes::{ReadSet, RecordChange, json_equal};
 pub use query::Query;
 pub use space::{DataSpace, json_object};
-pub use surrealdb::types::{Object, SurrealValue, Value};
+pub use surrealdb_types::{Object, SurrealValue, Value};
 pub use transaction::Transaction;
 pub use types::{Document, Error, Id, Order, Result, Table};
 
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
-use surrealdb::{Surreal, engine::local::Db};
-use surrealdb_core::kvs::Datastore;
+use storage::StorageCore;
+use surrealdb_kvs::TransactionType;
 use tokio::sync::{Mutex, broadcast};
 
 /// A filesystem path is not an endpoint string: it cannot select a remote engine.
@@ -57,92 +58,38 @@ pub struct Database {
 // so there is no runtime lock or competing shutdown poller.
 enum Lifecycle {
     Open(Arc<DatabaseState>),
-    Closing(Mutex<Pin<Box<dyn Future<Output = surrealdb::Result<()>> + Send>>>),
-    Closed(surrealdb::Result<()>),
+    Closing(Mutex<Pin<Box<dyn Future<Output = std::result::Result<(), String>> + Send>>>),
+    Closed(std::result::Result<(), String>),
 }
 
 // Shared only with transactions, not independently cloneable database owners.
 // The strong count therefore tells close whether an invocation still owns a tx.
 pub(super) struct DatabaseState {
-    client: Surreal<Db>,
-    // Keep the explicit owner alongside the ONLY SDK attachment. Features never
-    // receive this raw handle: bypass writes would evade tracked invalidation.
-    datastore: Arc<Datastore>,
+    storage: StorageCore,
     changes: broadcast::Sender<ChangeEvent>,
 }
 
-fn startup_error(
-    error: impl std::fmt::Display,
-    cleanup: std::result::Result<(), impl std::fmt::Display>,
-) -> String {
-    match cleanup {
-        Ok(()) => error.to_string(),
-        Err(cleanup) => format!("{error}; startup cleanup failed: {cleanup}"),
-    }
-}
-
 impl Database {
-    /// Narrow crate-internal diagnostic access, not a feature capability or an
-    /// independently managed SDK attachment. Do not retain across close.
-    #[allow(dead_code)]
-    pub(crate) fn datastore(&self) -> Result<&Arc<Datastore>> {
-        Ok(&self.state()?.datastore)
-    }
-
-    /// Box the embedded engine's deep startup future at this ownership boundary.
-    /// Callers keep the same `.await` API without inheriting its enormous layout
-    /// or needing their own recursion-limit/stack configuration.
+    /// Open just the storage backend and the fixed application catalog.
     pub fn open(storage: Storage) -> Pin<Box<dyn Future<Output = Result<Self>> + Send>> {
         Box::pin(Self::open_owned(storage))
     }
 
     async fn open_owned(storage: Storage) -> Result<Self> {
         let path = match storage {
-            Storage::Memory => "memory".to_owned(),
+            Storage::Memory => "mem://".to_owned(),
             Storage::Disk(path) => format!(
                 "surrealkv://{}",
                 path.to_str()
                     .ok_or(Error::Invalid("database path must be UTF-8"))?
             ),
         };
-        // Version/bootstrap writes must precede background maintenance. The
-        // supplied-datastore SDK bridge deliberately does none of this setup.
-        let datastore = Box::pin(
-            Datastore::builder()
-                .without_maintenance_tasks()
-                .build_with_path(&path),
-        )
-        .await
-        .map_err(|e| Error::Startup(e.to_string()))?;
-        let startup = async {
-            Box::pin(datastore.check_version()).await?;
-            Box::pin(datastore.bootstrap()).await?;
-            Box::pin(datastore.start_maintenance_tasks_checked()).await
-        }
-        .await;
-        if let Err(error) = startup {
-            let cleanup = datastore.shutdown().await;
-            return Err(Error::Startup(startup_error(error, cleanup)));
-        }
-        let client = match Surreal::<Db>::unstable_from_datastore(datastore.clone(), None).await {
-            Ok(client) => client,
-            Err(error) => {
-                let cleanup = datastore.shutdown().await;
-                return Err(Error::Startup(startup_error(error, cleanup)));
-            }
-        };
-        if let Err(error) = client.use_ns("tokamak").use_db("tokamak").await {
-            // After attachment the SDK owns shutdown, including its routing task.
-            let cleanup = client.shutdown().await;
-            return Err(Error::Startup(startup_error(error, cleanup)));
-        }
+        let storage = StorageCore::open(&path)
+            .await
+            .map_err(|e| Error::Startup(e.to_string()))?;
         let (changes, _) = broadcast::channel(256);
         Ok(Self {
-            state: Lifecycle::Open(Arc::new(DatabaseState {
-                client,
-                datastore,
-                changes,
-            })),
+            state: Lifecycle::Open(Arc::new(DatabaseState { storage, changes })),
         })
     }
 
@@ -173,15 +120,25 @@ impl Database {
     /// feature service replays the WHOLE invocation on a typed conflict.
     pub async fn begin(&self) -> Result<Transaction> {
         let state = self.state()?;
-        let tx = state.client.clone().begin().await?;
-        Ok(Transaction::new(tx, Arc::clone(state), false))
+        let epochs = state.storage.epochs();
+        let tx = state
+            .storage
+            .factory
+            .transaction(TransactionType::Write, state.storage.sequences.clone())
+            .await?;
+        Ok(Transaction::new(tx, Arc::clone(state), false, epochs))
     }
 
     /// Both the wrapper and the engine reject writes in a read-only call.
     pub async fn read_only(&self) -> Result<Transaction> {
         let state = self.state()?;
-        let tx = state.client.clone().begin().read_only().await?;
-        Ok(Transaction::new(tx, Arc::clone(state), true))
+        let epochs = state.storage.epochs();
+        let tx = state
+            .storage
+            .factory
+            .transaction(TransactionType::Read, state.storage.sequences.clone())
+            .await?;
+        Ok(Transaction::new(tx, Arc::clone(state), true, epochs))
     }
 
     /// Busy leaves the database open. Once shutdown starts, data operations
@@ -199,7 +156,12 @@ impl Database {
                 std::mem::replace(&mut self.state, Lifecycle::Closed(Ok(())))
             {
                 self.state = Lifecycle::Closing(Mutex::new(Box::pin(async move {
-                    let result = state.client.shutdown().await;
+                    let result = state
+                        .storage
+                        .factory
+                        .shutdown()
+                        .await
+                        .map_err(|e| e.to_string());
                     // Shutdown alone is not a disk-lock barrier while retained
                     // Arc references still own the storage engine.
                     drop(state);
@@ -209,12 +171,16 @@ impl Database {
         }
         let result = match &mut self.state {
             Lifecycle::Closing(shutdown) => shutdown.get_mut().as_mut().await,
-            Lifecycle::Closed(result) => return result.clone().map_err(Error::from),
+            Lifecycle::Closed(result) => {
+                return result
+                    .clone()
+                    .map_err(|e| Error::Database(anyhow::anyhow!(e)));
+            }
             Lifecycle::Open(_) => unreachable!("open state was moved to shutdown above"),
         };
-        // Drop the completed future and its SDK owner before reporting success;
+        // Drop the completed future and its storage owner before reporting success;
         // otherwise a caller could still encounter a held SurrealKV lock.
         self.state = Lifecycle::Closed(result.clone());
-        result.map_err(Error::from)
+        result.map_err(|e| Error::Database(anyhow::anyhow!(e)))
     }
 }
