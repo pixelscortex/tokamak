@@ -1,0 +1,48 @@
+plugins/chat/backend/threads.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-35
+plugins/chat/package.json
+  s_91af24b72fc58d::t_670f9f1aed155d 1-12
+plugins/chat/backend/tsconfig.json
+  s_91af24b72fc58d::t_670f9f1aed155d 1-5
+plugins/chat/backend/schema.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-20
+plugins/chat/README.md
+  s_91af24b72fc58d::t_345ec30c928618 1-64
+plugins/chat/vite.config.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-9
+plugins/chat/backend/runs.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-21
+plugins/chat/api.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-4
+plugins/chat/backend/_functions.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-18
+plugins/chat/backend/messages.ts
+  s_91af24b72fc58d::t_670f9f1aed155d 1-8
+app/moon.yml
+  s_91af24b72fc58d::t_345ec30c928618 10,23-24
+  s_91af24b72fc58d::t_b3b6f6fb69a20b 25-26
+bun.lock
+  s_91af24b72fc58d::t_ee60f983ea5f2c 113-124,604-605
+plugins/chat/backend/chat.ts
+  s_91af24b72fc58d::t_e35edd0edde41e 1-51
+plugins/chat/backend/model.ts
+  s_91af24b72fc58d::t_49f97ea19f56e6 1-20
+plugins/chat/backend/send.ts
+  s_91af24b72fc58d::t_5518da8fc234e6 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ba553409e41285fe9b32e60b01e202dd62a2b5aa",
+  "prompts": {},
+  "sessions": {
+    "s_91af24b72fc58d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e0f9-ef30-76f0-bcad-1b5991cf0c07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
