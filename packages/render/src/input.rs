@@ -128,8 +128,30 @@ fn text_field(doc: &dyn Document, target: NodeId) -> bool {
 }
 
 pub(super) fn blocks_paste(doc: &dyn Document, target: NodeId) -> bool {
-    text_field(doc, target)
-        && (attribute(doc, target, "readonly") || attribute(doc, target, "disabled"))
+    text_field(doc, target) && (attribute(doc, target, "readonly") || disabled(doc, target))
+}
+
+fn disabled(doc: &dyn Document, target: NodeId) -> bool {
+    if attribute(doc, target, "disabled") {
+        return true;
+    }
+    let inner = doc.inner();
+    let mut child = target;
+    while let Some(parent) = inner.get_node(child).and_then(|n| n.parent) {
+        if tag(doc, parent, "fieldset") && attribute(doc, parent, "disabled") {
+            let legend = inner
+                .get_node(parent)
+                .unwrap()
+                .children
+                .iter()
+                .find(|id| tag(doc, **id, "legend"));
+            if legend != Some(&child) {
+                return true;
+            }
+        }
+        child = parent;
+    }
+    false
 }
 
 fn protect_input(doc: &dyn Document, event: &DomEvent, state: &mut EventState) {
@@ -139,7 +161,7 @@ fn protect_input(doc: &dyn Document, event: &DomEvent, state: &mut EventState) {
     // operations which can change text are canceled before Blitz edits.
     if text_field(doc, target) {
         let tab = matches!(&event.data, DomEventData::KeyDown(key) if key.key == Key::Named(NamedKey::Tab));
-        let disabled_edit = attribute(doc, target, "disabled")
+        let disabled_edit = disabled(doc, target)
             && !tab
             && matches!(
                 event.data,
