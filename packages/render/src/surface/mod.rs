@@ -41,7 +41,7 @@ struct Attach {
     radii: [f32; 4],
     join: f32,
 }
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 struct Look {
     fill: [f32; 4],
     bevel: f32,
@@ -64,6 +64,9 @@ struct Surface {
     size: Option<[f32; 2]>,
     boxes: HashMap<NodeId, [f32; 4]>,
     scale: f32,
+    picture: Option<(Vec<Shape>, Look, Scene)>,
+    #[cfg(test)]
+    builds: usize,
 }
 #[derive(Default)]
 struct Group {
@@ -293,7 +296,7 @@ impl SurfacePainter {
         if !state.tweens.is_empty() {
             el.document().shell_provider.request_redraw();
         }
-        draw(&state.shown, state.look, 1.0)
+        state.picture()
     }
 }
 
@@ -436,6 +439,25 @@ fn member_shape(node: &Node, rect: [f32; 4], default_join: f32) -> Shape {
 }
 
 impl Surface {
+    fn picture(&mut self) -> Scene {
+        if !self
+            .picture
+            .as_ref()
+            .is_some_and(|(shapes, look, _)| *shapes == self.shown && *look == self.look)
+        {
+            self.picture = Some((
+                self.shown.clone(),
+                self.look,
+                draw(&self.shown, self.look, 1.0),
+            ));
+            #[cfg(test)]
+            {
+                self.builds += 1;
+            }
+        }
+        self.picture.as_ref().unwrap().2.clone()
+    }
+
     fn set_shapes(&mut self, keys: Vec<Key>, shapes: Vec<Shape>, animate: &[bool]) {
         let old: HashMap<Key, usize> = self.keys.iter().enumerate().map(|(i, k)| (*k, i)).collect();
         let mut tweens = HashMap::new();

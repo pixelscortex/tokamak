@@ -947,3 +947,29 @@ fn raw_edge_bands_paint_nothing_outside_the_outline() {
         assert!(outside > 1000);
     }
 }
+
+#[test]
+fn unchanged_picture_is_reused_and_shape_or_look_changes_rebuild_it() {
+    let mut f = Fixture::new(
+        r#"<div id="root" tk-group="g"><div id="member" surface-groups="g" style="left:90px"></div></div>"#,
+        &["member"],
+    );
+    assert_eq!(f.state().builds, 1);
+    f.frame();
+    assert_eq!(f.state().builds, 1);
+    for (i, (name, style)) in [
+        ("member", "left:100px"),
+        ("root", "--tk-fill:red"),
+        ("root", "--tk-fill:red;--tk-bevel:2"),
+        ("root", "--tk-fill:red;--tk-bevel:2;border-radius:12px"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        f.attr(name, "style", style);
+        f.frame();
+        assert_eq!(f.state().builds, i + 2, "{style}");
+        f.frame();
+        assert_eq!(f.state().builds, i + 2, "{style} reused");
+    }
+}
