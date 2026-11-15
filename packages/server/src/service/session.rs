@@ -44,9 +44,11 @@ impl SessionSender {
         if self.slow.load(Ordering::Acquire) {
             return Err(Error::SlowConsumer);
         }
+
         if self.alive.upgrade().is_none_or(|sender| sender.is_closed()) {
             return Err(Error::Closed);
         }
+
         Ok(())
     }
 
@@ -60,6 +62,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
     if request.id() > 9_007_199_254_740_991 {
         return Err(Error::Invalid("request ID must be a JavaScript safe integer".into()));
     }
+
     Ok(match request {
         Request::Query {
             id,
@@ -150,6 +153,7 @@ impl tower::Service<Request> for SessionSender {
             if !sender.wait_for_capacity {
                 return sender.request(request);
             }
+
             let action = request_action(request)?;
             sender.check_live()?;
             // A permit is real bounded backpressure, not a retry of an operation
@@ -157,6 +161,7 @@ impl tower::Service<Request> for SessionSender {
             let permit = sender.commands.reserve().await.map_err(|_| Error::Closed)?;
             sender.check_live()?;
             permit.send(Command::Action(sender.id, action));
+
             Ok(())
         })
     }

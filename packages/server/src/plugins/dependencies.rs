@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<String>, Error> {
     for (id, artifact) in plugins {
         let definition = &artifact.manifest.plugin;
+
         for (dependency, range) in definition.dependencies() {
             let Some(installed) = plugins.get(dependency) else {
                 if definition.depends.contains_key(dependency) {
@@ -12,12 +13,14 @@ pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<S
                 }
                 continue;
             };
+
             if !matches_version(range, &installed.manifest.plugin.version)? {
                 return Err(invalid(format!(
                     "Incompatible dependency {dependency} for {id}: requires {range}"
                 )));
             }
         }
+
         for (conflict, range) in &definition.breaks {
             if let Some(installed) = plugins.get(conflict) {
                 if matches_version(range, &installed.manifest.plugin.version)? {
@@ -29,10 +32,14 @@ pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<S
     // Iterative DFS keeps long dependency chains on the heap, with each edge
     // visited once; plugin count must never turn into native stack depth.
     let mut order = Vec::new();
+
     let mut done = BTreeSet::new();
+
     let mut visiting = BTreeSet::new();
+
     for id in plugins.keys() {
         let mut stack = vec![(id.as_str(), false)];
+
         while let Some((id, exit)) = stack.pop() {
             if exit {
                 visiting.remove(id);
@@ -40,14 +47,18 @@ pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<S
                 order.push(id.to_owned());
                 continue;
             }
+
             if done.contains(id) {
                 continue;
             }
+
             if !visiting.insert(id) {
                 return Err(invalid(format!("Plugin dependency cycle at {id}")));
             }
             stack.push((id, true));
+
             let definition = &plugins[id].manifest.plugin;
+
             for dependency in definition.dependencies().map(|(id, _)| id).rev() {
                 if plugins.contains_key(dependency) {
                     stack.push((dependency, false));
@@ -55,11 +66,13 @@ pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<S
             }
         }
     }
+
     Ok(order)
 }
 
 fn matches_version(range: &str, version: &str) -> Result<bool, Error> {
     let requirement = VersionReq::parse(range).map_err(|e| invalid(e.to_string()))?;
+
     let version = Version::parse(version).map_err(|e| invalid(e.to_string()))?;
 
     Ok(requirement.matches(&version))

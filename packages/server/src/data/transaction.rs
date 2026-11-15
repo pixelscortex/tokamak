@@ -1,11 +1,6 @@
-//! A call-owned storage transaction, retained across separate operations/awaits.
-//! Failed or interrupted mutations poison the whole call; failed reads do too.
-//! Dropping a read does not poison: reads stage no record/index/catalog writes.
-//! Catching a host error cannot save
-//! earlier writes. The write set is local until commit succeeds, then published
-//! before returning, even if the caller stops awaiting commit. Once polled,
-//! commit and rollback run in owned tasks; cancelling the caller cannot interrupt
-//! storage finalization. Rollback and failed commits publish nothing.
+//! Failed reads and failed or cancelled mutations poison the transaction.
+//! Polled commit/rollback retain database ownership until storage finishes;
+//! only successful commits publish changes. The Tokio runtime must stay alive.
 
 use super::{
     ChangeEvent, DatabaseState, Document, Error, Id, Query, RecordChange, Result, Table,
@@ -123,11 +118,13 @@ impl Transaction {
 
     fn catalog(&mut self, define: bool) -> Result<()> {
         let core = &self.state.storage;
+
         let conflict = || {
             Error::Database(anyhow::Error::new(surrealdb_kvs::err::Error::TransactionConflict(
                 "catalog changed or is in use; retry with a fresh snapshot".into(),
             )))
         };
+
         if define && !matches!(self.catalog_guard, Some(CatalogGuard::Write { .. })) {
             // Upgrade by releasing our read guard. Never wait on another
             // call-owned transaction: its owner may be awaiting this operation.
@@ -141,10 +138,13 @@ impl Transaction {
                 _guard: core.catalog_gate.clone().try_read_owned().map_err(|_| conflict())?,
             });
         }
+
         let (catalog, writes) = core.epochs();
+
         if catalog != self.epochs.0 || (define && writes != self.epochs.1) {
             return Err(conflict());
         }
+
         Ok(())
     }
 
@@ -152,18 +152,23 @@ impl Transaction {
         let Some(changes) = &mut self.changes else {
             return;
         };
+
         if changes.len() >= 64 {
             self.changes = None;
             return;
         }
+
         let before = before.cloned().map(Document::into_json);
+
         let after = after.cloned().map(Document::into_json);
+
         let Some(bytes) =
             encoded_size(&(&before, &after), 32768usize.saturating_sub(self.change_bytes))
         else {
             self.changes = None;
             return;
         };
+
         let id = after
             .as_ref()
             .or(before.as_ref())
@@ -183,9 +188,11 @@ impl Transaction {
         if self.failed {
             return Err(Error::FailedTransaction);
         }
+
         if write && self.read_only {
             return Err(Error::ReadOnly);
         }
+
         Ok(())
     }
 
@@ -200,12 +207,8 @@ impl Transaction {
         Query::new(self, table.clone())
     }
 
-    /// Consume the handle: neither a second commit nor late JS writes are possible.
-    /// No automatic retry: only the invocation owner can safely replay JS logic.
-    /// Once polled, finalization runs to completion on the Tokio runtime even if
-    /// this future is dropped. A successful commit still publishes exactly one
-    /// change event when it has row changes, regardless of caller cancellation.
-    /// The runtime must remain running until finalization completes.
+    /// Polled finalization survives caller cancellation. Only the invocation
+    /// owner can replay JS safely; commit never retries automatically.
     pub async fn commit(self) -> Result<()> {
         tokio::spawn(self.commit_owned()).await.map_err(|error| Error::Database(error.into()))?
     }
@@ -213,8 +216,10 @@ impl Transaction {
     async fn commit_owned(self) -> Result<()> {
         if self.failed {
             self.inner.cancel().await?;
+
             return Err(Error::FailedTransaction);
         }
+
         if self.read_only {
             // Read transactions have nothing to flush; the backend rejects a
             // read-only commit, while the application API permits it.
@@ -222,17 +227,14 @@ impl Transaction {
         } else {
             self.inner.commit().await?;
         }
-        // This task owns self, including the catalog guard and database owner,
-        // through the actual storage outcome. Dropping the caller's JoinHandle
-        // does not cancel it. Publish epochs ONLY after storage success and
-        // BEFORE releasing the gate, with no intervening await. Thus an epoch
-        // captured before opening a snapshot can never be newer than its data.
-        // A snapshot opened during commit either conflicts at the held gate or
-        // observes the changed epoch on its next mutation and must retry.
+        // Publish epochs after storage success and before releasing the catalog
+        // gate, without an await, so snapshots cannot miss committed changes.
         let core = &self.state.storage;
+
         if self.catalog_changed {
             core.catalog_epoch.fetch_add(1, Ordering::Release);
         }
+
         if !self.written.is_empty() {
             core.write_epoch.fetch_add(1, Ordering::Release);
             // One owner sends once after success, including cancelled callers.
@@ -242,6 +244,7 @@ impl Transaction {
                 records: self.changes,
             });
         }
+
         Ok(())
     }
 

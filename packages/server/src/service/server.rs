@@ -36,7 +36,9 @@ impl Server {
     pub async fn connect(&self) -> Result<Session, Error> {
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::Connect(reply))?;
+
         let (id, output, slow, alive) = wait.await.map_err(|_| Error::Closed)??;
+
         Ok(Session {
             sender: SessionSender {
                 id,
@@ -57,6 +59,7 @@ impl Server {
         if let Some(result) = self.closed.borrow().clone() {
             return result;
         }
+
         let (reply, wait) = oneshot::channel();
         // The first request enters a dedicated one-slot control lane even when
         // application admission is saturated. Once enqueued, cancellation cannot
@@ -65,6 +68,7 @@ impl Server {
         if self.closing.send(reply).await.is_err() {
             return self.await_closed().await;
         }
+
         match wait.await {
             Ok(result) => result,
             Err(_) => self.await_closed().await,
@@ -75,6 +79,7 @@ impl Server {
         // A cancelled close caller does not own the shutdown barrier. Retain its
         // completed outcome so retries cannot report Closed before locks release.
         let mut closed = self.closed.clone();
+
         loop {
             if let Some(result) = closed.borrow_and_update().clone() {
                 return result;

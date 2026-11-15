@@ -8,6 +8,7 @@ impl Coordinator {
         mutation: bool,
     ) -> Result<Json, String> {
         let mut result = Err("mutation conflict retry limit exceeded".into());
+
         let determinism = engine::Determinism::default();
 
         for attempt in 0..ATTEMPTS {

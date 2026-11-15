@@ -22,18 +22,24 @@ impl Coordinator {
                     while let Some(command) = commands.recv().await {
                         match command {
                             Command::Action(session, action) => self.action(session, action).await,
-                            Command::Connect(reply) => { let _ = reply.send(Err(Error::Closed)); }
+                            Command::Connect(reply) => {
+                                let _ = reply.send(Err(Error::Closed));
+                            }
                             command => self.control(command).await,
                         }
                     }
                     self.stop_actions().await;
-                    let result = Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
+
+                    let result = Box::pin(self.database.close())
+                        .await
+                        .map_err(|e| Error::Invalid(e.to_string()));
                     self.closed.send_replace(Some(result.clone()));
+
                     let _ = reply.send(result);
                     return;
                 }
                 Some(completion) = self.action_jobs.join_next() => {
-                    if let Ok((session,id,result)) = completion {
+                    if let Ok((session, id, result)) = completion {
                         self.emit(session, Event::Response { id, result });
                     }
                 }
@@ -49,15 +55,27 @@ impl Coordinator {
                 command = commands.recv() => match command {
                     Some(Command::Connect(reply)) => {
                         if self.sessions.len() >= SESSIONS || self.next_session == u64::MAX {
-                            let _ = reply.send(Err(Error::Overloaded)); continue;
+                            let _ = reply.send(Err(Error::Overloaded));
+                            continue;
                         }
                         self.next_session += 1;
+
                         let id = self.next_session;
+
                         let (output, receiver) = mpsc::channel(OUTPUTS);
+
                         let slow = Arc::new(AtomicBool::new(false));
+
                         let alive = output.downgrade();
-                        self.sessions.insert(id, Client { output, slow: slow.clone(), subscriptions: BTreeMap::new() });
-                        if reply.send(Ok((id, receiver, slow, alive))).is_err() { self.sessions.remove(&id); }
+                        self.sessions.insert(id, Client {
+                            output,
+                            slow: slow.clone(),
+                            subscriptions: BTreeMap::new(),
+                        });
+
+                        if reply.send(Ok((id, receiver, slow, alive))).is_err() {
+                            self.sessions.remove(&id);
+                        }
                     }
                     Some(Command::Action(session, action)) => self.action(session, action).await,
                     Some(command) => self.control(command).await,
@@ -68,6 +86,7 @@ impl Coordinator {
         // Last-handle drop is also graceful: no invocation is abandoned at an
         // await point by a disappearing client/server handle.
         self.stop_actions().await;
+
         let result =
             Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
         self.closed.send_replace(Some(result));

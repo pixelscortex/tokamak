@@ -4,14 +4,19 @@ impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
         Self::read_reusing(directory, None)
     }
+
     pub(super) fn read_reusing(
         directory: &Path,
         previous: Option<&Artifact>,
     ) -> Result<Self, Error> {
         let root = directory.canonicalize().map_err(|e| invalid(e.to_string()))?;
+
         let manifest = Manifest::read(&root)?;
+
         let names = manifest.validate()?;
+
         let mut assets = BTreeMap::new();
+
         for name in names {
             let whole_backend = manifest
                 .entries
@@ -23,6 +28,7 @@ impl Artifact {
                 asset(&root, name, &manifest.hashes, previous, whole_backend)?,
             );
         }
+
         let bundle = manifest
             .entries
             .backend
@@ -39,13 +45,18 @@ impl Artifact {
                 }
 
                 let source = assets[&entry.code].backend_text(&entry.code)?;
+
                 let map = assets[&entry.map].backend_text(&entry.map)?;
                 Bundle::new(source, Some(&map)).map(Arc::new).map_err(|e| invalid(e.to_string()))
             })
             .transpose()?;
+
         let provides = manifest.plugin.provides.iter().cloned().collect();
+
         let consumes = manifest.plugin.consumes.iter().cloned().collect();
+
         let permissions = manifest.plugin.permissions.iter().cloned().collect();
+
         Ok(Self {
             manifest,
             bundle,
@@ -55,6 +66,7 @@ impl Artifact {
             permissions,
         })
     }
+
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,
     /// server source, credentials or on-disk files can be fetched by this method.
     pub fn ui_asset(&self, name: &str) -> Option<Arc<Asset>> {

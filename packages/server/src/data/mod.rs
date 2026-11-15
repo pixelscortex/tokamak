@@ -83,8 +83,11 @@ impl Database {
                 path.to_str().ok_or(Error::Invalid("database path must be UTF-8"))?
             ),
         };
+
         let storage = StorageCore::open(&path).await.map_err(|e| Error::Startup(e.to_string()))?;
+
         let (changes, _) = broadcast::channel(256);
+
         Ok(Self {
             state: Lifecycle::Open(Arc::new(DatabaseState {
                 storage,
@@ -129,12 +132,15 @@ impl Database {
 
     async fn transaction(&self, read_only: bool) -> Result<Transaction> {
         let state = self.state()?;
+
         let epochs = state.storage.epochs();
+
         let kind = if read_only {
             TransactionType::Read
         } else {
             TransactionType::Write
         };
+
         let tx = state.storage.factory.transaction(kind, state.storage.sequences.clone()).await?;
 
         Ok(Transaction::new(tx, Arc::clone(state), read_only, epochs))
@@ -163,6 +169,7 @@ impl Database {
                 })));
             }
         }
+
         let result = match &mut self.state {
             Lifecycle::Closing(shutdown) => shutdown.get_mut().as_mut().await,
             Lifecycle::Closed(result) => {

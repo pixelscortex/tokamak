@@ -18,21 +18,27 @@ impl Server {
     ) -> Result<Self, Error> {
         let inspected = async {
             let inspected = inspect(&pool, bundle.clone()).await?;
+
             let schema = crate::schema::Schema::parse(&inspected.0["schema"])?;
+
             let mut tx =
                 Box::pin(database.begin()).await.map_err(|e| Error::Invalid(e.to_string()))?;
+
             match Box::pin(schema.apply(&mut tx, &space)).await {
                 Ok(()) => Box::pin(tx.commit()).await.map_err(|e| Error::Invalid(e.to_string()))?,
                 Err(error) => {
                     Box::pin(tx.rollback()).await.map_err(|e| {
                         Error::Invalid(format!("{error}; schema rollback failed: {e}"))
                     })?;
+
                     return Err(error);
                 }
             }
+
             Ok(inspected)
         }
         .await;
+
         let (descriptor, kinds) = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
@@ -52,16 +58,19 @@ impl Server {
             Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
             Err(error) => Err(error),
         };
+
         let loaded = match loaded {
             Ok(loaded) => Box::pin(loaded.record_grants(&database, None)).await.map(|()| loaded),
             Err(error) => Err(error),
         };
+
         let loaded = match loaded {
             Ok(loaded) => loaded,
             Err(error) => {
                 return Err(startup_error(&mut database, error).await);
             }
         };
+
         let kinds =
             loaded.targets.iter().map(|(name, target)| (name.clone(), target.kind)).collect();
         Self::start(
@@ -96,11 +105,16 @@ impl Server {
                 return Err(startup_error(&mut database, Error::Invalid(error.to_string())).await);
             }
         };
+
         let changes = database.subscribe(); // Before any initial subscription run.
         let (commands, receiver) = mpsc::channel(COMMANDS);
+
         let (closing, close_receiver) = mpsc::channel(1);
+
         let cleanup = Arc::new(Notify::new());
+
         let (closed_sender, closed) = watch::channel(None);
+
         let actor = Coordinator {
             database,
             pool,
@@ -122,6 +136,7 @@ impl Server {
         // through COMMIT, invalidation, and ordered delivery. Client cancellation
         // does not abort finalization. Process/runtime failure remains unknown.
         tokio::spawn(actor.run(receiver, close_receiver));
+
         Ok(Self {
             commands,
             closing,
@@ -141,7 +156,9 @@ pub(crate) async fn inspect(
         .map_err(|e| Error::Invalid(e.to_string()))?
         .await
         .map_err(|e| Error::Invalid(e.to_string()))?;
+
     let mut kinds = BTreeMap::new();
+
     for function in descriptor
         .get("functions")
         .and_then(Json::as_array)
@@ -151,6 +168,7 @@ pub(crate) async fn inspect(
             .get("name")
             .and_then(Json::as_str)
             .ok_or_else(|| Error::Invalid("invalid function name".into()))?;
+
         let mutation = match function.get("kind").and_then(Json::as_str) {
             Some("query") => FunctionKind::Query,
             Some("mutation") => FunctionKind::Mutation,
@@ -161,14 +179,17 @@ pub(crate) async fn inspect(
                 ));
             }
         };
+
         if kinds.insert(name.to_owned(), mutation).is_some() {
             return Err(Error::Invalid("duplicate function name".into()));
         }
     }
+
     if descriptor.get("schema").is_none() {
         return Err(Error::Invalid("bundle descriptor must include schema".into()));
     }
     crate::schema::Schema::parse(&descriptor["schema"])?;
+
     Ok((descriptor, kinds))
 }
 

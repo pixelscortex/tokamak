@@ -13,13 +13,16 @@ impl WebHost {
         {
             return Err("fetch requires an http(s) URL without credentials".into());
         }
+
         let host = canonical_host(url.host_str().ok_or("fetch URL has no host")?)?;
+
         if !self.permissions.contains(&host) {
             return Err(format!("fetch permission denied: requires net:{host}"));
         }
         // Use the same canonical host for authority and transport, including
         // mapped IPv6 and WHATWG's alternate IPv4 spellings.
         url.set_host(Some(&host)).map_err(|e| e.to_string())?;
+
         Ok(())
     }
 }
@@ -30,6 +33,7 @@ pub(super) fn canonical_host(raw: &str) -> Result<String> {
     if raw.is_empty() || raw.chars().any(|c| c.is_whitespace() || "/\\@?#".contains(c)) {
         return Err("invalid network permission host".into());
     }
+
     let host = if let Ok(ip) = raw.parse::<IpAddr>() {
         match ip {
             IpAddr::V4(ip) => url::Host::Ipv4(ip),
@@ -38,6 +42,7 @@ pub(super) fn canonical_host(raw: &str) -> Result<String> {
     } else {
         url::Host::parse(raw).map_err(|e| e.to_string())?
     };
+
     Ok(match host {
         url::Host::Domain(name) => name.trim_end_matches('.').to_ascii_lowercase(),
         url::Host::Ipv4(ip) => ip.to_string(),
@@ -64,6 +69,7 @@ impl reqwest::dns::Resolve for PublicResolver {
                 let addresses = resolve_os(host).await?;
                 addresses.into_iter().filter(|address| public_address(address.ip())).collect()
             };
+
             if addresses.is_empty() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
@@ -95,6 +101,7 @@ fn public_address(ip: IpAddr) -> bool {
             if let Some(ip) = ip.to_ipv4_mapped() {
                 return public_address(IpAddr::V4(ip));
             }
+
             let s = ip.segments();
             // Conservatively allow global unicast only, excluding protocol,
             // documentation and transition ranges (including embedded IPv4).
@@ -109,6 +116,7 @@ fn public_address(ip: IpAddr) -> bool {
 async fn resolve_os(host: String) -> std::io::Result<Vec<std::net::SocketAddr>> {
     tokio::time::timeout(DNS_TIMEOUT, async move {
         let permit = DNS_LOOKUPS.acquire().await.map_err(std::io::Error::other)?;
+
         let task =
             tokio_util::task::AbortOnDropHandle::new(tokio::task::spawn_blocking(move || {
                 // Only owned host/address data crosses this boundary;

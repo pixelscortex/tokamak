@@ -18,15 +18,19 @@ impl Coordinator {
         impl std::io::Write for Limit {
             fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
                 self.0 += bytes.len();
+
                 if self.0 > engine::MAX_WIRE_MESSAGE_BYTES {
                     return Err(std::io::Error::other("result too large"));
                 }
+
                 Ok(bytes.len())
             }
+
             fn flush(&mut self) -> std::io::Result<()> {
                 Ok(())
             }
         }
+
         if serde_json::to_writer(&mut Limit(0), &event).is_err() {
             event = match event {
                 Event::Response {
@@ -65,9 +69,11 @@ impl Coordinator {
                 _ => return,
             };
         }
+
         let Some(client) = self.sessions.get(&session) else {
             return;
         };
+
         if let Err(error) = client.output.try_send(event) {
             if matches!(error, mpsc::error::TrySendError::Full(_)) {
                 client.slow.store(true, Ordering::Release);

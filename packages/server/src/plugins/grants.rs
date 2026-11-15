@@ -17,12 +17,14 @@ impl Loaded {
             .map_err(|e| invalid(e.to_string()))?
             .table(&Table::new("grants").map_err(|e| invalid(e.to_string()))?)
             .map_err(|e| invalid(e.to_string()))?;
+
         let mut tx = Box::pin(database.begin()).await.map_err(|e| invalid(e.to_string()))?;
 
         let result = async {
             // Schemas and grants commit together for the candidate generation.
             for (id, (descriptor, _)) in &self.inspected {
                 let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
+
                 let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
                 Box::pin(schema.apply(&mut tx, &space)).await?;
             }
@@ -31,6 +33,7 @@ impl Loaded {
 
             for id in &self.catalog.order {
                 let definition = &self.catalog.plugins[id].manifest.plugin;
+
                 let old = previous.and_then(|old| old.catalog.plugins.get(id));
 
                 if let Some(grant) = stage_grant(&mut tx, &table, id, definition, old).await? {
@@ -59,6 +62,7 @@ impl Loaded {
 
                 Ok(())
             }
+
             Err(error) => {
                 Box::pin(tx.rollback())
                     .await
@@ -90,8 +94,10 @@ async fn stage_grant(
     }
 
     let key = format!("{id}@{}", definition.version);
+
     let record_id = Id::new(table.clone(), format!("{:x}", Sha256::digest(key.as_bytes())))
         .map_err(|e| invalid(e.to_string()))?;
+
     let existing = Box::pin(tx.get(&record_id)).await.map_err(|e| invalid(e.to_string()))?;
 
     if let Some(record) = existing.map(|row| row.into_json()) {

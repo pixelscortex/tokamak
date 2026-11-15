@@ -29,8 +29,10 @@ impl Coordinator {
         // events accumulated during that run. This includes initial/empty/get
         // dependencies, so a write to a newly read table cannot be lost.
         let mut reruns = BTreeMap::<(u64, u64), usize>::new();
+
         loop {
             self.sessions.retain(|_, client| !client.output.is_closed());
+
             let next = self.sessions.iter().find_map(|(&owner, client)| {
                 client
                     .subscriptions
@@ -38,11 +40,13 @@ impl Coordinator {
                     .find(|(_, sub)| sub.dirty)
                     .map(|(&id, sub)| (owner, id, sub.name.clone(), sub.args.clone()))
             });
+
             let Some((owner, id, name, args)) = next else {
                 return;
             };
             self.sessions.get_mut(&owner).unwrap().subscriptions.get_mut(&id).unwrap().dirty =
                 false;
+
             let call = if self.kinds.get(&name) == Some(&FunctionKind::Query) {
                 host::invoke(
                     &self.database,
@@ -65,14 +69,18 @@ impl Coordinator {
                     conflict: false,
                 }
             };
+
             let sub = self.sessions.get_mut(&owner).unwrap().subscriptions.get_mut(&id).unwrap();
             sub.reads = call.reads;
             sub.uncertain = call.result.is_err();
             self.drain_changes();
+
             let sub = self.sessions.get_mut(&owner).unwrap().subscriptions.get_mut(&id).unwrap();
+
             if sub.dirty {
                 let count = reruns.entry((owner, id)).or_default();
                 *count += 1;
+
                 if *count < 4 {
                     continue;
                 }
@@ -89,6 +97,7 @@ impl Coordinator {
                 );
                 continue;
             }
+
             if sub.last.as_ref() != Some(&call.result) {
                 sub.last = Some(call.result.clone()); // serde_json structural equality; no hash dependency.
                 self.emit(
@@ -101,8 +110,10 @@ impl Coordinator {
             }
         }
     }
+
     pub(super) async fn subscribe(&mut self, session: u64, id: u64, name: String, args: Json) {
         let client = self.sessions.get_mut(&session).expect("checked session");
+
         let error = if self.kinds.get(&name) != Some(&FunctionKind::Query) {
             Some("subscriptions require a registered query")
         } else if client.subscriptions.contains_key(&id) {
@@ -112,6 +123,7 @@ impl Coordinator {
         } else {
             None
         };
+
         if let Some(error) = error {
             // Invalid registration never replaces an existing subscription.
             self.respond(session, id, Err(error.into()));

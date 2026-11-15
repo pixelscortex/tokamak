@@ -67,11 +67,13 @@ pub(crate) async fn invoke(
     } else {
         (bundle.expect("legacy bundle"), name.to_owned(), space.clone(), None)
     };
+
     let tx = if mutation {
         Box::pin(db.begin()).await
     } else {
         Box::pin(db.read_only()).await
     };
+
     let tx = match tx {
         Ok(tx) => tx,
         Err(e) => {
@@ -82,9 +84,13 @@ pub(crate) async fn invoke(
             };
         }
     };
+
     let shared: SharedTransaction = Arc::new(Mutex::new(Some(tx)));
+
     let observations = Arc::new(Mutex::new(Observations::default()));
+
     let failure: Failure = Arc::default();
+
     let ops = operations(
         shared.clone(),
         observations.clone(),
@@ -94,24 +100,31 @@ pub(crate) async fn invoke(
         graph,
         Some(determinism),
     );
+
     let result = match pool.submit(bundle, "invoke", json!({"name":name,"args":args}), ops) {
         Ok(pending) => pending.await.map_err(|e| e.to_string()),
         Err(e) => Err(e.to_string()),
     };
+
     let tx = shared.lock().await.take().expect("only invocation owner finishes");
+
     let mut observed = observations.lock().await;
+
     let result = result.and_then(|value| {
         let nested = failure.lock().expect("failure lock");
+
         match observed.error.as_ref().or(nested.as_ref()) {
             Some(error) => Err(error.clone()),
             None => Ok(value),
         }
     });
+
     let result = match result {
         Ok(value) => match Box::pin(tx.commit()).await {
             Ok(()) => Ok(value),
             Err(error) => {
                 observed.conflict |= error.is_retryable_conflict();
+
                 Err(format!("transaction commit failed (outcome may be unknown): {error}"))
             }
         },
@@ -120,6 +133,7 @@ pub(crate) async fn invoke(
             Err(rollback) => {
                 // A failed rollback is not evidence that replay is safe.
                 observed.conflict = false;
+
                 Err(format!("{error}; rollback failed: {rollback}"))
             }
         },
@@ -143,6 +157,7 @@ fn operations(
     determinism: Option<Determinism>,
 ) -> Arc<OpRegistry> {
     let mut ops = OpRegistry::new();
+
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
     }
@@ -154,9 +169,12 @@ fn operations(
         space,
         writable,
     );
+
     if let Some((plugins, owner, path)) = graph {
         let catalog = plugins.clone();
+
         let caller = owner.clone();
+
         let failed = failure.clone();
         ops.register_sync("plugin.providers", move |payload| {
             let result = text(&payload, "interface")
@@ -165,6 +183,7 @@ fn operations(
                     catalog.catalog.providers(&caller, interface).map_err(|e| e.to_string())
                 })
                 .map(|ids| json!(ids));
+
             if let Err(error) = &result {
                 *failed.lock().expect("failure lock") = Some(error.clone());
             }
@@ -176,11 +195,16 @@ fn operations(
                 if failure.lock().expect("failure lock").is_some() {
                     return Err("An earlier plugin operation failed".to_string());
                 }
+
                 let name = text(&payload, "name").map_err(|e| e.to_string())?;
+
                 let args = field(&payload, "args").map_err(|e| e.to_string())?.clone();
+
                 let target = plugins.target(&owner, name, writable, &path)?;
+
                 let mut child_path = path.clone();
                 child_path.push(name.into());
+
                 let child_ops = operations(
                     shared.clone(),
                     observations.clone(),
@@ -190,7 +214,9 @@ fn operations(
                     Some((plugins.clone(), target.owner, child_path)),
                     None,
                 );
+
                 let failed = failure.clone();
+
                 Ok(ModuleCall::new(
                     target.bundle,
                     "invoke",
@@ -201,6 +227,7 @@ fn operations(
                     },
                 ))
             })();
+
             if let Err(error) = &resolved {
                 *failure.lock().expect("failure lock") = Some(error.clone());
             }

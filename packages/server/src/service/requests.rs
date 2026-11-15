@@ -8,6 +8,7 @@ impl Coordinator {
         if !self.sessions.contains_key(&session) && !matches!(&action, Action::Call { .. }) {
             return;
         }
+
         match action {
             Action::Plugins(id) => {
                 let result = self.catalog_page(None, 0);
@@ -56,6 +57,7 @@ impl Coordinator {
             }
         }
     }
+
     async fn call(
         &mut self,
         session: u64,

@@ -38,6 +38,7 @@ pub(crate) struct Loaded {
     pub catalog_text: String,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
+
 #[derive(Clone)]
 pub(crate) struct Target {
     pub owner: String,
@@ -47,6 +48,7 @@ pub(crate) struct Target {
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,
 }
+
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }

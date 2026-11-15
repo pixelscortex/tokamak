@@ -56,9 +56,8 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Startup inspects the bundled SDK registry in a fresh QuickJS world. The
-/// caller owns the Tokio host runtime and must keep it alive through close;
-/// initialize embedded storage there, not on the JS executors.
+/// The caller's Tokio runtime must remain alive through close; embedded storage
+/// belongs on that runtime, outside the JavaScript executors.
 pub struct Server {
     commands: mpsc::Sender<Command>,
     // Shutdown must never compete for space with application calls.
@@ -173,6 +172,7 @@ struct Coordinator {
 mod action_coordination;
 mod command_loop;
 mod delivery;
+mod invocations;
 mod plugin_control;
 mod requests;
 mod server;
@@ -181,5 +181,3 @@ mod startup;
 mod subscriptions;
 
 pub(crate) use startup::inspect;
-
-mod invocations;
