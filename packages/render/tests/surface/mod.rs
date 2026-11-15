@@ -973,3 +973,33 @@ fn unchanged_picture_is_reused_and_shape_or_look_changes_rebuild_it() {
         assert_eq!(f.state().builds, i + 2, "{style} reused");
     }
 }
+
+#[test]
+#[ignore = "offscreen GPU raster; run explicitly"]
+fn fused_background_extends_past_the_roots_own_overflow_clip() {
+    use anyrender::ImageRenderer;
+    let mut f = Fixture::new(
+        r#"<div tk-group="g" style="overflow:hidden;--tk-fill:red"><div id="member" surface-groups="g" style="left:90px;top:0"></div></div>"#,
+        &["member"],
+    );
+    let mut renderer = anyrender_vello::VelloImageRenderer::new(400, 300);
+    let mut pixels = vec![];
+    renderer.render_to_vec(
+        |scene| {
+            blitz_paint::paint_scene_with(
+                scene,
+                &mut f.doc.inner_mut(),
+                1.0,
+                400,
+                300,
+                0,
+                0,
+                &f.surfaces.painter(),
+            )
+        },
+        &mut pixels,
+    );
+    let pixel = |x: usize, y: usize| &pixels[(y * 400 + x) * 4..][..4];
+    assert_eq!(pixel(125, 40), &[255, 0, 0, 255]);
+    assert_eq!(pixel(135, 40), &[0, 0, 0, 0]);
+}

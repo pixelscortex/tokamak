@@ -12,7 +12,10 @@ Tokamak's element painter draws the combined fill and edge at the root's
 `Background` piece, only when it paints its own box, then paints Blitz's
 background and all remaining pieces normally. CSS background images still
 work. The shape is above the root's backdrop and below its border, content
-and children, inside Blitz's clips, opacity layers and transforms.
+and children, inside ancestor clips and Blitz's clip-path, mask, opacity,
+filter and transform layers. The root's own overflow does not clip the fused
+shape: it behaves like an extending background. Root opacity/filter effects
+also bound it to Blitz's border-box effect bounds (expanded for filters).
 
 The root's computed style supplies the look:
 
@@ -28,8 +31,10 @@ Root attributes:
 - `surface-own="false"` omits the root's shape; otherwise it is the first add.
 - `surface-join="n"` supplies members' default join radius; default 0.
 
-Any element anywhere can join named groups with `surface-groups="panel other"`.
-Its border box and horizontal radii contribute where Blitz paints it:
+Group names must be unique within a document: one root per name; the last
+registration wins. Any element anywhere in the same document can join named groups with `surface-groups="panel other"`.
+Sub-documents use Blitz's default painter. A member's border box and horizontal
+radii contribute where Blitz paints it:
 
 - `surface-op="add|cut"`: default add.
 - `surface-join="n"`: overrides the root's join radius, in CSS pixels.
@@ -41,6 +46,7 @@ Its border box and horizontal radii contribute where Blitz paints it:
   220 ms with cubic ease-out, unless the root resized in the same paint.
   Arrivals/removals snap; unchanged targets keep their clocks. In-flight
   positions snap to device pixels. Only running tweens request another frame.
+  A paint gap longer than 220 ms ends a tween at its target without replay.
 
 Geometry is in CSS pixels in the root's border-box space. `locate(member)`
 provides the member's physical box and transform; one scale conversion maps
@@ -50,6 +56,7 @@ the rounded outline is transformed as a general shape; attach and slant are
 ignored. Hidden, culled or otherwise unpainted members contribute nothing.
 A culled root paints nothing, even if an external member remains visible.
 
+
 Order is root, plain adds, attached adds, then cuts, in document order.
 Wire mutations feed the registry; there is no document scan or after-layout
 surface pass. Window and offscreen rendering share the same painter. Per-root
@@ -57,7 +64,7 @@ state holds previous shapes and tweens. Removing a root drops its state;
 a document paint drops states for unpainted roots. If Blitz never calls the
 document root (for example `display:none`), state survives that paint.
 
-Each paint rebuilds the outline. Exact rounded builders flatten at 0.02 CSS px
+The outline and recorded scene are reused while the shown shapes and look are unchanged. Exact rounded builders flatten at 0.02 CSS px
 for ordered `geo` union/difference. General joins use round-buffer closing
 for adds and opening for cuts, limited to twice the member's join radius.
 Buffer arcs have at most 0.01 CSS px sagitta.
@@ -68,5 +75,5 @@ bounding dimension. Upward outward normals lighten towards white (gain .18),
 downward normals darken towards black (gain .45); horizontal normals retain
 the base lift. Hole normals reverse. One opacity layer preserves fill alpha.
 
-There are no surface textures, shaders, GPU resources, or geometry caches.
+There are no surface textures, shaders or GPU resources.
 Legacy surface styling and geometry attributes are ignored.
