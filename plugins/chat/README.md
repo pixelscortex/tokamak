@@ -95,3 +95,8 @@ The shared list in `models.ts` contains `openrouter/free`,
 `https://openrouter.ai/api/v1/models` on 2026-11-15. Availability can change.
 
 Copy-last-reply is omitted: the native QuickJS UI exposes no clipboard API.
+
+Conversation history uses a bounded native scroller in chronological order.
+Blitz currently clamps scroll offsets to zero or greater; reverse flex makes
+older messages unreachable. The UI bridge exposes no scroll command, so automatic
+bottom anchoring and opening at the newest message require a runtime extension.
