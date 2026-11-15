@@ -219,12 +219,46 @@ export function Composer(props: ComposerProps): JSX.Element {
   const limit = () => props.contextLimit ?? 6;
   const shown = () => (props.context ?? []).slice(0, limit());
   const hidden = () => Math.max(0, (props.context?.length ?? 0) - limit());
-  const hasAbove = () =>
-    Boolean(props.approval || props.running || listing() || props.form || props.context?.length || props.above);
+  const hasShelf = () =>
+    Boolean(props.approval || props.running || listing() || props.context?.length || props.above);
+  const hasAbove = () => Boolean(props.form || hasShelf());
 
   const body = () => (
     <>
-      <Show when={hasAbove()}>
+      {/* Form menus must escape the shelf's overflow clip. */}
+      <Show when={props.form}>
+        {(form: Accessor<ComposerForm>) => (
+          <div id={ids("form")} class={`flex shrink-0 flex-wrap items-center gap-1.5 px-4 pt-3 ${hasShelf() ? "" : "pb-3"}`}>
+            <span class="flex h-[26px] items-center gap-1 rounded-sm bg-chip pr-0.5 pl-2 text-[13px] leading-4 font-medium text-ink">
+              {form().tag}
+              <Show when={form().onCancel}>
+                <button
+                  type="button"
+                  aria-label="Cancel command"
+                  onClick={() => form().onCancel?.()}
+                  class="flex size-5 items-center justify-center rounded-xs border-0 bg-transparent p-0 text-ink-4 hover:bg-lift hover:text-ink"
+                >
+                  <Icon d={icons.x} strokeWidth={2} class="size-3" />
+                </button>
+              </Show>
+            </span>
+            <For each={form().fields ?? []}>
+              {(field) => (
+                <Select
+                  id={ids(`field-${field.id}`)}
+                  label={field.label}
+                  size="compact"
+                  side="top"
+                  options={field.options}
+                  value={field.value}
+                  onValueChange={(v) => field.onChange?.(v)}
+                />
+              )}
+            </For>
+          </div>
+        )}
+      </Show>
+      <Show when={hasShelf()}>
         {/* Above the message: scrolls when the composer runs out of room
           * and the text has given up its lines. */}
         <div class="flex min-h-0 shrink flex-col gap-3 overflow-y-auto px-4 pt-3 pb-3">
@@ -319,38 +353,6 @@ export function Composer(props: ComposerProps): JSX.Element {
               </div>
             </div>
           </Show>
-          <Show when={props.form}>
-            {(form: Accessor<ComposerForm>) => (
-              <div id={ids("form")} class="flex flex-wrap items-center gap-1.5">
-                <span class="flex h-[26px] items-center gap-1 rounded-sm bg-chip pr-0.5 pl-2 text-[13px] leading-4 font-medium text-ink">
-                  {form().tag}
-                  <Show when={form().onCancel}>
-                    <button
-                      type="button"
-                      aria-label="Cancel command"
-                      onClick={() => form().onCancel?.()}
-                      class="flex size-5 items-center justify-center rounded-xs border-0 bg-transparent p-0 text-ink-4 hover:bg-lift hover:text-ink"
-                    >
-                      <Icon d={icons.x} strokeWidth={2} class="size-3" />
-                    </button>
-                  </Show>
-                </span>
-                <For each={form().fields ?? []}>
-                  {(field) => (
-                    <Select
-                      id={ids(`field-${field.id}`)}
-                      label={field.label}
-                      size="compact"
-                      side="top"
-                      options={field.options}
-                      value={field.value}
-                      onValueChange={(v) => field.onChange?.(v)}
-                    />
-                  )}
-                </For>
-              </div>
-            )}
-          </Show>
           <Show when={props.context?.length}>
             {/* Two rows at most (24 px chips, 6 px gap). */}
             <div class="flex max-h-[54px] flex-wrap gap-1.5 overflow-hidden">
@@ -372,6 +374,8 @@ export function Composer(props: ComposerProps): JSX.Element {
           </Show>
           {props.above}
         </div>
+      </Show>
+      <Show when={hasAbove()}>
         <div class="mx-4 h-px shrink-0 bg-line" />
       </Show>
       {/* The message: gives up lines first when room runs out. */}

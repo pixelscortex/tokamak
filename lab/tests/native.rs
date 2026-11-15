@@ -521,6 +521,45 @@ fn the_composer_shows_each_state() {
     assert!(doc.take_error().is_none());
 }
 
+/// Form selects show their options outside the scrolling composer shelf,
+/// both on a free plate and docked with context in a short window.
+#[test]
+fn composer_form_menus_show_their_options() {
+    for (width, height) in [(1440, 900), min_window()] {
+        for docked in [false, true] {
+            let mut doc = view_at(width, height, if docked { "chat" } else { "composer" });
+            let prefix = if docked {
+                click(&mut doc, "lab-chat-composer-input");
+                commit(&mut doc, "/to");
+                enter(&mut doc, false);
+                "lab-chat-composer"
+            } else {
+                "lab-form"
+            };
+            let trigger = format!("{prefix}-field-due");
+            click(&mut doc, &trigger);
+            let menu = rect(&doc, &format!("{trigger}-menu"));
+            let list = rect_of(&doc, &format!("#{trigger}-menu [role=listbox]"));
+            assert_eq!(
+                list.height,
+                4.0 * 28.0,
+                "{width}x{height} {trigger}: all four options visible"
+            );
+            let stage = support::id(&doc, "shell-stage");
+            let top = if docked {
+                0.0
+            } else {
+                rect(&doc, "shell-stage").y + doc.inner().get_node(stage).unwrap().scroll_offset().y
+            };
+            assert!(
+                menu.y >= top && menu.y + menu.height <= height as f64 - 8.0,
+                "{trigger}: {menu:?}"
+            );
+            assert!(doc.take_error().is_none());
+        }
+    }
+}
+
 /// The docked composer never takes more than 60% of the stage: on a short
 /// window the text gives up lines first (the chips and footer keep theirs).
 /// On a tall window the same text keeps all eight lines.
