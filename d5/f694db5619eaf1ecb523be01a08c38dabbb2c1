@@ -1,0 +1,31 @@
+app/README.md
+  s_9343aadf26e008::t_d56187d49224e1 67-82
+  s_9343aadf26e008::t_bb3cce254c64d1 83-95
+app/tests/plugins.rs
+  s_9343aadf26e008::t_a47d629add7bac 426
+  s_9343aadf26e008::t_b25b321539aec9 179,193-196,1017-1239
+app/src/chat/map.tsx
+  s_9343aadf26e008::t_bb3cce254c64d1 2,74-79
+Cargo.lock
+  s_9343aadf26e008::t_1693eb71c0181e 6350-6351,6353,6358
+app/Cargo.toml
+  s_9343aadf26e008::t_a97d33ee7a17b9 33-38
+app/tests/support/capture.rs
+  s_9343aadf26e008::t_1a61e960106db0 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5f694db5619eaf1ecb523be01a08c38dabbb2c1",
+  "prompts": {},
+  "sessions": {
+    "s_9343aadf26e008": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e104-d6a0-79b0-b8cd-28322a806f07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
