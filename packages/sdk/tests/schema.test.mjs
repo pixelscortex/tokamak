@@ -97,6 +97,13 @@ test("index declarations reject bad names, duplicates and invalid field lists", 
   // A rejected declaration leaves the table unchanged and still usable.
   expect(table.indexes.map(index => index.name)).toEqual(["by_owner"]);
   expect(table.index("by_text", ["text"]).indexes).toHaveLength(2);
+  // Size caps match the server's, which installs indexes outside the JS budget.
+  expect(() => table.index("a".repeat(65), ["owner"])).toThrow("longer than 64");
+  const wide = Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`f${i}`, v.string()]));
+  expect(() => defineTable(wide).index("by_all", Object.keys(wide))).toThrow("at most 16 fields");
+  let full = defineTable({ owner: v.string() });
+  for (let i = 0; i < 32; i++) full = full.index(`by_${i}`, ["owner"]);
+  expect(() => full.index("by_32", ["owner"])).toThrow("at most 32 indexes");
   // Index names are per table: two tables may reuse one name.
   expect(() =>
     defineSchema({

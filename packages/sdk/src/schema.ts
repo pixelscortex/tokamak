@@ -42,10 +42,17 @@ export type IndexesFor<M extends DataModel, T extends keyof M> =
     ? T extends keyof I ? Extract<I[T], Indexes> : never
     : Indexes;
 
+// The server enforces the same caps when a plugin loads (schema.rs); checking
+// here reports the mistake at the declaration instead of at install.
+const MAX_INDEXES_PER_TABLE = 32;
+const MAX_INDEX_FIELDS = 16;
+const MAX_NAME_LENGTH = 64;
+
 export function assertIndexName(name: string): void {
   if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
     throw new Error("Index name must match [A-Za-z_][A-Za-z0-9_]*");
   }
+  if (name.length > MAX_NAME_LENGTH) throw new Error(`Index name is longer than ${MAX_NAME_LENGTH} characters`);
 }
 
 export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Record<never, never>> {
@@ -59,6 +66,8 @@ export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Rec
       assertIndexName(name);
       if (indexes.some(index => index.name === name)) throw new Error(`Duplicate index: ${name}`);
       if (!Array.isArray(keys) || keys.length === 0) throw new Error("An index needs at least one field");
+      if (keys.length > MAX_INDEX_FIELDS) throw new Error(`An index has at most ${MAX_INDEX_FIELDS} fields`);
+      if (indexes.length >= MAX_INDEXES_PER_TABLE) throw new Error(`A table has at most ${MAX_INDEXES_PER_TABLE} indexes`);
       const seen = new Set<string>();
       for (const key of keys) {
         if (typeof key !== "string" || !Object.hasOwn(snapshot, key)) throw new Error(`Undeclared index field: ${key}`);

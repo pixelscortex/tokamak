@@ -83,6 +83,10 @@ Unique violations reject the host operation with the index name and abort the
 invocation even if caught in JS. Reloading identical definitions is a no-op.
 New indexes on tables with rows, or changes to a named index, fail the load:
 index backfill is not supported yet. Removed indexes remain installed.
+
+Limits, checked at declaration and again by the server at load: 256 tables per
+plugin, 32 indexes per table, 16 fields per index, 64 characters per table or
+index name.
 Field descriptions provide types and metadata; field validation on persisted
 writes and schema migrations remain deferred.
 

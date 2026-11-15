@@ -26,6 +26,17 @@ struct Index {
     fields: Vec<String>,
     unique: bool,
 }
+// The schema is produced by plugin code, so its size is untrusted. Installing
+// it runs natively under the catalog gate, outside the JS execution budget, and
+// every installed index is maintained on every later write to its table. These
+// caps bound that work before any transaction is opened. They limit one
+// schema; indexes retained from removed declarations are not counted until
+// dropping indexes exists.
+const MAX_TABLES: usize = 256;
+const MAX_INDEXES_PER_TABLE: usize = 32;
+const MAX_INDEX_FIELDS: usize = 16;
+const MAX_NAME_BYTES: usize = 64;
+
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }
@@ -44,10 +55,32 @@ impl Schema {
             serde_json::from_value(value.clone())
                 .map_err(|e| invalid(format!("Invalid plugin schema: {e}")))?
         };
+        if schema.tables.len() > MAX_TABLES {
+            return Err(invalid(format!(
+                "Invalid plugin schema: at most {MAX_TABLES} tables are allowed"
+            )));
+        }
         for (table, definition) in &schema.tables {
+            // Checked before the name is echoed, so an oversized name cannot
+            // be copied into the error message.
+            if table.len() > MAX_NAME_BYTES {
+                return Err(invalid(format!(
+                    "Invalid plugin schema: table names are at most {MAX_NAME_BYTES} bytes"
+                )));
+            }
             Table::new(table).map_err(|e| invalid(format!("Invalid schema table {table}: {e}")))?;
+            if definition.indexes.len() > MAX_INDEXES_PER_TABLE {
+                return Err(invalid(format!(
+                    "Invalid schema table {table}: at most {MAX_INDEXES_PER_TABLE} indexes are allowed"
+                )));
+            }
             let mut names = BTreeSet::new();
             for index in &definition.indexes {
+                if index.name.len() > MAX_NAME_BYTES {
+                    return Err(invalid(format!(
+                        "Invalid schema table {table}: index names are at most {MAX_NAME_BYTES} bytes"
+                    )));
+                }
                 let fail = |reason| {
                     invalid(format!(
                         "Invalid schema index {table}.{}: {reason}",
@@ -62,6 +95,9 @@ impl Schema {
                 }
                 if index.fields.is_empty() {
                     return Err(fail("at least one field is required"));
+                }
+                if index.fields.len() > MAX_INDEX_FIELDS {
+                    return Err(fail("at most 16 fields are allowed"));
                 }
                 let mut fields = BTreeSet::new();
                 for field in &index.fields {

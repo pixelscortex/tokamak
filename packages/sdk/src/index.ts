@@ -29,7 +29,7 @@ export type {
   WireResult,
 } from "./functions";
 
-export type { DatabaseReader, DatabaseWriter, Doc, TableQuery, QueryResult, IndexRange, IndexBounds } from "./database";
+export type { DatabaseReader, DatabaseWriter, Doc, TableQuery, FilteredQuery, QueryResult, IndexRange, IndexBounds } from "./database";
 
 export type {
   HostBridge,

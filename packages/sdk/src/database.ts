@@ -45,10 +45,19 @@ export interface QueryResult<D extends object> {
   first(): Promise<D | null>;
   collect(): Promise<D[]>;
 }
+// A query that already has a `where` filter. It has no `withIndex`: filters and
+// an index cannot be mixed (the host rejects it), so the type removes the
+// method instead of letting the chain compile and fail at runtime.
+export interface FilteredQuery<D extends object> extends QueryResult<D> {
+  where<K extends Extract<keyof D, string>>(
+    field: K, operator: "=", value: NoInfer<D[K]>,
+  ): FilteredQuery<D>;
+  order(direction: "asc" | "desc"): FilteredQuery<D>;
+}
 export interface TableQuery<D extends object, I extends Indexes = Indexes> extends QueryResult<D> {
   where<K extends Extract<keyof D, string>>(
     field: K, operator: "=", value: NoInfer<D[K]>,
-  ): TableQuery<D, I>;
+  ): FilteredQuery<D>;
   order(direction: "asc" | "desc"): TableQuery<D, I>;
   withIndex<N extends Extract<keyof I, string>>(
     name: N, range?: (q: IndexRange<D, I[N]>) => IndexBounds,

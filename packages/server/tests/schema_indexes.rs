@@ -1259,3 +1259,82 @@ fn server_rejects_invalid_schema_registries_from_non_sdk_bundles() {
         }
     });
 }
+
+// The schema is plugin-controlled and is installed natively, outside the JS
+// execution budget and under the catalog gate. Without caps a bundle declaring
+// tens of thousands of indexes was accepted and installed. Each oversized shape
+// must be refused at load, before anything is installed.
+#[test]
+fn server_refuses_oversized_schema_registries() {
+    run(async {
+        let index = |name: &str, fields: Value| json!({"name":name,"fields":fields,"unique":false});
+        let table = |fields: &[String], indexes: Value| {
+            let fields: serde_json::Map<String, Value> = fields
+                .iter()
+                .map(|f| (f.clone(), json!({"kind":"string"})))
+                .collect();
+            json!({"description":{"kind":"object","fields":fields},"indexes":indexes})
+        };
+        let owner = ["owner".to_owned()];
+        let many_fields: Vec<String> = (0..17).map(|i| format!("f{i}")).collect();
+        let long = "a".repeat(65);
+        let cases = [
+            (
+                "too many indexes on a table",
+                json!({"todos": table(&owner, Value::Array(
+                    (0..33).map(|i| index(&format!("by_{i}"), json!(["owner"]))).collect(),
+                ))}),
+                "at most 32 indexes",
+            ),
+            (
+                "too many fields in an index",
+                json!({"todos": table(&many_fields, json!([index("by_all", json!(many_fields))]))}),
+                "at most 16 fields",
+            ),
+            (
+                "index name too long",
+                json!({"todos": table(&owner, json!([index(&long, json!(["owner"]))]))}),
+                "index names are at most 64 bytes",
+            ),
+            (
+                "table name too long",
+                json!({long.clone(): table(&owner, json!([]))}),
+                "table names are at most 64 bytes",
+            ),
+            (
+                "too many tables",
+                Value::Object(
+                    (0..257)
+                        .map(|i| (format!("t{i}"), table(&owner, json!([]))))
+                        .collect(),
+                ),
+                "at most 256 tables",
+            ),
+        ];
+        for (case, tables, expected) in cases {
+            let installation = Installation::new(false);
+            installation.install(&ALPHA);
+            let schema = json!({"tables": tables});
+            installation.rewrite_bundle("alpha", BUNDLE_SCHEMA, &format!("var schema = {schema};"));
+            let error = installation
+                .load()
+                .await
+                .map(|_| panic!("{case}: oversized registry accepted"))
+                .unwrap_err();
+            assert!(error.contains(expected), "{case}: {error}");
+        }
+
+        // The caps themselves are allowed: 32 indexes of up to 16 fields load.
+        let installation = Installation::new(false);
+        installation.install(&ALPHA);
+        let fields: Vec<String> = (0..16).map(|i| format!("f{i}")).collect();
+        let indexes: Vec<Value> = (0..32)
+            .map(|i| index(&format!("by_{i}"), json!(fields[..=i % 16])))
+            .collect();
+        let schema = json!({"tables": {"todos": table(&fields, Value::Array(indexes))}});
+        installation.rewrite_bundle("alpha", BUNDLE_SCHEMA, &format!("var schema = {schema};"));
+        if let Err(error) = installation.load().await {
+            panic!("schema at the caps was refused: {error}");
+        }
+    });
+}

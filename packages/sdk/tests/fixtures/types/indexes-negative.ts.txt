@@ -24,5 +24,7 @@ query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q =>
 query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', () => 5).collect() }); // reject
 query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created').where('owner', '=', 'a').collect() }); // reject
 query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created').withIndex('by_owner_text').collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').where('owner', '=', 'a').withIndex('by_owner_created').collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').where('owner', '=', 'a').order('desc').withIndex('by_owner_created').collect() }); // reject
 defineTable({ owner: v.string() }).index('by_x', ['missing']); // reject
 defineTable({ owner: v.string() }).unique('by_x', []); // reject
