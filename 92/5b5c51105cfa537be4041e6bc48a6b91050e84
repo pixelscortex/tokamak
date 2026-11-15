@@ -1,0 +1,49 @@
+app/tests/plugins.rs
+  s_8eb7dc1a524fa8::t_8169b948d4568d 1142-1151,1155-1158,1202-1250
+  s_8eb7dc1a524fa8::t_5721940b7a51ee 1152-1154
+app/src/chat/tool-part.tsx
+  s_8eb7dc1a524fa8::t_c1406bfc863c35 29
+  s_8eb7dc1a524fa8::t_a0e1e74bd70ab8 1-28,30-40
+app/tests/native.rs
+  s_8eb7dc1a524fa8::t_c1406bfc863c35 1431-1476
+app/src/chat.tsx
+  s_8eb7dc1a524fa8::t_f683fe14910e03 1,11,65
+plugins/todo/src/styles.css
+  s_8eb7dc1a524fa8::t_c1406bfc863c35 4,9,12-19
+app/src/chat/thread-view.tsx
+  s_8eb7dc1a524fa8::t_6fc82a756f1956 1,11,62
+app/src/chat/screen.tsx
+  s_8eb7dc1a524fa8::t_18bbe1c6a37778 1,11,85
+app/tests/bridge.tsx
+  s_8eb7dc1a524fa8::t_c1406bfc863c35 8-10,61,74-86
+plugins/todo/src/main.tsx
+  s_8eb7dc1a524fa8::t_334b25db4bf6b0 1,3,7-8
+app/src/shell.tsx
+  s_8eb7dc1a524fa8::t_fe9b5edd525944 62
+plugins/todo/src/todos.tsx
+  s_8eb7dc1a524fa8::t_c1406bfc863c35 101
+plugins/todo/src/todo-card.tsx
+  s_8eb7dc1a524fa8::t_7481a565b1722e 1-28,30,35,37-40
+  s_8eb7dc1a524fa8::t_f683fe14910e03 31-32,36
+  s_8eb7dc1a524fa8::t_c1406bfc863c35 29,33-34
+app/README.md
+  s_8eb7dc1a524fa8::t_0cb48121773da9 101-104
+app/src/chat/message.tsx
+  s_8eb7dc1a524fa8::t_46b56e7eb6b7e4 1-3,13,20-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "925b5c51105cfa537be4041e6bc48a6b91050e84",
+  "prompts": {},
+  "sessions": {
+    "s_8eb7dc1a524fa8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e186-3e4b-7562-a772-c0f6c3f79d33",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
