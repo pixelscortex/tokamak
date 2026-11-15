@@ -22,3 +22,6 @@ anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
 # PNG captures of the offscreen frames (already in the lock graph).
 png = "=0.18.1"
+
+[lints]
+workspace = true

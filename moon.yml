@@ -34,3 +34,19 @@ tasks:
         }
     options:
       cache: false
+  lint-rust:
+    command: 'cargo clippy --locked --workspace --lib --bins --all-features'
+    options:
+      cache: false
+      mutex: 'cargo'
+      allowFailure: true
+  lint-ts:
+    command: 'bun run oxlint packages app lab plugins'
+    options:
+      cache: false
+      allowFailure: true
+  duplicates:
+    command: 'bun run jscpd packages app lab plugins --format rust,typescript,tsx,javascript --ignore "**/tests/**,**/vendor/**,**/dist/**,**/target/**,**/node_modules/**,**/protocol.ts" --min-lines 6 --min-tokens 50'
+    options:
+      cache: false
+      allowFailure: true
