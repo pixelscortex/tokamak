@@ -1,0 +1,37 @@
+lab/Cargo.toml
+  s_32e91805417f99::t_c51198ac43a312 16-17,20-22
+packages/render/Cargo.toml
+  s_32e91805417f99::t_c51198ac43a312 15-19,21,23-24,27
+packages/runtime/Cargo.toml
+  s_32e91805417f99::t_c51198ac43a312 25
+app/Cargo.toml
+  s_32e91805417f99::t_c51198ac43a312 28-29
+Cargo.toml
+  s_32e91805417f99::t_c51198ac43a312 32-34
+Cargo.lock
+  s_cc3941cf0f28bd::t_e21add4ab5c44c 180,191,561,606,617,636,655,1340,1438,1707,3569,4511,4814,5195,5252,5393,5398-5399,5404,5513-5514,5879-5880,5891,5906,5937-5938,5946-5947,5958-5959,5967-5968,5973,5986-5987,5995,6005-6006,6876-6877,6900,6926-6928,7053-7054,7057,7067-7068,8125,8128-8129,8155,8426,8428,8453,8455,8469,8471,8492,8494,8511,8513,8526,8528,8543,8545,8564,8566,8592,8594,8615,8617,8622,8634,8636,8699,8701,8715,8717
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e47b9afba3c986e0f003967c5e0c213b2fa34bb",
+  "prompts": {},
+  "sessions": {
+    "s_32e91805417f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de38-a74a-7550-9ba9-7b99f54d1679",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_cc3941cf0f28bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de39-6e3f-7962-b0c9-dd4b516ec899",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
