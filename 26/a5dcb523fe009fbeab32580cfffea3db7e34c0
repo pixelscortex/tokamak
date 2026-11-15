@@ -1,0 +1,23 @@
+plugins/chat/backend/parts.ts
+  s_d0d6007df97f49::t_1306104f810453 19-37
+plugins/chat/backend/send.ts
+  s_d0d6007df97f49::t_204027a8d5062e 2,74-75,77,90
+plugins/chat/backend/tools.ts
+  s_d0d6007df97f49::t_6549b64cfd81c0 3,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26a5dcb523fe009fbeab32580cfffea3db7e34c0",
+  "prompts": {},
+  "sessions": {
+    "s_d0d6007df97f49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e174-f282-7032-b1f9-8a7a5dbb4bea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

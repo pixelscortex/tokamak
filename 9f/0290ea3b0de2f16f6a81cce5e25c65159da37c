@@ -1,0 +1,22 @@
+packages/server/tests/build-actions.mjs
+  s_d0d6007df97f49::t_26f9453041a294 52
+packages/server/tests/chat-driver.ts
+  s_d0d6007df97f49::t_26f9453041a294 181
+  s_d0d6007df97f49::t_ca42d9baa6640e 3-4,21,66,74,102-142,147-149,155-156,173,232-233,242-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f0290ea3b0de2f16f6a81cce5e25c65159da37c",
+  "prompts": {},
+  "sessions": {
+    "s_d0d6007df97f49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e174-f282-7032-b1f9-8a7a5dbb4bea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
