@@ -1,0 +1,27 @@
+lab/tests/fused_surface.rs
+  s_32e91805417f99::t_deb31239fec5eb 699
+packages/render/src/icon.rs
+  s_32e91805417f99::t_a42a3398dcfddb 4
+packages/render/src/input.rs
+  s_32e91805417f99::t_619fc76a51f4c4 3
+packages/render/src/shell.rs
+  s_32e91805417f99::t_366976253a4b09 152,351-352
+packages/render/src/surface/mod.rs
+  s_32e91805417f99::t_dc28981e2550ee 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6cf9eff0a9d615f0a83642bee7efe94cfa893ca1",
+  "prompts": {},
+  "sessions": {
+    "s_32e91805417f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de38-a74a-7550-9ba9-7b99f54d1679",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
