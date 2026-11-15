@@ -35,11 +35,17 @@ All functions use one argument object. Wire names and results:
 
 Documents include `_id: string` and `_creationTime: number`, plus:
 
-- `Thread`: `title`, `createdAt`, `updatedAt`.
-- `Message`: `threadId`, `role: "user" | "assistant"`, `parts`,
+- `Thread`: `ownerId: string`, `title`, `createdAt`, `updatedAt`.
+- `Message`: `threadId`, `authorId: string`, `role: "user" | "assistant"`, `parts`,
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
-  `model`, `startedAt`, optional `finishedAt` (present for terminal runs).
+  `startedBy: string`, optional `cancelledBy: string`, `model`, `startedAt`,
+  optional `finishedAt` (present for terminal runs).
+
+`Thread.ownerId`, user `Message.authorId`, and `Run.startedBy` are currently
+`"owner"`; assistant `Message.authorId` is `"assistant"`. `runs:cancel` sets
+`Run.cancelledBy` to `"owner"` when cancelling a running run. The shared `OWNER`
+constant becomes the host's member id when threads are shared.
 
 IDs are SDK table IDs; timestamps are epoch milliseconds. Empty titles/text are
 refused. Only one run may be active per thread; another send is refused. The

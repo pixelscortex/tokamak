@@ -2,6 +2,10 @@ import { createFunctions, type DatabaseReader, type ModelFromSchema, type Id } f
 import schema from "./schema";
 
 export const { query, mutation, action } = createFunctions(schema);
+
+// Becomes the host's member id when threads are shared.
+export const OWNER = "owner";
+
 export const DEFAULT_TITLE = "New thread";
 export type Model = ModelFromSchema<typeof schema>;
 

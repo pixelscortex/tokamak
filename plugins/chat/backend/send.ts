@@ -1,5 +1,5 @@
 import { v } from "@tokamak/sdk";
-import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
+import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
 
 // Only chat.send uses these transactional steps; they are not plugin exports.
 export const start = mutation({
@@ -14,9 +14,19 @@ export const start = mutation({
     // Milliseconds can tie across consecutive sends. Keep user before assistant
     // and preserve order without relying on randomly generated document IDs.
     const now = Math.max(Date.now(), (history.at(-1)?.createdAt ?? 0) + 1);
-    await db.insert("messages", { threadId, role: "user", parts: [{ type: "text", text }], status: "complete", createdAt: now });
-    const messageId = await db.insert("messages", { threadId, role: "assistant", parts: [], status: "streaming", createdAt: now + 1 });
-    const runId = await db.insert("runs", { threadId, messageId, status: "running", model, startedAt: Date.now() });
+
+    await db.insert("messages", {
+      threadId, authorId: OWNER, role: "user",
+      parts: [{ type: "text", text }], status: "complete", createdAt: now,
+    });
+    const messageId = await db.insert("messages", {
+      threadId, authorId: "assistant", role: "assistant",
+      parts: [], status: "streaming", createdAt: now + 1,
+    });
+    const runId = await db.insert("runs", {
+      threadId, messageId, startedBy: OWNER, status: "running", model, startedAt: Date.now(),
+    });
+
     const title = history.length === 0 && current.title === DEFAULT_TITLE ? text.slice(0, 80) : current.title;
     await db.patch(threadId, { title, updatedAt: Date.now() });
     return { runId, messageId, history: [

@@ -1,5 +1,5 @@
 import { v } from "@tokamak/sdk";
-import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
+import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
 
 export const list = query({
   handler: ({ db }) => db.query("threads").withIndex("by_updatedAt").order("desc").collect(),
@@ -9,7 +9,12 @@ export const create = mutation({
   args: { title: v.optional(v.string()) },
   handler: ({ db }, { title }) => {
     const now = Date.now();
-    return db.insert("threads", { title: title === undefined ? DEFAULT_TITLE : nonempty(title), createdAt: now, updatedAt: now });
+
+    return db.insert("threads", {
+      ownerId: OWNER,
+      title: title === undefined ? DEFAULT_TITLE : nonempty(title),
+      createdAt: now, updatedAt: now,
+    });
   },
 });
 
