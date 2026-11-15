@@ -1,0 +1,59 @@
+app/Cargo.toml
+  s_2297d4366353cf::t_43032514ac954b 14-15
+app/README.md
+  s_2297d4366353cf::t_1f3ec131cff835 66
+app/assets/fonts/SpaceGrotesk-OFL.txt
+  s_2297d4366353cf::t_6075b0df752292 1-93
+app/assets/fonts/SpaceMono-OFL.txt
+  s_2297d4366353cf::t_dbab8dd48c36bb 1-93
+app/src/chat.tsx
+  s_2297d4366353cf::t_72f6cfac9dcf98 1-57
+app/src/main.rs
+  s_2297d4366353cf::t_401c2fab3ffa07 2-22,24-32
+app/src/shell-frame.tsx
+  s_2297d4366353cf::t_2091d23fa2c38e 1-7,10,16-20
+app/src/shell.tsx
+  s_2297d4366353cf::t_f0e21974b1671a 11,24,40,53-58
+app/src/styles.css
+  s_2297d4366353cf::t_91ba800bef75ab 4-12,14-95
+app/tests/plugins.rs
+  s_2297d4366353cf::t_8d0e6bc6fd8a01 180-184,454-461,490,510,515,528,532,586
+packages/render/README.md
+  s_2297d4366353cf::t_22f518bc420f78 38-45
+packages/render/js/jsx-runtime.ts
+  s_2297d4366353cf::t_bc569f2631fb8c 13-18,77-80,93-95
+packages/render/src/bridge.rs
+  s_2297d4366353cf::t_e3ad80be906d09 100
+packages/render/src/caret.rs
+  s_2297d4366353cf::t_c1591ab526266b 1-150
+packages/render/src/document.rs
+  s_2297d4366353cf::t_0feaec2fdd151a 5,39-64,100-107
+packages/render/src/lib.rs
+  s_2297d4366353cf::t_5f52569c3e2ceb 5
+packages/render/src/shell.rs
+  s_2297d4366353cf::t_6bfd1ca924f840 81-83,101
+packages/render/src/wire.rs
+  s_2297d4366353cf::t_f63daa57b0ed3a 54,70,173-175
+packages/runtime/src/client.rs
+  s_2297d4366353cf::t_4ef31e0af4ce77 41-48,70
+packages/ui/src/components/textarea.tsx
+  s_2297d4366353cf::t_ad7c7571f1c9d8 22-26,28,49-55,67,73-74,77-79,99,104,121-122,132-133,138,142-149
+packages/ui/src/theme.css
+  s_2297d4366353cf::t_b7c6f411d77cca 54-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e666797d1ada842dbfb74a7b1811c05c005e67d",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
