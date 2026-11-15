@@ -12,7 +12,7 @@ export function ToolPart(props: { loader: PluginLoader; part: Tool; threadId: st
     : undefined);
 
   return <Show when={renderer()} fallback={<ToolLine part={props.part} />}>
-    {(contribution: Accessor<SlotContribution>) => <Contribution loader={props.loader} contribution={contribution()} componentProps={{ part: props.part, threadId: props.threadId }} />}
+    {(contribution: Accessor<SlotContribution>) => <Contribution loader={props.loader} contribution={contribution()} failureFallback={<ToolLine part={props.part} />} componentProps={{ part: props.part, threadId: props.threadId }} />}
   </Show>;
 }
 

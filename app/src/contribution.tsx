@@ -1,6 +1,6 @@
 /** Every slot owns an error boundary and reactive generation. Keying the owner
  * retires effects/resources before mounting an updated plugin contribution. */
-import { ErrorBoundary, Show, createRoot, createSignal, onCleanup, type Accessor, type Component } from "solid-js";
+import { ErrorBoundary, Show, createRoot, createSignal, onCleanup, type Accessor, type Component, type JSX } from "solid-js";
 import { createComponent } from "@tokamak/render";
 import type { ModuleExports } from "@tokamak/runtime/modules";
 import type { PluginLoader, SlotContribution } from "@tokamak/runtime/plugins";
@@ -9,9 +9,10 @@ export function Contribution(props: {
   loader: PluginLoader;
   contribution: SlotContribution;
   componentProps?: Record<string, unknown>;
+  failureFallback?: JSX.Element;
 }) {
   return <Show keyed when={`${props.contribution.plugin}:${props.contribution.id}:${props.loader.version(props.contribution.plugin)}`}>
-    {(_generation: string) => <ErrorBoundary fallback={(_cause: unknown) => <div class="plugin-error" role="alert" style="display:flex;align-items:center">
+    {(_generation: string) => <ErrorBoundary fallback={(_cause: unknown) => props.failureFallback ?? <div class="plugin-error" role="alert" style="display:flex;align-items:center">
       {/* Blitz can hit the anonymous inline formatting box instead of an inline
           button. Flex gives Reload its own hit-test box without changing CSS. */}
       <span>{props.contribution.plugin} failed · </span>
