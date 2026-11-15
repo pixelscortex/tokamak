@@ -1,0 +1,51 @@
+plugins/chat/backend/chat.ts
+  s_5090f2015e00ed::t_7a6159b314fccf 5-6,18-28,35-37,49,51-57,61,64
+  s_5090f2015e00ed::t_191ede24afbcae 50
+plugins/chat/backend/model.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 3,9,16,19
+plugins/chat/backend/send.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 1,37,54,56,86
+  s_5090f2015e00ed::t_191ede24afbcae 61-84
+plugins/chat/package.json
+  s_5090f2015e00ed::t_05c808627dc0d8 3
+plugins/chat/backend/parts.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 1-17
+plugins/chat/vite.config.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 6-7
+plugins/chat/backend/schema.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 3-4,14
+packages/server/tests/chat-driver.ts
+  s_5090f2015e00ed::t_191ede24afbcae 21,34-35,44-60,106-107,128-140,143
+plugins/chat/backend/tools.ts
+  s_5090f2015e00ed::t_7a6159b314fccf 1-44
+packages/server/tests/fixtures/actions/b/api.ts
+  s_5090f2015e00ed::t_191ede24afbcae 2
+packages/server/tests/fixtures/actions/b/backend/tools.ts
+  s_5090f2015e00ed::t_191ede24afbcae 1-12
+plugins/chat/backend/runs.ts
+  s_5090f2015e00ed::t_05c808627dc0d8 25-30
+packages/server/tests/build-actions.mjs
+  s_5090f2015e00ed::t_191ede24afbcae 35,38
+packages/server/tests/actions.rs
+  s_5090f2015e00ed::t_3e119df81e53a7 569-577
+packages/server/tests/fixtures/actions/a/backend/tools.ts
+  s_5090f2015e00ed::t_50d98189312032 1
+plugins/chat/README.md
+  s_5090f2015e00ed::t_bc41bf48dc1201 4,73,102-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7ecef7da54c7d8bc8554b5c2f93246bc3f3bf2d7",
+  "prompts": {},
+  "sessions": {
+    "s_5090f2015e00ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e161-e2dd-7ec3-a3fa-afc4539f3db6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
