@@ -1,0 +1,25 @@
+app/src/chat/use-chat.ts
+  s_9343aadf26e008::t_bf687711daf6ea 1-88
+app/tsconfig.json
+  s_9343aadf26e008::t_938e3b55b8d867 8
+plugins/chat/README.md
+  s_9343aadf26e008::t_e58931c2001b81 21-24
+plugins/chat/api.ts
+  s_9343aadf26e008::t_540b703709ea62 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b383f6a6bca804efe4f79fc8fb2b831be3868c4d",
+  "prompts": {},
+  "sessions": {
+    "s_9343aadf26e008": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e104-d6a0-79b0-b8cd-28322a806f07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
