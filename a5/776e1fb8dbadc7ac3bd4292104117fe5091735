@@ -1,0 +1,19 @@
+packages/render/js/index.ts
+  s_4f307e17b09e61::t_03dab9672117a7 58-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5776e1fb8dbadc7ac3bd4292104117fe5091735",
+  "prompts": {},
+  "sessions": {
+    "s_4f307e17b09e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e152-45b2-75d3-aaeb-86306de2e06a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
