@@ -2,6 +2,11 @@
 // references before bundling. Stdio carries real Rust Session protocol messages.
 import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
+import { writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { chatScenario } from "./chat-driver";
+import { completionChunk, completionEnd } from "./completions";
 import { createInterface } from "node:readline";
 import { TokamakClient, InProcessTransport, WebSocketTransport, type Event } from "@tokamak/sdk";
 import { api } from "./a/backend/_generated/api";
@@ -81,11 +86,9 @@ const mock = createServer(async (req, res) => {
       let index = 0;
       advance = () => {
         if (index < deltas.length) {
-          res.write(`data: ${JSON.stringify({ id: "mock", object: "chat.completion.chunk", created: 1,
-            model: "mock", choices: [{ index: 0, delta: { content: deltas[index++] }, finish_reason: null }] })}\n\n`);
+          res.write(completionChunk(deltas[index++]!));
         } else {
-          res.end(`data: ${JSON.stringify({ id: "mock", object: "chat.completion.chunk", created: 1,
-            model: "mock", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+          res.end(completionEnd());
         }
       };
       advance();
@@ -103,7 +106,12 @@ assert.ok(address && typeof address !== "string");
 const base = `http://127.0.0.1:${address.port}`;
 
 try {
-  if (scenario === "contract") {
+  if (scenario.startsWith("chat-")) {
+    await chatScenario(client, scenario, async baseURL => {
+      await writeFile(join(dirname(fileURLToPath(import.meta.url)), "../.env.local"),
+        `OPENROUTER_API_KEY=local-mock-only\nOPENROUTER_BASE_URL=${baseURL}\n`);
+    });
+  } else if (scenario === "contract") {
     // Prove the configured normal call budget is real, then outlive it in action.
     await assert.rejects(client.query(api.ops.timeoutQuery, {}), /wall-clock budget/);
     await assert.rejects(client.mutation(api.ops.timeoutMutation, {}), /wall-clock budget/);

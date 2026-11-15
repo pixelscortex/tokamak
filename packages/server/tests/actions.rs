@@ -50,15 +50,23 @@ fn artifacts() -> &'static BTreeMap<String, String> {
 struct Installation(PathBuf);
 impl Installation {
     fn new() -> Self {
+        Self::with_chat(false)
+    }
+    fn with_chat(chat: bool) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let path = root().join(format!(
-            "packages/server/target/tkm45-install-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
+        let path = root()
+            .join(format!(
+                "packages/server/target/tkm45-install-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ))
+            .join("plugins");
         std::fs::create_dir_all(&path).unwrap();
         let installation = Self(path);
         for (name, source) in artifacts() {
+            if name.starts_with("chat/") && !chat {
+                continue;
+            }
             let path = installation.0.join(name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, source).unwrap();
@@ -68,7 +76,7 @@ impl Installation {
 }
 impl Drop for Installation {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        let _ = std::fs::remove_dir_all(self.0.parent().unwrap());
     }
 }
 struct Child(std::process::Child);
@@ -88,10 +96,32 @@ fn acceptance(scenario: &str) {
 }
 
 fn acceptance_over(scenario: &str, websocket: bool) {
-    let installation = Installation::new();
+    let installation = Installation::with_chat(scenario.starts_with("chat-"));
+    if scenario == "chat-grant" || scenario == "chat-real" {
+        let path = installation.0.join("chat/manifest.json");
+        let mut manifest: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        if scenario == "chat-grant" {
+            manifest["plugin"]["permissions"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|grant| grant != "env:OPENROUTER_API_KEY");
+        } else {
+            manifest["plugin"]["permissions"] = json!([
+                "net:openrouter.ai",
+                "env:OPENROUTER_API_KEY",
+                "env:OPENROUTER_BASE_URL"
+            ]);
+            std::fs::copy(
+                root().join(".env.local"),
+                installation.0.parent().unwrap().join(".env.local"),
+            )
+            .unwrap();
+        }
+        std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    }
     tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
         .block_on(async {
-            tokio::time::timeout(Duration::from_secs(30), async {
+            tokio::time::timeout(Duration::from_secs(if scenario == "chat-real" { 120 } else { 30 }), async {
                 let pool = Arc::new(Pool::new(PoolConfig {
                     workers: 1,
                     limits: Limits {
@@ -510,3 +540,29 @@ fn web_fix_cancel_disconnects_with_worker_idle() {
 #[cfg(unix)]
 #[path = "helpers/actions_dns.rs"]
 mod dns;
+
+#[test]
+fn chat_thread_crud_cascades_messages_and_runs() {
+    acceptance("chat-crud");
+}
+#[test]
+fn chat_stream_persists_deltas_and_live_query_observes_growth() {
+    acceptance("chat-stream");
+}
+#[test]
+fn chat_cancel_stops_a_silent_upstream() {
+    acceptance("chat-cancel");
+}
+#[test]
+fn chat_upstream_failure_marks_message_and_run_error() {
+    acceptance("chat-error");
+}
+#[test]
+fn chat_missing_environment_grant_is_refused() {
+    acceptance("chat-grant");
+}
+#[test]
+#[ignore = "manual OpenRouter smoke run; requires .env.local"]
+fn chat_real_openrouter_smoke() {
+    acceptance("chat-real");
+}

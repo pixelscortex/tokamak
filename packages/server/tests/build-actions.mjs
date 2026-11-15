@@ -12,16 +12,28 @@ try {
   const files = {};
   for (const id of ["a", "b"])
     await cp(new URL(`./fixtures/actions/${id}/`, import.meta.url), join(root, id), { recursive: true });
-  for (const id of ["a", "b"]) {
+  await cp(join(workspace, "plugins/chat"), join(root, "chat"), {
+    recursive: true,
+    filter: path => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
+  });
+  for (const id of ["a", "b", "chat"]) {
     const path = join(root, id);
     await writeFile(join(path, "backend/tsconfig.json"), JSON.stringify({
       extends: join(workspace, "tsconfig.json"),
-      compilerOptions: { paths: { "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")] } },
+      compilerOptions: {
+        ...(id === "chat" ? { skipLibCheck: true } : {}),
+        paths: {
+          "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")],
+          "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")],
+        },
+      },
     }));
     await writeFile(join(path, "vite.config.ts"), `
 import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vite.ts"))};
 export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
-      id, version: "1.0.0", ...(id === "a"
+      id, version: "1.0.0", ...(id === "chat"
+        ? { exports: "./api.ts", permissions: ["net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"] }
+        : id === "a"
         ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1"] }
         : { exports: "./api.ts", permissions: ["net:localhost", "net:loopback.tkm.test", "net:private.tkm.test", "net:metadata.tkm.test", "net:mapped.tkm.test", "net:held.tkm.test"] }),
     })} })] };
@@ -35,10 +47,12 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
   }
   const driver = join(root, "driver.ts");
   await cp(new URL("./actions-driver.ts", import.meta.url), driver);
+  await cp(new URL("./chat-driver.ts", import.meta.url), join(root, "chat-driver.ts"));
+  await cp(new URL("./helpers/completions.ts", import.meta.url), join(root, "completions.ts"));
   await writeFile(join(root, "tsconfig.json"), JSON.stringify({
     extends: join(workspace, "tsconfig.json"),
     compilerOptions: { lib: ["ES2022", "DOM"], types: ["node"], allowImportingTsExtensions: true,
-      paths: { "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")] } },
+      paths: { "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")], "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")] } },
     files: [driver], include: [],
   }));
   const checked = Bun.spawn([process.execPath, "check", "--no-script", "--no-pretty", "--project", join(root, "tsconfig.json")], { stdout: "inherit", stderr: "inherit" });
