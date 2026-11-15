@@ -16,7 +16,7 @@ const scratch = await mkdtemp(join(output, "compiler-"));
 const workspace = join(scratch, "checkout with spaces");
 const fixture = join(workspace, "app");
 const frontend = join(fixture, "src/main.tsx");
-const backend = join(fixture, "backend/todo.ts");
+const backend = join(fixture, "backend/createTodo.ts");
 
 function command(args: string[], cwd = fixture) {
   const result = spawnSync(process.execPath, args, {
@@ -65,7 +65,7 @@ try {
   // but use the actual product's zero-option build configuration.
   await cp(join(app, "dist/tests/todo/src"), join(fixture, "src"), { recursive: true });
   await mkdir(join(fixture, "backend"));
-  for (const name of ["schema.ts", "todo.ts", "_limits.ts", "_legacyApi.ts", "tsconfig.json"]) {
+  for (const name of ["schema.ts", "todo.ts", "createTodo.ts", "_limits.ts", "_legacyApi.ts", "tsconfig.json"]) {
     await copyFile(join(app, name === "tsconfig.json" ? "backend" : "dist/tests/todo/backend", name),
       join(fixture, "backend", name));
   }
@@ -150,7 +150,7 @@ try {
     ["Enter a task title", 'throw new Error("Enter a task title")'],
   ]);
   const backendMap = JSON.parse(await readFile(join(fixture, "dist/bundle.js.map"), "utf8"));
-  assert(backendMap.sources.some((source: string) => source === "../backend/todo.ts"),
+  assert(backendMap.sources.some((source: string) => source === "../backend/createTodo.ts"),
     "final backend map must resolve from app/dist back to original backend source");
   await writeFile(join(fixture, "artifact-consumer.ts"), `
     import { api } from "./dist/api";

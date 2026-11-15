@@ -111,6 +111,11 @@ fn acceptance_over(scenario: &str, websocket: bool) {
                 "env:OPENROUTER_API_KEY",
                 "env:OPENROUTER_BASE_URL"
             ]);
+            let fixture_path = installation.0.join("b/manifest.json");
+            let mut fixture: Value =
+                serde_json::from_slice(&std::fs::read(&fixture_path).unwrap()).unwrap();
+            fixture["plugin"]["provides"] = json!([]);
+            std::fs::write(fixture_path, serde_json::to_vec(&fixture).unwrap()).unwrap();
             std::fs::copy(
                 root().join(".env.local"),
                 installation.0.parent().unwrap().join(".env.local"),
@@ -121,7 +126,7 @@ fn acceptance_over(scenario: &str, websocket: bool) {
     }
     tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
         .block_on(async {
-            tokio::time::timeout(Duration::from_secs(if scenario == "chat-real" { 120 } else { 30 }), async {
+            tokio::time::timeout(Duration::from_secs(if scenario == "chat-real" { 360 } else { 30 }), async {
                 let pool = Arc::new(Pool::new(PoolConfig {
                     workers: 1,
                     limits: Limits {
@@ -578,4 +583,9 @@ fn chat_tools_persist_running_done_then_text_and_filter_providers() {
 #[test]
 fn chat_tool_errors_return_to_model_and_finish_run() {
     acceptance("chat-tools-error");
+}
+
+#[test]
+fn todo_tools_allow_consumer_and_refuse_non_consumer() {
+    acceptance("todo-tools");
 }

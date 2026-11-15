@@ -115,7 +115,7 @@
     },
     "plugins/chat": {
       "name": "chat",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@ai-sdk/openai": "4.0.111",
         "@tokamak/sdk": "workspace:*",
@@ -127,7 +127,7 @@
     },
     "plugins/todo": {
       "name": "todo",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@tokamak/render": "workspace:*",
         "@tokamak/sdk": "workspace:*",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { TokamakClient } from "@tokamak/sdk";
 import { api } from "./chat/backend/_generated/api";
+import { api as todo } from "./todo/backend/_generated/api";
 import { completionChunk, completionEnd } from "./completions";
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -15,18 +16,25 @@ async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
 
 export async function chatScenario(client: TokamakClient, scenario: string, configure: (url: string) => Promise<void>) {
   if (scenario === "chat-real") {
-    const threadId = await client.mutation(api.threads.create, {});
-    let first = "";
-    const stop = client.subscribe(api.messages.list, { threadId }, event => {
-      if ("value" in event && !first) first = event.value.find(row => row.role === "assistant")?.parts.find(part => part.type === "text")?.text ?? "";
-    });
-    try {
-      const result = await client.action(api.chat.send, { threadId, text: "Reply with a short greeting." });
+    const failures: string[] = [];
+    for (const model of ["liquid/lfm-3-1.7b:free", "inclusionai/ling-3.2-flash:free", "google/gemma-4-26b-a4b-it:free", "openrouter/free"]) {
+      const threadId = await client.mutation(api.threads.create, {});
+      await client.mutation(api.threads.setModel, { threadId, model });
+      const result = await client.action(api.chat.send, { threadId, text: "Add a todo to buy milk tomorrow" });
       const messages = await client.query(api.messages.list, { threadId });
-      assert.equal(result.status, "done", messages[1]?.error ?? "Unexpected run status");
-      console.error(`OpenRouter first tokens: ${JSON.stringify(first.slice(0, 160))}`);
-    } finally { stop(); }
-    return;
+      const part = messages[1]?.parts.find(part => part.type === "tool" && part.plugin === "todo" && part.status === "done");
+      if (result.status === "done" && part?.type === "tool") {
+        const row = await client.query(todo.todo.get, { id: (part.result as { id: import("@tokamak/sdk").Id<"todos"> }).id });
+        assert.ok(row);
+        assert.match(row.title, /milk/i);
+        console.error(`OpenRouter tool smoke passed: ${model}; tool part done; todo exists: ${JSON.stringify(row.title)}`);
+        return;
+      }
+      const reason = messages[1]?.error ?? "no completed Todo tool call";
+      failures.push(`${model}: ${reason}`);
+      console.error(`OpenRouter tool smoke failed: ${model}: ${reason}`);
+    }
+    assert.fail(failures.join("\n"));
   }
   let holdHeaders = false;
   let releaseHeaders = false;
@@ -51,7 +59,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     }
     if (scenario === "chat-tools" || scenario === "chat-tools-error") {
       const request = JSON.parse(body);
-      assert.deepEqual(request.tools.map((tool: { function: { name: string } }) => tool.function.name), ["b__fixture_create"]);
+      assert.deepEqual(request.tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ["todo__todos_create", "b__fixture_create"].sort());
       res.writeHead(200, { "content-type": "text/event-stream" });
       if (requests++ === 0) {
         res.end(`data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
@@ -61,7 +69,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
             choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`);
       } else {
         assert.ok(request.messages.some((message: { role: string; content: string }) => message.role === "tool" &&
-          message.content.includes(scenario === "chat-tools-error" ? "fixture tool failed" : "Fixture created")));
+          message.content.includes(scenario === "chat-tools-error" ? "fixture tool failed" : "Fixture created")), JSON.stringify(request.messages));
         res.end(completionChunk("Added it.") + completionEnd());
       }
       return;

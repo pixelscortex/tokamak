@@ -3,7 +3,7 @@
 export const MAX_TITLE_UNITS = 200;
 const MAX_LIST_BYTES = 48 * 1024;
 
-export function assertReadable(todos: readonly { done: boolean }[]): void {
+export function assertReadable(todos: readonly object[]): void {
   // false is one byte longer than true. Budget every row in its larger state,
   // so a later toggle cannot turn a readable list into an oversized event.
   const json = JSON.stringify(todos.map((todo) => ({ ...todo, done: false })));

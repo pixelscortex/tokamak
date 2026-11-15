@@ -106,7 +106,15 @@ assert.ok(address && typeof address !== "string");
 const base = `http://127.0.0.1:${address.port}`;
 
 try {
-  if (scenario.startsWith("chat-")) {
+  if (scenario === "todo-tools") {
+    const result = await client.action(b.ops.todoTools, {});
+    assert.equal(result.descriptions[0]!.name, "todos.create");
+    assert.equal(result.out.view, "todo.card");
+    assert.equal(result.todo?.title, "Buy milk tomorrow");
+    assert.equal(result.todo?.done, false);
+    assert.equal(result.out.summary, "Created a task in Todo");
+    await assert.rejects(client.action(api.ops.todoTools, {}), /does not declare access to todo/);
+  } else if (scenario.startsWith("chat-")) {
     await chatScenario(client, scenario, async baseURL => {
       await writeFile(join(dirname(fileURLToPath(import.meta.url)), "../.env.local"),
         `OPENROUTER_API_KEY=local-mock-only\nOPENROUTER_BASE_URL=${baseURL}\n`);
