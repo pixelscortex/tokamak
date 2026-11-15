@@ -1,0 +1,68 @@
+plugins/chat/backend/send.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 2-3,68-70
+app/src/chat/markdown.tsx
+  s_ca0c84e5a7239b::t_f05157b1a9fe83 37-45
+plugins/chat/README.md
+  s_ca0c84e5a7239b::t_f05157b1a9fe83 39,43-44,107-108,111-114
+  s_ca0c84e5a7239b::t_dabe7f122b3638 129-132
+app/src/chat/use-map.ts
+  s_ca0c84e5a7239b::t_f05157b1a9fe83 1-3,5-31,35-36,39-40,42-62,64-69,82
+  s_ca0c84e5a7239b::t_97a88d0ff7da56 4,33,38,41,76-81
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 32,34,37,63,70-75
+app/src/chat/use-thread-editor.ts
+  s_ca0c84e5a7239b::t_f05157b1a9fe83 1-51
+plugins/chat/backend/recovery.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 1,14
+plugins/chat/backend/tool-parts.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 1-32
+plugins/chat/backend/stream-buffer.ts
+  s_ca0c84e5a7239b::t_9fc57c84c672f3 10,18
+  s_ca0c84e5a7239b::t_5ce62ed78acfcf 1-9,11-17,19-45
+plugins/chat/backend/chat.ts
+  s_ca0c84e5a7239b::t_5ce62ed78acfcf 6-7,18,23,30,36,38-43,45-48
+  s_ca0c84e5a7239b::t_9fc57c84c672f3 8,19,28-29,56
+app/src/chat/use-chat.ts
+  s_ca0c84e5a7239b::t_5ce62ed78acfcf 1,7,57
+  s_ca0c84e5a7239b::t_97a88d0ff7da56 8
+app/src/chat/use-drafts.ts
+  s_ca0c84e5a7239b::t_f05157b1a9fe83 1-34
+plugins/chat/backend/tool-events.ts
+  s_ca0c84e5a7239b::t_9fc57c84c672f3 7,11-14,53
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 1,3,19-29,33-39,43,46,49
+  s_ca0c84e5a7239b::t_5ce62ed78acfcf 2,4-6,8-10,15-18,30-32,40-42,44-45,47-48,50-52,54
+plugins/chat/backend/runs.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 1,27
+plugins/chat/backend/acknowledgements.ts
+  s_ca0c84e5a7239b::t_5ce62ed78acfcf 1-22
+packages/sdk/src/tools.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 29,34-44,55,60,67
+plugins/chat/backend/run-messages.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 1-12
+plugins/chat/backend/parts.ts
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 3-8,12,19,32-33,35,47-51
+  s_ca0c84e5a7239b::t_9beb88e8c98c16 52
+app/src/chat/use-run-recovery.ts
+  s_ca0c84e5a7239b::t_5ce62ed78acfcf 1-59
+app/src/chat/screen.tsx
+  s_ca0c84e5a7239b::t_f05157b1a9fe83 2,9-11,17-18,33-34,55-66
+  s_ca0c84e5a7239b::t_f0251a4fb1828e 6,46,49-52,78-84
+  s_ca0c84e5a7239b::t_f2ada531be0cfb 53-54
+app/src/chat/map.tsx
+  s_ca0c84e5a7239b::t_048dad11df63a1 1,4-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1a11264b80bb3b44f66ad8aa5d65c0ec4f1d1bf",
+  "prompts": {},
+  "sessions": {
+    "s_ca0c84e5a7239b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e19e-1112-7062-b36a-be94dd4e3975",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
