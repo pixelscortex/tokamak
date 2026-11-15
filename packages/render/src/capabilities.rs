@@ -7,6 +7,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
+        mpsc,
     },
     time::Duration,
 };
@@ -15,18 +16,41 @@ pub(crate) type Host = Rc<RefCell<Option<HostSender>>>;
 
 pub(crate) fn install(ctx: &Ctx<'_>, host: Host) -> Result<()> {
     let install = || -> engine::rquickjs::Result<()> {
-        let clipboard = RefCell::new(None::<arboard::Clipboard>);
+        let (writes, requests) = mpsc::sync_channel::<(HostSender, u32, String)>(32);
+        std::thread::Builder::new()
+            .name("ui-clipboard".into())
+            .spawn(move || {
+                let mut clipboard = None;
+                for (sender, id, text) in requests {
+                    let result = (|| {
+                        if clipboard.is_none() {
+                            clipboard = Some(arboard::Clipboard::new()?);
+                        }
+                        match clipboard.as_mut() {
+                            Some(clipboard) => clipboard.set_text(text),
+                            None => Err(arboard::Error::ClipboardNotSupported),
+                        }
+                    })();
+                    let error = result.err().map(|error| error.to_string());
+                    let _ = sender.send(
+                        "tk:clipboard",
+                        serde_json::json!({ "id": id, "error": error }),
+                    );
+                }
+            })
+            .map_err(|error| Exception::throw_message(ctx, &error.to_string()))?;
+
+        let clipboard_host = host.clone();
         ctx.globals().set(
             "__tokamakClipboard",
-            Function::new(ctx.clone(), move |ctx: Ctx<'_>, text: String| {
-                let mut clipboard = clipboard.borrow_mut();
-                let result = (|| {
-                    if clipboard.is_none() {
-                        *clipboard = Some(arboard::Clipboard::new()?);
-                    }
-                    clipboard.as_mut().unwrap().set_text(text)
-                })();
-                result.map_err(|error| Exception::throw_message(&ctx, &error.to_string()))
+            Function::new(ctx.clone(), move |ctx: Ctx<'_>, id: u32, text: String| {
+                let sender = clipboard_host
+                    .borrow()
+                    .clone()
+                    .ok_or_else(|| Exception::throw_message(&ctx, "No window mailbox"))?;
+                writes
+                    .try_send((sender, id, text))
+                    .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))
             })?,
         )?;
 

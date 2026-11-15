@@ -33,12 +33,24 @@ type Mutation =
   | { op: "detach"; id: number }
   | { op: "scroll"; id: number; top: number };
 
-declare const __tokamakClipboard: (text: string) => void;
+declare const __tokamakClipboard: (id: number, text: string) => void;
 declare const __tokamakAfter: (id: number, ms: number) => void;
 
+const clipboardWrites = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
+let nextClipboardWrite = 1;
+
 export const clipboard = {
-  async writeText(text: string): Promise<void> {
-    __tokamakClipboard(text);
+  writeText(text: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const id = nextClipboardWrite++;
+      clipboardWrites.set(id, { resolve, reject });
+      try {
+        __tokamakClipboard(id, text);
+      } catch (cause) {
+        clipboardWrites.delete(id);
+        reject(cause);
+      }
+    });
   },
 };
 
@@ -335,6 +347,14 @@ Object.defineProperty(globalThis, "__tokamak", {
     },
     host(json: string): void {
       const { topic, payload } = JSON.parse(json) as { topic: string; payload: unknown };
+      if (topic === "tk:clipboard") {
+        const { id, error } = payload as { id: number; error: string | null };
+        const write = clipboardWrites.get(id);
+        clipboardWrites.delete(id);
+        if (error !== null) write?.reject(new Error(error));
+        else write?.resolve();
+        return;
+      }
       if (topic === "tk:delay") {
         const id = payload as number;
         const callback = delays.get(id);
@@ -355,6 +375,7 @@ Object.defineProperty(globalThis, "__tokamak", {
         subscriptions.clear();
         observers.clear();
         delays.clear();
+        clipboardWrites.clear();
         clearRejections();
         nodes.clear();
         pending = [];
