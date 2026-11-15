@@ -1,0 +1,28 @@
+// Every line marked reject must produce its own compiler diagnostic on that line.
+import { createFunctions, defineSchema, defineTable, v } from '@tokamak/sdk';
+const schema = defineSchema({
+  todos: defineTable({ owner: v.string(), text: v.string(), done: v.boolean(), created: v.number() })
+    .index('by_owner_created', ['owner', 'created'])
+    .unique('by_owner_text', ['owner', 'text']),
+  notes: defineTable({ topic: v.string() }).index('by_topic', ['topic']),
+});
+const { query } = createFunctions(schema);
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_missing').collect() }); // reject
+query({ handler: ctx => ctx.db.query('notes').withIndex('by_owner_created').collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('text', 'a')).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('created', 1)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_text', q => q.eq('text', 'a')).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 1)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').gt('created', 'x')).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').gt('text', 'x')).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.gt('created', 1)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').gt('created', 1).eq('created', 2)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').gt('created', 1).gte('created', 2)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').lt('created', 1).lte('created', 2)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').eq('created', 1).eq('text', 'x')).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', 'a').eq('created', 1).gt('created', 2)).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created', () => 5).collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created').where('owner', '=', 'a').collect() }); // reject
+query({ handler: ctx => ctx.db.query('todos').withIndex('by_owner_created').withIndex('by_owner_text').collect() }); // reject
+defineTable({ owner: v.string() }).index('by_x', ['missing']); // reject
+defineTable({ owner: v.string() }).unique('by_x', []); // reject
