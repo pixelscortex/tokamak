@@ -1,0 +1,19 @@
+plugins/chat/backend/chat.ts
+  s_fef74dc7f45283::t_b76a0644c70c1c 39,90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e7ffecdf9aedf6901a4afc4718b1b5d61f9cfac",
+  "prompts": {},
+  "sessions": {
+    "s_fef74dc7f45283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e192-a5d3-7562-b9b9-e16df473fd61",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
