@@ -89,7 +89,30 @@ fn commit(doc: &mut NativeDocument, text: &str) {
 }
 
 /// A pointer click on `name`, then the layout the next frame would see.
+/// Click `name`, first scrolling the stage so it is in view: content
+/// scrolled out of the stage takes no clicks.
 fn click(doc: &mut NativeDocument, name: &str) {
+    doc.resolve_layout(0.0);
+    let stage = support::id(doc, "shell-stage");
+    let (top, height, target) = {
+        let inner = doc.inner();
+        let view = inner.get_client_bounding_rect(stage).unwrap();
+        // Blitz reports a scroller's box moved by its own scroll offset.
+        let scrolled = inner.get_node(stage).unwrap().scroll_offset().y;
+        (
+            view.y + scrolled,
+            view.height,
+            inner
+                .get_client_bounding_rect(support::id(doc, name))
+                .unwrap(),
+        )
+    };
+    let middle = target.y + target.height / 2.0;
+    if middle < top || middle > top + height {
+        let centre = top + height / 2.0;
+        doc.inner_mut()
+            .scroll_by(stage, 0.0, middle - centre, Default::default());
+    }
     support::pointer(doc, name);
     doc.resolve_layout(0.0);
 }
