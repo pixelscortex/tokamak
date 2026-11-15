@@ -1,6 +1,18 @@
 @import "../../packages/ui/src/styles.css";
 @source "../../packages/ui/src";
 
+@theme {
+  --color-ground: #0f0f0f;
+  --color-raised: #1c1c1c;
+  --color-hairline: #2a2a2a;
+  --color-edge: #3a3a3a;
+  --color-text: #e4e4e4;
+  --color-text-2: #a3a3a3;
+  --color-text-3: #6f6f6f;
+  --color-faint: #5c5c5c;
+  --color-light: #c2c2c2;
+}
+
 body {
   margin: 0;
   background: var(--color-ground);
@@ -58,38 +70,4 @@ body {
 .shell-plugin { flex: 1; min-width: 0; min-height: 0; padding: 16px; overflow: auto; }
 .plugin-error { padding: 16px; }
 
-.chat-view { display: flex; flex: 1; justify-content: center; min-width: 0; min-height: 0; padding: 0 16px; }
-/* Reverse flow makes the input the scroll origin: new lines stay visible
- * without browser-only scroll APIs. Older messages grow upward from it. */
-.chat-thread {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 16px;
-  width: 560px;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 0 24px;
-  box-sizing: border-box;
-}
-.chat-row { display: flex; flex-shrink: 0; align-items: flex-start; gap: 10px; min-width: 0; }
-.chat-mark {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  /* Centred on the first 24 px text line. */
-  margin-top: 4px;
-  box-sizing: border-box;
-}
-.chat-mark-you { background: var(--color-light); color: var(--color-raised); }
-.chat-mark-icon { width: 10px; height: 10px; }
-.chat-mark-agent { border: 1px solid var(--color-text-3); }
-.chat-mark-agent span { width: 6px; height: 6px; background: var(--color-light); }
-.chat-text { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: break-word; }
-.chat-text-you { color: var(--color-text); }
-.chat-text-agent { color: var(--color-text-2); }
-.chat-input { flex: 1; min-width: 0; color: var(--color-text); font-family: var(--font-read); --textarea-placeholder: var(--color-faint); --textarea-caret: var(--color-light); }
+.chat-input { color: var(--color-text); font-family: var(--font-read); --textarea-placeholder: var(--color-faint); --textarea-caret: var(--color-light); }

@@ -9,11 +9,13 @@ import type { ModuleRegistry } from "@tokamak/runtime/modules";
 import { Contribution } from "./contribution";
 import { ShellFrame } from "./shell-frame";
 import { Chat } from "./chat";
+import { useChat } from "./chat/use-chat";
 
 export function Shell(props: { modules: ModuleRegistry }) {
   const transport = new InProcessTransport(createMessageConnection<Request, Event>());
   const subscriptions = retainSubscriptions(transport);
   const client = new TokamakClient(subscriptions);
+  const chat = useChat(client);
   const router = createMemoryRouter("/chat");
   const loader = createPluginLoader(props.modules, transport);
   const [error, setError] = createSignal<string>();
@@ -37,6 +39,11 @@ export function Shell(props: { modules: ModuleRegistry }) {
   return <ClientContext.Provider value={client}><RouterContext.Provider value={router}>
     <For each={Object.entries(loader.styles())}>{([id, css]) => <style data-plugin={id}>{css}</style>}</For>
     <ShellFrame
+      onKeyDown={event => {
+        if (event.defaultPrevented || event.isComposing || !event.metaKey || event.key?.toLowerCase() !== "n") return;
+        event.preventDefault();
+        if (!event.repeat) void chat.createThread().then(id => { if (id) router.navigate("/chat"); });
+      }}
       switcher={<>
         <button aria-current={router.match("/chat") || router.match("/chat/:thread") ? "page" : undefined} onClick={() => router.navigate("/chat")}>Chat</button>
         <For each={views()}>{view => <button
@@ -52,7 +59,7 @@ export function Shell(props: { modules: ModuleRegistry }) {
         <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
         <Show keyed when={activeKey()} fallback={
           <Show when={router.match("/chat") || router.match("/chat/:thread")} fallback={<p>View not found</p>}>
-            <Chat pathname={router.location().pathname} />
+            <Chat pathname={router.location().pathname} chat={chat} />
           </Show>
         }>
           {(_key: string) => <div class="shell-plugin"><Contribution loader={loader} contribution={active()!} componentProps={{ router }} /></div>}

@@ -1,7 +1,7 @@
 //! Product configuration only; runtime owns the native client lifecycle.
-/// The window base colour, `--color-ground` in packages/ui/src/theme.css.
+/// The window base colour, `--color-ground` in app/src/styles.css.
 /// macOS shows it while a live resize waits for the next frame.
-const WINDOW_GROUND: u32 = 0x0f0f0e;
+const WINDOW_GROUND: u32 = 0x0f0f0f;
 
 /// The page has no title bar: the thread starts under a bare window, and the
 /// real close / minimise / zoom buttons float over the page's top drag area
