@@ -97,7 +97,7 @@ impl Bridge {
         Ok(())
     }
 
-    fn send_event(
+    pub(super) fn send_event(
         &mut self,
         doc: &mut dyn Document,
         chain: &[NodeId],

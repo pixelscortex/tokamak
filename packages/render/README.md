@@ -35,6 +35,14 @@ and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overri
 - [`@tokamak/render`](js/index.ts) exports the universal JSX runtime, `mount`,
   `onHostEvent` and `observeLayout`. Events cancel synchronously; layout reports
   arrive after layout rather than through synchronous DOM measurements.
+- Text inputs and textareas opt into `onCaretChange` with `tk-caret`. After
+  layout, `event.caret` gives the insertion box (`x`, `y`, `width`, `height`)
+  relative to the content box in CSS px, corrected for text scrolling, and
+  `atEnd` (a collapsed selection at the end of the text). It is `null` on blur
+  or when the editor/IME hides its caret. Reports are non-bubbling,
+  non-cancelable and sent only when these values change. This supports page-drawn
+  carets because Blitz's native caret width is fixed; use `caret-color:
+  transparent` to hide that caret while keeping native selection highlighting.
 
 ## Blitz workarounds
 

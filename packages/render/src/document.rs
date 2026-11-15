@@ -2,7 +2,7 @@
 use crate::{
     Error, Result,
     bridge::Bridge,
-    icon,
+    caret, icon,
     input::{Composition, Handler},
     js, layout, wire,
 };
@@ -36,7 +36,32 @@ impl NativeDocument {
     }
 
     pub fn new_connected(shell: &str, bundle: &str, send: Option<MessageSender>) -> Result<Self> {
-        let mut html = HtmlDocument::from_html(shell, Default::default());
+        Self::new_connected_with_fonts(shell, bundle, send, &[])
+    }
+
+    /// As `new_connected`, with the product's own font files (TTF, OTF, WOFF
+    /// or WOFF2 bytes) added to the system's. CSS then names their families
+    /// as usual. The released renderer loads `@font-face` only through a
+    /// network provider, which this host does not have, so bundled fonts are
+    /// registered here instead.
+    pub fn new_connected_with_fonts(
+        shell: &str,
+        bundle: &str,
+        send: Option<MessageSender>,
+        fonts: &[&[u8]],
+    ) -> Result<Self> {
+        let mut config = blitz_dom::DocumentConfig::default();
+        if !fonts.is_empty() {
+            let mut context = blitz_dom::FontContext::default();
+            for font in fonts {
+                let bytes = blitz_dom::decode_font_bytes(font).into_owned();
+                context
+                    .collection
+                    .register_fonts(peniko::Blob::new(Arc::new(bytes) as _), None);
+            }
+            config.font_ctx = Some(context);
+        }
+        let mut html = HtmlDocument::from_html(shell, config);
         html.inner_mut()
             .add_user_agent_stylesheet(blitz_dom::UserAgentStylesheet::parse(icon::UA_CSS));
         let root = html
@@ -72,7 +97,14 @@ impl NativeDocument {
     pub fn resolve_layout(&mut self, time: f64) {
         for _ in 0..4 {
             self.html.inner_mut().resolve(time);
-            match layout::report_layout(&mut self.bridge, &mut self.html) {
+            // Both reports may update page overlays. Resolve their mutations
+            // before painting, including after a native selection-only edit.
+            let reports = (|| {
+                let layout = layout::report_layout(&mut self.bridge, &mut self.html)?;
+                let caret = caret::report_caret(&mut self.bridge, &mut self.html)?;
+                Ok::<_, Error>(layout || caret)
+            })();
+            match reports {
                 Ok(true) => {}
                 Ok(false) => return,
                 Err(error) => {

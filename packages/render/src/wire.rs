@@ -51,6 +51,7 @@ pub(crate) struct Tree {
     native: HashMap<u32, NodeId>,
     handles: HashMap<NodeId, u32>,
     pub(super) layout: crate::layout::Observed,
+    pub(super) caret: crate::caret::Observed,
 }
 
 impl Tree {
@@ -66,6 +67,7 @@ impl Tree {
             native: HashMap::from([(0, root)]),
             handles: HashMap::from([(root, 0)]),
             layout: Default::default(),
+            caret: Default::default(),
         }
     }
 
@@ -167,6 +169,9 @@ impl Tree {
                     // layout on, whatever the attribute's value.
                     if name == "tk-observe" {
                         self.layout.observe(self.native[&id], id, value.is_some());
+                    }
+                    if name == "tk-caret" {
+                        self.caret.observe(self.native[&id], value.is_some());
                     }
                     let attribute = QualName::new(None, Namespace::from(""), name.into());
                     if let Some(value) = value {

@@ -38,6 +38,14 @@ pub fn run_ui(config: ClientConfig<'_>) -> Result<(), Error> {
 }
 
 pub fn run(config: ClientConfig<'_>) -> Result<(), Error> {
+    let options = config.window_options();
+    run_with(config, options)
+}
+
+/// As `run`, for a product that sets its own window options (for example a
+/// page-drawn title bar). Start from `config.window_options()` to keep the
+/// configured minimum size.
+pub fn run_with(config: ClientConfig<'_>, options: render::WindowOptions) -> Result<(), Error> {
     let directory = std::env::var_os("TOKAMAK_SERVER_DIR")
         .map(std::path::PathBuf::from)
         .or_else(|| {
@@ -59,7 +67,7 @@ pub fn run(config: ClientConfig<'_>) -> Result<(), Error> {
         config.ui,
         config.title,
         config.window_size,
-        config.window_options(),
+        options,
         Some(requests),
         move |sender| {
             let _ = host.send(sender);

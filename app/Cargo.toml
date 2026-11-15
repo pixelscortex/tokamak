@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 runtime = { path = "../packages/runtime", features = ["client"] }
+# Window options only: the page-drawn title bar and window-button placement.
+render = { path = "../packages/render" }
 
 [build-dependencies]
 tokamak-build = { path = "../packages/build" }

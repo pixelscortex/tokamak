@@ -2,6 +2,7 @@
 //! thread. Host producers send owned JSON through a generation-scoped mailbox;
 //! neither JS values nor native document references cross that boundary.
 mod bridge;
+mod caret;
 mod document;
 mod icon;
 mod input;

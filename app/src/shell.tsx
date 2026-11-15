@@ -8,6 +8,7 @@ import { retainSubscriptions } from "@tokamak/runtime/subscriptions";
 import type { ModuleRegistry } from "@tokamak/runtime/modules";
 import { Contribution } from "./contribution";
 import { ShellFrame } from "./shell-frame";
+import { Chat } from "./chat";
 
 export function Shell(props: { modules: ModuleRegistry }) {
   const transport = new InProcessTransport(createMessageConnection<Request, Event>());
@@ -20,7 +21,7 @@ export function Shell(props: { modules: ModuleRegistry }) {
   onCleanup(() => { loader.dispose(); subscriptions.dispose(); transport.close(); });
 
   const href = (view: SlotContribution) => `/p/${view.plugin}${view.options.route === "/" ? "" : view.options.route}`;
-  // Every rail button reads active state. Cache these projections so a large
+  // Every switcher button reads active state. Cache these projections so a large
   // catalog does not allocate/search its entire view list once per button.
   const views = createMemo(() => loader.contributions("view"));
   const active = createMemo(() => {
@@ -36,7 +37,7 @@ export function Shell(props: { modules: ModuleRegistry }) {
   return <ClientContext.Provider value={client}><RouterContext.Provider value={router}>
     <For each={Object.entries(loader.styles())}>{([id, css]) => <style data-plugin={id}>{css}</style>}</For>
     <ShellFrame
-      rail={<>
+      switcher={<>
         <button aria-current={router.match("/chat") || router.match("/chat/:thread") ? "page" : undefined} onClick={() => router.navigate("/chat")}>Chat</button>
         <For each={views()}>{view => <button
           data-plugin-view={`${view.plugin}/${view.id}`}
@@ -46,15 +47,17 @@ export function Shell(props: { modules: ModuleRegistry }) {
       navigation={<>
         <button aria-label="Go back" onClick={() => router.back()}>Back</button>
         <button aria-label="Go forward" onClick={() => router.forward()}>Forward</button>
-        <span>{router.location().pathname}</span>
       </>}
       stage={<>
         <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
-        <Show keyed when={activeKey()} fallback={<p>{router.match("/chat") || router.match("/chat/:thread") ? "Chat" : "View not found"}</p>}>
-          {(_key: string) => <Contribution loader={loader} contribution={active()!} componentProps={{ router }} />}
+        <Show keyed when={activeKey()} fallback={
+          <Show when={router.match("/chat") || router.match("/chat/:thread")} fallback={<p>View not found</p>}>
+            <Chat pathname={router.location().pathname} />
+          </Show>
+        }>
+          {(_key: string) => <div class="shell-plugin"><Contribution loader={loader} contribution={active()!} componentProps={{ router }} /></div>}
         </Show>
       </>}
-      thread={<p>Thread panel</p>}
     />
   </RouterContext.Provider></ClientContext.Provider>;
 }

@@ -177,7 +177,11 @@ impl Window {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let captured = requests.clone();
         let mut doc = NativeDocument::new_connected(
-            &std::fs::read_to_string(bundle.join("shell.html")).unwrap(),
+            // The product hides the switcher and history (shell-frame.tsx);
+            // these tests drive plugin views and routes through them.
+            &std::fs::read_to_string(bundle.join("shell.html"))
+                .unwrap()
+                .replace("<body>", "<body data-dev-nav>"),
             &std::fs::read_to_string(bundle.join("ui.js")).unwrap(),
             Some(Box::new(move |message| {
                 captured
@@ -447,6 +451,14 @@ fn cli_reload_updates_open_importers_and_preserves_live_subscription() {
 // locks the shell's chat/thread/plugin history into one window.
 #[test]
 fn contribution_failure_keeps_navigation_and_route_history_working() {
+    // The zen strip omits the pathname. Assert the mounted chat's route instead,
+    // so history still distinguishes /chat from /chat/:thread.
+    let at_chat = |doc: &NativeDocument, path: &str| {
+        doc.inner()
+            .query_selector(&format!("[data-chat-route='{path}']"))
+            .unwrap()
+            .is_some()
+    };
     let scratch = Scratch::new();
     scratch.build("initial");
     scratch.build("parts-host");
@@ -475,7 +487,7 @@ fn contribution_failure_keeps_navigation_and_route_history_working() {
     }
     let mut window = Window::open(&service.directory);
     window.wait(|doc| support::text(doc, "app").contains("Broken"));
-    assert!(support::text(window.doc(), "app").contains("/chat"));
+    assert!(at_chat(window.doc(), "/chat"));
     window.view("broken/Broken");
     window.wait(|doc| support::text(doc, "app").contains("broken failed"));
     assert!(support::text(window.doc(), "app").contains("Reload"));
@@ -495,12 +507,12 @@ fn contribution_failure_keeps_navigation_and_route_history_working() {
     window.view("consumer/Consumer");
     window.wait(|doc| doc.inner().get_element_by_id("thread-route").is_some());
     window.click("id", "thread-route");
-    window.wait(|doc| support::text(doc, "app").contains("/chat/thread-one"));
+    window.wait(|doc| at_chat(doc, "/chat/thread-one"));
     assert!(!support::text(window.doc(), "app").contains("View not found"));
     window.click("aria-label", "Go back");
     window.wait(|doc| doc.inner().get_element_by_id("nested-route").is_some());
     window.click("aria-label", "Go forward");
-    window.wait(|doc| support::text(doc, "app").contains("/chat/thread-one"));
+    window.wait(|doc| at_chat(doc, "/chat/thread-one"));
     window.click("aria-label", "Go back");
     window.wait(|doc| doc.inner().get_element_by_id("nested-route").is_some());
     window.click("id", "nested-route");
@@ -513,17 +525,11 @@ fn contribution_failure_keeps_navigation_and_route_history_working() {
     window.click("aria-label", "Go back");
     window.wait(|doc| support::text(doc, "app").contains("broken failed"));
     window.click("aria-label", "Go back");
-    window.wait(|doc| {
-        !support::text(doc, "app").contains("/p/")
-            && !support::text(doc, "app").contains("View not found")
-    });
-    assert!(support::text(window.doc(), "app").contains("/chat"));
+    window.wait(|doc| at_chat(doc, "/chat"));
     window.click("aria-label", "Go forward");
     window.wait(|doc| support::text(doc, "app").contains("broken failed"));
     window.click("aria-label", "Go back");
-    window.wait(|doc| {
-        support::text(doc, "app").contains("/chat") && !support::text(doc, "app").contains("/p/")
-    });
+    window.wait(|doc| at_chat(doc, "/chat"));
 }
 
 // Behaviour 9 (launcher). Prevents the actual launcher regressing to --bundle or
@@ -577,7 +583,7 @@ fn launcher_starts_plugin_mode_and_real_todo_renders() {
 }
 
 // 10A / no product caps: 500 installed plugins must install, page through the
-// bounded 8 KiB catalog transfer, and render as 500 rail entries. The old 64
+// bounded 8 KiB catalog transfer, and render as 500 switcher entries. The old 64
 // plugin ceiling (and any later count quota) would fail installation or leave
 // the window disconnected before its first contribution could open. Nothing
 // in a lazy catalog may fetch UI: only the one opened plugin is downloaded.

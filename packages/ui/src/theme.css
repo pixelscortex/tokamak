@@ -51,4 +51,18 @@
    * fallback is the system UI font. Departure Mono is installed. */
   --font-ui: "Geist", system-ui, sans-serif;
   --font-data: "Departure Mono", ui-monospace, monospace;
+
+  /* Zen: the app's current look */
+  --color-ground: #0f0f0e;      /* window */
+  --color-raised: #1c1c1b;      /* selected row */
+  --color-hairline: #2a2a28;    /* quiet line */
+  --color-edge: #3a3936;        /* box edge */
+  --color-text: #e4e2dd;        /* main text */
+  --color-text-2: #a3a19b;      /* body text */
+  --color-text-3: #6f6d68;      /* labels */
+  --color-faint: #5c5b57;       /* placeholder */
+  --color-light: #c2bfb9;       /* the user's mark */
+  /* Space fonts are not bundled: use the system fallbacks for now. */
+  --font-read: "Space Grotesk", system-ui, sans-serif;
+  --font-label: "Space Mono", ui-monospace, monospace;
 }

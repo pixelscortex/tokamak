@@ -78,6 +78,9 @@ pub struct WindowOptions {
     /// may lay them out again (resize, focus, scale change, redraw); left
     /// alone in full screen, where they live in the system's title bar.
     pub traffic_lights: Option<TrafficLights>,
+    /// Font files the product ships (see
+    /// `NativeDocument::new_connected_with_fonts`). Empty: system fonts only.
+    pub fonts: &'static [&'static [u8]],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -95,7 +98,7 @@ pub fn launch_window_with(
     send: Option<crate::MessageSender>,
     connect: impl FnOnce(HostSender),
 ) -> Result<()> {
-    let document = NativeDocument::new_connected(shell, bundle, send)?;
+    let document = NativeDocument::new_connected_with_fonts(shell, bundle, send, options.fonts)?;
     let event_loop = winit::event_loop::EventLoop::builder()
         .build()
         .map_err(|e| Error(e.to_string()))?;

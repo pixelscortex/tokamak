@@ -63,4 +63,4 @@ close/IME/VoiceOver and visual presentation remain separate manual acceptance.
 The application is a shared-runtime plugin shell. `bun run app` builds Todo and
 starts/reuses the independent server with `--plugins <workspace>/plugins`.
 [The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,
-module loading and the separate presentation frame for the Paper design pass.
+module loading and the separate presentation frame for the current zen screen.

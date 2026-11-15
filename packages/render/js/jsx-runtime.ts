@@ -10,6 +10,12 @@ export interface NativeEvent {
   readonly cancelable: boolean;
   readonly defaultPrevented: boolean;
   readonly value?: string;
+  /** With `tk-caret`: the real editor's insertion box after layout, in CSS
+   * px relative to the content box, with text scrolling already subtracted.
+   * Null on blur or while the editor/IME hides its caret. Reports only change
+   * when this geometry or atEnd changes; selection highlighting stays native.
+   * This lets a page replace Blitz's fixed-width caret without measuring text. */
+  readonly caret?: { x: number; y: number; width: number; height: number; atEnd: boolean } | null;
   readonly key?: string;
   readonly code?: string;
   /** macOS commands arrive before KeyboardInput; cancel their native editing here. */
@@ -68,6 +74,10 @@ export namespace JSX {
   // Only the verified plain text editor is promised, not web password masking,
   // placeholder rendering, form submission, selection or full DOM input APIs.
   export interface InputAttributes extends Attributes {
+    /** Opt into non-bubbling, non-cancelable `caretchange` reports after layout.
+     * Hide the native caret with `caret-color: transparent` when drawing one. */
+    "tk-caret"?: true;
+    onCaretChange?: EventHandler;
     type?: "text";
     value?: string;
     disabled?: boolean;
@@ -80,6 +90,9 @@ export namespace JSX {
    * content (`@tokamak/ui`'s Textarea grows it). Its initial text is its
    * text content; `value` replaces the editor's text. No placeholder. */
   export interface TextareaAttributes extends Attributes {
+    /** Same opt-in caret reporting as InputAttributes. */
+    "tk-caret"?: true;
+    onCaretChange?: EventHandler;
     value?: string;
     rows?: number;
     disabled?: boolean;

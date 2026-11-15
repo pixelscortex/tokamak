@@ -19,8 +19,13 @@
  * composer that runs out of room takes lines from the text first.
  *
  * Placeholder: Blitz draws none, so it is a span over the empty field.
- * Typography is fixed per `size` (the mirror must match it exactly). */
+ * Font size/line height are fixed per `size` (the mirror must match exactly).
+ * `appearance="inherit"` lets a caller supply the family and text colour;
+ * `--textarea-placeholder` supplies its placeholder colour. `caret="block"`
+ * uses `--textarea-caret` (default `--color-light`) and reserves room for the
+ * block at the right edge in both the mirror and the editor. */
 import { Show, createSignal, splitProps, untrack } from "solid-js";
+import type { Accessor } from "solid-js";
 import { setProp } from "@tokamak/render";
 import type { JSX, NativeEvent, NativeNode } from "@tokamak/render";
 
@@ -41,8 +46,13 @@ export interface TextareaProps {
   maxRows?: number;
   /** Lines when empty (default 1). */
   minRows?: number;
-  /** `md`: 15 px on 24 px lines (default); `sm`: 13 px on 20 px lines. */
-  size?: "md" | "sm";
+  /** `md`: 15/24 (default); `sm`: 13/20; `xs`: 12/20, in CSS px. */
+  size?: "md" | "sm" | "xs";
+  /** Inherit font family and text colour instead of the catalog palette. */
+  appearance?: "default" | "inherit";
+  /** A steady 8 px block at the text end, a 2 px bar inside text. The host
+   * supplies the real caret position after layout; native selection is kept. */
+  caret?: "block";
   disabled?: boolean;
   readonly?: boolean;
   /** Id of the `<textarea>` itself. */
@@ -54,15 +64,19 @@ export interface TextareaProps {
 }
 
 /** Line height per size, CSS px (the mirror and the textarea share it). */
-export const textareaLine = { md: 24, sm: 20 } as const;
+export const textareaLine = { md: 24, sm: 20, xs: 20 } as const;
 
 export function Textarea(props: TextareaProps): JSX.Element {
   const [local] = splitProps(props, ["value", "defaultValue"]);
   const [own, setOwn] = createSignal(untrack(() => local.defaultValue ?? local.value ?? ""));
   const current = () => local.value ?? own();
+  const [caret, setCaret] = createSignal<NativeEvent["caret"]>(null);
+  const blockCaret = () => props.caret === "block";
   let node: NativeNode | undefined;
   const line = () => textareaLine[props.size ?? "md"];
-  const type = () => (props.size === "sm" ? "text-[13px] leading-5" : "text-[15px] leading-6");
+  const type = () => props.size === "xs" ? "text-[12px] leading-5"
+    : props.size === "sm" ? "text-[13px] leading-5" : "text-[15px] leading-6";
+  const appearance = () => props.appearance === "inherit" ? "font-[family-name:inherit] text-inherit" : "font-ui text-ink";
   const rows = () => `min-height: ${(props.minRows ?? 1) * line()}px; max-height: ${(props.maxRows ?? 8) * line()}px`;
   function input(event: NativeEvent) {
     if (props.disabled || props.readonly) return;
@@ -82,12 +96,12 @@ export function Textarea(props: TextareaProps): JSX.Element {
     }
   }
   return (
-    <div class={`grid min-h-0 grid-rows-[minmax(0,1fr)] ${props.class ?? ""}`}>
+    <div class={`grid min-h-0 grid-rows-[minmax(0,1fr)] ${blockCaret() ? "relative" : ""} ${props.class ?? ""}`}>
       {/* The mirror: sizes the cell. The trailing space gives a final empty
         * line its height. */}
       <div
         aria-hidden="true"
-        class={`invisible col-start-1 row-start-1 overflow-hidden break-words whitespace-pre-wrap ${type()}`}
+        class={`invisible col-start-1 row-start-1 overflow-hidden break-words whitespace-pre-wrap ${blockCaret() ? "pr-2" : ""} ${type()}`}
         style={rows()}
       >
         {`${current()} `}
@@ -104,6 +118,8 @@ export function Textarea(props: TextareaProps): JSX.Element {
         disabled={props.disabled}
         readonly={props.readonly}
         value={current()}
+        tk-caret={blockCaret() ? true : undefined}
+        onCaretChange={(event) => setCaret(event.caret ?? null)}
         onInput={input}
         onKeyDown={keydown}
         onAppleKeybinding={(event) => {
@@ -113,15 +129,24 @@ export function Textarea(props: TextareaProps): JSX.Element {
         }}
         onFocus={(event) => props.onFocus?.(event)}
         onBlur={(event) => props.onBlur?.(event)}
-        class={`col-start-1 row-start-1 m-0 h-full min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-ui text-ink outline-none ${type()}`}
+        style={blockCaret() ? "caret-color: transparent" : undefined}
+        class={`col-start-1 row-start-1 m-0 h-full min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${blockCaret() ? "pr-2" : ""} ${appearance()} ${type()}`}
       >
         {untrack(current)}
       </textarea>
       <Show when={current() === "" && props.placeholder}>
-        <span class={`pointer-events-none col-start-1 row-start-1 truncate text-ink-4 ${type()}`}>
+        <span class={`pointer-events-none col-start-1 row-start-1 truncate ${blockCaret() && caret() ? "pl-4" : ""} ${props.appearance === "inherit" ? "text-(--textarea-placeholder)" : "text-ink-4"} ${type()}`}>
           {props.placeholder}
         </span>
       </Show>
+      <Show when={blockCaret() && caret()}>{(box: Accessor<NonNullable<NativeEvent["caret"]>>) => (
+        <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
+          <span
+            class="absolute"
+            style={`left: ${box().x}px; top: ${box().y + 2}px; width: ${box().atEnd ? 8 : 2}px; height: ${Math.max(0, box().height - 4)}px; background-color: var(--textarea-caret, var(--color-light))`}
+          />
+        </div>
+      )}</Show>
     </div>
   );
 }
