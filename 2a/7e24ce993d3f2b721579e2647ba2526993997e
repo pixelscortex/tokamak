@@ -1,0 +1,33 @@
+lab/src/app.tsx
+  s_37590b8e9b99ee::t_7bf94407d2a34b 96
+lab/src/chat.tsx
+  s_37590b8e9b99ee::t_2a572af5b7d526 1,4,17,31-32,37,53,60,107,125,232
+lab/src/fixtures.tsx
+  s_37590b8e9b99ee::t_2bb47fd6a0cb2a 10
+lab/src/kit.tsx
+  s_37590b8e9b99ee::t_5b76634fce077e 78
+packages/ui/src/components/chip.tsx
+  s_37590b8e9b99ee::t_30803b0ccc0138 26
+packages/ui/src/components/composer.tsx
+  s_37590b8e9b99ee::t_3bfe91eac67f04 32,439-441,443-444
+packages/ui/src/components/select.tsx
+  s_37590b8e9b99ee::t_7f124c55410f2b 1,11,169,178,195-196,200-205,214,262,286-287
+packages/ui/src/components/shell.tsx
+  s_37590b8e9b99ee::t_d10f43030a3b28 101,139-142,150,154-158,160-161,173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2a7e24ce993d3f2b721579e2647ba2526993997e",
+  "prompts": {},
+  "sessions": {
+    "s_37590b8e9b99ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1df54-9078-7492-9721-2256f7e3c9a4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
