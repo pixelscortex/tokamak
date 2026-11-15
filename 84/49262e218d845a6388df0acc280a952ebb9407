@@ -1,0 +1,41 @@
+app/tests/plugins.rs
+  s_8eb7dc1a524fa8::t_8169b948d4568d 1232-1240
+  s_fef74dc7f45283::t_208db17585b511 1226-1231
+  s_1ef1f4cb5ce556::t_ce5c43ecca3b68 1258
+plugins/chat/backend/chat.ts
+  s_fef74dc7f45283::t_6bf6192fe63249 86-89
+packages/server/tests/chat-driver.ts
+  s_fef74dc7f45283::t_d5f38ebdb9aa8a 48,67-69,176-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8449262e218d845a6388df0acc280a952ebb9407",
+  "prompts": {},
+  "sessions": {
+    "s_1ef1f4cb5ce556": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e15c-fbec-7810-a329-b5f96ab34a12",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_8eb7dc1a524fa8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e186-3e4b-7562-a772-c0f6c3f79d33",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    },
+    "s_fef74dc7f45283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e192-a5d3-7562-b9b9-e16df473fd61",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
