@@ -54,6 +54,20 @@ export const clipboard = {
   },
 };
 
+declare global {
+  interface Clipboard {
+    writeText(text: string): Promise<void>;
+  }
+  interface Navigator {
+    readonly clipboard: Clipboard;
+  }
+  var navigator: Navigator;
+}
+
+Object.defineProperty(globalThis, "navigator", {
+  value: Object.freeze({ clipboard }),
+});
+
 const delays = new Map<number, () => void>();
 let nextDelay = 1;
 

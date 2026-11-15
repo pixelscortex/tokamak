@@ -1,4 +1,4 @@
-import { afterDelay, clipboard, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
+import { afterDelay, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
 import { DEFAULT_MODEL } from "../../../plugins/chat/models";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
@@ -23,7 +23,7 @@ export function ThreadView(props: { chat: ChatState; threadId: Id<"threads">; hi
     if (!text) return;
 
     try {
-      await clipboard.writeText(text);
+      await navigator.clipboard.writeText(text);
       if (!alive) return;
       clearCopied?.();
       setCopied(true);
