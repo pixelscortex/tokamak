@@ -75,7 +75,9 @@ starting the server; restart an existing server after changing its environment.
 Enter sends; Shift+Enter adds a line; Escape stops the current run. Tab opens
 Map and Tab/Escape closes it. Type to filter thread titles, use arrows and Enter
 or 1–9 to open a thread, and use Cmd+Enter in Map or Cmd+N to create one.
-The selected thread stays in memory for the shell's lifetime.
+Cmd+Shift+C copies the last assistant reply and briefly shows COPIED in the strip.
+The selected thread stays in memory for the shell's lifetime. Conversations open
+at the end and follow replies until you scroll up; scroll to the bottom to resume.
 
 For an isolated manual run, use `TOKAMAK_SERVER_DIR=/tmp/tokamak-chat bun run app`.
 Stop that server with the same variable and `bun run server:stop` after closing
@@ -90,6 +92,6 @@ TOKAMAK_CHAT_LIVE=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots \
   cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --nocapture --test-threads=1
 ```
 
-This uses the workspace `.env.local` and disposable storage, sends the five-word
-hello prompt, verifies streaming and stopping, and exercises Map search and thread
-switching. Captures use the production Blitz painter with the bundled fonts.
+This uses the workspace `.env.local` and disposable storage, sends a long reply prompt, verifies streaming follow/pause/resume, clipboard
+contents on macOS, and stopping, and exercises Map search and thread switching.
+`ux-autoscroll.png` captures the completed reply at the bottom. Captures use the production Blitz painter with the bundled fonts.

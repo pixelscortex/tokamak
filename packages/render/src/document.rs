@@ -85,6 +85,10 @@ impl NativeDocument {
         })
     }
 
+    pub(crate) fn connect_host(&self, sender: crate::HostSender) {
+        *self.bridge.js.2.borrow_mut() = Some(sender);
+    }
+
     pub fn generation(&self) -> u64 {
         self.generation
     }

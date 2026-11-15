@@ -148,7 +148,9 @@ impl HostMailbox {
             }),
             wake: Box::new(wake),
         });
-        (HostSender(mailbox.clone()), Self(mailbox))
+        let sender = HostSender(mailbox.clone());
+        document.connect_host(sender.clone());
+        (sender, Self(mailbox))
     }
 
     pub fn generation(&self) -> u64 {

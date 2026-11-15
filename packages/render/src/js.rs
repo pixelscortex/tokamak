@@ -112,7 +112,7 @@ fn promise_callback<'js>(
     }
 }
 
-pub(crate) struct Js(QuickJsContext, Rc<HookState>);
+pub(crate) struct Js(QuickJsContext, Rc<HookState>, pub(crate) crate::capabilities::Host);
 
 impl Js {
     pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {
@@ -127,6 +127,7 @@ impl Js {
         let world =
             block_on(QuickJsContext::new(window_heap_bytes())).map_err(|e| Error(e.to_string()))?;
         let hooks = Rc::new(HookState::default());
+        let host = Rc::new(RefCell::new(None));
         block_on(world.context().async_with(async |ctx| {
             ctx.store_userdata(hooks.clone())
                 .map_err(|e| Error(e.to_string()))
@@ -187,6 +188,7 @@ impl Js {
                     )
                     .map_err(|e| Error(e.to_string()))?;
             }
+            crate::capabilities::install(&ctx, host.clone())?;
             ctx.eval::<(), _>(bundle)
                 .map_err(|e| Error(CaughtError::from_error(&ctx, e).to_string()))?;
             let api: Object = ctx
@@ -202,7 +204,7 @@ impl Js {
         let expired = hooks.expired();
         world.set_deadline(None);
         hooks.deadline.set(None);
-        let js = Self(world, hooks);
+        let js = Self(world, hooks, host);
         js.report_hook_errors();
         if expired {
             return Err(Error("UI initialization deadline exceeded".into()));

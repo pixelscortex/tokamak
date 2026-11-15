@@ -44,7 +44,7 @@ pub(super) fn report_layout(bridge: &mut Bridge, html: &mut HtmlDocument) -> Res
             if now != *last {
                 *last = now;
                 if let Some(r) = now {
-                    changed.push(json!({"id": handle, "rect": r.rect, "clip": r.clip}));
+                    changed.push(json!({"id": handle, "rect": r.rect, "clip": r.clip, "scroll": r.scroll}));
                 }
             }
         }
@@ -65,6 +65,8 @@ struct Report {
     rect: [f32; 4],
     /// Visible area: x, y, width, height (CSS px, window coordinates).
     clip: [f32; 4],
+    /// Vertical scroll offset, content height and viewport height (CSS px).
+    scroll: [f64; 3],
 }
 
 fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
@@ -110,7 +112,11 @@ fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
         ];
         clip = intersect(clip, padding);
     }
-    Some(Report { rect, clip })
+    Some(Report {
+        rect,
+        clip,
+        scroll: [n.scroll_offset().y, n.scroll_height() as f64, n.client_height() as f64],
+    })
 }
 
 /// The border box of `node` in window coordinates. Blitz's client rect of

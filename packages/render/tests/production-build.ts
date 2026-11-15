@@ -20,7 +20,7 @@ try {
   ]) {
     const directory = join(scratch, checkout);
     for (const name of ["tools", "demo", "js"]) await mkdir(join(directory, name), { recursive: true });
-    for (const name of ["tools/bundle.mjs", "tools/native-build.ts", "vite.config.ts", "package.json", "js/index.ts", "js/jsx-runtime.ts"]) {
+    for (const name of ["tools/bundle.mjs", "tools/native-build.ts", "vite.config.ts", "package.json", "js/index.ts", "js/jsx-runtime.ts", "js/async-ownership.ts"]) {
       await copyFile(join(render, name), join(directory, name));
     }
     await symlink(fileURLToPath(new URL("../../../node_modules", import.meta.url)), join(directory, "node_modules"), "dir");

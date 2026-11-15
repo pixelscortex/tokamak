@@ -31,6 +31,8 @@ enum Mutation {
     },
     #[serde(rename = "detach")]
     Detach { id: u32 },
+    #[serde(rename = "scroll")]
+    Scroll { id: u32, top: f64 },
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -113,6 +115,11 @@ impl Tree {
                         return Err(invalid());
                     }
                 }
+                Mutation::Scroll { id, top } => {
+                    if entry(id)?.kind != Kind::Element || !top.is_finite() {
+                        return Err(invalid());
+                    }
+                }
                 Mutation::Detach { id } => {
                     if entry(id)?.kind == Kind::Root || entry(id)?.parent.is_none() {
                         return Err(invalid());
@@ -141,6 +148,7 @@ impl Tree {
         }
         let mut inner = document.inner_mut();
         let mut dom = inner.mutate();
+        let mut scrolls = Vec::new();
         for mutation in mutations {
             match mutation {
                 Mutation::Element { id, tag } => {
@@ -191,7 +199,13 @@ impl Tree {
                     }
                 }
                 Mutation::Detach { id } => dom.remove_node(self.native[&id]),
+                Mutation::Scroll { id, top } => scrolls.push((self.native[&id], top)),
             }
+        }
+        drop(dom);
+        for (id, top) in scrolls {
+            let x = inner.get_node(id).unwrap().scroll_offset().x;
+            inner.scroll_to(id, x, top, blitz_dom::ScrollBehavior::Instant);
         }
         self.topology = staged;
         Ok(())

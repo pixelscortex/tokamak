@@ -11,6 +11,13 @@ export class NativeNode {
   readonly children: NativeNode[] = [];
   readonly handlers = new Map<string, EventHandler>();
   parent: NativeNode | undefined;
+
+  /** Queue a vertical scroll in CSS px. Call after observeLayout for current bounds. */
+  scrollTo(top: number): void {
+    if (!Number.isFinite(top)) throw new TypeError("Scroll offset must be finite");
+    pending.push({ op: "scroll", id: this.id, top });
+  }
+
   constructor(
     readonly id: number,
     readonly text: boolean,
@@ -23,7 +30,30 @@ type Mutation =
   | { op: "textValue"; id: number; value: string }
   | { op: "attribute"; id: number; name: string; value: string | null }
   | { op: "insert"; id: number; parent: number; before: number | null }
-  | { op: "detach"; id: number };
+  | { op: "detach"; id: number }
+  | { op: "scroll"; id: number; top: number };
+
+declare const __tokamakClipboard: (text: string) => void;
+declare const __tokamakAfter: (id: number, ms: number) => void;
+
+export const clipboard = {
+  async writeText(text: string): Promise<void> {
+    __tokamakClipboard(text);
+  },
+};
+
+const delays = new Map<number, () => void>();
+let nextDelay = 1;
+
+/** Run once on the UI thread after a short delay; disposal cancels delivery. */
+export function afterDelay(ms: number, callback: () => void): () => void {
+  const id = nextDelay++;
+  __tokamakAfter(id, ms);
+  delays.set(id, owned(callback));
+  const stop = () => { delays.delete(id); };
+  if (getOwner()) onCleanup(stop);
+  return stop;
+}
 
 const nodes = new Map<number, NativeNode>();
 const root = new NativeNode(0, false);
@@ -152,6 +182,8 @@ export interface Layout {
   /** The part of the window it can show in: the window cut by every
    * ancestor that clips its overflow (a scroller, a clipped panel). */
   clip: Rect;
+  /** Resolved vertical scroll geometry in CSS px, including content growth. */
+  scroll: { top: number; height: number; clientHeight: number };
 }
 export interface Rect {
   x: number;
@@ -193,11 +225,14 @@ export function observeLayout(node: NativeNode, callback: (layout: Layout) => vo
   return stop;
 }
 
-function reportLayout(changes: ({ id: number; rect: number[]; clip: number[] })[]) {
+function reportLayout(changes: ({ id: number; rect: number[]; clip: number[]; scroll: number[] })[]) {
   const box = (r: number[]): Rect => ({ x: r[0], y: r[1], width: r[2], height: r[3] });
   for (const change of changes) {
     for (const listener of [...(observers.get(change.id) ?? [])]) {
-      listener({ rect: box(change.rect), clip: box(change.clip) });
+      listener({
+        rect: box(change.rect), clip: box(change.clip),
+        scroll: { top: change.scroll[0]!, height: change.scroll[1]!, clientHeight: change.scroll[2]! },
+      });
     }
   }
 }
@@ -300,6 +335,13 @@ Object.defineProperty(globalThis, "__tokamak", {
     },
     host(json: string): void {
       const { topic, payload } = JSON.parse(json) as { topic: string; payload: unknown };
+      if (topic === "tk:delay") {
+        const id = payload as number;
+        const callback = delays.get(id);
+        delays.delete(id);
+        callback?.();
+        return;
+      }
       if (topic === "tk:layout") return reportLayout(payload as Parameters<typeof reportLayout>[0]);
       for (const handler of [...(subscriptions.get(topic) ?? [])]) handler(payload);
     },
@@ -312,6 +354,7 @@ Object.defineProperty(globalThis, "__tokamak", {
         dispose = undefined;
         subscriptions.clear();
         observers.clear();
+        delays.clear();
         clearRejections();
         nodes.clear();
         pending = [];

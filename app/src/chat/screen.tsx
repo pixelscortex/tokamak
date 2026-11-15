@@ -12,6 +12,7 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
   const [mapOpen, setMapOpen] = createSignal(false);
   const [sending, setSending] = createSignal<Record<string, boolean>>({});
   const map = useMap(props.chat, () => setMapOpen(false));
+  let copyReply: (() => Promise<void>) | undefined;
   let alive = true;
   onCleanup(() => { alive = false; });
   const draft = () => drafts()[props.chat.threadId() ?? ""] ?? "";
@@ -29,6 +30,9 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
     if (event.metaKey && (key.toLowerCase() === "n" || key === "Enter")) {
       event.preventDefault();
       if (!event.repeat) void newThread();
+    } else if (!mapOpen() && event.metaKey && event.shiftKey && key.toLowerCase() === "c") {
+      event.preventDefault();
+      if (!event.repeat) void copyReply?.();
     } else if (!mapOpen() && event.metaKey && key.toLowerCase() === "m") {
       event.preventDefault();
       if (!event.repeat) void props.chat.cycleModel();
@@ -69,7 +73,7 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
     class="flex min-h-0 min-w-0 flex-1 justify-center px-6 pb-6">
     <div class={`flex min-h-0 w-[560px] max-w-full flex-col gap-4 ${mapOpen() ? "pt-6" : ""}`}>
       <Show when={mapOpen()}><MapHeader /></Show>
-      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView chat={props.chat} threadId={threadId} hidden={mapOpen()} />}</Show>
+      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView chat={props.chat} threadId={threadId} hidden={mapOpen()} onCopyReady={copy => { copyReply = copy; }} />}</Show>
       <Show when={props.chat.error() ?? props.chat.threads.error()?.message}>{(error: Accessor<string>) => <p role="alert" class="m-0 text-text-2">{error()}</p>}</Show>
       {/* Retire the focused native editor only while the row editor owns focus. */}
       <Show when={map.editing() !== "rename"}>

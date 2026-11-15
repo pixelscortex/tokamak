@@ -4367,6 +4367,7 @@ version = "0.1.0"
 dependencies = [
  "anyrender",
  "anyrender_vello",
+ "arboard",
  "blitz-dom",
  "blitz-html",
  "blitz-shell",

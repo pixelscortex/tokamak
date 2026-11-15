@@ -35,6 +35,15 @@ and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overri
 - [`@tokamak/render`](js/index.ts) exports the universal JSX runtime, `mount`,
   `onHostEvent` and `observeLayout`. Events cancel synchronously; layout reports
   arrive after layout rather than through synchronous DOM measurements.
+- `observeLayout` includes vertical `scroll` geometry (`top`, `height`,
+  `clientHeight`) and reports offset changes and content growth. Call
+  `NativeNode.scrollTo(top)` from the observer to queue a clamped, instant scroll
+  through Blitz before paint.
+- `clipboard.writeText(text)` returns a promise and writes through the host's
+  `arboard` clipboard. Failures reject the promise. `afterDelay(ms, callback)`
+  schedules short UI feedback through the window mailbox and returns a cancel
+  function; owner disposal cancels delivery. Delays require `HostMailbox`, allow
+  at most 32 outstanding waits per document, and are limited to 60 seconds.
 - Text inputs and textareas opt into `onCaretChange` with `tk-caret`. After
   layout, `event.caret` gives the insertion box (`x`, `y`, `width`, `height`)
   relative to the content box in CSS px, corrected for text scrolling, and
