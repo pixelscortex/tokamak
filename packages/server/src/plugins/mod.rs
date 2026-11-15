@@ -1,0 +1,68 @@
+//! Static preflight, disk-backed immutable artifact snapshots and dependency routing.
+use crate::{Error, data::DataSpace};
+use engine::Bundle;
+use semver::{Version, VersionReq};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs::File,
+    io::{Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+pub struct Artifact {
+    pub manifest: Manifest,
+    pub bundle: Option<Arc<Bundle>>,
+    assets: BTreeMap<String, Arc<Asset>>,
+    provides: BTreeSet<String>,
+    consumes: BTreeSet<String>,
+    permissions: BTreeSet<String>,
+}
+pub struct Catalog {
+    pub order: Vec<String>,
+    pub plugins: BTreeMap<String, Arc<Artifact>>,
+    pub revision: String,
+    providers: BTreeMap<String, Vec<String>>,
+    pub(crate) environment: PathBuf,
+}
+
+/// One immutable, fully inspected generation. Function lookup selects the owner;
+/// neither request JSON nor JavaScript can choose a database namespace.
+pub(crate) struct Loaded {
+    pub catalog: Catalog,
+    pub targets: BTreeMap<String, Target>,
+    pub descriptor: Value,
+    pub catalog_text: String,
+    inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
+}
+#[derive(Clone)]
+pub(crate) struct Target {
+    pub owner: String,
+    pub local_name: String,
+    pub mutation: bool,
+    pub kind: crate::service::FunctionKind,
+    pub bundle: Arc<Bundle>,
+    pub space: DataSpace,
+}
+fn invalid(message: impl Into<String>) -> Error {
+    Error::Invalid(message.into())
+}
+
+mod artifact;
+mod assets;
+mod catalog;
+mod dependencies;
+mod grants;
+mod loading;
+mod manifest;
+
+pub use assets::Asset;
+use assets::asset;
+use dependencies::resolve;
+pub use manifest::*;
+
+#[cfg(test)]
+mod tests;
