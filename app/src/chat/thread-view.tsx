@@ -12,6 +12,10 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
   const messages = useQuery(props.chat.client, api.messages.list, () => ({ threadId: props.threadId }));
   const byId = createMemo(() => new Map((messages.data() ?? []).map(message => [message._id, message])));
   const messageIds = createMemo(() => [...byId().keys()]);
+  const liveCards = createMemo(() => new Set((messages.data() ?? []).flatMap(message =>
+    message.parts.filter(part => part.type === "tool" && part.status === "done" && part.view)
+      .map(part => part.type === "tool" ? part.callId : ""),
+  ).slice(-20)));
   const turns = () => messages.data()?.filter(message => message.role === "user").length ?? 0;
 
   const [copied, setCopied] = createSignal(false);
@@ -61,7 +65,7 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
   return <div class={props.hidden ? "hidden" : "flex min-h-0 flex-1 flex-col gap-5"}>
     {/* Blitz only supports non-negative scroll offsets; keep history in normal flow. */}
     <div ref={follow} id="chat-messages" role="log" aria-label="Conversation" class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain">
-      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} />}</For>
+      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} liveCards={props.hidden ? new Set<string>() : liveCards()} />}</For>
     </div>
     <Show when={messages.error()}><p role="alert" class="m-0 text-text-2">{messages.error()?.message}</p></Show>
     <Show when={props.chat.thread()}>

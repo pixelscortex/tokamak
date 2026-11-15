@@ -5,8 +5,8 @@ import type { Message } from "./use-chat";
 
 type Tool = Extract<Message["parts"][number], { type: "tool" }>;
 
-export function ToolPart(props: { loader: PluginLoader; part: Tool; threadId: string }) {
-  const renderer = createMemo(() => props.part.status === "done" && props.part.view
+export function ToolPart(props: { loader: PluginLoader; part: Tool; threadId: string; live?: boolean }) {
+  const renderer = createMemo(() => props.live !== false && props.part.status === "done" && props.part.view
     ? props.loader.contributions("itemRenderer").find(contribution =>
       contribution.plugin === props.part.plugin && contribution.options.type === props.part.view)
     : undefined);

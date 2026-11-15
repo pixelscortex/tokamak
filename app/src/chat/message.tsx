@@ -10,7 +10,7 @@ export function Mark(props: { user?: boolean }) {
   </span>;
 }
 
-export function Message(props: { loader: PluginLoader; threadId: string; message: ChatMessage }) {
+export function Message(props: { loader: PluginLoader; threadId: string; message: ChatMessage; liveCards?: ReadonlySet<string> }) {
   const parts = createMemo(() => new Map(props.message.parts.map((part, index) => [
     part.type === "tool" ? `tool:${part.callId}` : `text:${index}`, part,
   ])));
@@ -26,7 +26,7 @@ export function Message(props: { loader: PluginLoader; threadId: string; message
           const part = () => parts().get(id)!;
           return id.startsWith("text:")
             ? <Markdown text={(part() as Extract<ChatMessage["parts"][number], { type: "text" }>).text} />
-            : <ToolPart loader={props.loader} part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>} threadId={props.threadId} />;
+            : <ToolPart loader={props.loader} part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>} threadId={props.threadId} live={props.liveCards?.has((part() as Extract<ChatMessage["parts"][number], { type: "tool" }>).callId) ?? true} />;
         }}</For></div>
       </Show>
       <Show when={props.message.status === "streaming"}><p role="status" class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">· working</p></Show>
