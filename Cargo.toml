@@ -31,4 +31,4 @@ codegen-units = 1
 rquickjs-sys = { path = "vendor/rquickjs-sys" }
 
 # Share the timer used by Blitz and AnyRender.
-debug_timer = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46" }
+debug_timer = { git = "https://github.com/JustKira/blitz", rev = "673df1778499b3003d4ed00657313a439e97b77b" }

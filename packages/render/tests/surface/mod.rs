@@ -1038,3 +1038,30 @@ fn known_limit_a_positioned_member_under_a_zero_opacity_ancestor_is_still_locate
     // Blitz still locates this hoisted descendant despite its transparent ancestor.
     assert_eq!(f.state().shown.len(), 1);
 }
+
+#[test]
+fn a_click_reaches_what_is_visible_under_clipped_content() {
+    let mut doc = HtmlDocument::from_html(
+        r#"<html><body style="margin:0">
+        <button id="button" style="position:absolute;left:0;top:100px;width:100px;height:30px">Click</button>
+        <div style="position:absolute;left:0;top:0;width:100px;height:20px;overflow:hidden"><div id="outside" style="height:200px"></div></div>
+        </body></html>"#,
+        Default::default(),
+    );
+    doc.inner_mut().set_viewport(Viewport {
+        window_size: (400, 300),
+        ..Default::default()
+    });
+    doc.inner_mut().resolve(0.0);
+    let hit = doc.inner().hit(50.0, 115.0).unwrap().node_id;
+    let outside = doc.get_element_by_id("outside").unwrap();
+    let button = doc.get_element_by_id("button").unwrap();
+    let mut at = Some(hit);
+    let mut in_button = false;
+    while let Some(id) = at {
+        assert_ne!(id, outside, "clipped-away content takes no clicks");
+        in_button |= id == button;
+        at = doc.inner().get_node(id).and_then(|n| n.parent);
+    }
+    assert!(in_button);
+}

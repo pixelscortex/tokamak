@@ -558,7 +558,7 @@ dependencies = [
 [[package]]
 name = "blitz-dom"
 version = "0.3.0-beta.4"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 dependencies = [
  "accesskit",
  "anyrender",
@@ -603,7 +603,7 @@ dependencies = [
 [[package]]
 name = "blitz-html"
 version = "0.3.0-beta.4"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 dependencies = [
  "blitz-dom",
  "blitz-traits",
@@ -614,7 +614,7 @@ dependencies = [
 [[package]]
 name = "blitz-paint"
 version = "0.3.0-beta.4"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 dependencies = [
  "anyrender",
  "blitz-dom",
@@ -633,7 +633,7 @@ dependencies = [
 [[package]]
 name = "blitz-shell"
 version = "0.3.0-beta.4"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 dependencies = [
  "android-activity",
  "anyrender",
@@ -652,7 +652,7 @@ dependencies = [
 [[package]]
 name = "blitz-traits"
 version = "0.3.0-beta.4"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 dependencies = [
  "atomic_refcell",
  "bitflags",
@@ -1337,7 +1337,7 @@ checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 [[package]]
 name = "debug_timer"
 version = "0.1.3"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 
 [[package]]
 name = "debugid"
@@ -5992,7 +5992,7 @@ dependencies = [
 [[package]]
 name = "stylo_taffy"
 version = "0.3.0-beta.4"
-source = "git+https://github.com/JustKira/blitz?rev=c12afcd220456e01f671bd8304f76cbffb615d46#c12afcd220456e01f671bd8304f76cbffb615d46"
+source = "git+https://github.com/JustKira/blitz?rev=673df1778499b3003d4ed00657313a439e97b77b#673df1778499b3003d4ed00657313a439e97b77b"
 dependencies = [
  "bitflags",
  "stylo",
