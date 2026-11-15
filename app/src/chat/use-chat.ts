@@ -43,7 +43,7 @@ export function useChat(client: TokamakClient) {
       else void createThread();
     }
     const selected = untrack(threadId);
-    if (selected && !list.some(thread => thread._id === selected) && !untrack(creating)) {
+    if ((!selected || !list.some(thread => thread._id === selected)) && !untrack(creating)) {
       setThreadId(list[0]?._id);
     }
   });
