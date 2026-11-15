@@ -10,7 +10,7 @@ test("native library preserves its public element and component exports", async 
   assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
   assert.deepEqual(Object.keys(await import(componentsPath)).sort(), [
     "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Shell", "Textarea",
-    "dismissOutside", "place", "rail", "railItemTop", "textareaLine", "topBar",
+    "dismissOutside", "place", "rail", "textareaLine", "topBar",
     "trackLayout",
   ]);
   let library = "";

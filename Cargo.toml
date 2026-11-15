@@ -32,4 +32,3 @@ codegen-units = 1
 # Remove this patch once a released rquickjs-sys bundles a quickjs-ng with it.
 [patch.crates-io]
 rquickjs-sys = { git = "https://github.com/JustKira/rquickjs", rev = "f17e57e27b37a2c4d9ff12753f2b42067bf15394" }
-

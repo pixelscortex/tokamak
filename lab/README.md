@@ -43,7 +43,7 @@ Tests:
   on a click outside; each composer state; the composer stays within 60%
   of the stage; buttons; layout at wide and narrow windows.
 - `tests/shell.rs`: click and wheel interactions,
-  stable control boxes, shell resize frames, and
+  stable control boxes, and
   every view settling without requesting frames. The ignored GPU tests
   render offscreen frames (pixel checks, and one capture of each view with
   `capture_views`, written to `$TK_CAPTURE_DIR`, default

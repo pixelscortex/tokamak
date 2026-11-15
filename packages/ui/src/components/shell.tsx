@@ -88,7 +88,6 @@ export const rail = {
   item: 38,
   gap: 8,
   inset: 13,
-  tab: 8,
 } as const;
 
 /** Shared with the native traffic-light placement, CSS px. */
@@ -97,9 +96,6 @@ export const topBar = {
   left: 13,
   reserve: 13 + 2 * 20 + 14 + 11,
 } as const;
-
-/** Top of rail item `i` within the rail column. */
-export const railItemTop = (i: number) => i * (rail.item + rail.gap);
 
 export interface ShellProps {
   /** Keep room for the macOS traffic-light buttons (custom title bar). */

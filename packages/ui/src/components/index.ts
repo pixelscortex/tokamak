@@ -1,4 +1,4 @@
-export { Shell, rail, railItemTop, topBar } from "./shell";
+export { Shell, rail, topBar } from "./shell";
 export type { ShellProps } from "./shell";
 /** Plate controls (Tailwind utilities and theme tokens only). `Button` here
  * is the plate button; `@tokamak/ui/elements` keeps the older class-based
