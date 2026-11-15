@@ -1030,13 +1030,12 @@ fn fused_background_extends_past_the_roots_own_overflow_clip() {
 }
 
 #[test]
-fn known_limit_a_positioned_member_under_a_zero_opacity_ancestor_is_still_located() {
+fn a_positioned_member_under_a_zero_opacity_ancestor_contributes_nothing() {
     let f = Fixture::new(
         r#"<div tk-group="g" surface-own="false"><div style="opacity:0"><div id="member" surface-groups="g"></div></div></div>"#,
         &["member"],
     );
-    // Blitz still locates this hoisted descendant despite its transparent ancestor.
-    assert_eq!(f.state().shown.len(), 1);
+    assert_eq!(f.state().shown.len(), 0);
 }
 
 #[test]

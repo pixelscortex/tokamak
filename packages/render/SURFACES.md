@@ -55,9 +55,7 @@ Pure translations retain exact attached/slanted builders. For scale/rotation,
 the rounded outline is transformed as a general shape; attach and slant are
 ignored. A member contributes wherever it would land, in view or not, including
 when scrolled out of an ancestor clip. Unrendered members (`display:none`, not
-visible, `opacity:0`, or under such an element) contribute nothing, except that
-Blitz currently still locates a positioned descendant of a zero-opacity ancestor;
-such a descendant can contribute to a visible group.
+visible, `opacity:0`, or under such an element) contribute nothing.
 The group is drawn only when Blitz paints its root: a root that is itself out
 of view draws nothing even if a member is visible.
 

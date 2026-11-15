@@ -13,11 +13,11 @@ tokamak-build = { path = "../packages/build" }
 
 [dev-dependencies]
 serde_json = "1.0.154"
-blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "673df1778499b3003d4ed00657313a439e97b77b", default-features = false, features = ["system-fonts"] }
-blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "673df1778499b3003d4ed00657313a439e97b77b" }
+blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c", default-features = false, features = ["system-fonts"] }
+blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c" }
 keyboard-types = "=0.8.0"
 # Offscreen GPU frames and captures of the lab (tests/fused_surface.rs).
-blitz-paint = { git = "https://github.com/JustKira/blitz", rev = "673df1778499b3003d4ed00657313a439e97b77b", default-features = false, features = ["custom-widget"] }
+blitz-paint = { git = "https://github.com/JustKira/blitz", rev = "378f3c6a459817f4ab083cb01968747c49ab576c", default-features = false, features = ["custom-widget"] }
 anyrender = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
 anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
 # PNG captures of the offscreen frames (already in the lock graph).
