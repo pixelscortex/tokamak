@@ -1366,12 +1366,34 @@ fn chat_screen_socket_workflow() {
     key(&mut window, Key::Named(NamedKey::Escape), false);
     assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
     key(&mut window, Key::Named(NamedKey::Tab), false);
+    key(&mut window, Key::Character("r".into()), false);
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-rename")
+            .is_some()
+    );
     key(&mut window, Key::Named(NamedKey::Enter), true);
     window.wait(|doc| {
         support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != first)
     });
     let second = selected(&window);
     window.wait(|doc| doc.inner().get_element_by_id("chat-map").is_none());
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-rename")
+            .is_none()
+    );
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-input")
+            .is_some()
+    );
     key(&mut window, Key::Named(NamedKey::Tab), false);
     window.wait(|doc| support::text(doc, "chat-map").contains("New thread"));
     if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {

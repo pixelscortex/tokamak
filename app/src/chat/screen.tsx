@@ -11,7 +11,7 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
   const [drafts, setDrafts] = createSignal<Record<string, string>>({});
   const [mapOpen, setMapOpen] = createSignal(false);
   const [sending, setSending] = createSignal<Record<string, boolean>>({});
-  const map = useMap(props.chat, () => setMapOpen(false));
+  const map = useMap(props.chat, closeMap);
   let copyReply: (() => Promise<void>) | undefined;
   let alive = true;
   onCleanup(() => { alive = false; });
@@ -20,8 +20,13 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
   const busy = () => Boolean(props.chat.active() || sending()[props.chat.threadId() ?? ""]);
   const editorClass = () => mapOpen() ? "order-1 border-b border-hairline py-3" : "";
 
+  function closeMap() {
+    map.reset();
+    setMapOpen(false);
+  }
+
   async function newThread() {
-    if (await props.chat.createThread()) setMapOpen(false);
+    if (await props.chat.createThread()) closeMap();
   }
 
   function keydown(event: NativeEvent) {
@@ -41,8 +46,11 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
     } else if (key === "Tab" || (key === "Escape" && mapOpen())) {
       event.preventDefault();
       if (event.repeat) return;
-      if (!mapOpen()) map.reset();
-      setMapOpen(!mapOpen());
+      if (mapOpen()) closeMap();
+      else {
+        map.reset();
+        setMapOpen(true);
+      }
     } else if (mapOpen()) {
       map.keydown(event);
     } else if (key === "Escape" && props.chat.active()) {
