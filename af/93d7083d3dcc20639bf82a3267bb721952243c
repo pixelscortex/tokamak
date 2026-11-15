@@ -1,0 +1,35 @@
+packages/server/src/plugins/artifact.rs
+  s_d3722a4b772de5::t_dab133343356cc 1-132
+packages/server/src/plugins/assets.rs
+  s_d3722a4b772de5::t_a60bfcc4aacc33 1,30,43-44,58,76,81,90,94,129,138
+packages/server/src/plugins/catalog.rs
+  s_d3722a4b772de5::t_fc4f710d34e79b 1-97
+packages/server/src/plugins/dependencies.rs
+  s_d3722a4b772de5::t_5514d5f56fd7f2 1-65
+packages/server/src/plugins/grants.rs
+  s_d3722a4b772de5::t_52c991c99097f5 1-79
+packages/server/src/plugins/loading.rs
+  s_d3722a4b772de5::t_8581cc42823363 1-110
+packages/server/src/plugins/manifest.rs
+  s_d3722a4b772de5::t_6d3ad941a6540a 1-69
+packages/server/src/plugins/mod.rs
+  s_d3722a4b772de5::t_53dbbc54c41973 1-68
+packages/server/src/plugins/tests.rs
+  s_d3722a4b772de5::t_014a99bc314cfd 1-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af93d7083d3dcc20639bf82a3267bb721952243c",
+  "prompts": {},
+  "sessions": {
+    "s_d3722a4b772de5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e116-e282-78d3-a14b-24506a8c5e26",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
