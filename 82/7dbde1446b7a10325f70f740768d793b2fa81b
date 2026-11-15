@@ -1,0 +1,23 @@
+packages/render/SURFACES.md
+  s_1fe29573c38953::t_1e772b68686438 15-18,34-37,49,59,67,78
+packages/render/BLITZ_CHANGES.md
+  s_1fe29573c38953::t_1e772b68686438 3-7
+packages/render/tests/surface/mod.rs
+  s_1fe29573c38953::t_8ce57075b20846 976-1005
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "827dbde1446b7a10325f70f740768d793b2fa81b",
+  "prompts": {},
+  "sessions": {
+    "s_1fe29573c38953": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de7c-0c19-7083-8213-0d82c9257571",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
