@@ -77,6 +77,8 @@ export const send = action({
       const iterator = source.stream[Symbol.asyncIterator]();
       let next = iterator.next();
       for (;;) {
+        // execute waits for our tool-call acknowledgement, then runs independently.
+        // Waiting for its next stream event keeps polling cancellation/heartbeats.
         const chunk = await waitFor(next);
         if (chunk?.done) break;
         if (chunk) {
