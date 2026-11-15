@@ -7,19 +7,11 @@
  * focused trigger filters a searchable menu because Blitz cannot focus it
  * programmatically. Shell dismisses clicks outside the menu.
  */
-import type { Accessor } from "solid-js";
-import { For, Show, createMemo, createSignal, untrack } from "solid-js";
+import { Show, createMemo, createSignal, untrack } from "solid-js";
 import type { JSX, NativeEvent, NativeNode } from "@tokamak/render";
 import { Icon } from "../elements/icon";
-import { dismissable } from "./dismiss";
-import { place, trackLayout } from "./floating";
+import { SelectMenu } from "./select-menu";
 import { icons } from "./icons";
-
-const GAP = 6;
-/** Kept free between the menu and the edge of its clipping area. */
-const MARGIN = 8;
-/** The list's own height limit (the menu may get less room). */
-const LIST_MAX = 264;
 
 export interface SelectOption {
   value: string;
@@ -67,6 +59,44 @@ type Row =
   | { kind: "option"; option: SelectOption; index: number };
 
 export function Select(props: SelectProps): JSX.Element {
+  const state = createSelectState(props);
+  const { selected, open, compact, type, setOpen, keydown } = state;
+
+  return (
+    <div
+      class={`relative flex ${props.class ?? ""}`}
+      onKeyDown={keydown}
+      onClick={state.mark}
+    >
+      <button
+        type="button"
+        id={props.id}
+        ref={state.setTrigger}
+        aria-label={props.label}
+        aria-haspopup="listbox"
+        aria-expanded={open()}
+        aria-disabled={props.disabled ? true : undefined}
+        disabled={props.disabled}
+        onClick={() => setOpen(!open())}
+        class={`relative flex min-w-0 items-center gap-1.5 border-0 font-ui outline-none focus:ring-2 focus:ring-ink-5 aria-disabled:opacity-40 aria-expanded:z-[31] ${
+          compact()
+            ? "h-[26px] rounded-sm bg-transparent px-2 text-ink-3 not-aria-disabled:hover:text-ink not-aria-disabled:not-aria-expanded:hover:bg-chip aria-expanded:text-ink aria-expanded:bg-chip"
+            : "h-[34px] w-full justify-between rounded-md bg-chip px-3 text-ink not-aria-expanded:bg-chip not-aria-disabled:not-aria-expanded:hover:bg-lift not-aria-disabled:not-aria-expanded:active:bg-card"
+        }`}
+      >
+        <span class={`min-w-0 truncate ${type()} ${selected() ? "" : "text-ink-4"}`}>
+          {selected()?.label ?? props.placeholder ?? ""}
+        </span>
+        <Icon d={icons.chevronDown} strokeWidth={2} class={`shrink-0 text-ink-4 ${compact() ? "size-3" : "size-3.5"}`} />
+      </button>
+      <Show when={open()}>
+        <SelectMenu {...props} state={state} />
+      </Show>
+    </div>
+  );
+}
+
+export function createSelectState(props: SelectProps) {
   const [own, setOwn] = createSignal(untrack(() => props.defaultValue));
   const [open, setOpenSignal] = createSignal(untrack(() => props.defaultOpen ?? false));
   const [query, setQuery] = createSignal("");
@@ -146,7 +176,13 @@ export function Select(props: SelectProps): JSX.Element {
       setOpen(false);
     } else if (key === "Tab") {
       setOpen(false);
-    } else if (props.search && trigger && event.target === trigger.id && !event.metaKey && !event.ctrlKey) {
+    } else {
+      typeSearch(event);
+    }
+  }
+  function typeSearch(event: NativeEvent) {
+    if (!props.search || !trigger || event.target !== trigger.id || event.metaKey || event.ctrlKey) return;
+    const key = event.key;
       // Typing on the trigger goes into the search field.
       if (key === "Backspace") {
         event.preventDefault();
@@ -155,8 +191,8 @@ export function Select(props: SelectProps): JSX.Element {
         event.preventDefault();
         search(query() + key);
       }
-    }
   }
+
   function search(next: string) {
     setQuery(next);
     setActive(order()[0]);
@@ -166,135 +202,9 @@ export function Select(props: SelectProps): JSX.Element {
   const type = () => (props.mono ? "font-data text-[11px] leading-4" : compact() ? "text-[12px] leading-4" : "text-[13px] leading-4");
   const sub = (part: string) => (props.id ? `${props.id}-${part}` : undefined);
 
-  /** Reposition the menu when the trigger or clipping area moves. */
-  function Menu() {
-    layer = dismissable(() => setOpen(false));
-    const [anchor, observeAnchor] = trackLayout();
-    const [menu, observeMenu] = trackLayout();
-    const [list, observeList] = trackLayout();
-    const [content, observeContent] = trackLayout();
-    if (trigger) observeAnchor(trigger);
-    /** Everything in CSS px relative to the trigger's box. */
-    const at = createMemo(() => {
-      const a = anchor();
-      if (!a) return undefined;
-      const { width: tw, height: th } = a.rect;
-      const mw = compact() ? Math.max(240, tw) : tw;
-      // The menu's natural height: its chrome plus its rows (up to the
-      // list's own limit). Zero until the first report.
-      const m = menu(), l = list(), c = content();
-      const natural = m && l && c ? m.rect.height - l.rect.height + Math.min(c.rect.height, LIST_MAX) : 0;
-      const options = {
-        anchor: a.rect,
-        clip: a.clip,
-        size: { width: mw, height: natural },
-        side: props.side,
-        align: props.align ?? "start",
-        margin: MARGIN,
-      };
-      const p = place({ ...options, offset: GAP });
-      return { ...p, left: p.x - a.rect.x, width: mw, height: th };
-    });
-    return (
-      <Show when={at()}>
-        {(g: Accessor<NonNullable<ReturnType<typeof at>>>) => (
-          <div
-            id={sub("menu")}
-            ref={observeMenu}
-            class="absolute z-30 flex flex-col gap-1 rounded-[10px] bg-chip p-1"
-            style={`left: ${g().left}px; ${g().side === "top" ? "bottom" : "top"}: ${g().height + GAP}px; width: ${g().width}px; max-height: ${g().maxHeight}px`}
-          >
-            <Show when={props.search}>
-              <div class="grid shrink-0">
-                <input
-                  id={sub("search")}
-                  aria-label="Search"
-                  value={query()}
-                  onInput={(event) => search(event.value ?? "")}
-                  class="col-start-1 row-start-1 h-7 w-full rounded-md border-0 bg-well px-2 pl-7 font-ui text-[13px] text-ink outline-none"
-                />
-                <Icon d={icons.search} class="pointer-events-none col-start-1 row-start-1 ml-2 size-3.5 self-center text-ink-4" />
-                <Show when={query() === ""}>
-                  <span class="pointer-events-none col-start-1 row-start-1 self-center pl-7 text-[13px] leading-4 text-ink-4">
-                    {props.searchPlaceholder ?? "Search"}
-                  </span>
-                </Show>
-              </div>
-            </Show>
-            <div role="listbox" ref={observeList} class="flex max-h-[264px] min-h-0 flex-col overflow-y-auto overscroll-contain">
-              <div ref={observeContent} class="flex shrink-0 flex-col">
-                <For each={rows()}>
-                  {(row) =>
-                    row.kind === "group" ? (
-                      <div class="flex h-7 shrink-0 items-end px-2 pb-1 text-[11px] leading-4 font-medium text-ink-4">{row.label}</div>
-                    ) : (
-                      <div
-                        role="option"
-                        id={sub(`option-${row.index}`)}
-                        aria-selected={row.option.value === value()}
-                        aria-disabled={row.option.disabled ? true : undefined}
-                        data-active={active() === row.index ? "" : undefined}
-                        onClick={() => pick(row.option)}
-                        class={`flex h-7 shrink-0 items-center gap-2 rounded-md px-2 aria-disabled:text-ink-6 not-aria-disabled:hover:bg-lift data-active:bg-lift ${
-                          row.option.value === value() ? "text-ink" : "text-ink-body"
-                        }`}
-                      >
-                        <span class={`min-w-0 flex-1 truncate ${props.mono ? "font-data text-[11px] leading-4" : "text-[13px] leading-4"}`}>
-                          {row.option.label}
-                        </span>
-                        <Show when={row.option.detail}>
-                          <span class="shrink-0 font-data text-[11px] leading-4 text-ink-4">{row.option.detail}</span>
-                        </Show>
-                        <span class="flex size-3.5 shrink-0 items-center justify-center">
-                          <Show when={row.option.value === value()}>
-                            <Icon d={icons.check} strokeWidth={2} class="size-3.5 text-ink" />
-                          </Show>
-                        </span>
-                      </div>
-                    )
-                  }
-                </For>
-                <Show when={rows().length === 0}>
-                  <div class="flex h-7 items-center px-2 text-[13px] leading-4 text-ink-4">No matches</div>
-                </Show>
-              </div>
-            </div>
-          </div>
-        )}
-      </Show>
-    );
-  }
 
-  return (
-    <div
-      class={`relative flex ${props.class ?? ""}`}
-      onKeyDown={keydown}
-      onClick={() => layer?.mark()}
-    >
-      <button
-        type="button"
-        id={props.id}
-        ref={(node) => (trigger = node)}
-        aria-label={props.label}
-        aria-haspopup="listbox"
-        aria-expanded={open()}
-        aria-disabled={props.disabled ? true : undefined}
-        disabled={props.disabled}
-        onClick={() => setOpen(!open())}
-        class={`relative flex min-w-0 items-center gap-1.5 border-0 font-ui outline-none focus:ring-2 focus:ring-ink-5 aria-disabled:opacity-40 aria-expanded:z-[31] ${
-          compact()
-            ? "h-[26px] rounded-sm bg-transparent px-2 text-ink-3 not-aria-disabled:hover:text-ink not-aria-disabled:not-aria-expanded:hover:bg-chip aria-expanded:text-ink aria-expanded:bg-chip"
-            : "h-[34px] w-full justify-between rounded-md bg-chip px-3 text-ink not-aria-expanded:bg-chip not-aria-disabled:not-aria-expanded:hover:bg-lift not-aria-disabled:not-aria-expanded:active:bg-card"
-        }`}
-      >
-        <span class={`min-w-0 truncate ${type()} ${selected() ? "" : "text-ink-4"}`}>
-          {selected()?.label ?? props.placeholder ?? ""}
-        </span>
-        <Icon d={icons.chevronDown} strokeWidth={2} class={`shrink-0 text-ink-4 ${compact() ? "size-3" : "size-3.5"}`} />
-      </button>
-      <Show when={open()}>
-        <Menu />
-      </Show>
-    </div>
-  );
+  return { value, selected, open, query, active, rows, compact, type, sub, setOpen, pick, search, keydown,
+    trigger: () => trigger, setTrigger: (node: NativeNode) => { trigger = node; },
+    setLayer: (next: { mark(): void }) => { layer = next; }, mark: () => layer?.mark(),
+  };
 }

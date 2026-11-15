@@ -1,11 +1,6 @@
-(function (host, network) {
-  "use strict";
-  const sync = (op, args = {}) => host.op("web.sync", { op, ...args });
-  const asyncOp = (op, args) => host.op("web.async", { op, ...args });
-  const chunkSize = 65536;
-  const effects = () => { if (!network) throw new Error("web effects are only available in actions; fetch is forbidden in queries and mutations"); };
-  const unsupported = name => { throw new TypeError(`${name} is not supported by Tokamak web APIs`); };
-
+"use strict";
+{
+function createEvents() {
   class DOMException extends Error {
     constructor(message = "", name = "Error") { super(message); this.name = name; }
   }
@@ -31,7 +26,10 @@
         if (item.once) this.removeEventListener(event.type, item.callback);
         // One throwing application listener must not suppress the listener
         // which cancels native HTTP I/O. Report its error after all listeners.
-        try { typeof item.callback === "function" ? item.callback.call(this, event) : item.callback.handleEvent(event); }
+        try {
+          if (typeof item.callback === "function") item.callback.call(this, event);
+          else item.callback.handleEvent(event);
+        }
         catch (error) { failure ??= { error }; }
       }
       if (failure) throw failure.error;
@@ -73,6 +71,10 @@
     abort(reason) { this.#signal._abort(reason); }
   }
 
+  return { DOMException, Event, EventTarget, AbortSignal, AbortController };
+}
+
+function createEncoding(sync, chunkSize) {
   class TextEncoder {
     get encoding() { return "utf-8"; }
     encode(text = "") { return new Uint8Array(sync("encode", { text: String(text).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,"\uFFFD") })); }
@@ -136,6 +138,10 @@
       this.readable = stream.readable; this.writable = stream.writable;
     }
   }
+  return { TextEncoder, TextDecoder, TextDecoderStream, byteView };
+}
+
+function createUrls(sync) {
   const formEncode = value => encodeURIComponent(value).replace(/%20/g,"+").replace(/[!'()~]/g,c=>`%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   const formDecode = value => { try { return decodeURIComponent(value.replace(/\+/g," ")); } catch { return value.replace(/\+/g," "); } };
   const replaceParams = Symbol();
@@ -191,6 +197,10 @@
     static parse(url,base) { try { return new URL(url,base); } catch { return null; } }
   }
   for (const key of ["protocol","host","hostname","port","pathname","search","hash","username","password"]) Object.defineProperty(URL.prototype,key,{get(){return this._get(key);},set(v){this._set(key,v);}});
+  return { URL, URLSearchParams };
+}
+
+function createHttpBodies(unsupported, chunkSize, byteView, TextEncoder, TextDecoder, URL, URLSearchParams, AbortSignal, AbortController) {
   const headerName = name => { name = String(name).toLowerCase(); if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) throw new TypeError("Invalid header name"); return name; };
   const headerValue = value => { value = String(value).trim(); if (/[\r\n\0]/.test(value)) throw new TypeError("Invalid header value"); return value; };
   class Headers {
@@ -245,6 +255,16 @@
     formData() { unsupported("FormData"); }
     _cloneBody() { if (this.bodyUsed || this.body?.locked) throw new TypeError("Body has already been consumed"); if (!this.body) return null; const [a,b] = this.body.tee(); this.body = a; return b; }
   }
+  function validateRequestOptions(init) {
+      for (const key of Object.keys(init)) if (!["method","headers","body","signal","redirect","duplex"].includes(key)) unsupported(`Request.${key}`);
+      if (init.duplex !== undefined && init.duplex !== "half") unsupported("Request.duplex");
+  }
+
+  function validateRequestMethod(method, body) {
+    if (!/^[A-Z]+$/.test(method) || ["CONNECT","TRACE","TRACK"].includes(method)) throw new TypeError("Unsupported request method");
+    if (["GET","HEAD"].includes(method) && body) throw new TypeError("GET/HEAD cannot have a body");
+  }
+
   class Request extends Body {
     constructor(input, init = {}) {
       const source = input instanceof Request ? input : null;
@@ -252,14 +272,12 @@
       super(init.body ?? sourceBody,init.headers ?? source?.headers);
       this.url = new URL(source ? source.url : String(input)).href;
       this.method = String(init.method ?? source?.method ?? "GET").toUpperCase();
-      if (!/^[A-Z]+$/.test(this.method) || ["CONNECT","TRACE","TRACK"].includes(this.method)) throw new TypeError("Unsupported request method");
-      if (["GET","HEAD"].includes(this.method) && this.body) throw new TypeError("GET/HEAD cannot have a body");
+      validateRequestMethod(this.method, this.body);
       this.signal = init.signal ?? source?.signal ?? new AbortController().signal;
       if (!(this.signal instanceof AbortSignal)) throw new TypeError("Expected AbortSignal");
       this.redirect = init.redirect ?? source?.redirect ?? "follow";
       if (!["follow","manual","error"].includes(this.redirect)) throw new TypeError("Invalid redirect mode");
-      for (const key of Object.keys(init)) if (!["method","headers","body","signal","redirect","duplex"].includes(key)) unsupported(`Request.${key}`);
-      if (init.duplex !== undefined && init.duplex !== "half") unsupported("Request.duplex");
+      validateRequestOptions(init);
       // Transfer through a proxy stream: constructing from a Request makes its
       // original body unusable immediately, even before fetch starts the upload.
       if (sourceBody) this.body = sourceBody.pipeThrough(new TransformStream());
@@ -278,6 +296,10 @@
     static redirect(url, status = 302) { if (![301,302,303,307,308].includes(status)) throw new RangeError("Invalid redirect status"); return new Response(null,{status,headers:{location:new URL(url).href}}); }
   }
 
+  return { Headers, Request, Response };
+}
+
+function createFetch(sync, asyncOp, effects, unsupported, chunkSize, byteView, DOMException, URL, Headers, Request, Response) {
   async function fetch(input, init) {
     effects();
     const request = new Request(input,init);
@@ -316,8 +338,7 @@
         try {
           while (true) {
             const {done,value} = await reader.read(); if (done) break;
-            const bytes = byteView(value);
-            for (let offset = 0; offset < bytes.length; offset += chunkSize) await asyncOp("write", {id,bytes:Array.from(bytes.subarray(offset,offset+chunkSize))});
+            await writeBodyChunk(id, value);
           }
           sync("finish", {id});
         } catch (e) { cancel(e); throw e; }
@@ -332,12 +353,7 @@
           cancel(new DOMException("Redirected", "AbortError"));
           if (request.redirect === "error") throw new TypeError("fetch redirect rejected");
           if (redirects >= 20) throw new TypeError("fetch exceeded redirect limit");
-          const next = new URL(headers.get("location"),request.url);
-          if (next.origin !== new URL(request.url).origin) for (const name of ["authorization","proxy-authorization","cookie"]) request.headers.delete(name);
-          const changeMethod = (info.status === 303 && request.method !== "HEAD") || ([301,302].includes(info.status) && request.method === "POST");
-          if (request.body && !changeMethod) unsupported("redirect replay of a streamed request body");
-          if (changeMethod) { request.headers.delete("content-type"); request.headers.delete("content-length"); }
-          request = new Request(next,{method:changeMethod?"GET":request.method,headers:request.headers,signal:request.signal,redirect:request.redirect});
+          request = redirectRequest(request, info.status, headers);
           continue;
         }
         let body = null;
@@ -358,6 +374,24 @@
       } catch (e) { cancel(e); throw request.signal.aborted ? request.signal.reason : e; }
     }
   }
+
+  function redirectRequest(request, status, headers) {
+          const next = new URL(headers.get("location"),request.url);
+          if (next.origin !== new URL(request.url).origin) for (const name of ["authorization","proxy-authorization","cookie"]) request.headers.delete(name);
+          const changeMethod = (status === 303 && request.method !== "HEAD") || ([301,302].includes(status) && request.method === "POST");
+          if (request.body && !changeMethod) unsupported("redirect replay of a streamed request body");
+          if (changeMethod) { request.headers.delete("content-type"); request.headers.delete("content-length"); }
+          return new Request(next,{method:changeMethod?"GET":request.method,headers:request.headers,signal:request.signal,redirect:request.redirect});
+  }
+
+  async function writeBodyChunk(id, value) {
+            const bytes = byteView(value);
+            for (let offset = 0; offset < bytes.length; offset += chunkSize) await asyncOp("write", {id,bytes:Array.from(bytes.subarray(offset,offset+chunkSize))});
+  }
+  return { fetch };
+}
+
+function createTimersAndCrypto(sync, asyncOp, effects, unsupported, chunkSize, byteView, DOMException) {
   const timers = new Map();
   function schedule(callback, delay, repeat, args) {
     effects(); if (typeof callback !== "function") throw new TypeError("Timer callback must be a function");
@@ -388,8 +422,28 @@
     },
     get subtle() { return unsupported("crypto.subtle"); },
   };
+  return { schedule, clearTimer, crypto };
+}
+
+(function (host, network) {
+  "use strict";
+  const sync = (op, args = {}) => host.op("web.sync", { op, ...args });
+  const asyncOp = (op, args) => host.op("web.async", { op, ...args });
+  const chunkSize = 65536;
+  const effects = () => { if (!network) throw new Error("web effects are only available in actions; fetch is forbidden in queries and mutations"); };
+  const unsupported = name => { throw new TypeError(`${name} is not supported by Tokamak web APIs`); };
+
+
+  const { DOMException, Event, EventTarget, AbortSignal, AbortController } = createEvents();
+  const { TextEncoder, TextDecoder, TextDecoderStream, byteView } = createEncoding(sync, chunkSize);
+  const { URL, URLSearchParams } = createUrls(sync);
+  const { Headers, Request, Response } = createHttpBodies(unsupported, chunkSize, byteView, TextEncoder, TextDecoder, URL, URLSearchParams, AbortSignal, AbortController);
+  const { fetch } = createFetch(sync, asyncOp, effects, unsupported, chunkSize, byteView, DOMException, URL, Headers, Request, Response);
+  const { schedule, clearTimer, crypto } = createTimersAndCrypto(sync, asyncOp, effects, unsupported, chunkSize, byteView, DOMException);
+
   Object.assign(globalThis,{DOMException,Event,EventTarget,AbortSignal,AbortController,TextEncoder,TextDecoder,TextDecoderStream,URLSearchParams,URL,Headers,Request,Response,fetch:network?fetch:()=>effects(),crypto,
     setTimeout:(fn,ms,...args)=>schedule(fn,ms,false,args),setInterval:(fn,ms,...args)=>schedule(fn,ms,true,args),clearTimeout:clearTimer,clearInterval:clearTimer,
   });
   for (const name of ["WebSocket","XMLHttpRequest","Blob","File","FormData","Worker","EventSource","TextEncoderStream"]) Object.defineProperty(globalThis,name,{configurable:true,get:()=>unsupported(name)});
 })
+}

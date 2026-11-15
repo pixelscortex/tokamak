@@ -22,8 +22,7 @@ export function publicFunctions(root: string, entry: string | undefined): string
   const names = new Map<ts.Symbol, string[]>();
   for (const file of program.getSourceFiles()) {
     const local = relative(resolve(root, "backend"), file.fileName).split(sep).join("/");
-    if (!local.endsWith(".ts") || local === "schema.ts" || /\.(d|test|spec)\.ts$/.test(local)
-      || local.split("/").some(part => part.startsWith("_") || part.startsWith(".") || ["node_modules", "dist", "tests"].includes(part))) continue;
+    if (!isBackendModule(local)) continue;
     const symbol = checker.getSymbolAtLocation(file);
     if (!symbol) continue;
     for (const exported of checker.getExportsOfModule(symbol)) {
@@ -48,13 +47,21 @@ export function publicFunctions(root: string, entry: string | undefined): string
       .map(symbol => symbol.getName()));
     for (const statement of file.statements) {
       if (!ts.isExportDeclaration(statement) || statement.isTypeOnly) continue;
-      if (statement.exportClause) {
-        if (ts.isNamedExports(statement.exportClause)) {
-          for (const item of statement.exportClause.elements) if (!item.isTypeOnly) names.add(item.name.text);
-        } else names.add(statement.exportClause.name.text);
-      } else if (statement.moduleSpecifier) {
+      if (!statement.exportClause) {
+        if (!statement.moduleSpecifier) continue;
         const target = checker.getSymbolAtLocation(statement.moduleSpecifier);
-        if (target) for (const name of runtimeExports(target, new Set(seen))) if (name !== "default") names.add(name);
+        if (!target) continue;
+        for (const name of runtimeExports(target, new Set(seen))) {
+          if (name !== "default") names.add(name);
+        }
+        continue;
+      }
+      if (!ts.isNamedExports(statement.exportClause)) {
+        names.add(statement.exportClause.name.text);
+        continue;
+      }
+      for (const item of statement.exportClause.elements) {
+        if (!item.isTypeOnly) names.add(item.name.text);
       }
     }
     return names;
@@ -68,4 +75,9 @@ export function publicFunctions(root: string, entry: string | undefined): string
     for (const target of targets!) result.add(target);
   }
   return [...result].sort();
+}
+
+function isBackendModule(local: string): boolean {
+  return !(!local.endsWith(".ts") || local === "schema.ts" || /\.(d|test|spec)\.ts$/.test(local)
+      || local.split("/").some(part => part.startsWith("_") || part.startsWith(".") || ["node_modules", "dist", "tests"].includes(part)));
 }

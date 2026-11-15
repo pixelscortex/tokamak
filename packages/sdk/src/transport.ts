@@ -2,11 +2,11 @@
 // provide an ordered native message connection or an already-open WebSocket;
 // this module installs no browser/Node globals. Only immutable catalog transfers
 // may restart; queries, mutations and actions are never automatically retried.
+import { webSocketConnection, type ClientWebSocket } from "./websocket-transport";
 import type { ClientTransport, SubscriptionEvent } from "./client";
 import type { Event, Request } from "./protocol";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
 import type { JsonValue } from "./values";
-import { assertJson } from "./values";
 
 export interface MessageConnection {
   send(request: Request): void;
@@ -22,6 +22,12 @@ type Observer = (event: SubscriptionEvent<JsonValue>) => void;
 const CAPACITY = 128;
 class CatalogRevisionChanged extends Error {
   constructor() { super("Plugin generation changed during catalog transfer"); }
+}
+
+function isCatalogPage(value: { [key: string]: JsonValue }, offset: number): value is { text: string; revision: string; done: boolean; next: number } {
+  return typeof value.text === "string" && typeof value.revision === "string" && typeof value.done === "boolean"
+    && typeof value.next === "number" && Number.isSafeInteger(value.next) && value.next >= offset
+    && (value.done || value.next !== offset);
 }
 
 export class InProcessTransport implements ClientTransport {
@@ -81,9 +87,7 @@ export class InProcessTransport implements ClientTransport {
         if (revision !== undefined) throw new CatalogRevisionChanged();
         return value;
       }
-      if (typeof value.text !== "string" || typeof value.revision !== "string" || typeof value.done !== "boolean"
-        || typeof value.next !== "number" || !Number.isSafeInteger(value.next) || value.next < offset
-        || (!value.done && value.next === offset)) throw new Error("Invalid catalog page");
+      if (!isCatalogPage(value, offset)) throw new Error("Invalid catalog page");
       if (revision === undefined) revision = value.revision;
       else if (value.revision !== revision) throw new CatalogRevisionChanged();
       chunks.push(value.text);
@@ -264,80 +268,9 @@ export class InProcessTransport implements ClientTransport {
   }
 }
 
-// Structural subset accepted by browser and Bun WebSockets. Connection creation
-// belongs to the caller; requiring OPEN avoids an unbounded pre-connect buffer.
-export interface ClientWebSocket {
-  readonly readyState: number;
-  readonly bufferedAmount: number;
-  send(text: string): void;
-  close(): void;
-  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
-  addEventListener(type: "close" | "error", listener: () => void): void;
-  removeEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
-  removeEventListener(type: "close" | "error", listener: () => void): void;
-}
-
-function decode(data: unknown): Event {
-  if (typeof data !== "string") throw new Error("expected JSON text frame");
-  const event: unknown = JSON.parse(data);
-  assertJson(event, "server event");
-  if (!event || typeof event !== "object" || Array.isArray(event)) throw new Error("invalid event");
-  if (event.type === "pluginchanged") {
-    if (!Array.isArray(event.plugins) || event.plugins.some(id => typeof id !== "string")
-      || !event.catalog || typeof event.catalog !== "object" || Array.isArray(event.catalog)) throw new Error("invalid plugin change");
-    return event as Event;
-  }
-  const { type, id, result } = event;
-  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0)
-    throw new Error("invalid event ID");
-  if (type === "unsubscribed") return event as Event;
-  if (
-    (type !== "response" && type !== "subscription") ||
-    !result ||
-    typeof result !== "object" ||
-    Array.isArray(result)
-  )
-    throw new Error("invalid event result");
-  if (
-    Object.keys(result).length !== 1 ||
-    (!("Ok" in result) && !("Err" in result && typeof result.Err === "string"))
-  )
-    throw new Error("invalid event outcome");
-  return event as Event;
-}
-
 export class WebSocketTransport extends InProcessTransport {
   constructor(socket: ClientWebSocket) {
-    if (socket.readyState !== 1) throw new Error("WebSocket must already be open");
-    super({
-      send(request) {
-        const text = JSON.stringify(request);
-        // Bound the SDK's socket queue as well as the server queues. A failed
-        // send closes the whole connection; admitted mutation outcomes are unknown.
-        if (text.length > MAX_WIRE_MESSAGE_BYTES || socket.bufferedAmount > MAX_WIRE_MESSAGE_BYTES)
-          throw new Error("WebSocket buffer capacity exceeded");
-        socket.send(text);
-      },
-      listen(onEvent, onClose) {
-        const message = (event: { data: unknown }) => {
-          try {
-            onEvent(decode(event.data));
-          } catch (error) {
-            onClose(error instanceof Error ? error : new Error(String(error)));
-          }
-        };
-        const closed = () =>
-          onClose(new Error("WebSocket closed; mutation outcomes may be unknown"));
-        socket.addEventListener("message", message);
-        socket.addEventListener("close", closed);
-        socket.addEventListener("error", closed);
-        return () => {
-          socket.removeEventListener("message", message);
-          socket.removeEventListener("close", closed);
-          socket.removeEventListener("error", closed);
-        };
-      },
-      close: () => socket.close(),
-    });
+    super(webSocketConnection(socket));
   }
 }
+export type { ClientWebSocket } from "./websocket-transport";

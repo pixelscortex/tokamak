@@ -17,6 +17,31 @@ export function uiContributions(root: string) {
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(entry);
   if (!source) throw new Error(`Missing plugin UI entry ${entry}`);
+  const runtimeNames = emittedExports(program, checker);
+  const runtime = runtimeNames(source);
+  const original = (s: ts.Symbol): ts.Symbol => s.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(s) : s;
+  const module = checker.getSymbolAtLocation(source);
+  const contributes: Record<string, { id: string; [key: string]: string }[]> = {};
+  for (const exported of module ? checker.getExportsOfModule(module) : []) {
+    if (!runtime.has(exported.name)) continue;
+    const symbol = original(exported);
+    const declaration = symbol.valueDeclaration;
+    if (!declaration) continue;
+    const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
+    const brand = type.getProperties().find(p => p.name.startsWith("__@contributionBrand@"));
+    if (!brand) continue;
+    const kindType = checker.getTypeOfSymbolAtLocation(brand, declaration);
+    const fail = (): never => { throw new Error(`Invalid UI contribution ${exported.name}: use a contribution helper with static literal options`); };
+    if (!kindType.isStringLiteral() || !(kindType.value in fields)) fail();
+    const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
+    const values = contributionOptions(declaration, fields[kind], fail);
+    if (kind === "view") validateRoute(values.route!, fail);
+    (contributes[kind] ??= []).push({ id: exported.name, ...values });
+  }
+  return { contributes };
+}
+
+function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
   // Inspect TS's emitted module syntax before bundler dead-code elimination.
   // This excludes type-only stars/aliases throughout re-export chains while
   // preserving declared exports after a top-level throw (never execute code).
@@ -55,22 +80,10 @@ export function uiContributions(root: string) {
     }
     return names;
   }
-  const runtime = runtimeNames(source);
-  const original = (s: ts.Symbol): ts.Symbol => s.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(s) : s;
-  const module = checker.getSymbolAtLocation(source);
-  const contributes: Record<string, { id: string; [key: string]: string }[]> = {};
-  for (const exported of module ? checker.getExportsOfModule(module) : []) {
-    if (!runtime.has(exported.name)) continue;
-    const symbol = original(exported);
-    const declaration = symbol.valueDeclaration;
-    if (!declaration) continue;
-    const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
-    const brand = type.getProperties().find(p => p.name.startsWith("__@contributionBrand@"));
-    if (!brand) continue;
-    const kindType = checker.getTypeOfSymbolAtLocation(brand, declaration);
-    const fail = (): never => { throw new Error(`Invalid UI contribution ${exported.name}: use a contribution helper with static literal options`); };
-    if (!kindType.isStringLiteral() || !(kindType.value in fields)) fail();
-    const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
+  return runtimeNames;
+}
+
+function contributionOptions(declaration: ts.Declaration, field: string, fail: () => never): Record<string, string> {
     let initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer
       : ts.isExportAssignment(declaration) ? declaration.expression : undefined;
     while (initializer && (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer) || ts.isParenthesizedExpression(initializer))) initializer = initializer.expression;
@@ -85,12 +98,14 @@ export function uiContributions(root: string) {
         || !ts.isStringLiteralLike(property.initializer)) fail();
       const p = property as ts.PropertyAssignment;
       const key = (p.name as ts.Identifier).text;
-      if (key !== fields[kind] || key in values) fail();
+      if (key !== field || key in values) fail();
       values[key] = (p.initializer as ts.StringLiteral).text;
     }
-    if (!values[fields[kind]]) fail();
-    if (kind === "view") {
-      const route = values.route!;
+    if (!values[field]) fail();
+  return values;
+}
+
+function validateRoute(route: string, fail: () => never): void {
       if (!route.startsWith("/") || route.startsWith("//") || /[\\\x00-\x20\x7f?#]/.test(route)) fail();
       const names = new Set<string>();
       const segments = route.slice(1).split("/");
@@ -101,8 +116,4 @@ export function uiContributions(root: string) {
           || (part.startsWith("*") && index !== segments.length - 1)) fail();
         names.add(name);
       }
-    }
-    (contributes[kind] ??= []).push({ id: exported.name, ...values });
-  }
-  return { contributes };
 }
