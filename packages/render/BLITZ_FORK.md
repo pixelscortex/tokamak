@@ -1,7 +1,7 @@
 # Blitz fork
 
 This branch uses `https://github.com/JustKira/blitz`, branch `traversal-api`,
-commit `6340b3202934d444262075d540369c41a256787a`. All Blitz crates share
+commit `c12afcd220456e01f671bd8304f76cbffb615d46`. All Blitz crates share
 that revision. Its element traversal API paints fused vector groups directly.
 
 AnyRender uses its `main` git source, held in `Cargo.lock` at

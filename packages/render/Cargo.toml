@@ -12,11 +12,11 @@ gpu-diagnostics = ["anyrender_vello/log_frame_times"]
 [dependencies]
 engine = { path = "../engine" }
 # Blitz paints fused groups through traversal and icons through vector widgets.
-blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["system-fonts", "custom-widget"] }
-blitz-html = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false }
-blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a" }
-blitz-shell = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["custom-widget"] }
-blitz-paint = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["custom-widget"] }
+blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46", default-features = false, features = ["system-fonts", "custom-widget"] }
+blitz-html = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46", default-features = false }
+blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46" }
+blitz-shell = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46", default-features = false, features = ["custom-widget"] }
+blitz-paint = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46", default-features = false, features = ["custom-widget"] }
 # Read computed border radii and registered custom properties.
 style = { package = "stylo", version = "=0.23.0", git = "https://github.com/servo/stylo", rev = "2dca34592ced37c6aa01733e94206a767194cf9d" }
 geo = { version = "=0.32.0", default-features = false }

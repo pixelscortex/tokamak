@@ -22,7 +22,7 @@ futures-util = { version = "0.3.34", default-features = false, features = ["sink
 
 [dev-dependencies]
 server = { path = "../server" }
-blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false }
+blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46", default-features = false }
 
 [[test]]
 name = "router"

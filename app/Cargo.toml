@@ -25,6 +25,6 @@ tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-th
 tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["connect", "handshake"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 tower = { version = "0.5.3", default-features = false }
-blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["system-fonts"] }
-blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a" }
+blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46", default-features = false, features = ["system-fonts"] }
+blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "c12afcd220456e01f671bd8304f76cbffb615d46" }
 keyboard-types = "=0.8.0"
