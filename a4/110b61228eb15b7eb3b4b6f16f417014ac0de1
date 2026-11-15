@@ -1,0 +1,78 @@
+packages/render/Cargo.toml
+  s_0b53bb2aa6136c::t_2a91960ffe50b2 30
+app/src/chat/composer-strip.tsx
+  s_0b53bb2aa6136c::t_988e304a06530a 1-18
+app/tests/plugins.rs
+  s_1edd98eec1751b::t_f30c21dfb21149 1071-1072,1206-1210,1212-1213,1215,1332-1333
+  s_1edd98eec1751b::t_f1710b4599fe10 1216
+  s_1edd98eec1751b::t_6ea423cb8a2a0a 1338
+  s_9343aadf26e008::t_b25b321539aec9 1079-1088,1147-1148,1152,1172-1180,1211,1286-1290,1339-1341
+  s_0b53bb2aa6136c::t_737eb4f5fc0d37 1164-1171,1190,1198,1200-1202,1204-1205,1316
+  s_1edd98eec1751b::t_6de52b7731bd8f 1073,1203,1291-1292,1334-1337
+  s_0b53bb2aa6136c::t_084bfcc3330beb 1064-1070,1074-1078
+packages/render/js/index.ts
+  s_0b53bb2aa6136c::t_e951ae70cb2cde 35
+  s_0b53bb2aa6136c::t_2a91960ffe50b2 14-20,33-34,185-186,228,232-235
+  s_0b53bb2aa6136c::t_d8321c039867d6 36-56,338-344,357
+packages/render/README.md
+  s_0b53bb2aa6136c::t_12255770b1ab86 38-46
+app/README.md
+  s_0b53bb2aa6136c::t_8ac9640afb0e6d 78-80,95-97
+app/src/chat/screen.tsx
+  s_0b53bb2aa6136c::t_495075614fcccf 15,33-35,76
+Cargo.lock
+  s_0b53bb2aa6136c::t_19c8b2dabe3b56 4370
+packages/render/src/wire.rs
+  s_0b53bb2aa6136c::t_bdd949b5dfb0f6 208-209
+  s_0b53bb2aa6136c::t_2a91960ffe50b2 34-35,118-122,151,202,205-207
+packages/render/src/capabilities.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 1-46
+app/src/chat/thread-view.tsx
+  s_0b53bb2aa6136c::t_43b6f5130e54c3 20-42
+  s_0b53bb2aa6136c::t_029ee080888437 1,3,10,14-19,43-60,63,68
+packages/render/src/layout.rs
+  s_0b53bb2aa6136c::t_2a91960ffe50b2 47,68-69,115-118
+  s_0b53bb2aa6136c::t_902c02deea71ae 119
+packages/render/tests/production-build.ts
+  s_0b53bb2aa6136c::t_f896eb18d3a4a3 23
+packages/render/src/lib.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 5
+packages/render/src/js.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 115,130,191,207
+packages/render/src/mailbox.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 151-153
+packages/render/src/document.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 88-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a4110b61228eb15b7eb3b4b6f16f417014ac0de1",
+  "prompts": {},
+  "sessions": {
+    "s_0b53bb2aa6136c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e141-393e-75c0-8999-1aba419bd22f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_1edd98eec1751b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e12c-6f41-7e12-a524-0174740468a7",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_9343aadf26e008": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e104-d6a0-79b0-b8cd-28322a806f07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
