@@ -324,7 +324,7 @@ fn the_select_searches_and_opens_upward() {
     assert!(doc.take_error().is_none());
 }
 
-/// The gap between a select's trigger and its menu, bridged (CSS px).
+/// The gap between a select's trigger and its menu (CSS px).
 const GAP: f64 = 6.0;
 
 /// The rect of the first element matching `selector`.
@@ -406,7 +406,7 @@ fn an_open_select_is_placed_again_on_resize_and_scroll() {
     );
     // The upward select (open from the start), scrolled to the top of a
     // short stage: no room above it any more, so it opens below.
-    let mut doc = view_at(1440, min_window().1, "select");
+    let mut doc = view_at(1100, min_window().1, "select");
     let (trigger, menu) = (
         rect(&doc, "lab-select-up"),
         rect(&doc, "lab-select-up-menu"),
@@ -670,9 +670,8 @@ fn rect(doc: &NativeDocument, name: &str) -> blitz_dom::BoundingRect {
 
 /// Chat at wide to minimum widths: the reading column shrinks with the
 /// stage and never runs into the context column (which gets out of the way
-/// below a 1200 px window), and the title notch and composer follow the
-/// column, their fused shapes (fillets, the notch's slant) staying inside
-/// the stage. Nothing in the top bar or the plugin sidebar overlaps.
+/// below a 1200 px window), and the title and composer follow the
+/// column while staying inside the stage. Nothing in the top bar or the plugin sidebar overlaps.
 #[test]
 fn chat_fits_wide_and_narrow_stages() {
     let (min_width, min_height) = min_window();
@@ -710,8 +709,6 @@ fn chat_fits_wide_and_narrow_stages() {
             column.width <= 640.0 && column.width > 300.0,
             "{width}: {column:?}"
         );
-        // Fused shapes: the composer's fillets reach 22 px beyond its box,
-        // the notch's slant 40 * tan(22 deg) ~ 16 px plus its 14 px fillet.
         for (name, reach) in [("lab-chat-composer", 22.0), ("lab-chat-notch", 31.0)] {
             let r = rect(&doc, name);
             assert!(
@@ -847,7 +844,7 @@ fn views_teleport_into_the_shell_regions() {
 
 #[test]
 fn the_stage_scroller_owns_its_content_paint_order() {
-    let doc = view("surfaces");
+    let doc = view("buttons");
     assert!(
         doc.inner()
             .get_node(support::id(&doc, "shell-stage"))

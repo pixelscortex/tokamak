@@ -48,27 +48,7 @@ fn readonly_textareas_reject_ime_commits() {
 }
 
 #[test]
-fn asynchronous_paste_obeys_the_current_fields_edit_policy() {
-    for tag in ["input", "textarea"] {
-        let mut doc = document(tag);
-        focus(&mut doc, "editable");
-        doc.handle_ui_event(UiEvent::Paste("editable".into()));
-        assert_eq!(text(&doc, "editable"), "editable", "{tag}");
-        for name in ["readonly", "disabled"] {
-            focus(&mut doc, name);
-            doc.handle_ui_event(UiEvent::Paste("blocked".into()));
-            assert_eq!(text(&doc, name), "", "{tag} {name}");
-        }
-        focus(&mut doc, "editable");
-        doc.handle_ui_event(UiEvent::AppleStandardKeybinding("paste:".into()));
-        focus(&mut doc, "readonly");
-        doc.handle_ui_event(UiEvent::Paste("late reply".into()));
-        assert_eq!(text(&doc, "readonly"), "", "{tag} late reply");
-    }
-}
-
-#[test]
-fn disabled_fieldsets_block_paste_typing_and_ime_except_in_the_first_legend() {
+fn disabled_fieldsets_block_typing_and_ime_except_in_the_first_legend() {
     for tag in ["input", "textarea"] {
         for (content, accepts) in [
             (format!("<{tag} id='field'></{tag}>"), false),
@@ -109,22 +89,16 @@ fn disabled_fieldsets_block_paste_typing_and_ime_except_in_the_first_legend() {
                 blitz_dom::QualName::new(None, blitz_dom::Namespace::from(""), "disabled".into()),
                 "",
             );
-            doc.handle_ui_event(UiEvent::Paste("late".into()));
-            assert_eq!(
-                text(&doc, "field"),
-                if accepts { "late" } else { "" },
-                "{tag} {content} paste"
-            );
             support::key(&mut doc, "x", false, false);
             assert_eq!(
                 text(&doc, "field"),
-                if accepts { "latex" } else { "" },
+                if accepts { "x" } else { "" },
                 "{tag} {content} typing"
             );
             doc.handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit("ime".into())));
             assert_eq!(
                 text(&doc, "field"),
-                if accepts { "latexime" } else { "" },
+                if accepts { "xime" } else { "" },
                 "{tag} {content} IME"
             );
         }

@@ -8,9 +8,8 @@ test("native library preserves its public element and component exports", async 
   const elementsPath = new URL("elements.js", dist).href;
   const componentsPath = new URL("components.js", dist).href;
   assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
-  assert.deepEqual(Object.keys((await import(componentsPath)).Surface).sort(), ["Add", "Cut"]);
   assert.deepEqual(Object.keys(await import(componentsPath)).sort(), [
-    "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Shell", "Surface", "Textarea",
+    "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Shell", "Textarea",
     "dismissOutside", "place", "rail", "railItemTop", "textareaLine", "topBar",
     "trackLayout",
   ]);

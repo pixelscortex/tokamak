@@ -1,9 +1,4 @@
-/** Select view: the field size closed, open below (with groups and
- * search) and open above, both fused to their trigger by the bridge; the
- * compact size, bridged (models) and merged (a trigger too narrow for a
- * bridge); and a select at the bottom of a short scrolling box that opens
- * upward by itself. Every select is live; the open ones start open
- * (`defaultOpen`) and close like any other. */
+/** Field and compact selects, with search and automatic placement. */
 import { createSignal } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Select, Shell } from "@tokamak/ui/components";
@@ -33,8 +28,7 @@ export default function SelectView() {
     <Shell.Stage>
       <div id="lab-select" class="flex flex-col gap-8 px-8 pt-8 pb-16">
         <SectionTitle eyebrow="SELECT" title="Field size, 34 px">
-          Open, the trigger and its menu are one plate: 6 px apart, joined by a bridge 80% as wide as the
-          narrower of the two. Up and Down move, Enter picks, Escape or a click outside closes.
+          The trigger and menu are separate boxes, 6 px apart. Up and Down move, Enter picks, Escape or a click outside closes.
         </SectionTitle>
         <div class="flex flex-wrap items-start gap-8">
           <Case title="Closed" value={list()} id="lab-select-field-value" class="w-[240px]">
@@ -57,16 +51,15 @@ export default function SelectView() {
           </Case>
         </div>
         <SectionTitle eyebrow="COMPACT" title="Compact size, 26 px">
-          For toolbars and the composer: no plate until hover. Under a 64 px bridge the menu merges onto the
-          trigger. At the bottom of a scrolling box the menu opens upward by itself.
+          For toolbars and the composer: a small trigger and a separate menu. At the bottom of a scrolling box the menu opens upward by itself.
         </SectionTitle>
         <div class="flex flex-wrap items-start gap-8">
-          <Case title="Compact, bridged" value={model()} id="lab-select-compact-value" class="w-[260px]">
+          <Case title="Compact, models" value={model()} id="lab-select-compact-value" class="w-[260px]">
             <div class="flex">
               <Select id="lab-select-compact" label="Model" size="compact" mono search options={mocks.models} value={model()} onValueChange={setModel} />
             </div>
           </Case>
-          <Case title="Compact, merged" value={merged()} id="lab-select-merged-value" class="h-[170px] w-[260px]">
+          <Case title="Compact, priority" value={merged()} id="lab-select-merged-value" class="h-[170px] w-[260px]">
             <div class="flex">
               <Select id="lab-select-merged" label="Priority" size="compact" options={mocks.priorities} value={merged()} onValueChange={setMerged} defaultOpen />
             </div>
