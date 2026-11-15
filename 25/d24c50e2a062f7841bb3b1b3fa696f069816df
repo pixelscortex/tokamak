@@ -1,0 +1,23 @@
+packages/server/src/data/transaction/indexes.rs
+  s_d3722a4b772de5::t_daf6e0e7fd75e5 1-149
+packages/server/src/data/transaction.rs
+  s_d3722a4b772de5::t_daf6e0e7fd75e5 12,17-21,26-31,84,127-129,137,141,161-163,174-178,210
+packages/server/src/data/transaction/records.rs
+  s_d3722a4b772de5::t_daf6e0e7fd75e5 1-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "25d24c50e2a062f7841bb3b1b3fa696f069816df",
+  "prompts": {},
+  "sessions": {
+    "s_d3722a4b772de5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e116-e282-78d3-a14b-24506a8c5e26",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
