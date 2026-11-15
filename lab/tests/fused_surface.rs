@@ -710,7 +710,14 @@ fn a_view_switch_lands_without_animating() {
             "composer", "surfaces", "chat", "select", "chat", "buttons", "chat",
         ] {
             open(&mut doc, view);
+            let redraws = std::sync::Arc::new(Redraws::default());
+            doc.inner_mut().set_shell_provider(redraws.clone());
             paint(&mut doc);
+            assert_eq!(
+                redraws.0.load(std::sync::atomic::Ordering::Relaxed),
+                0,
+                "to {view} scale {scale}"
+            );
             assert!(!doc.inner().is_animating(), "to {view} scale {scale}");
         }
         assert!(doc.take_error().is_none());
