@@ -112,7 +112,11 @@ fn promise_callback<'js>(
     }
 }
 
-pub(crate) struct Js(QuickJsContext, Rc<HookState>, pub(crate) crate::capabilities::Host);
+pub(crate) struct Js(
+    QuickJsContext,
+    Rc<HookState>,
+    pub(crate) crate::capabilities::Host,
+);
 
 impl Js {
     pub fn new(bundle: &str, send: Option<crate::MessageSender>) -> Result<Self> {

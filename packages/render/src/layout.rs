@@ -44,7 +44,9 @@ pub(super) fn report_layout(bridge: &mut Bridge, html: &mut HtmlDocument) -> Res
             if now != *last {
                 *last = now;
                 if let Some(r) = now {
-                    changed.push(json!({"id": handle, "rect": r.rect, "clip": r.clip, "scroll": r.scroll}));
+                    changed.push(
+                        json!({"id": handle, "rect": r.rect, "clip": r.clip, "scroll": r.scroll}),
+                    );
                 }
             }
         }
@@ -115,7 +117,11 @@ fn report(doc: &BaseDocument, node: NodeId) -> Option<Report> {
     Some(Report {
         rect,
         clip,
-        scroll: [n.scroll_offset().y, n.scroll_height() as f64, n.client_height() as f64],
+        scroll: [
+            n.scroll_offset().y,
+            n.scroll_height() as f64,
+            n.client_height() as f64,
+        ],
     })
 }
 
