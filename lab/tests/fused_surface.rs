@@ -696,7 +696,7 @@ fn the_select_trigger_keeps_its_box_on_hover() {
             .unwrap()
             .primary_styles()
             .unwrap();
-        assert_eq!(format!("{:?}", style.clone_translate()), "None");
+        assert_eq!(format!("{:?}", style.slow_clone_translate()), "None");
         [r.x, r.y, r.width, r.height]
     };
     let before = rect(&doc);

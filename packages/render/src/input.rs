@@ -1,5 +1,6 @@
 //! Supply the input default actions missing from Blitz.
 use crate::{Error, Result, bridge::Bridge};
+use blitz_dom::CopyStyleGetters;
 use blitz_dom::{BaseDocument, Document, EventHandler, ScrollBehavior};
 use blitz_traits::{NodeId, events::*};
 use keyboard_types::{Key, Modifiers, NamedKey};

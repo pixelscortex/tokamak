@@ -5,6 +5,7 @@ mod outline;
 mod tests;
 
 use anyrender::{PaintScene, RenderContext, Scene};
+use blitz_dom::CopyStyleGetters;
 use blitz_dom::{
     BaseDocument, LocalName, Node,
     node::{ComputedStyles, Widget},
