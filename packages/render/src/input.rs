@@ -123,12 +123,21 @@ fn contain_wheel(
     }
 }
 
+fn text_field(doc: &dyn Document, target: NodeId) -> bool {
+    tag(doc, target, "input") || tag(doc, target, "textarea")
+}
+
+pub(super) fn blocks_paste(doc: &dyn Document, target: NodeId) -> bool {
+    text_field(doc, target)
+        && (attribute(doc, target, "readonly") || attribute(doc, target, "disabled"))
+}
+
 fn protect_input(doc: &dyn Document, event: &DomEvent, state: &mut EventState) {
     let target = event.target;
     // Disabled fields reject keyboard defaults except Tab. Readonly
     // fields still permit caret movement, selection and copying; only
     // operations which can change text are canceled before Blitz edits.
-    if tag(doc, target, "input") {
+    if text_field(doc, target) {
         let tab = matches!(&event.data, DomEventData::KeyDown(key) if key.key == Key::Named(NamedKey::Tab));
         let disabled_edit = attribute(doc, target, "disabled")
             && !tab
