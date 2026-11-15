@@ -1,7 +1,7 @@
 import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { afterDelay, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
 import { DEFAULT_MODEL } from "../../../plugins/chat/models";
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createMemo, createEffect, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
 import { api, type ChatState } from "./use-chat";
@@ -10,6 +10,8 @@ import { ComposerStrip } from "./composer-strip";
 
 export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threadId: Id<"threads">; hidden: boolean; onCopyReady?: (copy: () => Promise<void>) => void }) {
   const messages = useQuery(props.chat.client, api.messages.list, () => ({ threadId: props.threadId }));
+  const byId = createMemo(() => new Map((messages.data() ?? []).map(message => [message._id, message])));
+  const messageIds = createMemo(() => [...byId().keys()]);
   const turns = () => messages.data()?.filter(message => message.role === "user").length ?? 0;
 
   const [copied, setCopied] = createSignal(false);
@@ -59,7 +61,7 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
   return <div class={props.hidden ? "hidden" : "flex min-h-0 flex-1 flex-col gap-5"}>
     {/* Blitz only supports non-negative scroll offsets; keep history in normal flow. */}
     <div ref={follow} id="chat-messages" role="log" aria-label="Conversation" class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain">
-      <For each={messages.data() ?? []}>{message => <Message loader={props.loader} threadId={props.threadId} message={message} />}</For>
+      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} />}</For>
     </div>
     <Show when={messages.error()}><p role="alert" class="m-0 text-text-2">{messages.error()?.message}</p></Show>
     <Show when={props.chat.thread()}>
