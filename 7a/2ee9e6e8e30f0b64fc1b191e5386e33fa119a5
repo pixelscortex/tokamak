@@ -1,0 +1,19 @@
+app/src/chat/use-chat.ts
+  s_db6c75ef3d5136::t_72dbaa073db0cd 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7a2ee9e6e8e30f0b64fc1b191e5386e33fa119a5",
+  "prompts": {},
+  "sessions": {
+    "s_db6c75ef3d5136": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e120-0ea6-7651-a29e-9c5f98990edf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
