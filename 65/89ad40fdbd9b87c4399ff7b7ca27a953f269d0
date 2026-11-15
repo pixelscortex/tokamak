@@ -1,0 +1,27 @@
+app/src/chat/markdown.tsx
+  s_5d333dcb82c6ea::t_406bc7292a7ea4 43,47-61
+  s_5d333dcb82c6ea::t_ceddb5505d4ddc 14,17
+app/tests/native.rs
+  s_5d333dcb82c6ea::t_5cccba32db0e23 1418,1423-1425
+  s_5d333dcb82c6ea::t_d709f54c722bdb 1419-1422
+app/src/styles.css
+  s_5d333dcb82c6ea::t_e673875e3e622e 73-74
+app/src/chat/use-chat.ts
+  s_5d333dcb82c6ea::t_e32e543a93cafa 85-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6589ad40fdbd9b87c4399ff7b7ca27a953f269d0",
+  "prompts": {},
+  "sessions": {
+    "s_5d333dcb82c6ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e16d-c3c0-7933-bd6c-17594b624be2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

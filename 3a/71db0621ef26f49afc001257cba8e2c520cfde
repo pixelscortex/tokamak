@@ -1,0 +1,23 @@
+app/src/chat/use-chat.ts
+  s_5d333dcb82c6ea::t_fb0a0ec5335c64 2,57-61,63-71,73,76-84,89-93,95,101-102,106
+app/src/chat/markdown.tsx
+  s_5d333dcb82c6ea::t_bd28c57a981bc9 1,7-13,15-16,20-21,23,26,30-33,35,37,40,43
+app/tests/native.rs
+  s_5d333dcb82c6ea::t_7545d0ca804931 1418-1421
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a71db0621ef26f49afc001257cba8e2c520cfde",
+  "prompts": {},
+  "sessions": {
+    "s_5d333dcb82c6ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e16d-c3c0-7933-bd6c-17594b624be2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
