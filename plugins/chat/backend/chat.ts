@@ -2,14 +2,14 @@ import type {} from "@tokamak/sdk/web";
 import { v, type Id } from "@tokamak/sdk";
 import { action } from "./_functions";
 import { api } from "./_generated/api";
-import { DEFAULT_MODEL, modelStream, safeErrorMessage } from "./model";
+import { modelStream, safeErrorMessage } from "./model";
 
 type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "error" | "cancelled" };
 
 export const send = action({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
-    const { runId, messageId, history } = await ctx.runMutation(api.send.start, { ...args, model: DEFAULT_MODEL });
+    const { runId, messageId, history, model } = await ctx.runMutation(api.send.start, args);
     const controller = new AbortController();
     let pending = "";
     let flushedAt = Date.now();
@@ -19,7 +19,7 @@ export const send = action({
     });
 
     try {
-      const source = await modelStream(ctx, history, controller.signal);
+      const source = await modelStream(ctx, history, controller.signal, model);
       const iterator = source.stream[Symbol.asyncIterator]();
       let next = iterator.next();
       for (;;) {

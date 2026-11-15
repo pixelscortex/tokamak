@@ -2,6 +2,7 @@ import { defineSchema, defineTable, v } from "@tokamak/sdk";
 
 export default defineSchema({
   threads: defineTable({
+    model: v.optional(v.string()),
     ownerId: v.string(), title: v.string(), createdAt: v.number(), updatedAt: v.number(),
   }).index("by_updatedAt", ["updatedAt"]),
   messages: defineTable({

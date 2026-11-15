@@ -1,3 +1,4 @@
+import { CHAT_MODELS, DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
 
@@ -11,7 +12,7 @@ export const create = mutation({
     const now = Date.now();
 
     return db.insert("threads", {
-      ownerId: OWNER,
+      ownerId: OWNER, model: DEFAULT_MODEL,
       title: title === undefined ? DEFAULT_TITLE : nonempty(title),
       createdAt: now, updatedAt: now,
     });
@@ -36,5 +37,15 @@ export const remove = mutation({
       await db.delete(run._id);
     }
     return db.delete(threadId);
+  },
+});
+
+export const setModel = mutation({
+  args: { threadId: v.id("threads"), model: v.string() },
+  handler: async ({ db }, { threadId, model }) => {
+    await thread(db, threadId);
+    if (!CHAT_MODELS.some(choice => choice === model)) throw new Error("Unknown chat model");
+
+    return db.patch(threadId, { model, updatedAt: Date.now() });
   },
 });

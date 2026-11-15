@@ -13,7 +13,8 @@ Generated references are in `backend/_generated/api.ts` (`api.threads.list`, etc
 
 Set `OPENROUTER_API_KEY` in the server process environment or the workspace's
 ignored `.env.local`. `OPENROUTER_BASE_URL` optionally overrides
-`https://openrouter.ai/api/v1`. The model is `openrouter/free`; `backend/model.ts`
+`https://openrouter.ai/api/v1`. The default model is `openrouter/free`; each thread can select a model from
+`models.ts`. `backend/model.ts`
 is the single provider boundary. For another host, also change the manifest's
 `net:<host>` grant and bump the plugin version. Request arguments cannot supply
 credentials or select a network grant.
@@ -34,13 +35,14 @@ All functions use one argument object. Wire names and results:
 | Query | `chat/runs:active` | `{threadId}` | `Run \| null` |
 | Mutation | `chat/threads:create` | `{title?: string}` | thread ID |
 | Mutation | `chat/threads:rename` | `{threadId, title: string}` | `null` |
+| Mutation | `chat/threads:setModel` | `{threadId, model: string}` | `null` |
 | Mutation | `chat/threads:remove` | `{threadId}` | `null` |
 | Mutation | `chat/runs:cancel` | `{runId}` | `null` |
 | Action | `chat/chat:send` | `{threadId, text: string}` | `{runId, messageId, status: "done" \| "error" \| "cancelled"}` |
 
 Documents include `_id: string` and `_creationTime: number`, plus:
 
-- `Thread`: `ownerId: string`, `title`, `createdAt`, `updatedAt`.
+- `Thread`: `ownerId: string`, `title`, `createdAt`, `updatedAt`, optional `model` (defaults to `openrouter/free`).
 - `Message`: `threadId`, `authorId: string`, `role: "user" | "assistant"`, `parts`,
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
@@ -76,3 +78,20 @@ marked running; there is intentionally no recovery worker.
 Offline integration tests run in `cargo test -p server`. The ignored
 `chat_real_openrouter_smoke` test is a manual real-provider check with `.env.local`:
 `cargo test -p server --test actions chat_real_openrouter_smoke -- --ignored --nocapture`.
+
+## Native chat controls
+
+Enter sends, Shift+Enter inserts a line, and whitespace-only messages are ignored.
+During a run the composer stays typeable with muted text; Enter leaves the draft
+alone. Escape stops the run. Tab opens Map. With an empty search, R renames the
+selected row inline (Enter saves, Escape cancels). Cmd+Backspace asks
+`Delete? Enter / Esc` on that row before removing it and its messages/runs.
+
+Click the model above the composer or press Cmd+M to cycle the per-thread model.
+An active run retains the model it started with; the next send uses the selection.
+The shared list in `models.ts` contains `openrouter/free`,
+`inclusionai/ling-3.2-flash:free`, `liquid/lfm-3-1.7b:free`, and
+`google/gemma-4-26b-a4b-it:free`. These three `:free` IDs were verified against
+`https://openrouter.ai/api/v1/models` on 2026-11-15. Availability can change.
+
+Copy-last-reply is omitted: the native QuickJS UI exposes no clipboard API.

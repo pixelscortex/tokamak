@@ -1,12 +1,14 @@
+import { DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
 
 // Only chat.send uses these transactional steps; they are not plugin exports.
 export const start = mutation({
-  args: { threadId: v.id("threads"), text: v.string(), model: v.string() },
-  handler: async ({ db }, { threadId, text, model }) => {
+  args: { threadId: v.id("threads"), text: v.string() },
+  handler: async ({ db }, { threadId, text }) => {
     text = nonempty(text);
     const current = await thread(db, threadId);
+    const model = current.model ?? DEFAULT_MODEL;
     const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
     if (runs.some(run => run.status === "running")) throw new Error("Thread already has an active run");
 
@@ -29,7 +31,7 @@ export const start = mutation({
 
     const title = history.length === 0 && current.title === DEFAULT_TITLE ? Array.from(text).slice(0, 80).join("") : current.title;
     await db.patch(threadId, { title, updatedAt: Date.now() });
-    return { runId, messageId, history: [
+    return { runId, messageId, model, history: [
       ...history.filter(message => message.status === "complete").map(message => ({
         role: message.role, content: message.parts.map(part => part.text).join(""),
       })),
