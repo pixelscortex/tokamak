@@ -1,0 +1,37 @@
+packages/server/tests/fixtures/indexes/beta/backend/todos.ts
+  s_2297d4366353cf::t_7ad8b11221962a 1-13
+packages/server/tests/fixtures/indexes/alpha/backend/todos.ts
+  s_2297d4366353cf::t_17c6bf11cb04e5 1-114
+packages/sdk/tests/fixtures/types/indexes-positive.ts.txt
+  s_2297d4366353cf::t_ebc20e08d79be0 1-32
+packages/sdk/tests/schema.test.mjs
+  s_2297d4366353cf::t_c3cdfab1c53399 178-179
+  s_2297d4366353cf::t_83665a59bd2797 9
+  s_2297d4366353cf::t_0daaefb2cfe88f 1-8,10-177,180-252
+packages/server/tests/fixtures/indexes/alpha/backend/schema.ts
+  s_2297d4366353cf::t_17771ee14a5981 1-12
+packages/server/tests/schema_indexes.rs
+  s_2297d4366353cf::t_c722dbd4243b30 122-124,142-146,227-230,236-237,386-389,399-401,407-410,441-443,500-503,518-521,534-536,547-550,553-556,560-563,588,693-698,733-736,746-749,754-757,768-771,774-777,799-801,812-819,834-840,845-848,874-877,884-887,890-893,910,917-919,927-930,960-967,982-985,1048-1051,1085-1087,1089-1091,1133-1136,1140-1143,1146-1149,1161-1169,1172-1175,1203-1205,1222-1223,1226-1233,1235-1238,1242-1245
+  s_2297d4366353cf::t_2f9af10da07bd7 1-18,20-121,125-141,147-226,231-235,238-385,390-398,402-406,411-440,444-499,504-517,522-533,537-546,551-552,557-559,564-587,589-692,699-732,737-745,750-753,758-767,772-773,778-798,802-811,820-833,841-844,849-873,878-883,888-889,894-909,911-916,920-926,931-959,968-981,986-1047,1052-1084,1088,1092-1132,1137-1139,1144-1145,1150-1160,1170-1171,1176-1202,1206-1221,1224-1225,1234,1239-1241,1246-1250,1252-1261
+  s_2297d4366353cf::t_7037eaef976899 19,1251
+packages/sdk/tests/fixtures/types/indexes-negative.ts.txt
+  s_2297d4366353cf::t_13be52fe1025ef 1-28
+packages/server/tests/fixtures/indexes/beta/backend/schema.ts
+  s_2297d4366353cf::t_188d93eca33fa8 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "25fbecd52c31201e6f34241ff888f175d31045a2",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

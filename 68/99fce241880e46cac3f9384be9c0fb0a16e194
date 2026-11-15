@@ -1,0 +1,39 @@
+packages/server/tests/internal/datastore_owner.rs
+  s_822cb42a004075::t_eaa95e7c5cfb12 2,5-6,10,30-41,45-75,83-84,86,102,105-106,118,120,129,131,133,143,153,155,159,163
+  s_822cb42a004075::t_4184cf5900b6df 169
+packages/server/src/data/README.md
+  s_822cb42a004075::t_d12f2424c3e1a2 69-71
+  s_822cb42a004075::t_5b915b4f8d776d 5-10,36-37,46-68,72-87
+packages/server/src/data/storage.rs
+  s_822cb42a004075::t_d12f2424c3e1a2 96
+  s_822cb42a004075::t_59352fedb8207a 4-7,13,23-25,29-38,78-80
+packages/server/src/data/transaction.rs
+  s_822cb42a004075::t_d12f2424c3e1a2 355,386-392,409-410,435,464-469
+  s_822cb42a004075::t_7c11eea109b619 15-17,33-39,51-53,83,93-131,133,228,251,307,340,515-522,524-527
+packages/server/src/data/query.rs
+  s_822cb42a004075::t_d12f2424c3e1a2 142-143
+packages/server/tests/data.rs
+  s_822cb42a004075::t_eaa95e7c5cfb12 694-695,697-698,701,703-705,707,710-714,723-724,730,789
+Cargo.lock
+  s_822cb42a004075::t_7f1b06eedfc84c 43,52,66,819,833,887,1133,2134,2145,2169,2812,3102-3103,3105,4930,4940-4944,4950,5478,7777
+packages/server/src/data/mod.rs
+  s_822cb42a004075::t_deaa74f0cb706a 13-14,87-89,92,123-129,135-141,159-164,174-178
+packages/server/src/data/types.rs
+  s_822cb42a004075::t_16074368d776a8 234-236,238,259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6899fce241880e46cac3f9384be9c0fb0a16e194",
+  "prompts": {},
+  "sessions": {
+    "s_822cb42a004075": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db58-b48d-7cf0-beab-4168541f978d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

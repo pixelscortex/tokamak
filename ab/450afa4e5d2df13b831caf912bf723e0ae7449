@@ -1,0 +1,22 @@
+packages/server/tests/data_indexes.rs
+  s_2297d4366353cf::t_bced53391d1aa9 1170-1171,1173,1176-1179,1182
+  s_2297d4366353cf::t_881ac3b9f6cedd 978
+  s_2297d4366353cf::t_64540aa92f4ca7 1-977,979-1169,1172,1174-1175,1180-1181,1183-1313,1319-1320,1322
+  s_2297d4366353cf::t_6a6f938af88c00 1314-1318,1321,1323-2098
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab450afa4e5d2df13b831caf912bf723e0ae7449",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

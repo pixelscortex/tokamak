@@ -1,0 +1,33 @@
+packages/server/src/schema.rs
+  s_2297d4366353cf::t_0063275f9c59b2 29-39,58-62,64-70,72-76,79-83,99-101
+packages/sdk/src/index.ts
+  s_2297d4366353cf::t_8aef2ef014b067 32
+packages/sdk/tests/schema.test.mjs
+  s_2297d4366353cf::t_6a2f2fcdb019c2 100-106
+packages/sdk/src/schema.ts
+  s_2297d4366353cf::t_59b45cd67d0ed7 45-50,55,69-70
+packages/server/tests/schema_indexes.rs
+  s_2297d4366353cf::t_2002f58ba6ca39 1262-1340
+packages/sdk/tests/fixtures/types/indexes-negative.ts.txt
+  s_2297d4366353cf::t_0063275f9c59b2 27-28
+packages/sdk/src/database.ts
+  s_2297d4366353cf::t_0063275f9c59b2 48-56,60
+packages/sdk/README.md
+  s_2297d4366353cf::t_920de36cddbc95 86-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c859b9e018b843ba7512f71da6f959d13c0e5ad",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
