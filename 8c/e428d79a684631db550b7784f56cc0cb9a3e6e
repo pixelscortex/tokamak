@@ -1,0 +1,19 @@
+app/src/styles.css
+  s_5d333dcb82c6ea::t_e673875e3e622e 73-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ce428d79a684631db550b7784f56cc0cb9a3e6e",
+  "prompts": {},
+  "sessions": {
+    "s_5d333dcb82c6ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e16d-c3c0-7933-bd6c-17594b624be2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
