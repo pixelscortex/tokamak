@@ -1,6 +1,6 @@
 import { functionName, type ActionContext, type FunctionReference, type ToolDescription, type ToolOutput, type JsonValue } from "@tokamak/sdk";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
-import { checkToolArgs, type ToolPart } from "./parts";
+import { checkToolArgs } from "./parts";
 
 type ToolsApi = { tools: {
   describe: FunctionReference<"query", Record<string, never>, ToolDescription[]>;
@@ -10,7 +10,7 @@ export type ToolTarget = { plugin: string; toolName: string };
 
 export async function discoverTools(
   ctx: ActionContext, threadId: string, running: () => Promise<boolean>,
-  update: (part: ToolPart) => Promise<unknown>,
+  acknowledged: (callId: string) => Promise<unknown>,
 ) {
   const tools: ToolSet = {};
   const targets = new Map<string, ToolTarget>();
@@ -28,10 +28,8 @@ export async function discoverTools(
           const execute = async () => {
             checkToolArgs(args);
             if (!await running()) throw new Error("cancelled");
-            const part: ToolPart = { type: "tool", callId: toolCallId, ...target, args: args as JsonValue, status: "running" };
-            if (await update(part) !== "running") throw new Error("cancelled");
+            if (await acknowledged(toolCallId) !== "running") throw new Error("cancelled");
             const out = await ctx.runMutation(provider.tools.invoke, { name: description.name, args: args as JsonValue, threadId });
-            await update({ ...part, ...out, status: "done" });
             return out.model ?? JSON.stringify(out.result);
           };
           const result = lock.then(execute);

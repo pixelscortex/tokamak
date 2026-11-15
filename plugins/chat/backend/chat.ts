@@ -4,7 +4,7 @@ import { v, type Id } from "@tokamak/sdk";
 import { action } from "./_functions";
 import { api } from "./_generated/api";
 import { discoverTools } from "./tools";
-import type { ToolPart } from "./parts";
+import { checkToolArgs, type ToolPart } from "./parts";
 import { modelStream, safeErrorMessage } from "./model";
 
 type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "error" | "cancelled" };
@@ -16,17 +16,28 @@ export const send = action({
     const controller = new AbortController();
     let pending = "";
     let flushedAt = Date.now();
-    let writes: Promise<unknown> = Promise.resolve();
-    const update = (tool?: ToolPart) => {
-      const write = async () => {
-        const delta = pending;
-        pending = "";
-        const status = await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}) });
-        flushedAt = Date.now();
-        return status;
-      };
-      writes = writes.then(write);
-      return writes;
+    const acknowledgements = new Map<string, {
+      promise: Promise<unknown>; resolve: (status: unknown) => void; reject: (error: unknown) => void;
+    }>();
+    const acknowledgement = (callId: string) => {
+      let entry = acknowledgements.get(callId);
+      if (!entry) {
+        let resolve!: (status: unknown) => void;
+        let reject!: (error: unknown) => void;
+        const promise = new Promise<unknown>((yes, no) => { resolve = yes; reject = no; });
+        // Validation may reject before execute starts waiting.
+        void promise.catch(() => {});
+        entry = { promise, resolve, reject };
+        acknowledgements.set(callId, entry);
+      }
+      return entry;
+    };
+    const update = async (tool?: ToolPart) => {
+      const delta = pending;
+      pending = "";
+      const status = await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}) });
+      flushedAt = Date.now();
+      return status;
     };
     let heartbeatAt = flushedAt;
 
@@ -60,7 +71,7 @@ export const send = action({
 
     try {
       const { tools, targets } = await discoverTools(ctx, args.threadId,
-        () => ctx.runQuery(api.send.running, { runId }), update);
+        () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgement(callId).promise);
       const source = await waitFor(modelStream(ctx, history, controller.signal, model, tools));
       const iterator = source.stream[Symbol.asyncIterator]();
       let next = iterator.next();
@@ -70,23 +81,43 @@ export const send = action({
         if (chunk) {
           const part = chunk.value;
           if (part.type === "text-delta") pending += part.text;
-          if (part.type === "tool-error") {
+          if (part.type === "tool-call") {
+            const ack = acknowledgement(part.toolCallId);
+            try {
+              checkToolArgs(part.input);
+              const target = targets.get(part.toolName);
+              if (!target) throw new Error("Unknown tool");
+              ack.resolve(await update({ type: "tool", callId: part.toolCallId, ...target,
+                args: part.input as import("@tokamak/sdk").JsonValue, status: "running" }));
+            } catch (error) { ack.reject(error); }
+          }
+          if (part.type === "tool-result" || part.type === "tool-error") {
             const target = targets.get(part.toolName);
-            if (target) await update({
-              type: "tool", callId: part.toolCallId, ...target, args: part.input as import("@tokamak/sdk").JsonValue,
-              status: "error", error: await safeErrorMessage(ctx, part.error),
-            });
+            // Invalid/oversized calls never get persisted, including their args.
+            if (target) {
+              try {
+                checkToolArgs(part.input);
+                await update({ type: "tool", callId: part.toolCallId, ...target,
+                  args: part.input as import("@tokamak/sdk").JsonValue,
+                  ...(part.type === "tool-error"
+                    ? { status: "error", error: await safeErrorMessage(ctx, part.error) }
+                    : { ...(part.output as import("@tokamak/sdk").ToolOutput), status: "done" }),
+                });
+              } catch (error) {
+                if (!(error instanceof Error && error.message === "Tool arguments exceed 16 KB")) throw error;
+              }
+            }
           }
           next = iterator.next();
         }
       }
-      await writes;
       if (source.error()) throw source.error();
       return await finish("done");
     } catch (cause) {
       return await finish("error", await safeErrorMessage(ctx, cause));
     } finally {
       controller.abort();
+      for (const ack of acknowledgements.values()) ack.reject(new Error("Run ended"));
     }
   },
 });
