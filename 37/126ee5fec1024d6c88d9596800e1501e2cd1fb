@@ -1,0 +1,19 @@
+app/tests/native.rs
+  s_5d333dcb82c6ea::t_d709f54c722bdb 1419-1422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37126ee5fec1024d6c88d9596800e1501e2cd1fb",
+  "prompts": {},
+  "sessions": {
+    "s_5d333dcb82c6ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e16d-c3c0-7933-bd6c-17594b624be2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
