@@ -1,0 +1,23 @@
+app/src/chat/message.tsx
+  s_fef74dc7f45283::t_e25e3007e80ec5 13,29
+app/src/chat/thread-view.tsx
+  s_fef74dc7f45283::t_1e0bcc62ed999d 15-18,68
+app/src/chat/tool-part.tsx
+  s_fef74dc7f45283::t_b2160e6506410b 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb07b1600bc1b13144f39f37b89578a4354f890a",
+  "prompts": {},
+  "sessions": {
+    "s_fef74dc7f45283": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e192-a5d3-7562-b9b9-e16df473fd61",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
