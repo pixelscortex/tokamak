@@ -1,4 +1,4 @@
-/** A trigger and menu fused while open. Field and compact sizes; placement
+/** A trigger and a separate menu. Field and compact sizes; placement
  * follows available space above/below the trigger and updates with layout.
  *
  * <Select options={models} value={model()} onValueChange={setModel} search />
@@ -7,21 +7,15 @@
  * focused trigger filters a searchable menu because Blitz cannot focus it
  * programmatically. Shell dismisses clicks outside the menu.
  */
-import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
+import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 import type { JSX, NativeEvent, NativeNode } from "@tokamak/render";
 import { Icon } from "../elements/icon";
 import { dismissable } from "./dismiss";
 import { place, trackLayout } from "./floating";
 import { icons } from "./icons";
-import { Surface } from "./surface";
 
-/** Gap between the trigger and its menu, bridged. */
 const GAP = 6;
-/** Concave fillets where plates meet. */
-const JOIN = 3;
-/** Narrower than this, no bridge: the menu merges onto the trigger. */
-const MIN_BRIDGE = 64;
 /** Kept free between the menu and the edge of its clipping area. */
 const MARGIN = 8;
 /** The list's own height limit (the menu may get less room). */
@@ -66,26 +60,6 @@ export interface SelectProps {
   label?: string;
   /** Classes of the outer element (width, margins). */
   class?: string;
-}
-
-/** The open menu's geometry, CSS px relative to the trigger's box. */
-interface Geometry {
-  side: "top" | "bottom";
-  /** No bridge: the menu sits on the trigger. */
-  merged: boolean;
-  /** The fused surface's left edge and width. */
-  left: number;
-  width: number;
-  /** Trigger, menu and bridge: left edge (in the surface) and size. */
-  tx: number;
-  tw: number;
-  th: number;
-  mx: number;
-  mw: number;
-  bx: number;
-  bw: number;
-  /** The room on the menu's side. */
-  maxHeight: number;
 }
 
 type Row =
@@ -192,7 +166,7 @@ export function Select(props: SelectProps): JSX.Element {
   const type = () => (props.mono ? "font-data text-[11px] leading-4" : compact() ? "text-[12px] leading-4" : "text-[13px] leading-4");
   const sub = (part: string) => (props.id ? `${props.id}-${part}` : undefined);
 
-  /** The open menu: trigger, bridge and menu as one fused surface. */
+  /** Reposition the menu when the trigger or clipping area moves. */
   function Menu() {
     layer = dismissable(() => setOpen(false));
     const [anchor, observeAnchor] = trackLayout();
@@ -201,7 +175,7 @@ export function Select(props: SelectProps): JSX.Element {
     const [content, observeContent] = trackLayout();
     if (trigger) observeAnchor(trigger);
     /** Everything in CSS px relative to the trigger's box. */
-    const at = createMemo((): Geometry | undefined => {
+    const at = createMemo(() => {
       const a = anchor();
       if (!a) return undefined;
       const { width: tw, height: th } = a.rect;
@@ -218,64 +192,18 @@ export function Select(props: SelectProps): JSX.Element {
         align: props.align ?? "start",
         margin: MARGIN,
       };
-      const bridged = place({ ...options, offset: GAP });
-      const mx = bridged.x - a.rect.x;
-      // Where trigger and menu overlap: 80% of it is the bridge.
-      const lo = Math.max(0, mx);
-      const span = Math.max(0, Math.min(tw, mx + mw) - lo);
-      const merged = span * 0.8 < MIN_BRIDGE;
-      const p = merged ? place({ ...options, offset: 0 }) : bridged;
-      const left = Math.min(0, mx);
-      return {
-        side: p.side,
-        merged,
-        left,
-        width: Math.max(tw, mx + mw) - left,
-        tx: -left,
-        tw,
-        th,
-        mx: mx - left,
-        mw,
-        bx: lo + span * 0.1 - left,
-        bw: span * 0.8,
-        maxHeight: p.maxHeight,
-      };
+      const p = place({ ...options, offset: GAP });
+      return { ...p, left: p.x - a.rect.x, width: mw, height: th };
     });
     return (
       <Show when={at()}>
-        {(g: Accessor<Geometry>) => (
-          <Surface
-            id={sub("fused")}
-            own={false}
-            join={JOIN}
-            class={`surface-chip bevel-1 pointer-events-none absolute z-30 flex items-start ${g().side === "top" ? "flex-col-reverse" : "flex-col"}`}
-            style={`left: ${g().left}px; ${g().side === "top" ? "bottom" : "top"}: 0; width: ${g().width}px`}
+        {(g: Accessor<NonNullable<ReturnType<typeof at>>>) => (
+          <div
+            id={sub("menu")}
+            ref={observeMenu}
+            class="absolute z-30 flex flex-col gap-1 rounded-[10px] bg-chip p-1"
+            style={`left: ${g().left}px; ${g().side === "top" ? "bottom" : "top"}: ${g().height + GAP}px; width: ${g().width}px; max-height: ${g().maxHeight}px`}
           >
-            {/* The trigger's face: the real button sits above it (z-31). */}
-            <Surface.Add
-              id={sub("face")}
-              attach={g().merged ? (g().side === "top" ? "top" : "bottom") : undefined}
-              join={g().merged ? undefined : 0}
-              class={compact() ? "shrink-0 rounded-sm" : "shrink-0 rounded-md"}
-              style={`margin-left: ${g().tx}px; width: ${g().tw}px; height: ${g().th}px`}
-            />
-            <Show when={!g().merged}>
-              <Surface.Add
-                id={sub("bridge")}
-                attach="top"
-                class="pointer-events-auto shrink-0"
-                style={`margin-left: ${g().bx}px; width: ${g().bw}px; height: ${GAP}px`}
-              >
-                <Surface.Add attach="bottom" class="absolute inset-0" />
-              </Surface.Add>
-            </Show>
-            <Surface.Add
-              id={sub("menu")}
-              ref={observeMenu}
-              join={0}
-              class="pointer-events-auto flex shrink-0 flex-col gap-1 rounded-[10px] p-1"
-              style={`margin-left: ${g().mx}px; width: ${g().mw}px; max-height: ${g().maxHeight}px`}
-            >
               <Show when={props.search}>
                 <div class="grid shrink-0">
                   <input
@@ -283,7 +211,7 @@ export function Select(props: SelectProps): JSX.Element {
                     aria-label="Search"
                     value={query()}
                     onInput={(event) => search(event.value ?? "")}
-                    class="col-start-1 row-start-1 h-7 w-full rounded-md border-0 material-well px-2 pl-7 font-ui text-[13px] text-ink outline-none"
+                    class="col-start-1 row-start-1 h-7 w-full rounded-md border-0 bg-well px-2 pl-7 font-ui text-[13px] text-ink outline-none"
                   />
                   <Icon d={icons.search} class="pointer-events-none col-start-1 row-start-1 ml-2 size-3.5 self-center text-ink-4" />
                   <Show when={query() === ""}>
@@ -331,8 +259,7 @@ export function Select(props: SelectProps): JSX.Element {
                   </Show>
                 </div>
               </div>
-            </Surface.Add>
-          </Surface>
+          </div>
         )}
       </Show>
     );
@@ -356,8 +283,8 @@ export function Select(props: SelectProps): JSX.Element {
         onClick={() => setOpen(!open())}
         class={`relative flex min-w-0 items-center gap-1.5 border-0 font-ui outline-none focus:ring-2 focus:ring-ink-5 aria-disabled:opacity-40 aria-expanded:z-[31] ${
           compact()
-            ? "h-[26px] rounded-sm bg-transparent px-2 text-ink-3 not-aria-disabled:hover:text-ink not-aria-disabled:not-aria-expanded:hover:bg-chip aria-expanded:text-ink"
-            : "h-[34px] w-full justify-between rounded-md bg-transparent px-3 text-ink not-aria-expanded:bg-chip not-aria-disabled:not-aria-expanded:hover:bg-lift not-aria-disabled:not-aria-expanded:active:bg-card"
+            ? "h-[26px] rounded-sm bg-transparent px-2 text-ink-3 not-aria-disabled:hover:text-ink not-aria-disabled:not-aria-expanded:hover:bg-chip aria-expanded:text-ink aria-expanded:bg-chip"
+            : "h-[34px] w-full justify-between rounded-md bg-chip px-3 text-ink not-aria-expanded:bg-chip not-aria-disabled:not-aria-expanded:hover:bg-lift not-aria-disabled:not-aria-expanded:active:bg-card"
         }`}
       >
         <span class={`min-w-0 truncate ${type()} ${selected() ? "" : "text-ink-4"}`}>

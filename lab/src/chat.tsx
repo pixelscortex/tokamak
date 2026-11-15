@@ -1,11 +1,7 @@
-/** Chat view: the design file's chat view with sample content (mocks.ts).
- * The thread title hangs from the top bar and the real `Composer` rises
- * from the bottom, both as shapes of window-base material fused into the
- * shell's layers. Sending adds the message to the thread; `/todo` opens
- * its command form. */
+/** Chat view with sample content and a working composer. */
 import { For, createSignal } from "solid-js";
 import { Icon } from "@tokamak/ui/elements";
-import { Button, Composer, Shell, Surface } from "@tokamak/ui/components";
+import { Button, Composer, Shell } from "@tokamak/ui/components";
 import type { ComposerForm } from "@tokamak/ui/components";
 import { stroke } from "./icons";
 import * as mocks from "./mocks";
@@ -18,10 +14,7 @@ import * as mocks from "./mocks";
  * - The title notch and the composer live in the stage's top and bottom
  *   overlays, outside the stage's flow, so they sit in a "lane" with the
  *   same width and centre as the reading column: the stage minus the context
- *   column when that is shown, and 48 px each side: room for the notch's
- *   16 px overhang left of the text, its slant (~16 px) and fillet (14 px),
- *   and for the composer's 22 px fillets, so the fused shapes never reach
- *   the stage's sides. */
+ *   column when that is shown, with 48 px each side. */
 const COLUMN = "w-full min-w-0 max-w-[640px]";
 
 /** The lane for content in the stage's overlays (see above). Static class
@@ -35,22 +28,14 @@ function lane(context: boolean) {
 /** The context column: shown when toggled on and the window is wide. */
 const CONTEXT_SHOWN = "flex max-[1200px]:hidden";
 
-/** The thread title, hanging from the top bar: base material with 14 px
- * bottom corners and 14 px fillets into the stage's top edge. Its sides lean
- * by `slant` degrees, wider where it meets the top edge: the lean grows
- * outward from the content box (by 40 * tan(slant) px at the top), so it
- * never crowds the text. The title truncates before the notch outgrows the
- * reading column. */
-function TitleNotch(props: { slant: number; context: boolean }) {
+/** The thread title in the stage overlay. */
+function Title(props: { context: boolean }) {
   return (
     <Shell.TopBar at="stage">
       <div class={lane(props.context)}>
         <div class={`flex ${COLUMN}`}>
-          <Surface.Add
+          <div
             id="lab-chat-notch"
-            layer="base"
-            join={14}
-            slant={props.slant}
             class="pointer-events-auto -ml-4 flex h-10 max-w-full min-w-0 items-center gap-2.5 rounded-b-[14px] bg-base pr-[18px] pb-0.5 pl-4"
           >
             <span
@@ -65,16 +50,14 @@ function TitleNotch(props: { slant: number; context: boolean }) {
               <span class="size-1.5 rounded-full bg-ink" />
               <span class="text-[12px] leading-4 text-ink-2">{mocks.thread.status}</span>
             </span>
-          </Surface.Add>
+          </div>
         </div>
       </div>
     </Shell.TopBar>
   );
 }
 
-/** The composer, rising from the bottom (`docked`: base material with 18 px
- * top corners and 22 px fillets into the stage's bottom edge), in the
- * lane of the reading column. */
+/** The composer in the reading column's overlay lane. */
 function ChatComposer(props: { context: boolean; send: (text: string) => void }) {
   const [model, setModel] = createSignal("openrouter/free");
   const [chips, setChips] = createSignal(mocks.context.slice(0, 2));
@@ -121,7 +104,7 @@ function ChatComposer(props: { context: boolean; send: (text: string) => void })
 function Bubble(props: { id?: string; text: string }) {
   return (
     <div class="flex justify-end pb-7">
-      <div id={props.id} class="bg-chip bevel-1 rounded-[12px] max-w-[75%] min-w-0 px-3.5 py-2">
+      <div id={props.id} class="bg-chip rounded-[12px] max-w-[75%] min-w-0 px-3.5 py-2">
         <p class="m-0 text-[15px] leading-6 tracking-[-0.006em] whitespace-pre-wrap text-ink">{props.text}</p>
       </div>
     </div>
@@ -139,7 +122,7 @@ function Messages(props: { sent: string[] }) {
         <span class="font-data text-[11px] leading-4 text-ink-5">{mocks.thread.tool.time}</span>
       </div>
       <div class="h-3 shrink-0" />
-      <div id="lab-chat-card" class="bg-card bevel-1 rounded-[10px] flex flex-col gap-2.5 px-4 pt-3.5 pb-4">
+      <div id="lab-chat-card" class="bg-card rounded-[10px] flex flex-col gap-2.5 px-4 pt-3.5 pb-4">
         <div class="flex items-center gap-1.5">
           <span class="text-[12px] leading-4 font-medium text-ink-3">Todo</span>
           <Icon d={stroke.chevronRight} class="size-3 text-ink-5" />
@@ -221,7 +204,6 @@ function ContextColumn(props: { shown: boolean }) {
 }
 
 /** The title notch's side lean, degrees from vertical (both sides). */
-const NOTCH_SLANT = 22;
 
 export default function ChatView() {
   const [context, setContext] = createSignal(true);
@@ -247,7 +229,7 @@ export default function ChatView() {
           <Icon d={stroke.sidebarRight} class="size-4" />
         </Button>
       </Shell.TopBar>
-      <TitleNotch slant={NOTCH_SLANT} context={context()} />
+      <Title context={context()} />
       <Shell.Stage>
         <div id="lab-chat" class="flex min-h-full">
           <div class="flex min-w-0 flex-1 flex-col items-center px-12">

@@ -8,13 +8,11 @@
  *
  * Teleports resolve under their view's owner, so context and cleanup follow
  * the view. Events and inherited CSS follow their destination region.
- * Named surface layers let members join sidebar/stage or cut through to base.
  */
 import { For, children, createContext, createSignal, onCleanup, useContext } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { dismissOutside } from "./dismiss";
-import { Surface, shellGroups } from "./surface";
 
 type Region =
   | "top-start"
@@ -100,9 +98,7 @@ export const topBar = {
   reserve: 13 + 2 * 20 + 14 + 11,
 } as const;
 
-/** Top of rail item `i` within the rail column (the first is level with the
- * plugin container's top, so a fused tab's top edge would run straight into
- * the container's). */
+/** Top of rail item `i` within the rail column. */
 export const railItemTop = (i: number) => i * (rail.item + rail.gap);
 
 export interface ShellProps {
@@ -140,12 +136,10 @@ function ShellFrame(props: ShellProps) {
             <Slot region="top-end" />
           </div>
         </div>
-        <div class="flex min-h-0 flex-1 pr-2 pb-2">
-          <Surface
-            id={shellGroups.sidebar}
-            own={false}
-            join={10}
-            class="surface-sidebar bevel-[1] bevel-quiet -mr-4 flex shrink-0"
+        <div class="flex min-h-0 flex-1 gap-2 pr-2 pb-2">
+          <div
+            id="shell-sidebar"
+            class="relative flex shrink-0 rounded-[12px] bg-sidebar"
           >
             <div
               class="relative isolate flex shrink-0 flex-col items-start"
@@ -153,20 +147,18 @@ function ShellFrame(props: ShellProps) {
             >
               <Slot region="rail" />
             </div>
-            <Surface.Add class="rounded-[12px] flex pr-4">
+            <div class="flex">
               <div class="relative isolate flex w-[220px] shrink-0 flex-col gap-0.5 px-1.5 py-2">
                 <Slot region="sidebar" />
               </div>
-            </Surface.Add>
-          </Surface>
-          <Surface
-            id={shellGroups.stage}
-            join={14}
-            class="surface-panel rounded-r-[12px] bevel-[1] bevel-quiet min-w-0 flex-1"
+            </div>
+          </div>
+          <div
+            id="shell-stage-surface"
+            class="relative isolate min-w-0 flex-1 rounded-[12px] bg-panel"
           >
-            {/* Own the paint order so z-indexed descendants stay clipped;
-              * the one-pixel inset keeps content inside the lit edge. */}
-            <div id="shell-stage" class="absolute inset-x-0 inset-y-px z-0 overflow-y-auto rounded-r-[11px]">
+            {/* Keep z-indexed descendants inside the stage. */}
+            <div id="shell-stage" class="absolute inset-x-0 inset-y-0 z-0 overflow-y-auto rounded-[12px]">
               <Slot region="stage" />
             </div>
             <div class="pointer-events-none absolute inset-x-0 top-0 isolate flex flex-col items-center *:pointer-events-auto">
@@ -178,7 +170,7 @@ function ShellFrame(props: ShellProps) {
             <div class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex max-h-[60%] flex-col items-center *:pointer-events-auto">
               <Slot region="bottom" />
             </div>
-          </Surface>
+          </div>
         </div>
       </div>
       {/* Views: their teleports render into the regions above, not here. */}

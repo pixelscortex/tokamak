@@ -23,7 +23,7 @@ export interface ChipProps {
   class?: string;
 }
 
-const chip = "flex h-6 max-w-[220px] min-w-0 shrink-0 items-center gap-1.5 rounded-sm material-chip pl-2 text-[12px] leading-4";
+const chip = "flex h-6 max-w-[220px] min-w-0 shrink-0 items-center gap-1.5 rounded-sm bg-chip pl-2 text-[12px] leading-4";
 
 export function Chip(props: ChipProps): JSX.Element {
   return (

@@ -14,7 +14,6 @@ import ChatView from "./chat";
 import ComposerStatesView from "./composer-states";
 import SelectView from "./select";
 import ButtonsView from "./buttons";
-import SurfacesView from "./surfaces";
 import FixturesView from "./fixtures";
 
 /** The views in the plugin sidebar, in order. */
@@ -23,7 +22,6 @@ export const views = [
   { id: "composer", label: "Composer states", meta: "6" },
   { id: "select", label: "Select" },
   { id: "buttons", label: "Buttons and keys" },
-  { id: "surfaces", label: "Surfaces", meta: "ref" },
 ] as const;
 
 type View = (typeof views)[number]["id"] | "fixtures";
@@ -95,7 +93,7 @@ function TopBar() {
         <div window-no-drag class="flex w-[400px] max-w-full min-w-0">
           <div
             id="lab-search"
-            class="bg-well bevel-inset bevel-1 rounded-[8px] flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
+            class="bg-well rounded-[8px] flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
           >
             <Icon d={stroke.search} class="size-3.5 text-ink-4" />
             <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-4">Search or run a command</span>
@@ -134,9 +132,6 @@ export default function App() {
         </Match>
         <Match when={view() === "buttons"}>
           <ButtonsView />
-        </Match>
-        <Match when={view() === "surfaces"}>
-          <SurfacesView />
         </Match>
         <Match when={view() === "fixtures"}>
           <FixturesView />

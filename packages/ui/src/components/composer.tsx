@@ -29,10 +29,7 @@
  * - `above` and `tools`: free slots above the text and in the footer.
  *
  * What sits above the message is separated from it by a faint divider;
- * the composer is one shape that grows taller. `docked` makes that shape
- * rise out of the window base (a `Surface.Add` of the base layer, with
- * fillets into the stage's bottom edge); put it in `Shell.BottomBar`.
- * Otherwise it is a free base-coloured plate (galleries).
+ * the composer is a rounded box. Put a `docked` composer in `Shell.BottomBar`.
  *
  * Height: the shell's bottom bar is at most 60% of the stage, and the
  * composer fills what it gets: the text gives up its lines first (it
@@ -54,7 +51,6 @@ import { icons } from "./icons";
 import { Kbd } from "./kbd";
 import { Select } from "./select";
 import type { SelectOption } from "./select";
-import { Surface } from "./surface";
 import { Textarea } from "./textarea";
 
 /** A context chip: what the message is about (a task, a file). */
@@ -439,24 +435,12 @@ export function Composer(props: ComposerProps): JSX.Element {
     </>
   );
 
-  const frame = "flex min-h-0 flex-col font-ui";
   return (
-    <Show
-      when={props.docked}
-      fallback={
-        <div id={props.id} class={`${frame} rounded-[18px] bg-base ${props.class ?? ""}`}>
-          {body()}
-        </div>
-      }
+    <div
+      id={props.id}
+      class={`flex min-h-0 flex-col bg-base font-ui ${props.docked ? "pointer-events-auto rounded-t-[18px]" : "rounded-[18px]"} ${props.class ?? ""}`}
     >
-      <Surface.Add
-        id={props.id}
-        layer="base"
-        join={22}
-        class={`${frame} pointer-events-auto rounded-t-[18px] bg-base ${props.class ?? ""}`}
-      >
-        {body()}
-      </Surface.Add>
-    </Show>
+      {body()}
+    </div>
   );
 }

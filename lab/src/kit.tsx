@@ -75,7 +75,7 @@ export function SidebarRow(props: {
       <div
         id={props.id}
         onClick={props.onClick}
-        class="bg-chip bevel-1 rounded-[6px] flex h-[30px] shrink-0 items-center gap-2.5 px-2"
+        class="bg-chip rounded-[6px] flex h-[30px] shrink-0 items-center gap-2.5 px-2"
       >
         {content()}
       </div>
