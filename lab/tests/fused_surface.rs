@@ -882,3 +882,186 @@ fn release_paint_benchmark() {
         }
     }
 }
+
+#[test]
+#[ignore = "release locate benchmark; run explicitly"]
+fn release_locate_benchmark() {
+    use blitz_paint::{ElementPaint, ElementPainter};
+    use std::cell::Cell;
+    struct Timed {
+        painter: render::SurfacePainter,
+        elapsed: Cell<Option<Duration>>,
+    }
+    impl ElementPainter<anyrender::NullScenePainter> for Timed {
+        fn paint_element(
+            &self,
+            el: &mut ElementPaint<'_, anyrender::NullScenePainter>,
+            scene: &mut anyrender::NullScenePainter,
+        ) {
+            if self.elapsed.get().is_none() && el.node().attr("tk-group".into()).is_some() {
+                let start = std::time::Instant::now();
+                let _ = el.locate(el.node().id);
+                self.elapsed.set(Some(start.elapsed()));
+            }
+            self.painter.paint_element(el, scene);
+        }
+    }
+    for view in ["chat", "select", "composer", "surfaces", "long"] {
+        let mut doc = if view == "long" {
+            let mut doc = NativeDocument::new(
+                "<html><body style='margin:0'><div id='app'></div></body></html>",
+                r#"let pending = [
+                    {op:'element',id:1,tag:'div'}, {op:'attribute',id:1,name:'style',value:'height:800px;overflow:hidden'}, {op:'insert',id:1,parent:0,before:null},
+                    {op:'element',id:2,tag:'div'}, {op:'attribute',id:2,name:'tk-group',value:'long'}, {op:'attribute',id:2,name:'style',value:'width:100px;height:20px;--tk-fill:red'}, {op:'insert',id:2,parent:1,before:null}
+                ];
+                for (let id=3; id<4003; id++) pending.push({op:'element',id,tag:'div'}, {op:'attribute',id,name:'style',value:'height:24px'}, {op:'insert',id,parent:1,before:null});
+                globalThis.__tokamak = { dispatch() { return '{"prevented":false,"stopped":false,"error":null}'; }, host() {}, drain() { const out=JSON.stringify(pending); pending=[]; return out; }, dispose() {} };"#,
+            ).unwrap();
+            doc.inner_mut().set_viewport(Viewport {
+                window_size: (2880, 1800),
+                hidpi_scale: 2.0,
+                ..Default::default()
+            });
+            doc.resolve_layout(0.0);
+            let scroll = doc.inner().query_selector("#app > div").unwrap().unwrap();
+            doc.inner_mut()
+                .scroll_by(scroll, 0.0, 10.0, Default::default());
+            doc
+        } else {
+            let mut doc = document(2.0, 900.0);
+            open(&mut doc, view);
+            doc
+        };
+        let timed = Timed {
+            painter: doc.surface_painter(),
+            elapsed: Cell::new(None),
+        };
+        let mut samples = Vec::new();
+        for i in 0..100 {
+            timed.elapsed.set(None);
+            blitz_paint::paint_scene_with(
+                &mut anyrender::NullScenePainter,
+                &mut doc.inner_mut(),
+                2.0,
+                2880,
+                1800,
+                0,
+                0,
+                &timed,
+            );
+            if i >= 20 {
+                samples.push(
+                    timed
+                        .elapsed
+                        .get()
+                        .expect("group called locate")
+                        .as_secs_f64()
+                        * 1000.0,
+                );
+            }
+        }
+        samples.sort_by(f64::total_cmp);
+        println!(
+            "LOCATE_BENCH view={view} scale=2 median_ms={:.6}",
+            samples[40]
+        );
+    }
+}
+
+#[test]
+fn scrolling_the_select_face_out_of_view_preserves_the_outline_and_join() {
+    use anyrender::{PaintScene, Scene, recording::RenderCommand};
+    use blitz_paint::{ElementPaint, ElementPainter};
+    use geo::{Area, BooleanOps, Contains};
+    use peniko::{
+        Fill,
+        kurbo::{Affine, PathEl},
+    };
+    use std::cell::RefCell;
+    struct Outline {
+        painter: render::SurfacePainter,
+        root: blitz_traits::NodeId,
+        region: RefCell<Option<geo::MultiPolygon<f64>>>,
+    }
+    impl ElementPainter<Scene> for Outline {
+        fn paint_element(&self, el: &mut ElementPaint<'_, Scene>, scene: &mut Scene) {
+            if el.node().id != self.root {
+                self.painter.paint_element(el, scene);
+                return;
+            }
+            let inverse = (el.transform() * Affine::scale(el.scale())).inverse();
+            let mut picture = Scene::new();
+            self.painter.paint_element(el, &mut picture);
+            let layer = picture
+                .commands
+                .iter()
+                .find_map(|c| match c {
+                    RenderCommand::PushLayer(layer) if layer.fill == Fill::EvenOdd => Some(layer),
+                    _ => None,
+                })
+                .expect("fused outline clip");
+            let transform = inverse * layer.transform;
+            let mut rings = Vec::new();
+            let mut points = Vec::new();
+            for element in layer.clip.elements() {
+                match element {
+                    PathEl::MoveTo(p) | PathEl::LineTo(p) => {
+                        let p = transform * *p;
+                        points.push((p.x, p.y));
+                    }
+                    PathEl::ClosePath => {
+                        rings.push(geo::LineString::from(std::mem::take(&mut points)))
+                    }
+                    _ => panic!("fused contour is polygonal"),
+                }
+            }
+            assert_eq!(rings.len(), 1);
+            *self.region.borrow_mut() = Some(geo::MultiPolygon(vec![geo::Polygon::new(
+                rings.remove(0),
+                vec![],
+            )]));
+            scene.append_scene(picture, Affine::IDENTITY);
+        }
+    }
+    let mut doc = document(1.0, 520.0);
+    open(&mut doc, "select");
+    let root = support::id(&doc, "lab-select-open-fused");
+    let outline = Outline {
+        painter: doc.surface_painter(),
+        root,
+        region: RefCell::new(None),
+    };
+    let mut regions = Vec::new();
+    let mut fillets = Vec::new();
+    for scroll in [213.9, 214.1] {
+        scroll_stage(&mut doc, scroll);
+        let bridge = doc
+            .inner()
+            .get_client_bounding_rect(support::id(&doc, "lab-select-open-bridge"))
+            .unwrap();
+        let root_box = doc.inner().get_client_bounding_rect(root).unwrap();
+        let fillet = geo::Point::new(bridge.x - root_box.x - 0.5, bridge.y - root_box.y + 0.5);
+        blitz_paint::paint_scene_with(
+            &mut Scene::new(),
+            &mut doc.inner_mut(),
+            1.0,
+            1440,
+            520,
+            0,
+            0,
+            &outline,
+        );
+        let region = outline.region.borrow_mut().take().unwrap();
+        fillets.push(region.contains(&fillet));
+        regions.push(region);
+    }
+    let difference = regions[0].xor(&regions[1]).unsigned_area();
+    assert!(
+        fillets.iter().all(|present| *present),
+        "face-to-bridge fillets {fillets:?}; difference {difference} CSS px²"
+    );
+    assert!(
+        difference < 0.01,
+        "root-space outline changed by {difference} CSS px²"
+    );
+}

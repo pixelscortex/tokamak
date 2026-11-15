@@ -802,22 +802,47 @@ fn only_running_tweens_request_frames() {
 }
 
 #[test]
-fn visibility_and_culling_remove_members_from_the_painted_outline() {
+fn unrendered_members_contribute_nothing() {
     let mut f = Fixture::new(
         r#"<div tk-group="g" surface-own="false"><div id="ancestor"><div id="member" surface-groups="g"></div></div></div>"#,
         &["member"],
     );
     assert_eq!(f.state().shown.len(), 1);
-    f.attr("ancestor", "style", "visibility:hidden");
-    f.frame();
-    assert!(f.state().shown.is_empty());
-    f.attr(
-        "ancestor",
-        "style",
-        "visibility:visible;transform:translate(1000px)",
+    for style in ["display:none", "visibility:hidden"] {
+        f.attr("ancestor", "style", style);
+        f.frame();
+        assert!(f.state().shown.is_empty(), "{style}");
+    }
+}
+
+#[test]
+fn members_outside_the_viewport_or_scrolled_out_of_a_clip_still_contribute() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div id="member" surface-groups="g" style="top:400px"></div></div>"#,
+        &["member"],
     );
+    assert!(inside(&f.region(), 10.0, 410.0));
+    let mut f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div id="scroll" style="position:absolute;width:80px;height:80px;overflow:hidden"><div style="height:400px"><div id="member" surface-groups="g" surface-animate style="top:10px"></div></div></div></div>"#,
+        &["member"],
+    );
+    let scroll = f.id("scroll");
+    f.doc
+        .inner_mut()
+        .scroll_by(scroll, 0.0, 40.0, Default::default());
     f.frame();
-    assert!(f.state().shown.is_empty());
+    assert!(f.moving());
+    assert!(f.state().boxes.contains_key(&f.id("member")));
+    f.advance(ANIMATION);
+    assert!(inside(&f.region(), 10.0, -20.0));
+    f.doc
+        .inner_mut()
+        .scroll_by(scroll, 0.0, -40.0, Default::default());
+    f.frame();
+    assert!(
+        f.moving(),
+        "returning member keeps its previous box rather than arriving"
+    );
 }
 
 #[test]
@@ -1002,4 +1027,14 @@ fn fused_background_extends_past_the_roots_own_overflow_clip() {
     let pixel = |x: usize, y: usize| &pixels[(y * 400 + x) * 4..][..4];
     assert_eq!(pixel(125, 40), &[255, 0, 0, 255]);
     assert_eq!(pixel(135, 40), &[0, 0, 0, 0]);
+}
+
+#[test]
+fn known_limit_a_positioned_member_under_a_zero_opacity_ancestor_is_still_located() {
+    let f = Fixture::new(
+        r#"<div tk-group="g" surface-own="false"><div style="opacity:0"><div id="member" surface-groups="g"></div></div></div>"#,
+        &["member"],
+    );
+    // Blitz still locates this hoisted descendant despite its transparent ancestor.
+    assert_eq!(f.state().shown.len(), 1);
 }

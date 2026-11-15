@@ -53,9 +53,13 @@ provides the member's physical box and transform; one scale conversion maps
 it into this space, and the root's transform places the result in the scene.
 Pure translations retain exact attached/slanted builders. For scale/rotation,
 the rounded outline is transformed as a general shape; attach and slant are
-ignored. Hidden, culled or otherwise unpainted members contribute nothing.
-A culled root paints nothing, even if an external member remains visible.
-
+ignored. A member contributes wherever it would land, in view or not, including
+when scrolled out of an ancestor clip. Unrendered members (`display:none`, not
+visible, `opacity:0`, or under such an element) contribute nothing, except that
+Blitz currently still locates a positioned descendant of a zero-opacity ancestor;
+such a descendant can contribute to a visible group.
+The group is drawn only when Blitz paints its root: a root that is itself out
+of view draws nothing even if a member is visible.
 
 Order is root, plain adds, attached adds, then cuts, in document order.
 Wire mutations feed the registry; there is no document scan or after-layout
@@ -64,7 +68,8 @@ state holds previous shapes and tweens. Removing a root drops its state;
 a document paint drops states for unpainted roots. If Blitz never calls the
 document root (for example `display:none`), state survives that paint.
 
-The outline and recorded scene are reused while the shown shapes and look are unchanged. Exact rounded builders flatten at 0.02 CSS px
+The outline and recorded scene are reused while shown shapes and look are
+unchanged. Exact rounded builders flatten at 0.02 CSS px
 for ordered `geo` union/difference. General joins use round-buffer closing
 for adds and opening for cuts, limited to twice the member's join radius.
 Buffer arcs have at most 0.01 CSS px sagitta.

@@ -22,3 +22,5 @@ anyrender = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
 anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
 # PNG captures of the offscreen frames (already in the lock graph).
 png = "=0.18.1"
+geo = { version = "=0.32.0", default-features = false }
+peniko = "=0.6.1"
