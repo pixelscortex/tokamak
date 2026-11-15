@@ -1,0 +1,19 @@
+app/src/chat/use-chat.ts
+  s_5d333dcb82c6ea::t_e32e543a93cafa 85-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fdeb100486e100a7ffdd26d12375bd07aa1d9ab",
+  "prompts": {},
+  "sessions": {
+    "s_5d333dcb82c6ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e16d-c3c0-7933-bd6c-17594b624be2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
