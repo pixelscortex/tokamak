@@ -1,6 +1,13 @@
 # Blitz fork
 
-No fork is in use on this branch. Blitz comes from crates.io at `=0.3.0-beta.4`.
+This branch uses `https://github.com/JustKira/blitz`, branch `traversal-api`,
+commit `6340b3202934d444262075d540369c41a256787a`. All Blitz crates share
+that revision. Its element traversal API paints fused vector groups directly.
+
+AnyRender uses its `main` git source, held in `Cargo.lock` at
+`3e7fc16bc0223aaf0f053f1162b36146070e2f75`. Stylo 0.23.0 uses
+`2dca34592ced37c6aa01733e94206a767194cf9d`, taffy uses
+`4aca4f4933aa9cb7a3266050c788aad4c90288d2`, and winit is `=0.31.0-beta.4`.
 
 ## Rules
 

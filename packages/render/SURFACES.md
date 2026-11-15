@@ -1,75 +1,72 @@
-# Fused surfaces
+# Fused vector groups
 
-A group is an ordinary root with one background widget as its first child:
+A group is one ordinary root; there is no surface element or widget:
 
 ```html
-<div tk-group="panel" style="position:relative;--tk-fill:#202020;border-radius:12px;--tk-bevel:2">
-  <tk-surface group="panel" style="position:absolute;inset:0"></tk-surface>
-  <!-- ordinary CSS content -->
+<div tk-group="panel" style="--tk-fill:#303030;border-radius:12px;--tk-bevel:1.5">
+  <div surface-groups="panel" surface-attach="right"></div>
 </div>
 ```
 
-The layer must absolutely fill the root, behind its content. User-agent CSS
-keeps `pointer-events: none !important` on it: Blitz swallows events that hit
-custom widgets. Ordinary elements keep their CSS backgrounds and events.
-A `bg-*` class on a `Surface` root paints an ordinary rectangle; use `surface-*` for the fused fill.
-The vector outline can extend outside the layer’s box, subject to ancestor clipping; member shapes use layout boxes and do not follow CSS transforms.
+Tokamak's element painter draws the combined fill and edge at the root's
+`Background` piece, only when it paints its own box, then paints Blitz's
+background and all remaining pieces normally. CSS background images still
+work. The shape is above the root's backdrop and below its border, content
+and children, inside Blitz's clips, opacity layers and transforms.
 
-The root's computed style supplies the group's appearance:
+The root's computed style supplies the look:
 
-- `--tk-fill`: registered `<color>`; unset or transparent draws nothing.
-- `border-radius`: horizontal radius of each corner of the root's border box.
-- `--tk-bevel`: inside edge width in CSS pixels; default 0. Keep it at most half the thinnest part of the shape: where two opposite edges are closer than twice the width, their bands overlap and the later one wins.
-- `--tk-bevel-inset`: 1 reverses the lighting; default 0.
-- `--tk-bevel-base`: uniform edge lift towards white from 0 to 1; default 0.
-- `--tk-bevel-strength`: lighting strength from 0 to 1; default 1.
+- `--tk-fill`: colour, including `currentColor`; default transparent.
+- `border-radius`: four horizontal corner radii, CSS-normalized to fit.
+- `--tk-bevel`: inside edge width in CSS pixels; default 0.
+- `--tk-bevel-inset`: 1 reverses lighting; default 0.
+- `--tk-bevel-base`: uniform lift towards white, 0–1; default 0.
+- `--tk-bevel-strength`: lighting strength, 0–1; default 1.
 
 Root attributes:
 
-- `surface-own="false"` omits the root's own shape. Otherwise it is the first add.
+- `surface-own="false"` omits the root's shape; otherwise it is the first add.
 - `surface-join="n"` supplies members' default join radius; default 0.
 
-Any element anywhere in the document can join one or more groups:
-
-```html
-<div surface-groups="panel other" surface-op="cut"
-     surface-join="8" surface-slant="0 45"></div>
-```
-
-Its border box, relative to each layer, is its shape. Its computed
-`border-radius` supplies its four horizontal corner radii. Member attributes:
+Any element anywhere can join named groups with `surface-groups="panel other"`.
+Its border box and horizontal radii contribute where Blitz paints it:
 
 - `surface-op="add|cut"`: default add.
-- `surface-join="n"`: overrides the root's default, CSS pixels.
-- `surface-attach="left|right|top|bottom"`: add only; names the member's side
-  touching a plain add's edge. Uses an exact rounded outline when a target exists.
-- `surface-slant="a"` or `"left right"`: side angles from vertical, clamped
-  to ±75 degrees. Positive widens the top; negative widens the bottom.
-- `surface-animate`: tween a previously present member whose box changed,
-  for 220 ms with cubic ease-out, unless the layer resized in the same pass.
-  Arrivals and removals are immediate; unchanged targets keep their clocks.
+- `surface-join="n"`: overrides the root's join radius, in CSS pixels.
+- `surface-attach="left|right|top|bottom"`: add only; the member's side touching
+  a plain add. Uses an exact rounded outline when a target exists.
+- `surface-slant="a"` or `"left right"`: angles from vertical, clamped to ±75°.
+  Positive widens the top; negative widens the bottom.
+- `surface-animate`: tween a previously present member whose box changed for
+  220 ms with cubic ease-out, unless the root resized in the same paint.
+  Arrivals/removals snap; unchanged targets keep their clocks. In-flight
+  positions snap to device pixels. Only running tweens request another frame.
 
-Order is root, plain adds, attached adds, then cuts, each in document order.
-The registry is fed by wire mutations, never by a document scan.
-`NativeDocument::layout_surfaces()` reads boxes after layout, before painting.
-Only running tweens request further frames. In-flight positions snap to device pixels.
+Geometry is in CSS pixels in the root's border-box space. `locate(member)`
+provides the member's physical box and transform; one scale conversion maps
+it into this space, and the root's transform places the result in the scene.
+Pure translations retain exact attached/slanted builders. For scale/rotation,
+the rounded outline is transformed as a general shape; attach and slant are
+ignored. Hidden, culled or otherwise unpainted members contribute nothing.
+A culled root paints nothing, even if an external member remains visible.
 
-Each paint rebuilds one outline with contours and holes. Rounded polygons,
-attachments and slants retain the exact builders; paths flatten at 0.02 CSS px
-for `geo` ordered union/difference. General joins use round-buffer closing
-for adds and opening for cuts. The correction is limited to within twice the
-join radius of the member. Buffer arcs have at most 0.01 CSS px sagitta.
+Order is root, plain adds, attached adds, then cuts, in document order.
+Wire mutations feed the registry; there is no document scan or after-layout
+surface pass. Window and offscreen rendering share the same painter. Per-root
+state holds previous shapes and tweens. Removing a root drops its state;
+a document paint drops states for unpainted roots. If Blitz never calls the
+document root (for example `display:none`), state survives that paint.
 
-The scene fills the outline, then fills inward edge strips clipped to it.
-Adjacent strips meet at angle bisectors; the width is capped at half each
-contour's smallest bounding dimension so opposing bands do not overlap.
-The uniform base lift applies on every side. Outward normals facing straight
-up lighten towards white (gain 0.18); downward normals darken towards black
-(gain 0.45); horizontal normals keep the uniformly lifted fill. Holes reverse
-their normals. One opacity layer preserves the fill's alpha across the band.
-Segment colours approximate smooth lighting. Ignored GPU tests cover thin
-bands and lab resize frames at device scale 2.
+Each paint rebuilds the outline. Exact rounded builders flatten at 0.02 CSS px
+for ordered `geo` union/difference. General joins use round-buffer closing
+for adds and opening for cuts, limited to twice the member's join radius.
+Buffer arcs have at most 0.01 CSS px sagitta.
 
-There are no surface textures, shaders, atlas, caches, renderer resources,
-plates, sheets, guests, regions, per-shape materials, or end-of-frame hook.
+The scene fills the outline, then inward edge strips clipped to it. Strips
+meet at angle bisectors; width is capped at half each contour's smallest
+bounding dimension. Upward outward normals lighten towards white (gain .18),
+downward normals darken towards black (gain .45); horizontal normals retain
+the base lift. Hole normals reverse. One opacity layer preserves fill alpha.
+
+There are no surface textures, shaders, GPU resources, or geometry caches.
 Legacy surface styling and geometry attributes are ignored.

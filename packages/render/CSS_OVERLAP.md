@@ -3,7 +3,7 @@
 Blitz paints ordinary backgrounds, borders, shadows, outlines, opacity,
 transforms and clipping. The render host does not intercept those styles.
 
-Fused groups use a separate `<tk-surface>` background layer. Its root's
+Fused groups paint at their ordinary root's background piece. The root's
 `--tk-fill`, `border-radius` and `--tk-bevel*` properties control one combined
 outline, including member adds and cuts. There is no separate surface border:
 the bevel is the only lit band. See [SURFACES.md](SURFACES.md).
