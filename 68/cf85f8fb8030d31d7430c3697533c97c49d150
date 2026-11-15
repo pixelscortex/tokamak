@@ -1,0 +1,50 @@
+packages/build/src/exports.ts
+  s_fc6a6bb52fab80::t_7c30c6554ed11e 25,50-51,53-64,79-82
+  s_fc6a6bb52fab80::t_e573fea753e1c0 83
+packages/ui/src/components/select.tsx
+  s_fc6a6bb52fab80::t_99c66ccc2904fc 10,13,62-99,179-185,195,206-209
+packages/build/src/contributions.ts
+  s_fc6a6bb52fab80::t_7c30c6554ed11e 20-44,83-86,101,104-108
+packages/render/js/async-ownership.ts
+  s_fc6a6bb52fab80::t_a1275400c9305e 1-88
+packages/ui/src/components/composer-types.ts
+  s_fc6a6bb52fab80::t_a1275400c9305e 1-105
+packages/ui/src/components/composer-commands.tsx
+  s_fc6a6bb52fab80::t_a1275400c9305e 1-86
+packages/ui/src/components/select-menu.tsx
+  s_fc6a6bb52fab80::t_99c66ccc2904fc 1-120
+packages/ui/src/components/composer.tsx
+  s_fc6a6bb52fab80::t_9c30be0a547f79 1,44-45,47
+  s_fc6a6bb52fab80::t_a1275400c9305e 2,5-8,19,33,39,46,63,68
+packages/render/js/index.ts
+  s_fc6a6bb52fab80::t_a1275400c9305e 3-4,297,315
+packages/engine/src/web/surface.js
+  s_fc6a6bb52fab80::t_bfbfca5d3e7036 3,29-32,74-77,141-144,200-203,258-267,275,280,299-302,341,356,377-394,425-427
+  s_fc6a6bb52fab80::t_c9fd7a2b70caef 1-2,449
+  s_fc6a6bb52fab80::t_824097d7d03fb0 428-443
+packages/ui/src/components/composer-parts.tsx
+  s_fc6a6bb52fab80::t_a1275400c9305e 1-195
+packages/sdk/src/transport.ts
+  s_fc6a6bb52fab80::t_a1275400c9305e 27-32,90,276
+  s_fc6a6bb52fab80::t_9c30be0a547f79 5,273
+packages/sdk/src/websocket-transport.ts
+  s_fc6a6bb52fab80::t_9c30be0a547f79 1,56,58,87
+  s_fc6a6bb52fab80::t_a1275400c9305e 2-24,26-55,57,59-86,88
+  s_fc6a6bb52fab80::t_ccdb30b558a0ea 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68cf85f8fb8030d31d7430c3697533c97c49d150",
+  "prompts": {},
+  "sessions": {
+    "s_fc6a6bb52fab80": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e12c-2ce3-7be0-b351-abc8a2f82dd4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
