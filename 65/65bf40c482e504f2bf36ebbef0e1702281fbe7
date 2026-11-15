@@ -1,0 +1,31 @@
+Cargo.toml
+  s_1fe29573c38953::t_cfb4542d1c9ca0 34
+app/Cargo.toml
+  s_1fe29573c38953::t_7b98b5ce77e75a 28-29
+lab/Cargo.toml
+  s_1fe29573c38953::t_27a757527b326e 16-17,20
+packages/render/BLITZ_FORK.md
+  s_1fe29573c38953::t_934cfd5049b1fd 4
+packages/render/Cargo.toml
+  s_1fe29573c38953::t_31b9c6f5225395 15-19
+packages/runtime/Cargo.toml
+  s_1fe29573c38953::t_56db2a95ae4062 25
+Cargo.lock
+  s_1fe29573c38953::t_65c0909638d888 561,606,617,636,655,1340,5995
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6565bf40c482e504f2bf36ebbef0e1702281fbe7",
+  "prompts": {},
+  "sessions": {
+    "s_1fe29573c38953": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de7c-0c19-7083-8213-0d82c9257571",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
