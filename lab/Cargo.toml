@@ -13,12 +13,12 @@ tokamak-build = { path = "../packages/build" }
 
 [dev-dependencies]
 serde_json = "1.0.154"
-blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts"] }
-blitz-traits = "=0.3.0-beta.4"
+blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["system-fonts"] }
+blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a" }
 keyboard-types = "=0.8.0"
 # Offscreen GPU frames and captures of the lab (tests/fused_surface.rs).
-blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
-anyrender = "=0.14.0"
-anyrender_vello = "=0.15.0"
+blitz-paint = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["custom-widget"] }
+anyrender = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
+anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
 # PNG captures of the offscreen frames (already in the lock graph).
 png = "=0.18.1"

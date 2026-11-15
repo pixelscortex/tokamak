@@ -12,18 +12,19 @@ gpu-diagnostics = ["anyrender_vello/log_frame_times"]
 [dependencies]
 engine = { path = "../engine" }
 # Blitz attaches surface/icon widgets and paints their ordinary vector scenes.
-blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts", "custom-widget"] }
-blitz-html = { version = "=0.3.0-beta.4", default-features = false }
-blitz-traits = "=0.3.0-beta.4"
-blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard", "custom-widget"] }
+blitz-dom = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["system-fonts", "custom-widget"] }
+blitz-html = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false }
+blitz-traits = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a" }
+blitz-shell = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["custom-widget"] }
+blitz-paint = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a", default-features = false, features = ["custom-widget"] }
 # Read computed border radii and registered custom properties.
-style = { package = "stylo", version = "=0.22.0" }
+style = { package = "stylo", version = "=0.23.0", git = "https://github.com/servo/stylo", rev = "2dca34592ced37c6aa01733e94206a767194cf9d" }
 geo = { version = "=0.32.0", default-features = false }
-anyrender = "=0.14.0"
-anyrender_vello = "=0.15.0"
+anyrender = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
+anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender", branch = "main" }
 # Vector widgets share the scene colour and geometry types.
 peniko = "=0.6.1"
-winit = "=0.31.0-beta.3"
+winit = "=0.31.0-beta.4"
 keyboard-types = "=0.8.0"
 futures-lite = "=2.6.1"
 serde = { version = "1.0", features = ["derive"] }

@@ -29,3 +29,6 @@ codegen-units = 1
 # Details and the exact diff: vendor/rquickjs-sys/TOKAMAK_PATCHES.md
 [patch.crates-io]
 rquickjs-sys = { path = "vendor/rquickjs-sys" }
+
+# Share the timer used by Blitz and AnyRender.
+debug_timer = { git = "https://github.com/JustKira/blitz", rev = "6340b3202934d444262075d540369c41a256787a" }
