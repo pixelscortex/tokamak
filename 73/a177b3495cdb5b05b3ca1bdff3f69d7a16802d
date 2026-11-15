@@ -1,0 +1,25 @@
+packages/render/Cargo.toml
+  s_37590b8e9b99ee::t_657379da3830c7 14,19
+packages/render/src/document.rs
+  s_37590b8e9b99ee::t_d0b015c9984650 7
+packages/render/src/shell.rs
+  s_37590b8e9b99ee::t_2e17307e9c26fd 124-128
+packages/ui/src/styles.css
+  s_37590b8e9b99ee::t_37dbdff3ce11e2 7-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73a177b3495cdb5b05b3ca1bdff3f69d7a16802d",
+  "prompts": {},
+  "sessions": {
+    "s_37590b8e9b99ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1df54-9078-7492-9721-2256f7e3c9a4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
