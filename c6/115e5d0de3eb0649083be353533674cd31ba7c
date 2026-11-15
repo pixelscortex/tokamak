@@ -1,0 +1,21 @@
+app/src/chat/map.tsx
+  s_db6c75ef3d5136::t_bf7a60c4482694 39
+app/tests/plugins.rs
+  s_db6c75ef3d5136::t_adc43046cd10bd 1200-1204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6115e5d0de3eb0649083be353533674cd31ba7c",
+  "prompts": {},
+  "sessions": {
+    "s_db6c75ef3d5136": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e120-0ea6-7651-a29e-9c5f98990edf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
