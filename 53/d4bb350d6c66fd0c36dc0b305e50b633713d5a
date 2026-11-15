@@ -1,0 +1,19 @@
+plugins/chat/backend/send.ts
+  s_d0d6007df97f49::t_3bfb14da27f2bc 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "53d4bb350d6c66fd0c36dc0b305e50b633713d5a",
+  "prompts": {},
+  "sessions": {
+    "s_d0d6007df97f49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e174-f282-7032-b1f9-8a7a5dbb4bea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
