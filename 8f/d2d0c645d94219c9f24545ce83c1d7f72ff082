@@ -1,0 +1,21 @@
+app/src/chat/screen.tsx
+  s_4f307e17b09e61::t_4e0405306ae810 14,23-27,29,49-53
+app/tests/plugins.rs
+  s_4f307e17b09e61::t_20cf27de37ec6d 1369-1370,1377-1378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fd2d0c645d94219c9f24545ce83c1d7f72ff082",
+  "prompts": {},
+  "sessions": {
+    "s_4f307e17b09e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e152-45b2-75d3-aaeb-86306de2e06a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
