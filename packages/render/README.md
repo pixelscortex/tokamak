@@ -4,9 +4,17 @@
 Blitz and Vello/wgpu. JS and Blitz stay on the window event-loop thread; host
 workers exchange owned JSON through a bounded, generation-scoped mailbox.
 
-Blitz uses the JustKira traversal fork at `6340b3202934d444262075d540369c41a256787a`.
-See [SURFACES.md](SURFACES.md) for fused vector groups and
-[BLITZ_FORK.md](BLITZ_FORK.md) for the dependency pins and fork rules.
+Tokamak uses released Blitz `0.3.0-beta.4`. Custom surface rendering and the fork
+were removed on 2026-11-15 to focus on getting the app running. The work is
+preserved in git on `minimal/surfaces-traversal` and `minimal/surfaces`, and in
+`github.com/JustKira/blitz` on branch `tokamak`.
+
+Nothing goes to the Blitz project without the owner's written approval.
+   No pull request, issue, comment or discussion post on
+   `github.com/DioxusLabs/blitz` or any related project (anyrender, vello,
+   stylo, taffy, parley). Approval is per change, written by the owner on that
+   change's Linear sub-issue. Reading upstream is fine.
+
 QuickJS’s heap ceiling defaults to half of physical memory, with a 256 MiB floor
 and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overrides it.
 
@@ -22,7 +30,7 @@ and a 4 GiB fallback when memory size is unknown; `TOKAMAK_UI_HEAP_BYTES` overri
   admission; `launch_window_with` accepts size and `WindowOptions` (including
   `TrafficLights`). The connect callback receives a host sender and must not block.
 - Headless embedders use Blitz’s `Document` trait, call `resolve_layout`, then
-  `paint_document` to paint fused groups through element traversal. `take_error` returns deferred UI errors.
+  `blitz_paint::paint_scene` to draw ordinary elements. `take_error` returns deferred UI errors.
 - `Error`, `Result`, `MessageSender` and `MAX_WIRE_MESSAGE_BYTES` are exported at the crate root.
 - [`@tokamak/render`](js/index.ts) exports the universal JSX runtime, `mount`,
   `onHostEvent` and `observeLayout`. Events cancel synchronously; layout reports

@@ -1,7 +1,7 @@
 # Native UI elements
 
 `@tokamak/ui/elements` exports Solid `Button`, `Input` and `Icon` for QuickJS +
-the universal renderer. `@tokamak/ui/components` exports `Surface` and `Shell` (used by the lab only so far; the app's shell frame and plugin slots are
+the universal renderer. `@tokamak/ui/components` exports `Shell` (used by the lab only so far; the app's shell frame and plugin slots are
 separate) and the controls `Button`, `Kbd`, `Chip`, `ChipMore`,
 `Textarea`, `Select` and `Composer`. No DOM globals, React dependency, or
 accessibility-host claims.
@@ -9,55 +9,17 @@ accessibility-host claims.
 ## Styling
 
 One system: Tailwind v4 utilities written in the component, as complete static
-class names, with tokens in `src/theme.css` (colours, radii, fonts). Ordinary
-backgrounds and edges are CSS; fused groups read the same theme colours through
-`surface-*` utilities.
+class names, with tokens in `src/theme.css` (colours, radii, fonts). Backgrounds, radii and interaction states use ordinary Tailwind utilities.
 Still on the older class pattern: the elements `Button` and `Input`
 (`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
 `src/styles.css`); the todo plugin uses them. Do not add to that pattern: new
 controls are in `@tokamak/ui/components`.
 
-## Surfaces and shell
-
-```tsx
-import { Shell, Surface } from "@tokamak/ui/components";
-
-<button class="bg-blue-600 rounded-md bevel px-3 py-2">Run</button>;
-<div class="bg-card rounded-lg bevel p-4">
-  <input class="bg-well rounded-md bevel-inset px-2" aria-label="Name" />
-</div>;
-
-<Surface class="surface-panel rounded-xl bevel p-4" join={10}>
-  <Surface.Add attach="right" class="absolute -left-12 top-6 h-10 w-12 rounded-l-lg" />
-  <Surface.Cut class="absolute right-4 top-4 size-10 rounded-full">
-    <button class="size-10 rounded-full bg-chip bevel" aria-label="Run">Run</button>
-  </Surface.Cut>
-  Panel content
-</Surface>;
-```
-
-`Surface` takes `class`, `style`, `id`, `ref`, `children`, `join` and `own`
-(default true). Its first child paints one fused outline. `Surface.Add` and
-`Surface.Cut` take the same element props plus `join`, `slant` (one angle or
-[left, right]), `animate` (220 ms) and `layer` (base, sidebar, stage). Only
-`Add` takes `attach` (left, right, top, bottom). Corners come from CSS.
-`own={false}` uses only members. Member children stay above the shape.
-
-`surface-*` sets the fused fill: theme colours, arbitrary colours, custom
-properties and opacity (`surface-panel`, `surface-[#1b1b1b]`,
-`surface-(--my-var)`, `surface-white/10`). Use `bg-*` on ordinary elements.
-`bevel` adds a 1.5 px edge; `bevel-2` / `bevel-[0.75]` set its width,
-`bevel-inset` reverses the light, and `bevel-quiet` uses strength 0.075 and a uniform edge lift of 0.055.
-Ordinary edges use Tailwind's inset shadow slot and compose with rings and
-outer shadows. An explicit Tailwind inset shadow replaces that slot.
-Fused roots suppress CSS shadows because the renderer follows their outline.
-`material-chip` and `material-well` are ordinary CSS shortcuts for the controls.
+## Shell
 
 `Shell` provides the fixed top bar, rail, sidebar, scrolling stage and bottom
 bar. Views teleport content with `Shell.TopBar` (`at`: start, center, end,
 stage), `Shell.Rail`, `Shell.Sidebar`, `Shell.Stage` and `Shell.BottomBar`.
-Members with `layer="base"` cut the layers above the window background;
-`sidebar` and `stage` join those shell groups from anywhere under the shell.
 `Icon` from `@tokamak/ui/elements` draws SVG path data, coloured by CSS.
 
 ## Controls (`@tokamak/ui/components`)
@@ -81,7 +43,7 @@ file starts with its usage and the details; the short version:
 
 - Buttons change fill on hover and press without moving. Focus uses
   `focus:ring-2` (`:focus`; Blitz has no `:focus-visible`).
-- Fields use `bg-well bevel-inset`; open Select menus are fused groups.
+- Fields use `bg-well`; Select triggers and menus are separate rounded boxes.
 - `Textarea` grows by layout, not measuring: an invisible copy of its text
   in the same grid cell sizes it (Blitz's `<textarea>` keeps a fixed
   `rows` height and reports no content height).

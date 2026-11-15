@@ -1,7 +1,6 @@
 /* Shared semantic tokens: edit this file to restyle elements and utilities.
  * Hex colors and system fonts avoid color/font features not verified in Blitz.
- * `static` emits every token on :root even if no utility uses it: surfaces
- * resolve their material colours from these variables at paint time. */
+ * `static` emits every token on :root even if no utility uses it. */
 @theme static {
   --color-canvas: #f4f6fa;
   --color-surface: #ffffff;
