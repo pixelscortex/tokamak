@@ -6347,11 +6347,15 @@ dependencies = [
 name = "tokamak-app"
 version = "0.1.0"
 dependencies = [
+ "anyrender",
+ "anyrender_vello",
  "blitz-dom",
+ "blitz-paint",
  "blitz-traits",
  "engine",
  "futures-util",
  "keyboard-types",
+ "png",
  "render",
  "runtime",
  "serde_json",

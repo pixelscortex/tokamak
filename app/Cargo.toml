@@ -30,3 +30,9 @@ tower = { version = "0.5.3", default-features = false }
 blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts"] }
 blitz-traits = "=0.3.0-beta.4"
 keyboard-types = "=0.8.0"
+
+# Opt-in native chat captures use the same released painter as the lab.
+blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = ["custom-widget"] }
+anyrender = "=0.14.0"
+anyrender_vello = "=0.15.0"
+png = "=0.18.1"

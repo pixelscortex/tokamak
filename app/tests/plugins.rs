@@ -176,7 +176,7 @@ impl Window {
         let (send, receiver) = socket::admission();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let captured = requests.clone();
-        let mut doc = NativeDocument::new_connected(
+        let mut doc = NativeDocument::new_connected_with_fonts(
             // The product hides the switcher and history (shell-frame.tsx);
             // these tests drive plugin views and routes through them.
             &std::fs::read_to_string(bundle.join("shell.html"))
@@ -190,6 +190,10 @@ impl Window {
                     .push(serde_json::from_str(&message).unwrap());
                 send(message)
             })),
+            &[
+                include_bytes!("../assets/fonts/SpaceGrotesk-Variable.ttf"),
+                include_bytes!("../assets/fonts/SpaceMono-Regular.ttf"),
+            ],
         )
         .unwrap();
         doc.inner_mut().set_viewport(Viewport {
@@ -419,7 +423,7 @@ fn cli_reload_updates_open_importers_and_preserves_live_subscription() {
             .is_some_and(|_| support::text(doc, "live-data") == "[]")
     });
     let subscriptions = window.subscriptions();
-    assert_eq!(subscriptions.len(), 1);
+    assert_eq!(window.subscriptions_to("todo:list"), 1);
     let consumer_assets = window.assets("consumer");
     scratch.build("reload");
     service.cli(&["plugin", "reload", "library"]);
@@ -1009,4 +1013,227 @@ fn hundred_megabyte_ui_asset_streams_in_pages_with_matching_contents() {
         pages >= 100_000_000 / 8192,
         "asset arrived in only {pages} pages"
     );
+}
+
+#[path = "support/capture.rs"]
+mod capture;
+
+// Default: an offline permission error. Opt in to the real provider/captures
+// with TOKAMAK_CHAT_LIVE=1 and TK_CAPTURE_DIR, using the workspace .env.local.
+#[test]
+fn chat_screen_socket_workflow() {
+    use blitz_traits::events::*;
+    use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
+
+    fn key(window: &mut Window, key: Key, meta: bool) {
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
+                key,
+                code: Code::Unidentified,
+                text: None,
+                modifiers: if meta {
+                    Modifiers::META
+                } else {
+                    Modifiers::empty()
+                },
+                location: Location::Standard,
+                is_auto_repeating: false,
+                is_composing: false,
+                state: KeyState::Pressed,
+            }));
+    }
+    fn type_text(window: &mut Window, text: &str) {
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
+    }
+    fn selected(window: &Window) -> String {
+        support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap()
+    }
+
+    let live = std::env::var("TOKAMAK_CHAT_LIVE").as_deref() == Ok("1");
+    let scratch = Scratch::new();
+    let plugin = scratch.0.join("installation/chat/dist");
+    std::fs::create_dir_all(&plugin).unwrap();
+    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        std::fs::copy(
+            root().join("plugins/chat/dist").join(file),
+            plugin.join(file),
+        )
+        .unwrap();
+    }
+    if live {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(root().join(".env.local"), scratch.0.join(".env.local"))
+            .unwrap();
+    } else {
+        let path = plugin.join("manifest.json");
+        let mut manifest: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        manifest["plugin"]["permissions"] = json!([]);
+        std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    }
+    let service = Service::start(&scratch);
+    let mut window = Window::open(&service.directory);
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .inner_mut()
+        .set_viewport(Viewport {
+            window_size: (680, 820),
+            ..Default::default()
+        });
+    window.wait(|doc| support::attr(doc, "chat-screen", "data-thread-id").is_some());
+    let body = window
+        .doc()
+        .inner()
+        .query_selector("body")
+        .unwrap()
+        .unwrap();
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .inner_mut()
+        .mutate()
+        .clear_attribute(
+            body,
+            QualName::new(None, Namespace::from(""), "data-dev-nav".into()),
+        );
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    key(&mut window, Key::Named(NamedKey::Tab), false);
+    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
+    key(&mut window, Key::Named(NamedKey::Escape), false);
+    let first = selected(&window);
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    type_text(&mut window, "Say hello in five words");
+    key(&mut window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| support::text(doc, "chat-messages").contains("Say hello in five words"));
+
+    if live {
+        let mut previous = String::new();
+        let mut grew = false;
+        let deadline = Instant::now() + Duration::from_secs(90);
+        while Instant::now() < deadline {
+            window.mailbox.drain(window.doc.as_mut().unwrap()).unwrap();
+            let doc = window.doc();
+            assert!(
+                doc.inner()
+                    .query_selector("[data-status=error]")
+                    .unwrap()
+                    .is_none(),
+                "{}",
+                support::text(doc, "chat-messages")
+            );
+            let streaming = doc
+                .inner()
+                .query_selector("[data-status=streaming]")
+                .unwrap();
+            if let Some(id) = streaming {
+                let text = doc.inner().get_node(id).unwrap().text_content();
+                if text != previous && !text.trim_start().starts_with('·') {
+                    grew = true;
+                    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+                        capture::save(
+                            window.doc.as_mut().unwrap(),
+                            &Path::new(&directory).join("chat-streaming.png"),
+                        );
+                    }
+                    previous = text;
+                }
+            } else if grew {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(grew, "no assistant text arrived while streaming");
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=streaming]")
+                .unwrap()
+                .is_none()
+        });
+        println!(
+            "Live reply: {}",
+            support::text(window.doc(), "chat-messages")
+        );
+        type_text(
+            &mut window,
+            "Count from one to one hundred, one number per line.",
+        );
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=streaming]")
+                .unwrap()
+                .is_some()
+        });
+        key(&mut window, Key::Named(NamedKey::Tab), false);
+        window.wait(|doc| support::text(doc, "chat-map").contains("RUNNING"));
+        key(&mut window, Key::Named(NamedKey::Escape), false);
+        key(&mut window, Key::Named(NamedKey::Escape), false);
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=cancelled]")
+                .unwrap()
+                .is_some()
+        });
+        assert!(support::text(window.doc(), "chat-messages").contains("Stopped"));
+    } else {
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=error]")
+                .unwrap()
+                .is_some()
+        });
+    }
+
+    type_text(&mut window, "draft to keep");
+    key(&mut window, Key::Named(NamedKey::Tab), false);
+    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
+    type_text(&mut window, "no matching title");
+    assert!(support::text(window.doc(), "chat-map").contains("No threads found"));
+    key(&mut window, Key::Named(NamedKey::Escape), false);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
+    key(&mut window, Key::Named(NamedKey::Tab), false);
+    key(&mut window, Key::Named(NamedKey::Enter), true);
+    window.wait(|doc| {
+        support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != first)
+    });
+    let second = selected(&window);
+    window.wait(|doc| doc.inner().get_element_by_id("chat-map").is_none());
+    key(&mut window, Key::Named(NamedKey::Tab), false);
+    window.wait(|doc| support::text(doc, "chat-map").contains("New thread"));
+    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+        capture::save(
+            window.doc.as_mut().unwrap(),
+            &Path::new(&directory).join("map-open.png"),
+        );
+    }
+    key(&mut window, Key::Named(NamedKey::ArrowDown), false);
+    key(&mut window, Key::Named(NamedKey::Enter), false);
+    assert_eq!(selected(&window), first);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
+    key(&mut window, Key::Named(NamedKey::Tab), false);
+    key(&mut window, Key::Character("1".into()), false);
+    assert_eq!(selected(&window), second);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "");
+    key(&mut window, Key::Named(NamedKey::Tab), false);
+    window.click("data-thread", &first);
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    type_text(&mut window, " + click");
+    let edited = support::editor(window.doc(), "chat-input");
+    assert!(edited.contains("draft to keep") && edited.contains(" + click"));
+    key(&mut window, Key::Character("n".into()), true);
+    window.wait(|doc| {
+        support::attr(doc, "chat-screen", "data-thread-id")
+            .is_some_and(|id| id != first && id != second)
+    });
+    assert_eq!(window.subscriptions_to("threads:list"), 1);
 }

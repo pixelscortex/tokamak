@@ -64,3 +64,32 @@ The application is a shared-runtime plugin shell. `bun run app` builds Todo and
 starts/reuses the independent server with `--plugins <workspace>/plugins`.
 [The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,
 module loading and the separate presentation frame for the current zen screen.
+
+## Chat
+
+The default screen uses the Chat plugin's persisted threads and live message
+queries through the shared SDK client. The normal bundle task builds both Chat
+and Todo. Set `OPENROUTER_API_KEY` in the ignored workspace `.env.local` before
+starting the server; restart an existing server after changing its environment.
+
+Enter sends; Shift+Enter adds a line; Escape stops the current run. Tab opens
+Map and Tab/Escape closes it. Type to filter thread titles, use arrows and Enter
+or 1–9 to open a thread, and use Cmd+Enter in Map or Cmd+N to create one.
+The selected thread stays in memory for the shell's lifetime.
+
+For an isolated manual run, use `TOKAMAK_SERVER_DIR=/tmp/tokamak-chat bun run app`.
+Stop that server with the same variable and `bun run server:stop` after closing
+the desktop window.
+
+The existing native socket harness includes `chat_screen_socket_workflow`. Its
+default mode stays offline and checks the persisted error state. After building
+with `moon run app:bundle`, opt in to the real provider and offscreen GPU captures:
+
+```sh
+TOKAMAK_CHAT_LIVE=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots \
+  cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --nocapture --test-threads=1
+```
+
+This uses the workspace `.env.local` and disposable storage, sends the five-word
+hello prompt, verifies streaming and stopping, and exercises Map search and thread
+switching. Captures use the production Blitz painter with the bundled fonts.
