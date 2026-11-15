@@ -126,10 +126,13 @@ collisions fail rather than routing to the wrong tool. Parts retain real names.
 
 A tool part has `{type:"tool", callId, plugin, toolName, args, status}` with
 `status: "running" | "done" | "error"` and optional `result`, `summary`, `model`,
-`view`, `error`. Result JSON above 8 KB is replaced by `{truncated:true}`.
+`view`, `error`. Arguments above 16 KB of JSON are rejected before storage or
+execution; stored errors stay within 2 KB. Result JSON above 8 KB is replaced by
+`{truncated:true}`.
 Tool updates flush pending text immediately. Calls execute serially, each in
 its provider's transaction; a run stops after at most five model steps.
 Tool errors return to the model and persist on the part. Cancellation marks
-running parts with `status:"error", error:"cancelled"`.
+running parts with `status:"error", error:"cancelled"`; stale recovery settles
+them with `error:"Interrupted"`.
 Earlier turns flatten tools to `[tool toolName: model text]`; the current run
 keeps AI SDK tool messages. Rendering these parts belongs to the desktop.

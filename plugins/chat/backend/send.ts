@@ -1,5 +1,5 @@
 import { interruptStale, STALE_AFTER_MS } from "./recovery";
-import { toolUpdate, type ToolPart } from "./parts";
+import { boundedError, checkToolArgs, jsonBytes, toolUpdate, type ToolPart } from "./parts";
 import { DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
@@ -71,13 +71,10 @@ export const update = mutation({
     }
     if (tool) {
       const patch = { ...tool };
+      if (patch.args !== undefined) checkToolArgs(patch.args);
+      if (patch.error !== undefined) patch.error = boundedError(patch.error);
       if (patch.result !== undefined) {
-        let bytes = 0;
-        for (const character of JSON.stringify(patch.result)) {
-          const point = character.codePointAt(0)!;
-          bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
-        }
-        if (bytes > 8 * 1024) patch.result = { truncated: true };
+        if (jsonBytes(patch.result) > 8 * 1024) patch.result = { truncated: true };
       }
       const existing = parts.find(part => part.type === "tool" && part.callId === patch.callId);
       if (existing) Object.assign(existing, patch);
@@ -90,7 +87,7 @@ export const update = mutation({
     await db.patch(run.messageId, {
       parts,
       status: outcome === "done" ? "complete" : outcome === "error" ? "error" : "streaming",
-      ...(error === undefined ? {} : { error }),
+      ...(error === undefined ? {} : { error: boundedError(error) }),
     });
     await db.patch(run.threadId, { updatedAt: Date.now() });
     if (outcome) await db.patch(runId, { status: outcome, finishedAt: Date.now() });

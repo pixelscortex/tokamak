@@ -1,6 +1,6 @@
 import { functionName, type ActionContext, type FunctionReference, type ToolDescription, type ToolOutput, type JsonValue } from "@tokamak/sdk";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
-import type { ToolPart } from "./parts";
+import { checkToolArgs, type ToolPart } from "./parts";
 
 type ToolsApi = { tools: {
   describe: FunctionReference<"query", Record<string, never>, ToolDescription[]>;
@@ -26,6 +26,7 @@ export async function discoverTools(
         description: description.description, inputSchema: jsonSchema(description.parameters),
         execute: (args, { toolCallId }) => {
           const execute = async () => {
+            checkToolArgs(args);
             if (!await running()) throw new Error("cancelled");
             const part: ToolPart = { type: "tool", callId: toolCallId, ...target, args: args as JsonValue, status: "running" };
             if (await update(part) !== "running") throw new Error("cancelled");
