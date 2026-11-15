@@ -35,8 +35,8 @@ export const send = action({
     };
     const update = async (tool?: ToolPart) => {
       const delta = pending;
-      pending = "";
       const status = await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}) });
+      pending = pending.slice(delta.length);
       flushedAt = Date.now();
       return status;
     };
@@ -87,6 +87,7 @@ export const send = action({
           if (part.type === "tool-call") {
             const ack = acknowledgement(part.toolCallId);
             try {
+              if (pending) await update();
               checkToolArgs(part.input);
               const target = targets.get(part.toolName);
               if (!target) throw new Error("Unknown tool");
