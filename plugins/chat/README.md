@@ -18,6 +18,10 @@ is the single provider boundary. For another host, also change the manifest's
 `net:<host>` grant and bump the plugin version. Request arguments cannot supply
 credentials or select a network grant.
 
+Native UI consumers import `api` from `plugins/chat/client.ts`. It uses the same
+SDK references and wire names without importing the action provider's Web API
+ambient types into the QuickJS UI type graph.
+
 ## UI calls
 
 All functions use one argument object. Wire names and results:

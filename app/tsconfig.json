@@ -5,6 +5,6 @@
     "jsxImportSource": "@tokamak/render",
     "skipLibCheck": true
   },
-  "include": ["src/**/*.tsx", "backend/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "backend/**/*.ts"],
   "exclude": ["backend/dist"]
 }
