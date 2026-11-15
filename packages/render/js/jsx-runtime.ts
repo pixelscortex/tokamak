@@ -74,6 +74,8 @@ export namespace JSX {
   // Only the verified plain text editor is promised, not web password masking,
   // placeholder rendering, form submission, selection or full DOM input APIs.
   export interface InputAttributes extends Attributes {
+    /** Focus this text editor whenever the native window has no focused control. */
+    autofocus?: boolean;
     /** Opt into non-bubbling, non-cancelable `caretchange` reports after layout.
      * Hide the native caret with `caret-color: transparent` when drawing one. */
     "tk-caret"?: true;
@@ -90,6 +92,8 @@ export namespace JSX {
    * content (`@tokamak/ui`'s Textarea grows it). Its initial text is its
    * text content; `value` replaces the editor's text. No placeholder. */
   export interface TextareaAttributes extends Attributes {
+    /** Same idle-focus behavior as InputAttributes. */
+    autofocus?: boolean;
     /** Same opt-in caret reporting as InputAttributes. */
     "tk-caret"?: true;
     onCaretChange?: EventHandler;

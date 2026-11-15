@@ -97,6 +97,37 @@ impl NativeDocument {
     pub fn resolve_layout(&mut self, time: f64) {
         for _ in 0..4 {
             self.html.inner_mut().resolve(time);
+            // Keep an opted-in text editor ready on launch and after a click
+            // on non-focusable content. Never steal focus from another control.
+            let autofocus = {
+                let inner = self.html.inner();
+                inner
+                    .get_focussed_node_id()
+                    .is_none_or(|target| {
+                        inner
+                            .get_node(target)
+                            .and_then(|node| node.element_data())
+                            .is_some_and(|element| matches!(&*element.name.local, "html" | "body"))
+                    })
+                    .then(|| {
+                        inner
+                            .query_selector("[autofocus]:not([disabled])")
+                            .ok()
+                            .flatten()
+                            .filter(|target| {
+                                inner.get_node(*target).is_some_and(|node| {
+                                    node.element_data()
+                                        .is_some_and(|element| element.text_input_data().is_some())
+                                        && node.final_layout().size.width > 0.0
+                                        && node.final_layout().size.height > 0.0
+                                })
+                            })
+                    })
+                    .flatten()
+            };
+            if let Some(target) = autofocus {
+                self.html.inner_mut().set_focus_to(target);
+            }
             // Both reports may update page overlays. Resolve their mutations
             // before painting, including after a native selection-only edit.
             let reports = (|| {

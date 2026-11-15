@@ -10,7 +10,7 @@ import { Map, MapHeader, useMap } from "./chat/map";
 export function Chat(props: { pathname: string; chat: ChatState }) {
   const [drafts, setDrafts] = createSignal<Record<string, string>>({});
   const [mapOpen, setMapOpen] = createSignal(false);
-  const [sending, setSending] = createSignal<string>();
+  const [sending, setSending] = createSignal<Record<string, boolean>>({});
   const map = useMap(props.chat, () => setMapOpen(false));
   let alive = true;
   onCleanup(() => { alive = false; });
@@ -41,23 +41,23 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
 
   async function send(text: string) {
     const threadId = props.chat.threadId();
-    if (!threadId || !text.trim() || props.chat.active() || sending() === threadId) return;
+    if (!threadId || !text.trim() || props.chat.active() || sending()[threadId]) return;
     props.chat.setError(undefined);
-    setSending(threadId);
+    setSending(previous => ({ ...previous, [threadId]: true }));
     setDrafts(previous => ({ ...previous, [threadId]: "" }));
     try {
       await props.chat.client.action(api.chat.send, { threadId, text });
     } catch (cause) {
       if (alive) {
-        setDrafts(previous => ({ ...previous, [threadId]: text }));
+        setDrafts(previous => ({ ...previous, [threadId]: previous[threadId] || text }));
         props.chat.setError(String(cause));
       }
     } finally {
-      if (alive) setSending(undefined);
+      if (alive) setSending(previous => ({ ...previous, [threadId]: false }));
     }
   }
 
-  return <section aria-label={mapOpen() ? "Map" : "Chat"} data-chat-route={props.pathname} onKeyDown={keydown}
+  return <section id="chat-screen" data-thread-id={props.chat.threadId()} aria-label={mapOpen() ? "Map" : "Chat"} data-chat-route={props.pathname} onKeyDown={keydown}
     class="flex min-h-0 min-w-0 flex-1 justify-center px-6 pb-6">
     <div class={`flex min-h-0 w-[560px] max-w-full flex-col gap-4 ${mapOpen() ? "pt-6" : ""}`}>
       <Show when={mapOpen()}><MapHeader /></Show>
@@ -66,7 +66,7 @@ export function Chat(props: { pathname: string; chat: ChatState }) {
       {/* Keep one native editor mounted so Tab preserves focus in both views. */}
       <div class={`flex shrink-0 items-start gap-3 ${mapOpen() ? "order-1 border-b border-hairline py-3" : ""}`}>
         <Show when={!mapOpen()}><Mark user /></Show>
-        <Textarea id="chat-input" aria-label={mapOpen() ? "Search threads" : "Message"} size="md" appearance="inherit" caret="block"
+        <Textarea autofocus id="chat-input" aria-label={mapOpen() ? "Search threads" : "Message"} size="md" appearance="inherit" caret="block"
           class="chat-input min-w-0 flex-1" maxRows={mapOpen() ? 1 : 8}
           placeholder={mapOpen() ? "Search threads" : "Ask anything, or tell Tokamak what to do"}
           value={mapOpen() ? map.query() : draft()}

@@ -146,7 +146,7 @@ const adapter = createRenderer<NativeNode>({
     }
     // ARIA and data booleans are strings. Only HTML boolean attributes use
     // presence/absence; aria-disabled is deliberately not native disabled.
-    const boolean = name === "disabled" || name === "readonly" || name === "hidden";
+    const boolean = name === "disabled" || name === "readonly" || name === "hidden" || name === "autofocus";
     if (value != null && !["string", "number", "boolean"].includes(typeof value)) {
       throw new TypeError(`${name} must be a scalar attribute`);
     }

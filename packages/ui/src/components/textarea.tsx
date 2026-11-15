@@ -53,6 +53,8 @@ export interface TextareaProps {
   /** A steady 8 px block at the text end, a 2 px bar inside text. The host
    * supplies the real caret position after layout; native selection is kept. */
   caret?: "block";
+  /** Keep this editor ready when the native window has no focused control. */
+  autofocus?: boolean;
   disabled?: boolean;
   readonly?: boolean;
   /** Id of the `<textarea>` itself. */
@@ -113,6 +115,7 @@ export function Textarea(props: TextareaProps): JSX.Element {
           props.ref?.(el);
         }}
         rows={1}
+        autofocus={props.autofocus}
         aria-label={props["aria-label"]}
         aria-disabled={props.disabled ? true : undefined}
         disabled={props.disabled}
