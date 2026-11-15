@@ -1,4 +1,4 @@
-import { interruptTools } from "./parts";
+import { interruptResponse } from "./run-messages";
 import { interruptStale } from "./recovery";
 import { v } from "@tokamak/sdk";
 import { OWNER, mutation, query } from "./_functions";
@@ -24,11 +24,7 @@ export const cancel = mutation({
     const run = await db.get(runId);
     if (!run || run.status !== "running") return null;
 
-    const message = await db.get(run.messageId);
-    if (message) await db.patch(run.messageId, {
-      status: "cancelled",
-      parts: interruptTools(message.parts, "cancelled"),
-    });
+    await interruptResponse(db, run, "cancelled", "cancelled");
     await db.patch(run.threadId, { updatedAt: Date.now() });
     return db.patch(runId, { status: "cancelled", cancelledBy: OWNER, finishedAt: Date.now() });
   },

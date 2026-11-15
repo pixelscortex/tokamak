@@ -1,5 +1,6 @@
 import { interruptStale, STALE_AFTER_MS } from "./recovery";
-import { boundedError, checkToolArgs, jsonBytes, toolUpdate, type ToolPart } from "./parts";
+import { appendText, boundedError, toolUpdate } from "./parts";
+import { applyToolUpdate } from "./tool-parts";
 import { DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
@@ -64,35 +65,9 @@ export const update = mutation({
     const message = await db.get(run.messageId);
     if (!message) throw new Error("Response message no longer exists");
     const parts = message.parts;
-    if (delta) {
-      const last = parts.at(-1);
-      if (last?.type === "text") last.text += delta;
-      else parts.push({ type: "text", text: delta });
-    }
-    if (tool) {
-      const patch = { ...tool };
-      if (patch.args !== undefined) checkToolArgs(patch.args);
-      if (patch.error !== undefined) patch.error = boundedError(patch.error);
-      if (patch.result !== undefined) {
-        if (jsonBytes(patch.result) > 8 * 1024) patch.result = { truncated: true };
-      }
-      const existing = parts.find(part => part.type === "tool" && part.callId === patch.callId);
-      if (existing?.type === "tool") {
-        if (patch.status === "running") throw new Error(`Duplicate tool callId: ${patch.callId}`);
-        if (existing.status !== "running") throw new Error("Tool is already settled");
-        if ((patch.plugin !== undefined && patch.plugin !== existing.plugin) ||
-            (patch.toolName !== undefined && patch.toolName !== existing.toolName))
-          throw new Error("Tool identity is immutable");
-        const { callId: _callId, plugin: _plugin, toolName: _toolName, args: _args, ...completion } = patch;
-        Object.assign(existing, completion);
-      }
-      else {
-        if (patch.status !== "running") throw new Error("New tool part must be running");
-        if (patch.plugin === undefined || patch.toolName === undefined || patch.args === undefined)
-          throw new Error("New tool part requires plugin, toolName and args");
-        parts.push({ type: "tool", ...patch } as ToolPart);
-      }
-    }
+    if (delta) appendText(parts, delta);
+    if (tool) applyToolUpdate(parts, tool);
+
     await db.patch(run.messageId, {
       parts,
       status: outcome === "done" ? "complete" : outcome === "error" ? "error" : "streaming",

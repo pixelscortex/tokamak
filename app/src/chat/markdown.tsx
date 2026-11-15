@@ -29,14 +29,20 @@ function renderToken(token: Token, depth: number) {
     case "def": return null;
     case "paragraph": return <p><Tokens tokens={token.tokens} depth={depth + 1} /></p>;
     case "heading": return <h3 aria-level={token.depth}><Tokens tokens={token.tokens} depth={depth + 1} /></h3>;
-    case "strong": return <strong><Tokens tokens={token.tokens} depth={depth + 1} /></strong>;
-    case "em": return <em><Tokens tokens={token.tokens} depth={depth + 1} /></em>;
-    case "codespan": return <code>{token.text}</code>;
     case "blockquote": return <blockquote><Tokens tokens={token.tokens} depth={depth + 1} /></blockquote>;
     case "list": {
       const items = () => <Index each={token.items}>{item => <li><Tokens tokens={item().tokens} depth={depth + 1} /></li>}</Index>;
       return token.ordered ? <ol start={token.start || 1}>{items()}</ol> : <ul>{items()}</ul>;
     }
+    default: return renderInline(token, depth);
+  }
+}
+
+function renderInline(token: Token, depth: number) {
+  switch (token.type) {
+    case "strong": return <strong><Tokens tokens={token.tokens} depth={depth + 1} /></strong>;
+    case "em": return <em><Tokens tokens={token.tokens} depth={depth + 1} /></em>;
+    case "codespan": return <code>{token.text}</code>;
     case "link": return <span class="underline"><Tokens tokens={token.tokens} depth={depth + 1} /></span>;
     case "br": return <br />;
     case "hr": return <hr />;

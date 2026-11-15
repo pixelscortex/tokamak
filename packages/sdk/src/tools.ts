@@ -26,14 +26,20 @@ export function toJsonSchema(description: ValidatorDescription): JsonSchema {
     case "literal": return { const: description.value };
     case "array": return { type: "array", items: toJsonSchema(description.item) };
     case "union": return { anyOf: description.members.map(toJsonSchema) };
-    case "object": return {
-      type: "object",
-      properties: Object.fromEntries(Object.entries(description.fields).map(([key, value]) => [key, toJsonSchema(value)])),
-      required: Object.entries(description.fields).filter(([, value]) => value.kind !== "optional").map(([key]) => key),
-      additionalProperties: false,
-    };
+    case "object": return objectSchema(description.fields);
     default: return { type: description.kind };
   }
+}
+
+function objectSchema(fields: Record<string, ValidatorDescription>): JsonSchema {
+  const entries = Object.entries(fields);
+
+  return {
+    type: "object",
+    properties: Object.fromEntries(entries.map(([key, value]) => [key, toJsonSchema(value)])),
+    required: entries.filter(([, value]) => value.kind !== "optional").map(([key]) => key),
+    additionalProperties: false,
+  };
 }
 
 export function defineTools<M extends DataModel, T extends { [K in keyof T]: Tool<Fields> }>(
@@ -46,15 +52,18 @@ export function defineTools<M extends DataModel, T extends { [K in keyof T]: Too
       ...(definition.view === undefined ? {} : { view: definition.view }),
     })),
   });
+
   const invoke = builders.mutation({
     args: { name: v.string(), args: v.any(), threadId: v.string() },
     handler: async (ctx, { name, args }): Promise<ToolOutput> => {
       if (!Object.hasOwn(tools, name)) throw new Error(`Unknown tool: ${name}`);
+
       const definition = tools[name as keyof T];
       validate(v.object(definition.args).description, args);
       const out = await definition.handler(ctx as unknown as MutationContext<DataModel>, args as ObjectValue<Fields>);
       return { ...out, ...(definition.view === undefined ? {} : { view: definition.view }), model: out.model ?? JSON.stringify(out.result) };
     },
   });
+
   return { describe, invoke };
 }

@@ -1,9 +1,8 @@
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show } from "solid-js";
 import { Textarea } from "@tokamak/ui/components";
-import { api } from "./use-chat";
 import { Icon } from "@tokamak/ui";
-import type { NativeEvent } from "@tokamak/render";
-import type { ChatState, Thread } from "./use-chat";
+import type { ChatState } from "./use-chat";
+import type { MapState } from "./use-map";
 
 function relativeTime(time: number) {
   const minutes = Math.max(0, Math.floor((Date.now() - time) / 60000));
@@ -12,102 +11,6 @@ function relativeTime(time: number) {
   if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
   return `${Math.floor(minutes / 1440)}d`;
 }
-
-export function useMap(chat: ChatState, close: () => void) {
-  const [query, setQuery] = createSignal("");
-  const [editing, setEditing] = createSignal<"rename" | "delete">();
-  const [target, setTarget] = createSignal<string>();
-  const [title, setTitle] = createSignal("");
-  const [busy, setBusy] = createSignal(false);
-  const [selected, setSelected] = createSignal<string>();
-  const rows = createMemo(() => {
-    const matches = (chat.threads.data() ?? []).filter(thread => thread.title.toLowerCase().includes(query().trim().toLowerCase()));
-    const recent = matches.sort((a, b) => b.updatedAt - a.updatedAt);
-    return [...recent.filter(thread => chat.runs()[thread._id]), ...recent.filter(thread => !chat.runs()[thread._id])];
-  });
-  const index = () => Math.max(0, rows().findIndex(thread => thread._id === selected()));
-
-  createEffect(() => {
-    if (editing() && !rows().some(thread => thread._id === target())) setEditing(undefined);
-  });
-
-  function open(thread: Thread | undefined) {
-    if (!thread) return;
-    chat.open(thread._id);
-    close();
-  }
-
-  async function save() {
-    const current = rows().find(thread => thread._id === target());
-    if (!current) {
-      setEditing(undefined);
-      return;
-    }
-    if (!editing() || busy() || (editing() === "rename" && !title().trim())) return;
-    setBusy(true);
-    try {
-      if (editing() === "rename") await chat.client.mutation(api.threads.rename, { threadId: current._id, title: title() });
-      else await chat.client.mutation(api.threads.remove, { threadId: current._id });
-      setEditing(undefined);
-    } catch (cause) {
-      chat.setError(String(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function keydown(event: NativeEvent) {
-    const key = event.key ?? "";
-    if (editing()) {
-      if (key === "Escape" || key === "Enter" || key === "Tab") {
-        event.preventDefault();
-        if (event.repeat || busy()) return;
-        if (key === "Enter") void save();
-        else setEditing(undefined);
-      }
-      return;
-    }
-
-    const current = rows()[index()];
-    const rename = !query() && key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey && !event.altKey;
-    const remove = event.metaKey && key === "Backspace";
-
-    if (current && (rename || remove)) {
-      event.preventDefault();
-      if (event.repeat) return;
-      setSelected(current._id);
-      setTarget(current._id);
-      setTitle(current.title);
-      setEditing(rename ? "rename" : "delete");
-    } else if (key === "ArrowDown" || key === "ArrowUp") {
-      event.preventDefault();
-      const list = rows();
-      setSelected(list[(index() + (key === "ArrowDown" ? 1 : -1) + list.length) % list.length]?._id);
-    } else if (key === "Enter") {
-      event.preventDefault();
-      if (!event.repeat) open(rows()[index()]);
-    } else if (!query() && /^[1-9]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault();
-      if (!event.repeat) open(rows()[Number(key) - 1]);
-    }
-  }
-
-  function search(text: string) {
-    if (editing()) return;
-    setQuery(text);
-    setSelected(undefined);
-  }
-
-  function reset() {
-    setEditing(undefined);
-    setQuery("");
-    setSelected(chat.threadId());
-  }
-
-  return { editing, title, setTitle, query, search, rows, index, open, keydown, reset };
-}
-
-export type MapState = ReturnType<typeof useMap>;
 
 export function MapHeader() {
   return <header class="order-0 flex shrink-0 justify-between gap-4 border-b border-hairline pb-4 font-label text-[10px] leading-4 tracking-[0.08em] text-text-3">

@@ -3,8 +3,6 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, stepCountIs, type ToolSet, type ModelMessage } from "ai";
 import type { ActionContext } from "@tokamak/sdk";
 
-export { DEFAULT_MODEL } from "../models";
-
 // The provider boundary: another backend can later supply the same text stream.
 export async function modelStream(ctx: ActionContext, messages: ModelMessage[], signal: AbortSignal, model: string, tools: ToolSet) {
   const apiKey = await ctx.env("OPENROUTER_API_KEY");

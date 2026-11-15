@@ -1,14 +1,14 @@
-import { afterDelay } from "@tokamak/render";
-import { createEffect, createMemo, createSignal, getOwner, onCleanup, runWithOwner, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
 import { CHAT_MODELS, DEFAULT_MODEL } from "../../../plugins/chat/models";
 import { api } from "../../../plugins/chat/client";
 
+import { useRunRecovery } from "./use-run-recovery";
+
 export { api };
 export type Thread = ResultOf<typeof api.threads.list>[number];
 export type Message = ResultOf<typeof api.messages.list>[number];
-export type Run = ResultOf<typeof api.runs.running>[number];
 export type ChatState = ReturnType<typeof useChat>;
 
 export function useChat(client: TokamakClient) {
@@ -54,58 +54,7 @@ export function useChat(client: TokamakClient) {
     alive = false;
   });
 
-  const owner = getOwner();
-  let sweep: { stop: () => void; schedule: () => void } | undefined;
-  let schedulingErrorLogged = false;
-  onCleanup(() => sweep?.stop());
-
-  createEffect(() => {
-    if (!running.data()?.length) {
-      sweep?.stop();
-      sweep = undefined;
-      return;
-    }
-    if (sweep) {
-      sweep.schedule();
-      return;
-    }
-    let stopped = false;
-    let recovering = false;
-    let cancelDelay: (() => void) | undefined;
-
-    function schedule() {
-      if (stopped || recovering || cancelDelay) return;
-      try {
-        cancelDelay = runWithOwner(owner, () => afterDelay(30_000, () => {
-          cancelDelay = undefined;
-          void recover();
-        }));
-      } catch (cause) {
-        if (!schedulingErrorLogged) {
-          const message = `Could not schedule stale-run recovery: ${String(cause)}`;
-          const logger = (globalThis as { console?: { error: (message: string) => void } }).console;
-          if (logger) logger.error(message);
-          else setError(message);
-          schedulingErrorLogged = true;
-        }
-      }
-    }
-
-    async function recover() {
-      recovering = true;
-      try {
-        await client.mutation(api.runs.recover, {});
-      } catch (cause) {
-        if (!stopped) setError(String(cause));
-      } finally {
-        recovering = false;
-        schedule();
-      }
-    }
-
-    sweep = { stop: () => { stopped = true; cancelDelay?.(); }, schedule };
-    void recover();
-  });
+  useRunRecovery(client, () => Boolean(running.data()?.length), setError);
 
   const thread = createMemo(() => threads.data()?.find(item => item._id === threadId()));
   const active = () => runs()[threadId() ?? ""] ?? null;
