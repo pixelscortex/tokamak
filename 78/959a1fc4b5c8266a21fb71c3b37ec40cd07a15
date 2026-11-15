@@ -1,0 +1,99 @@
+packages/render/tests/surface/mod.rs
+  s_bef2713774a71d::t_e5ce1acffd05c4 665
+  s_520aa74b63c14d::t_5c9efc549a4eac 29-33,78,82-92,104-105,147,172-173,230
+  s_520aa74b63c14d::t_db66f3f60a0195 34-37,41-47,95,101,166,168,184,189,197,213,245,261,691,702,706,850,860
+  s_32e91805417f99::t_3a4e8cbdaa7f0d 120,675,709,711,725,727,735,737,757,759,769,771,796,798,815,817,830,832,868-888,890,897
+  s_bef2713774a71d::t_053d12a9bf6156 550,563
+  s_bef2713774a71d::t_29e07324901617 538
+  s_bef2713774a71d::t_4d8d07c50e6385 520,526
+  s_32e91805417f99::t_3f722fba047d92 68-77,79,676-690,692-701,703-705,707-708,710,712-724,726,728-734,736,738-756,758,760-768,770,772-795,797,799-814,816,818-829,831,833-849,851-859,861-867,889,891-896
+packages/ui/src/components/surface.tsx
+  s_e3d99f9a782059::t_6ba3188cead05e 54
+packages/render/src/shell.rs
+  s_520aa74b63c14d::t_74507ecf102601 126-128,172
+  s_32e91805417f99::t_bdfaf90ee66d88 124-125
+packages/render/src/surface/mod.rs
+  s_520aa74b63c14d::t_7e1c6f457a82fd 7
+  s_520aa74b63c14d::t_db66f3f60a0195 9-10,58,69-70,73-82,85-86,89-96,98-122,124,126-135,137-148,152-157,162-284
+  s_32e91805417f99::t_c44a6b893a8608 285-304
+packages/render/src/document.rs
+  s_520aa74b63c14d::t_d13692818011ab 90
+  s_18bc7f3b1654bd::t_6afb2ff1fc601b 89
+packages/render/src/surface/outline.rs
+  s_520aa74b63c14d::t_75cd2301e01922 185-187
+  s_520aa74b63c14d::t_db66f3f60a0195 416
+  s_bef2713774a71d::t_962e378f0bfe67 4
+  s_32e91805417f99::t_09d25615155a3c 135,146,174-177
+packages/render/src/wire.rs
+  s_520aa74b63c14d::t_32e4aaacb6deb2 156
+  s_18bc7f3b1654bd::t_a543b7e29ea552 155
+  s_e3d99f9a782059::t_64eec4eee91375 168-170
+  s_32e91805417f99::t_fe69dbf3809dc2 197-199
+packages/render/Cargo.toml
+  s_32e91805417f99::t_c510c99fbdef15 14
+lab/tests/fused_surface.rs
+  s_e3d99f9a782059::t_b62ec9e50eaacf 268
+  s_bef2713774a71d::t_078780200cc3c8 666,713
+  s_e3d99f9a782059::t_16bb80682e00f9 37,140-143
+  s_ae26a73a5cbf75::t_4fb796249fd17e 126
+  s_32e91805417f99::t_3a4e8cbdaa7f0d 38,80-109,205,690-697
+  s_32e91805417f99::t_08d2235ecf5727 29-36,451
+packages/render/src/lib.rs
+  s_32e91805417f99::t_8a7a0a672ea17e 20,33-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78959a1fc4b5c8266a21fb71c3b37ec40cd07a15",
+  "prompts": {},
+  "sessions": {
+    "s_18bc7f3b1654bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1db5f-9a43-70f0-8183-827215422bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_32e91805417f99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de38-a74a-7550-9ba9-7b99f54d1679",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    },
+    "s_520aa74b63c14d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dbd3-533f-7320-bd95-8655d9a8c388",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_ae26a73a5cbf75": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8e3825f6-2ae2-4024-a106-a4b32f432d0c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_bef2713774a71d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1dc13-9c90-7272-9e09-e6f8216ba342",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_e3d99f9a782059": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebb3bacb-ae1e-4116-8778-5886c1ae82bc",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
