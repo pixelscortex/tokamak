@@ -1,0 +1,32 @@
+// Every valid indexed query shape must compile, and results keep document types.
+import { createFunctions, defineSchema, defineTable, v, type Doc, type ModelFromSchema } from '@tokamak/sdk';
+const schema = defineSchema({
+  todos: defineTable({ owner: v.string(), text: v.string(), done: v.boolean(), created: v.number() })
+    .index('by_owner_created', ['owner', 'created'])
+    .unique('by_owner_text', ['owner', 'text']),
+  notes: defineTable({ topic: v.string() }).index('by_topic', ['topic']),
+});
+type Todo = Doc<ModelFromSchema<typeof schema>, 'todos'>;
+const { query } = createFunctions(schema);
+export const recent = query({
+  args: { owner: v.string(), since: v.number() },
+  handler: async (ctx, { owner, since }) => {
+    const rows: Todo[] = await ctx.db.query('todos')
+      .withIndex('by_owner_created', q => q.eq('owner', owner).gt('created', since))
+      .order('desc').take(20);
+    const both: Todo[] = await ctx.db.query('todos')
+      .withIndex('by_owner_created', q => q.eq('owner', owner).gte('created', 1).lt('created', 9)).collect();
+    const upperFirst: Todo | null = await ctx.db.query('todos')
+      .withIndex('by_owner_created', q => q.eq('owner', owner).lte('created', 9).gt('created', 1)).first();
+    const leading = await ctx.db.query('todos').withIndex('by_owner_created', q => q.gte('owner', 'a').lt('owner', 'b')).collect();
+    const full = await ctx.db.query('todos').withIndex('by_owner_created', q => q.eq('owner', owner).eq('created', since)).collect();
+    const unique = await ctx.db.query('todos').withIndex('by_owner_text', q => q.eq('owner', owner).eq('text', 'x')).first();
+    const scan = await ctx.db.query('todos').withIndex('by_owner_created').collect();
+    const ordered = await ctx.db.query('todos').order('desc').withIndex('by_owner_created', q => q.eq('owner', owner)).collect();
+    const notes = await ctx.db.query('notes').withIndex('by_topic', q => q.eq('topic', 't')).collect();
+    const unindexed: Todo[] = await ctx.db.query('todos').where('owner', '=', owner).collect();
+    const created: number | undefined = full[0]?.created;
+    const topic: string | undefined = notes[0]?.topic;
+    return { rows, both, upperFirst, leading, full, unique, scan, ordered, unindexed, created, topic };
+  },
+});

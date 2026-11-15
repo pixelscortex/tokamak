@@ -108,6 +108,9 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           ], { stdio: "inherit" });
           if (bundled.error) throw bundled.error;
           if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
+          // The bundle's describe() carries the schema/index registry evaluated
+          // in QuickJS. Keep that source authoritative instead of importing user
+          // schema modules into the build host or duplicating them in manifests.
           const bundle = resolve(root, "backend/dist/bundle.js");
           const source = await readFile(bundle, "utf8");
           const map = JSON.parse(await readFile(`${bundle}.map`, "utf8"));

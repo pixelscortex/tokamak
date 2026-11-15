@@ -12,9 +12,20 @@ export interface EqualityClause {
   value: JsonValue;
 }
 
+export interface RangeClause extends EqualityClause {
+  operator: "gt" | "gte" | "lt" | "lte";
+}
+
+export interface IndexQuery {
+  name: string;
+  eq: EqualityClause[];
+  range: RangeClause[];
+}
+
 export interface QueryRequest {
   table: string;
   where: EqualityClause[];
+  index?: IndexQuery;
   order: "asc" | "desc";
   limit: number | null;
 }
@@ -23,7 +34,9 @@ export interface QueryRequest {
  * Sole source for names and payload/result shapes used by the SDK and host.
  * where clauses are ANDed, with JSON structural equality (object key order is
  * irrelevant). Fields are top-level names, not SurrealQL or dotted paths.
- * Sort by (_creationTime, _id), both in the requested direction. No indexes.
+ * Unindexed queries sort by (_creationTime, _id). Indexed queries sort by index
+ * fields and ID; eq follows the leading fields, range bounds the next field.
+ * Indexed requests require an empty where array.
  * Missing get -> null; missing patch/replace -> error; missing delete -> null.
  * Patch merges top-level keys; replace preserves _id and _creationTime.
  * Writes cannot supply system fields. No undefined/delete-field sentinel.

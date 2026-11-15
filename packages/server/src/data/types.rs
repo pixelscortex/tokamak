@@ -1,16 +1,18 @@
 //! Boundary types keep data separate from SQL syntax and storage metadata.
 //! The POC intentionally accepts a narrow, SDK-compatible ID spelling instead
-//! of parsing arbitrary SurrealQL record expressions. Values remain native
-//! SurrealDB values; the feature service's host adapter owns JSON conversion.
+//! of parsing record expressions. JSON-like public values cross the internal
+//! storage boundary explicitly; no parser or execution engine is involved.
 
 use std::{fmt, str::FromStr};
-use surrealdb::types::{Number, Object, QueryError, RecordId, RecordIdKey, Value};
+use surrealdb_idx::val::{RecordId, Value as StoredValue};
+use surrealdb_types::{Number, Object, Value};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    Database(surrealdb::Error),
+    Database(anyhow::Error),
+    UniqueViolation { index: String },
     Startup(String),
     Invalid(&'static str),
     ReadOnly,
@@ -25,12 +27,22 @@ impl Error {
     /// No message matching and no automatic retries of arbitrary commit errors.
     pub fn is_retryable_conflict(&self) -> bool {
         matches!(self, Self::Database(error)
-            if error.query_details() == Some(&QueryError::TransactionConflict))
+            if matches!(error.downcast_ref::<surrealdb_kvs::err::Error>(),
+                Some(surrealdb_kvs::err::Error::TransactionConflict(_))))
     }
 }
 
-impl From<surrealdb::Error> for Error {
-    fn from(error: surrealdb::Error) -> Self {
+impl From<anyhow::Error> for Error {
+    fn from(error: anyhow::Error) -> Self {
+        if let Some(
+            surrealdb_idx::Error::IndexExists { index, .. }
+            | surrealdb_idx::Error::IndexExistsHidden { index },
+        ) = error.downcast_ref()
+        {
+            return Self::UniqueViolation {
+                index: index.clone(),
+            };
+        }
         Self::Database(error)
     }
 }
@@ -39,6 +51,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(error) => error.fmt(f),
+            Self::UniqueViolation { index } => {
+                write!(f, "unique index `{index}` already contains that value")
+            }
             Self::Startup(message) => f.write_str(message),
             Self::Invalid(message) => f.write_str(message),
             Self::ReadOnly => f.write_str("read-only transactions cannot write"),
@@ -58,13 +73,13 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Database(error) => Some(error),
+            Self::Database(error) => Some(error.as_ref()),
             _ => None,
         }
     }
 }
 
-/// ASCII table names match the SDK, but are still bound, never SQL fragments.
+/// ASCII table names form the stable application identifier format.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Table(String);
 
@@ -113,14 +128,10 @@ impl Id {
     }
 
     pub(crate) fn record(&self) -> RecordId {
-        RecordId::new(self.table.as_str(), self.key.as_str())
-    }
-
-    fn from_record(id: RecordId) -> Result<Self> {
-        let RecordIdKey::String(key) = id.key else {
-            return Err(Error::Invalid("stored record has a non-string key"));
-        };
-        Self::new(Table::new(id.table.as_str())?, key)
+        RecordId {
+            table: self.table.as_str().into(),
+            key: self.key.clone().into(),
+        }
     }
 }
 
@@ -158,7 +169,8 @@ pub struct Document {
 }
 
 impl Document {
-    pub(crate) fn decode(value: Value) -> Result<Self> {
+    pub(crate) fn decode(value: StoredValue) -> Result<Self> {
+        let value = Value::try_from(value)?;
         let Value::Object(mut fields) = value else {
             return Err(Error::Invalid("stored document is not an object"));
         };
@@ -176,7 +188,13 @@ impl Document {
             return Err(Error::Invalid("stored document has no data object"));
         };
         Ok(Self {
-            id: Id::from_record(id)?,
+            id: Id::new(
+                Table::new(id.table.as_str())?,
+                match id.key {
+                    surrealdb_types::RecordIdKey::String(key) => key,
+                    _ => return Err(Error::Invalid("stored record has a non-string key")),
+                },
+            )?,
             creation_time,
             fields,
         })
@@ -208,4 +226,78 @@ pub(crate) fn check_field(field: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// Normalize before comparing or indexing, so NONE-only edits remain no-ops.
+/// The depth bound also prevents untrusted host values exhausting the Rust stack.
+pub(crate) fn normalize(value: Value, depth: usize) -> Result<Value> {
+    // Leave headroom for the private record envelope inside the storage
+    // value layer's 256-level ceiling, as the old bound request did.
+    if depth > 253 {
+        return Err(Error::Database(anyhow::anyhow!(
+            "document nesting exceeds 253 levels"
+        )));
+    }
+    Ok(match value {
+        Value::Object(object) => {
+            let mut normalized = Object::new();
+            for (key, value) in object {
+                if value != Value::None {
+                    normalized.insert(key, normalize(value, depth + 1)?);
+                }
+            }
+            Value::Object(normalized)
+        }
+        Value::Array(array) => Value::Array(
+            array
+                .into_iter()
+                .map(|value| normalize(value, depth + 1))
+                .collect::<Result<Vec<_>>>()?
+                .into(),
+        ),
+        Value::None | Value::Null | Value::Bool(_) | Value::String(_) => value,
+        Value::Number(Number::Int(_) | Number::Decimal(_)) => value,
+        Value::Number(Number::Float(number)) if number.is_finite() => value,
+        // The public number type also carries narrow variants that Rust callers
+        // can build by hand (the JS bridge and primitive conversions never do).
+        // Widen them to the two canonical kinds, so the same finite number is
+        // accepted, stored, indexed and compared identically whatever its
+        // in-memory width. Widening is exact for every case below.
+        Value::Number(Number::I8(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::U8(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::I16(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::U16(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::I32(number)) => Value::Number(Number::Int(number.into())),
+        Value::Number(Number::U32(number)) => Value::Number(Number::Int(number.into())),
+        // Above i64::MAX there is no exact canonical integer; reject rather
+        // than round, as JSON consumers could not represent it either.
+        Value::Number(Number::U64(number)) if i64::try_from(number).is_ok() => {
+            Value::Number(Number::Int(number as i64))
+        }
+        Value::Number(Number::F32(number)) if number.is_finite() => {
+            Value::Number(Number::Float(number.into()))
+        }
+        Value::Number(Number::F16(number)) if number.is_finite() => {
+            Value::Number(Number::Float(number.into()))
+        }
+        // Everything else (non-finite floats, arbitrary-precision decimals,
+        // record ids, regexes, closures, ...) is outside the JSON-like contract.
+        _ => return Err(Error::Invalid("document values must be JSON-like")),
+    })
+}
+
+impl Document {
+    pub(crate) fn stored(&self) -> StoredValue {
+        let mut envelope = Object::new();
+        envelope.insert(
+            "id",
+            Value::RecordId(surrealdb_types::RecordId::new(
+                self.id.table().as_str(),
+                self.id.key(),
+            )),
+        );
+        envelope.insert("_creationTime", self.creation_time);
+        envelope.insert("data", self.fields.clone());
+        StoredValue::from(Value::Object(envelope))
+    }
 }

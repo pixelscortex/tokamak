@@ -67,7 +67,7 @@ export type FunctionBuilder<K extends FunctionKind, M extends DataModel> = <
   ) => R;
 }) => FunctionDefinition<K, ObjectValue<F>, WireResult<R>>;
 
-function builder<K extends FunctionKind, M extends DataModel>(kind: K): FunctionBuilder<K, M> {
+function builder<K extends FunctionKind, M extends DataModel>(kind: K, schema?: SchemaDefinition): FunctionBuilder<K, M> {
   return (definition) => {
     const description = v.object(definition.args ?? {}).description;
     const handler = definition.handler;
@@ -93,7 +93,7 @@ function builder<K extends FunctionKind, M extends DataModel>(kind: K): Function
           runMutation: (reference: { [functionName]: string }, args: unknown) => run("mutation", reference, args),
           providers,
         } : {
-          db: kind === "query" ? createDatabase<M>(host, false) : createDatabase<M>(host, true),
+          db: kind === "query" ? createDatabase<M>(host, false, schema) : createDatabase<M>(host, true, schema),
           use: <T>(api: T) => bindCalls(api, host),
           providers,
         });
@@ -133,13 +133,13 @@ export const query = builder<"query", Record<string, JsonObject>>("query");
 export const mutation = builder<"mutation", Record<string, JsonObject>>("mutation");
 export const action = builder<"action", Record<string, JsonObject>>("action");
 export function createFunctions<S extends SchemaDefinition>(
-  _schema: S,
+  schema: S,
 ): {
   query: FunctionBuilder<"query", ModelFromSchema<S>>;
   mutation: FunctionBuilder<"mutation", ModelFromSchema<S>>;
   action: FunctionBuilder<"action", ModelFromSchema<S>>;
 } {
-  return { query: builder("query"), mutation: builder("mutation"), action: builder<"action", ModelFromSchema<S>>("action") };
+  return { query: builder("query", schema), mutation: builder("mutation", schema), action: builder<"action", ModelFromSchema<S>>("action", schema) };
 }
 
 export type FunctionRegistry = Readonly<Record<string, FunctionDefinition>>;
