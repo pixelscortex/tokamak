@@ -18,7 +18,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     const threadId = await client.mutation(api.threads.create, {});
     let first = "";
     const stop = client.subscribe(api.messages.list, { threadId }, event => {
-      if ("value" in event && !first) first = event.value.find(row => row.role === "assistant")?.parts[0]?.text ?? "";
+      if ("value" in event && !first) first = event.value.find(row => row.role === "assistant")?.parts.find(part => part.type === "text")?.text ?? "";
     });
     try {
       const result = await client.action(api.chat.send, { threadId, text: "Reply with a short greeting." });
@@ -33,6 +33,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
   let disconnected = false;
   let requested = false;
   let history: unknown;
+  const toolStates: string[] = [];
+  let requests = 0;
   const growing: string[] = [];
   const mock = createServer(async (req, res) => {
     requested = true;
@@ -45,6 +47,23 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       if (holdHeaders) await until(() => releaseHeaders, 750);
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end(completionChunk("Recovered") + completionEnd());
+      return;
+    }
+    if (scenario === "chat-tools" || scenario === "chat-tools-error") {
+      const request = JSON.parse(body);
+      assert.deepEqual(request.tools.map((tool: { function: { name: string } }) => tool.function.name), ["b__fixture_create"]);
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      if (requests++ === 0) {
+        res.end(`data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call-1", type: "function",
+            function: { name: "b__fixture_create", arguments: JSON.stringify({ title: scenario === "chat-tools-error" ? "fail" : "milk" }) } }] }, finish_reason: null }] })}\n\n` +
+          `data: ${JSON.stringify({ id: "tool", object: "chat.completion.chunk", created: 1, model: "mock",
+            choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`);
+      } else {
+        assert.ok(request.messages.some((message: { role: string; content: string }) => message.role === "tool" &&
+          message.content.includes(scenario === "chat-tools-error" ? "fixture tool failed" : "Fixture created")));
+        res.end(completionChunk("Added it.") + completionEnd());
+      }
       return;
     }
     if (scenario === "chat-error") {
@@ -131,7 +150,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     const stop = client.subscribe(api.messages.list, { threadId }, event => {
       if ("error" in event) { subscriptionError = event.error; return; }
       const message = event.value.find(row => row.role === "assistant");
-      if (message) growing.push(message.parts.map(part => part.text).join(""));
+      if (message) for (const part of message.parts) if (part.type === "tool") toolStates.push(part.status);
+      if (message) growing.push(message.parts.map(part => part.type === "text" ? part.text : "").join(""));
     });
     try {
       const pending = client.action(api.chat.send, input);
@@ -152,9 +172,22 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
         if (scenario === "chat-error" || scenario === "chat-grant") {
           assert.equal(response.status, "error");
           assert.match(response.error!, scenario === "chat-grant" ? /permission denied: requires env:OPENROUTER_API_KEY/ : /temporarily unavailable|503/);
+        } else if (scenario.startsWith("chat-tools")) {
+          assert.equal(response.status, "complete");
+          assert.deepEqual(response.parts.map(part => part.type), ["tool", "text"]);
+          const tool = response.parts[0]!;
+          assert.equal(tool.type, "tool");
+          if (tool.type !== "tool") throw new Error("Expected tool");
+          assert.equal(tool.plugin, "b");
+          assert.equal(tool.toolName, "fixture.create");
+          assert.equal(tool.status, scenario === "chat-tools-error" ? "error" : "done");
+          if (scenario === "chat-tools-error") assert.match(tool.error!, /fixture tool failed/);
+          assert.ok(toolStates.includes("running"), JSON.stringify(toolStates));
+          await until(() => toolStates.includes(tool.status));
+          assert.equal(response.parts.find(part => part.type === "text")!.text, "Added it.");
         } else {
           assert.equal(response.status, "complete");
-          assert.equal(response.parts[0]!.text, "Hello there friend");
+          assert.equal(response.parts.find(part => part.type === "text")!.text, "Hello there friend");
           assert.ok(growing.includes("Hello"), JSON.stringify(growing));
           assert.ok(growing.includes("Hello there"), JSON.stringify(growing));
           assert.deepEqual(history, [{ role: "user", content: "Say hello" }]);

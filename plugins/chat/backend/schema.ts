@@ -1,5 +1,7 @@
 import { defineSchema, defineTable, v } from "@tokamak/sdk";
 
+import { textPart, toolPart } from "./parts";
+
 export default defineSchema({
   threads: defineTable({
     model: v.optional(v.string()),
@@ -9,7 +11,7 @@ export default defineSchema({
     threadId: v.id("threads"),
     authorId: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant")),
-    parts: v.array(v.object({ type: v.literal("text"), text: v.string() })),
+    parts: v.array(v.union(textPart, toolPart)),
     status: v.union(v.literal("streaming"), v.literal("complete"), v.literal("error"), v.literal("cancelled")),
     error: v.optional(v.string()),
     createdAt: v.number(),

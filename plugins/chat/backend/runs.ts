@@ -23,7 +23,12 @@ export const cancel = mutation({
     const run = await db.get(runId);
     if (!run || run.status !== "running") return null;
 
-    await db.patch(run.messageId, { status: "cancelled" });
+    const message = await db.get(run.messageId);
+    if (message) await db.patch(run.messageId, {
+      status: "cancelled",
+      parts: message.parts.map(part => part.type === "tool" && part.status === "running"
+        ? { ...part, status: "error" as const, error: "cancelled" } : part),
+    });
     await db.patch(run.threadId, { updatedAt: Date.now() });
     return db.patch(runId, { status: "cancelled", cancelledBy: OWNER, finishedAt: Date.now() });
   },

@@ -570,3 +570,12 @@ fn chat_missing_environment_grant_is_refused() {
 fn chat_real_openrouter_smoke() {
     acceptance("chat-real");
 }
+
+#[test]
+fn chat_tools_persist_running_done_then_text_and_filter_providers() {
+    acceptance("chat-tools");
+}
+#[test]
+fn chat_tool_errors_return_to_model_and_finish_run() {
+    acceptance("chat-tools-error");
+}

@@ -1,0 +1,44 @@
+import { functionName, type ActionContext, type FunctionReference, type ToolDescription, type ToolOutput, type JsonValue } from "@tokamak/sdk";
+import { dynamicTool, jsonSchema, type ToolSet } from "ai";
+import type { ToolPart } from "./parts";
+
+type ToolsApi = { tools: {
+  describe: FunctionReference<"query", Record<string, never>, ToolDescription[]>;
+  invoke: FunctionReference<"mutation", { name: string; args: JsonValue; threadId: string }, ToolOutput>;
+} };
+export type ToolTarget = { plugin: string; toolName: string };
+
+export async function discoverTools(
+  ctx: ActionContext, threadId: string, running: () => Promise<boolean>,
+  update: (part: ToolPart) => Promise<void>,
+) {
+  const tools: ToolSet = {};
+  const targets = new Map<string, ToolTarget>();
+  let lock = Promise.resolve();
+  for (const provider of await ctx.providers<ToolsApi>("chat.tools")) {
+    const plugin = provider.tools.describe[functionName].split("/")[0]!;
+    for (const description of await ctx.runQuery(provider.tools.describe, {})) {
+      const name = `${plugin}__${description.name}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+      if (Object.hasOwn(tools, name)) throw new Error(`Duplicate model tool name: ${name}`);
+      const target = { plugin, toolName: description.name };
+      targets.set(name, target);
+      tools[name] = dynamicTool({
+        description: description.description, inputSchema: jsonSchema(description.parameters),
+        execute: (args, { toolCallId }) => {
+          const execute = async () => {
+            if (!await running()) throw new Error("cancelled");
+            const part: ToolPart = { type: "tool", callId: toolCallId, ...target, args: args as JsonValue, status: "running" };
+            await update(part);
+            const out = await ctx.runMutation(provider.tools.invoke, { name: description.name, args: args as JsonValue, threadId });
+            await update({ ...part, ...out, status: "done" });
+            return out.model ?? JSON.stringify(out.result);
+          };
+          const result = lock.then(execute);
+          lock = result.then(() => {}, () => {});
+          return result;
+        },
+      });
+    }
+  }
+  return { tools, targets };
+}

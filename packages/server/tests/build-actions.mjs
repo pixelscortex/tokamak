@@ -32,10 +32,10 @@ try {
 import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vite.ts"))};
 export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
       id, version: "1.0.0", ...(id === "chat"
-        ? { exports: "./api.ts", permissions: ["net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"] }
+        ? { exports: "./api.ts", consumes: ["chat.tools"], permissions: ["net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"] }
         : id === "a"
         ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1"] }
-        : { exports: "./api.ts", permissions: ["net:localhost", "net:loopback.tkm.test", "net:private.tkm.test", "net:metadata.tkm.test", "net:mapped.tkm.test", "net:held.tkm.test"] }),
+        : { exports: "./api.ts", provides: ["chat.tools"], permissions: ["net:localhost", "net:loopback.tkm.test", "net:private.tkm.test", "net:metadata.tkm.test", "net:mapped.tkm.test", "net:held.tkm.test"] }),
     })} })] };
 `);
     if (id === "chat") await writeFile(join(path, "backend/testing.ts"), `

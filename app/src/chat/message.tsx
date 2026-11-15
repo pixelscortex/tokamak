@@ -13,9 +13,9 @@ export function Message(props: { message: ChatMessage }) {
     <Mark user={props.message.role === "user"} />
     <div class="min-w-0 flex-1">
       <Show when={props.message.role === "assistant"} fallback={
-        <p class="m-0 whitespace-pre-wrap break-words text-text">{props.message.parts.map(part => part.text).join("")}</p>
+        <p class="m-0 whitespace-pre-wrap break-words text-text">{props.message.parts.map(part => part.type === "text" ? part.text : "").join("")}</p>
       }>
-        <Markdown text={props.message.parts.map(part => part.text).join("")} />
+        <Markdown text={props.message.parts.map(part => part.type === "text" ? part.text : "").join("")} />
       </Show>
       <Show when={props.message.status === "streaming"}><p role="status" class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">· working</p></Show>
       <Show when={props.message.status === "error"}><p role="alert" class="m-0 mt-2 text-text-2">{props.message.error ?? "Unable to complete this reply"}</p></Show>

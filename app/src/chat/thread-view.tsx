@@ -19,7 +19,7 @@ export function ThreadView(props: { chat: ChatState; threadId: Id<"threads">; hi
   async function copyReply() {
     if (!alive) return;
     const reply = [...(messages.data() ?? [])].reverse().find(message => message.role === "assistant");
-    const text = reply?.parts.map(part => part.text).join("");
+    const text = reply?.parts.map(part => part.type === "text" ? part.text : "").join("");
     if (!text) return;
 
     try {

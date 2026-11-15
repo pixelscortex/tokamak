@@ -1,4 +1,5 @@
 import { interruptStale, STALE_AFTER_MS } from "./recovery";
+import { toolUpdate, type ToolPart } from "./parts";
 import { DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
@@ -35,7 +36,7 @@ export const start = mutation({
     await db.patch(threadId, { title, updatedAt: Date.now() });
     return { runId, messageId, model, history: [
       ...history.filter(message => message.status === "complete").map(message => ({
-        role: message.role, content: message.parts.map(part => part.text).join(""),
+        role: message.role, content: message.parts.map(part => part.type === "text" ? part.text : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`).join(""),
       })),
       { role: "user" as const, content: text },
     ] };
@@ -52,8 +53,9 @@ export const update = mutation({
     runId: v.id("runs"), delta: v.string(),
     outcome: v.optional(v.union(v.literal("done"), v.literal("error"))),
     error: v.optional(v.string()),
+    tool: v.optional(toolUpdate),
   },
-  handler: async ({ db }, { runId, delta, outcome, error }) => {
+  handler: async ({ db }, { runId, delta, outcome, error, tool }) => {
     const run = await db.get(runId);
     if (!run || run.status !== "running") return "cancelled" as const;
     await db.patch(runId, { updatedAt: Date.now() });
@@ -61,9 +63,32 @@ export const update = mutation({
 
     const message = await db.get(run.messageId);
     if (!message) throw new Error("Response message no longer exists");
-    const text = message.parts.map(part => part.text).join("") + delta;
+    const parts = message.parts;
+    if (delta) {
+      const last = parts.at(-1);
+      if (last?.type === "text") last.text += delta;
+      else parts.push({ type: "text", text: delta });
+    }
+    if (tool) {
+      const patch = { ...tool };
+      if (patch.result !== undefined) {
+        let bytes = 0;
+        for (const character of JSON.stringify(patch.result)) {
+          const point = character.codePointAt(0)!;
+          bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
+        }
+        if (bytes > 8 * 1024) patch.result = { truncated: true };
+      }
+      const existing = parts.find(part => part.type === "tool" && part.callId === patch.callId);
+      if (existing) Object.assign(existing, patch);
+      else {
+        if (patch.plugin === undefined || patch.toolName === undefined || patch.args === undefined)
+          throw new Error("New tool part requires plugin, toolName and args");
+        parts.push({ type: "tool", ...patch } as ToolPart);
+      }
+    }
     await db.patch(run.messageId, {
-      parts: [{ type: "text", text }],
+      parts,
       status: outcome === "done" ? "complete" : outcome === "error" ? "error" : "streaming",
       ...(error === undefined ? {} : { error }),
     });
