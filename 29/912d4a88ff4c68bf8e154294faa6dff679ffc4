@@ -1,0 +1,21 @@
+packages/runtime/js/subscriptions.ts
+  s_9343aadf26e008::t_29691d694b7b52 15
+packages/runtime/tests/plugins.test.mjs
+  s_9343aadf26e008::t_e0aa7e1a6ead63 134-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29912d4a88ff4c68bf8e154294faa6dff679ffc4",
+  "prompts": {},
+  "sessions": {
+    "s_9343aadf26e008": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e104-d6a0-79b0-b8cd-28322a806f07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
