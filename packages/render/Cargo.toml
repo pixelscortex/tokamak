@@ -35,3 +35,6 @@ raw-window-handle = "=0.6.2"
 # Physical memory size for the UI heap ceiling (already in the lock graph).
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
+
+[lints]
+workspace = true

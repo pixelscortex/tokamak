@@ -36,3 +36,6 @@ blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = 
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
 png = "=0.18.1"
+
+[lints]
+workspace = true
