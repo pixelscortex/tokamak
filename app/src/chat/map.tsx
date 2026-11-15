@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { Textarea } from "@tokamak/ui/components";
 import { api } from "./use-chat";
 import { Icon } from "@tokamak/ui";
@@ -16,6 +16,7 @@ function relativeTime(time: number) {
 export function useMap(chat: ChatState, close: () => void) {
   const [query, setQuery] = createSignal("");
   const [editing, setEditing] = createSignal<"rename" | "delete">();
+  const [target, setTarget] = createSignal<string>();
   const [title, setTitle] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [selected, setSelected] = createSignal<string>();
@@ -26,6 +27,10 @@ export function useMap(chat: ChatState, close: () => void) {
   });
   const index = () => Math.max(0, rows().findIndex(thread => thread._id === selected()));
 
+  createEffect(() => {
+    if (editing() && !rows().some(thread => thread._id === target())) setEditing(undefined);
+  });
+
   function open(thread: Thread | undefined) {
     if (!thread) return;
     chat.open(thread._id);
@@ -33,8 +38,12 @@ export function useMap(chat: ChatState, close: () => void) {
   }
 
   async function save() {
-    const current = rows()[index()];
-    if (!current || busy() || (editing() === "rename" && !title().trim())) return;
+    const current = rows().find(thread => thread._id === target());
+    if (!current) {
+      setEditing(undefined);
+      return;
+    }
+    if (!editing() || busy() || (editing() === "rename" && !title().trim())) return;
     setBusy(true);
     try {
       if (editing() === "rename") await chat.client.mutation(api.threads.rename, { threadId: current._id, title: title() });
@@ -67,6 +76,7 @@ export function useMap(chat: ChatState, close: () => void) {
       event.preventDefault();
       if (event.repeat) return;
       setSelected(current._id);
+      setTarget(current._id);
       setTitle(current.title);
       setEditing(rename ? "rename" : "delete");
     } else if (key === "ArrowDown" || key === "ArrowUp") {
