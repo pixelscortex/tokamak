@@ -25,8 +25,10 @@ impl Transaction {
 
             let rid = id.record();
 
-            let record =
-                self.inner.get_record(core.ns, core.db, &rid.table, &rid.key, None).await?;
+            let record = self
+                .inner
+                .get_record(core.ns, core.db, &rid.table, &rid.key, None)
+                .await?;
 
             if record.data == StoredValue::None {
                 return Ok(None);
@@ -59,7 +61,10 @@ impl Transaction {
         for key in keys {
             let key = RecordKey::decode_key(&key)?;
 
-            let record = self.inner.get_record(core.ns, core.db, &table, &key.id, None).await?;
+            let record = self
+                .inner
+                .get_record(core.ns, core.db, &table, &key.id, None)
+                .await?;
             documents.push(Document::decode(record.data.clone())?);
         }
 
@@ -109,7 +114,9 @@ impl Transaction {
             let rid = id.record();
 
             let core = &tx.state.storage;
-            tx.inner.get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None).await?;
+            tx.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
+                .await?;
 
             let row = Document {
                 id: id.clone(),
@@ -219,7 +226,9 @@ impl Transaction {
 
             let core = &tx.state.storage;
             tx.indexes(Some(&old), None).await?;
-            tx.inner.del_record(core.ns, core.db, &rid.table, &rid.key).await?;
+            tx.inner
+                .del_record(core.ns, core.db, &rid.table, &rid.key)
+                .await?;
             tx.written.insert(id.table().clone());
             tx.record(Some(&old), None);
 

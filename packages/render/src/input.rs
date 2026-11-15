@@ -312,8 +312,16 @@ fn overscroll_wheel(doc: &mut BaseDocument, chain: &[NodeId], wheel: &BlitzWheel
     for id in &chain[..=container] {
         let (room_x, room_y) = room(doc, *id, dx, dy);
         if room_x || room_y {
-            let x = if room_x { dx } else { 0.0 };
-            let y = if room_y { dy } else { 0.0 };
+            let x = if room_x {
+                dx
+            } else {
+                0.0
+            };
+            let y = if room_y {
+                dy
+            } else {
+                0.0
+            };
             doc.scroll_by(*id, x, y, ScrollBehavior::Instant);
             break;
         }

@@ -18,12 +18,8 @@ mod records;
 // Hold the catalog stable from a writer's first mutation through its outcome.
 // Read guards coexist; only defining a new index needs exclusive access.
 enum CatalogGuard {
-    Read {
-        _guard: OwnedRwLockReadGuard<()>,
-    },
-    Write {
-        _guard: OwnedRwLockWriteGuard<()>,
-    },
+    Read { _guard: OwnedRwLockReadGuard<()> },
+    Write { _guard: OwnedRwLockWriteGuard<()> },
 }
 
 // Arm before any mutation work (including catalog creation and index updates).
@@ -120,9 +116,11 @@ impl Transaction {
         let core = &self.state.storage;
 
         let conflict = || {
-            Error::Database(anyhow::Error::new(surrealdb_kvs::err::Error::TransactionConflict(
-                "catalog changed or is in use; retry with a fresh snapshot".into(),
-            )))
+            Error::Database(anyhow::Error::new(
+                surrealdb_kvs::err::Error::TransactionConflict(
+                    "catalog changed or is in use; retry with a fresh snapshot".into(),
+                ),
+            ))
         };
 
         if define && !matches!(self.catalog_guard, Some(CatalogGuard::Write { .. })) {
@@ -131,11 +129,19 @@ impl Transaction {
             // Epoch validation below makes a non-atomic upgrade safe.
             self.catalog_guard = None;
             self.catalog_guard = Some(CatalogGuard::Write {
-                _guard: core.catalog_gate.clone().try_write_owned().map_err(|_| conflict())?,
+                _guard: core
+                    .catalog_gate
+                    .clone()
+                    .try_write_owned()
+                    .map_err(|_| conflict())?,
             });
         } else if self.catalog_guard.is_none() {
             self.catalog_guard = Some(CatalogGuard::Read {
-                _guard: core.catalog_gate.clone().try_read_owned().map_err(|_| conflict())?,
+                _guard: core
+                    .catalog_gate
+                    .clone()
+                    .try_read_owned()
+                    .map_err(|_| conflict())?,
             });
         }
 
@@ -162,9 +168,10 @@ impl Transaction {
 
         let after = after.cloned().map(Document::into_json);
 
-        let Some(bytes) =
-            encoded_size(&(&before, &after), 32768usize.saturating_sub(self.change_bytes))
-        else {
+        let Some(bytes) = encoded_size(
+            &(&before, &after),
+            32768usize.saturating_sub(self.change_bytes),
+        ) else {
             self.changes = None;
             return;
         };
@@ -176,11 +183,7 @@ impl Transaction {
             .expect("change has a before or after image")
             .parse()
             .expect("native record id");
-        changes.push(RecordChange {
-            id,
-            before,
-            after,
-        });
+        changes.push(RecordChange { id, before, after });
         self.change_bytes += bytes;
     }
 
@@ -210,7 +213,9 @@ impl Transaction {
     /// Polled finalization survives caller cancellation. Only the invocation
     /// owner can replay JS safely; commit never retries automatically.
     pub async fn commit(self) -> Result<()> {
-        tokio::spawn(self.commit_owned()).await.map_err(|error| Error::Database(error.into()))?
+        tokio::spawn(self.commit_owned())
+            .await
+            .map_err(|error| Error::Database(error.into()))?
     }
 
     async fn commit_owned(self) -> Result<()> {

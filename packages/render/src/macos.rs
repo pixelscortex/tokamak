@@ -84,7 +84,9 @@ pub(super) fn anchor_layer(window: &dyn winit::window::Window, background: Optio
             }
         }
         let layer: *mut AnyObject = msg_send![view, layer];
-        let Some(layer) = layer.as_ref() else { return };
+        let Some(layer) = layer.as_ref() else {
+            return;
+        };
         let mut layers = vec![layer];
         let sublayers: *mut AnyObject = msg_send![layer, sublayers];
         if let Some(sublayers) = sublayers.as_ref() {

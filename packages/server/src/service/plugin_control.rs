@@ -53,7 +53,11 @@ impl Coordinator {
                     .as_ref()
                     .ok_or_else(|| Error::Invalid("No plugin installation".into()))
                     .map(|loaded| {
-                        loaded.catalog.plugins.get(&id).and_then(|plugin| plugin.ui_asset(&name))
+                        loaded
+                            .catalog
+                            .plugins
+                            .get(&id)
+                            .and_then(|plugin| plugin.ui_asset(&name))
                     });
 
                 let _ = reply.send(result);
@@ -77,7 +81,10 @@ impl Coordinator {
             crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
 
         if !catalog.plugins.contains_key(id)
-            && !self.plugins.as_ref().is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
+            && !self
+                .plugins
+                .as_ref()
+                .is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
         {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
@@ -101,8 +108,11 @@ impl Coordinator {
         // grants running in old worlds; the old pool tears down detached.
         self.action_pool.cancel_actions();
         self.action_pool = action_pool;
-        self.kinds =
-            candidate.targets.iter().map(|(name, target)| (name.clone(), target.kind)).collect();
+        self.kinds = candidate
+            .targets
+            .iter()
+            .map(|(name, target)| (name.clone(), target.kind))
+            .collect();
 
         let mut changed = std::collections::BTreeSet::new();
 

@@ -118,7 +118,10 @@ impl Transaction {
 
         let rid = row.id.record();
 
-        let indexes = self.inner.all_tb_indexes(core.ns, core.db, &rid.table, None).await?;
+        let indexes = self
+            .inner
+            .all_tb_indexes(core.ns, core.db, &rid.table, None)
+            .await?;
 
         if indexes.is_empty() {
             return Ok(());
@@ -132,9 +135,13 @@ impl Transaction {
         };
 
         for index in indexes.iter() {
-            let old = before.map(|document| index_values(index, document)).transpose()?;
+            let old = before
+                .map(|document| index_values(index, document))
+                .transpose()?;
 
-            let new = after.map(|document| index_values(index, document)).transpose()?;
+            let new = after
+                .map(|document| index_values(index, document))
+                .transpose()?;
 
             let mut compaction = false;
             surrealdb_idx::index::IndexOperation::new(
@@ -160,13 +167,18 @@ fn index_values(index: &IndexDefinition, document: &Document) -> Result<Vec<Stor
         .cols
         .iter()
         .map(|column| {
-            let [surrealdb_idx::expr::Part::Field(field), surrealdb_idx::expr::Part::Flatten] =
-                column.0.as_slice()
+            let [
+                surrealdb_idx::expr::Part::Field(field),
+                surrealdb_idx::expr::Part::Flatten,
+            ] = column.0.as_slice()
             else {
                 return Err(Error::Invalid("index is not a TokamakDB value index"));
             };
 
-            Ok(StoredValue::from(crate::data::query::field_value(document, field.as_str())))
+            Ok(StoredValue::from(crate::data::query::field_value(
+                document,
+                field.as_str(),
+            )))
         })
         .collect()
 }

@@ -112,14 +112,21 @@ impl Manifest {
         if !requirement
             .matches(&Version::parse(env!("CARGO_PKG_VERSION")).expect("package version"))
         {
-            return Err(invalid(format!("Incompatible host API for {}", self.plugin.id)));
+            return Err(invalid(format!(
+                "Incompatible host API for {}",
+                self.plugin.id
+            )));
         }
 
         if !["hub", "runner", "hybrid"].contains(&self.plugin.placement.as_str()) {
             return Err(invalid("Invalid plugin placement"));
         }
 
-        for map in [&self.plugin.depends, &self.plugin.optional, &self.plugin.breaks] {
+        for map in [
+            &self.plugin.depends,
+            &self.plugin.optional,
+            &self.plugin.breaks,
+        ] {
             for (id, range) in map {
                 DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
                 VersionReq::parse(range)
@@ -127,7 +134,11 @@ impl Manifest {
             }
         }
 
-        for list in [&self.plugin.provides, &self.plugin.consumes, &self.plugin.permissions] {
+        for list in [
+            &self.plugin.provides,
+            &self.plugin.consumes,
+            &self.plugin.permissions,
+        ] {
             let unique = list.iter().collect::<BTreeSet<_>>();
 
             if unique.len() != list.len() || list.iter().any(|value| value.is_empty()) {

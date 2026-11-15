@@ -452,8 +452,20 @@ async fn indexed_queries_return_exactly_the_matching_rows_in_index_order(disk: b
             .iter()
             .filter(|(_, o, c)| {
                 o == owner
-                    && lower.is_none_or(|(op, v)| if op == "gt" { *c > v } else { *c >= v })
-                    && upper.is_none_or(|(op, v)| if op == "lt" { *c < v } else { *c <= v })
+                    && lower.is_none_or(|(op, v)| {
+                        if op == "gt" {
+                            *c > v
+                        } else {
+                            *c >= v
+                        }
+                    })
+                    && upper.is_none_or(|(op, v)| {
+                        if op == "lt" {
+                            *c < v
+                        } else {
+                            *c <= v
+                        }
+                    })
             })
             .map(|(id, _, c)| (*c, id.clone()))
             .collect();

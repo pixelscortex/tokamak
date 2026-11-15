@@ -379,7 +379,11 @@ fn assert_wrapped_clicks(doc: &render::NativeDocument, clicks: u64, cancel: bool
         "activation must deliver a click, not reuse a keyboard event"
     );
     assert_eq!(count(doc, "wrapped-owner-identity"), clicks);
-    let bubbles = if stop { 0 } else { clicks };
+    let bubbles = if stop {
+        0
+    } else {
+        clicks
+    };
     assert_eq!(
         count(doc, "wrapped-parent"),
         bubbles,
@@ -389,11 +393,19 @@ fn assert_wrapped_clicks(doc: &render::NativeDocument, clicks: u64, cancel: bool
     assert_eq!(count(doc, "wrapped-parent-identity"), bubbles);
     assert_eq!(
         count(doc, "wrapped-parent-prevented"),
-        if cancel { bubbles } else { 0 }
+        if cancel {
+            bubbles
+        } else {
+            0
+        }
     );
     assert_eq!(
         count(doc, "wrapped-change"),
-        if cancel { 0 } else { clicks }
+        if cancel {
+            0
+        } else {
+            clicks
+        }
     );
     assert_eq!(
         attr(doc, "wrapped", "aria-pressed").as_deref(),

@@ -95,7 +95,12 @@ fn admit(sender: &mpsc::Sender<Command>, command: Command) -> Result<(), Error> 
     })
 }
 
-type Connection = (u64, mpsc::Receiver<Event>, Arc<AtomicBool>, mpsc::WeakSender<Event>);
+type Connection = (
+    u64,
+    mpsc::Receiver<Event>,
+    Arc<AtomicBool>,
+    mpsc::WeakSender<Event>,
+);
 
 pub(crate) enum Command {
     Connect(oneshot::Sender<Result<Connection, Error>>),
@@ -103,7 +108,11 @@ pub(crate) enum Command {
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
-    Asset(String, String, oneshot::Sender<Result<Option<Arc<crate::plugins::Asset>>, Error>>),
+    Asset(
+        String,
+        String,
+        oneshot::Sender<Result<Option<Arc<crate::plugins::Asset>>, Error>>,
+    ),
 }
 
 pub(crate) enum Action {

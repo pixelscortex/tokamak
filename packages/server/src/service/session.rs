@@ -60,55 +60,33 @@ impl SessionSender {
 
 fn request_action(request: Request) -> Result<Action, Error> {
     if request.id() > 9_007_199_254_740_991 {
-        return Err(Error::Invalid("request ID must be a JavaScript safe integer".into()));
+        return Err(Error::Invalid(
+            "request ID must be a JavaScript safe integer".into(),
+        ));
     }
 
     Ok(match request {
-        Request::Query {
-            id,
-            name,
-            args,
-        } => Action::Call {
+        Request::Query { id, name, args } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Query),
         },
-        Request::Mutation {
-            id,
-            name,
-            args,
-        } => Action::Call {
+        Request::Mutation { id, name, args } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Mutation),
         },
-        Request::Action {
-            id,
-            name,
-            args,
-        } => Action::Call {
+        Request::Action { id, name, args } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Action),
         },
-        Request::Subscribe {
-            id,
-            name,
-            args,
-        } => Action::Subscribe {
-            id,
-            name,
-            args,
-        },
-        Request::Unsubscribe {
-            id,
-        } => Action::Unsubscribe(id),
-        Request::Plugins {
-            id,
-        } => Action::Plugins(id),
+        Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
+        Request::Unsubscribe { id } => Action::Unsubscribe(id),
+        Request::Plugins { id } => Action::Plugins(id),
         Request::PluginsPage {
             id,
             revision,

@@ -527,7 +527,15 @@ fn the_composer_shows_each_state() {
 fn composer_form_menus_show_their_options() {
     for (width, height) in [(1440, 900), min_window()] {
         for docked in [false, true] {
-            let mut doc = view_at(width, height, if docked { "chat" } else { "composer" });
+            let mut doc = view_at(
+                width,
+                height,
+                if docked {
+                    "chat"
+                } else {
+                    "composer"
+                },
+            );
             let prefix = if docked {
                 click(&mut doc, "lab-chat-composer-input");
                 commit(&mut doc, "/to");

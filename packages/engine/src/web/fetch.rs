@@ -61,9 +61,15 @@ impl WebHost {
         }
 
         let (cancel, response) = {
-            let r = self.resources.lock().map_err(|_| "web resource lock poisoned")?;
+            let r = self
+                .resources
+                .lock()
+                .map_err(|_| "web resource lock poisoned")?;
 
-            let x = r.requests.get(&request_id).ok_or("fetch is aborted or closed")?;
+            let x = r
+                .requests
+                .get(&request_id)
+                .ok_or("fetch is aborted or closed")?;
             (x.cancel.clone(), x.response.clone())
         };
 
@@ -133,7 +139,10 @@ impl WebHost {
 
         if let Some(receiver) = receiver {
             let stream = futures_util::stream::unfold(receiver, |mut receiver| async {
-                receiver.recv().await.map(|b| (Ok::<_, std::io::Error>(b), receiver))
+                receiver
+                    .recv()
+                    .await
+                    .map(|b| (Ok::<_, std::io::Error>(b), receiver))
             });
             request = request.body(reqwest::Body::wrap_stream(stream));
         }
@@ -144,7 +153,10 @@ impl WebHost {
             .headers()
             .iter()
             .map(|(k, v)| {
-                vec![k.as_str().to_owned(), String::from_utf8_lossy(v.as_bytes()).into_owned()]
+                vec![
+                    k.as_str().to_owned(),
+                    String::from_utf8_lossy(v.as_bytes()).into_owned(),
+                ]
             })
             .collect();
 
@@ -163,7 +175,10 @@ impl WebHost {
             .get(&request_id)
             .and_then(|x| x.upload.clone())
             .ok_or("request body is closed")?;
-        sender.send(bytes(&p["bytes"])?).await.map_err(|_| "request body receiver closed")?;
+        sender
+            .send(bytes(&p["bytes"])?)
+            .await
+            .map_err(|_| "request body receiver closed")?;
 
         Ok(Json::Null)
     }
@@ -174,8 +189,17 @@ impl WebHost {
         response: Arc<AsyncMutex<Option<reqwest::Response>>>,
     ) -> Result<Json> {
         let remainder = {
-            let mut r = self.resources.lock().map_err(|_| "web resource lock poisoned")?;
-            std::mem::take(&mut r.requests.get_mut(&request_id).ok_or("fetch aborted")?.remainder)
+            let mut r = self
+                .resources
+                .lock()
+                .map_err(|_| "web resource lock poisoned")?;
+            std::mem::take(
+                &mut r
+                    .requests
+                    .get_mut(&request_id)
+                    .ok_or("fetch aborted")?
+                    .remainder,
+            )
         };
 
         let mut data = if remainder.is_empty() {

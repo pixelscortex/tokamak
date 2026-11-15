@@ -2,13 +2,7 @@ use super::*;
 
 impl Coordinator {
     pub(super) fn respond(&mut self, session: u64, id: u64, result: Result<Json, String>) {
-        self.emit(
-            session,
-            Event::Response {
-                id,
-                result,
-            },
-        );
+        self.emit(session, Event::Response { id, result });
     }
 
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
@@ -33,17 +27,11 @@ impl Coordinator {
 
         if serde_json::to_writer(&mut Limit(0), &event).is_err() {
             event = match event {
-                Event::Response {
-                    id,
-                    ..
-                } => Event::Response {
+                Event::Response { id, .. } => Event::Response {
                     id,
                     result: Err("result too large (1 MiB limit)".into()),
                 },
-                Event::Subscription {
-                    id,
-                    ..
-                } => {
+                Event::Subscription { id, .. } => {
                     if let Some(client) = self.sessions.get_mut(&session) {
                         client.subscriptions.remove(&id);
                     }
@@ -54,10 +42,7 @@ impl Coordinator {
                         result: Err("result too large (1 MiB limit); subscription ended".into()),
                     }
                 }
-                Event::PluginChanged {
-                    catalog,
-                    ..
-                } => {
+                Event::PluginChanged { catalog, .. } => {
                     // The complete catalog is already paged. Clients diff it
                     // after assembly, so an arbitrarily large list of changed
                     // identities need not fit a single notification envelope.

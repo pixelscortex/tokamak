@@ -162,10 +162,14 @@ impl Pool {
             ops,
             reply,
         };
-        self.sender.as_ref().ok_or(Error::Closed)?.try_send(job).map_err(|error| match error {
-            mpsc::TrySendError::Full(_) => Error::Overloaded,
-            mpsc::TrySendError::Disconnected(_) => Error::Closed,
-        })?;
+        self.sender
+            .as_ref()
+            .ok_or(Error::Closed)?
+            .try_send(job)
+            .map_err(|error| match error {
+                mpsc::TrySendError::Full(_) => Error::Overloaded,
+                mpsc::TrySendError::Disconnected(_) => Error::Closed,
+            })?;
         Ok(PendingCall(receiver))
     }
 }
@@ -198,7 +202,9 @@ fn run_worker<E, F>(
             executor.block_on(engine.invoke(&job.bundle, &job.export, job.args, job.ops))
         }))
         .unwrap_or_else(|_| {
-            Err(Error::Engine("JavaScript worker panicked; world discarded".into()))
+            Err(Error::Engine(
+                "JavaScript worker panicked; world discarded".into(),
+            ))
         });
         let _ = job.reply.send(result);
     }

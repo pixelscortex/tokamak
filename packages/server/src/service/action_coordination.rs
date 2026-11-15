@@ -9,7 +9,11 @@ impl Coordinator {
 
         let (bundle, local_name, owner) = if let Some(loaded) = &self.plugins {
             let target = &loaded.targets[&name];
-            (target.bundle.clone(), target.local_name.clone(), Some(target.owner.clone()))
+            (
+                target.bundle.clone(),
+                target.local_name.clone(),
+                Some(target.owner.clone()),
+            )
         } else {
             (self.bundle.clone().expect("legacy bundle"), name, None)
         };

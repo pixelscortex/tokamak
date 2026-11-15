@@ -44,8 +44,13 @@ impl Coordinator {
             let Some((owner, id, name, args)) = next else {
                 return;
             };
-            self.sessions.get_mut(&owner).unwrap().subscriptions.get_mut(&id).unwrap().dirty =
-                false;
+            self.sessions
+                .get_mut(&owner)
+                .unwrap()
+                .subscriptions
+                .get_mut(&id)
+                .unwrap()
+                .dirty = false;
 
             let call = if self.kinds.get(&name) == Some(&FunctionKind::Query) {
                 host::invoke(
@@ -63,19 +68,31 @@ impl Coordinator {
             } else {
                 host::Call {
                     result: Err(
-                        "Subscription query is not registered in this plugin generation".into()
+                        "Subscription query is not registered in this plugin generation".into(),
                     ),
                     reads: ReadSet::new(),
                     conflict: false,
                 }
             };
 
-            let sub = self.sessions.get_mut(&owner).unwrap().subscriptions.get_mut(&id).unwrap();
+            let sub = self
+                .sessions
+                .get_mut(&owner)
+                .unwrap()
+                .subscriptions
+                .get_mut(&id)
+                .unwrap();
             sub.reads = call.reads;
             sub.uncertain = call.result.is_err();
             self.drain_changes();
 
-            let sub = self.sessions.get_mut(&owner).unwrap().subscriptions.get_mut(&id).unwrap();
+            let sub = self
+                .sessions
+                .get_mut(&owner)
+                .unwrap()
+                .subscriptions
+                .get_mut(&id)
+                .unwrap();
 
             if sub.dirty {
                 let count = reruns.entry((owner, id)).or_default();
@@ -87,7 +104,11 @@ impl Coordinator {
                 // Native transactions retained outside the service can keep
                 // changing snapshots. End explicitly instead of publishing a
                 // known-stale value or starving every command indefinitely.
-                self.sessions.get_mut(&owner).unwrap().subscriptions.remove(&id);
+                self.sessions
+                    .get_mut(&owner)
+                    .unwrap()
+                    .subscriptions
+                    .remove(&id);
                 self.emit(
                     owner,
                     Event::Subscription {

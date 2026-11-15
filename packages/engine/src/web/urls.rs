@@ -14,9 +14,9 @@ pub(super) fn parse(p: &Json) -> Result<Json> {
         let value = text(p, "value")?;
 
         match key {
-            "protocol" => {
-                url.set_scheme(value.trim_end_matches(':')).map_err(|_| "invalid URL scheme")?
-            }
+            "protocol" => url
+                .set_scheme(value.trim_end_matches(':'))
+                .map_err(|_| "invalid URL scheme")?,
             "hostname" => url.set_host(Some(value)).map_err(|e| e.to_string())?,
             "host" => {
                 let parsed = Url::parse(&format!("{}://{value}", url.scheme()))
@@ -43,7 +43,9 @@ pub(super) fn parse(p: &Json) -> Result<Json> {
                 Some(value.trim_start_matches('#'))
             }),
             "username" => url.set_username(value).map_err(|_| "invalid username")?,
-            "password" => url.set_password(Some(value)).map_err(|_| "invalid password")?,
+            "password" => url
+                .set_password(Some(value))
+                .map_err(|_| "invalid password")?,
             _ => return Err("unsupported URL property".into()),
         }
     }

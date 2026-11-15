@@ -30,7 +30,9 @@ impl Server {
     }
 
     pub fn functions(&self) -> &[Json] {
-        self.descriptor["functions"].as_array().expect("validated descriptor")
+        self.descriptor["functions"]
+            .as_array()
+            .expect("validated descriptor")
     }
 
     pub async fn connect(&self) -> Result<Session, Error> {

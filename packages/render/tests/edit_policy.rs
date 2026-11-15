@@ -92,13 +92,21 @@ fn disabled_fieldsets_block_typing_and_ime_except_in_the_first_legend() {
             support::key(&mut doc, "x", false, false);
             assert_eq!(
                 text(&doc, "field"),
-                if accepts { "x" } else { "" },
+                if accepts {
+                    "x"
+                } else {
+                    ""
+                },
                 "{tag} {content} typing"
             );
             doc.handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit("ime".into())));
             assert_eq!(
                 text(&doc, "field"),
-                if accepts { "xime" } else { "" },
+                if accepts {
+                    "xime"
+                } else {
+                    ""
+                },
                 "{tag} {content} IME"
             );
         }

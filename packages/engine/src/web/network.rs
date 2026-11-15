@@ -30,7 +30,11 @@ impl WebHost {
 // Parse grants as hosts, never as URLs: credentials, ports and URL delimiters
 // must not lend authority to a different host. url supplies IDNA and IPv4 parsing.
 pub(super) fn canonical_host(raw: &str) -> Result<String> {
-    if raw.is_empty() || raw.chars().any(|c| c.is_whitespace() || "/\\@?#".contains(c)) {
+    if raw.is_empty()
+        || raw
+            .chars()
+            .any(|c| c.is_whitespace() || "/\\@?#".contains(c))
+    {
         return Err("invalid network permission host".into());
     }
 
@@ -67,7 +71,10 @@ impl reqwest::dns::Resolve for PublicResolver {
                 ]
             } else {
                 let addresses = resolve_os(host).await?;
-                addresses.into_iter().filter(|address| public_address(address.ip())).collect()
+                addresses
+                    .into_iter()
+                    .filter(|address| public_address(address.ip()))
+                    .collect()
             };
 
             if addresses.is_empty() {
@@ -122,7 +129,9 @@ async fn resolve_os(host: String) -> std::io::Result<Vec<std::net::SocketAddr>> 
                 // Only owned host/address data crosses this boundary;
                 // no invocation, resource table or JS state is retained.
                 let _permit = permit;
-                (host.as_str(), 0).to_socket_addrs().map(|addresses| addresses.collect::<Vec<_>>())
+                (host.as_str(), 0)
+                    .to_socket_addrs()
+                    .map(|addresses| addresses.collect::<Vec<_>>())
             }));
         // Abort queued work on timeout/cancellation. Running OS
         // lookups cannot be interrupted and retain their permits.

@@ -39,21 +39,16 @@ impl Coordinator {
             } => {
                 self.call(session, id, name, args, expected).await;
             }
-            Action::Subscribe {
-                id,
-                name,
-                args,
-            } => {
+            Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
             }
             Action::Unsubscribe(id) => {
-                self.sessions.get_mut(&session).expect("checked session").subscriptions.remove(&id);
-                self.emit(
-                    session,
-                    Event::Unsubscribed {
-                        id,
-                    },
-                );
+                self.sessions
+                    .get_mut(&session)
+                    .expect("checked session")
+                    .subscriptions
+                    .remove(&id);
+                self.emit(session, Event::Unsubscribed { id });
             }
         }
     }
@@ -75,7 +70,10 @@ impl Coordinator {
                 self.start_action(session, id, name, args);
                 return;
             }
-            Some(kind) => self.invoke_function(&name, args, kind == FunctionKind::Mutation).await,
+            Some(kind) => {
+                self.invoke_function(&name, args, kind == FunctionKind::Mutation)
+                    .await
+            }
         };
         self.drain_changes();
         self.refresh().await; // Writer barrier precedes response on the SAME queue.

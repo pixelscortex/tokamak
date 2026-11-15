@@ -129,7 +129,10 @@ impl WebHost {
     }
 
     fn sync(&self, p: Json) -> Result<Json> {
-        let mut r = self.resources.lock().map_err(|_| "web resource lock poisoned")?;
+        let mut r = self
+            .resources
+            .lock()
+            .map_err(|_| "web resource lock poisoned")?;
 
         match text(&p, "op")? {
             "open" | "cancel" | "finish" => self.fetch_sync(&mut r, &p),
@@ -158,24 +161,35 @@ impl WebHost {
         // The world's future owns this handle; no native task is detached.
         let task =
             tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move { self.io(p).await }));
-        task.await.map_err(|e| format!("native web operation stopped: {e}"))?
+        task.await
+            .map_err(|e| format!("native web operation stopped: {e}"))?
     }
 }
 
 fn text<'a>(p: &'a Json, key: &str) -> Result<&'a str> {
-    p[key].as_str().ok_or_else(|| format!("web operation requires {key}"))
+    p[key]
+        .as_str()
+        .ok_or_else(|| format!("web operation requires {key}"))
 }
 
 fn id(p: &Json) -> Result<u64> {
-    p["id"].as_u64().ok_or_else(|| "web operation requires id".into())
+    p["id"]
+        .as_u64()
+        .ok_or_else(|| "web operation requires id".into())
 }
 
 fn bytes(p: &Json) -> Result<Vec<u8>> {
-    let array = p.as_array().filter(|a| a.len() <= CHUNK).ok_or("web byte chunk exceeds 64 KiB")?;
+    let array = p
+        .as_array()
+        .filter(|a| a.len() <= CHUNK)
+        .ok_or("web byte chunk exceeds 64 KiB")?;
     array
         .iter()
         .map(|v| {
-            v.as_u64().filter(|n| *n <= 255).map(|n| n as u8).ok_or_else(|| "invalid byte".into())
+            v.as_u64()
+                .filter(|n| *n <= 255)
+                .map(|n| n as u8)
+                .ok_or_else(|| "invalid byte".into())
         })
         .collect()
 }

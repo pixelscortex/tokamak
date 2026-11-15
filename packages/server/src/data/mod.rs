@@ -80,19 +80,19 @@ impl Database {
             Storage::Memory => "mem://".to_owned(),
             Storage::Disk(path) => format!(
                 "surrealkv://{}",
-                path.to_str().ok_or(Error::Invalid("database path must be UTF-8"))?
+                path.to_str()
+                    .ok_or(Error::Invalid("database path must be UTF-8"))?
             ),
         };
 
-        let storage = StorageCore::open(&path).await.map_err(|e| Error::Startup(e.to_string()))?;
+        let storage = StorageCore::open(&path)
+            .await
+            .map_err(|e| Error::Startup(e.to_string()))?;
 
         let (changes, _) = broadcast::channel(256);
 
         Ok(Self {
-            state: Lifecycle::Open(Arc::new(DatabaseState {
-                storage,
-                changes,
-            })),
+            state: Lifecycle::Open(Arc::new(DatabaseState { storage, changes })),
         })
     }
 
@@ -141,7 +141,11 @@ impl Database {
             TransactionType::Write
         };
 
-        let tx = state.storage.factory.transaction(kind, state.storage.sequences.clone()).await?;
+        let tx = state
+            .storage
+            .factory
+            .transaction(kind, state.storage.sequences.clone())
+            .await?;
 
         Ok(Transaction::new(tx, Arc::clone(state), read_only, epochs))
     }
@@ -161,7 +165,12 @@ impl Database {
                 std::mem::replace(&mut self.state, Lifecycle::Closed(Ok(())))
             {
                 self.state = Lifecycle::Closing(Mutex::new(Box::pin(async move {
-                    let result = state.storage.factory.shutdown().await.map_err(|e| e.to_string());
+                    let result = state
+                        .storage
+                        .factory
+                        .shutdown()
+                        .await
+                        .map_err(|e| e.to_string());
                     // Shutdown alone is not a disk-lock barrier while retained
                     // Arc references still own the storage engine.
                     drop(state);
@@ -173,7 +182,9 @@ impl Database {
         let result = match &mut self.state {
             Lifecycle::Closing(shutdown) => shutdown.get_mut().as_mut().await,
             Lifecycle::Closed(result) => {
-                return result.clone().map_err(|e| Error::Database(anyhow::anyhow!(e)));
+                return result
+                    .clone()
+                    .map_err(|e| Error::Database(anyhow::anyhow!(e)));
             }
             Lifecycle::Open(_) => unreachable!("open state was moved to shutdown above"),
         };

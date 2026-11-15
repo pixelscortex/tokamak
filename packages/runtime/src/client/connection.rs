@@ -21,10 +21,15 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
         &std::fs::read_to_string(directory.join("server.json"))
             .map_err(|_| "Local server is not running; use `bun run app`")?,
     )?;
-    let mut request =
-        descriptor["url"].as_str().ok_or("Invalid server discovery")?.into_client_request()?;
+    let mut request = descriptor["url"]
+        .as_str()
+        .ok_or("Invalid server discovery")?
+        .into_client_request()?;
     let uri = request.uri();
-    let host = uri.host().ok_or("Missing local host")?.trim_matches(['[', ']']);
+    let host = uri
+        .host()
+        .ok_or("Missing local host")?
+        .trim_matches(['[', ']']);
     if uri.scheme_str() != Some("ws")
         || !host.parse::<IpAddr>()?.is_loopback()
         || uri.path() != "/ws"
@@ -83,11 +88,17 @@ pub fn admission() -> (render::MessageSender, mpsc::Receiver<String>) {
 fn header(value: &Value, event: bool) -> Option<(&str, u64)> {
     let kind = value["type"].as_str()?;
     if event && kind == "pluginchanged" {
-        value["plugins"].as_array()?.iter().all(Value::is_string).then_some(())?;
+        value["plugins"]
+            .as_array()?
+            .iter()
+            .all(Value::is_string)
+            .then_some(())?;
         value["catalog"].as_object()?;
         return Some((kind, 0));
     }
-    let id = value["id"].as_u64().filter(|id| *id <= 9_007_199_254_740_991)?;
+    let id = value["id"]
+        .as_u64()
+        .filter(|id| *id <= 9_007_199_254_740_991)?;
     if event {
         match kind {
             "unsubscribed" => {}

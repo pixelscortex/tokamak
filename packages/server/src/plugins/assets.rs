@@ -30,7 +30,12 @@ impl SourceStamp {
             #[cfg(unix)]
             identity: {
                 use std::os::unix::fs::MetadataExt;
-                (metadata.dev(), metadata.ino(), metadata.ctime(), metadata.ctime_nsec())
+                (
+                    metadata.dev(),
+                    metadata.ino(),
+                    metadata.ctime(),
+                    metadata.ctime_nsec(),
+                )
             },
         })
     }
@@ -47,8 +52,10 @@ impl Asset {
         let mut bytes = vec![0; count];
 
         let mut file = File::open(&*self.path).map_err(|e| invalid(e.to_string()))?;
-        file.seek(SeekFrom::Start(offset)).map_err(|e| invalid(e.to_string()))?;
-        file.read_exact(&mut bytes).map_err(|e| invalid(e.to_string()))?;
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|e| invalid(e.to_string()))?;
+        file.read_exact(&mut bytes)
+            .map_err(|e| invalid(e.to_string()))?;
 
         Ok(bytes)
     }
@@ -66,7 +73,9 @@ impl Asset {
             }
 
             Err(_) => {
-                return Err(invalid("Invalid asset offset or plugin UI asset is not UTF-8"));
+                return Err(invalid(
+                    "Invalid asset offset or plugin UI asset is not UTF-8",
+                ));
             }
         };
 
@@ -106,12 +115,17 @@ pub(super) fn asset(
     let relative = Path::new(name);
 
     if relative.is_absolute()
-        || relative.components().any(|c| !matches!(c, std::path::Component::Normal(_)))
+        || relative
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
     {
         return Err(invalid("Artifact paths must stay inside their directory"));
     }
 
-    let path = root.join(relative).canonicalize().map_err(|e| invalid(e.to_string()))?;
+    let path = root
+        .join(relative)
+        .canonicalize()
+        .map_err(|e| invalid(e.to_string()))?;
 
     if !path.starts_with(root) {
         return Err(invalid("Artifact symlink escapes its directory"));
@@ -156,7 +170,9 @@ pub(super) fn asset(
     let mut buffer = [0u8; 64 * 1024];
 
     loop {
-        let count = source.read(&mut buffer).map_err(|e| invalid(e.to_string()))?;
+        let count = source
+            .read(&mut buffer)
+            .map_err(|e| invalid(e.to_string()))?;
 
         if count == 0 {
             break;
@@ -168,7 +184,8 @@ pub(super) fn asset(
         hash.update(&buffer[..count]);
 
         if let Some(file) = &mut snapshot {
-            file.write_all(&buffer[..count]).map_err(|e| invalid(e.to_string()))?;
+            file.write_all(&buffer[..count])
+                .map_err(|e| invalid(e.to_string()))?;
         }
         len += count as u64;
     }

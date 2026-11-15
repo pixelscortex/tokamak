@@ -9,7 +9,9 @@ impl Artifact {
         directory: &Path,
         previous: Option<&Artifact>,
     ) -> Result<Self, Error> {
-        let root = directory.canonicalize().map_err(|e| invalid(e.to_string()))?;
+        let root = directory
+            .canonicalize()
+            .map_err(|e| invalid(e.to_string()))?;
 
         let manifest = Manifest::read(&root)?;
 
@@ -47,7 +49,9 @@ impl Artifact {
                 let source = assets[&entry.code].backend_text(&entry.code)?;
 
                 let map = assets[&entry.map].backend_text(&entry.map)?;
-                Bundle::new(source, Some(&map)).map(Arc::new).map_err(|e| invalid(e.to_string()))
+                Bundle::new(source, Some(&map))
+                    .map(Arc::new)
+                    .map_err(|e| invalid(e.to_string()))
             })
             .transpose()?;
 

@@ -518,7 +518,11 @@ fn the_select_trigger_keeps_its_box_on_hover() {
         assert_eq!(rect(&doc), before, "release open={open}");
         assert_eq!(
             support::attr(&doc, name, "aria-expanded").as_deref(),
-            Some(if open { "false" } else { "true" })
+            Some(if open {
+                "false"
+            } else {
+                "true"
+            })
         );
     }
     assert!(doc.take_error().is_none());

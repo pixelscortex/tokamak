@@ -21,7 +21,8 @@ fn local_ownership(directory: &Path) -> Result<File, Box<dyn std::error::Error>>
         options.mode(0o600);
     }
     let file = options.open(directory.join("server-owner.lock"))?;
-    file.try_lock().map_err(|error| format!("Cannot acquire local server ownership: {error}"))?;
+    file.try_lock()
+        .map_err(|error| format!("Cannot acquire local server ownership: {error}"))?;
     Ok(file)
 }
 
@@ -83,7 +84,8 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
     {
         return Err("Only discovered loopback ws:// endpoints are supported".into());
     }
-    url.set_scheme("http").map_err(|_| "Invalid local URL scheme")?;
+    url.set_scheme("http")
+        .map_err(|_| "Invalid local URL scheme")?;
     url.set_path(&path);
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -137,7 +139,9 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             );
             return Ok(None);
         }
-        let value = args.next().ok_or_else(|| format!("missing value for {flag}"))?;
+        let value = args
+            .next()
+            .ok_or_else(|| format!("missing value for {flag}"))?;
         match flag.as_str() {
             "--data" => data = value.into(),
             "--listen" => listen = value.parse()?,
@@ -277,10 +281,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = tokio::signal::ctrl_c().await;
             }
         },
-        token.map(|token| websocket::LocalAccess {
-            token,
-            identity,
-        }),
+        token.map(|token| websocket::LocalAccess { token, identity }),
     )
     .await;
     let closed = backend.close().await;

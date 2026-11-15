@@ -53,7 +53,9 @@ pub(super) async fn query(
 
     if let Some(index) = payload.get("index") {
         if !clauses.is_empty() {
-            return Err(data::Error::Invalid("indexed queries require an empty where array"));
+            return Err(data::Error::Invalid(
+                "indexed queries require an empty where array",
+            ));
         }
 
         return indexed(tx, reads, space, &table, index, order, limit).await;
@@ -71,13 +73,17 @@ pub(super) async fn query(
     // limit here, rather than interpreting dotted keys or SQL NONE/null.
     let rows = Box::pin(query.collect()).await?;
 
-    let rows = rows.into_iter().map(|doc| space.document(doc)).collect::<data::Result<Vec<_>>>()?;
+    let rows = rows
+        .into_iter()
+        .map(|doc| space.document(doc))
+        .collect::<data::Result<Vec<_>>>()?;
 
     Ok(Json::Array(
         rows.into_iter()
             .filter(|doc| {
                 clauses.iter().all(|(key, expected)| {
-                    doc.get(key).is_some_and(|actual| json_equal(actual, expected))
+                    doc.get(key)
+                        .is_some_and(|actual| json_equal(actual, expected))
                 })
             })
             .take(limit)
@@ -92,8 +98,9 @@ fn filters(payload: &Json, space: &DataSpace) -> data::Result<(Clauses, Option<d
 
     let mut record_dependency = None;
 
-    for clause in
-        field(payload, "where")?.as_array().ok_or(data::Error::Invalid("where must be an array"))?
+    for clause in field(payload, "where")?
+        .as_array()
+        .ok_or(data::Error::Invalid("where must be an array"))?
     {
         let name = text(clause, "field")?.to_owned();
 
@@ -134,7 +141,9 @@ fn limit(payload: &Json) -> data::Result<usize> {
         let count = limit
             .as_u64()
             .filter(|n| *n <= 9_007_199_254_740_991)
-            .ok_or(data::Error::Invalid("limit must be a nonnegative safe integer or null"))?;
+            .ok_or(data::Error::Invalid(
+                "limit must be a nonnegative safe integer or null",
+            ))?;
         usize::try_from(count).unwrap_or(usize::MAX)
     };
 
@@ -178,6 +187,8 @@ async fn indexed(
     let rows = Box::pin(query.limit(limit.min(u32::MAX as usize) as u32).collect()).await?;
 
     Ok(Json::Array(
-        rows.into_iter().map(|doc| space.document(doc)).collect::<data::Result<Vec<_>>>()?,
+        rows.into_iter()
+            .map(|doc| space.document(doc))
+            .collect::<data::Result<Vec<_>>>()?,
     ))
 }

@@ -62,7 +62,11 @@ impl Loaded {
                 );
             }
 
-            for mut function in descriptor["functions"].as_array().expect("inspected").clone() {
+            for mut function in descriptor["functions"]
+                .as_array()
+                .expect("inspected")
+                .clone()
+            {
                 function["name"] =
                     format!("{id}/{}", function["name"].as_str().expect("inspected")).into();
                 functions.push(function);
@@ -98,11 +102,16 @@ impl Loaded {
         writable: bool,
         path: &[String],
     ) -> Result<Target, String> {
-        let target =
-            self.targets.get(name).ok_or_else(|| format!("Unknown plugin function: {name}"))?;
+        let target = self
+            .targets
+            .get(name)
+            .ok_or_else(|| format!("Unknown plugin function: {name}"))?;
 
         if !self.catalog.can_call(caller, &target.owner) {
-            return Err(format!("{caller} does not declare access to {}", target.owner));
+            return Err(format!(
+                "{caller} does not declare access to {}",
+                target.owner
+            ));
         }
 
         let manifest = &self.catalog.plugins[&target.owner].manifest;
@@ -111,7 +120,10 @@ impl Loaded {
             && (manifest.plugin.exports.is_none()
                 || !manifest.public_functions.contains(&target.local_name))
         {
-            return Err(format!("{} is not exported by {}", target.local_name, target.owner));
+            return Err(format!(
+                "{} is not exported by {}",
+                target.local_name, target.owner
+            ));
         }
 
         if target.kind == crate::service::FunctionKind::Action {

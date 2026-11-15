@@ -21,11 +21,14 @@ impl Server {
 
             let schema = crate::schema::Schema::parse(&inspected.0["schema"])?;
 
-            let mut tx =
-                Box::pin(database.begin()).await.map_err(|e| Error::Invalid(e.to_string()))?;
+            let mut tx = Box::pin(database.begin())
+                .await
+                .map_err(|e| Error::Invalid(e.to_string()))?;
 
             match Box::pin(schema.apply(&mut tx, &space)).await {
-                Ok(()) => Box::pin(tx.commit()).await.map_err(|e| Error::Invalid(e.to_string()))?,
+                Ok(()) => Box::pin(tx.commit())
+                    .await
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
                 Err(error) => {
                     Box::pin(tx.rollback()).await.map_err(|e| {
                         Error::Invalid(format!("{error}; schema rollback failed: {e}"))
@@ -45,7 +48,17 @@ impl Server {
                 return Err(startup_error(&mut database, error).await);
             }
         };
-        Self::start(database, pool, Some(bundle), space, descriptor, kinds, None, None).await
+        Self::start(
+            database,
+            pool,
+            Some(bundle),
+            space,
+            descriptor,
+            kinds,
+            None,
+            None,
+        )
+        .await
     }
 
     /// All static manifests resolve before any plugin module is evaluated.
@@ -60,7 +73,9 @@ impl Server {
         };
 
         let loaded = match loaded {
-            Ok(loaded) => Box::pin(loaded.record_grants(&database, None)).await.map(|()| loaded),
+            Ok(loaded) => Box::pin(loaded.record_grants(&database, None))
+                .await
+                .map(|()| loaded),
             Err(error) => Err(error),
         };
 
@@ -71,8 +86,11 @@ impl Server {
             }
         };
 
-        let kinds =
-            loaded.targets.iter().map(|(name, target)| (name.clone(), target.kind)).collect();
+        let kinds = loaded
+            .targets
+            .iter()
+            .map(|(name, target)| (name.clone(), target.kind))
+            .collect();
         Self::start(
             database,
             pool,
@@ -152,7 +170,12 @@ pub(crate) async fn inspect(
     bundle: Arc<Bundle>,
 ) -> Result<(Json, BTreeMap<String, FunctionKind>), Error> {
     let descriptor = pool
-        .submit(bundle.clone(), "describe", Json::Null, Arc::new(OpRegistry::new()))
+        .submit(
+            bundle.clone(),
+            "describe",
+            Json::Null,
+            Arc::new(OpRegistry::new()),
+        )
         .map_err(|e| Error::Invalid(e.to_string()))?
         .await
         .map_err(|e| Error::Invalid(e.to_string()))?;
@@ -186,7 +209,9 @@ pub(crate) async fn inspect(
     }
 
     if descriptor.get("schema").is_none() {
-        return Err(Error::Invalid("bundle descriptor must include schema".into()));
+        return Err(Error::Invalid(
+            "bundle descriptor must include schema".into(),
+        ));
     }
     crate::schema::Schema::parse(&descriptor["schema"])?;
 

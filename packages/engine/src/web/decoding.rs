@@ -23,12 +23,17 @@ pub(super) fn sync(r: &mut Resources, p: &Json) -> Result<Json> {
         "decode" => {
             let bytes = bytes(&p["bytes"])?;
 
-            let decoder = r.decoders.get_mut(&id(p)?).ok_or("text decoder is closed")?;
+            let decoder = r
+                .decoders
+                .get_mut(&id(p)?)
+                .ok_or("text decoder is closed")?;
 
             let last = p["last"].as_bool() == Some(true);
 
             let mut output = String::with_capacity(
-                decoder.max_utf8_buffer_length(bytes.len()).ok_or("decoder input too large")?,
+                decoder
+                    .max_utf8_buffer_length(bytes.len())
+                    .ok_or("decoder input too large")?,
             );
 
             let (_, _, errors) = decoder.decode_to_string(&bytes, &mut output, last);

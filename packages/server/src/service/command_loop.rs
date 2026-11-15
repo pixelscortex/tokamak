@@ -87,8 +87,9 @@ impl Coordinator {
         // await point by a disappearing client/server handle.
         self.stop_actions().await;
 
-        let result =
-            Box::pin(self.database.close()).await.map_err(|e| Error::Invalid(e.to_string()));
+        let result = Box::pin(self.database.close())
+            .await
+            .map_err(|e| Error::Invalid(e.to_string()));
         self.closed.send_replace(Some(result));
     }
 }

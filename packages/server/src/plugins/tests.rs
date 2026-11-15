@@ -136,8 +136,7 @@ fn rejects_unbuilt_and_escaping_artifacts() {
     assert!(error(&root.0).contains("not been built"));
     let path = write(&root.0, "artifact", json!({"id":"a","version":"1.0.0"}));
     let manifest = path.join("manifest.json");
-    let mut metadata: Value =
-        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    let mut metadata: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
     metadata["entries"]["ui"]["code"] = "../outside.js".into();
     std::fs::write(&manifest, metadata.to_string()).unwrap();
     assert!(

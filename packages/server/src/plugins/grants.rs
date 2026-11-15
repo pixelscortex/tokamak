@@ -18,7 +18,9 @@ impl Loaded {
             .table(&Table::new("grants").map_err(|e| invalid(e.to_string()))?)
             .map_err(|e| invalid(e.to_string()))?;
 
-        let mut tx = Box::pin(database.begin()).await.map_err(|e| invalid(e.to_string()))?;
+        let mut tx = Box::pin(database.begin())
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
 
         let result = async {
             // Schemas and grants commit together for the candidate generation.
@@ -47,14 +49,11 @@ impl Loaded {
 
         match result {
             Ok(granted) => {
-                Box::pin(tx.commit()).await.map_err(|e| invalid(e.to_string()))?;
+                Box::pin(tx.commit())
+                    .await
+                    .map_err(|e| invalid(e.to_string()))?;
 
-                for Grant {
-                    id,
-                    version,
-                    count,
-                } in granted
-                {
+                for Grant { id, version, count } in granted {
                     eprintln!(
                         "Auto-granted {count} declared capabilities to {id}@{version} (trusted local plugins)"
                     );
@@ -95,10 +94,15 @@ async fn stage_grant(
 
     let key = format!("{id}@{}", definition.version);
 
-    let record_id = Id::new(table.clone(), format!("{:x}", Sha256::digest(key.as_bytes())))
-        .map_err(|e| invalid(e.to_string()))?;
+    let record_id = Id::new(
+        table.clone(),
+        format!("{:x}", Sha256::digest(key.as_bytes())),
+    )
+    .map_err(|e| invalid(e.to_string()))?;
 
-    let existing = Box::pin(tx.get(&record_id)).await.map_err(|e| invalid(e.to_string()))?;
+    let existing = Box::pin(tx.get(&record_id))
+        .await
+        .map_err(|e| invalid(e.to_string()))?;
 
     if let Some(record) = existing.map(|row| row.into_json()) {
         if record["permissions"] != json!(permissions) {
@@ -120,7 +124,9 @@ async fn stage_grant(
     }))
     .map_err(|e| invalid(e.to_string()))?;
 
-    Box::pin(tx.insert_keyed(&record_id, record)).await.map_err(|e| invalid(e.to_string()))?;
+    Box::pin(tx.insert_keyed(&record_id, record))
+        .await
+        .map_err(|e| invalid(e.to_string()))?;
 
     Ok(Some(Grant {
         id: id.to_owned(),

@@ -8,7 +8,14 @@ pub(super) fn register(
     space: DataSpace,
     writable: bool,
 ) {
-    for operation in ["db.get", "db.query", "db.insert", "db.patch", "db.replace", "db.delete"] {
+    for operation in [
+        "db.get",
+        "db.query",
+        "db.insert",
+        "db.patch",
+        "db.replace",
+        "db.delete",
+    ] {
         let shared = shared.clone();
 
         let observations = observations.clone();
@@ -82,9 +89,9 @@ pub(super) fn field<'a>(payload: &'a Json, key: &str) -> data::Result<&'a Json> 
 }
 
 pub(super) fn text<'a>(payload: &'a Json, key: &str) -> data::Result<&'a str> {
-    field(payload, key)?
-        .as_str()
-        .ok_or(data::Error::Invalid("host operation field must be a string"))
+    field(payload, key)?.as_str().ok_or(data::Error::Invalid(
+        "host operation field must be a string",
+    ))
 }
 
 async fn operation_call(
@@ -110,7 +117,9 @@ async fn operation_call(
 
             let value = json_object(field(&payload, "value")?)?;
 
-            Ok(json!(space.present_id(&Box::pin(tx.insert(&table, value)).await?)?))
+            Ok(json!(
+                space.present_id(&Box::pin(tx.insert(&table, value)).await?)?
+            ))
         }
         "db.patch" | "db.replace" | "db.delete" => {
             let id = space.id(text(&payload, "id")?)?;

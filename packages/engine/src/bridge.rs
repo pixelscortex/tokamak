@@ -71,7 +71,11 @@ impl Drop for ModuleCall {
 /// Construct before sharing. Per-call registries can capture the server's
 /// transaction/readset without making the runtime aware of database semantics.
 #[derive(Default)]
-pub struct OpRegistry(BTreeMap<String, Op>, pub(crate) Option<Determinism>, Vec<String>);
+pub struct OpRegistry(
+    BTreeMap<String, Op>,
+    pub(crate) Option<Determinism>,
+    Vec<String>,
+);
 
 impl OpRegistry {
     pub fn new() -> Self {
@@ -114,7 +118,10 @@ impl OpRegistry {
         F: Fn(Json) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = OpResult> + Send + 'static,
     {
-        self.insert(name.into(), Op::Async(Box::new(move |args| Box::pin(op(args)))))
+        self.insert(
+            name.into(),
+            Op::Async(Box::new(move |args| Box::pin(op(args)))),
+        )
     }
 
     /// Domain routing/authority belongs to the native resolver. The error
@@ -213,48 +220,53 @@ fn install_leased<'js>(
     let host = Object::new(ctx.clone())?;
     host.set(
         "op",
-        Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String, args: Value<'js>| {
-            check(&ctx, &lease.active, lease.deadline)?;
-            let args = decode(&ctx, args)?;
-            // Serialization can run application getters, so check again immediately
-            // before entering Rust, not just before converting the arguments.
-            check(&ctx, &lease.active, lease.deadline)?;
-            let op = registry.0.get(&name).ok_or_else(|| {
-                Exception::throw_message(&ctx, &format!("unknown host op: {name}"))
-            })?;
-            match op {
-                Op::Sync(op) => {
-                    let result = op(args).map_err(|e| Exception::throw_message(&ctx, &e))?;
-                    check(&ctx, &lease.active, lease.deadline)?;
-                    encode(&ctx, result)
-                }
-                Op::Module(resolve) => {
-                    let mut call =
-                        resolve(args).map_err(|error| Exception::throw_message(&ctx, &error))?;
-                    let number = lease.modules.fetch_add(1, Ordering::Relaxed);
-                    if lease.depth >= 16 || number >= 256 {
-                        call.finish(Some("delegated module depth/count budget exceeded".into()));
-                        return Err(Exception::throw_message(
-                            &ctx,
-                            "delegated module depth/count budget exceeded",
-                        ));
+        Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'js>, name: String, args: Value<'js>| {
+                check(&ctx, &lease.active, lease.deadline)?;
+                let args = decode(&ctx, args)?;
+                // Serialization can run application getters, so check again immediately
+                // before entering Rust, not just before converting the arguments.
+                check(&ctx, &lease.active, lease.deadline)?;
+                let op = registry.0.get(&name).ok_or_else(|| {
+                    Exception::throw_message(&ctx, &format!("unknown host op: {name}"))
+                })?;
+                match op {
+                    Op::Sync(op) => {
+                        let result = op(args).map_err(|e| Exception::throw_message(&ctx, &e))?;
+                        check(&ctx, &lease.active, lease.deadline)?;
+                        encode(&ctx, result)
                     }
-                    Ok(Promise::wrap_future(
-                        &ctx,
-                        invoke_module(ctx.clone(), call, lease.clone(), number),
-                    )?
-                    .into_value())
+                    Op::Module(resolve) => {
+                        let mut call = resolve(args)
+                            .map_err(|error| Exception::throw_message(&ctx, &error))?;
+                        let number = lease.modules.fetch_add(1, Ordering::Relaxed);
+                        if lease.depth >= 16 || number >= 256 {
+                            call.finish(Some(
+                                "delegated module depth/count budget exceeded".into(),
+                            ));
+                            return Err(Exception::throw_message(
+                                &ctx,
+                                "delegated module depth/count budget exceeded",
+                            ));
+                        }
+                        Ok(Promise::wrap_future(
+                            &ctx,
+                            invoke_module(ctx.clone(), call, lease.clone(), number),
+                        )?
+                        .into_value())
+                    }
+                    Op::Async(op) => {
+                        let future = op(args);
+                        Ok(Promise::wrap_future(
+                            &ctx,
+                            await_operation(ctx.clone(), future, lease.clone()),
+                        )?
+                        .into_value())
+                    }
                 }
-                Op::Async(op) => {
-                    let future = op(args);
-                    Ok(Promise::wrap_future(
-                        &ctx,
-                        await_operation(ctx.clone(), future, lease.clone()),
-                    )?
-                    .into_value())
-                }
-            }
-        })?,
+            },
+        )?,
     )?;
     Ok(host)
 }
@@ -341,7 +353,10 @@ async fn await_operation<'js>(
 
 fn check(ctx: &Ctx<'_>, active: &AtomicBool, deadline: Option<Instant>) -> rquickjs::Result<()> {
     if !active.load(Ordering::Acquire) || deadline.is_some_and(|end| Instant::now() >= end) {
-        return Err(Exception::throw_message(ctx, "stale invocation: host operation refused"));
+        return Err(Exception::throw_message(
+            ctx,
+            "stale invocation: host operation refused",
+        ));
     }
     Ok(())
 }

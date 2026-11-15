@@ -57,7 +57,11 @@ pub(crate) async fn invoke(
     determinism: Determinism,
 ) -> Call {
     let (bundle, name, space, graph) = if let Some(plugins) = plugins {
-        let target = plugins.targets.get(name).expect("coordinator validated target").clone();
+        let target = plugins
+            .targets
+            .get(name)
+            .expect("coordinator validated target")
+            .clone();
         (
             target.bundle,
             target.local_name,
@@ -65,7 +69,12 @@ pub(crate) async fn invoke(
             Some((plugins, target.owner, vec![name.to_owned()])),
         )
     } else {
-        (bundle.expect("legacy bundle"), name.to_owned(), space.clone(), None)
+        (
+            bundle.expect("legacy bundle"),
+            name.to_owned(),
+            space.clone(),
+            None,
+        )
     };
 
     let tx = if mutation {
@@ -106,7 +115,11 @@ pub(crate) async fn invoke(
         Err(e) => Err(e.to_string()),
     };
 
-    let tx = shared.lock().await.take().expect("only invocation owner finishes");
+    let tx = shared
+        .lock()
+        .await
+        .take()
+        .expect("only invocation owner finishes");
 
     let mut observed = observations.lock().await;
 
@@ -125,7 +138,9 @@ pub(crate) async fn invoke(
             Err(error) => {
                 observed.conflict |= error.is_retryable_conflict();
 
-                Err(format!("transaction commit failed (outcome may be unknown): {error}"))
+                Err(format!(
+                    "transaction commit failed (outcome may be unknown): {error}"
+                ))
             }
         },
         Err(error) => match Box::pin(tx.rollback()).await {
@@ -180,7 +195,10 @@ fn operations(
             let result = text(&payload, "interface")
                 .map_err(|e| e.to_string())
                 .and_then(|interface| {
-                    catalog.catalog.providers(&caller, interface).map_err(|e| e.to_string())
+                    catalog
+                        .catalog
+                        .providers(&caller, interface)
+                        .map_err(|e| e.to_string())
                 })
                 .map(|ids| json!(ids));
 

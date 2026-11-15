@@ -23,7 +23,10 @@ impl Catalog {
                 if let Some(directory) = artifact_directory(&path) {
                     result.push(directory);
                 } else if path.join("package.json").is_file() {
-                    return Err(invalid(format!("Plugin has not been built: {}", path.display())));
+                    return Err(invalid(format!(
+                        "Plugin has not been built: {}",
+                        path.display()
+                    )));
                 }
             }
             result.sort();
@@ -44,7 +47,9 @@ impl Catalog {
             let id = artifact.manifest.plugin.id.clone();
 
             if plugins.insert(id.clone(), Arc::new(artifact)).is_some() {
-                return Err(invalid(format!("Duplicate installed plugin identity: {id}")));
+                return Err(invalid(format!(
+                    "Duplicate installed plugin identity: {id}"
+                )));
             }
         }
 
@@ -62,7 +67,10 @@ impl Catalog {
 
         for id in &order {
             for interface in &plugins[id].provides {
-                providers.entry(interface.clone()).or_default().push(id.clone());
+                providers
+                    .entry(interface.clone())
+                    .or_default()
+                    .push(id.clone());
             }
         }
 
@@ -80,7 +88,10 @@ impl Catalog {
     }
 
     pub fn providers(&self, caller: &str, interface: &str) -> Result<Vec<String>, Error> {
-        let artifact = self.plugins.get(caller).ok_or_else(|| invalid("Unknown calling plugin"))?;
+        let artifact = self
+            .plugins
+            .get(caller)
+            .ok_or_else(|| invalid("Unknown calling plugin"))?;
 
         if !artifact.consumes.contains(interface) {
             return Err(invalid("Plugin does not declare this consumed interface"));
@@ -102,7 +113,10 @@ impl Catalog {
         definition.id == target.manifest.plugin.id
             || definition.depends.contains_key(&target.manifest.plugin.id)
             || definition.optional.contains_key(&target.manifest.plugin.id)
-            || caller.consumes.iter().any(|interface| target.provides.contains(interface))
+            || caller
+                .consumes
+                .iter()
+                .any(|interface| target.provides.contains(interface))
     }
 
     pub fn permits_network(&self, plugin: &str, host: &str) -> bool {

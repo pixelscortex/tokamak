@@ -8,7 +8,12 @@ use std::{
 };
 
 pub fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().into()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .into()
 }
 
 pub fn bun_script(name: &str) -> Command {
@@ -38,7 +43,10 @@ pub fn bundle() -> Arc<Bundle> {
     static BUILT: OnceLock<Arc<Bundle>> = OnceLock::new();
     BUILT
         .get_or_init(|| {
-            let output = bun_script("build-feature.mjs").arg("--load").output().unwrap();
+            let output = bun_script("build-feature.mjs")
+                .arg("--load")
+                .output()
+                .unwrap();
             assert!(
                 output.status.success(),
                 "real SDK feature build failed:\n{}\n{}",
@@ -50,8 +58,11 @@ pub fn bundle() -> Arc<Bundle> {
             let stdout = String::from_utf8(output.stdout).unwrap();
             let built: Json = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
             Arc::new(
-                Bundle::new(built["code"].as_str().unwrap(), Some(built["map"].as_str().unwrap()))
-                    .unwrap(),
+                Bundle::new(
+                    built["code"].as_str().unwrap(),
+                    Some(built["map"].as_str().unwrap()),
+                )
+                .unwrap(),
             )
         })
         .clone()
