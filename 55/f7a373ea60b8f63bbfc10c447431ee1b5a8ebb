@@ -1,0 +1,21 @@
+app/src/chat/thread-view.tsx
+  s_4f307e17b09e61::t_22dfe8b88af71c 1,26
+packages/render/js/index.ts
+  s_4f307e17b09e61::t_f29d51b57a8aa4 57-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55f7a373ea60b8f63bbfc10c447431ee1b5a8ebb",
+  "prompts": {},
+  "sessions": {
+    "s_4f307e17b09e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e152-45b2-75d3-aaeb-86306de2e06a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
