@@ -26,7 +26,7 @@ export default function TodoCard(props: { part: { result?: unknown }; threadId: 
     }
   }
 
-  return <section data-todo-card class="box-border flex size-48 flex-col gap-4 border border-hairline bg-ground p-4">
+  return <section data-todo-card class="box-border flex w-full flex-col gap-4 border border-hairline bg-ground p-4">
     <Show when={todo.data()} fallback={<p class="m-0 text-text-3">{todo.data() === null ? "Task deleted" : "Loading task…"}</p>}>
       {(task: Accessor<Todo>) => <div class="flex items-start gap-2 text-text">
         <button role="checkbox" aria-checked={task().done} disabled={pending()} aria-label={`Complete: ${task().title}`}
