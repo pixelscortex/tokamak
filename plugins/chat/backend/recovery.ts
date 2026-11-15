@@ -1,3 +1,4 @@
+import { interruptTools } from "./parts";
 import type { DatabaseWriter, Doc } from "@tokamak/sdk";
 import type { Model } from "./_functions";
 
@@ -10,7 +11,10 @@ export async function interruptStale(db: DatabaseWriter<Model>, runs: Doc<Model,
     if (run.status !== "running" || now - (run.updatedAt ?? run.startedAt) < STALE_AFTER_MS) continue;
 
     await db.patch(run._id, { status: "error", error: "Interrupted", finishedAt: now });
-    if (await db.get(run.messageId)) await db.patch(run.messageId, { status: "error", error: "Interrupted" });
+    const message = await db.get(run.messageId);
+    if (message) await db.patch(run.messageId, {
+      status: "error", error: "Interrupted", parts: interruptTools(message.parts, "Interrupted"),
+    });
     await db.patch(run.threadId, { updatedAt: now });
   }
 }

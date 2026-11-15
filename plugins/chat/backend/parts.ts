@@ -35,3 +35,8 @@ export function boundedError(error: string): string {
   // Each UTF-16 code unit needs at most three UTF-8 bytes.
   return error.slice(0, 680);
 }
+
+export function interruptTools(parts: (Infer<typeof textPart> | ToolPart)[], error: string) {
+  return parts.map(part => part.type === "tool" && part.status === "running"
+    ? { ...part, status: "error" as const, error } : part);
+}
