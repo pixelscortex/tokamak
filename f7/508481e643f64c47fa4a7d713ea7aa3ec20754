@@ -1,0 +1,22 @@
+packages/render/src/input.rs
+  s_1fe29573c38953::t_8c573b88ce4632 131-154,164
+packages/render/tests/edit_policy.rs
+  s_1fe29573c38953::t_8c573b88ce4632 1-3,69-130
+  s_1fe29573c38953::t_f6f270f885769c 131-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7508481e643f64c47fa4a7d713ea7aa3ec20754",
+  "prompts": {},
+  "sessions": {
+    "s_1fe29573c38953": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1de7c-0c19-7083-8213-0d82c9257571",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
