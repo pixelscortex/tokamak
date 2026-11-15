@@ -1,0 +1,57 @@
+packages/build/src/contributions.ts
+  s_fc6a6bb52fab80::t_d659bc80a3f58a 87-104,109-118
+packages/engine/src/bridge.rs
+  s_fc6a6bb52fab80::t_72e0ad4315ee19 74,117,186-196,216-240,242-246,248-257,262-317,320-339,344
+packages/engine/src/pool.rs
+  s_fc6a6bb52fab80::t_e16bd42b4e9670 165-168,182-208
+packages/engine/src/web/surface.js
+  s_fc6a6bb52fab80::t_d4648a4db4ac6d 3-5,7-9,11-33,35-36,39-65,68-72,74-75,77-89,92-122,126-139,141,144-161,164-177,179-197,199-200,203-219,221-260,263-266,268-285,287-296,299-300,302-313,315-347,349-357,359-375,378-385,387-391,394-423,425,428-434,437-442,444-448
+packages/engine/tests/find_interrupt.rs
+  s_fc6a6bb52fab80::t_b90444c0144ff2 15,57-78,82-87,89-104,107-112
+packages/engine/tests/support/find_watchdog.rs
+  s_fc6a6bb52fab80::t_aef6c29c534bd5 23
+packages/render/js/async-ownership.ts
+  s_fc6a6bb52fab80::t_1c68a4535b94d0 57-82
+packages/render/tests/find_interrupt.rs
+  s_fc6a6bb52fab80::t_8c1e8fd5185653 111,117,124
+packages/runtime/src/client/connection.rs
+  s_fc6a6bb52fab80::t_b62b06fe196cce 24-25,27,86,90
+packages/sdk/src/websocket-transport.ts
+  s_fc6a6bb52fab80::t_6a63795a615bb8 38-39,57-87
+packages/server/src/actions.rs
+  s_fc6a6bb52fab80::t_fda735828538d9 30,38-40,53,69,75-76,87-100
+packages/server/src/data/changes.rs
+  s_fc6a6bb52fab80::t_a20b428ce9491d 21,44-47,130-132,139-143,150,178,182
+packages/server/src/data/query.rs
+  s_fc6a6bb52fab80::t_555cb632a2dcb9 84,159,200,230-231,239-245
+packages/server/src/main.rs
+  s_fc6a6bb52fab80::t_f71a5824a5384f 24,86,140,158-165,168-173,195-212,215-223,256,280-283
+packages/server/src/schema.rs
+  s_fc6a6bb52fab80::t_2c79a08bd5eb46 44,47-84
+packages/server/tests/sdk_transport.rs
+  s_fc6a6bb52fab80::t_59fbec72f5d97f 32,55-56,98,109,139-140,144,148-151,172,175-176,247-249,252,255-258,268,278,282,285-288,317,334,355,369-371,392-395,434,437-438
+packages/server/tests/service.rs
+  s_fc6a6bb52fab80::t_27a421001807f8 38-39,92,108,155,181-183,185-186,189-190,194,196,226,229,231,233-235,237,239-241,248,264-267,277-280,324,330-332,339,342,350-353,390,400,406,420,427,439-442,444,446,454,463,471,473-478,482-483,494-497,501,516,552,573,576,583,586,624-628,662,667,715-719,739,741,762,765,779,785
+packages/server/tests/support/sdk.rs
+  s_fc6a6bb52fab80::t_2c9c549bb174b3 2-8,16-19,31-33,41,53-54
+packages/ui/src/components/select-menu.tsx
+  s_fc6a6bb52fab80::t_17e7d6eb63dc93 15-75,80-102,104-108,110-117
+packages/ui/src/components/select.tsx
+  s_fc6a6bb52fab80::t_ad11819915d1cf 186-193,205-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "333e576c3d36b1d0cbd9c07b5e3a08397a7f64eb",
+  "prompts": {},
+  "sessions": {
+    "s_fc6a6bb52fab80": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e12c-2ce3-7be0-b351-abc8a2f82dd4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
