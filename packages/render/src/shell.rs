@@ -121,11 +121,11 @@ pub fn launch_window_with(
                 .with_fullsize_content_view(true),
         ));
     }
-    let painter = document.surface_painter();
-    app.add_window(
-        WindowConfig::with_attributes(Box::new(document), VelloWindowRenderer::new(), attributes)
-            .with_element_painter(painter),
-    );
+    app.add_window(WindowConfig::with_attributes(
+        Box::new(document),
+        VelloWindowRenderer::new(),
+        attributes,
+    ));
     connect(sender);
     event_loop
         .run_app(Host(app, mailbox, options))

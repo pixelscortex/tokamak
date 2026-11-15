@@ -50,7 +50,6 @@ pub(crate) struct Tree {
     topology: HashMap<u32, Entry>,
     native: HashMap<u32, NodeId>,
     handles: HashMap<NodeId, u32>,
-    pub surfaces: crate::surface::Surfaces,
     pub(super) layout: crate::layout::Observed,
 }
 
@@ -66,7 +65,6 @@ impl Tree {
             )]),
             native: HashMap::from([(0, root)]),
             handles: HashMap::from([(root, 0)]),
-            surfaces: Default::default(),
             layout: Default::default(),
         }
     }
@@ -165,10 +163,6 @@ impl Tree {
                 }
                 Mutation::TextValue { id, value } => dom.set_node_text(self.native[&id], &value),
                 Mutation::Attribute { id, name, value } => {
-                    if name == "surface-groups" || name == "tk-group" {
-                        self.surfaces
-                            .attribute(self.native[&id], &name, value.as_deref());
-                    }
                     // Layout observation (layout.rs): reported from the next
                     // layout on, whatever the attribute's value.
                     if name == "tk-observe" {
@@ -194,9 +188,6 @@ impl Tree {
                 Mutation::Detach { id } => dom.remove_node(self.native[&id]),
             }
         }
-        drop(dom);
-        drop(inner);
-        self.surfaces.retain(&document.inner());
         self.topology = staged;
         Ok(())
     }

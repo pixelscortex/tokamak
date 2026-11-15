@@ -55,14 +55,6 @@ export namespace JSX {
     onKeyUp?: EventHandler;
     onComposition?: EventHandler;
     onAppleKeybinding?: EventHandler;
-    "tk-group"?: string;
-    "surface-own"?: "false";
-    "surface-groups"?: string;
-    "surface-op"?: "add" | "cut";
-    "surface-join"?: number;
-    "surface-slant"?: string;
-    "surface-animate"?: true;
-    "surface-attach"?: "left" | "right" | "top" | "bottom";
     /** With `WindowOptions::custom_titlebar`: pressing here drags the window. */
     "window-drag"?: true;
     "window-no-drag"?: true;

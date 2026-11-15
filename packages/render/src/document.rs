@@ -4,7 +4,7 @@ use crate::{
     bridge::Bridge,
     icon,
     input::{Composition, Handler},
-    js, layout, surface, wire,
+    js, layout, wire,
 };
 use blitz_dom::{DocGuard, DocGuardMut, Document, EventDriver};
 use blitz_html::HtmlDocument;
@@ -84,10 +84,6 @@ impl NativeDocument {
         }
         // Still changing after the last round: lay out what it left.
         self.html.inner_mut().resolve(time);
-    }
-
-    pub fn surface_painter(&self) -> surface::SurfacePainter {
-        self.bridge.tree.surfaces.painter()
     }
 
     pub fn take_error(&mut self) -> Option<Error> {
