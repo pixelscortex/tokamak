@@ -832,3 +832,46 @@ fn full_screen_sizes_draw_every_shell_surface() {
         }
     }
 }
+
+#[test]
+#[ignore = "release paint benchmark; run explicitly"]
+fn release_paint_benchmark() {
+    for scale in [1.0, 2.0] {
+        for view in ["chat", "select", "composer", "surfaces"] {
+            let mut doc = document(scale, 900.0);
+            open(&mut doc, view);
+            for groups in [true, false] {
+                if !groups {
+                    use blitz_dom::{Namespace, QualName};
+                    let ids = doc
+                        .inner()
+                        .query_selector_all("[tk-group], [surface-groups]")
+                        .unwrap();
+                    for id in ids {
+                        for name in ["tk-group", "surface-groups"] {
+                            doc.inner_mut().mutate().clear_attribute(
+                                id,
+                                QualName::new(None, Namespace::from(""), name.into()),
+                            );
+                        }
+                    }
+                    doc.resolve_layout(0.0);
+                }
+                for _ in 0..20 {
+                    paint(&mut doc);
+                }
+                let mut samples = Vec::new();
+                for _ in 0..80 {
+                    let start = std::time::Instant::now();
+                    paint(&mut doc);
+                    samples.push(start.elapsed().as_secs_f64() * 1000.0);
+                }
+                samples.sort_by(f64::total_cmp);
+                println!(
+                    "REVIEW_BENCH view={view} scale={scale} groups={groups} median_ms={:.6} p10_ms={:.6} p90_ms={:.6}",
+                    samples[40], samples[8], samples[72]
+                );
+            }
+        }
+    }
+}

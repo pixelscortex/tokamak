@@ -377,7 +377,7 @@ fn general_join_rounds_the_intersection() {
 }
 
 #[test]
-fn edge_bands_stay_inside_the_real_contours_at_both_scales() {
+fn edge_bands_face_inward_and_the_scene_clips_them_at_both_scales() {
     let shapes = [
         Shape::rect(false, [0.0, 0.0, 420.0, 200.0], [20.0; 4]),
         Shape {
@@ -389,25 +389,31 @@ fn edge_bands_stay_inside_the_real_contours_at_both_scales() {
     assert_eq!(r.0.len(), 1);
     assert_eq!(r.0[0].interiors().len(), 1);
     let bands = outline::bands(&r, 2.0);
-    use geo::{CoordsIter, Distance, Euclidean};
     for (band, _) in &bands {
-        for c in band.coords_iter() {
-            let point = Point::new(c.x, c.y);
-            let nearest = std::iter::once(r.0[0].exterior())
-                .chain(r.0[0].interiors())
-                .map(|ring| Euclidean.distance(&point, ring))
-                .fold(f64::INFINITY, f64::min);
-            assert!(nearest <= 2.02, "band escaped its width: {nearest}");
+        let points = &band.0[0].exterior().0;
+        let (a, b) = (points[0], points[1]);
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let len = dx.hypot(dy);
+        let midpoint = Point::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
+        let inward = if r.contains(&Point::new(
+            midpoint.x() - dy / len * 0.001,
+            midpoint.y() + dx / len * 0.001,
+        )) {
+            1.0
+        } else {
+            -1.0
+        };
+        for p in points {
+            let distance = ((p.x - a.x) * -dy + (p.y - a.y) * dx) / len * inward;
+            assert!(
+                (-1e-6..=2.000001).contains(&distance),
+                "band depth {distance}"
+            );
         }
     }
     let band = bands
         .iter()
         .fold(geo::MultiPolygon::new(vec![]), |r, (p, _)| r.union(p));
-    assert!(
-        band.difference(&r).unsigned_area() < 1e-4,
-        "spill {}",
-        band.difference(&r).unsigned_area()
-    );
     assert!(inside(&band, 1.0, 100.0) && inside(&band, 279.0, 100.0));
     assert!(!inside(&band, -1.0, 100.0) && !inside(&band, 281.0, 100.0));
     assert!(!inside(&band, 3.0, 100.0) && !inside(&band, 277.0, 100.0));
@@ -894,4 +900,50 @@ fn a_singular_root_transform_does_not_invert_or_keep_group_state() {
         &["member"],
     );
     assert!(f.surfaces.0.borrow().states.is_empty());
+}
+
+#[test]
+#[ignore = "offscreen GPU raster; run explicitly"]
+fn raw_edge_bands_paint_nothing_outside_the_outline() {
+    use anyrender::ImageRenderer;
+    use geo::{Distance, Euclidean};
+    let shapes = [
+        Shape::rect(false, [20.0, 20.0, 100.0, 100.0], [12.0; 4]),
+        Shape::rect(true, [70.0, 60.0, 70.0, 30.0], [8.0; 4]),
+    ];
+    let r = region(&shapes);
+    for scale in [1.0, 2.0] {
+        let size = (150.0 * scale) as u32;
+        let mut renderer = anyrender_vello::VelloImageRenderer::new(size, size);
+        let mut pixels = vec![];
+        renderer.render_to_vec(
+            |scene| {
+                scene.append_scene(
+                    draw(
+                        &shapes,
+                        Look {
+                            fill: [0.5, 0.5, 0.5, 1.0],
+                            bevel: 10.0,
+                            strength: 1.0,
+                            ..Default::default()
+                        },
+                        scale,
+                    ),
+                    Affine::IDENTITY,
+                )
+            },
+            &mut pixels,
+        );
+        let mut outside = 0;
+        for y in 0..size {
+            for x in 0..size {
+                let p = Point::new((x as f64 + 0.5) / scale, (y as f64 + 0.5) / scale);
+                if Euclidean.distance(&p, &r) > 1.0 / scale {
+                    assert_eq!(pixels[((y * size + x) * 4 + 3) as usize], 0);
+                    outside += 1;
+                }
+            }
+        }
+        assert!(outside > 1000);
+    }
 }

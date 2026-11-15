@@ -511,10 +511,7 @@ pub(super) fn bands(region: &MultiPolygon<f64>, width: f64) -> Vec<(MultiPolygon
                     LineString::new(vec![points[i], points[j], inset[j], inset[i], points[i]]),
                     vec![],
                 );
-                bands.push((
-                    MultiPolygon(vec![band]).intersection(region),
-                    normals[i].1 as f32,
-                ));
+                bands.push((MultiPolygon(vec![band]), normals[i].1 as f32));
             }
         }
     }
