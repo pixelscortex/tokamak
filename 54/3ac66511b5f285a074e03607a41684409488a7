@@ -1,0 +1,37 @@
+app/src/chat/thread-view.tsx
+  s_1edd98eec1751b::t_d222a3cb74a6a8 1-2,14-16,19-20
+app/src/chat/message.tsx
+  s_1edd98eec1751b::t_6de52b7731bd8f 11
+app/src/chat/screen.tsx
+  s_1edd98eec1751b::t_ed75c07ff57a38 19,21,76,78-79,81-82
+  s_1edd98eec1751b::t_d222a3cb74a6a8 1-18,22-73,77,80,83-89
+  s_1edd98eec1751b::t_ba9a4d7400f2c1 20,74-75
+app/src/chat/map.tsx
+  s_1edd98eec1751b::t_ed75c07ff57a38 2-3,18-20,35-49,52-72,85-97,116,119-124,130,134-135
+app/src/chat/use-chat.ts
+  s_1edd98eec1751b::t_d222a3cb74a6a8 4,69-80
+app/src/styles.css
+  s_1edd98eec1751b::t_d222a3cb74a6a8 74-75
+app/src/shell.tsx
+  s_1edd98eec1751b::t_d222a3cb74a6a8 11
+app/src/chat/composer-strip.tsx
+  s_1edd98eec1751b::t_d222a3cb74a6a8 1,4-7
+app/src/chat/composer-input.tsx
+  s_1edd98eec1751b::t_38efb806fd6662 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "543ac66511b5f285a074e03607a41684409488a7",
+  "prompts": {},
+  "sessions": {
+    "s_1edd98eec1751b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e12c-6f41-7e12-a524-0174740468a7",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,48 @@
+packages/render/src/layout.rs
+  s_0b53bb2aa6136c::t_2a91960ffe50b2 48-49,120-124
+  s_0b53bb2aa6136c::t_72410d44512416 47
+packages/render/src/capabilities.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 30-31,49-55,61-62
+  s_0b53bb2aa6136c::t_88e0fc8ee9bde8 4-12,19-21,34-40,42-45
+app/tests/plugins.rs
+  s_1edd98eec1751b::t_6de52b7731bd8f 1246-1250,1253-1256
+  s_1edd98eec1751b::t_6ea423cb8a2a0a 1476-1478
+  s_1edd98eec1751b::t_f30c21dfb21149 1041-1054,1110-1114,1239-1244,1293-1296,1298-1303,1316-1319,1341-1346,1349-1354,1378-1381
+  s_0b53bb2aa6136c::t_737eb4f5fc0d37 1070-1087,1092-1098,1205-1208,1211-1214,1219-1222,1258-1262,1264-1267,1271-1274,1277-1281,1285-1287,1391-1394,1419-1422,1439-1442,1449-1452
+  s_9343aadf26e008::t_b25b321539aec9 1129-1137,1139-1144,1151-1154,1188-1191,1195-1198
+packages/render/src/js.rs
+  s_0b53bb2aa6136c::t_d8321c039867d6 116-119
+  s_0b53bb2aa6136c::t_58d1a0b8ff651b 115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb5a23ae5a3dda0e6eed75ad90771de35745b6da",
+  "prompts": {},
+  "sessions": {
+    "s_0b53bb2aa6136c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e141-393e-75c0-8999-1aba419bd22f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_1edd98eec1751b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e12c-6f41-7e12-a524-0174740468a7",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_9343aadf26e008": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e104-d6a0-79b0-b8cd-28322a806f07",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
