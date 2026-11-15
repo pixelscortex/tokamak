@@ -6,7 +6,8 @@
 //! Here the interrupt is the 250 ms UI deadline that `render` arms around every
 //! JS entry (`Js::call`), so a UI handler that is stuck in a `find*` over many
 //! objects must produce a deadline error, not take the desktop app down. The
-//! fix is a one-line patch in `vendor/rquickjs-sys` (see `TOKAMAK_PATCHES.md`).
+//! fix is one line in QuickJS, carried by the `[patch.crates-io]` entry in the
+//! workspace `Cargo.toml`.
 //! A regression is a SIGSEGV that would kill the whole test harness, so each
 //! method runs in a child process and the parent asserts no signal ended it.
 use blitz_dom::Document;
