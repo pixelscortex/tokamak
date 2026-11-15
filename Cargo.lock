@@ -5048,6 +5048,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-sys"
 version = "0.14.0"
+source = "git+https://github.com/JustKira/rquickjs?rev=f17e57e27b37a2c4d9ff12753f2b42067bf15394#f17e57e27b37a2c4d9ff12753f2b42067bf15394"
 dependencies = [
  "cc",
 ]
