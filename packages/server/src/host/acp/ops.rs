@@ -89,6 +89,10 @@ async fn dispatch(
         return Err("Unknown ACP permission request".into());
     }
 
+    if name == "open" {
+        session::validate_cwd(text(&payload, "cwd")?)?;
+    }
+
     let process = manager.process(plugin, text(&payload, "agent")?).await?;
     if name == "open" {
         return session::open(

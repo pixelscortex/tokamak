@@ -75,7 +75,7 @@ const PLUGIN: &str = r#"
 import { action, query, mutation, createRegistry, invokeFunction, functionMetadata, v } from 'SDK';
 const probe = action({ args: { mode: v.string() }, handler: async ({ acp }, { mode }) => {
   if (mode === 'agents') return acp.agents();
-  const opened = await acp.open({ agent: mode === 'missing' ? 'absent' : mode === 'slow-initialize' ? 'slow' : 'fake', cwd: '/tmp' });
+  const opened = await acp.open({ agent: mode === 'missing' ? 'absent' : mode === 'slow-initialize' ? 'slow' : 'fake', cwd: mode === 'cwd-relative' ? '.' : mode === 'cwd-missing' ? '/nonexistent-tokamak-acp-directory' : mode === 'cwd-file' ? '/etc/hosts' : '/tmp' });
   const events = [];
   for await (const event of acp.prompt({ agent: 'fake', sessionId: opened.sessionId, text: mode === 'blocked-write' ? 'x'.repeat(900000) : mode })) {
     events.push(event);
@@ -327,5 +327,15 @@ async fn initialize_deadline_does_not_block_other_agents() {
     assert!(fast.unwrap().is_ok());
     let error = slow.unwrap_err();
     assert!(error.contains("initialize timed out"), "{error}");
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cwd_must_be_an_absolute_existing_directory() {
+    let fixture = Fixture::new(true).await;
+    for mode in ["cwd-relative", "cwd-missing", "cwd-file"] {
+        let error = fixture.action(mode).await.unwrap_err();
+        assert!(error.contains("ACP cwd"), "{mode}: {error}");
+    }
     fixture.close().await;
 }

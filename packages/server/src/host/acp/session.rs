@@ -105,6 +105,17 @@ impl Drop for Lease {
     }
 }
 
+pub(super) fn validate_cwd(cwd: &str) -> Result<(), String> {
+    let path = std::path::Path::new(cwd);
+    if !path.is_absolute() {
+        return Err("ACP cwd must be an absolute path to an existing directory".into());
+    }
+    if !path.is_dir() {
+        return Err(format!("ACP cwd is not an existing directory: {cwd}"));
+    }
+    Ok(())
+}
+
 pub(super) async fn open(
     process: &Process,
     cwd: &str,
