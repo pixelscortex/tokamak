@@ -1,0 +1,54 @@
+packages/server/tests/fixtures/worker/src/server/database.ts
+  s_8bec1d618d27a8::t_9cac9cd14146ef 7
+plugins/acp/tests/client.test.ts
+  s_8bec1d618d27a8::t_545e632fe4ea13 162
+  s_8bec1d618d27a8::t_9ed4494264b7d3 112-128,135-161,163-171,175-180,188-191
+  s_8bec1d618d27a8::t_1319e609907a96 192,204-208,213-227,236-238
+  s_8bec1d618d27a8::t_fcbf53836ac591 129-134,172-174,181-187,193-203,209-212,228-235
+plugins/acp/src/server/agents/client.ts
+  s_8bec1d618d27a8::t_e42b398423ed7d 88
+  s_8bec1d618d27a8::t_dcc8f8f22c2852 70,77-79,90-92,265-266,274-277
+  s_8bec1d618d27a8::t_fcbf53836ac591 80-87,89,267-273
+packages/server/src/host/worker/mod.rs
+  s_8bec1d618d27a8::t_64d81c1d0b0612 3
+packages/server/tests/fixtures/worker/src/server/actions.ts
+  s_8bec1d618d27a8::t_e42b398423ed7d 6,64,69-78
+  s_8bec1d618d27a8::t_9cac9cd14146ef 3,49,53-63
+  s_8bec1d618d27a8::t_adfbd5dbabb859 65-68
+packages/server/tests/workers.rs
+  s_8bec1d618d27a8::t_fcbf53836ac591 219-222,224-230,243-246,254-268,272-278,280-292,301,306-308,311-313
+  s_8bec1d618d27a8::t_8292d9d8721be2 238,279,304-305,309-310
+  s_8bec1d618d27a8::t_ffe9af632604e1 217-218,223,239-242,247,269-271
+  s_8bec1d618d27a8::t_e42b398423ed7d 215,293-294,298-300,302
+  s_8bec1d618d27a8::t_9cac9cd14146ef 211-214,216,231-237,248-253,303,314
+  s_8bec1d618d27a8::t_adfbd5dbabb859 295-297
+packages/server/src/host/worker/logs.rs
+  s_8bec1d618d27a8::t_fcbf53836ac591 4-8,27-28,31-33,41-43,76-78,83-87,90-92
+  s_8bec1d618d27a8::t_e8c72b276470a4 1-3,9-26,29-30,34-40,44-75,79-82,88-89,93-102
+packages/server/src/host/worker/process.rs
+  s_8bec1d618d27a8::t_a9cc57facfa8b5 34,42
+  s_8bec1d618d27a8::t_fcbf53836ac591 35-41,45-48,106-109,158-160
+  s_8bec1d618d27a8::t_64d81c1d0b0612 26-33,43-44,49-50,80-81,98,133,142-151,172,179-181,211-214,223-226,266
+packages/server/tests/worker-lifecycle-driver.mjs
+  s_8bec1d618d27a8::t_14d8caf3816b9b 1-4,6-10,14,18-19,25-26,33-37,44-57,60-72,74-77,85
+  s_8bec1d618d27a8::t_e9ccc8df270cb6 20-24
+  s_8bec1d618d27a8::t_faf48b1a07b1ee 58-59
+  s_8bec1d618d27a8::t_fcbf53836ac591 11-13,15-17,27-32,38-43,78-84
+  s_8bec1d618d27a8::t_ffe9af632604e1 5,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ca46d7c2f4fdaf4e1d36d4022f5a4301cb3811d",
+  "prompts": {},
+  "sessions": {
+    "s_8bec1d618d27a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e510-7f35-74b2-aa56-ae19aed81b02",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
