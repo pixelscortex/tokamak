@@ -30,7 +30,13 @@ export function ChatComposer(props: {
         caret="block"
         class={`chat-input min-w-0 flex-1 ${!props.mapOpen && Boolean(props.chat.active() || props.composer.sending()) ? "chat-input-busy" : ""}`}
         maxRows={props.mapOpen ? 1 : 8}
-        placeholder={props.mapOpen ? "Search threads" : "Ask anything, or tell Tokamak what to do"}
+        placeholder={
+          props.mapOpen
+            ? "Search threads"
+            : !props.chat.agentAvailable()
+              ? "No agent configured: see agents.example.toml"
+              : "Ask anything, or tell Tokamak what to do"
+        }
         value={props.mapOpen ? props.map.query() : props.composer.draft()}
         onValueChange={(text) => {
           if (props.mapOpen) props.map.search(text);

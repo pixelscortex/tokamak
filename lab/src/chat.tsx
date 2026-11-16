@@ -59,7 +59,7 @@ function Title(props: { context: boolean }) {
 
 /** The composer in the reading column's overlay lane. */
 function ChatComposer(props: { context: boolean; send: (text: string) => void }) {
-  const [model, setModel] = createSignal("openrouter/free");
+  const [model, setModel] = createSignal("claude");
   const [chips, setChips] = createSignal(mocks.context.slice(0, 2));
   const [form, setForm] = createSignal(false);
   const [list, setList] = createSignal("inbox");
@@ -184,7 +184,7 @@ function ContextColumn(props: { shown: boolean }) {
         <div class={label}>Run</div>
         <div class={row}>
           <span class={key}>Model</span>
-          <span class={value}>openrouter/free</span>
+          <span class={value}>claude</span>
         </div>
         <div class={row}>
           <span class={key}>Tokens</span>

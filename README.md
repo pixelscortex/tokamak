@@ -17,7 +17,7 @@ sources in `app/src/` and SDK backend functions in `app/backend/`.
 | `app/`              | Thin product shell, reserved for Core and plugins              |
 | `lab/`              | Independent native UI component catalog and interaction checks |
 
-Root `plugins/` contains the installed Chat plugin.
+Root `plugins/` contains the installed Chat and ACP plugins.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
 names remain unchanged; `app` and `lab` are separate application projects.
 
@@ -28,12 +28,23 @@ prerequisites for your OS (Xcode command-line tools on macOS). From this checkou
 run `proto use` to install the pins in `.prototools`: Bun 1.4.4, Moon 2.5.6 and
 Rust 1.97.0. Put proto's bin/shims and Cargo's bin directory on `PATH`.
 
-Create `.env.local` **at the repository root**, next to `package.json`
-(`/Volumes/mypixel/tokamak/.env.local` in this checkout), containing:
+Install the agent adapters once (requires Node.js/npm):
 
-```dotenv
-OPENROUTER_API_KEY=your-key-here
+```sh
+npm install -g @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
 ```
+
+Copy `agents.example.toml` to
+`~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml` on macOS;
+on Linux use `$XDG_DATA_HOME/tokamak/agents.toml` (default
+`~/.local/share/tokamak/agents.toml`). If set, `$TOKAMAK_SERVER_DIR/agents.toml`
+overrides these paths. The adapters run directly from the global installation;
+downloading an adapter at each launch can exceed the 30-second initialization timeout.
+The example forwards `PATH`, `HOME`, and `USER`. `HOME` lets the adapters reuse
+existing Claude Code and Codex logins in `~/.claude` and `~/.codex`.
+API keys are optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to the corresponding
+agent's `env` list only if you prefer keys, and set them in the server environment
+or the repository-root `.env.local`.
 
 Then run from the repository root:
 
@@ -44,33 +55,20 @@ bun run app
 This installs workspace dependencies, builds Chat, the UI and Rust binaries,
 starts the local server, and opens chat. Type a message and press Enter.
 Closing the desktop leaves the server running; `bun run server:stop` stops it.
-After changing keys or agents, stop the server and run `bun run app` again.
+After changing agents or their environment, stop the server and run `bun run app` again.
 
 Enter sends; Shift+Enter adds a line; Esc stops your reply or closes a picker.
 Tab opens/closes Map; type to search, arrows/Enter select, and 1–9 open a row
 with an empty search. Cmd+N creates a thread. In Map with an empty search,
 R renames and Cmd+Backspace deletes (Enter confirms, Esc cancels).
-Cmd+M selects a model/agent; Cmd+Shift+C copies the last assistant reply.
+Cmd+M selects an agent; Cmd+Shift+C copies the last assistant reply.
 With an empty composer, 1–4 answers agent permissions.
 
-For agents, copy `agents.example.toml` to
-`~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml` on macOS;
-on Linux use `$XDG_DATA_HOME/tokamak/agents.toml` (default
-`~/.local/share/tokamak/agents.toml`). If set, `$TOKAMAK_SERVER_DIR/agents.toml`
-overrides these paths. Install Node.js/npx; the example forwards `PATH` and
-`ANTHROPIC_API_KEY` for Claude, `PATH` and `OPENAI_API_KEY` for Codex.
-Set those keys in the root `.env.local` or server environment, restart the server,
-then select an agent with Cmd+M and enter an absolute working-folder path.
+New threads select the first available agent. Use Cmd+M to configure its absolute
+working-folder path. Without an agent, the composer shows
+"No agent configured: see agents.example.toml" and sending is refused.
 
-Two credentialed smoke checks after building (both use the root `.env.local`):
-
-```sh
-cargo test --locked -p server --test actions chat_real_openrouter_smoke -- --ignored --exact --nocapture
-TOKAMAK_CHAT_LIVE=1 TOKAMAK_CHAT_QUICKSTART=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --exact --nocapture --test-threads=1
-```
-
-The second writes `/tmp/tokamak-chat-shots/quickstart.png` using disposable storage.
-See [Chat details](plugins/chat/README.md) for tools and backend contracts, and
+See [Chat details](plugins/chat/README.md) for thread and backend contracts, and
 [ACP setup](plugins/acp/README.md) for installed coding agents and smoke tests.
 Agent entries in `agents.toml` must allow `plugins = ["acp"]`.
 `bun run app` builds and loads both plugins. Backend storage changes have no

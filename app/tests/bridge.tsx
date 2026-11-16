@@ -5,7 +5,6 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { ArgsOf, Event, Request } from "@tokamak/sdk";
-import type { PluginLoader, SlotContribution } from "@tokamak/runtime/plugins";
 import { Message } from "../src/chat/message";
 import { Map } from "../src/chat/map";
 import { useMap } from "../src/chat/use-map";
@@ -98,22 +97,6 @@ function ToolMessage() {
     result: { id: "record-one" },
     view: "record.card",
   };
-  const [renderers, setRenderers] = createSignal<SlotContribution[]>([]);
-  onHostEvent<string>("tool:renderer", (plugin) =>
-    setRenderers(
-      plugin ? [{ plugin, id: "Card", kind: "itemRenderer", options: { type: "record.card" } }] : [],
-    ),
-  );
-  const loader = {
-    contributions: () => renderers(),
-    version: () => 0,
-    onError: () => () => {},
-    load: async () => ({
-      Card: (props: { part: unknown; threadId: string }) => (
-        <p id="tool-card-props">{JSON.stringify(props)}</p>
-      ),
-    }),
-  } as unknown as PluginLoader;
   const message = {
     _id: "message-one",
     role: "assistant",
@@ -123,7 +106,7 @@ function ToolMessage() {
 
   return (
     <div id="tool-message">
-      <Message loader={loader} threadId="thread-one" message={message} />
+      <Message message={message} />
     </div>
   );
 }
@@ -170,8 +153,6 @@ function PermissionFixture() {
   return (
     <div id="permission-fixture">
       <Message
-        loader={{} as PluginLoader}
-        threadId="waiting"
         message={message()}
         onAnswer={(_, optionId) => setPart((before) => ({ ...before, status: "answered", optionId }))}
       />

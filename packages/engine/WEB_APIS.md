@@ -107,9 +107,8 @@ TypeError. Bundles must contain their dependencies.
 
 ## Dependency choice
 
-The npm registry was checked on 2026-11-09. The streaming smoke uses **ai
-7.0.166** and **@ai-sdk/openai 4.0.111**, bundled for the browser target. The
-current streams polyfill is maintained, dependency-free and already implements
+Historical streaming proofs used a browser-targeted third-party SDK, which is
+no longer a workspace dependency. The current streams polyfill is maintained, dependency-free and already implements
 backpressure, teeing and cancellation. Writing these algorithms by hand would
 add substantial correctness risk. Its pinned npm integrity is
 `sha512-pFmV/G8K9uKW3I3xx3vqpKYLBer7K1wZej5uU66zhtjzG1bfE6e+OHNxhmGb9UsXe+geX4/lndxJDgs7wbYO9g==`.

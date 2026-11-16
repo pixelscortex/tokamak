@@ -19,13 +19,24 @@ export function useChat(client: TokamakClient) {
   const [creating, setCreating] = createSignal(false);
   let initialized = false;
   let alive = true;
+  const [backends, setBackends] = createSignal<Awaited<ReturnType<typeof loadBackends>>>([]);
+  function loadBackends() {
+    return client.action(api.backends.list, {});
+  }
+  void loadBackends()
+    .then((options) => {
+      if (alive) setBackends(options);
+    })
+    .catch((cause) => {
+      if (alive) setError(String(cause));
+    });
 
   async function createThread() {
     if (creating()) return;
     setCreating(true);
     setError(undefined);
     try {
-      const id = await client.mutation(api.threads.create, {});
+      const id = await client.action(api.threads.create, {});
       if (alive) setThreadId(id);
       return id;
     } catch (cause) {
@@ -70,6 +81,11 @@ export function useChat(client: TokamakClient) {
 
   return {
     client,
+    backends,
+    agentAvailable: () =>
+      backends().some(
+        (option) => option.plugin === thread()?.backend?.plugin && option.id === thread()?.backend?.backendId,
+      ),
     threads,
     threadId,
     thread,

@@ -66,8 +66,8 @@ module loading and the separate presentation frame for the current zen screen.
 ## Chat
 
 The default screen uses the Chat plugin's persisted threads and live message
-queries through the shared SDK client. The normal bundle task builds Chat. Set `OPENROUTER_API_KEY` in the ignored workspace `.env.local` before
-starting the server; restart an existing server after changing its environment.
+queries through the shared SDK client. The normal bundle task builds Chat. Configure an agent in `agents.toml` using the root README quick start; restart
+the server after changing agent configuration.
 
 Enter sends; Shift+Enter adds a line; Escape stops the current run. Tab opens
 Map and Tab/Escape closes it. Type to filter thread titles, use arrows and Enter
@@ -97,7 +97,3 @@ abandoned run for three sweep ticks. `ux-autoscroll.png` captures the completed
 long reply at the bottom. Captures use the production Blitz painter with the bundled fonts.
 
 Add `TOKAMAK_CHAT_QUICKSTART=1` for a single-message check with Chat installed; it saves `quickstart.png` and skips the longer UX checks.
-
-Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the record fixture card flow
-instead: `liquid/lfm-3-1.7b:free` creates a milk record, the harness toggles the
-card, checks the saved task is done, and captures `tool-card-2.png`.

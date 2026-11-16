@@ -11,7 +11,6 @@ export const running = query({
     return visible.map((run) => ({
       runId: run._id,
       threadId: run.threadId,
-      model: run.model,
       waiting: run.waiting ?? false,
     }));
   },

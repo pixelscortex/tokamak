@@ -22,7 +22,7 @@ function Case(props: { title: string; value?: string; id?: string; class?: strin
 export default function SelectView() {
   const [list, setList] = createSignal("inbox");
   const [open, setOpen] = createSignal("groceries");
-  const [model, setModel] = createSignal("openrouter/free");
+  const [model, setModel] = createSignal("claude");
   const [up, setUp] = createSignal("normal");
   const [merged, setMerged] = createSignal("normal");
   const [flip, setFlip] = createSignal("today");

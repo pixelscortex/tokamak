@@ -24,6 +24,10 @@ export function useDrafts(chat: ChatState) {
     // During a run Enter keeps the draft and shows nothing new.
     if (!threadId || !text.trim() || chat.active() || sending()[threadId]) return;
 
+    if (!chat.agentAvailable()) {
+      chat.setError("No agent configured: see agents.example.toml");
+      return;
+    }
     chat.setError(undefined);
     setRaced((previous) => ({ ...previous, [threadId]: false }));
     setSending((previous) => ({ ...previous, [threadId]: true }));

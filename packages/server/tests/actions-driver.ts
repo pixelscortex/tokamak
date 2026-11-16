@@ -2,11 +2,7 @@
 // references before bundling. Stdio carries real Rust Session protocol messages.
 import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
-import { writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { chatScenario } from "./chat-driver";
-import { completionChunk, completionEnd } from "./completions";
 import { createInterface } from "node:readline";
 import { TokamakClient, InProcessTransport, WebSocketTransport, type Event } from "@tokamak/sdk";
 import { api } from "./a/backend/_generated/api";
@@ -105,7 +101,7 @@ const mock = createServer(async (req, res) => {
       else res.end();
     };
     advance();
-  } else if (path === "/hold" || path === "/v1/chat/completions") {
+  } else if (path === "/hold") {
     stream = res;
     req.resume();
     held.add(res);
@@ -116,22 +112,8 @@ const mock = createServer(async (req, res) => {
       closedAt = Date.now();
       disconnected.resolve();
     });
-    if (path === "/hold") {
-      res.writeHead(200, { "content-type": "text/plain" });
-      res.write("first");
-    } else {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      const deltas = ["one", " two", " three"];
-      let index = 0;
-      advance = () => {
-        if (index < deltas.length) {
-          res.write(completionChunk(deltas[index++]!));
-        } else {
-          res.end(completionEnd());
-        }
-      };
-      advance();
-    }
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.write("first");
   } else if (path === "/ack") {
     res.end("ack");
     advance?.();
@@ -153,21 +135,8 @@ assert.ok(address && typeof address !== "string");
 const base = `http://127.0.0.1:${address.port}`;
 
 try {
-  if (scenario === "record-tools") {
-    const result = await client.action(b.ops.recordTools, {});
-    assert.equal(result.descriptions[0]!.name, "records.create");
-    assert.equal(result.out.view, "record.card");
-    assert.equal(result.record?.title, "Buy milk tomorrow");
-    assert.equal(result.record?.done, false);
-    assert.equal(result.out.summary, "Created a task in Record");
-    await assert.rejects(client.action(api.ops.recordTools, {}), /does not declare access to record/);
-  } else if (scenario.startsWith("chat-")) {
-    await chatScenario(client, scenario, async (baseURL) => {
-      await writeFile(
-        join(dirname(fileURLToPath(import.meta.url)), "../.env.local"),
-        `OPENROUTER_API_KEY=local-mock-only\nOPENROUTER_BASE_URL=${baseURL}\n`,
-      );
-    });
+  if (scenario.startsWith("chat-")) {
+    await chatScenario(client, scenario);
   } else if (scenario === "contract") {
     // Prove the configured normal call budget is real, then outlive it in action.
     await assert.rejects(client.query(api.ops.timeoutQuery, {}), /wall-clock budget/);
@@ -287,22 +256,6 @@ try {
         client.action(api.ops.exports, { write }),
         new RegExp(`ops:private${write ? "Write" : "Read"} is not exported by b`),
       );
-  } else if (scenario === "ai" || scenario === "ai-abort") {
-    // Prevent SDK compatibility regressions hidden by hand-written fetch probes.
-    const abort = scenario === "ai-abort";
-    const result = await client.action(api.ai.stream, {
-      baseURL: `${base}/v1`,
-      abort,
-      ack: `${base}/ack`,
-      observed: `${base}/observed`,
-    });
-    assert.deepEqual(result, {
-      deltas: abort ? ["one", " two"] : ["one", " two", " three"],
-      aborted: abort,
-      observed: abort ? "disconnected" : "complete",
-    });
-    assert.equal(hits.filter((path) => path === "/v1/chat/completions").length, 1);
-    if (abort) assert.equal(holdClosed, true);
   } else if (scenario === "network-boundary") {
     // The Rust harness verifies each shim answer before starting this driver.
     for (const host of ["loopback", "private", "metadata", "mapped"]) {

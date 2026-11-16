@@ -5,9 +5,9 @@ import type { ComposerCommand, ComposerContext, ComposerRun, SelectOption } from
 
 /** Models for the composer's model select (grouped by provider). */
 export const models: SelectOption[] = [
-  { value: "openrouter/free", label: "openrouter/free", detail: "free", group: "OpenRouter" },
-  { value: "openrouter/auto", label: "openrouter/auto", detail: "auto", group: "OpenRouter" },
-  { value: "deepseek/r1", label: "deepseek/r1", detail: "64k", group: "OpenRouter" },
+  { value: "claude", label: "claude", detail: "free", group: "Agents" },
+  { value: "codex", label: "codex", detail: "auto", group: "Agents" },
+  { value: "deepseek/r1", label: "deepseek/r1", detail: "64k", group: "Agents" },
   { value: "gpt-6.1", label: "gpt-6.1", detail: "1M", group: "ChatGPT" },
   { value: "gpt-6.1-mini", label: "gpt-6.1-mini", detail: "400k", group: "ChatGPT" },
   { value: "local/llama-5", label: "local/llama-5", detail: "offline", group: "Local", disabled: true },

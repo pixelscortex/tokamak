@@ -120,36 +120,9 @@ fn acceptance_over(scenario: &str, websocket: bool) {
             "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"acp\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"acp\"]\n", json!(agent), json!(agent)
         )).unwrap();
     }
-    if scenario == "chat-grant" || scenario == "chat-real" {
-        let path = installation.0.join("chat/manifest.json");
-        let mut manifest: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        if scenario == "chat-grant" {
-            manifest["plugin"]["permissions"]
-                .as_array_mut()
-                .unwrap()
-                .retain(|grant| grant != "env:OPENROUTER_API_KEY");
-        } else {
-            manifest["plugin"]["permissions"] = json!([
-                "net:openrouter.ai",
-                "env:OPENROUTER_API_KEY",
-                "env:OPENROUTER_BASE_URL"
-            ]);
-            let fixture_path = installation.0.join("b/manifest.json");
-            let mut fixture: Value =
-                serde_json::from_slice(&std::fs::read(&fixture_path).unwrap()).unwrap();
-            fixture["plugin"]["provides"] = json!([]);
-            std::fs::write(fixture_path, serde_json::to_vec(&fixture).unwrap()).unwrap();
-            std::fs::copy(
-                root().join(".env.local"),
-                installation.0.parent().unwrap().join(".env.local"),
-            )
-            .unwrap();
-        }
-        std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-    }
     tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
         .block_on(async {
-            tokio::time::timeout(Duration::from_secs(if scenario == "chat-real" { 360 } else { 30 }), async {
+            tokio::time::timeout(Duration::from_secs(30), async {
                 let pool = Arc::new(Pool::new(PoolConfig {
                     workers: 1,
                     limits: Limits {
@@ -233,14 +206,6 @@ fn action_clock_advances_but_nested_transactions_freeze_time() {
 #[test]
 fn actions_enforce_cross_plugin_exports() {
     acceptance("exports");
-}
-#[test]
-fn pinned_ai_sdk_streams_multiple_deltas_offline() {
-    acceptance("ai");
-}
-#[test]
-fn pinned_ai_sdk_abort_disconnects_mid_stream() {
-    acceptance("ai-abort");
 }
 #[test]
 fn missing_web_api_fails_loudly() {
@@ -574,43 +539,12 @@ fn chat_thread_crud_cascades_messages_and_runs() {
     acceptance("chat-crud");
 }
 #[test]
-fn chat_stream_persists_deltas_and_live_query_observes_growth() {
-    acceptance("chat-stream");
-}
-#[test]
 fn chat_stale_runs_recover_without_cancelling_healthy_runs() {
     acceptance("chat-recovery");
 }
 #[test]
-fn chat_cancel_stops_a_silent_upstream() {
-    acceptance("chat-cancel");
-}
-#[test]
-fn chat_upstream_failure_marks_message_and_run_error() {
-    acceptance("chat-error");
-}
-#[test]
-fn chat_missing_environment_grant_is_refused() {
-    acceptance("chat-grant");
-}
-#[test]
-#[ignore = "manual OpenRouter smoke run; requires .env.local"]
-fn chat_real_openrouter_smoke() {
-    acceptance("chat-real");
-}
-
-#[test]
-fn chat_tools_persist_running_done_then_text_and_filter_providers() {
-    acceptance("chat-tools");
-}
-#[test]
-fn chat_tool_errors_return_to_model_and_finish_run() {
-    acceptance("chat-tools-error");
-}
-
-#[test]
-fn record_tools_allow_consumer_and_refuse_non_consumer() {
-    acceptance("record-tools");
+fn chat_generic_tool_parts() {
+    acceptance("chat-parts");
 }
 
 #[test]
@@ -619,7 +553,7 @@ fn chat_acp_backend() {
 }
 
 #[test]
-fn chat_missing_backend_finishes_run_with_clear_error() {
+fn chat_missing_backend_refuses_send_without_creating_run() {
     acceptance("chat-backend-missing");
 }
 

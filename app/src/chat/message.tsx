@@ -1,4 +1,3 @@
-import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { For, Show, createMemo } from "solid-js";
 import { PermissionPart, type Permission } from "./permission-part";
 import { ToolPart } from "./tool-part";
@@ -17,11 +16,8 @@ export function Mark(props: { user?: boolean }) {
 }
 
 export function Message(props: {
-  loader: PluginLoader;
-  threadId: string;
   message: ChatMessage;
   onAnswer?: (part: Permission, optionId: string) => void;
-  liveCards?: ReadonlySet<string>;
 }) {
   const parts = createMemo(
     () =>
@@ -78,16 +74,7 @@ export function Message(props: {
                       .join(" · ")}
                   </span>
                 ) : (
-                  <ToolPart
-                    loader={props.loader}
-                    part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>}
-                    threadId={props.threadId}
-                    live={
-                      props.liveCards?.has(
-                        (part() as Extract<ChatMessage["parts"][number], { type: "tool" }>).callId,
-                      ) ?? true
-                    }
-                  />
+                  <ToolPart part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>} />
                 );
               }}
             </For>

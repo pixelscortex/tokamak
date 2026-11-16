@@ -1,13 +1,16 @@
+# Install once:
+# npm install -g @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
 # Copy to the Tokamak data directory as agents.toml. Only listed environment
-# variables reach the adapter. Set API keys in the server environment or .env.local.
+# variables reach the adapter. HOME reuses existing ~/.claude and ~/.codex logins.
+# Optionally add ANTHROPIC_API_KEY or OPENAI_API_KEY to env if you prefer API keys.
 [agents.claude]
-command = "npx"
-args = ["-y", "@agentclientprotocol/claude-agent-acp@0.106.0"]
-env = ["PATH", "ANTHROPIC_API_KEY"]
+command = "claude-agent-acp"
+args = []
+env = ["PATH", "HOME", "USER"]
 plugins = ["acp"]
 
 [agents.codex]
-command = "npx"
-args = ["-y", "@agentclientprotocol/codex-acp@2.6.0"]
-env = ["PATH", "OPENAI_API_KEY"]
+command = "codex-acp"
+args = []
+env = ["PATH", "HOME", "USER"]
 plugins = ["acp"]

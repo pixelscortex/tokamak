@@ -1,34 +1,8 @@
-import { Show, createMemo, createSignal, type Accessor } from "solid-js";
-import type { PluginLoader, SlotContribution } from "@tokamak/runtime/plugins";
-import { Contribution } from "../contribution";
+import { Show, createSignal } from "solid-js";
 import type { Message } from "./use-chat";
-
 type Tool = Extract<Message["parts"][number], { type: "tool" }>;
-
-export function ToolPart(props: { loader: PluginLoader; part: Tool; threadId: string; live?: boolean }) {
-  const renderer = createMemo(() =>
-    props.live !== false && props.part.status === "done" && props.part.view
-      ? props.loader
-          .contributions("itemRenderer")
-          .find(
-            (contribution) =>
-              contribution.plugin === props.part.plugin && contribution.options.type === props.part.view,
-          )
-      : undefined,
-  );
-
-  return (
-    <Show when={renderer()} fallback={<ToolLine part={props.part} />}>
-      {(contribution: Accessor<SlotContribution>) => (
-        <Contribution
-          loader={props.loader}
-          contribution={contribution()}
-          failureFallback={<ToolLine part={props.part} />}
-          componentProps={{ part: props.part, threadId: props.threadId }}
-        />
-      )}
-    </Show>
-  );
+export function ToolPart(props: { part: Tool }) {
+  return <ToolLine part={props.part} />;
 }
 
 function ToolLine(props: { part: Tool }) {

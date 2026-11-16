@@ -6,7 +6,6 @@ import { backend } from "./backend";
 
 export default defineSchema({
   threads: defineTable({
-    model: v.optional(v.string()),
     backend: v.optional(backend),
     title: v.string(),
     createdAt: v.number(),
@@ -40,7 +39,6 @@ export default defineSchema({
         v.object({ sweepId: v.string(), tick: v.number(), heartbeat: v.number(), unchanged: v.number() }),
       ),
     ),
-    model: v.string(),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
   })

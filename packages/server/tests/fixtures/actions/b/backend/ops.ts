@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { action, mutation, query, v, createApi, type ApiFromModule } from "@tokamak/sdk";
+import { action, mutation, query, v, createApi } from "@tokamak/sdk";
 export const publicRead = query({ handler: () => "public" });
 export const privateRead = query({ handler: () => "private" });
 export const privateWrite = mutation({ handler: (ctx) => ctx.db.insert("private", { value: "denied" }) });
@@ -22,28 +22,6 @@ export const dns = action({
         }
       }),
     ),
-});
-
-const record = createApi<{
-  tools: ApiFromModule<typeof import("../../record/backend/tools")>;
-  record: ApiFromModule<typeof import("../../record/backend/record")>;
-}>("record");
-export const recordTools = action({
-  handler: async (ctx) => {
-    const descriptions = await ctx.runQuery(record.tools.describe, {});
-    const out = await ctx.runMutation(record.tools.invoke, {
-      name: "records.create",
-      args: { title: "Buy milk tomorrow" },
-      threadId: "test-thread",
-    });
-    return {
-      descriptions,
-      out,
-      record: await ctx.runQuery(record.record.get, {
-        id: (out.result as { id: import("@tokamak/sdk").Id<"records"> }).id,
-      }),
-    };
-  },
 });
 
 // A dependent plugin can discover a run, but never receives its turn capability.

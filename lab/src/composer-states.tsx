@@ -24,7 +24,7 @@ function State(props: { id: string; title: string; hint: string; note?: string; 
 }
 
 export default function ComposerStatesView() {
-  const [model, setModel] = createSignal("openrouter/free");
+  const [model, setModel] = createSignal("claude");
   const [sent, setSent] = createSignal("");
   const [chips, setChips] = createSignal(mocks.context);
   const [stopped, setStopped] = createSignal("");

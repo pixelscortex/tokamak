@@ -1,4 +1,3 @@
-import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { afterDelay, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
 import { backendLabel } from "./backend-picker";
 import { For, Show, createMemo, createEffect, createSignal, onCleanup } from "solid-js";
@@ -10,7 +9,6 @@ import { Message } from "./message";
 import { ComposerStrip } from "./composer-strip";
 
 export function ThreadView(props: {
-  loader: PluginLoader;
   chat: ChatState;
   threadId: Id<"threads">;
   hidden: boolean;
@@ -22,18 +20,6 @@ export function ThreadView(props: {
   const messages = useQuery(props.chat.client, api.messages.list, () => ({ threadId: props.threadId }));
   const byId = createMemo(() => new Map((messages.data() ?? []).map((message) => [message._id, message])));
   const messageIds = createMemo(() => [...byId().keys()]);
-  const liveCards = createMemo(
-    () =>
-      new Set(
-        (messages.data() ?? [])
-          .flatMap((message) =>
-            message.parts
-              .filter((part) => part.type === "tool" && part.status === "done" && part.view)
-              .map((part) => (part.type === "tool" ? part.callId : "")),
-          )
-          .slice(-20),
-      ),
-  );
   const [answering, setAnswering] = createSignal(false);
   const latestPermission = () =>
     (messages.data() ?? [])
@@ -134,11 +120,8 @@ export function ThreadView(props: {
         <For each={messageIds()}>
           {(id) => (
             <Message
-              loader={props.loader}
-              threadId={props.threadId}
               message={byId().get(id)!}
               onAnswer={(part, optionId) => void answer(byId().get(id)!._id, part, optionId)}
-              liveCards={props.hidden ? new Set<string>() : liveCards()}
             />
           )}
         </For>
@@ -151,12 +134,12 @@ export function ThreadView(props: {
       <Show when={props.chat.thread()}>
         <ComposerStrip
           title={props.chat.thread()?.title ?? "New thread"}
-          model={backendLabel(props.chat.thread())}
+          backend={backendLabel(props.chat.thread(), props.chat.backends())}
           turns={turns()}
           copied={copied()}
           busy={Boolean(props.chat.active())}
           raced={props.raced}
-          onModel={props.onBackend}
+          onBackend={props.onBackend}
         />
       </Show>
     </div>

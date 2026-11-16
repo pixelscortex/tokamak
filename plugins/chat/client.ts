@@ -5,7 +5,17 @@ import { createApi, type ApiFromModule, type FunctionReference, type Id, type Do
 import type { Model } from "./backend/_functions";
 
 export const api = createApi<{
-  threads: ApiFromModule<typeof import("./backend/threads")>;
+  threads: {
+    list: FunctionReference<"query", {}, Doc<Model, "threads">[]>;
+    create: FunctionReference<"action", { title?: string }, Id<"threads">>;
+    rename: FunctionReference<"mutation", { threadId: Id<"threads">; title: string }, null>;
+    remove: FunctionReference<"mutation", { threadId: Id<"threads"> }, null>;
+    setBackend: FunctionReference<
+      "mutation",
+      { threadId: Id<"threads">; backend: NonNullable<Doc<Model, "threads">["backend"]> },
+      null
+    >;
+  };
   messages: ApiFromModule<typeof import("./backend/messages")>;
   permissions: Pick<ApiFromModule<typeof import("./backend/permissions")>, "answer">;
   runs: {
@@ -15,11 +25,10 @@ export const api = createApi<{
       {
         runId: Id<"runs">;
         threadId: Id<"threads">;
-        model: string;
         waiting: boolean;
       }[]
     >;
-    active: FunctionReference<"query", { threadId: Id<"threads"> }, Doc<Model, "runs"> | null>;
+    active: FunctionReference<"query", { threadId: Id<"threads"> }, Omit<Doc<Model, "runs">, "token"> | null>;
     cancel: FunctionReference<"mutation", { runId: Id<"runs"> }, null>;
     observe: FunctionReference<"mutation", { sweepId: string; tick: number }, null>;
   };

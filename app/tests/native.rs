@@ -1110,7 +1110,7 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
 }
 
 #[test]
-fn tool_renderer_missing_shows_line_and_expands() {
+fn generic_tool_part_shows_line_and_expands() {
     let store = Store::new();
     let mut app = App::with_ui(
         &store.0,
@@ -1119,8 +1119,6 @@ fn tool_renderer_missing_shows_line_and_expands() {
         )
         .unwrap(),
     );
-    // A different plugin cannot claim Record's renderer type.
-    app.host.send("tool:renderer", "other").unwrap();
     app.wait(|doc| support::text(doc, "tool-message").contains("Created a task in Record"));
     assert!(
         support::text(app.doc(), "tool-message").contains("Before toolCreated a task in Record")
@@ -1137,42 +1135,6 @@ fn tool_renderer_missing_shows_line_and_expands() {
     assert!(text.contains("\n  \"args\": {"));
     assert!(text.contains("record-one"));
     assert!(text.ends_with("After tool"));
-}
-
-#[test]
-fn tool_renderer_mounts_with_part_and_thread_id() {
-    let store = Store::new();
-    let mut app = App::with_ui(
-        &store.0,
-        &std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
-        )
-        .unwrap(),
-    );
-    app.host.send("tool:renderer", "record").unwrap();
-    app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_some());
-    let props: Value = serde_json::from_str(&support::text(app.doc(), "tool-card-props")).unwrap();
-    assert_eq!(props["threadId"], "thread-one");
-    assert_eq!(props["part"]["callId"], "call-one");
-    assert_eq!(props["part"]["result"]["id"], "record-one");
-    assert!(!support::text(app.doc(), "tool-message").contains("Created a task in Record›"));
-}
-
-#[test]
-fn tool_plugin_uninstalled_falls_back_to_line() {
-    let store = Store::new();
-    let mut app = App::with_ui(
-        &store.0,
-        &std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
-        )
-        .unwrap(),
-    );
-    app.host.send("tool:renderer", "record").unwrap();
-    app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_some());
-    app.host.send("tool:renderer", "").unwrap();
-    app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_none());
-    assert!(support::text(app.doc(), "tool-message").contains("Created a task in Record"));
 }
 
 #[test]

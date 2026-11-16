@@ -5,18 +5,16 @@ Build with `proto run bun -- packages/build/src/build.ts plugins/acp` after chat
 
 ## ACP backend
 
-Threads optionally store `backend: {kind:"model", model}` or
-`{kind:"plugin", plugin:"acp", backendId:agent, settings:{cwd}, state?:{sessionId}}`. An absent backend uses the existing
-`model` field and default model without migration. `threads:setBackend` preserves
-provider state only when provider, backend ID and settings match.
-`threads:setModel` selects the model backend. Only this plugin declares the `acp` grant;
+Threads store a provider backend with plugin, agent ID, settings and optional session
+state. `threads:setBackend` preserves state when the agent and settings match.
+Only this plugin declares the `acp` grant;
 configure permitted agents in the host data directory's `agents.toml` with
 `plugins = ["acp"]`. `backend:describe` lists agents because ACP is action-only.
 
 ACP opens and saves a session before prompting. Restored sessions receive only
 the new user text; fresh sessions also receive the most recent flattened completed
-history, capped at 32 KB. Runs identify their backend as `acp:<agent>`.
-Text uses the same ordered persistence and 100 ms buffer as model replies.
+history, capped at 32 KB.
+Text uses the same ordered persistence and 100 ms buffer as other replies.
 Non-text message content becomes `[image]` or `[resource]`. Tools use
 `plugin:"acp:<agent>"`, retain ACP call IDs and follow the existing size limits.
 Plans use `{type:"plan", entries:[{content, status, priority}]}`; each update
@@ -45,11 +43,19 @@ Tokamak data directory: `$TOKAMAK_SERVER_DIR` when set, otherwise
 `~/Library/Application Support/com.pixelscortex.Tokamak` on macOS
 (`$XDG_DATA_HOME/tokamak` or `~/.local/share/tokamak` on Linux).
 Agents are loaded once at startup; restart the app (server) after editing `agents.toml`.
-The pinned Claude and Codex adapters require Node.js/npx. Only named `env`
-variables are passed through, including `PATH` for npx and its Node interpreter.
-Set API keys in the server environment or `.env.local` in the parent of the
-plugin installation directory (the repository root when using workspace `plugins/`).
-Prefer API keys: subscription logins in third-party apps may break provider terms.
+Install the pinned adapters globally once:
+
+```sh
+npm install -g @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
+```
+
+The example runs `claude-agent-acp` and `codex-acp` directly, avoiding downloads
+that can exceed the 30-second initialization timeout. Only named `env` variables
+are passed through: `PATH`, `HOME`, and `USER` by default. `HOME` lets adapters
+reuse existing Claude Code and Codex logins in `~/.claude` and `~/.codex`.
+API keys are optional: list `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `env` only
+if you prefer keys, and set them in the server environment or repository-root
+`.env.local`.
 Agents have the same access as their CLI; the selected folder is not a sandbox.
 
 Manual credentialed checks (never part of the normal suite): set

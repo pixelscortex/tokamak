@@ -1152,9 +1152,8 @@ fn chat_screen_socket_workflow() {
             .unwrap();
         }
     }
-    let tools_live = live && std::env::var("TOKAMAK_CHAT_TOOLS").as_deref() == Ok("1");
     let quickstart = live && std::env::var("TOKAMAK_CHAT_QUICKSTART").as_deref() == Ok("1");
-    if tools_live || quickstart {
+    if quickstart {
         let record = scratch.0.join("installation/record/dist");
         std::fs::create_dir_all(&record).unwrap();
         for file in [
@@ -1269,70 +1268,6 @@ fn chat_screen_socket_workflow() {
         );
         return;
     }
-    if tools_live {
-        let thread = selected(&window);
-        call(
-            &service,
-            "mutation",
-            "chat/threads:setModel",
-            json!({"threadId": thread, "model": "liquid/lfm-3-1.7b:free"}),
-        );
-        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        type_text(&mut window, "Add a record to buy milk tomorrow");
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
-            doc.inner()
-                .query_selector("[data-record-card] [role=checkbox]")
-                .unwrap()
-                .is_some()
-        });
-        window.click("role", "checkbox");
-        window.wait(|doc| {
-            doc.inner()
-                .query_selector("[data-record-card] [aria-checked=true]")
-                .unwrap()
-                .is_some()
-        });
-        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
-            doc.inner()
-                .query_selector("[data-role=assistant][data-status=complete], [data-role=assistant][data-status=error]")
-                .unwrap()
-                .is_some()
-        });
-        assert_eq!(
-            call(
-                &service,
-                "query",
-                "chat/runs:active",
-                json!({"threadId": thread})
-            ),
-            Value::Null
-        );
-        let records = call(&service, "query", "record/record:list", json!({}));
-        assert!(
-            records
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|record| record["done"] == true
-                    && record["title"]
-                        .as_str()
-                        .unwrap()
-                        .to_lowercase()
-                        .contains("milk")),
-            "{records}"
-        );
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("tool-card-2.png"),
-            );
-        }
-        println!(
-            "Live liquid/lfm-3-1.7b:free created a milk record; card toggle persisted done=true."
-        );
-        return;
-    }
     if live {
         support::pointer(window.doc.as_mut().unwrap(), "chat-input");
         type_text(
@@ -1366,7 +1301,7 @@ fn chat_screen_socket_workflow() {
             &service,
             "mutation",
             "chat/send:start",
-            json!({"threadId": thread, "text": "Simulated interrupted reply"}),
+            json!({"threadId": thread, "text": "Simulated interrupted reply", "token": "fixture-turn-token"}),
         );
         drop(window);
         // No action owns this persisted run. A fresh launch starts observing it.
@@ -1632,14 +1567,6 @@ fn chat_screen_socket_workflow() {
         key(&mut window, Key::Character("m".into()), true);
         window.wait(|doc| support::text(doc, "backend-picker").contains("codex"));
         let picker = support::text(window.doc(), "backend-picker");
-        for model in [
-            "openrouter/free",
-            "inclusionai/ling-3.2-flash:free",
-            "liquid/lfm-3-1.7b:free",
-            "google/gemma-4-26b-a4b-it:free",
-        ] {
-            assert!(picker.contains(model));
-        }
         assert!(picker.contains("claude"));
         assert_eq!(
             picker
@@ -1652,9 +1579,6 @@ fn chat_screen_socket_workflow() {
                 window.doc.as_mut().unwrap(),
                 &Path::new(&directory).join("backend-picker.png"),
             );
-        }
-        for _ in 0..4 {
-            key(&mut window, Key::Named(NamedKey::ArrowDown), false);
         }
         key(&mut window, Key::Named(NamedKey::Enter), false);
         window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
@@ -1696,17 +1620,12 @@ fn chat_screen_socket_workflow() {
         );
         assert_eq!(support::text(window.doc(), "chat-messages"), history);
         key(&mut window, Key::Character("m".into()), true);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-4").is_some());
-        window.click("id", "backend-choice-4");
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
+        window.click("id", "backend-choice-0");
         window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
         window.doc.as_mut().unwrap().resolve_layout(0.0);
         assert_eq!(support::editor(window.doc(), "backend-folder"), cwd);
         key(&mut window, Key::Named(NamedKey::Escape), false);
-        key(&mut window, Key::Character("m".into()), true);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_some());
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
-        window.wait(|doc| support::text(doc, "chat-strip").contains("openrouter/free"));
         assert_eq!(support::text(window.doc(), "chat-messages"), history);
     }
 
@@ -1784,8 +1703,8 @@ fn chat_screen_socket_workflow() {
     assert!(edited.contains("draft to keep") && edited.contains(" + click"));
     if !live {
         key(&mut window, Key::Character("m".into()), true);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-4").is_some());
-        window.click("id", "backend-choice-4");
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
+        window.click("id", "backend-choice-0");
         window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
     }
     key(&mut window, Key::Character("n".into()), true);
@@ -1815,7 +1734,7 @@ fn chat_screen_socket_workflow() {
     key(&mut window, Key::Character("a".into()), true);
     type_text(
         &mut window,
-        "Daily notes with a deliberately long title that must leave room for the model and turn count in the composer strip",
+        "Daily notes with a deliberately long title that must leave room for the agent and turn count in the composer strip",
     );
     if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
         capture::save(
@@ -1840,19 +1759,25 @@ fn chat_screen_socket_workflow() {
     {
         let inner = window.doc().inner();
         let title = inner.get_element_by_id("chat-strip-title").unwrap();
-        let model = inner.get_element_by_id("chat-strip-model").unwrap();
+        let agent = inner.get_element_by_id("chat-strip-agent").unwrap();
         let title = inner.get_client_bounding_rect(title).unwrap();
-        let model = inner.get_client_bounding_rect(model).unwrap();
+        let agent = inner.get_client_bounding_rect(agent).unwrap();
         assert!(
-            title.x + title.width <= model.x,
-            "title must leave room for model and turns"
+            title.x + title.width <= agent.x,
+            "title must leave room for agent and turns"
         );
     }
 
     key(&mut window, Key::Character("m".into()), true);
-    window
-        .wait(|doc| support::text(doc, "chat-screen").contains("inclusionai/ling-3.2-flash:free"));
+    window.wait(|doc| support::text(doc, "chat-screen").contains("codex"));
     key(&mut window, Key::Named(NamedKey::ArrowDown), false);
+    key(&mut window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+    key(&mut window, Key::Character("a".into()), true);
+    type_text(
+        &mut window,
+        root().canonicalize().unwrap().to_str().unwrap(),
+    );
     key(&mut window, Key::Named(NamedKey::Enter), false);
     window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
     support::pointer(window.doc.as_mut().unwrap(), "chat-input");

@@ -1,16 +1,17 @@
-import { functionName, v } from "@tokamak/sdk";
+import { functionName, v, type ActionContext } from "@tokamak/sdk";
 import { action } from "./_functions";
 import type { BackendApi } from "../backends";
 export const list = action({
-  handler: async (ctx) => {
-    const options = [];
-    for (const provider of await ctx.providers<BackendApi>("chat.backend")) {
-      const plugin = provider.backend.describe[functionName].split("/")[0]!;
-      for (const option of await ctx.use(provider).backend.describe({})) options.push({ ...option, plugin });
-    }
-    return options;
-  },
+  handler: listBackends,
 });
+export async function listBackends(ctx: ActionContext) {
+  const options = [];
+  for (const provider of await ctx.providers<BackendApi>("chat.backend")) {
+    const plugin = provider.backend.describe[functionName].split("/")[0]!;
+    for (const option of await ctx.use(provider).backend.describe({})) options.push({ ...option, plugin });
+  }
+  return options;
+}
 export const configure = action({
   args: { plugin: v.string(), backendId: v.string(), settings: v.any() },
   handler: async (ctx, args) => {

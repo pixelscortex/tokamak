@@ -9,7 +9,6 @@ import {
 import { acpSend } from "./acp/backend/acp";
 import { api as acp } from "./acp/backend/_generated/api";
 import { api } from "./chat/backend/_generated/api";
-import { CHAT_MODELS, DEFAULT_MODEL, currentModel } from "./chat/models";
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
   for (let i = 0; i < attempts; i++) {
@@ -39,8 +38,13 @@ export async function acpScenario(client: TokamakClient) {
     }),
     { cwd: "/tmp" },
   );
-  const threadId = await client.mutation(api.threads.create, {});
+  const threadId = await client.action(api.threads.create, {});
   const backend = { kind: "plugin" as const, plugin: "acp", backendId: "fake", settings: { cwd: "/tmp" } };
+  assert.deepEqual((await client.query(api.threads.list, {}))[0]!.backend, {
+    kind: "plugin",
+    plugin: "acp",
+    backendId: "fake",
+  });
   await client.mutation(api.threads.setBackend, { threadId, backend });
   const send = (text: string) => client.action(api.chat.send, { threadId, text });
   const messages = () => client.query(api.messages.list, { threadId });
@@ -287,7 +291,6 @@ export async function acpScenario(client: TokamakClient) {
       false,
   );
   const run = await client.query(api.runs.active, { threadId });
-  assert.equal(run!.model, "acp:fake");
   await client.mutation(api.runs.cancel, { runId: run!._id });
   assert.equal((await pending).status, "cancelled");
   const cancelledTool = (await messages()).at(-1)!.parts.find((part) => part.type === "tool");
@@ -303,14 +306,14 @@ export async function acpScenario(client: TokamakClient) {
     settings: { cwd: "/" },
   });
   await client.mutation(api.threads.setBackend, { threadId, backend: { ...backend, backendId: "other" } });
-  assert.equal((await send("hello")).status, "error");
+  await assert.rejects(send("hello"), /No agent configured/);
   await client.mutation(api.threads.setBackend, {
     threadId,
     backend: { ...backend, settings: { cwd: "/var" } },
   });
   assert.equal((await send("auth")).status, "error");
   assert.equal((await messages()).at(-1)!.error, "Sign in to `fake` in a terminal");
-  const fresh = await client.mutation(api.threads.create, {});
+  const fresh = await client.action(api.threads.create, {});
   const seeded = await client.mutation(api.send.start, {
     token: "fixture-turn-token",
     threadId: fresh,
@@ -337,18 +340,13 @@ export async function acpScenario(client: TokamakClient) {
   assert.match(echoed.text, /user: new question$/);
   assert.ok(Buffer.byteLength(echoed.text) <= 32768 + 100);
   assert.ok(!echoed.text.includes("user: old"));
-  const model = CHAT_MODELS[1];
-  await client.mutation(api.threads.setBackend, { threadId: fresh, backend: { kind: "model", model } });
-  const selected = (await client.query(api.threads.list, {})).find((thread) => thread._id === fresh)!;
-  assert.deepEqual([selected.model, currentModel({ ...selected, model: DEFAULT_MODEL })], [model, model]);
-  return;
 }
 
 export async function turnTokenScenario(client: TokamakClient) {
   const attacker = createApi<{ ops: import("@tokamak/sdk").ApiFromModule<typeof import("./b/backend/ops")> }>(
     "b",
   );
-  const threadId = await client.mutation(api.threads.create, {});
+  const threadId = await client.action(api.threads.create, {});
   await client.mutation(api.threads.setBackend, {
     threadId,
     backend: { kind: "plugin", plugin: "acp", backendId: "fake", settings: { cwd: "/tmp" } },

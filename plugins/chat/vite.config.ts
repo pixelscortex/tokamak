@@ -8,9 +8,8 @@ export default defineConfig({
       plugin: {
         id: "chat",
         version: "0.3.0",
-        consumes: ["chat.tools", "chat.backend"],
+        consumes: ["chat.backend"],
         exports: "./api.ts",
-        permissions: ["net:openrouter.ai", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"],
       },
     }),
   ],

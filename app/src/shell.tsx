@@ -106,7 +106,7 @@ export function Shell(props: { modules: ModuleRegistry }) {
                     when={router.match("/chat") || router.match("/chat/:thread")}
                     fallback={<p>View not found</p>}
                   >
-                    <Chat loader={loader} pathname={router.location().pathname} chat={chat} />
+                    <Chat pathname={router.location().pathname} chat={chat} />
                   </Show>
                 }
               >

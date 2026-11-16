@@ -1,20 +1,32 @@
 import { backend } from "./backend";
-import { CHAT_MODELS, DEFAULT_MODEL } from "../models";
+import { listBackends } from "./backends";
+import { api } from "./_generated/api";
 import { v } from "@tokamak/sdk";
-import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
+import { DEFAULT_TITLE, action, mutation, nonempty, query, thread } from "./_functions";
 
 export const list = query({
   handler: ({ db }) => db.query("threads").withIndex("by_updatedAt").order("desc").collect(),
 });
 
-export const create = mutation({
+export const create = action({
   args: { title: v.optional(v.string()) },
-  handler: (ctx, { title }) => {
+  handler: async (ctx, args): Promise<import("@tokamak/sdk").Id<"threads">> => {
+    const first = (await listBackends(ctx))[0];
+    return ctx.runMutation(api.threads.insert, {
+      ...args,
+      ...(first ? { backend: { kind: "plugin" as const, plugin: first.plugin, backendId: first.id } } : {}),
+    });
+  },
+});
+
+export const insert = mutation({
+  args: { title: v.optional(v.string()), backend: v.optional(backend) },
+  handler: (ctx, { title, backend }) => {
     const { db } = ctx;
     const now = Date.now();
 
     return db.insert("threads", {
-      model: DEFAULT_MODEL,
+      ...(backend ? { backend } : {}),
       title: title === undefined ? DEFAULT_TITLE : nonempty(title),
       createdAt: now,
       updatedAt: now,
@@ -51,30 +63,11 @@ export const remove = mutation({
   },
 });
 
-export const setModel = mutation({
-  args: { threadId: v.id("threads"), model: v.string() },
-  handler: async (ctx, { threadId, model }) => {
-    const { db } = ctx;
-    const current = await thread(db, threadId);
-    if (!CHAT_MODELS.some((choice) => choice === model)) throw new Error("Unknown chat model");
-
-    return db.patch(threadId, {
-      model,
-      ...(current.backend ? { backend: { kind: "model" as const, model } } : {}),
-      updatedAt: Date.now(),
-    });
-  },
-});
-
 export const setBackend = mutation({
   args: { threadId: v.id("threads"), backend },
   handler: async (ctx, { threadId, backend }) => {
     const { db } = ctx;
     const current = await thread(db, threadId);
-    if (backend.kind === "model") {
-      const selected = backend.model;
-      if (!CHAT_MODELS.some((model) => model === selected)) throw new Error("Unknown chat model");
-    }
     if (backend.kind === "plugin") {
       const previous = current.backend;
       const { state: _state, ...selected } = backend;
@@ -93,7 +86,6 @@ export const setBackend = mutation({
     }
     return db.patch(threadId, {
       backend,
-      ...(backend.kind === "model" ? { model: backend.model } : {}),
       updatedAt: Date.now(),
     });
   },

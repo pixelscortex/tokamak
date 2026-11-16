@@ -45,12 +45,11 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
         id,
         version: "1.0.0",
         ...(id === "record"
-          ? { exports: "./api.ts", provides: ["chat.tools"] }
+          ? { exports: "./api.ts" }
           : id === "chat"
             ? {
                 exports: "./api.ts",
-                consumes: ["chat.tools", "chat.backend"],
-                permissions: ["net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"],
+                consumes: ["chat.backend"],
               }
             : id === "acp"
               ? {
@@ -63,8 +62,6 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
                 ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
                 : {
                     exports: "./api.ts",
-                    provides: ["chat.tools"],
-                    consumes: ["chat.tools"],
                     permissions: [
                       "net:localhost",
                       "net:loopback.tkm.test",
@@ -134,7 +131,6 @@ export const age = mutation({
   await cp(new URL("./actions-driver.ts", import.meta.url), driver);
   await cp(new URL("./chat-driver.ts", import.meta.url), join(root, "chat-driver.ts"));
   await cp(new URL("./acp-driver.ts", import.meta.url), join(root, "acp-driver.ts"));
-  await cp(new URL("./helpers/completions.ts", import.meta.url), join(root, "completions.ts"));
   await writeFile(
     join(root, "tsconfig.json"),
     JSON.stringify({

@@ -1,4 +1,3 @@
-import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { Show, createEffect, createSignal, on, type Accessor } from "solid-js";
 import { BackendPicker } from "./backend-picker";
 import { ChatComposer } from "./chat-composer";
@@ -11,7 +10,7 @@ import { useMap } from "./use-map";
 import { useDrafts } from "./use-drafts";
 import { chatKeys } from "./chat-keys";
 
-export function Chat(props: { loader: PluginLoader; pathname: string; chat: ChatState }) {
+export function Chat(props: { pathname: string; chat: ChatState }) {
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [pickerFolder, setPickerFolder] = createSignal(false);
   let pickerKey: ((event: NativeEvent) => void) | undefined;
@@ -79,7 +78,6 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
         <Show keyed when={props.chat.threadId()}>
           {(threadId: Id<"threads">) => (
             <ThreadView
-              loader={props.loader}
               chat={props.chat}
               threadId={threadId}
               hidden={mapOpen()}

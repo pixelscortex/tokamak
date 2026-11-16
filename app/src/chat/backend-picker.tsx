@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { NativeEvent } from "@tokamak/render";
 import { Textarea } from "@tokamak/ui/components";
-import { CHAT_MODELS, currentModel } from "../../../plugins/chat/models";
 import { api, type ChatState, type Thread } from "./use-chat";
 import type { JsonValue } from "@tokamak/sdk";
 
@@ -14,11 +13,14 @@ function backendFolder(settings: JsonValue | undefined): string {
     : "";
 }
 
-export function backendLabel(thread: Thread | undefined) {
+export function backendLabel(
+  thread: Thread | undefined,
+  options: { id: string; plugin: string; title: string }[] = [],
+) {
   const backend = thread?.backend;
   return backend?.kind === "plugin"
-    ? `${backend.backendId}${backendFolder(backend.settings) ? ` · ${backendFolder(backend.settings).split("/").filter(Boolean).at(-1) ?? "/"}` : ""}`
-    : currentModel(thread);
+    ? `${options.find((option) => option.id === backend.backendId && option.plugin === backend.plugin)?.title ?? backend.backendId}${backendFolder(backend.settings) ? ` · ${backendFolder(backend.settings).split("/").filter(Boolean).at(-1) ?? "/"}` : ""}`
+    : "No agent configured: see agents.example.toml";
 }
 
 // Keep the last successful folder across threads without depending on browser storage.
@@ -40,11 +42,7 @@ export function BackendPicker(props: {
   const backend = props.chat.thread()?.backend;
   const previous = props.chat.threads.data()?.find((thread) => thread.backend?.kind === "plugin")?.backend;
   const [folder, setFolder] = createSignal(
-    String(
-      backend?.kind === "plugin"
-        ? backendFolder(backend.settings)
-        : lastFolder || (previous?.kind === "plugin" ? backendFolder(previous.settings) : ""),
-    ),
+    backendFolder(backend?.settings) || lastFolder || backendFolder(previous?.settings),
   );
   let alive = true;
   onCleanup(() => {
@@ -52,7 +50,6 @@ export function BackendPicker(props: {
   });
   const [saving, setSaving] = createSignal(false);
   const choices = createMemo(() => [
-    ...CHAT_MODELS.map((model) => ({ title: model, backend: { kind: "model" as const, model } })),
     ...options().map((agent) => ({
       title: agent.title,
       folder: agent.folder,
@@ -71,11 +68,12 @@ export function BackendPicker(props: {
       if (alive) setLoading(false);
     });
 
-  async function save(
-    backend:
-      | { kind: "model"; model: string }
-      | { kind: "plugin"; plugin: string; backendId: string; settings?: import("@tokamak/sdk").JsonValue },
-  ) {
+  async function save(backend: {
+    kind: "plugin";
+    plugin: string;
+    backendId: string;
+    settings?: import("@tokamak/sdk").JsonValue;
+  }) {
     const thread = props.chat.thread();
     if (!thread || saving()) return;
     setSaving(true);
@@ -126,6 +124,7 @@ export function BackendPicker(props: {
       if (!saving()) props.onClose();
     } else if (!selected() && (key === "ArrowDown" || key === "ArrowUp" || key === "Enter")) {
       event.preventDefault();
+      if (!choices().length) return;
       if (key === "Enter") {
         if (!event.repeat) choose(index());
       } else setIndex((i) => (i + (key === "ArrowDown" ? 1 : -1) + choices().length) % choices().length);
@@ -183,7 +182,7 @@ export function BackendPicker(props: {
           <span class="text-text-3">Loading backends…</span>
         </Show>
         <Show when={!loading() && !options().length}>
-          <span class="text-text-3">No additional backends configured.</span>
+          <span class="text-text-3">No agent configured: see agents.example.toml</span>
         </Show>
         <span class="text-text-3">↑↓ MOVE · ENTER SELECT · ESC CLOSE</span>
       </Show>

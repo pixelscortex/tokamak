@@ -1,6 +1,5 @@
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "./parts";
 import { applyToolUpdate } from "./tool-parts";
-import { currentModel } from "../models";
 import { v, type Infer } from "@tokamak/sdk";
 import type { Part } from "./parts";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread, turn } from "./_functions";
@@ -13,7 +12,7 @@ export const start = mutation({
     text = nonempty(text);
     const current = await thread(db, threadId);
     const backend = current.backend;
-    const model = currentModel(current);
+    if (!backend) throw new Error("No agent configured: see agents.example.toml");
     const runs = await db
       .query("runs")
       .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
@@ -48,7 +47,6 @@ export const start = mutation({
       status: "running",
       token,
       ...(backend?.kind === "plugin" ? { backendPlugin: backend.plugin } : {}),
-      model,
       startedAt: Date.now(),
     });
 
@@ -60,8 +58,7 @@ export const start = mutation({
     return {
       runId,
       messageId,
-      model,
-      ...(backend ? { backend } : {}),
+      backend,
       history: [
         ...history
           .filter((message) => message.status === "complete")

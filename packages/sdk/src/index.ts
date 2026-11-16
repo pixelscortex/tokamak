@@ -70,6 +70,3 @@ export type { Id, JsonValue, JsonObject } from "./values";
 
 export { view, itemRenderer, toolbar, command, entityCard } from "./contributions";
 export type { Contribution, ContributionKind, ContributionOptions } from "./contributions";
-
-export { tool, defineTools, toJsonSchema } from "./tools";
-export type { JsonSchema, ToolDescription, ToolOutput } from "./tools";

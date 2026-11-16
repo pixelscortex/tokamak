@@ -4,12 +4,12 @@ import { BusyStatus } from "./busy-status";
 
 export function ComposerStrip(props: {
   title: string;
-  model: string;
+  backend: string;
   turns: number;
   copied: boolean;
   busy: boolean;
   raced: boolean;
-  onModel?: () => void;
+  onBackend?: () => void;
 }) {
   const [available, setAvailable] = createSignal(0);
   const [width, setWidth] = createSignal(0);
@@ -39,19 +39,19 @@ export function ComposerStrip(props: {
           <span class="shrink-0">…</span>
         </Show>
       </span>
-      <span id="chat-strip-model" class="flex shrink-0 items-center gap-2 whitespace-nowrap">
+      <span id="chat-strip-agent" class="flex shrink-0 items-center gap-2 whitespace-nowrap">
         <Show when={props.copied}>
           <span role="status">COPIED</span>
         </Show>
         <BusyStatus busy={props.busy} raced={props.raced} />
 
-        <Show when={props.onModel} fallback={<span id="chat-strip-backend">{props.model}</span>}>
+        <Show when={props.onBackend} fallback={<span id="chat-strip-backend">{props.backend}</span>}>
           <button
             aria-label="Change backend (CMD+M)"
-            onClick={() => props.onModel?.()}
+            onClick={() => props.onBackend?.()}
             class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[9px] uppercase text-text-3"
           >
-            {props.model}
+            {props.backend}
           </button>
         </Show>
         <span>
