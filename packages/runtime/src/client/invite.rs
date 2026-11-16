@@ -30,7 +30,11 @@ pub(crate) fn server_url(server: &str, remote: bool) -> Result<Url, Error> {
         .and_then(|host| host.trim_matches(['[', ']']).parse::<IpAddr>().ok())
         .is_some_and(|ip| ip.is_loopback());
     if (!remote && original_host != url.host_str())
-        || !(url.scheme() == "ws" && loopback || remote && url.scheme() == "wss")
+        || !(if remote {
+            url.scheme() == "wss"
+        } else {
+            url.scheme() == "ws" && loopback
+        })
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -38,7 +42,10 @@ pub(crate) fn server_url(server: &str, remote: bool) -> Result<Url, Error> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err("Server must use loopback ws:// or remote wss:// with path /ws".into());
+        return Err(
+            "Local servers require loopback ws://; remote servers require wss://; path must be /ws"
+                .into(),
+        );
     }
     Ok(url)
 }
@@ -73,12 +80,7 @@ pub fn parse_link(link: &str) -> Result<Invite, Error> {
 impl Invite {
     pub fn join_url(&self) -> Url {
         let mut url = self.server.clone();
-        url.set_scheme(if self.server.scheme() == "wss" {
-            "https"
-        } else {
-            "http"
-        })
-        .expect("validated WebSocket scheme");
+        url.set_scheme("https").expect("validated WebSocket scheme");
         url.set_path("/join");
         url
     }
@@ -104,12 +106,9 @@ mod tests {
             ),
             (
                 "tokamak://join?server=ws://127.0.0.1:8080/ws&code=abc",
-                Some("http://127.0.0.1:8080/join"),
+                None,
             ),
-            (
-                "tokamak://join?server=ws://[::1]:8080/ws&code=abc",
-                Some("http://[::1]:8080/join"),
-            ),
+            ("tokamak://join?server=ws://[::1]:8080/ws&code=abc", None),
             ("https://join?server=wss://example.com/ws&code=abc", None),
             ("tokamak://other?server=wss://example.com/ws&code=abc", None),
             ("tokamak://join?server=wss://example.com/ws", None),
@@ -129,7 +128,10 @@ mod tests {
         for (url, remote, valid) in [
             ("wss://example.com/ws", true, true),
             ("wss://example.com/ws", false, false),
-            ("ws://127.0.0.1/ws", true, true),
+            ("ws://127.0.0.1/ws", true, false),
+            ("ws://[::1]/ws", true, false),
+            ("wss://127.0.0.1/ws", true, true),
+            ("wss://[::1]/ws", true, true),
             ("ws://[::1]/ws", false, true),
             ("ws://127.0.0.1/ws", false, true),
             ("ws://0177.0.0.1/ws", false, false),
