@@ -1,0 +1,44 @@
+app/src/chat/chat-composer.tsx
+  s_9fae101001efa7::t_9df5ca1c7af66a 15-25
+  s_9fae101001efa7::t_ea5d3e76ee8711 1-14,26
+plugins/chat/backend/acp-turn.ts
+  s_9fae101001efa7::t_93de2d72b11d98 1-53
+plugins/chat/backend/acp.ts
+  s_9fae101001efa7::t_93de2d72b11d98 4,54-63
+plugins/chat/README.md
+  s_9fae101001efa7::t_4d773547118ba5 5-6
+plugins/chat/backend/acp-events.ts
+  s_9fae101001efa7::t_93de2d72b11d98 37,41-51
+  s_9fae101001efa7::t_60806760e4f8a9 52
+packages/server/README.md
+  s_9fae101001efa7::t_4d773547118ba5 6-8,120-122,507-526
+plugins/chat/backend/runs.ts
+  s_9fae101001efa7::t_93de2d72b11d98 5,12,61,66-72
+  s_9fae101001efa7::t_9df5ca1c7af66a 4
+app/src/chat/backend-picker.tsx
+  s_9fae101001efa7::t_151729fc820d4c 48,57,63,76
+app/src/chat/chat-keys.ts
+  s_9fae101001efa7::t_045dc2eadec1e3 1-81
+app/src/chat/screen.tsx
+  s_9fae101001efa7::t_3dde369444f3af 4,13,49-55,74
+plugins/chat/backend/chat.ts
+  s_9fae101001efa7::t_e8a3b849466808 2,31,63-68
+plugins/chat/backend/send.ts
+  s_9fae101001efa7::t_5c987267a52504 6-7,91,98-99,103,121-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1be2f48b385b08fbd0d5e4f01be0f81c06f58d4a",
+  "prompts": {},
+  "sessions": {
+    "s_9fae101001efa7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e268-6374-7d42-85a8-5469fea8c75a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
