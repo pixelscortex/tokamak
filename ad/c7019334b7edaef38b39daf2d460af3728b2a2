@@ -1,0 +1,36 @@
+packages/server/src/host/acp/ops.rs
+  s_2297d4366353cf::t_e78bbf267e7164 99-102,105-106
+  s_2297d4366353cf::t_03859a96627e4d 34-36
+plugins/chat/backend/chat.ts
+  s_2297d4366353cf::t_6cceff31f11538 76
+  s_2297d4366353cf::t_51f3432acbe8bd 11-13,20-21
+  s_2297d4366353cf::t_03859a96627e4d 14-19
+plugins/acp/backend/backend.ts
+  s_2297d4366353cf::t_3569171f0a30bf 34
+  s_2297d4366353cf::t_67318bde66ce37 13-14
+packages/server/src/host/acp/session.rs
+  s_2297d4366353cf::t_fe1ec46ff9e531 108-121,123,126,128
+packages/sdk/src/functions.ts
+  s_2297d4366353cf::t_12ffae392e51f5 56-57
+  s_2297d4366353cf::t_c9e398f6997069 171
+packages/server/tests/acp-driver.ts
+  s_2297d4366353cf::t_ec83193bb7369d 27
+packages/server/tests/acp.rs
+  s_2297d4366353cf::t_773bfb86265b39 372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adc7019334b7edaef38b39daf2d460af3728b2a2",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
