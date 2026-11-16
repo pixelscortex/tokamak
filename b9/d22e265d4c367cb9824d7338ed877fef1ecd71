@@ -1,0 +1,28 @@
+plugins/chat/README.md
+  s_9aac700ca3b093::t_e8ffaa40ea27a6 126-128
+plugins/chat/backend/schema.ts
+  s_9aac700ca3b093::t_e8ffaa40ea27a6 31
+plugins/chat/backend/runs.ts
+  s_9aac700ca3b093::t_e8ffaa40ea27a6 62-63,65,67-73
+packages/server/tests/chat-driver.ts
+  s_9aac700ca3b093::t_9973af6e472a10 428-429
+  s_9aac700ca3b093::t_e8ffaa40ea27a6 401-402,404-415,423,426,430-432
+packages/server/tests/build-actions.mjs
+  s_9aac700ca3b093::t_e8ffaa40ea27a6 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b9d22e265d4c367cb9824d7338ed877fef1ecd71",
+  "prompts": {},
+  "sessions": {
+    "s_9aac700ca3b093": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e2d3-8c0f-72b3-b972-2a43692dd35e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
