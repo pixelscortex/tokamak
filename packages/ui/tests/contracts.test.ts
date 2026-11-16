@@ -9,8 +9,19 @@ test("native library preserves its public element and component exports", async 
   const componentsPath = new URL("components.js", dist).href;
   assert.deepEqual(Object.keys(await import(elementsPath)).sort(), ["Button", "Icon", "Input"]);
   assert.deepEqual(Object.keys(await import(componentsPath)).sort(), [
-    "Button", "Chip", "ChipMore", "Composer", "Kbd", "Select", "Shell", "Textarea",
-    "dismissOutside", "place", "rail", "textareaLine", "topBar",
+    "Button",
+    "Chip",
+    "ChipMore",
+    "Composer",
+    "Kbd",
+    "Select",
+    "Shell",
+    "Textarea",
+    "dismissOutside",
+    "place",
+    "rail",
+    "textareaLine",
+    "topBar",
     "trackLayout",
   ]);
   let library = "";
@@ -31,7 +42,19 @@ test("Tailwind theme retains shared color, radius, spacing and font variables an
   const css = await readFile(new URL("styles.css", dist), "utf8");
   assert.match(theme, /@theme\s+static/);
   const tokenGroups = [
-    [true, ["color-surface", "color-foreground", "color-accent", "color-focus", "color-invalid", "radius-control", "spacing", "font-sans"]],
+    [
+      true,
+      [
+        "color-surface",
+        "color-foreground",
+        "color-accent",
+        "color-focus",
+        "color-invalid",
+        "radius-control",
+        "spacing",
+        "font-sans",
+      ],
+    ],
     [false, ["color-line", "color-lift", "color-danger", "color-well", "color-chip", "font-data"]],
   ] as const;
   for (const [compiled, tokens] of tokenGroups) {
@@ -40,6 +63,14 @@ test("Tailwind theme retains shared color, radius, spacing and font variables an
       if (compiled) assert(css.includes(`var(--${token}`), `${token} must reach compiled native styles`);
     }
   }
-  for (const selector of [".tk-button", ".tk-input", "[data-pressed]", "[data-disabled]", "[data-focused]", "[data-invalid]"]) assert(css.includes(selector), selector);
+  for (const selector of [
+    ".tk-button",
+    ".tk-input",
+    "[data-pressed]",
+    "[data-disabled]",
+    "[data-focused]",
+    "[data-invalid]",
+  ])
+    assert(css.includes(selector), selector);
   assert(!/@apply|@import/.test(css), "QuickJS/Blitz must receive compiled CSS, not compiler directives");
 });

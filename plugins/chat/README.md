@@ -28,22 +28,22 @@ ambient types into the QuickJS UI type graph.
 
 All functions use one argument object. Wire names and results:
 
-| Kind | Name | Args | Result |
-| --- | --- | --- | --- |
-| Query | `chat/threads:list` | `{}` | `Thread[]`, newest updated first |
-| Query | `chat/messages:list` | `{threadId}` | `Message[]`, oldest first |
-| Query | `chat/runs:running` | `{}` | `{runId, threadId, model, waiting, startedBy, starterName}[]`, visible running runs |
-| Query | `chat/runs:active` | `{threadId}` | `Run \| null` |
-| Mutation | `chat/threads:create` | `{title?: string}` | thread ID |
-| Mutation | `chat/threads:rename` | `{threadId, title: string}` | `null` |
-| Mutation | `chat/threads:setBackend` | `{threadId, backend}` | `null` |
-| Action | `chat/agents:list` | `{}` | `{id, title}[]` |
-| Mutation | `chat/threads:setModel` | `{threadId, model: string}` | `null` |
-| Mutation | `chat/threads:remove` | `{threadId}` | `null` |
-| Mutation | `chat/runs:observe` | `{sweepId: string, tick: number}` | `null` |
-| Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null` |
-| Mutation | `chat/runs:cancel` | `{runId}` | `null` |
-| Action | `chat/chat:send` | `{threadId, text: string}` | `{runId, messageId, status: "done" \| "error" \| "cancelled"}` |
+| Kind     | Name                      | Args                               | Result                                                                              |
+| -------- | ------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| Query    | `chat/threads:list`       | `{}`                               | `Thread[]`, newest updated first                                                    |
+| Query    | `chat/messages:list`      | `{threadId}`                       | `Message[]`, oldest first                                                           |
+| Query    | `chat/runs:running`       | `{}`                               | `{runId, threadId, model, waiting, startedBy, starterName}[]`, visible running runs |
+| Query    | `chat/runs:active`        | `{threadId}`                       | `Run \| null`                                                                       |
+| Mutation | `chat/threads:create`     | `{title?: string}`                 | thread ID                                                                           |
+| Mutation | `chat/threads:rename`     | `{threadId, title: string}`        | `null`                                                                              |
+| Mutation | `chat/threads:setBackend` | `{threadId, backend}`              | `null`                                                                              |
+| Action   | `chat/agents:list`        | `{}`                               | `{id, title}[]`                                                                     |
+| Mutation | `chat/threads:setModel`   | `{threadId, model: string}`        | `null`                                                                              |
+| Mutation | `chat/threads:remove`     | `{threadId}`                       | `null`                                                                              |
+| Mutation | `chat/runs:observe`       | `{sweepId: string, tick: number}`  | `null`                                                                              |
+| Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null`                                                                              |
+| Mutation | `chat/runs:cancel`        | `{runId}`                          | `null`                                                                              |
+| Action   | `chat/chat:send`          | `{threadId, text: string}`         | `{runId, messageId, status: "done" \| "error" \| "cancelled"}`                      |
 
 A text part is `{type: "text", text: string}`; tool parts are described below.
 

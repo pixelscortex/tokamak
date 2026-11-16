@@ -11,21 +11,21 @@ import { api } from "../dist/tests/todo/backend/_legacyApi";
 function Fairness() {
   const [trace, setTrace] = createSignal<string[]>([]);
   const [titles, setTitles] = createSignal<string[]>([]);
-  const record = (event: string) => setTrace(before => [...before, event]);
+  const record = (event: string) => setTrace((before) => [...before, event]);
   const transport = new InProcessTransport(createMessageConnection<Request, Event>());
   const client = new TokamakClient(transport);
   onCleanup(() => transport.close());
-  onHostEvent<Event>("connection:event", event => {
+  onHostEvent<Event>("connection:event", (event) => {
     if (event.type === "unsubscribed") record(`ack:${event.id}`);
   });
-  onHostEvent<string>("connection:close", reason => record(`closed:${reason}`));
+  onHostEvent<string>("connection:close", (reason) => record(`closed:${reason}`));
   onHostEvent<null>("begin", () => {
     void (async () => {
       try {
         await client.mutation(api.todo.add, { title: "Healthy after cheap native requests" });
         record("mutation:accepted");
         const rows = await client.query(api.todo.list, {});
-        setTitles(rows.map(row => row.title));
+        setTitles(rows.map((row) => row.title));
         record("query:reply");
       } catch (error) {
         record(`failed:${String(error)}`);

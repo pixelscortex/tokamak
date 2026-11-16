@@ -96,7 +96,9 @@ function TopBar() {
             class="bg-well rounded-[8px] flex h-[30px] w-full min-w-0 items-center gap-2 pr-2 pl-2.5"
           >
             <Icon d={stroke.search} class="size-3.5 text-ink-4" />
-            <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-4">Search or run a command</span>
+            <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-4">
+              Search or run a command
+            </span>
             <Kbd keys={["cmd", "K"]} />
           </div>
         </div>

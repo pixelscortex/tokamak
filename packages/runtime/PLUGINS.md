@@ -13,8 +13,13 @@ The default `tokamak()` build compiles `src/main.tsx` into a single CommonJS
 factory wrapped in:
 
 ```js
-globalThis.__tokamakModules.register("@plugins/todo/ui", ["@tokamak/render", "@tokamak/sdk"],
-  function(require, exports, module) { /* plugin code */ });
+globalThis.__tokamakModules.register(
+  "@plugins/todo/ui",
+  ["@tokamak/render", "@tokamak/sdk"],
+  function (require, exports, module) {
+    /* plugin code */
+  },
+);
 ```
 
 Host packages and `@plugins/*` stay external. A plugin can import another's
@@ -36,7 +41,9 @@ literal options without running UI code, and uses public export names as IDs:
 ```json
 {
   "plugin": {
-    "id": "todo", "version": "0.1.0", "depends": {},
+    "id": "todo",
+    "version": "0.1.0",
+    "depends": {},
     "contributes": { "view": [{ "id": "Todo", "route": "/" }] }
   },
   "entries": { "ui": { "code": "ui.js", "map": "ui.js.map", "css": "styles.css", "shell": "shell.html" } }

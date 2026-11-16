@@ -14,8 +14,10 @@ export type Contribution<K extends ContributionKind, T> = T & {
   readonly options: ContributionOptions[K];
 };
 function helper<K extends ContributionKind>(kind: K) {
-  return <T extends (...args: never[]) => unknown>(options: ContributionOptions[K], component: T): Contribution<K, T> =>
-    Object.assign(component, { [contributionBrand]: kind, options });
+  return <T extends (...args: never[]) => unknown>(
+    options: ContributionOptions[K],
+    component: T,
+  ): Contribution<K, T> => Object.assign(component, { [contributionBrand]: kind, options });
 }
 export const view = helper("view");
 export const itemRenderer = helper("itemRenderer");

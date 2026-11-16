@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@tokamak/sdk": "workspace:*",
     "@ai-sdk/openai": "4.0.111",
+    "@tokamak/sdk": "workspace:*",
     "ai": "7.0.166"
   },
-  "devDependencies": { "@tokamak/build": "workspace:*" }
+  "devDependencies": {
+    "@tokamak/build": "workspace:*"
+  }
 }

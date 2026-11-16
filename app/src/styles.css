@@ -24,7 +24,12 @@ body {
 }
 
 /* A fixed window gives the stage (and its scrollers) a bounded height. */
-.shell-frame { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.shell-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
 .shell-strip {
   display: flex;
   flex-shrink: 0;
@@ -44,10 +49,23 @@ body {
   text-transform: uppercase;
 }
 /* The product shows no navigation yet; see shell-frame.tsx. */
-.shell-switcher, .shell-navigation { display: none; align-items: center; gap: 16px; }
-[data-dev-nav] .shell-switcher, [data-dev-nav] .shell-navigation { display: flex; }
-.shell-switcher { min-width: 0; overflow-x: auto; }
-.shell-navigation { flex-shrink: 0; }
+.shell-switcher,
+.shell-navigation {
+  display: none;
+  align-items: center;
+  gap: 16px;
+}
+[data-dev-nav] .shell-switcher,
+[data-dev-nav] .shell-navigation {
+  display: flex;
+}
+.shell-switcher {
+  min-width: 0;
+  overflow-x: auto;
+}
+.shell-navigation {
+  flex-shrink: 0;
+}
 .shell-strip button {
   display: flex;
   align-items: center;
@@ -65,27 +83,99 @@ body {
   cursor: pointer;
 }
 .shell-strip button[aria-current="page"],
-.shell-strip button:hover, .shell-strip button:focus { color: var(--color-text); }
-.shell-stage { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
-.shell-plugin { flex: 1; min-width: 0; min-height: 0; padding: 16px; overflow: auto; }
-.plugin-error { padding: 16px; }
+.shell-strip button:hover,
+.shell-strip button:focus {
+  color: var(--color-text);
+}
+.shell-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.shell-plugin {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+.plugin-error {
+  padding: 16px;
+}
 
-#chat-messages > :first-child { margin-top: auto; }
+#chat-messages > :first-child {
+  margin-top: auto;
+}
 
-.chat-input { color: var(--color-text); font-family: var(--font-read); --textarea-placeholder: var(--color-faint); --textarea-caret: var(--color-light); }
+.chat-input {
+  color: var(--color-text);
+  font-family: var(--font-read);
+  --textarea-placeholder: var(--color-faint);
+  --textarea-caret: var(--color-light);
+}
 
-.chat-input-busy { color: var(--color-text-3); --textarea-caret: var(--color-text-3); }
+.chat-input-busy {
+  color: var(--color-text-3);
+  --textarea-caret: var(--color-text-3);
+}
 
-.chat-markdown { min-width: 0; overflow-wrap: break-word; }
-.chat-markdown p, .chat-markdown h3, .chat-markdown ul,
-.chat-markdown ol, .chat-markdown blockquote, .chat-markdown pre { margin: 0 0 12px; }
-.chat-markdown > :last-child { margin-bottom: 0; }
-.chat-markdown h3 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--color-text); }
-.chat-markdown strong { font-weight: 600; color: var(--color-text); }
-.chat-markdown ul, .chat-markdown ol { padding-left: 24px; }
-.chat-markdown li > p { margin-bottom: 4px; }
-.chat-markdown blockquote { border-left: 2px solid var(--color-edge); padding-left: 12px; }
-.chat-markdown code { font-family: var(--font-label); font-size: 13px; background: var(--color-raised); }
-.chat-markdown pre { min-width: 0; max-width: 100%; overflow-x: auto; padding: 12px; background: var(--color-raised); white-space: pre; overflow-wrap: normal; }
-.chat-markdown pre code { white-space: pre; }
-.chat-markdown hr { margin: 16px 0; border: 0; border-top: 1px solid var(--color-edge); }
+.chat-markdown {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.chat-markdown p,
+.chat-markdown h3,
+.chat-markdown ul,
+.chat-markdown ol,
+.chat-markdown blockquote,
+.chat-markdown pre {
+  margin: 0 0 12px;
+}
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+.chat-markdown h3 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.chat-markdown strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.chat-markdown ul,
+.chat-markdown ol {
+  padding-left: 24px;
+}
+.chat-markdown li > p {
+  margin-bottom: 4px;
+}
+.chat-markdown blockquote {
+  border-left: 2px solid var(--color-edge);
+  padding-left: 12px;
+}
+.chat-markdown code {
+  font-family: var(--font-label);
+  font-size: 13px;
+  background: var(--color-raised);
+}
+.chat-markdown pre {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 12px;
+  background: var(--color-raised);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.chat-markdown pre code {
+  white-space: pre;
+}
+.chat-markdown hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--color-edge);
+}

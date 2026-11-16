@@ -54,20 +54,14 @@ export interface SelectProps {
   class?: string;
 }
 
-type Row =
-  | { kind: "group"; label: string }
-  | { kind: "option"; option: SelectOption; index: number };
+type Row = { kind: "group"; label: string } | { kind: "option"; option: SelectOption; index: number };
 
 export function Select(props: SelectProps): JSX.Element {
   const state = createSelectState(props);
   const { selected, open, compact, type, setOpen, keydown } = state;
 
   return (
-    <div
-      class={`relative flex ${props.class ?? ""}`}
-      onKeyDown={keydown}
-      onClick={state.mark}
-    >
+    <div class={`relative flex ${props.class ?? ""}`} onKeyDown={keydown} onClick={state.mark}>
       <button
         type="button"
         id={props.id}
@@ -87,7 +81,11 @@ export function Select(props: SelectProps): JSX.Element {
         <span class={`min-w-0 truncate ${type()} ${selected() ? "" : "text-ink-4"}`}>
           {selected()?.label ?? props.placeholder ?? ""}
         </span>
-        <Icon d={icons.chevronDown} strokeWidth={2} class={`shrink-0 text-ink-4 ${compact() ? "size-3" : "size-3.5"}`} />
+        <Icon
+          d={icons.chevronDown}
+          strokeWidth={2}
+          class={`shrink-0 text-ink-4 ${compact() ? "size-3" : "size-3.5"}`}
+        />
       </button>
       <Show when={open()}>
         <SelectMenu {...props} state={state} />
@@ -171,13 +169,36 @@ export function createSelectState(props: SelectProps) {
   }
 
   const compact = () => props.size === "compact";
-  const type = () => (props.mono ? "font-data text-[11px] leading-4" : compact() ? "text-[12px] leading-4" : "text-[13px] leading-4");
+  const type = () =>
+    props.mono
+      ? "font-data text-[11px] leading-4"
+      : compact()
+        ? "text-[12px] leading-4"
+        : "text-[13px] leading-4";
   const sub = (part: string) => (props.id ? `${props.id}-${part}` : undefined);
 
   return {
-    value, selected, open, query, active, rows, compact, type, sub, setOpen, pick, search, keydown,
-    trigger: () => trigger, setTrigger: (node: NativeNode) => { trigger = node; },
-    setLayer: (next: { mark(): void }) => { layer = next; }, mark: () => layer?.mark(),
+    value,
+    selected,
+    open,
+    query,
+    active,
+    rows,
+    compact,
+    type,
+    sub,
+    setOpen,
+    pick,
+    search,
+    keydown,
+    trigger: () => trigger,
+    setTrigger: (node: NativeNode) => {
+      trigger = node;
+    },
+    setLayer: (next: { mark(): void }) => {
+      layer = next;
+    },
+    mark: () => layer?.mark(),
   };
 }
 
@@ -203,8 +224,7 @@ function createSelectSearch(props: SelectProps) {
     return out;
   });
   /** Enabled options in display order: what Up and Down move over. */
-  const order = () =>
-    rows().flatMap((r) => (r.kind === "option" && !r.option.disabled ? [r.index] : []));
+  const order = () => rows().flatMap((r) => (r.kind === "option" && !r.option.disabled ? [r.index] : []));
 
   function search(next: string) {
     setQuery(next);

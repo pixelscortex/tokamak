@@ -76,9 +76,7 @@ export const v = {
   object<F extends Fields>(fields: F): Validator<ObjectValue<F>> {
     return validator({
       kind: "object",
-      fields: Object.fromEntries(
-        Object.entries(fields).map(([key, field]) => [key, field.description]),
-      ),
+      fields: Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.description])),
     });
   },
 
@@ -139,18 +137,18 @@ function validateObject(fields: Record<string, ValidatorDescription>, value: unk
   if (!isPlainObject(value)) throw new Error(`${path}: expected object`);
   for (const [key, field] of Object.entries(fields)) {
     if (!Object.hasOwn(value, key)) {
-      if (field.kind !== "optional")
-        throw new Error(`${path}.${key}: required field is missing`);
+      if (field.kind !== "optional") throw new Error(`${path}.${key}: required field is missing`);
     } else validate(field, value[key], `${path}.${key}`);
   }
   for (const key of Object.keys(value)) {
-    if (!Object.hasOwn(fields, key))
-      throw new Error(`${path}.${key}: unexpected field`);
+    if (!Object.hasOwn(fields, key)) throw new Error(`${path}.${key}: unexpected field`);
   }
 }
 
 function validateScalar(description: ValidatorDescription, value: unknown, path: string) {
-  const fail = (expected: string): never => { throw new Error(`${path}: expected ${expected}`); };
+  const fail = (expected: string): never => {
+    throw new Error(`${path}: expected ${expected}`);
+  };
   switch (description.kind) {
     case "string":
       if (typeof value !== "string") fail("string");

@@ -6,13 +6,8 @@ import { fileURLToPath } from "node:url";
 import { copyFile, writeFile } from "node:fs/promises";
 
 await build({ ...config, configFile: false });
-await copyFile(
-  new URL("../src/theme.css", import.meta.url),
-  new URL("../dist/theme.css", import.meta.url),
-);
+await copyFile(new URL("../src/theme.css", import.meta.url), new URL("../dist/theme.css", import.meta.url));
 await writeFile(
   new URL("../dist/styles.css", import.meta.url),
-  await compileCss(
-    fileURLToPath(new URL("../src/styles.css", import.meta.url)),
-  ),
+  await compileCss(fileURLToPath(new URL("../src/styles.css", import.meta.url))),
 );

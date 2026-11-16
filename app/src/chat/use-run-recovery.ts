@@ -3,7 +3,11 @@ import { createEffect, getOwner, onCleanup, runWithOwner, type Accessor } from "
 import type { TokamakClient } from "@tokamak/sdk";
 import { api } from "../../../plugins/chat/client";
 
-export function useRunRecovery(client: TokamakClient, running: Accessor<boolean>, setError: (error: string) => void) {
+export function useRunRecovery(
+  client: TokamakClient,
+  running: Accessor<boolean>,
+  setError: (error: string) => void,
+) {
   const owner = getOwner();
   let sweep: { stop: () => void; schedule: () => void } | undefined;
   let schedulingErrorLogged = false;
@@ -28,10 +32,12 @@ export function useRunRecovery(client: TokamakClient, running: Accessor<boolean>
     function schedule() {
       if (stopped || recovering || cancelDelay) return;
       try {
-        cancelDelay = runWithOwner(owner, () => afterDelay(30_000, () => {
-          cancelDelay = undefined;
-          void recover();
-        }));
+        cancelDelay = runWithOwner(owner, () =>
+          afterDelay(30_000, () => {
+            cancelDelay = undefined;
+            void recover();
+          }),
+        );
       } catch (cause) {
         if (!schedulingErrorLogged) {
           const message = `Could not schedule stale-run recovery: ${String(cause)}`;
@@ -55,7 +61,13 @@ export function useRunRecovery(client: TokamakClient, running: Accessor<boolean>
       }
     }
 
-    sweep = { stop: () => { stopped = true; cancelDelay?.(); }, schedule };
+    sweep = {
+      stop: () => {
+        stopped = true;
+        cancelDelay?.();
+      },
+      schedule,
+    };
     void recover();
   });
 }

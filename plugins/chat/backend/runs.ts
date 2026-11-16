@@ -14,13 +14,20 @@ export const running = query({
     const names = new Map<string, string>();
     for (const run of visible) {
       if (names.has(run.startedBy)) continue;
-      const member = await db.query("members").withIndex("by_member", q => q.eq("memberId", run.startedBy)).first();
+      const member = await db
+        .query("members")
+        .withIndex("by_member", (q) => q.eq("memberId", run.startedBy))
+        .first();
       names.set(run.startedBy, member?.name ?? (run.startedBy === "owner" ? "Owner" : "Guest"));
     }
 
-    return visible.map(run => ({
-      runId: run._id, threadId: run.threadId, model: run.model, waiting: run.waiting ?? false,
-      startedBy: run.startedBy, starterName: names.get(run.startedBy)!,
+    return visible.map((run) => ({
+      runId: run._id,
+      threadId: run.threadId,
+      model: run.model,
+      waiting: run.waiting ?? false,
+      startedBy: run.startedBy,
+      starterName: names.get(run.startedBy)!,
     }));
   },
 });
@@ -29,10 +36,13 @@ export const active = query({
   guest: true,
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
-    if (!await canSee(ctx, threadId)) return null;
+    if (!(await canSee(ctx, threadId))) return null;
     const { db } = ctx;
-    const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
-    return runs.find(run => run.status === "running") ?? null;
+    const runs = await db
+      .query("runs")
+      .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+      .collect();
+    return runs.find((run) => run.status === "running") ?? null;
   },
 });
 
@@ -43,12 +53,18 @@ export const cancel = mutation({
     const { db, caller } = ctx;
     const run = await db.get(runId);
     if (!run) return null;
-    if (!await canSee(ctx, run.threadId) || (caller.role !== "owner" && run.startedBy !== caller.memberId)) throw new Error("Only the run starter or owner can cancel");
+    if (!(await canSee(ctx, run.threadId)) || (caller.role !== "owner" && run.startedBy !== caller.memberId))
+      throw new Error("Only the run starter or owner can cancel");
     if (run.status !== "running") return null;
 
     await interruptResponse(db, run, "cancelled", "cancelled");
     await db.patch(run.threadId, { updatedAt: Date.now() });
-    return db.patch(runId, { status: "cancelled", waiting: false, cancelledBy: caller.memberId, finishedAt: Date.now() });
+    return db.patch(runId, {
+      status: "cancelled",
+      waiting: false,
+      cancelledBy: caller.memberId,
+      finishedAt: Date.now(),
+    });
   },
 });
 
@@ -57,17 +73,22 @@ export const observe = mutation({
   args: { sweepId: v.string(), tick: v.number() },
   handler: async ({ db }, { sweepId, tick }) => {
     if (!Number.isSafeInteger(tick) || tick < 0) throw new Error("Invalid sweep tick");
-    const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
+    const runs = await db
+      .query("runs")
+      .withIndex("by_status", (q) => q.eq("status", "running"))
+      .collect();
     for (const run of runs) {
-      const previous = run.observations?.find(observation => observation.sweepId === sweepId);
+      const previous = run.observations?.find((observation) => observation.sweepId === sweepId);
       if (previous && tick <= previous.tick) continue;
       const heartbeat = run.heartbeat ?? 0;
       const unchanged = previous ? (previous.heartbeat === heartbeat ? previous.unchanged + 1 : 0) : 1;
       if (unchanged < 3) {
-        const observations = (run.observations ?? []).filter(observation => observation.sweepId !== sweepId);
+        const observations = (run.observations ?? []).filter(
+          (observation) => observation.sweepId !== sweepId,
+        );
         observations.push({ sweepId, tick, heartbeat, unchanged });
         if (observations.length > 4) {
-          const oldest = observations.reduce((a, b) => a.tick <= b.tick ? a : b);
+          const oldest = observations.reduce((a, b) => (a.tick <= b.tick ? a : b));
           observations.splice(observations.indexOf(oldest), 1);
         }
         await db.patch(run._id, { observations });
@@ -83,7 +104,10 @@ export const observe = mutation({
 });
 
 async function visibleRuns(ctx: { db: DatabaseReader<Model>; caller: Caller }) {
-  const runs = await ctx.db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
+  const runs = await ctx.db
+    .query("runs")
+    .withIndex("by_status", (q) => q.eq("status", "running"))
+    .collect();
   const visible = [];
   for (const run of runs) if (await canSee(ctx, run.threadId)) visible.push(run);
   return visible;

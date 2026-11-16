@@ -26,8 +26,7 @@ function decode(data: unknown): Event {
     return event as Event;
   }
   const { type, id, result } = event;
-  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0)
-    throw new Error("invalid event ID");
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0) throw new Error("invalid event ID");
   if (type === "unsubscribed") return event as Event;
   if (type !== "response" && type !== "subscription") throw new Error("invalid event result");
   validateResult(result);
@@ -35,17 +34,18 @@ function decode(data: unknown): Event {
 }
 
 function validatePluginChange(event: Record<string, unknown>): void {
-  if (!Array.isArray(event.plugins) || event.plugins.some(id => typeof id !== "string")
-    || !event.catalog || typeof event.catalog !== "object" || Array.isArray(event.catalog)) throw new Error("invalid plugin change");
+  if (
+    !Array.isArray(event.plugins) ||
+    event.plugins.some((id) => typeof id !== "string") ||
+    !event.catalog ||
+    typeof event.catalog !== "object" ||
+    Array.isArray(event.catalog)
+  )
+    throw new Error("invalid plugin change");
 }
 
 function validateResult(result: unknown): void {
-  if (
-    !result ||
-    typeof result !== "object" ||
-    Array.isArray(result)
-  )
-    throw new Error("invalid event result");
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("invalid event result");
   if (
     Object.keys(result).length !== 1 ||
     (!("Ok" in result) && !("Err" in result && typeof result.Err === "string"))
@@ -72,8 +72,7 @@ export function webSocketConnection(socket: ClientWebSocket): MessageConnection 
           onClose(error instanceof Error ? error : new Error(String(error)));
         }
       };
-      const closed = () =>
-        onClose(new Error("WebSocket closed; mutation outcomes may be unknown"));
+      const closed = () => onClose(new Error("WebSocket closed; mutation outcomes may be unknown"));
       socket.addEventListener("message", message);
       socket.addEventListener("close", closed);
       socket.addEventListener("error", closed);

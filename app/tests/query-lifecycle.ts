@@ -34,7 +34,7 @@ const client = new TokamakClient(transport);
 let dispose!: () => void;
 let change!: (filter: string) => void;
 let state!: ReturnType<typeof useQuery<{ filter: string }, string[]>>;
-createRoot(stop => {
+createRoot((stop) => {
   dispose = stop;
   const [filter, setFilter] = createSignal("first");
   change = setFilter;
@@ -75,7 +75,7 @@ assert.equal(registrations[1]!.stops, 1);
 registrations[1]!.notify({ error: new Error("after disposal") });
 assert.equal(state.error(), undefined);
 assert.deepEqual(state.data(), []);
-createRoot(stop => {
+createRoot((stop) => {
   dispose = stop;
   state = useQuery(client, api.todo.list, () => ({ filter: "remount" }));
 });
@@ -86,7 +86,7 @@ assert.equal(registrations[2]!.stops, 1);
 // Failure mode: synchronous admission failure is an observable error state, not
 // an escaping effect exception or an indefinitely loading query.
 registrationFailure = new Error("connection retired");
-createRoot(stop => {
+createRoot((stop) => {
   dispose = stop;
   state = useQuery(client, api.todo.list, () => ({ filter: "closed" }));
 });

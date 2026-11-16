@@ -6,15 +6,21 @@ import { uiContributions } from "./contributions.ts";
 
 type GenerateBundle = Extract<NonNullable<Plugin["generateBundle"]>, (...args: never[]) => unknown>;
 
-export function artifactBundle(root: string, plugin: Readonly<PluginDefinition>, options: { ui?: false; standalone?: boolean }): GenerateBundle {
+export function artifactBundle(
+  root: string,
+  plugin: Readonly<PluginDefinition>,
+  options: { ui?: false; standalone?: boolean },
+): GenerateBundle {
   return function (_options, bundle) {
     if (options.ui === false) delete bundle["ui.js"];
     if (options.ui !== false && !options.standalone) {
       const ui = bundle["ui.js"];
       if (!ui || ui.type !== "chunk") throw new Error("Missing plugin UI module");
       const modules = [...this.getModuleIds()];
-      if (modules.some(id => /\/solid-js\/|\/render\/js\//.test(id))) throw new Error("Shared runtime leaked into plugin UI");
-      if (/document\.|window\.|solid-js\/web/.test(ui.code)) throw new Error("Browser runtime leaked into plugin UI");
+      if (modules.some((id) => /\/solid-js\/|\/render\/js\//.test(id)))
+        throw new Error("Shared runtime leaked into plugin UI");
+      if (/document\.|window\.|solid-js\/web/.test(ui.code))
+        throw new Error("Browser runtime leaked into plugin UI");
       const metadataAsset = artifactManifest(bundle);
       const metadata = JSON.parse(String(metadataAsset.source));
       // The emitted chunk's imports are authoritative. The type-checker
@@ -55,8 +61,12 @@ export function artifactBundle(root: string, plugin: Readonly<PluginDefinition>,
 function inferOptional(code: string, depends: Record<string, string>, optional: Record<string, string>) {
   const source = ts.createSourceFile("ui.js", code, ts.ScriptTarget.Latest, true);
   function lazy(node: ts.Node) {
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-      && node.expression.expression.getText(source) === "__tokamakModules" && node.expression.name.text === "load") {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.expression.getText(source) === "__tokamakModules" &&
+      node.expression.name.text === "load"
+    ) {
       const arg = node.arguments[0];
       if (arg && ts.isStringLiteralLike(arg)) {
         const match = /^@plugins\/([^/]+)\/ui$/.exec(arg.text);
@@ -72,7 +82,9 @@ function bundleHashes(bundle: Parameters<GenerateBundle>[1]) {
   const hashes: Record<string, string> = {};
   for (const [name, file] of Object.entries(bundle)) {
     if (name === "manifest.json") continue;
-    hashes[name] = createHash("sha256").update(file.type === "chunk" ? file.code : file.source).digest("hex");
+    hashes[name] = createHash("sha256")
+      .update(file.type === "chunk" ? file.code : file.source)
+      .digest("hex");
   }
   return hashes;
 }

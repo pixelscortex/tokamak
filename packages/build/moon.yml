@@ -1,17 +1,17 @@
 # Internal source-only build tooling; no published compiler or product CLI.
-language: 'typescript'
-layer: 'library'
+language: "typescript"
+layer: "library"
 workspace:
   inheritedTasks:
-    include: ['check']
+    include: ["check"]
 tasks:
   check:
-    command: 'proto run bun -- check --no-script --project tsconfig.json'
+    command: "proto run bun -- check --no-script --project tsconfig.json"
     options:
-      mergeArgs: 'replace'
+      mergeArgs: "replace"
   test:
-    command: 'sh tests/run.sh'
+    command: "sh tests/run.sh"
     options:
       cache: false
-      mutex: 'cargo'
-      mergeArgs: 'replace'
+      mutex: "cargo"
+      mergeArgs: "replace"

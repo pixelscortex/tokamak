@@ -16,10 +16,15 @@ export interface TableDefinition<F extends Fields = Fields, I extends Indexes = 
   readonly description: ValidatorDescription;
   readonly indexes: readonly IndexDefinition[];
   index<N extends string, const K extends readonly [Extract<keyof F, string>, ...Extract<keyof F, string>[]]>(
-    name: N, fields: K,
+    name: N,
+    fields: K,
   ): TableDefinition<F, I & Record<N, K>>;
-  unique<N extends string, const K extends readonly [Extract<keyof F, string>, ...Extract<keyof F, string>[]]>(
-    name: N, fields: K,
+  unique<
+    N extends string,
+    const K extends readonly [Extract<keyof F, string>, ...Extract<keyof F, string>[]],
+  >(
+    name: N,
+    fields: K,
   ): TableDefinition<F, I & Record<N, K>>;
   readonly _indexes?: I;
 }
@@ -34,13 +39,18 @@ export type DataModel = Record<string, object>;
 declare const schemaIndexes: unique symbol;
 export type ModelFromSchema<S extends SchemaDefinition> = {
   [T in keyof S["tables"]]: ObjectValue<S["tables"][T]["fields"]>;
-} & { readonly [schemaIndexes]: {
-  [T in keyof S["tables"]]: NonNullable<S["tables"][T]["_indexes"]>;
-} };
-export type IndexesFor<M extends DataModel, T extends keyof M> =
-  M extends { readonly [schemaIndexes]: infer I }
-    ? T extends keyof I ? Extract<I[T], Indexes> : never
-    : Indexes;
+} & {
+  readonly [schemaIndexes]: {
+    [T in keyof S["tables"]]: NonNullable<S["tables"][T]["_indexes"]>;
+  };
+};
+export type IndexesFor<M extends DataModel, T extends keyof M> = M extends {
+  readonly [schemaIndexes]: infer I;
+}
+  ? T extends keyof I
+    ? Extract<I[T], Indexes>
+    : never
+  : Indexes;
 
 // The server enforces the same caps when a plugin loads (schema.rs); checking
 // here reports the mistake at the declaration instead of at install.
@@ -52,7 +62,8 @@ export function assertIndexName(name: string): void {
   if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
     throw new Error("Index name must match [A-Za-z_][A-Za-z0-9_]*");
   }
-  if (name.length > MAX_NAME_LENGTH) throw new Error(`Index name is longer than ${MAX_NAME_LENGTH} characters`);
+  if (name.length > MAX_NAME_LENGTH)
+    throw new Error(`Index name is longer than ${MAX_NAME_LENGTH} characters`);
 }
 
 export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Record<never, never>> {
@@ -64,21 +75,28 @@ export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Rec
   const table = (indexes: readonly IndexDefinition[]): TableDefinition<F, Indexes> => {
     const add = (name: string, keys: readonly string[], unique: boolean) => {
       assertIndexName(name);
-      if (indexes.some(index => index.name === name)) throw new Error(`Duplicate index: ${name}`);
+      if (indexes.some((index) => index.name === name)) throw new Error(`Duplicate index: ${name}`);
       if (!Array.isArray(keys) || keys.length === 0) throw new Error("An index needs at least one field");
       if (keys.length > MAX_INDEX_FIELDS) throw new Error(`An index has at most ${MAX_INDEX_FIELDS} fields`);
-      if (indexes.length >= MAX_INDEXES_PER_TABLE) throw new Error(`A table has at most ${MAX_INDEXES_PER_TABLE} indexes`);
+      if (indexes.length >= MAX_INDEXES_PER_TABLE)
+        throw new Error(`A table has at most ${MAX_INDEXES_PER_TABLE} indexes`);
       const seen = new Set<string>();
       for (const key of keys) {
-        if (typeof key !== "string" || !Object.hasOwn(snapshot, key)) throw new Error(`Undeclared index field: ${key}`);
+        if (typeof key !== "string" || !Object.hasOwn(snapshot, key))
+          throw new Error(`Undeclared index field: ${key}`);
         // The native value index API accepts single ASCII identifiers only.
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid index field: ${key}`);
         if (seen.has(key)) throw new Error(`Repeated index field: ${key}`);
         seen.add(key);
       }
-      return table(Object.freeze([...indexes, Object.freeze({ name, fields: Object.freeze([...keys]), unique })]));
+      return table(
+        Object.freeze([...indexes, Object.freeze({ name, fields: Object.freeze([...keys]), unique })]),
+      );
     };
-    return Object.freeze({ fields: snapshot, description, indexes,
+    return Object.freeze({
+      fields: snapshot,
+      description,
+      indexes,
       index: (name: string, keys: readonly string[]) => add(name, keys, false),
       unique: (name: string, keys: readonly string[]) => add(name, keys, true),
     }) as TableDefinition<F, Indexes>;
@@ -86,15 +104,19 @@ export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Rec
   return table(Object.freeze([])) as TableDefinition<F, Record<never, never>>;
 }
 
-export function defineSchema<T extends Record<string, TableDefinition>>(
-  tables: T,
-): SchemaDefinition<T> {
+export function defineSchema<T extends Record<string, TableDefinition>>(tables: T): SchemaDefinition<T> {
   for (const table of Object.keys(tables)) assertTable(table);
   return Object.freeze({ tables: Object.freeze({ ...tables }) });
 }
 
 /** Inspect the same schema as handlers, without serializing builder methods. */
 export function schemaMetadata(schema: SchemaDefinition | null) {
-  return { tables: Object.fromEntries(Object.entries(schema?.tables ?? {}).map(([name, table]) =>
-    [name, { description: table.description, indexes: table.indexes }])) };
+  return {
+    tables: Object.fromEntries(
+      Object.entries(schema?.tables ?? {}).map(([name, table]) => [
+        name,
+        { description: table.description, indexes: table.indexes },
+      ]),
+    ),
+  };
 }

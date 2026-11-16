@@ -18,7 +18,9 @@ export type Doc<M extends DataModel, T extends Table<M>> = M[T] & {
 };
 
 declare const rangeType: unique symbol;
-export interface IndexBounds { readonly [rangeType]: true }
+export interface IndexBounds {
+  readonly [rangeType]: true;
+}
 type FieldValue<D, K extends string> = K extends keyof D ? D[K] : never;
 type Lower<D, K extends string, R> = {
   gt(field: K, value: NoInfer<FieldValue<D, K>>): R;
@@ -28,15 +30,21 @@ type Upper<D, K extends string, R> = {
   lt(field: K, value: NoInfer<FieldValue<D, K>>): R;
   lte(field: K, value: NoInfer<FieldValue<D, K>>): R;
 };
-export type IndexRange<D, F extends readonly string[]> = IndexBounds & (
-  F extends readonly [infer K extends string, ...infer Rest extends string[]]
-    ? { eq(field: K, value: NoInfer<FieldValue<D, K>>): IndexRange<D, Rest> }
-      & Lower<D, K, IndexBounds & Upper<D, K, IndexBounds>>
-      & Upper<D, K, IndexBounds & Lower<D, K, IndexBounds>>
+export type IndexRange<D, F extends readonly string[]> = IndexBounds &
+  (F extends readonly [infer K extends string, ...infer Rest extends string[]]
+    ? { eq(field: K, value: NoInfer<FieldValue<D, K>>): IndexRange<D, Rest> } & Lower<
+        D,
+        K,
+        IndexBounds & Upper<D, K, IndexBounds>
+      > &
+        Upper<D, K, IndexBounds & Lower<D, K, IndexBounds>>
     : number extends F["length"]
-      ? { eq<K extends Extract<keyof D, string>>(field: K, value: NoInfer<D[K]>): IndexRange<D, F> }
-        & Lower<D, Extract<keyof D, string>, IndexBounds & Upper<D, Extract<keyof D, string>, IndexBounds>>
-        & Upper<D, Extract<keyof D, string>, IndexBounds & Lower<D, Extract<keyof D, string>, IndexBounds>>
+      ? { eq<K extends Extract<keyof D, string>>(field: K, value: NoInfer<D[K]>): IndexRange<D, F> } & Lower<
+          D,
+          Extract<keyof D, string>,
+          IndexBounds & Upper<D, Extract<keyof D, string>, IndexBounds>
+        > &
+          Upper<D, Extract<keyof D, string>, IndexBounds & Lower<D, Extract<keyof D, string>, IndexBounds>>
       : Record<never, never>);
 
 export interface QueryResult<D extends object> {
@@ -49,18 +57,15 @@ export interface QueryResult<D extends object> {
 // an index cannot be mixed (the host rejects it), so the type removes the
 // method instead of letting the chain compile and fail at runtime.
 export interface FilteredQuery<D extends object> extends QueryResult<D> {
-  where<K extends Extract<keyof D, string>>(
-    field: K, operator: "=", value: NoInfer<D[K]>,
-  ): FilteredQuery<D>;
+  where<K extends Extract<keyof D, string>>(field: K, operator: "=", value: NoInfer<D[K]>): FilteredQuery<D>;
   order(direction: "asc" | "desc"): FilteredQuery<D>;
 }
 export interface TableQuery<D extends object, I extends Indexes = Indexes> extends QueryResult<D> {
-  where<K extends Extract<keyof D, string>>(
-    field: K, operator: "=", value: NoInfer<D[K]>,
-  ): FilteredQuery<D>;
+  where<K extends Extract<keyof D, string>>(field: K, operator: "=", value: NoInfer<D[K]>): FilteredQuery<D>;
   order(direction: "asc" | "desc"): TableQuery<D, I>;
   withIndex<N extends Extract<keyof I, string>>(
-    name: N, range?: (q: IndexRange<D, I[N]>) => IndexBounds,
+    name: N,
+    range?: (q: IndexRange<D, I[N]>) => IndexBounds,
   ): QueryResult<D>;
 }
 
@@ -95,28 +100,44 @@ function writeValue(value: unknown): JsonObject {
 }
 
 const rangeState = Symbol("tokamak.indexRange");
-interface RangeState { owner: object; eq: EqualityClause[]; range: RangeClause[] }
+interface RangeState {
+  owner: object;
+  eq: EqualityClause[];
+  range: RangeClause[];
+}
 function indexRange(state: RangeState, fields?: readonly string[], validators?: Fields): object {
   const append = (operator: "eq" | RangeClause["operator"], field: string, value: unknown) => {
     if (typeof field !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field))
       throw new Error("Index field must be a single ASCII identifier");
     if (fields && fields[state.eq.length] !== field)
-      throw new Error(operator === "eq" ? "Index equalities must follow its leading field order" : "Index range must constrain the field after the equality prefix");
+      throw new Error(
+        operator === "eq"
+          ? "Index equalities must follow its leading field order"
+          : "Index range must constrain the field after the equality prefix",
+      );
     const snapshot = jsonSnapshot(value, "index value");
     if (validators?.[field]) validate(validators[field].description, snapshot, `index ${field}`);
     if (operator === "eq") {
       if (state.range.length) throw new Error("Cannot add equality after an index range");
-      if (state.eq.some(clause => clause.field === field)) throw new Error("Repeated index equality field");
+      if (state.eq.some((clause) => clause.field === field)) throw new Error("Repeated index equality field");
       return indexRange({ ...state, eq: [...state.eq, { field, value: snapshot }] }, fields, validators);
     }
     const lower = operator === "gt" || operator === "gte";
-    if (state.eq.some(clause => clause.field === field) || state.range.some(clause => clause.field !== field))
+    if (
+      state.eq.some((clause) => clause.field === field) ||
+      state.range.some((clause) => clause.field !== field)
+    )
       throw new Error("Index range must constrain the field after the equality prefix");
-    if (state.range.some(clause => (clause.operator === "gt" || clause.operator === "gte") === lower))
+    if (state.range.some((clause) => (clause.operator === "gt" || clause.operator === "gte") === lower))
       throw new Error("An index range accepts one lower and one upper bound");
-    return indexRange({ ...state, range: [...state.range, { field, operator, value: snapshot }] }, fields, validators);
+    return indexRange(
+      { ...state, range: [...state.range, { field, operator, value: snapshot }] },
+      fields,
+      validators,
+    );
   };
-  return Object.freeze({ [rangeState]: state,
+  return Object.freeze({
+    [rangeState]: state,
     eq: (field: string, value: unknown) => append("eq", field, value),
     gt: (field: string, value: unknown) => append("gt", field, value),
     gte: (field: string, value: unknown) => append("gte", field, value),
@@ -168,11 +189,16 @@ function plan<D extends object, I extends Indexes = Indexes>(
     withIndex(name: string, range?: (q: IndexRange<D, readonly string[]>) => IndexBounds) {
       assertIndexName(name);
       if (index || where.length) throw new Error("withIndex must be selected once before any where filters");
-      const definition = schema?.tables[table]?.indexes.find(index => index.name === name);
+      const definition = schema?.tables[table]?.indexes.find((index) => index.name === name);
       if (schema && !definition) throw new Error(`Unknown index on ${table}: ${name}`);
-      if (range !== undefined && typeof range !== "function") throw new Error("Index range must be a callback");
+      if (range !== undefined && typeof range !== "function")
+        throw new Error("Index range must be a callback");
       const owner = {};
-      const base = indexRange({ owner, eq: [], range: [] }, definition?.fields, schema?.tables[table]?.fields);
+      const base = indexRange(
+        { owner, eq: [], range: [] },
+        definition?.fields,
+        schema?.tables[table]?.fields,
+      );
       const result = range ? range(base as IndexRange<D, readonly string[]>) : base;
       const state = (result as { [rangeState]?: RangeState } | null)?.[rangeState];
       if (!state || state.owner !== owner) throw new Error("Index callback must return its range builder");

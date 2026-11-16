@@ -14,7 +14,10 @@ function exportsOf(source) {
   // export { a, b as c } from "…" and export type { … } from "…"
   for (const [, list] of source.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
     for (const item of (list ?? "").split(",")) {
-      const name = item.trim().split(/\s+as\s+/).pop();
+      const name = item
+        .trim()
+        .split(/\s+as\s+/)
+        .pop();
       if (name) names.add(name.replace(/^type\s+/, ""));
     }
   }

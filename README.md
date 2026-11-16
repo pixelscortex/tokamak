@@ -5,17 +5,17 @@ Reusable host, runtime, renderer, SDK and UI packages live under `packages/`.
 The single desktop application is composed under `app/`, with Rust and frontend
 sources in `app/src/` and SDK backend functions in `app/backend/`.
 
-| Directory | Purpose |
-| --- | --- |
-| `packages/server/` | Native host crate; builds the `tokamak` executable |
-| `packages/engine/` | Shared QuickJS engine, budgets and worker pool |
-| `packages/runtime/` | Feature-gated client/server hosts and local process lifecycle |
-| `packages/render/` | Native UI renderer crate |
-| `packages/sdk/` | TypeScript feature API, `@tokamak/sdk` |
-| `packages/ui/` | TypeScript UI library, `@tokamak/ui` |
-| `packages/build/` | Private shared Vite/Solid/theme build integration |
-| `app/` | Thin product shell, reserved for Core and plugins |
-| `lab/` | Independent native UI component catalog and interaction checks |
+| Directory           | Purpose                                                        |
+| ------------------- | -------------------------------------------------------------- |
+| `packages/server/`  | Native host crate; builds the `tokamak` executable             |
+| `packages/engine/`  | Shared QuickJS engine, budgets and worker pool                 |
+| `packages/runtime/` | Feature-gated client/server hosts and local process lifecycle  |
+| `packages/render/`  | Native UI renderer crate                                       |
+| `packages/sdk/`     | TypeScript feature API, `@tokamak/sdk`                         |
+| `packages/ui/`      | TypeScript UI library, `@tokamak/ui`                           |
+| `packages/build/`   | Private shared Vite/Solid/theme build integration              |
+| `app/`              | Thin product shell, reserved for Core and plugins              |
+| `lab/`              | Independent native UI component catalog and interaction checks |
 
 Root `plugins/` contains the installed Chat and Todo plugins.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
@@ -30,14 +30,17 @@ Rust 1.97.0. Put proto's bin/shims and Cargo's bin directory on `PATH`.
 
 Create `.env.local` **at the repository root**, next to `package.json`
 (`/Volumes/mypixel/tokamak/.env.local` in this checkout), containing:
+
 ```dotenv
 OPENROUTER_API_KEY=your-key-here
 ```
 
 Then run from the repository root:
+
 ```sh
 bun run app
 ```
+
 This installs workspace dependencies, builds Chat, Todo, the UI and Rust binaries,
 starts the local server, and opens chat. Type a message and press Enter.
 Closing the desktop leaves the server running; `bun run server:stop` stops it.
@@ -61,6 +64,7 @@ then select an agent with Cmd+M and enter an absolute working-folder path.
 
 To share with a friend, install/sign into Tailscale with Funnel enabled. Stop the
 local server, then run these in separate terminals from the repository root:
+
 ```sh
 bun run server:stop
 target/debug/tokamak --local-dir "$(target/debug/tokamak --local-path)" --plugins "$PWD/plugins" --share 127.0.0.1:3001
@@ -73,6 +77,7 @@ checkout with `moon run app:dev-build`, runs `target/debug/tokamak-desktop join 
 then `target/debug/tokamak-desktop`. Once they join, use Cmd+Shift+S to share a thread.
 
 Two credentialed smoke checks after building (both use the root `.env.local`):
+
 ```sh
 cargo test --locked -p server --test actions chat_real_openrouter_smoke -- --ignored --exact --nocapture
 TOKAMAK_CHAT_LIVE=1 TOKAMAK_CHAT_QUICKSTART=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --exact --nocapture --test-threads=1

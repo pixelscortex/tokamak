@@ -17,7 +17,13 @@ const states = ["rest", "hover", "pressed", "focused", "disabled", "live"] as co
 /** The classes that hold a state on (see the header). */
 function hold(variant: ButtonVariant, state: (typeof states)[number]) {
   if (state === "hover") {
-    return variant === "primary" ? "bg-white!" : variant === "outline" ? "bg-card! text-ink!" : variant === "ghost" ? "bg-chip! text-ink!" : "bg-lift!";
+    return variant === "primary"
+      ? "bg-white!"
+      : variant === "outline"
+        ? "bg-card! text-ink!"
+        : variant === "ghost"
+          ? "bg-chip! text-ink!"
+          : "bg-lift!";
   }
   if (state === "pressed") {
     return variant === "primary" ? "bg-ink-body!" : variant === "outline" ? "bg-base!" : "bg-card!";
@@ -37,8 +43,8 @@ export default function ButtonsView() {
     <Shell.Stage>
       <div id="lab-buttons" class="flex flex-col gap-8 px-8 pt-8 pb-16">
         <SectionTitle eyebrow="BUTTON" title="Variants and states">
-          Flat plates: the fill changes on hover and while pressed. Nothing moves.
-          Ghost has no plate until hover.
+          Flat plates: the fill changes on hover and while pressed. Nothing moves. Ghost has no plate until
+          hover.
         </SectionTitle>
         <div class="flex flex-col gap-3">
           <div class="flex items-center">
@@ -67,11 +73,15 @@ export default function ButtonsView() {
               </div>
             )}
           </For>
-          <p id="lab-button-presses" class="m-0 font-data text-[11px] leading-4 text-ink-4">{presses()} presses</p>
+          <p id="lab-button-presses" class="m-0 font-data text-[11px] leading-4 text-ink-4">
+            {presses()} presses
+          </p>
         </div>
         <SectionTitle eyebrow="SIZES" title="sm, md and icon; a toggle" />
         <div class="flex items-center gap-3">
-          <Button id="lab-button-sm" size="sm">Small</Button>
+          <Button id="lab-button-sm" size="sm">
+            Small
+          </Button>
           <Button id="lab-button-md">Medium</Button>
           <Button id="lab-button-icon" size="icon" label="Attach">
             <Icon d={stroke.paperclip} class="size-4" />
@@ -104,7 +114,12 @@ export default function ButtonsView() {
         <div id="lab-chips" class="flex flex-wrap items-center gap-1.5">
           <For each={chips()}>
             {(label, i) => (
-              <Chip id={`lab-chip-${i()}`} label={label} detail={i() === 0 ? "Todo" : undefined} onRemove={() => setChips(chips().filter((c) => c !== label))} />
+              <Chip
+                id={`lab-chip-${i()}`}
+                label={label}
+                detail={i() === 0 ? "Todo" : undefined}
+                onRemove={() => setChips(chips().filter((c) => c !== label))}
+              />
             )}
           </For>
           <Chip label="Read only" detail="Files" icon={stroke.paperclip} />

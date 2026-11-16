@@ -35,14 +35,8 @@ export class TokamakClient {
     return value as R;
   }
 
-  async mutation<A, R>(
-    reference: FunctionReference<"mutation", A, R>,
-    args: NoInfer<A>,
-  ): Promise<R> {
-    const value = await this.transport.mutation(
-      reference[functionName],
-      jsonSnapshot(args, "args"),
-    );
+  async mutation<A, R>(reference: FunctionReference<"mutation", A, R>, args: NoInfer<A>): Promise<R> {
+    const value = await this.transport.mutation(reference[functionName], jsonSnapshot(args, "args"));
     assertJson(value, "mutation result");
     return value as R;
   }
@@ -80,24 +74,20 @@ export class TokamakClient {
     };
 
     try {
-      stop = this.transport.subscribe(
-        reference[functionName],
-        jsonSnapshot(args, "args"),
-        (event) => {
-          if (!active) return;
-          try {
-            notify(event);
-          } catch (error) {
-            if (!registering) throw error;
-            // A synchronous observer must not abort transport registration:
-            // first capture its disposer, then close and rethrow the original
-            // failure. A separate flag also preserves `throw undefined`.
-            active = false;
-            initialFailure = true;
-            initialError = error;
-          }
-        },
-      );
+      stop = this.transport.subscribe(reference[functionName], jsonSnapshot(args, "args"), (event) => {
+        if (!active) return;
+        try {
+          notify(event);
+        } catch (error) {
+          if (!registering) throw error;
+          // A synchronous observer must not abort transport registration:
+          // first capture its disposer, then close and rethrow the original
+          // failure. A separate flag also preserves `throw undefined`.
+          active = false;
+          initialFailure = true;
+          initialError = error;
+        }
+      });
     } catch (error) {
       active = false;
       throw error;
@@ -105,8 +95,11 @@ export class TokamakClient {
       registering = false;
     }
     if (initialFailure) {
-      try { stop(); }
-      catch { /* The observer failure takes precedence over cleanup failures. */ }
+      try {
+        stop();
+      } catch {
+        /* The observer failure takes precedence over cleanup failures. */
+      }
       throw initialError;
     }
     // Closing twice is harmless; late transport events must not reach the UI.

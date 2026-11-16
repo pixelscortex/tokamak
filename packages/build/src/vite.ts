@@ -17,11 +17,13 @@ import { nativeSolid } from "./native.ts";
 import { nativePlugins } from "./native.ts";
 import { uiBuildConfig } from "./ui-build-config.ts";
 
-export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginDefinition; standalone?: boolean } = {}): PluginOption {
+export function tokamak(
+  options: { backend?: false; ui?: false; plugin?: PluginDefinition; standalone?: boolean } = {},
+): PluginOption {
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   return [
-    ...(options.ui === false ? [] : (options.standalone ? nativePlugins() : [nativeSolid()])),
+    ...(options.ui === false ? [] : options.standalone ? nativePlugins() : [nativeSolid()]),
     {
       name: "tokamak-application",
       config(config, environment) {
@@ -31,9 +33,10 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
         // Explicit --config must work from the workspace root as well as Moon's
         // app cwd. For implicit discovery Vite already searches the project cwd.
         const configFile = (config as InlineConfig).configFile;
-        root = typeof configFile === "string"
-          ? dirname(resolve(configFile))
-          : resolve(config.root ?? process.cwd());
+        root =
+          typeof configFile === "string"
+            ? dirname(resolve(configFile))
+            : resolve(config.root ?? process.cwd());
         return uiBuildConfig(root, options);
       },
       // Run on emitted JS after type erasure/Solid, so type queries never look
@@ -43,28 +46,40 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
       resolveId(id) {
         if (options.ui === false && id === resolve(root, ".tokamak-empty-ui.js")) return "\0tokamak-empty-ui";
       },
-      load(id) { if (id === "\0tokamak-empty-ui") return "export {};"; },
+      load(id) {
+        if (id === "\0tokamak-empty-ui") return "export {};";
+      },
       async buildStart() {
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
-        plugin = definePlugin(options.plugin ?? {
-          id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
-          version: manifest.version ?? "0.1.0",
-        });
+        plugin = definePlugin(
+          options.plugin ?? {
+            id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
+            version: manifest.version ?? "0.1.0",
+          },
+        );
         if (options.ui !== false && !options.standalone) {
           const ui = uiContributions(root);
           plugin = definePlugin({ ...plugin, contributes: ui.contributes });
         }
         const entries: Record<string, unknown> = {};
-        if (options.backend === false && plugin.exports !== undefined) throw new Error("Plugin exports require a backend");
+        if (options.backend === false && plugin.exports !== undefined)
+          throw new Error("Plugin exports require a backend");
         if (options.backend !== false) {
           // SDK discovery/checking is Bun-only. Invoke its existing pinned entry
           // even if Vite itself was launched through Node's standard CLI.
-          const bundled = spawnSync("proto", [
-            "run", "bun", "--",
-            fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
-            resolve(root, "backend"),
-            "--plugin", plugin.id,
-          ], { stdio: "inherit" });
+          const bundled = spawnSync(
+            "proto",
+            [
+              "run",
+              "bun",
+              "--",
+              fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
+              resolve(root, "backend"),
+              "--plugin",
+              plugin.id,
+            ],
+            { stdio: "inherit" },
+          );
           if (bundled.error) throw bundled.error;
           if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
           // The bundle's describe() carries the schema/index registry evaluated
@@ -76,14 +91,18 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
           // SDK maps are relative to backend/dist. Rebase source names when the
           // unchanged bundle is packaged into app/dist; retain original contents.
           map.sources = map.sources.map((source: string) =>
-            relative(resolve(root, "dist"), resolve(dirname(bundle), source)).split(sep).join("/"),
+            relative(resolve(root, "dist"), resolve(dirname(bundle), source))
+              .split(sep)
+              .join("/"),
           );
           this.emitFile({ type: "asset", fileName: "bundle.js", source });
           this.emitFile({ type: "asset", fileName: "bundle.js.map", source: JSON.stringify(map) });
           // References are source-aware, matching the existing SDK contract.
           // Rebase only its generated type-import specifiers, not user code.
-          const api = (await readFile(resolve(root, "backend/_generated/api.ts"), "utf8"))
-            .replaceAll('import("../', 'import("../backend/');
+          const api = (await readFile(resolve(root, "backend/_generated/api.ts"), "utf8")).replaceAll(
+            'import("../',
+            'import("../backend/',
+          );
           this.emitFile({ type: "asset", fileName: "api.ts", source: api });
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
         }
@@ -101,7 +120,12 @@ export function tokamak(options: { backend?: false; ui?: false; plugin?: PluginD
         this.emitFile({
           type: "asset",
           fileName: "manifest.json",
-          source: JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: publicFunctions(root, plugin.exports) }, null, 2) + "\n",
+          source:
+            JSON.stringify(
+              { formatVersion: 1, plugin, entries, publicFunctions: publicFunctions(root, plugin.exports) },
+              null,
+              2,
+            ) + "\n",
         });
       },
       generateBundle(_options, bundle, isWrite) {

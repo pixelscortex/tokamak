@@ -10,17 +10,30 @@ export const workspace = fileURLToPath(new URL("../../", import.meta.url));
 export async function source(root, id, code, options = { backend: false }) {
   const path = resolve(root, id);
   await mkdir(resolve(path, "src"), { recursive: true });
-  try { await symlink(resolve(workspace, "app/node_modules"), resolve(path, "node_modules"), "dir"); }
-  catch (error) { if (error.code !== "EEXIST") throw error; }
-  await writeFile(resolve(path, "package.json"), JSON.stringify({ name: id, version: "1.0.0", type: "module" }));
-  await writeFile(resolve(path, "tsconfig.json"), JSON.stringify({ extends: resolve(workspace, "app/tsconfig.json"), include: ["src"] }));
-  await writeFile(resolve(path, "vite.config.ts"), `import { tokamak } from "@tokamak/build/vite"; export default { plugins: [tokamak(${JSON.stringify(options)})] };`);
+  try {
+    await symlink(resolve(workspace, "app/node_modules"), resolve(path, "node_modules"), "dir");
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  await writeFile(
+    resolve(path, "package.json"),
+    JSON.stringify({ name: id, version: "1.0.0", type: "module" }),
+  );
+  await writeFile(
+    resolve(path, "tsconfig.json"),
+    JSON.stringify({ extends: resolve(workspace, "app/tsconfig.json"), include: ["src"] }),
+  );
+  await writeFile(
+    resolve(path, "vite.config.ts"),
+    `import { tokamak } from "@tokamak/build/vite"; export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
+  );
   await writeFile(resolve(path, "src/main.tsx"), code);
   return path;
 }
 export function build(path) {
   const result = spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), path], {
-    encoding: "utf8", timeout: 30_000,
+    encoding: "utf8",
+    timeout: 30_000,
   });
   assert.ifError(result.error);
   return result;
@@ -30,26 +43,46 @@ export function built(path) {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }
 export async function library(root, version = "before") {
-  const path = await source(root, "library", `
+  const path = await source(
+    root,
+    "library",
+    `
     import { createSignal } from "solid-js";
     export const [shared, setShared] = createSignal(0);
     export const ready = "library-ready";
     export function Counter() { return <button id="shared-increment" onClick={() => setShared(n => n + 1)}>library-${version}: {shared()}</button>; }
-  `);
+  `,
+  );
   built(path);
 }
 export async function fixtures(root) {
   const logic = await source(root, "logic", "", { ui: false });
   await cp(resolve(workspace, "plugins/todo/backend"), resolve(logic, "backend"), {
-    recursive: true, filter: path => !/\/(dist|_generated)(\/|$)/.test(path),
+    recursive: true,
+    filter: (path) => !/\/(dist|_generated)(\/|$)/.test(path),
   });
-  await writeFile(resolve(logic, "backend/tsconfig.json"), JSON.stringify({
-    extends: resolve(workspace, "app/backend/tsconfig.json"), include: ["**/*.ts"], exclude: ["dist"],
-  }));
+  await writeFile(
+    resolve(logic, "backend/tsconfig.json"),
+    JSON.stringify({
+      extends: resolve(workspace, "app/backend/tsconfig.json"),
+      include: ["**/*.ts"],
+      exclude: ["dist"],
+    }),
+  );
   built(logic);
   await library(root);
-  built(await source(root, "dormant", 'export function Unused() { throw new Error("backend dependency UI must stay lazy"); }'));
-  built(await source(root, "consumer", `
+  built(
+    await source(
+      root,
+      "dormant",
+      'export function Unused() { throw new Error("backend dependency UI must stay lazy"); }',
+    ),
+  );
+  built(
+    await source(
+      root,
+      "consumer",
+      `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient, useQuery } from "@tokamak/sdk/solid";
@@ -73,24 +106,43 @@ export async function fixtures(root) {
       </div>;
     });
     export const Nested = view({ route: "/detail/*rest" }, () => <p id="nested">Nested route</p>);
-  `, { backend: false, plugin: { id: "consumer", version: "1.0.0", depends: { logic: "*", dormant: "*" } } }));
-  built(await source(root, "broken", `import { view } from "@tokamak/sdk";
+  `,
+      { backend: false, plugin: { id: "consumer", version: "1.0.0", depends: { logic: "*", dormant: "*" } } },
+    ),
+  );
+  built(
+    await source(
+      root,
+      "broken",
+      `import { view } from "@tokamak/sdk";
     import { shared } from "@plugins/library/ui";
     export const Broken = view({ route: "/" }, () => {
       if (shared() === 0) throw new Error("intentional contribution failure");
       return <p id="recovered">Recovered contribution</p>;
-    });`));
+    });`,
+    ),
+  );
 }
 
 async function errors(root) {
   await library(root);
-  built(await source(root, "healthy", `
+  built(
+    await source(
+      root,
+      "healthy",
+      `
     import { view } from "@tokamak/sdk";
     import { Counter } from "@plugins/library/ui";
     export const Healthy = view({ route: "/" }, () => <Counter />);
-  `));
+  `,
+    ),
+  );
   for (const kind of ["event", "async", "effect", "factory"]) {
-    built(await source(root, `error-${kind}`, `
+    built(
+      await source(
+        root,
+        `error-${kind}`,
+        `
       import { createSignal, createEffect } from "solid-js";
       import { view } from "@tokamak/sdk";
       const [trigger, setTrigger] = createSignal(false);
@@ -98,12 +150,18 @@ async function errors(root) {
       export const Failure = view({ route: "/" }, () => {
         ${kind === "effect" ? 'createEffect(() => { if (trigger()) throw new Error("effect-owned failure"); });' : ""}
         return <button id="throw-${kind}" onClick={() => {
-          ${kind === "event" ? 'throw new Error("event-owned failure");'
-            : kind === "async" ? 'void (async () => { await Promise.resolve(); throw new Error("async-owned failure"); })();'
-            : "setTrigger(true);"}
+          ${
+            kind === "event"
+              ? 'throw new Error("event-owned failure");'
+              : kind === "async"
+                ? 'void (async () => { await Promise.resolve(); throw new Error("async-owned failure"); })();'
+                : "setTrigger(true);"
+          }
         }}>Throw ${kind}</button>;
       });
-    `));
+    `,
+      ),
+    );
   }
 }
 
@@ -111,11 +169,21 @@ async function errors(root) {
 // genuinely different artifact: reloading an unchanged artifact is a no-op and
 // emits no change notice, which would leave the retirement path untested.
 async function guards(root, generation = 1) {
-  built(await source(root, "vault", `
+  built(
+    await source(
+      root,
+      "vault",
+      `
     let original: any;
     export const remember = (handle: any) => { original ??= handle; return original; };
-  `));
-  built(await source(root, "guard", `
+  `,
+    ),
+  );
+  built(
+    await source(
+      root,
+      "guard",
+      `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { remember } from "@plugins/vault/ui";
@@ -143,12 +211,18 @@ async function guards(root, generation = 1) {
         <button id="guard-count" onClick={() => setCount(n => n + 1)}>state: {count()}</button>
         <p id="guard-status">{status()}</p></div>;
     });
-  `));
+  `,
+    ),
+  );
 }
 
 async function lazy(root) {
   await library(root);
-  built(await source(root, "lazy", `
+  built(
+    await source(
+      root,
+      "lazy",
+      `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     export const Lazy = view({ route: "/" }, () => {
@@ -158,7 +232,9 @@ async function lazy(root) {
         setComponent(() => module.Counter);
       }}>Load library</button>{component() && component()({})}</div>;
     });
-  `));
+  `,
+    ),
+  );
 }
 
 // One backend serves the payload, wire-limit and subscription-growth views.
@@ -166,14 +242,23 @@ async function lazy(root) {
 async function payloadBackend(root) {
   const backend = await source(root, "payload", "", { ui: false });
   await mkdir(resolve(backend, "backend"), { recursive: true });
-  await writeFile(resolve(backend, "backend/tsconfig.json"), JSON.stringify({
-    extends: resolve(workspace, "app/backend/tsconfig.json"), include: ["**/*.ts"],
-  }));
-  await writeFile(resolve(backend, "backend/schema.ts"), `
+  await writeFile(
+    resolve(backend, "backend/tsconfig.json"),
+    JSON.stringify({
+      extends: resolve(workspace, "app/backend/tsconfig.json"),
+      include: ["**/*.ts"],
+    }),
+  );
+  await writeFile(
+    resolve(backend, "backend/schema.ts"),
+    `
     import { defineSchema, defineTable, v } from "@tokamak/sdk";
     export default defineSchema({ values: defineTable({ size: v.number() }), rows: defineTable({ text: v.string() }) });
-  `);
-  await writeFile(resolve(backend, "backend/ops.ts"), `
+  `,
+  );
+  await writeFile(
+    resolve(backend, "backend/ops.ts"),
+    `
     import { createFunctions, v } from "@tokamak/sdk";
     import schema from "./schema";
     const { query, mutation } = createFunctions(schema);
@@ -181,13 +266,18 @@ async function payloadBackend(root) {
     export const all = query({ args: {}, handler: ({ db }) => db.query("rows").collect() });
     export const grow = mutation({ args: { size: v.number() }, handler: ({ db }, { size }) => db.insert("rows", { text: "x".repeat(size) }) });
     export const clear = mutation({ args: {}, handler: async ({ db }) => { for (const row of await db.query("rows").collect()) await db.delete(row._id); } });
-  `);
+  `,
+  );
   built(backend);
 }
 
 async function payload(root) {
   await payloadBackend(root);
-  built(await source(root, "payload-view", `
+  built(
+    await source(
+      root,
+      "payload-view",
+      `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient } from "@tokamak/sdk/solid";
@@ -241,7 +331,10 @@ async function payload(root) {
       return <div><button id="boundary-run" onClick={() => { void run().catch(e => setStatus("FAILED: " + e)); }}>Run boundary</button>
         <p id="boundary-status">{status()}</p></div>;
     });
-  `, { backend: false, plugin: { id: "payload-view", version: "1.0.0", depends: { payload: "*" } } }));
+  `,
+      { backend: false, plugin: { id: "payload-view", version: "1.0.0", depends: { payload: "*" } } },
+    ),
+  );
 }
 
 // A live query whose result grows past the wire limit mid-subscription. The
@@ -249,7 +342,11 @@ async function payload(root) {
 // mounted (and usable) while the Growth contribution shows its error card.
 async function growth(root) {
   await payloadBackend(root);
-  built(await source(root, "growth-view", `
+  built(
+    await source(
+      root,
+      "growth-view",
+      `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient, useQuery } from "@tokamak/sdk/solid";
@@ -277,7 +374,10 @@ async function growth(root) {
         <p id="growth-log">{log()}</p>
       </div>;
     });
-  `, { backend: false, plugin: { id: "growth-view", version: "1.0.0", depends: { payload: "*" } } }));
+  `,
+      { backend: false, plugin: { id: "growth-view", version: "1.0.0", depends: { payload: "*" } } },
+    ),
+  );
 }
 
 // A plugin that allocates without bound next to a healthy plugin. The loop stops
@@ -285,12 +385,22 @@ async function growth(root) {
 // a clear message instead of exhausting the machine.
 async function heap(root) {
   await library(root);
-  built(await source(root, "healthy", `
+  built(
+    await source(
+      root,
+      "healthy",
+      `
     import { view } from "@tokamak/sdk";
     import { Counter } from "@plugins/library/ui";
     export const Healthy = view({ route: "/" }, () => <Counter />);
-  `));
-  built(await source(root, "hog", `
+  `,
+    ),
+  );
+  built(
+    await source(
+      root,
+      "hog",
+      `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     const [report, setReport] = createSignal("untouched");
@@ -307,7 +417,9 @@ async function heap(root) {
       }
     }}>Allocate</button>);
     export const Report = view({ route: "/report" }, () => <p id="hog-report">{report()}</p>);
-  `));
+  `,
+    ),
+  );
 }
 
 // A declared UI asset far larger than the old 64 MiB window heap. Its content
@@ -322,7 +434,10 @@ const BULK_BYTES = 100_000_000;
 async function bulk(root) {
   await payloadBackend(root); // supplies a tiny query used to yield between slices
   const repeats = Math.ceil(BULK_BYTES / 11);
-  const path = await source(root, "bulk", `
+  const path = await source(
+    root,
+    "bulk",
+    `
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient } from "@tokamak/sdk/solid";
@@ -347,9 +462,12 @@ async function bulk(root) {
       return <div><button id="bulk-run" onClick={() => { void run().catch(e => setStatus("FAILED: " + e)); }}>Download</button>
         <p id="bulk-status">{status()}</p></div>;
     });
-  `, { backend: false, plugin: { id: "bulk", version: "1.0.0", depends: { payload: "*" } } });
+  `,
+    { backend: false, plugin: { id: "bulk", version: "1.0.0", depends: { payload: "*" } } },
+  );
   built(path);
-  const mapPath = resolve(path, "dist/ui.js.map"), manifestPath = resolve(path, "dist/manifest.json");
+  const mapPath = resolve(path, "dist/ui.js.map"),
+    manifestPath = resolve(path, "dist/manifest.json");
   const blob = BULK_UNIT.repeat(repeats);
   assert.ok(Buffer.byteLength(blob) > BULK_BYTES, "bulk UI asset is smaller than 100 MB");
   await writeFile(mapPath, blob);
@@ -361,10 +479,14 @@ async function bulk(root) {
 async function catalog(root, count) {
   // Build once, then install distinct manifests from that real artifact. This
   // avoids hundreds of compiler processes while retaining real server validation.
-  const template = await source(root, "catalog-000", `
+  const template = await source(
+    root,
+    "catalog-000",
+    `
     import { view } from "@tokamak/sdk";
     export const Catalog = view({ route: "/" }, () => <p id="catalog-view">Catalog loaded</p>);
-  `);
+  `,
+  );
   built(template);
   const manifest = JSON.parse(await readFile(resolve(template, "dist/manifest.json"), "utf8"));
   const code = await readFile(resolve(template, "dist/ui.js"), "utf8");
@@ -375,29 +497,45 @@ async function catalog(root, count) {
     // every catalog entry remains a valid, independently loadable artifact.
     const renamed = code.replace("@plugins/catalog-000/ui", `@plugins/${id}/ui`);
     await writeFile(resolve(root, id, "dist/ui.js"), renamed);
-    await writeFile(resolve(root, id, "dist/manifest.json"), JSON.stringify({
-      ...manifest, plugin: { ...manifest.plugin, id },
-      hashes: { ...manifest.hashes, "ui.js": createHash("sha256").update(renamed).digest("hex") },
-    }));
+    await writeFile(
+      resolve(root, id, "dist/manifest.json"),
+      JSON.stringify({
+        ...manifest,
+        plugin: { ...manifest.plugin, id },
+        hashes: { ...manifest.hashes, "ui.js": createHash("sha256").update(renamed).digest("hex") },
+      }),
+    );
   }
 }
 
 async function partsHost(root) {
-  const entry = (await readFile(resolve(workspace, "app/src/main.tsx"), "utf8"))
-    .replace('import { Shell } from "./shell";', `import { PartsHost as Shell } from ${JSON.stringify(resolve(workspace, "app/tests/parts-host.tsx"))};`);
+  const entry = (await readFile(resolve(workspace, "app/src/main.tsx"), "utf8")).replace(
+    'import { Shell } from "./shell";',
+    `import { PartsHost as Shell } from ${JSON.stringify(resolve(workspace, "app/tests/parts-host.tsx"))};`,
+  );
   // This standalone test host uses the production entry's module namespaces.
   const path = await source(root, "parts-host", entry, { backend: false, standalone: true });
-  await writeFile(resolve(path, "src/styles.css"), "button { display: block; min-width: 160px; min-height: 32px; }");
+  await writeFile(
+    resolve(path, "src/styles.css"),
+    "button { display: block; min-width: 160px; min-height: 32px; }",
+  );
   built(path);
 }
 
 if (import.meta.main) {
   const [root, action] = process.argv.slice(2);
   if (action === "reload") await library(root, "after");
-  else if (action === "unrelated-reload") built(await source(root, "broken", `
+  else if (action === "unrelated-reload")
+    built(
+      await source(
+        root,
+        "broken",
+        `
     import { view } from "@tokamak/sdk";
     export const Updated = view({ route: "/" }, () => <p>Unrelated update</p>);
-  `));
+  `,
+      ),
+    );
   else if (action === "parts-host") await partsHost(root);
   else if (action === "errors") await errors(root);
   else if (action === "lazy") await lazy(root);

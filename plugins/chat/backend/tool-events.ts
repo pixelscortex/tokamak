@@ -9,8 +9,10 @@ import type { toolAcknowledgements } from "./acknowledgements";
 type Part = TextStreamPart<ToolSet>;
 
 export function toolEvents(
-  ctx: ActionContext, targets: Map<string, ToolTarget>,
-  buffer: ReturnType<typeof streamBuffer>, acknowledgements: ReturnType<typeof toolAcknowledgements>,
+  ctx: ActionContext,
+  targets: Map<string, ToolTarget>,
+  buffer: ReturnType<typeof streamBuffer>,
+  acknowledgements: ReturnType<typeof toolAcknowledgements>,
 ) {
   const { update, pending } = buffer;
   const activeTools = new Set<string>();
@@ -22,11 +24,18 @@ export function toolEvents(
       checkToolArgs(part.input);
       const target = targets.get(part.toolName);
       if (!target) throw new Error("Unknown tool");
-      const status = await update({ type: "tool", callId: part.toolCallId, ...target,
-        args: part.input as JsonValue, status: "running" });
+      const status = await update({
+        type: "tool",
+        callId: part.toolCallId,
+        ...target,
+        args: part.input as JsonValue,
+        status: "running",
+      });
       if (status === "running") activeTools.add(part.toolCallId);
       ack.resolve(status);
-    } catch (error) { ack.reject(error); }
+    } catch (error) {
+      ack.reject(error);
+    }
   }
 
   async function finish(part: Extract<Part, { type: "tool-result" | "tool-error" }>) {
@@ -39,7 +48,10 @@ export function toolEvents(
 
     try {
       checkToolArgs(part.input);
-      await update({ type: "tool", callId: part.toolCallId, ...target,
+      await update({
+        type: "tool",
+        callId: part.toolCallId,
+        ...target,
         args: part.input as JsonValue,
         ...(part.type === "tool-error"
           ? { status: "error", error: error! }

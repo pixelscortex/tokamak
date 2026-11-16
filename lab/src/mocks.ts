@@ -1,12 +1,7 @@
 /** MOCK DATA for the lab: the only place the lab's sample content lives.
  * Nothing here is real: no plugin, model or account is behind it. The
  * components (`@tokamak/ui`) take all of it through props. */
-import type {
-  ComposerCommand,
-  ComposerContext,
-  ComposerRun,
-  SelectOption,
-} from "@tokamak/ui/components";
+import type { ComposerCommand, ComposerContext, ComposerRun, SelectOption } from "@tokamak/ui/components";
 
 /** Models for the composer's model select (grouped by provider). */
 export const models: SelectOption[] = [

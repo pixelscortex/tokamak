@@ -23,7 +23,15 @@ export interface ButtonProps extends Omit<JSX.ButtonAttributes, "type"> {
 }
 
 export function Button(props: ButtonProps): JSX.Element {
-  const [local, rest] = splitProps(props, ["variant", "size", "pressed", "round", "label", "class", "disabled"]);
+  const [local, rest] = splitProps(props, [
+    "variant",
+    "size",
+    "pressed",
+    "round",
+    "label",
+    "class",
+    "disabled",
+  ]);
   const variant = () => local.variant ?? "neutral";
   const size = () => local.size ?? "md";
   return (

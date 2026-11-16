@@ -26,8 +26,14 @@ export const send = action({
     const acknowledgements = toolAcknowledgements();
 
     const finish = async (outcome: "done" | "error", error?: string): Promise<Result> => ({
-      runId, messageId,
-      status: await ctx.runMutation(api.send.update, { runId, delta: buffer.pending(), outcome, ...(error === undefined ? {} : { error }) }) as Result["status"],
+      runId,
+      messageId,
+      status: (await ctx.runMutation(api.send.update, {
+        runId,
+        delta: buffer.pending(),
+        outcome,
+        ...(error === undefined ? {} : { error }),
+      })) as Result["status"],
     });
 
     try {
@@ -65,8 +71,19 @@ export const send = action({
   },
 });
 
-async function modelTools(ctx: ActionContext, threadId: Id<"threads">, runId: Id<"runs">, acknowledgements: ReturnType<typeof toolAcknowledgements>, buffer: ReturnType<typeof streamBuffer>) {
+async function modelTools(
+  ctx: ActionContext,
+  threadId: Id<"threads">,
+  runId: Id<"runs">,
+  acknowledgements: ReturnType<typeof toolAcknowledgements>,
+  buffer: ReturnType<typeof streamBuffer>,
+) {
   if (ctx.caller.role === "guest") return { tools: {}, targets: new Map() };
-  return discoverTools(ctx, threadId,
-    () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgements.get(callId).promise, await toolApproval(ctx, threadId, runId, buffer));
+  return discoverTools(
+    ctx,
+    threadId,
+    () => ctx.runQuery(api.send.running, { runId }),
+    (callId) => acknowledgements.get(callId).promise,
+    await toolApproval(ctx, threadId, runId, buffer),
+  );
 }

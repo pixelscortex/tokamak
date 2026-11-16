@@ -11,14 +11,21 @@ export const stream = action({
     const provider = createOpenAI({ baseURL: args.baseURL, apiKey: "local-mock-only" });
     let failure = "";
     const result = streamText({
-      model: provider.chat("mock"), prompt: "offline regression", maxRetries: 0,
+      model: provider.chat("mock"),
+      prompt: "offline regression",
+      maxRetries: 0,
       abortSignal: controller.signal,
-      onError: ({ error }) => { failure = String(error); },
+      onError: ({ error }) => {
+        failure = String(error);
+      },
     });
     const deltas: string[] = [];
     for await (const delta of result.textStream) {
       deltas.push(delta);
-      if (args.abort && deltas.length === 2) { controller.abort(); break; }
+      if (args.abort && deltas.length === 2) {
+        controller.abort();
+        break;
+      }
       await (await fetch(args.ack)).text();
     }
     // Abort must close HTTP before returning and retiring this world.

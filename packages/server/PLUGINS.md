@@ -158,7 +158,6 @@ and immutable UI snapshots. Engine module tests cover shared-worker delegation
 and caught/abandoned child error observation. These are self-authored tests,
 not an independent review or proof of hybrid sync/long-running AI.
 
-
 The connected UI session also exposes `plugins` and revision-checked,
 UTF-8-chunked `pluginasset` requests. Successful generation swaps emit
 `pluginchanged` with the new catalog before refreshing existing subscriptions.

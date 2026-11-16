@@ -45,7 +45,12 @@ export default function ComposerStatesView() {
     <Shell.Stage>
       <div id="lab-composer-states" class="flex flex-col items-center gap-9 px-8 pt-10 pb-16">
         <State id="idle" title="Idle" hint="placeholder, model, send dim until there is text" note={sent()}>
-          <Composer id="lab-idle" placeholder="Ask anything…" onSubmit={(t) => setSent(`sent: ${t}`)} {...common} />
+          <Composer
+            id="lab-idle"
+            placeholder="Ask anything…"
+            onSubmit={(t) => setSent(`sent: ${t}`)}
+            {...common}
+          />
         </State>
         <State id="context" title="With context" hint="two rows at most, then +N more">
           <Composer
@@ -82,7 +87,13 @@ export default function ComposerStatesView() {
               placeholder: "Task title",
               fields: [
                 ...mocks.todoFields([list(), setList], [due(), setDue]),
-                { id: "priority", label: "Priority", options: mocks.priorities, value: priority(), onChange: setPriority },
+                {
+                  id: "priority",
+                  label: "Priority",
+                  options: mocks.priorities,
+                  value: priority(),
+                  onChange: setPriority,
+                },
               ],
               onSubmit: (title) => setCreated(`created: ${title || "untitled"} (${list()}, ${due()})`),
               onCancel: () => setCreated("cancelled"),

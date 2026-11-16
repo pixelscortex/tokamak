@@ -18,9 +18,7 @@ export function createMessageConnection<TRequest, TEvent>() {
   let closer: ((error?: Error) => void) | undefined;
   let reason: Error | undefined;
 
-  function close(
-    error = new Error("native connection closed; mutation outcomes may be unknown"),
-  ) {
+  function close(error = new Error("native connection closed; mutation outcomes may be unknown")) {
     if (closed) return;
     closed = true;
     reason = error;

@@ -27,6 +27,8 @@ test("render:test declares the UI stylesheet build as a prerequisite", () => {
     const task = JSON.parse(result.stdout) as Task;
     return (task.deps ?? []).some(({ target: dependency }) => reachesUiBuild(dependency));
   }
-  assert(reachesUiBuild("render:test"),
-    "render:test must depend on ui:build (directly or transitively) before its native fixture reads ui/dist/styles.css in a clean checkout");
+  assert(
+    reachesUiBuild("render:test"),
+    "render:test must depend on ui:build (directly or transitively) before its native fixture reads ui/dist/styles.css in a clean checkout",
+  );
 });

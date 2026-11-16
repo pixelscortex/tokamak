@@ -15,8 +15,7 @@ const { query, mutation } = createFunctions(schema);
 
 export const list = query({
   args: { done: v.boolean() },
-  handler: (ctx, { done }) =>
-    ctx.db.query("todos").where("done", "=", done).order("desc").collect(),
+  handler: (ctx, { done }) => ctx.db.query("todos").where("done", "=", done).order("desc").collect(),
 });
 export const add = mutation({
   args: { text: v.string() },

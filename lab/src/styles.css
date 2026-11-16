@@ -16,5 +16,10 @@
 
 /* Base element rules: the window never scrolls (only the shell's stage does),
  * and no preflight runs, so boxes and margins are set here once. */
-* { box-sizing: border-box; }
-html, body { @apply m-0 h-full overflow-hidden bg-base font-ui text-ink; }
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  @apply m-0 h-full overflow-hidden bg-base font-ui text-ink;
+}

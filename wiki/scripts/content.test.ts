@@ -26,8 +26,10 @@ test("sources update without drifting copies; optional pages appear and disappea
     const initial = await stat(overview);
     await syncContent(root, output);
     assert.equal((await stat(overview)).mtimeMs, initial.mtimeMs);
-    assert.deepEqual(JSON.parse(await readFile(join(output, "meta.json"), "utf8")).pages.slice(0, 2),
-      ["index", "how-it-works"]);
+    assert.deepEqual(JSON.parse(await readFile(join(output, "meta.json"), "utf8")).pages.slice(0, 2), [
+      "index",
+      "how-it-works",
+    ]);
     assert.ok(!JSON.parse(await readFile(join(output, "meta.json"), "utf8")).pages.includes("engine"));
     for (const source of contentSources.filter((entry) => entry.optional)) {
       assert.ok(!existsSync(join(output, source.page)));
@@ -36,8 +38,10 @@ test("sources update without drifting copies; optional pages appear and disappea
     await writeSource("packages/server/README.md", "Fresh source content\n");
     await syncContent(root, output);
     assert.ok((await readFile(join(output, "server/index.md"), "utf8")).includes("Fresh source content"));
-    assert.deepEqual(JSON.parse(await readFile(join(output, "runtime/meta.json"), "utf8")).pages,
-      ["routing", "plugins"]);
+    assert.deepEqual(JSON.parse(await readFile(join(output, "runtime/meta.json"), "utf8")).pages, [
+      "routing",
+      "plugins",
+    ]);
     assert.ok(JSON.parse(await readFile(join(output, "meta.json"), "utf8")).pages.includes("engine"));
     for (const source of contentSources.filter((entry) => entry.optional)) {
       assert.ok((await readFile(join(output, source.page), "utf8")).includes("Optional documentation"));
@@ -47,7 +51,9 @@ test("sources update without drifting copies; optional pages appear and disappea
     for (const source of contentSources.filter((entry) => entry.optional)) {
       assert.ok(!existsSync(join(output, source.page)));
     }
-    assert.deepEqual(JSON.parse(await readFile(join(output, "runtime/meta.json"), "utf8")).pages, ["routing"]);
+    assert.deepEqual(JSON.parse(await readFile(join(output, "runtime/meta.json"), "utf8")).pages, [
+      "routing",
+    ]);
     assert.ok(!JSON.parse(await readFile(join(output, "meta.json"), "utf8")).pages.includes("engine"));
     await rm(join(root, "packages/server/README.md"));
     await assert.rejects(syncContent(root, output), /Required wiki source is missing/);
@@ -66,12 +72,15 @@ test("links resolve from the source path, preserve anchors, and leave code and e
     { type: "code", url: "./PLUGINS.md" },
   ];
   remarkSourceLinks()({ type: "root", children: nodes }, { path: join(generatedDocs, "server/index.md") });
-  assert.deepEqual(nodes.map((node) => node.url), [
-    "/docs/server/plugins#build-and-run",
-    "/docs/runtime/routing?view=all#evidence",
-    "https://github.com/pixelscortex/tokamak/blob/dev/packages/server/tests/README.md",
-    "#local",
-    "https://example.com/docs.md",
-    "./PLUGINS.md",
-  ]);
+  assert.deepEqual(
+    nodes.map((node) => node.url),
+    [
+      "/docs/server/plugins#build-and-run",
+      "/docs/runtime/routing?view=all#evidence",
+      "https://github.com/pixelscortex/tokamak/blob/dev/packages/server/tests/README.md",
+      "#local",
+      "https://example.com/docs.md",
+      "./PLUGINS.md",
+    ],
+  );
 });

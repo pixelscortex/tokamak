@@ -26,9 +26,15 @@ if (command === "stop") {
   console.log(`Local server: pid ${running.pid}, ${running.url} (independent of desktop)`);
   if (command === "app") {
     const child = spawn(resolve(root, `target/${profile}/tokamak-desktop${suffix}`), [], {
-      stdio: "inherit", env: { ...process.env, TOKAMAK_SERVER_DIR: directory },
+      stdio: "inherit",
+      env: { ...process.env, TOKAMAK_SERVER_DIR: directory },
     });
-    child.on("error", error => { console.error(error.message); process.exitCode = 1; });
-    child.on("exit", (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });
+    child.on("error", (error) => {
+      console.error(error.message);
+      process.exitCode = 1;
+    });
+    child.on("exit", (code, signal) => {
+      process.exitCode = code ?? (signal ? 1 : 0);
+    });
   }
 }

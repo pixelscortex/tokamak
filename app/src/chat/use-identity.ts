@@ -9,11 +9,18 @@ export type Identity = ResultOf<typeof api.members.hello>;
 export function useIdentity(client: TokamakClient, setError: (error: string) => void) {
   const [identity, setIdentity] = createSignal<Identity>();
   let alive = true;
-  onCleanup(() => { alive = false; });
+  onCleanup(() => {
+    alive = false;
+  });
 
-  void client.mutation(api.members.hello, {})
-    .then(value => { if (alive) setIdentity(value); })
-    .catch(cause => { if (alive) setError(String(cause)); });
+  void client
+    .mutation(api.members.hello, {})
+    .then((value) => {
+      if (alive) setIdentity(value);
+    })
+    .catch((cause) => {
+      if (alive) setError(String(cause));
+    });
 
   return identity;
 }

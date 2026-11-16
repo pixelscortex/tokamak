@@ -7,7 +7,11 @@ import { Kbd } from "./kbd";
 const COMMAND_ROWS = 6;
 const COMMAND_ROW = 30;
 
-export function createComposerCommands(props: ComposerProps, draft: Accessor<string>, setDraft: (text: string) => void) {
+export function createComposerCommands(
+  props: ComposerProps,
+  draft: Accessor<string>,
+  setDraft: (text: string) => void,
+) {
   const [closed, setClosed] = createSignal(false);
   createEffect(on(draft, () => setClosed(false), { defer: true }));
   const matches = createMemo(() => {
@@ -42,7 +46,10 @@ export function createComposerCommands(props: ComposerProps, draft: Accessor<str
   return { listing, matches, active, pickCommand, keydown };
 }
 
-export function ComposerCommandMenu(props: { ids: (part: string) => string | undefined; commands: ReturnType<typeof createComposerCommands> }): JSX.Element {
+export function ComposerCommandMenu(props: {
+  ids: (part: string) => string | undefined;
+  commands: ReturnType<typeof createComposerCommands>;
+}): JSX.Element {
   const ids = props.ids;
   return (
     <Show when={props.commands.listing()}>
@@ -64,8 +71,12 @@ export function ComposerCommandMenu(props: { ids: (part: string) => string | und
                 class="flex shrink-0 items-center gap-3 rounded-md px-2 hover:bg-chip data-active:bg-chip"
                 style={`height: ${COMMAND_ROW}px`}
               >
-                <span class="w-24 shrink-0 truncate text-[13px] leading-4 font-medium text-ink">/{command.name}</span>
-                <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-3">{command.description}</span>
+                <span class="w-24 shrink-0 truncate text-[13px] leading-4 font-medium text-ink">
+                  /{command.name}
+                </span>
+                <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-3">
+                  {command.description}
+                </span>
                 <span class="shrink-0 font-data text-[11px] leading-4 text-ink-5">{command.source}</span>
               </div>
             )}

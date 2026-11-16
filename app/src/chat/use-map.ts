@@ -7,11 +7,17 @@ export function useMap(chat: ChatState, close: () => void) {
   const [query, setQuery] = createSignal("");
   const [selected, setSelected] = createSignal<string>();
   const rows = createMemo(() => {
-    const matches = (chat.threads.data() ?? []).filter(thread => thread.title.toLowerCase().includes(query().trim().toLowerCase()));
+    const matches = (chat.threads.data() ?? []).filter((thread) =>
+      thread.title.toLowerCase().includes(query().trim().toLowerCase()),
+    );
     const recent = matches.sort((a, b) => b.updatedAt - a.updatedAt);
     return recent.sort((a, b) => mapGroup(chat, a._id) - mapGroup(chat, b._id));
   });
-  const index = () => Math.max(0, rows().findIndex(thread => thread._id === selected()));
+  const index = () =>
+    Math.max(
+      0,
+      rows().findIndex((thread) => thread._id === selected()),
+    );
 
   const editor = useThreadEditor(chat, rows, setSelected);
 
@@ -61,7 +67,18 @@ export function useMap(chat: ChatState, close: () => void) {
     setSelected(chat.threadId());
   }
 
-  return { editing: editor.editing, title: editor.title, setTitle: editor.setTitle, query, search, rows, index, open, keydown, reset };
+  return {
+    editing: editor.editing,
+    title: editor.title,
+    setTitle: editor.setTitle,
+    query,
+    search,
+    rows,
+    index,
+    open,
+    keydown,
+    reset,
+  };
 }
 
 export type MapState = ReturnType<typeof useMap>;

@@ -60,9 +60,7 @@ export function nativePlugins(): Plugin[] {
     {
       name: "quickjs-runtime-guard",
       generateBundle(_options, bundle) {
-        const inputs = [...this.getModuleIds()].filter((id) =>
-          /\/solid-js\/(?:dist|web\/dist)\//.test(id),
-        );
+        const inputs = [...this.getModuleIds()].filter((id) => /\/solid-js\/(?:dist|web\/dist)\//.test(id));
         if (
           !inputs.some((id) => id.endsWith("/solid-js/dist/solid.js")) ||
           inputs.some((id) => /\/(server|dev)\.js$|\/web\//.test(id))
@@ -72,9 +70,7 @@ export function nativePlugins(): Plugin[] {
         for (const output of Object.values(bundle)) {
           if (
             output.type === "chunk" &&
-            /document\.createElement|window\.|solid-js\/web|@vite\/client|solid-refresh/.test(
-              output.code,
-            )
+            /document\.createElement|window\.|solid-js\/web|@vite\/client|solid-refresh/.test(output.code)
           ) {
             throw new Error("Browser/dev runtime leaked into native bundle");
           }

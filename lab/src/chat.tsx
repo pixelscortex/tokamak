@@ -132,17 +132,23 @@ function Messages(props: { sent: string[] }) {
         </div>
         <div class="flex items-center gap-3">
           <span class="size-4 shrink-0 rounded-full border-[1.5px] border-solid border-ink-4" />
-          <span class="min-w-0 flex-1 truncate text-[15px] leading-6 font-medium tracking-[-0.006em] text-ink">{mocks.thread.task.title}</span>
+          <span class="min-w-0 flex-1 truncate text-[15px] leading-6 font-medium tracking-[-0.006em] text-ink">
+            {mocks.thread.task.title}
+          </span>
           <span class="shrink-0 text-[13px] leading-4 text-ink-2">{mocks.thread.task.due}</span>
         </div>
       </div>
       <div class="h-6 shrink-0" />
-      <div id="lab-chat-reply" class="flex flex-col gap-3.5 text-[15px] leading-[26px] tracking-[-0.006em] text-ink-body">
+      <div
+        id="lab-chat-reply"
+        class="flex flex-col gap-3.5 text-[15px] leading-[26px] tracking-[-0.006em] text-ink-body"
+      >
         <p class="m-0">
           Done. <span class="font-semibold text-ink">{mocks.thread.task.title}</span> {mocks.thread.reply[0]}
         </p>
         <p class="m-0">
-          {mocks.thread.reply[1]}<span class="text-ink"> ▏</span>
+          {mocks.thread.reply[1]}
+          <span class="text-ink"> ▏</span>
         </p>
       </div>
       <div class="h-7 shrink-0" />

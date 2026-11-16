@@ -16,7 +16,12 @@ const feature = join(sdk, "tests/fixtures/feature");
 function run(command, cwd = workspace, env = {}) {
   // Force compiler diagnostics to stay plain even in Bun's agent environment.
   if (command[1] === "check") command = [...command.slice(0, 2), "--no-pretty", ...command.slice(2)];
-  const result = Bun.spawnSync(command, { cwd, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(command, {
+    cwd,
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   return { code: result.exitCode, output: result.stdout.toString() + result.stderr.toString() };
 }
 
@@ -80,8 +85,7 @@ test("argument boundary validates the complete value language before invoking ha
     [{ ...valid, extra: new Date() }, "args.extra"],
     [{ ...valid, extra: Array(1) }, "args.extra"],
   ];
-  for (const [input, path] of invalid)
-    await expect(definition.invoke(input, host)).rejects.toThrow(path);
+  for (const [input, path] of invalid) await expect(definition.invoke(input, host)).rejects.toThrow(path);
   expect(calls).toBe(2);
 
   const empty = query({ handler: (ctx) => ({ writable: "insert" in ctx.db }) });
@@ -134,9 +138,7 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
   expect(map.version).toBe(3);
   expect(map.mappings.length).toBeGreaterThan(0);
   expect(map.sources.some((path) => path.endsWith("tasks.ts"))).toBe(true);
-  expect(map.sourcesContent.some((text) => text?.includes("normalizeTitle(args.title)"))).toBe(
-    true,
-  );
+  expect(map.sourcesContent.some((text) => text?.includes("normalizeTitle(args.title)"))).toBe(true);
 
   const built = await import(pathToFileURL(join(feature, "dist/bundle.js")).href);
   expect(Object.keys(built.functions).sort()).toEqual([
@@ -159,7 +161,7 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
   const row = { _id: "tasks:a", _creationTime: 100, title: "SHIP", done: false, priority: 2 };
   const host = {
     op(name, payload) {
-        if (name === "host.caller") return ownerCaller;
+      if (name === "host.caller") return ownerCaller;
       calls.push([name, payload]);
       if (name === "db.insert") return "tasks:a";
       if (name === "db.get") return payload.id === "tasks:a" ? row : null;
@@ -214,16 +216,16 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
   expect(
     await built.invoke(
       { name: "tasks:search", args: { done: false, priority: 2 } },
-      { op: name => name === "host.caller" ? ownerCaller : [] },
+      { op: (name) => (name === "host.caller" ? ownerCaller : []) },
     ),
   ).toEqual({ recent: [], first: null, all: [], earliest: null, empty: [] });
 
   // Consume the generated runtime reference too: a UI call must arrive at the
   // bundled dispatcher without importing backend handlers into the reference.
   const apiSource = await readFile(join(feature, "_generated/api.ts"), "utf8");
-  expect(
-    new Bun.Transpiler({ loader: "ts" }).scan(apiSource).imports.map((item) => item.path),
-  ).toEqual(["@tokamak/sdk"]);
+  expect(new Bun.Transpiler({ loader: "ts" }).scan(apiSource).imports.map((item) => item.path)).toEqual([
+    "@tokamak/sdk",
+  ]);
   const { api } = await import(pathToFileURL(join(feature, "_generated/api.ts")).href);
 
   const client = new TokamakClient({
@@ -253,21 +255,11 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
         include: [],
       });
     await writeFile(join(root, "positive.json"), config(["types/positive.ts"]));
-    succeeds(
-      run([process.execPath, "check", "--no-script", "--project", join(root, "positive.json")]),
-    );
+    succeeds(run([process.execPath, "check", "--no-script", "--project", join(root, "positive.json")]));
     await writeFile(join(root, "negative.json"), config(["types/negative.ts"]));
-    const result = run([
-      process.execPath,
-      "check",
-      "--no-script",
-      "--project",
-      join(root, "negative.json"),
-    ]);
+    const result = run([process.execPath, "check", "--no-script", "--project", join(root, "negative.json")]);
     expect(result.code, result.output).not.toBe(0);
-    const lines = negative
-      .split("\n")
-      .flatMap((line, i) => (line.includes("// reject") ? [i + 1] : []));
+    const lines = negative.split("\n").flatMap((line, i) => (line.includes("// reject") ? [i + 1] : []));
     for (const line of lines)
       expect(result.output, result.output).toMatch(new RegExp(`negative\\.ts[(:]${line}[,:]`));
   });
@@ -279,7 +271,7 @@ test("database boundary rejects invalid plans, reserved writes, and malformed ho
   const requests = [];
   const forbidden = {
     op(name, payload) {
-        if (name === "host.caller") return ownerCaller;
+      if (name === "host.caller") return ownerCaller;
       requests.push([name, payload]);
       throw new Error("unexpected host operation");
     },
@@ -298,11 +290,7 @@ test("database boundary rejects invalid plans, reserved writes, and malformed ho
 
   const cases = [
     [(ctx) => ctx.db.get("tasks:a"), { _id: "tasks:b", _creationTime: 1 }, "wrong id"],
-    [
-      (ctx) => ctx.db.query("tasks").collect(),
-      [{ _id: "projects:a", _creationTime: 1 }],
-      "tasks:key",
-    ],
+    [(ctx) => ctx.db.query("tasks").collect(), [{ _id: "projects:a", _creationTime: 1 }], "tasks:key"],
     [(ctx) => ctx.db.query("tasks").collect(), [{ _id: "tasks:a" }], "_creationTime"],
     [(ctx) => ctx.db.query("tasks").collect(), null, "array"],
     [(ctx) => ctx.db.query("tasks").take(0), [{ _id: "tasks:a", _creationTime: 1 }], "limit"],
@@ -313,15 +301,18 @@ test("database boundary rejects invalid plans, reserved writes, and malformed ho
   ];
 
   for (const [handler, reply, message] of cases) {
-    await expect(mutation({ handler }).invoke({}, { op: async name => name === "host.caller" ? ownerCaller : reply })).rejects.toThrow(
-      message,
-    );
+    await expect(
+      mutation({ handler }).invoke(
+        {},
+        { op: async (name) => (name === "host.caller" ? ownerCaller : reply) },
+      ),
+    ).rejects.toThrow(message);
   }
   await expect(
     query({ handler: (ctx) => ctx.db.get("tasks:a") }).invoke(
       {},
       {
-        op: async name => {
+        op: async (name) => {
           if (name === "host.caller") return ownerCaller;
           throw new Error("transaction expired");
         },
@@ -368,9 +359,7 @@ test("injected client routes calls, preserves transport delivery order, and clos
   pending[0]("first");
   expect(await first).toBe("first");
   expect(await client.mutation(api.tasks.add, { title: "write" })).toBe("tasks:a");
-  const stop = client.subscribe(api.nested.views.dashboard, { done: false }, (event) =>
-    events.push(event),
-  );
+  const stop = client.subscribe(api.nested.views.dashboard, { done: false }, (event) => events.push(event));
 
   deliver({ value: ["second update"] });
   deliver({ value: ["first update arriving late"] });
@@ -427,7 +416,12 @@ test("bundle and generated API consumer consistently enforce default schema impo
     succeeds(run(["moon", "run", "sdk:bundle", "--", relative(workspace, root)]));
 
     const built = await import(pathToFileURL(join(root, "dist/bundle.js")).href);
-    expect(await built.invoke({ name: "tasks:list", args: {} }, { op: name => name === "host.caller" ? ownerCaller : [] })).toEqual([]);
+    expect(
+      await built.invoke(
+        { name: "tasks:list", args: {} },
+        { op: (name) => (name === "host.caller" ? ownerCaller : []) },
+      ),
+    ).toEqual([]);
 
     // This consumer is excluded from backend discovery and needs no special
     // compilerOptions or hand-maintained replacement for the generated API.
@@ -491,9 +485,7 @@ test("feature bundling preserves inherited tsconfig helper aliases alongside SDK
       export const display = query({ args: { text: v.string() }, handler: (_ctx, args) => title(args.text) });
     `,
     );
-    succeeds(
-      run([process.execPath, "check", "--no-script", "--project", join(root, "tsconfig.json")]),
-    );
+    succeeds(run([process.execPath, "check", "--no-script", "--project", join(root, "tsconfig.json")]));
     succeeds(run(["moon", "run", "sdk:bundle", "--", relative(workspace, root)]));
 
     const built = await import(pathToFileURL(join(root, "dist/bundle.js")).href);
@@ -596,10 +588,7 @@ test("SDK source checker rejects Node, Bun, browser and external runtime imports
       await writeFile(join(root, name), JSON.stringify(config));
     }
     await mkdir(join(root, "tests"));
-    await writeFile(
-      join(root, "tests/ambient.test.ts"),
-      '/// <reference lib="dom" />\nexport {};\n',
-    );
+    await writeFile(join(root, "tests/ambient.test.ts"), '/// <reference lib="dom" />\nexport {};\n');
 
     const check = () => run([process.execPath, join(root, "tools/check.mjs")], root);
     succeeds(check());
@@ -627,13 +616,20 @@ test("negative type diagnostics retain all source locations in agent environment
     await mkdir(join(root, "types"));
     const negative = await readFile(join(sdk, "tests/fixtures/types/negative.ts.txt"), "utf8");
     await writeFile(join(root, "types/negative.ts"), negative);
-    await writeFile(join(root, "negative.json"), JSON.stringify({
-      extends: join(workspace, "tsconfig.json"),
-      compilerOptions: { paths: { "@tokamak/sdk": [join(sdk, "src/index.ts")] } },
-      files: ["types/negative.ts"], include: [],
-    }));
-    const result = run([process.execPath, "check", "--no-script", "--project", join(root, "negative.json")], workspace,
-      { CLAUDECODE: "1", AI_AGENT: "1", CLAUDE_CODE_ENTRYPOINT: "cli" });
+    await writeFile(
+      join(root, "negative.json"),
+      JSON.stringify({
+        extends: join(workspace, "tsconfig.json"),
+        compilerOptions: { paths: { "@tokamak/sdk": [join(sdk, "src/index.ts")] } },
+        files: ["types/negative.ts"],
+        include: [],
+      }),
+    );
+    const result = run(
+      [process.execPath, "check", "--no-script", "--project", join(root, "negative.json")],
+      workspace,
+      { CLAUDECODE: "1", AI_AGENT: "1", CLAUDE_CODE_ENTRYPOINT: "cli" },
+    );
     expect(result.code, result.output).not.toBe(0);
     for (const [index, line] of negative.split("\n").entries()) {
       if (line.includes("// reject"))
@@ -654,8 +650,11 @@ test("SDK checker reports plain source diagnostics in agent environments", async
       await writeFile(join(root, name), JSON.stringify(config));
     }
     await writeFile(join(root, "src/diagnostic-probe.ts"), "export const value: string = 42;\n");
-    const result = run([process.execPath, join(root, "tools/check.mjs")], root,
-      { CLAUDECODE: "1", AI_AGENT: "1", CLAUDE_CODE_ENTRYPOINT: "cli" });
+    const result = run([process.execPath, join(root, "tools/check.mjs")], root, {
+      CLAUDECODE: "1",
+      AI_AGENT: "1",
+      CLAUDE_CODE_ENTRYPOINT: "cli",
+    });
     expect(result.code, result.output).not.toBe(0);
     expect(result.output, result.output).toMatch(/diagnostic-probe\.ts[(:]1[,:].*TS2322/);
   });

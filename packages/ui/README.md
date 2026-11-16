@@ -61,7 +61,9 @@ import { Button, Input } from "@tokamak/ui/elements";
 
 const [title, setTitle] = createSignal("");
 <Input label="Todo" description="One task" value={title()} onValueChange={setTitle} />;
-<Button defaultPressed={false} onPressedChange={(done) => save(done)}>Done</Button>;
+<Button defaultPressed={false} onPressedChange={(done) => save(done)}>
+  Done
+</Button>;
 ```
 
 ## Contract

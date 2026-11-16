@@ -6,8 +6,10 @@ test("memory histories are independent, branch after back and preserve query/has
   const b = createMemoryRouter("/plugins/notes");
   a.navigate("/threads/one?tab=items#latest");
   expect(a.location()).toEqual({
-    href: "/threads/one?tab=items#latest", pathname: "/threads/one",
-    search: "?tab=items", hash: "#latest",
+    href: "/threads/one?tab=items#latest",
+    pathname: "/threads/one",
+    search: "?tab=items",
+    hash: "#latest",
   });
   expect(a.match("/threads/:id").params.id).toBe("one");
   a.back();
@@ -30,8 +32,10 @@ test("memory histories are independent, branch after back and preserve query/has
 
 test("route matching handles encoded parameters, splats and malformed input", () => {
   expect(matchRoute("/threads/:id", "/threads/a%20b").params.id).toBe("a b");
-  expect(matchRoute("/plugins/:id/*path", "/plugins/notes/editor/a").params)
-    .toEqual({ id: "notes", path: "editor/a" });
+  expect(matchRoute("/plugins/:id/*path", "/plugins/notes/editor/a").params).toEqual({
+    id: "notes",
+    path: "editor/a",
+  });
   expect(matchRoute("/plugins/:id/*path", "/plugins/notes").params.path).toBe("");
   expect(matchRoute("/", "/").params).toEqual({});
   expect(matchRoute("/threads/:id", "/threads/one/")).toBeDefined();
@@ -42,7 +46,13 @@ test("route matching handles encoded parameters, splats and malformed input", ()
   expect(() => matchRoute("/:id/:id", "/one/two")).toThrow("duplicate");
   expect(() => matchRoute("/*rest/child", "/one/two")).toThrow("last");
   expect(Object.isFrozen(matchRoute("/threads/:id", "/threads/one").params)).toBe(true);
-  for (const path of ["http://example.com", "//example.com", "/\\example.com", "/bad\npath", "/".repeat(2049)]) {
+  for (const path of [
+    "http://example.com",
+    "//example.com",
+    "/\\example.com",
+    "/bad\npath",
+    "/".repeat(2049),
+  ]) {
     expect(() => createMemoryRouter(path)).toThrow("local absolute");
   }
 });

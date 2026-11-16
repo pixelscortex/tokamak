@@ -12,10 +12,17 @@ export function pluginImports(options: { ui?: false; standalone?: boolean }): Pl
       function visit(node: ts.Node) {
         if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
           const arg = node.arguments[0];
-          if (!arg || !ts.isStringLiteralLike(arg)) throw new Error(`Dynamic plugin imports require a string literal: ${id}. Use import("@plugins/<id>/ui").`);
+          if (!arg || !ts.isStringLiteralLike(arg))
+            throw new Error(
+              `Dynamic plugin imports require a string literal: ${id}. Use import("@plugins/<id>/ui").`,
+            );
           const match = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(arg.text);
-          if (match) edits.push({ start: node.getStart(source), end: node.end,
-            text: `__tokamakModules.load(${JSON.stringify(`@plugins/${match[1]}/ui`)})` });
+          if (match)
+            edits.push({
+              start: node.getStart(source),
+              end: node.end,
+              text: `__tokamakModules.load(${JSON.stringify(`@plugins/${match[1]}/ui`)})`,
+            });
         }
         ts.forEachChild(node, visit);
       }
@@ -23,7 +30,10 @@ export function pluginImports(options: { ui?: false; standalone?: boolean }): Pl
       if (!edits.length) return;
       const output = new MagicString(code);
       for (const edit of edits) output.overwrite(edit.start, edit.end, edit.text);
-      return { code: output.toString(), map: output.generateMap({ source: id, includeContent: true, hires: true }) };
+      return {
+        code: output.toString(),
+        map: output.generateMap({ source: id, includeContent: true, hires: true }),
+      };
     },
   };
 }

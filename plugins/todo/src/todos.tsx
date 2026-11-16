@@ -58,9 +58,7 @@ function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
       <Button id={`${props.id}-add`} disabled={pending() || !title().trim()} onClick={add}>
         Add task
       </Button>
-      <p role="status">
-        {todos.loading() ? "Loading tasks…" : `${todos.data()?.length ?? 0} tasks`}
-      </p>
+      <p role="status">{todos.loading() ? "Loading tasks…" : `${todos.data()?.length ?? 0} tasks`}</p>
       <p role="alert">{error() ?? todos.error()?.message ?? ""}</p>
       <div class="tasks">
         <For each={todos.data()}>
@@ -71,9 +69,7 @@ function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
                 pressed={todo.done}
                 disabled={pending()}
                 aria-label={`${todo.done ? "Mark incomplete" : "Complete"}: ${todo.title}`}
-                onClick={() =>
-                  void write(() => props.client.mutation(api.todo.toggle, { id: todo._id }))
-                }
+                onClick={() => void write(() => props.client.mutation(api.todo.toggle, { id: todo._id }))}
               >
                 {todo.done ? "Done · " : "To do · "}
                 {todo.title}
@@ -81,9 +77,7 @@ function TodoPanel(props: { client: TokamakClient; name: string; id: string }) {
               <Button
                 disabled={pending()}
                 aria-label={`Remove: ${todo.title}`}
-                onClick={() =>
-                  void write(() => props.client.mutation(api.todo.remove, { id: todo._id }))
-                }
+                onClick={() => void write(() => props.client.mutation(api.todo.remove, { id: todo._id }))}
               >
                 Remove
               </Button>

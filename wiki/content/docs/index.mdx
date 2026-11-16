@@ -10,18 +10,18 @@ component catalog.
 
 ## What's in the repo
 
-| Directory | Purpose |
-| --- | --- |
-| `packages/server/` | Native host crate; builds the `tokamak` executable |
-| `packages/engine/` | Shared QuickJS engine, budgets and worker pool |
+| Directory           | Purpose                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| `packages/server/`  | Native host crate; builds the `tokamak` executable                 |
+| `packages/engine/`  | Shared QuickJS engine, budgets and worker pool                     |
 | `packages/runtime/` | Feature-gated client and server hosts, and local process lifecycle |
-| `packages/render/` | Native UI renderer crate (Solid universal renderer on Blitz) |
-| `packages/sdk/` | TypeScript feature API, `@tokamak/sdk` |
-| `packages/ui/` | TypeScript UI library, `@tokamak/ui` |
-| `packages/build/` | Private shared Vite, Solid and theme build integration |
-| `app/` | Thin product shell, reserved for Core and plugins |
-| `lab/` | Independent native UI component catalog and interaction checks |
-| `wiki/` | This docs site |
+| `packages/render/`  | Native UI renderer crate (Solid universal renderer on Blitz)       |
+| `packages/sdk/`     | TypeScript feature API, `@tokamak/sdk`                             |
+| `packages/ui/`      | TypeScript UI library, `@tokamak/ui`                               |
+| `packages/build/`   | Private shared Vite, Solid and theme build integration             |
+| `app/`              | Thin product shell, reserved for Core and plugins                  |
+| `lab/`              | Independent native UI component catalog and interaction checks     |
+| `wiki/`             | This docs site                                                     |
 
 Cargo and Bun manifests and lockfiles stay at the repository root. Root
 `plugins/` is reserved for future first-class plugins and is not scaffolded.
@@ -77,7 +77,13 @@ moon run wiki:build    # static site in wiki/dist/public
 ## Next
 
 <Cards>
-  <Card title="Architecture" href="/docs/architecture">The shape of the system, in one page.</Card>
-  <Card title="Plugin installation" href="/docs/server/plugins">How the server loads and reloads plugins.</Card>
-  <Card title="SDK reference" href="/docs/api">The public API of `@tokamak/sdk`.</Card>
+  <Card title="Architecture" href="/docs/architecture">
+    The shape of the system, in one page.
+  </Card>
+  <Card title="Plugin installation" href="/docs/server/plugins">
+    How the server loads and reloads plugins.
+  </Card>
+  <Card title="SDK reference" href="/docs/api">
+    The public API of `@tokamak/sdk`.
+  </Card>
 </Cards>

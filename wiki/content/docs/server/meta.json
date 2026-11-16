@@ -1,7 +1,4 @@
 {
   "title": "Server",
-  "pages": [
-    "plugins",
-    "store"
-  ]
+  "pages": ["plugins", "store"]
 }

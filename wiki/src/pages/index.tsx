@@ -30,10 +30,18 @@ const pillars = [
 ];
 
 export default async function Home() {
-  const { nav, links, githubUrl, searchToggle } = await getPressContext<typeof app>().getLayoutProps({ lang: undefined });
+  const { nav, links, githubUrl, searchToggle } = await getPressContext<typeof app>().getLayoutProps({
+    lang: undefined,
+  });
 
   return (
-    <HomeLayout nav={nav} links={links} githubUrl={githubUrl} searchToggle={searchToggle} themeSwitch={{ enabled: false }}>
+    <HomeLayout
+      nav={nav}
+      links={links}
+      githubUrl={githubUrl}
+      searchToggle={searchToggle}
+      themeSwitch={{ enabled: false }}
+    >
       <main className="tk-landing relative flex flex-1 flex-col justify-center overflow-hidden">
         <div className="relative mx-auto w-full max-w-5xl px-6 py-16 md:py-24">
           <p className="tk-mono mb-6 text-xs tracking-[0.2em] text-fd-muted-foreground uppercase">
@@ -45,8 +53,8 @@ export default async function Home() {
             <span className="text-fd-muted-foreground">Everything else is a plugin.</span>
           </h1>
           <p className="mt-6 max-w-xl text-base text-fd-muted-foreground md:text-lg">
-            Tokamak is a personal AI harness: a small native core, and a TypeScript plugin
-            system for everything you build on it.
+            Tokamak is a personal AI harness: a small native core, and a TypeScript plugin system for
+            everything you build on it.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -65,7 +73,10 @@ export default async function Home() {
 
           <ul className="mt-16 grid border-t md:grid-cols-3">
             {pillars.map((pillar, index) => (
-              <li key={pillar.title} className="border-b py-6 md:border-b-0 md:px-6 md:first:pl-0 md:[&+li]:border-l">
+              <li
+                key={pillar.title}
+                className="border-b py-6 md:border-b-0 md:px-6 md:first:pl-0 md:[&+li]:border-l"
+              >
                 <p className="tk-mono text-xs text-fd-primary">{String(index + 1).padStart(2, "0")}</p>
                 <h2 className="mt-2 text-sm font-semibold">{pillar.title}</h2>
                 <p className="mt-2 text-sm text-fd-muted-foreground">{pillar.body}</p>

@@ -5,11 +5,23 @@ import type { useDrafts } from "./use-drafts";
 import type { useMap } from "./use-map";
 
 type Controls = {
-  chat: ChatState; composer: ReturnType<typeof useDrafts>; map: ReturnType<typeof useMap>;
-  mapOpen: Accessor<boolean>; setMapOpen: Setter<boolean>; closeMap: () => void; newThread: () => Promise<void>;
-  pickerOpen: Accessor<boolean>; setPickerOpen: Setter<boolean>; pickerKey: (event: NativeEvent) => void; closePicker: () => void;
-  shareOpen: Accessor<boolean>; setShareOpen: Setter<boolean>; shareKey: (event: NativeEvent) => void; closeShare: () => void;
-  pickPermission: (index: number) => boolean; copyReply: () => void;
+  chat: ChatState;
+  composer: ReturnType<typeof useDrafts>;
+  map: ReturnType<typeof useMap>;
+  mapOpen: Accessor<boolean>;
+  setMapOpen: Setter<boolean>;
+  closeMap: () => void;
+  newThread: () => Promise<void>;
+  pickerOpen: Accessor<boolean>;
+  setPickerOpen: Setter<boolean>;
+  pickerKey: (event: NativeEvent) => void;
+  closePicker: () => void;
+  shareOpen: Accessor<boolean>;
+  setShareOpen: Setter<boolean>;
+  shareKey: (event: NativeEvent) => void;
+  closeShare: () => void;
+  pickPermission: (index: number) => boolean;
+  copyReply: () => void;
 };
 
 export function chatKeys(controls: Controls) {
@@ -17,17 +29,32 @@ export function chatKeys(controls: Controls) {
     if (event.defaultPrevented || event.isComposing) return;
     const key = event.key ?? "";
     if (shortcut(controls, event, key)) return;
-    if (controls.pickerOpen()) { controls.pickerKey(event); return; }
-    if (controls.shareOpen()) { controls.shareKey(event); return; }
-    if (controls.mapOpen() && controls.map.editing()) { controls.map.keydown(event); return; }
+    if (controls.pickerOpen()) {
+      controls.pickerKey(event);
+      return;
+    }
+    if (controls.shareOpen()) {
+      controls.shareKey(event);
+      return;
+    }
+    if (controls.mapOpen() && controls.map.editing()) {
+      controls.map.keydown(event);
+      return;
+    }
     if (togglesMap(key, controls.mapOpen())) {
       event.preventDefault();
       if (event.repeat) return;
       if (controls.mapOpen()) controls.closeMap();
-      else { controls.map.reset(); controls.setMapOpen(true); }
+      else {
+        controls.map.reset();
+        controls.setMapOpen(true);
+      }
       return;
     }
-    if (controls.mapOpen()) { controls.map.keydown(event); return; }
+    if (controls.mapOpen()) {
+      controls.map.keydown(event);
+      return;
+    }
     if (answerPermission(controls, event, key)) return;
     stopRun(controls.chat, event);
   };
@@ -67,12 +94,18 @@ function pickerShortcut(controls: Controls, event: NativeEvent, letter: string) 
   if (!controls.chat.isOwner()) return false;
   if (event.shiftKey && letter === "s") {
     event.preventDefault();
-    if (!event.repeat) { controls.closePicker(); controls.setShareOpen(open => !open); }
+    if (!event.repeat) {
+      controls.closePicker();
+      controls.setShareOpen((open) => !open);
+    }
     return true;
   }
   if (letter !== "m") return false;
   event.preventDefault();
-  if (!event.repeat) { controls.closeShare(); controls.setPickerOpen(open => !open); }
+  if (!event.repeat) {
+    controls.closeShare();
+    controls.setPickerOpen((open) => !open);
+  }
   return true;
 }
 

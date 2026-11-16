@@ -9,11 +9,11 @@ export function useThreadEditor(chat: ChatState, rows: Accessor<Thread[]>, selec
   const [busy, setBusy] = createSignal(false);
 
   createEffect(() => {
-    if (editing() && !rows().some(thread => thread._id === target())) setEditing(undefined);
+    if (editing() && !rows().some((thread) => thread._id === target())) setEditing(undefined);
   });
 
   async function save() {
-    const current = rows().find(thread => thread._id === target());
+    const current = rows().find((thread) => thread._id === target());
     if (!current) {
       setEditing(undefined);
       return;
@@ -21,7 +21,8 @@ export function useThreadEditor(chat: ChatState, rows: Accessor<Thread[]>, selec
     if (!editing() || busy() || (editing() === "rename" && !title().trim())) return;
     setBusy(true);
     try {
-      if (editing() === "rename") await chat.client.mutation(api.threads.rename, { threadId: current._id, title: title() });
+      if (editing() === "rename")
+        await chat.client.mutation(api.threads.rename, { threadId: current._id, title: title() });
       else await chat.client.mutation(api.threads.remove, { threadId: current._id });
       setEditing(undefined);
     } catch (cause) {

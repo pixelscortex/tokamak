@@ -1,13 +1,13 @@
 # Share Cargo tasks through moon's Rust toolchain inheritance.
-language: 'rust'
-layer: 'library'
+language: "rust"
+layer: "library"
 tasks:
   fixture-test:
-    command: 'proto run bun -- test tests/build-feature.test.mjs'
+    command: "proto run bun -- test tests/build-feature.test.mjs"
   test:
     # Fixture isolation is part of normal validation, not an opt-in regression.
-    deps: ['server:fixture-test']
+    deps: ["server:fixture-test"]
   protocol-check:
-    command: 'cargo run --locked --package server --features protocol-codegen --bin export-protocol -- --check'
+    command: "cargo run --locked --package server --features protocol-codegen --bin export-protocol -- --check"
   check:
-    deps: ['server:protocol-check']
+    deps: ["server:protocol-check"]

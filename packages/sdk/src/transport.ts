@@ -21,13 +21,24 @@ type Observer = (event: SubscriptionEvent<JsonValue>) => void;
 // would lose ordered outcomes. Catalog/assets use one sequential call per page.
 const CAPACITY = 128;
 class CatalogRevisionChanged extends Error {
-  constructor() { super("Plugin generation changed during catalog transfer"); }
+  constructor() {
+    super("Plugin generation changed during catalog transfer");
+  }
 }
 
-function isCatalogPage(value: { [key: string]: JsonValue }, offset: number): value is { text: string; revision: string; done: boolean; next: number } {
-  return typeof value.text === "string" && typeof value.revision === "string" && typeof value.done === "boolean"
-    && typeof value.next === "number" && Number.isSafeInteger(value.next) && value.next >= offset
-    && (value.done || value.next !== offset);
+function isCatalogPage(
+  value: { [key: string]: JsonValue },
+  offset: number,
+): value is { text: string; revision: string; done: boolean; next: number } {
+  return (
+    typeof value.text === "string" &&
+    typeof value.revision === "string" &&
+    typeof value.done === "boolean" &&
+    typeof value.next === "number" &&
+    Number.isSafeInteger(value.next) &&
+    value.next >= offset &&
+    (value.done || value.next !== offset)
+  );
 }
 
 export class InProcessTransport implements ClientTransport {
@@ -41,8 +52,7 @@ export class InProcessTransport implements ClientTransport {
   constructor(private readonly connection: MessageConnection) {
     const stop = connection.listen(
       (event) => this.receive(event),
-      (error) =>
-        this.fail(error ?? new Error("connection closed; mutation outcomes may be unknown")),
+      (error) => this.fail(error ?? new Error("connection closed; mutation outcomes may be unknown")),
     );
     // Some native hosts can report a closed connection synchronously at listen.
     if (this.closed) stop();
@@ -67,21 +77,29 @@ export class InProcessTransport implements ClientTransport {
     // Pages from different snapshots cannot be combined; endless churn must
     // surface as a transient generation error rather than spin forever.
     for (let attempt = 0; ; attempt++) {
-      try { return await this.catalog(); }
-      catch (error) {
-        if (attempt >= 2 || !(error instanceof CatalogRevisionChanged
-          || error instanceof Error && error.message === "Plugin generation changed")) throw error;
+      try {
+        return await this.catalog();
+      } catch (error) {
+        if (
+          attempt >= 2 ||
+          !(
+            error instanceof CatalogRevisionChanged ||
+            (error instanceof Error && error.message === "Plugin generation changed")
+          )
+        )
+          throw error;
       }
     }
   }
 
   private async catalog(): Promise<JsonValue> {
-    let value = await this.control(id => ({ type: "plugins", id }));
+    let value = await this.control((id) => ({ type: "plugins", id }));
     const chunks: string[] = [];
     let offset = 0;
     let revision: string | undefined;
     for (;;) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid catalog page");
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error("Invalid catalog page");
       // Accept older hosts and structural test transports with a full catalog.
       if (Array.isArray(value.plugins)) {
         if (revision !== undefined) throw new CatalogRevisionChanged();
@@ -93,13 +111,18 @@ export class InProcessTransport implements ClientTransport {
       chunks.push(value.text);
       if (value.done) {
         const assembled = JSON.parse(chunks.join("")) as JsonValue;
-        if (!assembled || typeof assembled !== "object" || Array.isArray(assembled)
-          || assembled.revision !== revision) throw new CatalogRevisionChanged();
+        if (
+          !assembled ||
+          typeof assembled !== "object" ||
+          Array.isArray(assembled) ||
+          assembled.revision !== revision
+        )
+          throw new CatalogRevisionChanged();
         return assembled;
       }
       offset = value.next;
       const pinned = revision;
-      value = await this.control(id => ({ type: "pluginspage", id, revision: pinned, offset }));
+      value = await this.control((id) => ({ type: "pluginspage", id, revision: pinned, offset }));
     }
   }
 
@@ -107,11 +130,19 @@ export class InProcessTransport implements ClientTransport {
     let offset = 0;
     const chunks: string[] = [];
     for (;;) {
-      const value = await this.control(id => ({ type: "pluginasset", id, plugin, name, revision, offset }));
-      if (!value || typeof value !== "object" || Array.isArray(value)
-        || typeof value.text !== "string" || typeof value.next !== "number"
-        || typeof value.done !== "boolean" || !Number.isSafeInteger(value.next)
-        || value.next < offset || (!value.done && value.next === offset)) throw new Error("Invalid plugin asset chunk");
+      const value = await this.control((id) => ({ type: "pluginasset", id, plugin, name, revision, offset }));
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        typeof value.text !== "string" ||
+        typeof value.next !== "number" ||
+        typeof value.done !== "boolean" ||
+        !Number.isSafeInteger(value.next) ||
+        value.next < offset ||
+        (!value.done && value.next === offset)
+      )
+        throw new Error("Invalid plugin asset chunk");
       chunks.push(value.text);
       offset = value.next;
       if (value.done) return chunks.join("");
@@ -120,7 +151,9 @@ export class InProcessTransport implements ClientTransport {
 
   onPluginsChanged(listener: (event: Extract<Event, { type: "pluginchanged" }>) => void): () => void {
     this.pluginListeners.add(listener);
-    return () => { this.pluginListeners.delete(listener); };
+    return () => {
+      this.pluginListeners.delete(listener);
+    };
   }
 
   private control(request: (id: number) => Request): Promise<JsonValue> {
@@ -179,8 +212,7 @@ export class InProcessTransport implements ClientTransport {
   }
 
   subscribe(name: string, args: JsonValue, observer: Observer): () => void {
-    if (this.subscriptions.size >= CAPACITY)
-      throw new Error("client subscription capacity exceeded");
+    if (this.subscriptions.size >= CAPACITY) throw new Error("client subscription capacity exceeded");
     const id = this.id();
     this.subscriptions.set(id, observer);
     try {
@@ -210,7 +242,11 @@ export class InProcessTransport implements ClientTransport {
     if (this.closed) return;
     if (event.type === "pluginchanged") {
       for (const listener of this.pluginListeners) {
-        try { listener(event); } catch { /* isolate window/plugin observers */ }
+        try {
+          listener(event);
+        } catch {
+          /* isolate window/plugin observers */
+        }
       }
       return;
     }
@@ -231,7 +267,9 @@ export class InProcessTransport implements ClientTransport {
       if (event.type === "response") this.subscriptions.delete(event.id);
       this.notify(
         observer,
-        "Ok" in result ? { value: result.Ok } : { error: new Error(result.Err), terminal: event.type === "response" },
+        "Ok" in result
+          ? { value: result.Ok }
+          : { error: new Error(result.Err), terminal: event.type === "response" },
       );
     }
   }

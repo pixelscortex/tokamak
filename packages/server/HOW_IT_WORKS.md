@@ -34,17 +34,17 @@ It's the same idea as Convex: Convex is "their database + a V8 runtime + live sy
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-* **Plugins** are TypeScript. Their **backend functions** run in the server's QuickJS, and their **UI** runs in the desktop's QuickJS. Both halves are downloaded from the server.
-* **SurrealDB** is a library inside the server process, not a separate service. Its files live on disk (SurrealKV).
-* Plugins never write database queries. They call `ctx.db.get / query / insert / patch / delete`, and the server turns those into database operations. All SurrealQL stays inside `data/`.
+- **Plugins** are TypeScript. Their **backend functions** run in the server's QuickJS, and their **UI** runs in the desktop's QuickJS. Both halves are downloaded from the server.
+- **SurrealDB** is a library inside the server process, not a separate service. Its files live on disk (SurrealKV).
+- Plugins never write database queries. They call `ctx.db.get / query / insert / patch / delete`, and the server turns those into database operations. All SurrealQL stays inside `data/`.
 
 ## Three kinds of backend function
 
-| Kind | Can | Can't | Status |
-|---|---|---|---|
-| `query` | read data | write, use the network | built |
-| `mutation` | read + write, all-or-nothing (one transaction) | use the network | built |
-| `action` | network (`fetch`), AI (Vercel AI SDK), long waits | touch the database directly; it calls queries and mutations instead | built (TKM-45) |
+| Kind       | Can                                               | Can't                                                               | Status         |
+| ---------- | ------------------------------------------------- | ------------------------------------------------------------------- | -------------- |
+| `query`    | read data                                         | write, use the network                                              | built          |
+| `mutation` | read + write, all-or-nothing (one transaction)    | use the network                                                     | built          |
+| `action`   | network (`fetch`), AI (Vercel AI SDK), long waits | touch the database directly; it calls queries and mutations instead | built (TKM-45) |
 
 Queries and mutations are **deterministic**. Inside one call the clock is frozen and `Math.random` is seeded. So a mutation that's retried after a conflict, or replayed later for offline sync, does exactly the same thing. Actions see the real clock.
 
@@ -102,10 +102,10 @@ Plugin A can call plugin B only through the functions B lists in its `exports` f
 
 ## What's planned (designed, not built)
 
-* **Core threads** (TKM-46/47): threads, items, runs and an inbox, built on the flows above. Token streaming uses an in-memory channel, and the finished text is saved once.
-* **Pagination** (planned): a `paginate()` helper for queries and a `usePaginatedQuery` hook with Convex-style **reactive pagination**. Each loaded page is its own live subscription with a fixed boundary, so pages stay stable while data changes. Long lists and long threads need this.
-* **Hub and runner** (TKM-49): the same server binary in two roles. The hub is the source of truth, anywhere. The runner sits on your Mac for local work (files, Claude Code).
-* **Offline "hybrid" sync** (TKM-50): a runner keeps a local copy of some tables. When offline, mutations run locally and are recorded. On reconnect, the hub **re-runs the same mutations** against the real data. This is why mutations are deterministic and why plugins write intents (`setDone(true)`), not toggles.
+- **Core threads** (TKM-46/47): threads, items, runs and an inbox, built on the flows above. Token streaming uses an in-memory channel, and the finished text is saved once.
+- **Pagination** (planned): a `paginate()` helper for queries and a `usePaginatedQuery` hook with Convex-style **reactive pagination**. Each loaded page is its own live subscription with a fixed boundary, so pages stay stable while data changes. Long lists and long threads need this.
+- **Hub and runner** (TKM-49): the same server binary in two roles. The hub is the source of truth, anywhere. The runner sits on your Mac for local work (files, Claude Code).
+- **Offline "hybrid" sync** (TKM-50): a runner keeps a local copy of some tables. When offline, mutations run locally and are recorded. On reconnect, the hub **re-runs the same mutations** against the real data. This is why mutations are deterministic and why plugins write intents (`setDone(true)`), not toggles.
 
 ## So, in one line
 
@@ -113,9 +113,9 @@ We're building **our own runtime that sits on the database**: SurrealDB stores, 
 
 ## Further reading
 
-* `packages/server/README.md`: server CLI, local mode, lifecycle.
-* `packages/server/PLUGINS.md`: plugin manifests, dependencies, exports, reload.
-* `packages/server/src/data/README.md`: the Store boundary and invalidation.
-* `packages/runtime/ROUTING.md`: window routing.
-* `packages/runtime/PLUGINS.md`: the desktop plugin loader (paged catalog, lazy UI, hot reload).
-* `packages/engine/WEB_APIS.md`: the web APIs that actions get.
+- `packages/server/README.md`: server CLI, local mode, lifecycle.
+- `packages/server/PLUGINS.md`: plugin manifests, dependencies, exports, reload.
+- `packages/server/src/data/README.md`: the Store boundary and invalidation.
+- `packages/runtime/ROUTING.md`: window routing.
+- `packages/runtime/PLUGINS.md`: the desktop plugin loader (paged catalog, lazy UI, hot reload).
+- `packages/engine/WEB_APIS.md`: the web APIs that actions get.

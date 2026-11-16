@@ -19,7 +19,8 @@ const transports: WebSocketTransport[] = [];
 async function client(url: string, capability: string) {
   // Bun's custom request headers are used only by this local process test.
   const NativeSocket = WebSocket as unknown as new (
-    url: string, options: { headers: Record<string, string> },
+    url: string,
+    options: { headers: Record<string, string> },
   ) => WebSocket;
   const socket = new NativeSocket(url, { headers: { authorization: `Bearer ${capability}` } });
   sockets.push(socket);
@@ -34,11 +35,13 @@ async function client(url: string, capability: string) {
 }
 try {
   const [first, second] = await Promise.all([
-    ensure(binary, bundle, directory), ensure(binary, bundle, directory),
+    ensure(binary, bundle, directory),
+    ensure(binary, bundle, directory),
   ]);
   assert.deepEqual(second, first, "concurrent launchers must reuse one ready server");
   const duplicate = spawnSync(binary, ["--local-dir", directory, "--bundle", bundle], {
-    encoding: "utf8", timeout: 5000,
+    encoding: "utf8",
+    timeout: 5000,
   });
   assert.ifError(duplicate.error);
   assert.notEqual(duplicate.status, 0);
@@ -51,36 +54,48 @@ try {
   const base = first.url.replace("ws:", "http:").replace("/ws", "");
   assert.equal((await fetch(`${base}/health`)).status, 401);
   assert.equal((await fetch(`${base}/shutdown`, { method: "POST" })).status, 401);
-  assert.equal((await fetch(`${base}/health`, {
-    headers: { authorization: `Bearer ${capability}`, origin: "https://example.com" },
-  })).status, 403);
+  assert.equal(
+    (
+      await fetch(`${base}/health`, {
+        headers: { authorization: `Bearer ${capability}`, origin: "https://example.com" },
+      })
+    ).status,
+    403,
+  );
   assert.equal((await fetch(`${base}/ws`)).status, 401);
-  assert.equal((await fetch(`${base}/ws`, {
-    headers: { authorization: `Bearer ${capability}`, origin: "null" },
-  })).status, 403);
+  assert.equal(
+    (
+      await fetch(`${base}/ws`, {
+        headers: { authorization: `Bearer ${capability}`, origin: "null" },
+      })
+    ).status,
+    403,
+  );
   assert.deepEqual(await status(directory), first);
   const one = await client(first.url, capability);
   const two = await client(first.url, capability);
   const id = await one.mutation(api.todo.add, { title: "standalone survives desktop close" });
-  assert((await two.query(api.todo.list, {})).some(row => row._id === id));
-  transports.splice(0).forEach(transport => transport.close());
+  assert((await two.query(api.todo.list, {})).some((row) => row._id === id));
+  transports.splice(0).forEach((transport) => transport.close());
   assert.deepEqual(await status(directory), first, "client close must not stop the service");
   const reopened = await client(first.url, capability);
-  assert((await reopened.query(api.todo.list, {})).some(row => row._id === id));
+  assert((await reopened.query(api.todo.list, {})).some((row) => row._id === id));
   const changed = resolve(directory, "changed.mjs");
   await writeFile(changed, `${await readFile(bundle, "utf8")}\n// changed bundle`);
   await assert.rejects(ensure(binary, changed, directory), /different backend bundle/);
-  transports.splice(0).forEach(transport => transport.close());
+  transports.splice(0).forEach((transport) => transport.close());
   await stop(directory);
   assert.equal(await status(directory), undefined);
   const restarted = await ensure(binary, bundle, directory);
   assert.notEqual(restarted.pid, first.pid);
   const persisted = await client(restarted.url, capability);
-  assert((await persisted.query(api.todo.list, {})).some(row => row._id === id));
-  console.log("PASS local service: concurrent reuse, capability/Origin gates, client close/reopen, revision guard, shutdown and persistence");
+  assert((await persisted.query(api.todo.list, {})).some((row) => row._id === id));
+  console.log(
+    "PASS local service: concurrent reuse, capability/Origin gates, client close/reopen, revision guard, shutdown and persistence",
+  );
 } finally {
-  transports.forEach(transport => transport.close());
-  sockets.forEach(socket => socket.close());
+  transports.forEach((transport) => transport.close());
+  sockets.forEach((socket) => socket.close());
   await stop(directory);
   await rm(directory, { recursive: true, force: true });
 }

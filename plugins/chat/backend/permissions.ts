@@ -22,8 +22,11 @@ export const state = query({
   args: { runId: v.id("runs") },
   handler: async ({ db }, { runId }) => {
     const run = await db.get(runId);
-    const message = run && await db.get(run.messageId);
-    return { running: run?.status === "running", parts: message?.parts.filter(part => part.type === "permission") ?? [] };
+    const message = run && (await db.get(run.messageId));
+    return {
+      running: run?.status === "running",
+      parts: message?.parts.filter((part) => part.type === "permission") ?? [],
+    };
   },
 });
 
@@ -33,13 +36,19 @@ export const answer = mutation({
     if (caller.role !== "owner") throw new Error("Not available to guests");
     const message = await db.get(messageId);
     if (!message) throw new Error("Permission no longer exists");
-    const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", message.threadId)).collect();
-    const run = runs.find(run => run.messageId === messageId && run.status === "running");
+    const runs = await db
+      .query("runs")
+      .withIndex("by_threadId", (q) => q.eq("threadId", message.threadId))
+      .collect();
+    const run = runs.find((run) => run.messageId === messageId && run.status === "running");
     const thread = await db.get(message.threadId);
-    if (!run || (run.startedBy !== caller.memberId && thread?.ownerId !== caller.memberId)) throw new Error("Only the run starter or thread owner can answer");
-    const part = message.parts.find(part => part.type === "permission" && part.requestId === requestId);
-    if (part?.type !== "permission" || part.status !== "pending") throw new Error("Permission is no longer pending");
-    if (!part.options.some(option => option.optionId === optionId)) throw new Error("Unknown permission option");
+    if (!run || (run.startedBy !== caller.memberId && thread?.ownerId !== caller.memberId))
+      throw new Error("Only the run starter or thread owner can answer");
+    const part = message.parts.find((part) => part.type === "permission" && part.requestId === requestId);
+    if (part?.type !== "permission" || part.status !== "pending")
+      throw new Error("Permission is no longer pending");
+    if (!part.options.some((option) => option.optionId === optionId))
+      throw new Error("Unknown permission option");
     // Reserve the answer atomically; the action claims it before responding.
     if (part.optionId !== undefined) throw new Error("Permission already answered");
     part.optionId = optionId;
@@ -56,13 +65,18 @@ export const claim = mutation({
     const run = await db.get(runId);
     if (!run) return null;
     const message = await db.get(run.messageId);
-    const part = message?.parts.find(part => part.type === "permission" && part.requestId === requestId);
+    const part = message?.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission") return null;
     if (part.status === "pending") {
       if (run.status === "running" && part.optionId === undefined && !expired) return null;
-      claimPermission(part, run.status !== "running" ? "cancelled" : part.optionId !== undefined ? "answered" : "expired");
+      claimPermission(
+        part,
+        run.status !== "running" ? "cancelled" : part.optionId !== undefined ? "answered" : "expired",
+      );
       await db.patch(message!._id, { parts: message!.parts });
-      await db.patch(runId, { waiting: message!.parts.some(part => part.type === "permission" && part.status === "pending") });
+      await db.patch(runId, {
+        waiting: message!.parts.some((part) => part.type === "permission" && part.status === "pending"),
+      });
     }
     return { status: part.status, optionId: part.status === "answered" ? part.optionId! : null };
   },
@@ -74,8 +88,8 @@ export const undelivered = mutation({
   args: { runId: v.id("runs"), requestId: v.string() },
   handler: async ({ db }, { runId, requestId }) => {
     const run = await db.get(runId);
-    const message = run && await db.get(run.messageId);
-    const part = message?.parts.find(part => part.type === "permission" && part.requestId === requestId);
+    const message = run && (await db.get(run.messageId));
+    const part = message?.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission" || part.status !== "answered") return null;
 
     part.status = "expired";

@@ -1,8 +1,8 @@
 {
   "name": "todo",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "version": "0.2.0",
   "dependencies": {
     "@tokamak/render": "workspace:*",
     "@tokamak/sdk": "workspace:*",

@@ -18,5 +18,12 @@ export function ComposerInput(props: TextareaProps & { mapOpen: boolean }) {
     });
   });
 
-  return <Textarea {...editor} ref={node => { input = node; }} />;
+  return (
+    <Textarea
+      {...editor}
+      ref={(node) => {
+        input = node;
+      }}
+    />
+  );
 }

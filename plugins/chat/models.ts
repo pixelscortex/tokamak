@@ -12,5 +12,7 @@ export function currentModel(thread?: {
   backend?: { kind: "model"; model: string } | { kind: "acp"; agent: string };
 }): string {
   const backend = thread?.backend;
-  return backend?.kind === "acp" ? `acp:${backend.agent}` : backend?.model ?? thread?.model ?? DEFAULT_MODEL;
+  return backend?.kind === "acp"
+    ? `acp:${backend.agent}`
+    : (backend?.model ?? thread?.model ?? DEFAULT_MODEL);
 }

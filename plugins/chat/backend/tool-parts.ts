@@ -7,10 +7,12 @@ export function applyToolUpdate(parts: Part[], tool: Infer<typeof toolUpdate>) {
   if (patch.error !== undefined) patch.error = boundedError(patch.error);
   if (patch.result !== undefined && jsonBytes(patch.result) > 8 * 1024) patch.result = { truncated: true };
 
-  const existing = parts.find(part => part.type === "tool" && part.callId === patch.callId);
+  const existing = parts.find((part) => part.type === "tool" && part.callId === patch.callId);
   if (existing?.type === "tool") {
-    if (patch.status === "running" && !existing.plugin.startsWith("acp:")) throw new Error(`Duplicate tool callId: ${patch.callId}`);
-    if (existing.status !== "running" && !existing.plugin.startsWith("acp:")) throw new Error("Tool is already settled");
+    if (patch.status === "running" && !existing.plugin.startsWith("acp:"))
+      throw new Error(`Duplicate tool callId: ${patch.callId}`);
+    if (existing.status !== "running" && !existing.plugin.startsWith("acp:"))
+      throw new Error("Tool is already settled");
     checkIdentity(patch, existing);
 
     const { callId: _callId, plugin: _plugin, toolName: _toolName, args: _args, ...completion } = patch;
@@ -25,8 +27,10 @@ export function applyToolUpdate(parts: Part[], tool: Infer<typeof toolUpdate>) {
 }
 
 function checkIdentity(patch: Infer<typeof toolUpdate>, existing: ToolPart) {
-  if ((patch.plugin !== undefined && patch.plugin !== existing.plugin) ||
-      (patch.toolName !== undefined && patch.toolName !== existing.toolName)) {
+  if (
+    (patch.plugin !== undefined && patch.plugin !== existing.plugin) ||
+    (patch.toolName !== undefined && patch.toolName !== existing.toolName)
+  ) {
     throw new Error("Tool identity is immutable");
   }
 }

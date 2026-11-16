@@ -61,9 +61,7 @@ async function describe(feature) {
   // or overwriting them. The real registry must match the current source set.
   const code = await readFile(join(feature, "dist/bundle.js"), "utf8");
   expect(JSON.parse(await readFile(join(feature, "dist/bundle.js.map"), "utf8")).version).toBe(3);
-  const module = await import(
-    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
-  );
+  const module = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
   return module
     .describe()
     .functions.map((fn) => fn.name)

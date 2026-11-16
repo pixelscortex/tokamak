@@ -23,5 +23,6 @@ for (const [name, exports] of Object.entries({
   "@tokamak/ui/elements": ui,
   "@tokamak/ui/components": components,
   "@tokamak/runtime/router": router,
-})) modules.provide(name, exports);
+}))
+  modules.provide(name, exports);
 mount(() => <Shell modules={modules} />);

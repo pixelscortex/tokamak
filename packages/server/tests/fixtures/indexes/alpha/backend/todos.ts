@@ -20,9 +20,12 @@ export const move = mutation({
 // The documented example chain: eq on the leading field, then a lower bound.
 export const recent = query({
   args: { owner: v.string(), since: v.number() },
-  handler: (ctx, { owner, since }) => ctx.db.query("todos")
-    .withIndex("by_owner_created", q => q.eq("owner", owner).gt("created", since))
-    .order("desc").take(20),
+  handler: (ctx, { owner, since }) =>
+    ctx.db
+      .query("todos")
+      .withIndex("by_owner_created", (q) => q.eq("owner", owner).gt("created", since))
+      .order("desc")
+      .take(20),
 });
 
 // Every bound combination through the real builder. The dynamic method name is
@@ -30,12 +33,15 @@ export const recent = query({
 export const range = query({
   args: { owner: v.string(), lower: bound, upper: bound, order: v.string(), limit: v.optional(v.number()) },
   handler: (ctx, a) => {
-    const plan = ctx.db.query("todos").withIndex("by_owner_created", q => {
-      let r: any = q.eq("owner", a.owner);
-      if (a.lower) r = r[a.lower.op]("created", a.lower.value);
-      if (a.upper) r = r[a.upper.op]("created", a.upper.value);
-      return r;
-    }).order(a.order === "desc" ? "desc" : "asc");
+    const plan = ctx.db
+      .query("todos")
+      .withIndex("by_owner_created", (q) => {
+        let r: any = q.eq("owner", a.owner);
+        if (a.lower) r = r[a.lower.op]("created", a.lower.value);
+        if (a.upper) r = r[a.upper.op]("created", a.upper.value);
+        return r;
+      })
+      .order(a.order === "desc" ? "desc" : "asc");
     return a.limit === undefined ? plan.collect() : plan.take(a.limit);
   },
 });
@@ -43,8 +49,12 @@ export const range = query({
 // Omitting the callback scans the whole index in (owner, created, _id) order.
 export const scan = query({
   args: { order: v.string() },
-  handler: (ctx, { order }) => ctx.db.query("todos").withIndex("by_owner_created")
-    .order(order === "desc" ? "desc" : "asc").collect(),
+  handler: (ctx, { order }) =>
+    ctx.db
+      .query("todos")
+      .withIndex("by_owner_created")
+      .order(order === "desc" ? "desc" : "asc")
+      .collect(),
 });
 
 // Un-indexed queries keep working next to declared indexes.
@@ -102,7 +112,7 @@ export const probe = looseQuery({
   args: { table: v.string(), index: v.string() },
   handler: (ctx, { table, index }) => ctx.db.query(table).withIndex(index).collect(),
 });
-export const notes = looseQuery({ handler: ctx => ctx.db.query("notes").collect() });
+export const notes = looseQuery({ handler: (ctx) => ctx.db.query("notes").collect() });
 
 // Bypass the SDK query builder entirely and send a hand-written db.query
 // payload, as a non-SDK or tampered bundle could. Only the host validates it.

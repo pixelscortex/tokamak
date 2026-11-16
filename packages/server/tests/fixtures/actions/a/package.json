@@ -1,1 +1,6 @@
-{"name":"action-test-a","version":"1.0.0","private":true,"type":"module"}
+{
+  "name": "action-test-a",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module"
+}

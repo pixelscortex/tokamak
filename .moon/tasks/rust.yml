@@ -1,14 +1,14 @@
 # Cargo owns incremental artifacts shared by all three crates. Serialize its
 # commands rather than making parallel tasks contend for the same target lock.
 inheritedBy:
-  toolchains: ['rust']
+  toolchains: ["rust"]
 taskOptions:
   cache: false
-  mutex: 'cargo'
+  mutex: "cargo"
 tasks:
   check:
-    command: 'cargo check --locked --all-targets'
+    command: "cargo check --locked --all-targets"
   test:
-    command: 'cargo test --locked'
+    command: "cargo test --locked"
   build:
-    command: 'cargo build --locked'
+    command: "cargo build --locked"

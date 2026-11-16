@@ -16,7 +16,7 @@ export function localDirectory(binary: string, cwd = process.cwd()): string {
 async function token(directory: string): Promise<string> {
   const path = resolve(directory, "server.token");
   const metadata = await lstat(path);
-  if (!metadata.isFile() || (process.platform !== "win32" && (metadata.mode & 0o077))) {
+  if (!metadata.isFile() || (process.platform !== "win32" && metadata.mode & 0o077)) {
     throw new Error("Local capability must be a private regular file");
   }
   const value = await readFile(path, "utf8");
@@ -26,8 +26,15 @@ async function token(directory: string): Promise<string> {
 
 function endpoint(identity: Identity, path: string): URL {
   const url = new URL(identity.url);
-  if (url.protocol !== "ws:" || !["127.0.0.1", "[::1]"].includes(url.hostname)
-    || url.username || url.password || url.pathname !== "/ws" || url.search || url.hash) {
+  if (
+    url.protocol !== "ws:" ||
+    !["127.0.0.1", "[::1]"].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/ws" ||
+    url.search ||
+    url.hash
+  ) {
     throw new Error("Invalid local server discovery");
   }
   url.protocol = "http:";
@@ -43,34 +50,53 @@ export async function status(directory: string): Promise<Identity | undefined> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  if (!Number.isSafeInteger(identity.pid) || identity.pid <= 0
-    || !/^[a-f0-9]{64}$/.test(identity.bundleHash)) throw new Error("Invalid local server discovery");
+  if (!Number.isSafeInteger(identity.pid) || identity.pid <= 0 || !/^[a-f0-9]{64}$/.test(identity.bundleHash))
+    throw new Error("Invalid local server discovery");
   const url = endpoint(identity, "/health");
   const capability = await token(directory);
   let response: Response;
   try {
     response = await fetch(url, {
-      headers: { authorization: `Bearer ${capability}` }, signal: AbortSignal.timeout(1000),
+      headers: { authorization: `Bearer ${capability}` },
+      signal: AbortSignal.timeout(1000),
     });
-  } catch { return; }
+  } catch {
+    return;
+  }
   if (!response.ok) throw new Error(`Local server health refused (${response.status})`);
-  const actual = await response.json() as Identity;
-  if (actual.pid !== identity.pid || actual.url !== identity.url || actual.bundleHash !== identity.bundleHash) {
+  const actual = (await response.json()) as Identity;
+  if (
+    actual.pid !== identity.pid ||
+    actual.url !== identity.url ||
+    actual.bundleHash !== identity.bundleHash
+  ) {
     throw new Error("Local server identity does not match discovery");
   }
   return identity;
 }
 
 async function wait(): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
-export async function ensure(binary: string, bundle: string, directory: string, mode: "bundle" | "plugins" = "bundle"): Promise<Identity> {
+export async function ensure(
+  binary: string,
+  bundle: string,
+  directory: string,
+  mode: "bundle" | "plugins" = "bundle",
+): Promise<Identity> {
   const pluginRoot = mode === "plugins" ? await realpath(bundle) : undefined;
-  const hash = mode === "bundle" ? createHash("sha256").update(await readFile(bundle)).digest("hex") : undefined;
+  const hash =
+    mode === "bundle"
+      ? createHash("sha256")
+          .update(await readFile(bundle))
+          .digest("hex")
+      : undefined;
   function compatible(identity: Identity): Identity {
     if (mode === "plugins" ? identity.pluginRoot !== pluginRoot : identity.bundleHash !== hash) {
-      throw new Error("Local server has a different backend bundle or plugin installation; run `bun run server:stop` first");
+      throw new Error(
+        "Local server has a different backend bundle or plugin installation; run `bun run server:stop` first",
+      );
     }
     return identity;
   }
@@ -83,8 +109,10 @@ export async function ensure(binary: string, bundle: string, directory: string, 
   let owner = false;
   const deadline = Date.now() + 20_000;
   while (!owner && Date.now() < deadline) {
-    try { await mkdir(lock, { mode: 0o700 }); owner = true; }
-    catch (error) {
+    try {
+      await mkdir(lock, { mode: 0o700 });
+      owner = true;
+    } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const running = await status(directory);
       if (running) return compatible(running);
@@ -111,7 +139,8 @@ export async function stop(directory: string): Promise<void> {
   let response: Response | undefined;
   try {
     response = await fetch(url, {
-      method: "POST", headers: { authorization: `Bearer ${capability}` },
+      method: "POST",
+      headers: { authorization: `Bearer ${capability}` },
       signal: AbortSignal.timeout(5000),
     });
   } catch {
@@ -122,8 +151,12 @@ export async function stop(directory: string): Promise<void> {
   if (response && !response.ok) throw new Error(`Local server shutdown refused (${response.status})`);
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
-    try { await lstat(resolve(directory, "server.json")); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+    try {
+      await lstat(resolve(directory, "server.json"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
     await wait();
   }
   throw new Error("Local server has not completed storage shutdown; inspect server.log");
@@ -133,18 +166,36 @@ async function createToken(directory: string) {
   const temporary = resolve(directory, `server.token.${process.pid}.tmp`);
   try {
     await writeFile(temporary, randomBytes(32).toString("hex"), { flag: "wx", mode: 0o600 });
-    try { await link(temporary, resolve(directory, "server.token")); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-  } finally { await rm(temporary, { force: true }); }
+    try {
+      await link(temporary, resolve(directory, "server.token"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
-async function startServer(binary: string, bundle: string, directory: string, mode: "bundle" | "plugins", deadline: number): Promise<Identity> {
+async function startServer(
+  binary: string,
+  bundle: string,
+  directory: string,
+  mode: "bundle" | "plugins",
+  deadline: number,
+): Promise<Identity> {
   const log = await open(resolve(directory, "server.log"), "a", 0o600);
-  const child = spawn(binary, ["--local-dir", directory, mode === "plugins" ? "--plugins" : "--bundle", bundle], {
-    detached: true, stdio: ["ignore", log.fd, log.fd],
-  });
+  const child = spawn(
+    binary,
+    ["--local-dir", directory, mode === "plugins" ? "--plugins" : "--bundle", bundle],
+    {
+      detached: true,
+      stdio: ["ignore", log.fd, log.fd],
+    },
+  );
   let failure: Error | undefined;
-  child.on("error", error => { failure = error; });
+  child.on("error", (error) => {
+    failure = error;
+  });
   child.unref();
   await log.close();
   while (Date.now() < deadline) {

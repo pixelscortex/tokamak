@@ -16,11 +16,18 @@ function fakeAssets() {
     assets: {
       // Each call is a transfer the test settles by hand.
       plugins: () => new Promise((resolve, reject) => transfers.push({ resolve, reject })),
-      pluginAsset: async () => { throw new Error("no UI asset may be fetched"); },
-      onPluginsChanged(fn) { listener = fn; return () => { listener = undefined; }; },
+      pluginAsset: async () => {
+        throw new Error("no UI asset may be fetched");
+      },
+      onPluginsChanged(fn) {
+        listener = fn;
+        return () => {
+          listener = undefined;
+        };
+      },
     },
     transfers,
-    reloaded: event => listener(event),
+    reloaded: (event) => listener(event),
   };
 }
 
@@ -71,7 +78,9 @@ function fakeWire() {
       subscribe(name, args, observer) {
         const subscription = { name, args, observer, stopped: 0 };
         subscriptions.push(subscription);
-        return () => { subscription.stopped++; };
+        return () => {
+          subscription.stopped++;
+        };
       },
     },
   };
@@ -83,14 +92,16 @@ const tooLarge = () => ({ error: new Error("result too large"), terminal: true }
 // query cache must forget the entry. If it keeps the cached error, a remounted
 // view is handed that error again and never reaches the server.
 test("a terminal subscription error evicts the entry so a remount subscribes again", () => {
-  const wire = fakeWire(), cache = retainSubscriptions(wire.transport);
-  const first = [], second = [];
-  cache.subscribe("notes:list", {}, event => first.push(event));
+  const wire = fakeWire(),
+    cache = retainSubscriptions(wire.transport);
+  const first = [],
+    second = [];
+  cache.subscribe("notes:list", {}, (event) => first.push(event));
   wire.subscriptions[0].observer(tooLarge());
   expect(first).toHaveLength(1);
   expect(first[0].error.message).toBe("result too large");
   // The failed view unmounts and its replacement mounts.
-  cache.subscribe("notes:list", {}, event => second.push(event));
+  cache.subscribe("notes:list", {}, (event) => second.push(event));
   expect(wire.subscriptions).toHaveLength(2);
   expect(second).toEqual([]);
   wire.subscriptions[1].observer({ value: [] });
@@ -102,11 +113,12 @@ test("a terminal subscription error evicts the entry so a remount subscribes aga
 // keep sharing one wire subscription and replay its latest event, otherwise
 // every remount would open another subscription.
 test("a non-terminal error keeps the shared subscription and replays it", () => {
-  const wire = fakeWire(), cache = retainSubscriptions(wire.transport);
+  const wire = fakeWire(),
+    cache = retainSubscriptions(wire.transport);
   cache.subscribe("notes:list", {}, () => {});
   wire.subscriptions[0].observer({ error: new Error("rerun failed") });
   const replayed = [];
-  cache.subscribe("notes:list", {}, event => replayed.push(event));
+  cache.subscribe("notes:list", {}, (event) => replayed.push(event));
   expect(wire.subscriptions).toHaveLength(1);
   expect(replayed[0].error.message).toBe("rerun failed");
   cache.dispose();
@@ -142,7 +154,9 @@ test("the window query cache preserves action support and results", async () => 
     return { status: "done" };
   };
   const cache = retainSubscriptions(wire.transport);
-  expect(await cache.action("chat/chat:send", { threadId: "one", text: "hello" })).toEqual({ status: "done" });
+  expect(await cache.action("chat/chat:send", { threadId: "one", text: "hello" })).toEqual({
+    status: "done",
+  });
   expect(calls).toEqual([{ name: "chat/chat:send", args: { threadId: "one", text: "hello" } }]);
   cache.dispose();
 });

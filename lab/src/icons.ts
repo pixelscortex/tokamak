@@ -7,10 +7,8 @@
  * circles and rects are written as equivalent paths. */
 
 export const stroke = {
-  sidebarLeft:
-    "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M9 3v18",
-  sidebarRight:
-    "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M15 3v18",
+  sidebarLeft: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M9 3v18",
+  sidebarRight: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M15 3v18",
   chevronLeft: "m15 18-6-6 6-6",
   chevronRight: "m9 18 6-6-6-6",
   chevronDown: "m6 9 6 6 6-6",
@@ -23,15 +21,12 @@ export const stroke = {
   arrowUpRight: "M7 7h10v10 M7 17 17 7",
   paperclip:
     "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48",
-  atSign:
-    "M16 12a4 4 0 1 1-8 0a4 4 0 1 1 8 0Z M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8",
-  squareCheck:
-    "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Z m2 9 2 2 4-4",
+  atSign: "M16 12a4 4 0 1 1-8 0a4 4 0 1 1 8 0Z M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8",
+  squareCheck: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Z m2 9 2 2 4-4",
   message: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
   plus: "M5 12h14 M12 5v14",
   arrowUp: "m5 12 7-7 7 7 M12 19V5",
-  command:
-    "M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3",
+  command: "M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3",
 };
 
 export const fill = {

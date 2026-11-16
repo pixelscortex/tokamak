@@ -4,7 +4,10 @@ import { TIMEOUT_MS } from "./permissions";
 import type { PermissionPart } from "./permission-part";
 import type { streamBuffer } from "./stream-buffer";
 
-export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: ReturnType<typeof streamBuffer>,
+export function permissionWait(
+  ctx: ActionContext,
+  runId: Id<"runs">,
+  buffer: ReturnType<typeof streamBuffer>,
   respond?: (requestId: string, optionId: string | null) => Promise<void>,
 ) {
   const pending = new Map<string, number>();
@@ -23,13 +26,14 @@ export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: Re
   return {
     async request(part: PermissionPart) {
       await buffer.update();
-      if (!await ctx.runMutation(api.permissions.request, { runId, part })) throw new Error("Run cancelled");
+      if (!(await ctx.runMutation(api.permissions.request, { runId, part })))
+        throw new Error("Run cancelled");
       pending.set(part.requestId, Date.now() + TIMEOUT_MS);
     },
     async poll() {
       const state = await ctx.runQuery(api.permissions.state, { runId });
       for (const [requestId, deadline] of pending) {
-        const part = state.parts.find(part => part.requestId === requestId);
+        const part = state.parts.find((part) => part.requestId === requestId);
         const expired = Date.now() >= deadline;
         if (state.running && part?.status === "pending" && part.optionId === undefined && !expired) continue;
         const outcome = await ctx.runMutation(api.permissions.claim, { runId, requestId, expired });

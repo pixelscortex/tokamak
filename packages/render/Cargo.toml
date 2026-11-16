@@ -12,10 +12,16 @@ gpu-diagnostics = ["anyrender_vello/log_frame_times"]
 [dependencies]
 engine = { path = "../engine" }
 # Blitz paints ordinary elements and SVG icon widgets.
-blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = ["system-fonts", "custom-widget"] }
+blitz-dom = { version = "=0.3.0-beta.4", default-features = false, features = [
+  "system-fonts",
+  "custom-widget",
+] }
 blitz-html = { version = "=0.3.0-beta.4", default-features = false }
 blitz-traits = "=0.3.0-beta.4"
-blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = ["clipboard", "custom-widget"] }
+blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = [
+  "clipboard",
+  "custom-widget",
+] }
 # Read computed styles and registered custom properties.
 style = { package = "stylo", version = "=0.22.0" }
 anyrender = "=0.14.0"

@@ -2,16 +2,16 @@
 # Resolve it through proto because moon 2.5.6 puts Bun's global bin directory
 # ahead of the pinned toolchain, which can silently select an older global Bun.
 inheritedBy:
-  languages: ['typescript']
+  languages: ["typescript"]
 taskOptions:
   cache: false
 tasks:
   check:
-    command: 'proto run bun -- check --no-script'
+    command: "proto run bun -- check --no-script"
   test:
     # Empty packages are intentional now; real test failures must still fail.
-    command: 'proto run bun -- test --pass-with-no-tests'
+    command: "proto run bun -- test --pass-with-no-tests"
   build:
     # Plain ESM, without Bun-specific runtime injection, for future QuickJS hosts.
-    command: 'proto run bun -- build ./src/index.ts --target browser --format esm --outdir dist'
-    outputs: ['dist']
+    command: "proto run bun -- build ./src/index.ts --target browser --format esm --outdir dist"
+    outputs: ["dist"]

@@ -26,8 +26,11 @@ and this entry:
 
 ```tsx
 import {
-  createMemoryHistory, createRootRoute, createRoute,
-  createRouter, RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
 } from "@tanstack/solid-router";
 import { mount } from "@tokamak/render";
 const root = createRootRoute();

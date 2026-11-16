@@ -76,7 +76,9 @@ export function afterDelay(ms: number, callback: () => void): () => void {
   const id = nextDelay++;
   __tokamakAfter(id, ms);
   delays.set(id, owned(callback));
-  const stop = () => { delays.delete(id); };
+  const stop = () => {
+    delays.delete(id);
+  };
   if (getOwner()) onCleanup(stop);
   return stop;
 }
@@ -127,11 +129,7 @@ const adapter = createRenderer<NativeNode>({
   insertNode(parent, node, before) {
     if (node === before) return;
     detach(node);
-    parent.children.splice(
-      before ? parent.children.indexOf(before) : parent.children.length,
-      0,
-      node,
-    );
+    parent.children.splice(before ? parent.children.indexOf(before) : parent.children.length, 0, node);
     node.parent = parent;
     pending.push({ op: "insert", id: node.id, parent: parent.id, before: before?.id ?? null });
   },
@@ -141,8 +139,7 @@ const adapter = createRenderer<NativeNode>({
   },
   setProperty(node, name, value) {
     if (/^on[A-Z]/.test(name)) {
-      if (value != null && typeof value !== "function")
-        throw new TypeError(`${name} must be a handler`);
+      if (value != null && typeof value !== "function") throw new TypeError(`${name} must be a handler`);
       const event = name.slice(2).toLowerCase();
       if (typeof value === "function") node.handlers.set(event, owned(value as EventHandler));
       else node.handlers.delete(event);
@@ -155,11 +152,7 @@ const adapter = createRenderer<NativeNode>({
       throw new TypeError(`${name} must be a scalar attribute`);
     }
     const attribute =
-      value == null || (boolean && value === false)
-        ? null
-        : boolean && value === true
-          ? ""
-          : String(value);
+      value == null || (boolean && value === false) ? null : boolean && value === true ? "" : String(value);
     pending.push({ op: "attribute", id: node.id, name, value: attribute });
   },
 });
@@ -251,12 +244,13 @@ export function observeLayout(node: NativeNode, callback: (layout: Layout) => vo
   return stop;
 }
 
-function reportLayout(changes: ({ id: number; rect: number[]; clip: number[]; scroll: number[] })[]) {
+function reportLayout(changes: { id: number; rect: number[]; clip: number[]; scroll: number[] }[]) {
   const box = (r: number[]): Rect => ({ x: r[0], y: r[1], width: r[2], height: r[3] });
   for (const change of changes) {
     for (const listener of [...(observers.get(change.id) ?? [])]) {
       listener({
-        rect: box(change.rect), clip: box(change.clip),
+        rect: box(change.rect),
+        clip: box(change.clip),
         scroll: { top: change.scroll[0]!, height: change.scroll[1]!, clientHeight: change.scroll[2]! },
       });
     }

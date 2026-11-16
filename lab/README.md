@@ -7,12 +7,12 @@ It needs no server, SDK client, credentials or database.
 One screen: the application shell with one rail section (Chat). The plugin
 sidebar lists the lab's views; picking one swaps what the stage shows.
 
-| View | What it shows |
-| --- | --- |
-| Chat | The chat view on the real `Composer` (docked: it rises out of the window base), `Select`, `Chip` and `Button`. Sending adds the message to the thread; `/todo` opens its command form. |
-| Composer states | Each state of the one `Composer` as its own live composer, labelled: idle, with context, running, commands, command form, approval. |
-| Select | The field size closed and open (with groups and search), the compact size, a menu that opens upward, a disabled select. |
-| Buttons and keys | Every `Button` variant in each state (rest, hover, pressed, focused, disabled, live), the sizes, a toggle, `Kbd`, `Chip`. |
+| View             | What it shows                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat             | The chat view on the real `Composer` (docked: it rises out of the window base), `Select`, `Chip` and `Button`. Sending adds the message to the thread; `/todo` opens its command form. |
+| Composer states  | Each state of the one `Composer` as its own live composer, labelled: idle, with context, running, commands, command form, approval.                                                    |
+| Select           | The field size closed and open (with groups and search), the compact size, a menu that opens upward, a disabled select.                                                                |
+| Buttons and keys | Every `Button` variant in each state (rest, hover, pressed, focused, disabled, live), the sizes, a toggle, `Kbd`, `Chip`.                                                              |
 
 Files:
 

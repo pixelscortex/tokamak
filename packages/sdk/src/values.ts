@@ -1,12 +1,6 @@
 // The POC deliberately has one value language: lossless JSON. Keeping this rule
 // shared by validators, the database and the client avoids engine-specific codecs.
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export type JsonObject = { [key: string]: JsonValue };
 

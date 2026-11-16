@@ -6,7 +6,13 @@ export type { PluginDefinition } from "./plugin";
 export type { Validator, ValidatorDescription, Fields, Infer, ObjectValue } from "./validators";
 
 export { defineSchema, defineTable, schemaMetadata } from "./schema";
-export type { SchemaDefinition, TableDefinition, IndexDefinition, DataModel, ModelFromSchema } from "./schema";
+export type {
+  SchemaDefinition,
+  TableDefinition,
+  IndexDefinition,
+  DataModel,
+  ModelFromSchema,
+} from "./schema";
 
 export {
   query,
@@ -30,7 +36,16 @@ export type {
   WireResult,
 } from "./functions";
 
-export type { DatabaseReader, DatabaseWriter, Doc, TableQuery, FilteredQuery, QueryResult, IndexRange, IndexBounds } from "./database";
+export type {
+  DatabaseReader,
+  DatabaseWriter,
+  Doc,
+  TableQuery,
+  FilteredQuery,
+  QueryResult,
+  IndexRange,
+  IndexBounds,
+} from "./database";
 
 export type {
   HostBridge,

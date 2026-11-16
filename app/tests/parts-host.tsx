@@ -30,11 +30,19 @@ export function PartsHost(props: { modules: ModuleRegistry }) {
     transport.pluginAsset(plugin, name, loader.metadata().revision);
   const [connected, setConnected] = createSignal(false);
   void loader.connect().then(() => setConnected(true));
-  onCleanup(() => { loader.dispose(); subscriptions.dispose(); transport.close(); });
-  return <ClientContext.Provider value={client}><RouterContext.Provider value={router}>
-    <p id="route">{router.location().pathname}</p>
-    <For each={connected() ? loader.contributions("view").filter(c => !HIDDEN.includes(c.id)) : []}>
-      {contribution => <Contribution loader={loader} contribution={contribution} />}
-    </For>
-  </RouterContext.Provider></ClientContext.Provider>;
+  onCleanup(() => {
+    loader.dispose();
+    subscriptions.dispose();
+    transport.close();
+  });
+  return (
+    <ClientContext.Provider value={client}>
+      <RouterContext.Provider value={router}>
+        <p id="route">{router.location().pathname}</p>
+        <For each={connected() ? loader.contributions("view").filter((c) => !HIDDEN.includes(c.id)) : []}>
+          {(contribution) => <Contribution loader={loader} contribution={contribution} />}
+        </For>
+      </RouterContext.Provider>
+    </ClientContext.Provider>
+  );
 }

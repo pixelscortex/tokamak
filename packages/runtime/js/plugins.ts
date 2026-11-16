@@ -14,18 +14,31 @@ export interface PluginManifest {
   entries: { ui?: { code: string; css: string } };
   hashes: Readonly<Record<string, string>>;
 }
-export interface PluginCatalog { revision: string; plugins: readonly PluginManifest[] }
+export interface PluginCatalog {
+  revision: string;
+  plugins: readonly PluginManifest[];
+}
 export interface PluginAssets {
   plugins(): Promise<JsonValue>;
   pluginAsset(plugin: string, name: string, revision: string): Promise<string>;
   onPluginsChanged(listener: (event: { plugins: string[]; catalog: JsonValue }) => void): () => void;
 }
-export interface SlotContribution { plugin: string; id: string; kind: ContributionKind; options: Readonly<Record<string, string>> }
+export interface SlotContribution {
+  plugin: string;
+  id: string;
+  kind: ContributionKind;
+  options: Readonly<Record<string, string>>;
+}
 const moduleName = (id: string) => `@plugins/${id}/ui`;
 function catalog(value: JsonValue): PluginCatalog {
   const candidate = value as unknown as PluginCatalog;
-  if (!candidate || typeof candidate.revision !== "string" || !Array.isArray(candidate.plugins)
-    || candidate.plugins.some(p => !p?.plugin || typeof p.plugin.id !== "string" || !p.entries)) throw new Error("Invalid plugin catalog");
+  if (
+    !candidate ||
+    typeof candidate.revision !== "string" ||
+    !Array.isArray(candidate.plugins) ||
+    candidate.plugins.some((p) => !p?.plugin || typeof p.plugin.id !== "string" || !p.entries)
+  )
+    throw new Error("Invalid plugin catalog");
   return candidate;
 }
 
@@ -39,7 +52,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
   let changes = 0;
   const invalidations = new Set<string>();
   const version = (id: string) => versions()[id] ?? 0;
-  const manifests = createMemo(() => new Map(metadata().plugins.map(p => [p.plugin.id, p])));
+  const manifests = createMemo(() => new Map(metadata().plugins.map((p) => [p.plugin.id, p])));
   const manifest = (id: string) => manifests().get(id);
 
   function invalidate(ids: readonly string[], next = metadata()) {
@@ -50,7 +63,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
       for (const id of Object.keys(p.plugin.depends ?? {})) {
         const dependency = moduleName(id);
         let names = importers.get(dependency);
-        if (!names) importers.set(dependency, names = new Set());
+        if (!names) importers.set(dependency, (names = new Set()));
         names.add(moduleName(p.plugin.id));
       }
     }
@@ -62,7 +75,9 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
       for (const name of affected) {
         const id = name.slice("@plugins/".length, -"/ui".length);
         updated[id] = (updated[id] ?? 0) + 1;
-        delete css[id]; pending.delete(id); loaded.delete(id);
+        delete css[id];
+        pending.delete(id);
+        loaded.delete(id);
       }
       setVersions(updated);
       setStyles(css);
@@ -81,7 +96,8 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     const revision = metadata().revision;
     const generation = version(id);
     const live = () => {
-      if (disposed || generation !== version(id) || revision !== metadata().revision) throw new Error(`Retired plugin generation: ${id}`);
+      if (disposed || generation !== version(id) || revision !== metadata().revision)
+        throw new Error(`Retired plugin generation: ${id}`);
     };
     const task = (async () => {
       const entry = p.entries.ui!;
@@ -98,7 +114,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
       const css = await assets.pluginAsset(id, entry.css, revision);
       live();
       const exports = registry.require(moduleName(id));
-      setStyles(previous => ({ ...previous, [id]: css }));
+      setStyles((previous) => ({ ...previous, [id]: css }));
       return exports;
     })();
     pending.set(id, task);
@@ -108,8 +124,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
       loaded.set(id, exports);
       pending.delete(id);
       return exports;
-    }
-    catch (error) {
+    } catch (error) {
       if (generation === version(id)) {
         registry.remove([moduleName(id)]);
         pending.delete(id);
@@ -118,13 +133,13 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     }
   }
 
-  registry.setLoader(name => load(name.slice(9, -3)));
-  const stop = assets.onPluginsChanged(event => {
+  registry.setLoader((name) => load(name.slice(9, -3)));
+  const stop = assets.onPluginsChanged((event) => {
     changes++;
     for (const id of event.plugins) invalidations.add(id);
     const publish = (next: JsonValue) => {
       const parsed = catalog(next);
-      const nextManifests = new Map(parsed.plugins.map(p => [p.plugin.id, p]));
+      const nextManifests = new Map(parsed.plugins.map((p) => [p.plugin.id, p]));
       // Very large change-id lists are omitted from the bounded notification.
       // Diff the complete paged catalog too, so no installed-count ceiling can
       // silently prevent a module from retiring (including added/removed ids).
@@ -140,16 +155,25 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
       const change = changes;
       // Multiple reloads can race a paged fetch. Accumulate every changed id
       // until the latest complete catalog arrives, so none escapes retirement.
-      void assets.plugins().then(next => {
-        if (!disposed && change === changes) publish(next);
-      }).catch(error => {
-        if (!disposed && change === changes) for (const id of invalidations) registry.notifyError(moduleName(id), error);
-      });
+      void assets
+        .plugins()
+        .then((next) => {
+          if (!disposed && change === changes) publish(next);
+        })
+        .catch((error) => {
+          if (!disposed && change === changes)
+            for (const id of invalidations) registry.notifyError(moduleName(id), error);
+        });
     } else publish(event.catalog);
   });
   return {
-    metadata, version, styles, load,
-    onError(id: string, listener: (cause: unknown) => void) { return registry.onError(moduleName(id), listener); },
+    metadata,
+    version,
+    styles,
+    load,
+    onError(id: string, listener: (cause: unknown) => void) {
+      return registry.onError(moduleName(id), listener);
+    },
     async connect() {
       const before = changes;
       try {
@@ -162,12 +186,23 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
       }
     },
     contributions(kind: ContributionKind): SlotContribution[] {
-      return metadata().plugins.flatMap(p => (p.plugin.contributes?.[kind] ?? []).map(options => ({
-        plugin: p.plugin.id, id: options.id, kind, options,
-      })));
+      return metadata().plugins.flatMap((p) =>
+        (p.plugin.contributes?.[kind] ?? []).map((options) => ({
+          plugin: p.plugin.id,
+          id: options.id,
+          kind,
+          options,
+        })),
+      );
     },
-    reload(id: string) { invalidate([id]); },
-    dispose() { disposed = true; stop(); invalidate(metadata().plugins.map(p => p.plugin.id)); },
+    reload(id: string) {
+      invalidate([id]);
+    },
+    dispose() {
+      disposed = true;
+      stop();
+      invalidate(metadata().plugins.map((p) => p.plugin.id));
+    },
   };
 }
 export type PluginLoader = ReturnType<typeof createPluginLoader>;

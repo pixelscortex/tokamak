@@ -10,5 +10,9 @@ mount(() => {
   const transport = new InProcessTransport(createMessageConnection<Request, Event>());
   const client = new TokamakClient(transport);
   onCleanup(() => transport.close());
-  return <ClientContext.Provider value={client}><Todos /></ClientContext.Provider>;
+  return (
+    <ClientContext.Provider value={client}>
+      <Todos />
+    </ClientContext.Provider>
+  );
 });

@@ -43,9 +43,7 @@ function Demo() {
         onBlur={() => setFocus("none")}
         onKeyDown={(event) => setKey(event.key ?? "none")}
       />
-      <p id="help">
-        More than 24 characters marks the controlled input invalid.
-      </p>
+      <p id="help">More than 24 characters marks the controlled input invalid.</p>
       <p>Value: {value()}</p>
       <p>
         Focus: {focus()} · last key: {key()}
@@ -66,27 +64,14 @@ function Demo() {
       </div>
       <div class="row">
         <Button defaultPressed>Initially pressed</Button>
-        <Button
-          nativeButton={false}
-          defaultPressed={false}
-          render={(props) => <div {...props} />}
-        >
+        <Button nativeButton={false} defaultPressed={false} render={(props) => <div {...props} />}>
           Swapped div · Enter / Space
         </Button>
       </div>
       <div class="row">
-        <Input
-          label="Uncontrolled"
-          defaultValue="Buy milk"
-          description="Value is owned by Input."
-        />
+        <Input label="Uncontrolled" defaultValue="Buy milk" description="Value is owned by Input." />
         <Input label="Disabled" defaultValue="Not editable" disabled />
-        <Input
-          label="Invalid"
-          defaultValue=""
-          invalid
-          description="A task title is required."
-        />
+        <Input label="Invalid" defaultValue="" invalid description="A task title is required." />
       </div>
     </main>
   );

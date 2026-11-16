@@ -20,7 +20,9 @@ export type WireResult<R> = WireValue<Awaited<R>>;
 /** Bind finite generated references to host-mediated calls, never import handlers. */
 export type PluginCalls<T, K extends FunctionKind> =
   T extends FunctionReference<infer Kind, infer A, infer R>
-    ? Kind extends K ? (args: A) => Promise<R> : never
+    ? Kind extends K
+      ? (args: A) => Promise<R>
+      : never
     : { readonly [P in keyof T]: PluginCalls<T[P], K> };
 
 export interface Caller {
@@ -46,21 +48,25 @@ export interface MutationContext<M extends DataModel> {
 export type AcpEvent =
   | { type: "update"; update: JsonObject }
   | {
-    type: "permission";
-    requestId: string;
-    toolCall: JsonObject;
-    options: {
-      optionId: string;
-      name: string;
-      kind: "allow_once" | "allow_always" | "reject_once" | "reject_always";
-    }[];
-  }
+      type: "permission";
+      requestId: string;
+      toolCall: JsonObject;
+      options: {
+        optionId: string;
+        name: string;
+        kind: "allow_once" | "allow_always" | "reject_once" | "reject_always";
+      }[];
+    }
   | { type: "done"; stopReason: string };
 
 export interface AcpContext {
   agents(): { id: string; title: string }[];
   checkFolder(input: { path: string }): Promise<void>;
-  open(input: { agent: string; cwd: string; sessionId?: string }): Promise<{ sessionId: string; restored: boolean }>;
+  open(input: {
+    agent: string;
+    cwd: string;
+    sessionId?: string;
+  }): Promise<{ sessionId: string; restored: boolean }>;
   prompt(input: { agent: string; sessionId: string; text: string }): AsyncIterable<AcpEvent>;
   respond(input: { requestId: string; optionId: string | null }): Promise<void>;
   cancel(input: { agent: string; sessionId: string }): Promise<void>;
@@ -79,11 +85,7 @@ export interface ActionContext {
 
 const definitionBrand = Symbol("tokamak.function");
 
-export interface FunctionDefinition<
-  K extends FunctionKind = FunctionKind,
-  A = unknown,
-  R = unknown,
-> {
+export interface FunctionDefinition<K extends FunctionKind = FunctionKind, A = unknown, R = unknown> {
   readonly [definitionBrand]: true;
   readonly kind: K;
   readonly guest: boolean;
@@ -104,7 +106,10 @@ export type FunctionBuilder<K extends FunctionKind, M extends DataModel> = <
   ) => R;
 }) => FunctionDefinition<K, ObjectValue<F>, WireResult<R>>;
 
-function builder<K extends FunctionKind, M extends DataModel>(kind: K, schema?: SchemaDefinition): FunctionBuilder<K, M> {
+function builder<K extends FunctionKind, M extends DataModel>(
+  kind: K,
+  schema?: SchemaDefinition,
+): FunctionBuilder<K, M> {
   return (definition) => {
     const description = v.object(definition.args ?? {}).description;
     const handler = definition.handler;
@@ -120,26 +125,41 @@ function builder<K extends FunctionKind, M extends DataModel>(kind: K, schema?: 
         validate(description, args);
 
         const providers = async <T>(interfaceName: string) =>
-          (await callHost(host, "plugin.providers", { interface: interfaceName }))
-            .map(id => createApi<T>(id));
-        const run = async (kind: "query" | "mutation", reference: { [functionName]: string }, input: unknown) =>
+          (await callHost(host, "plugin.providers", { interface: interfaceName })).map((id) =>
+            createApi<T>(id),
+          );
+        const run = async (
+          kind: "query" | "mutation",
+          reference: { [functionName]: string },
+          input: unknown,
+        ) =>
           callHost(host, kind === "query" ? "action.runQuery" : "action.runMutation", {
-            name: reference[functionName], args: jsonSnapshot(input, "nested call args"),
+            name: reference[functionName],
+            args: jsonSnapshot(input, "nested call args"),
           });
         const caller = Object.freeze(await callHost(host, "host.caller", {}));
-        const ctx = Object.freeze(kind === "action" ? {
-          caller,
-          acp: createAcp(host),
-          env: (name: string) => callHost(host, "action.env", { name }),
-          runQuery: (reference: { [functionName]: string }, args: unknown) => run("query", reference, args),
-          runMutation: (reference: { [functionName]: string }, args: unknown) => run("mutation", reference, args),
-          providers,
-        } : {
-          caller,
-          db: kind === "query" ? createDatabase<M>(host, false, schema) : createDatabase<M>(host, true, schema),
-          use: <T>(api: T) => bindCalls(api, host),
-          providers,
-        });
+        const ctx = Object.freeze(
+          kind === "action"
+            ? {
+                caller,
+                acp: createAcp(host),
+                env: (name: string) => callHost(host, "action.env", { name }),
+                runQuery: (reference: { [functionName]: string }, args: unknown) =>
+                  run("query", reference, args),
+                runMutation: (reference: { [functionName]: string }, args: unknown) =>
+                  run("mutation", reference, args),
+                providers,
+              }
+            : {
+                caller,
+                db:
+                  kind === "query"
+                    ? createDatabase<M>(host, false, schema)
+                    : createDatabase<M>(host, true, schema),
+                use: <T>(api: T) => bindCalls(api, host),
+                providers,
+              },
+        );
         // The generic kind determines the context; the branch above enforces it
         // at runtime as well. Plugin reference kinds are erased, so the kernel
         // also enforces query-only calls. This cast never widens author types.
@@ -160,15 +180,17 @@ function createAcp(host: HostBridge): AcpContext {
     (host.op as (name: string, payload: JsonValue) => JsonValue | Promise<JsonValue>)(`acp.${name}`, payload);
   return Object.freeze({
     agents: () => op("agents", {}) as { id: string; title: string }[],
-    checkFolder: async (input: { path: string }) => { await op("checkFolder", input); },
+    checkFolder: async (input: { path: string }) => {
+      await op("checkFolder", input);
+    },
     open: async (input: { agent: string; cwd: string; sessionId?: string }) =>
-      await op("open", jsonSnapshot(input, "ACP open")) as { sessionId: string; restored: boolean },
+      (await op("open", jsonSnapshot(input, "ACP open"))) as { sessionId: string; restored: boolean },
     async *prompt(input: { agent: string; sessionId: string; text: string }): AsyncIterable<AcpEvent> {
       const stream = await op("prompt", input);
       let finished = false;
       try {
         while (!finished) {
-          const event = await op("next", { stream }) as AcpEvent;
+          const event = (await op("next", { stream })) as AcpEvent;
           finished = event.type === "done";
           yield event;
         }
@@ -176,25 +198,30 @@ function createAcp(host: HostBridge): AcpContext {
         if (!finished) await op("close", { stream });
       }
     },
-    respond: async (input: { requestId: string; optionId: string | null }) => { await op("respond", input); },
-    cancel: async (input: { agent: string; sessionId: string }) => { await op("cancel", input); },
+    respond: async (input: { requestId: string; optionId: string | null }) => {
+      await op("respond", input);
+    },
+    cancel: async (input: { agent: string; sessionId: string }) => {
+      await op("cancel", input);
+    },
   });
 }
 
 function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, FunctionKind> {
-  const bind = (reference: unknown): unknown => new Proxy(() => {}, {
-    get(_target, key) {
-      if (typeof key !== "string") return undefined;
-      return bind((reference as Record<string, unknown>)[key]);
-    },
-    apply(_target, _thisArg, argumentsList) {
-      if (argumentsList.length !== 1) throw new Error("Plugin calls require one argument object");
-      return callHost(host, "plugin.call", {
-        name: (reference as { [functionName]: string })[functionName],
-        args: jsonSnapshot(argumentsList[0], "plugin call args"),
-      });
-    },
-  });
+  const bind = (reference: unknown): unknown =>
+    new Proxy(() => {}, {
+      get(_target, key) {
+        if (typeof key !== "string") return undefined;
+        return bind((reference as Record<string, unknown>)[key]);
+      },
+      apply(_target, _thisArg, argumentsList) {
+        if (argumentsList.length !== 1) throw new Error("Plugin calls require one argument object");
+        return callHost(host, "plugin.call", {
+          name: (reference as { [functionName]: string })[functionName],
+          args: jsonSnapshot(argumentsList[0], "plugin call args"),
+        });
+      },
+    });
   return bind(api) as PluginCalls<T, FunctionKind>;
 }
 
@@ -209,7 +236,11 @@ export function createFunctions<S extends SchemaDefinition>(
   mutation: FunctionBuilder<"mutation", ModelFromSchema<S>>;
   action: FunctionBuilder<"action", ModelFromSchema<S>>;
 } {
-  return { query: builder("query", schema), mutation: builder("mutation", schema), action: builder<"action", ModelFromSchema<S>>("action", schema) };
+  return {
+    query: builder("query", schema),
+    mutation: builder("mutation", schema),
+    action: builder<"action", ModelFromSchema<S>>("action", schema),
+  };
 }
 
 export type FunctionRegistry = Readonly<Record<string, FunctionDefinition>>;

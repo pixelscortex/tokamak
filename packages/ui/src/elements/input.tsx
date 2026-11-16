@@ -28,9 +28,23 @@ export interface InputProps extends Omit<JSX.InputAttributes, "children"> {
  */
 function createInput(props: InputProps) {
   const [local, rest] = splitProps(props, [
-    "render", "value", "defaultValue", "onValueChange", "onInput", "class",
-    "disabled", "invalid", "label", "description", "id", "ref", "onFocus", "onBlur",
-    "aria-labelledby", "aria-describedby", "aria-invalid",
+    "render",
+    "value",
+    "defaultValue",
+    "onValueChange",
+    "onInput",
+    "class",
+    "disabled",
+    "invalid",
+    "label",
+    "description",
+    "id",
+    "ref",
+    "onFocus",
+    "onBlur",
+    "aria-labelledby",
+    "aria-describedby",
+    "aria-invalid",
   ]);
   const generated = `tk-input-${createUniqueId()}`;
   const id = () => local.id ?? generated;
@@ -38,48 +52,61 @@ function createInput(props: InputProps) {
   const [focused, setFocused] = createSignal(false);
   let node: NativeNode | undefined;
   const state: InputState = {
-    get disabled() { return local.disabled ?? false; },
-    get invalid() {
-      return (
-        local.invalid ??
-        (local["aria-invalid"] === true || local["aria-invalid"] === "true")
-      );
+    get disabled() {
+      return local.disabled ?? false;
     },
-    get focused() { return focused() && !state.disabled; },
+    get invalid() {
+      return local.invalid ?? (local["aria-invalid"] === true || local["aria-invalid"] === "true");
+    },
+    get focused() {
+      return focused() && !state.disabled;
+    },
   };
   const currentValue = () => local.value ?? value();
   const element = mergeProps(rest, {
     type: "text" as const,
-    get id() { return id(); },
+    get id() {
+      return id();
+    },
     "data-part": "input",
-    get class() { return ["tk-input", local.class].filter(Boolean).join(" "); },
-    get value() { return currentValue(); },
-    get disabled() { return state.disabled; },
-    get "aria-disabled"() { return state.disabled; },
-    get "aria-invalid"() { return state.invalid; },
+    get class() {
+      return ["tk-input", local.class].filter(Boolean).join(" ");
+    },
+    get value() {
+      return currentValue();
+    },
+    get disabled() {
+      return state.disabled;
+    },
+    get "aria-disabled"() {
+      return state.disabled;
+    },
+    get "aria-invalid"() {
+      return state.invalid;
+    },
     get "aria-labelledby"() {
       return (
-        [
-          local["aria-labelledby"],
-          local.label !== undefined ? `${id()}-label` : undefined,
-        ]
+        [local["aria-labelledby"], local.label !== undefined ? `${id()}-label` : undefined]
           .filter(Boolean)
           .join(" ") || undefined
       );
     },
     get "aria-describedby"() {
       return (
-        [
-          local["aria-describedby"],
-          local.description !== undefined ? `${id()}-description` : undefined,
-        ]
+        [local["aria-describedby"], local.description !== undefined ? `${id()}-description` : undefined]
           .filter(Boolean)
           .join(" ") || undefined
       );
     },
-    get "data-disabled"() { return state.disabled ? "" : undefined; },
-    get "data-invalid"() { return state.invalid ? "" : undefined; },
-    get "data-focused"() { return state.focused ? "" : undefined; },
+    get "data-disabled"() {
+      return state.disabled ? "" : undefined;
+    },
+    get "data-invalid"() {
+      return state.invalid ? "" : undefined;
+    },
+    get "data-focused"() {
+      return state.focused ? "" : undefined;
+    },
     ref(control: NativeNode) {
       node = control;
       local.ref?.(control);
@@ -94,8 +121,7 @@ function createInput(props: InputProps) {
       }
       // Native editing precedes onInput. Solid's spread skips equal values, so
       // explicitly restore a controlled value even when the owner rejects it.
-      if (node && event.value !== currentValue())
-        setProp(node, "value", currentValue());
+      if (node && event.value !== currentValue()) setProp(node, "value", currentValue());
     },
     onFocus(event: NativeEvent) {
       setFocused(true);

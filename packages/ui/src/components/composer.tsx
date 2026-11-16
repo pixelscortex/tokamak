@@ -3,9 +3,23 @@ import { Show, createSignal, untrack } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { Textarea } from "./textarea";
 import { createComposerCommands, ComposerCommandMenu } from "./composer-commands";
-import { ComposerFormFields, ComposerApprovalShelf, ComposerRunShelf, ComposerContextChips, ComposerFooter } from "./composer-parts";
+import {
+  ComposerFormFields,
+  ComposerApprovalShelf,
+  ComposerRunShelf,
+  ComposerContextChips,
+  ComposerFooter,
+} from "./composer-parts";
 import type { ComposerProps } from "./composer-types";
-export type { ComposerContext, ComposerRun, ComposerCommand, ComposerField, ComposerForm, ComposerApproval, ComposerProps } from "./composer-types";
+export type {
+  ComposerContext,
+  ComposerRun,
+  ComposerCommand,
+  ComposerField,
+  ComposerForm,
+  ComposerApproval,
+  ComposerProps,
+} from "./composer-types";
 
 export function Composer(props: ComposerProps): JSX.Element {
   const [own, setOwn] = createSignal(untrack(() => props.defaultValue ?? ""));
@@ -39,7 +53,7 @@ export function Composer(props: ComposerProps): JSX.Element {
       <ComposerFormFields {...props} ids={ids} hasShelf={hasShelf()} />
       <Show when={hasShelf()}>
         {/* Above the message: scrolls when the composer runs out of room
-          * and the text has given up its lines. */}
+         * and the text has given up its lines. */}
         <div class="flex min-h-0 shrink flex-col gap-3 overflow-y-auto px-4 pt-3 pb-3">
           <ComposerApprovalShelf {...props} ids={ids} />
           <ComposerRunShelf {...props} ids={ids} />

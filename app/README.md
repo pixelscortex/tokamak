@@ -58,7 +58,6 @@ No tests open the real user store.
 `moon run lab:test` separately checks the actual UI catalog. Physical native
 close/IME/VoiceOver and visual presentation remain separate manual acceptance.
 
-
 The application is a shared-runtime plugin shell. `bun run app` builds Chat and Todo and
 starts/reuses the independent server with `--plugins <workspace>/plugins`.
 [The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,

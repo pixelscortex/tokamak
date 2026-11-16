@@ -10,9 +10,15 @@ export async function compileCss(path: string): Promise<string> {
     from: path,
     onDependency() {},
   });
-  const automatic = compiler.root === "none" ? [] : [{
-    ...(compiler.root ?? { base: dirname(path), pattern: "**/*" }), negated: false,
-  }];
+  const automatic =
+    compiler.root === "none"
+      ? []
+      : [
+          {
+            ...(compiler.root ?? { base: dirname(path), pattern: "**/*" }),
+            negated: false,
+          },
+        ];
   // The maintained scanner owns extraction, ignores and @source semantics.
   const scanner = new Scanner({ sources: [...automatic, ...compiler.sources] });
   return compiler.build(scanner.scan());

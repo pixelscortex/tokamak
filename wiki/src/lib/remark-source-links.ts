@@ -18,19 +18,24 @@ export function remarkSourceLinks() {
     const entry = contentSources.find((entry) => entry.page === page);
     if (!entry) return;
     const walk = (node: Node) => {
-      if ((node.type === "link" || node.type === "definition" || node.type === "image") && node.url &&
-          !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(node.url)) {
+      if (
+        (node.type === "link" || node.type === "definition" || node.type === "image") &&
+        node.url &&
+        !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(node.url)
+      ) {
         const [, pathname = "", suffix = ""] = node.url.match(/^([^?#]*)(.*)$/)!;
         const target = pathname
           ? resolve(repoRoot, dirname(entry.source), decodeURI(pathname))
           : resolve(repoRoot, entry.source);
         const linked = contentSources.find((source) => resolve(repoRoot, source.source) === target);
-        node.url = linked && existsSync(target)
-          ? pageUrl(linked.page) + suffix
-          : (node.type === "image"
-              ? "https://raw.githubusercontent.com/pixelscortex/tokamak/dev/"
-              : "https://github.com/pixelscortex/tokamak/blob/dev/") +
-            relative(repoRoot, target).replaceAll("\\", "/") + suffix;
+        node.url =
+          linked && existsSync(target)
+            ? pageUrl(linked.page) + suffix
+            : (node.type === "image"
+                ? "https://raw.githubusercontent.com/pixelscortex/tokamak/dev/"
+                : "https://github.com/pixelscortex/tokamak/blob/dev/") +
+              relative(repoRoot, target).replaceAll("\\", "/") +
+              suffix;
       }
       node.children?.forEach(walk);
     };

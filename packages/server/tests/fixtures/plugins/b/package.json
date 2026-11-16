@@ -1,1 +1,6 @@
-{"name":"test-plugin-b","version":"1.0.0","private":true,"type":"module"}
+{
+  "name": "test-plugin-b",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module"
+}

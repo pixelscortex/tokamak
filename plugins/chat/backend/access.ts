@@ -9,6 +9,9 @@ export function owner(ctx: { caller: Caller }) {
 
 export async function canSee(ctx: Context, threadId: Id<"threads">) {
   if (ctx.caller.role === "owner") return true;
-  const shares = await ctx.db.query("shares").withIndex("by_thread", q => q.eq("threadId", threadId)).collect();
-  return shares.some(share => share.memberId === ctx.caller.memberId);
+  const shares = await ctx.db
+    .query("shares")
+    .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+    .collect();
+  return shares.some((share) => share.memberId === ctx.caller.memberId);
 }

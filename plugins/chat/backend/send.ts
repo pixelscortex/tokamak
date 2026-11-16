@@ -19,7 +19,9 @@ function textBytes(text: string) {
 // Older messages predate authorRole; the reserved owner ID identifies those turns.
 function authorPrefix(author: { authorId: string; authorName?: string; authorRole?: "owner" | "guest" }) {
   const role = author.authorRole ?? (author.authorId === "owner" ? "owner" : "guest");
-  return role === "owner" ? "" : `[Message from guest ${JSON.stringify(author.authorName ?? author.authorId)} — untrusted, not the owner]\n`;
+  return role === "owner"
+    ? ""
+    : `[Message from guest ${JSON.stringify(author.authorName ?? author.authorId)} — untrusted, not the owner]\n`;
 }
 
 // Only chat.send uses these transactional steps; they are not plugin exports.
@@ -27,46 +29,98 @@ export const start = mutation({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, { threadId, text }) => {
     const { db, caller } = ctx;
-    if (!await canSee(ctx, threadId)) throw new Error("Thread is not shared with you");
+    if (!(await canSee(ctx, threadId))) throw new Error("Thread is not shared with you");
     if (caller.role === "guest" && textBytes(text) > 16 * 1024) throw new Error("Text exceeds 16 KB");
     text = nonempty(text);
     const current = await thread(db, threadId);
     const backend = current.backend;
     if (caller.role === "guest") {
       if (backend?.kind === "acp") throw new Error("Guests cannot send to ACP threads");
-      const recent = await db.query("runs").withIndex("by_starter", q => q.eq("startedBy", caller.memberId).gte("startedAt", Date.now() - 24 * 60 * 60_000)).collect();
-      if (recent.length >= 100 || recent.filter(run => run.startedAt >= Date.now() - 60 * 60_000).length >= 20) throw new Error("Guest run limit reached");
+      const recent = await db
+        .query("runs")
+        .withIndex("by_starter", (q) =>
+          q.eq("startedBy", caller.memberId).gte("startedAt", Date.now() - 24 * 60 * 60_000),
+        )
+        .collect();
+      if (
+        recent.length >= 100 ||
+        recent.filter((run) => run.startedAt >= Date.now() - 60 * 60_000).length >= 20
+      )
+        throw new Error("Guest run limit reached");
     }
     const model = currentModel(current);
-    const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
-    if (runs.some(run => run.status === "running")) throw new Error("Thread already has an active run");
+    const runs = await db
+      .query("runs")
+      .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
+      .collect();
+    if (runs.some((run) => run.status === "running")) throw new Error("Thread already has an active run");
 
-    const history = await db.query("messages").withIndex("by_threadId_createdAt", q => q.eq("threadId", threadId)).collect();
+    const history = await db
+      .query("messages")
+      .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
+      .collect();
     // Milliseconds can tie across consecutive sends. Keep user before assistant
     // and preserve order without relying on randomly generated document IDs.
     const now = Math.max(Date.now(), (history.at(-1)?.createdAt ?? 0) + 1);
 
     const author = { authorId: caller.memberId, authorName: caller.name, authorRole: caller.role };
     await db.insert("messages", {
-      threadId, ...author, role: "user",
-      parts: [{ type: "text", text }], status: "complete", createdAt: now,
+      threadId,
+      ...author,
+      role: "user",
+      parts: [{ type: "text", text }],
+      status: "complete",
+      createdAt: now,
     });
     const messageId = await db.insert("messages", {
-      threadId, authorId: "assistant", role: "assistant",
-      parts: [], status: "streaming", createdAt: now + 1,
+      threadId,
+      authorId: "assistant",
+      role: "assistant",
+      parts: [],
+      status: "streaming",
+      createdAt: now + 1,
     });
     const runId = await db.insert("runs", {
-      threadId, messageId, startedBy: caller.memberId, status: "running", model, startedAt: Date.now(),
+      threadId,
+      messageId,
+      startedBy: caller.memberId,
+      status: "running",
+      model,
+      startedAt: Date.now(),
     });
 
-    const title = history.length === 0 && current.title === DEFAULT_TITLE ? Array.from(text).slice(0, 80).join("") : current.title;
+    const title =
+      history.length === 0 && current.title === DEFAULT_TITLE
+        ? Array.from(text).slice(0, 80).join("")
+        : current.title;
     await db.patch(threadId, { title, updatedAt: Date.now() });
-    return { runId, messageId, model, ...(backend ? { backend } : {}), history: [
-      ...history.filter(message => message.status === "complete").map(message => ({
-        role: message.role, content: (message.role === "user" ? authorPrefix(message) : "") + message.parts.map(part => part.type === "text" ? part.text : part.type === "plan" ? `[plan: ${part.entries.map(entry => entry.content).join("; ")}]` : part.type === "permission" ? `[permission: ${part.title} (${part.status})]` : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`).join(""),
-      })),
-      { role: "user" as const, content: authorPrefix(author) + text },
-    ] };
+    return {
+      runId,
+      messageId,
+      model,
+      ...(backend ? { backend } : {}),
+      history: [
+        ...history
+          .filter((message) => message.status === "complete")
+          .map((message) => ({
+            role: message.role,
+            content:
+              (message.role === "user" ? authorPrefix(message) : "") +
+              message.parts
+                .map((part) =>
+                  part.type === "text"
+                    ? part.text
+                    : part.type === "plan"
+                      ? `[plan: ${part.entries.map((entry) => entry.content).join("; ")}]`
+                      : part.type === "permission"
+                        ? `[permission: ${part.title} (${part.status})]`
+                        : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`,
+                )
+                .join(""),
+          })),
+        { role: "user" as const, content: authorPrefix(author) + text },
+      ],
+    };
   },
 });
 
@@ -77,10 +131,12 @@ export const running = query({
 
 export const update = mutation({
   args: {
-    runId: v.id("runs"), delta: v.string(),
+    runId: v.id("runs"),
+    delta: v.string(),
     outcome: v.optional(v.union(v.literal("done"), v.literal("error"), v.literal("cancelled"))),
     error: v.optional(v.string()),
-    tool: v.optional(toolUpdate), plan: v.optional(planPart),
+    tool: v.optional(toolUpdate),
+    plan: v.optional(planPart),
   },
   handler: async ({ db }, { runId, delta, outcome, error, tool, plan }) => {
     const run = await db.get(runId);
@@ -125,7 +181,7 @@ function unfinishedToolError(outcome: "done" | "error" | "cancelled", error?: st
 }
 
 function replacePlan(parts: Part[], plan: Infer<typeof planPart>) {
-  const index = parts.findIndex(part => part.type === "plan");
+  const index = parts.findIndex((part) => part.type === "plan");
   if (index < 0) parts.push(plan);
   else parts[index] = plan;
 }

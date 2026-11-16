@@ -13,9 +13,11 @@ export function useShares(client: TokamakClient, ownerId: string) {
   const [saving, setSaving] = createSignal(false);
   const loading = () => members.data() === undefined || shares.data() === undefined;
 
-  const guests = createMemo(() => (members.data() ?? [])
-    .filter(member => member.memberId !== ownerId)
-    .sort((a, b) => a.name.localeCompare(b.name)));
+  const guests = createMemo(() =>
+    (members.data() ?? [])
+      .filter((member) => member.memberId !== ownerId)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  );
 
   const byThread = createMemo(() => {
     const map = new Map<string, Set<string>>();

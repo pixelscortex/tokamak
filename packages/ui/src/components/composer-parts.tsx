@@ -15,7 +15,10 @@ export function ComposerFormFields(props: PartsProps & { hasShelf: boolean }): J
   return (
     <Show when={props.form}>
       {(form: Accessor<ComposerForm>) => (
-        <div id={ids("form")} class={`flex shrink-0 flex-wrap items-center gap-1.5 px-4 pt-3 ${props.hasShelf ? "" : "pb-3"}`}>
+        <div
+          id={ids("form")}
+          class={`flex shrink-0 flex-wrap items-center gap-1.5 px-4 pt-3 ${props.hasShelf ? "" : "pb-3"}`}
+        >
           <span class="flex h-[26px] items-center gap-1 rounded-sm bg-chip pr-0.5 pl-2 text-[13px] leading-4 font-medium text-ink">
             {form().tag}
             <Show when={form().onCancel}>
@@ -102,7 +105,13 @@ export function ComposerRunShelf(props: PartsProps): JSX.Element {
               <span class="shrink-0 font-data text-[11px] leading-4 text-ink-4">QUEUED</span>
               <span class="min-w-0 flex-1 truncate text-[13px] leading-4 text-ink-2">{run().queued}</span>
               <Show when={run().onCancelQueued}>
-                <Button variant="ghost" size="icon" label="Remove queued message" class="size-6" onClick={() => run().onCancelQueued?.()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  label="Remove queued message"
+                  class="size-6"
+                  onClick={() => run().onCancelQueued?.()}
+                >
                   <Icon d={icons.x} strokeWidth={2} class="size-3" />
                 </Button>
               </Show>
@@ -148,10 +157,22 @@ export function ComposerFooter(props: PartsProps & { submit: () => void; empty: 
   const empty = () => props.empty;
   return (
     <div class="flex shrink-0 items-center gap-0.5 px-2.5 pt-2.5 pb-2.5">
-      <Button id={ids("attach")} variant="ghost" size="icon" label="Attach" onClick={() => props.onAttach?.()}>
+      <Button
+        id={ids("attach")}
+        variant="ghost"
+        size="icon"
+        label="Attach"
+        onClick={() => props.onAttach?.()}
+      >
         <Icon d={icons.paperclip} class="size-4" />
       </Button>
-      <Button id={ids("mention")} variant="ghost" size="icon" label="Mention" onClick={() => props.onMention?.()}>
+      <Button
+        id={ids("mention")}
+        variant="ghost"
+        size="icon"
+        label="Mention"
+        onClick={() => props.onMention?.()}
+      >
         <Icon d={icons.atSign} class="size-4" />
       </Button>
       {props.tools}
@@ -180,12 +201,27 @@ export function ComposerFooter(props: PartsProps & { submit: () => void; empty: 
           )}
         </Match>
         <Match when={props.running}>
-          <Button id={ids("stop")} variant="primary" size="icon" round label="Stop" onClick={() => props.onStop?.()}>
+          <Button
+            id={ids("stop")}
+            variant="primary"
+            size="icon"
+            round
+            label="Stop"
+            onClick={() => props.onStop?.()}
+          >
             <span class="size-[9px] rounded-[2px] bg-base" />
           </Button>
         </Match>
         <Match when={true}>
-          <Button id={ids("send")} variant="primary" size="icon" round label="Send" disabled={empty()} onClick={submit}>
+          <Button
+            id={ids("send")}
+            variant="primary"
+            size="icon"
+            round
+            label="Send"
+            disabled={empty()}
+            onClick={submit}
+          >
             <Icon d={icons.arrowUp} strokeWidth={2.25} class="size-4" />
           </Button>
         </Match>

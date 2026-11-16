@@ -13,22 +13,35 @@ test("Tailwind extracts TSX utilities and honors shared sources/exclusions", asy
       await mkdir(resolve(scratch, name), { recursive: true });
     }
     const path = resolve(scratch, "src/styles.css");
-    await writeFile(path, `
+    await writeFile(
+      path,
+      `
       @import "tailwindcss/theme.css";
       @import "tailwindcss/utilities";
       @source "../shared";
       @source not "./excluded";
       .applied { @apply flex; }
-    `);
-    await writeFile(resolve(scratch, "src/main.tsx"),
-      '<div class="grid gap-4 w-[137px] min-[681px]:grid-cols-2 data-[active]:opacity-50 bg-[#137137]" />');
+    `,
+    );
+    await writeFile(
+      resolve(scratch, "src/main.tsx"),
+      '<div class="grid gap-4 w-[137px] min-[681px]:grid-cols-2 data-[active]:opacity-50 bg-[#137137]" />',
+    );
     await writeFile(resolve(scratch, "shared/input.tsx"), '<input class="rounded-[13px]" />');
     await writeFile(resolve(scratch, "src/excluded/demo.tsx"), '<div class="w-[999px]" />');
     await writeFile(resolve(scratch, "dist/ui.js"), '"w-[888px]"');
     const css = await compileCss(path);
-    for (const rule of [".grid {", ".gap-4 {", "width: 137px", "width >= 681px",
-      "[data-active]", "border-radius: 13px", ".applied {",
-      "background-color: #137137;"]) assert(css.includes(rule), rule);
+    for (const rule of [
+      ".grid {",
+      ".gap-4 {",
+      "width: 137px",
+      "width >= 681px",
+      "[data-active]",
+      "border-radius: 13px",
+      ".applied {",
+      "background-color: #137137;",
+    ])
+      assert(css.includes(rule), rule);
     assert(!css.includes("999px"));
     assert(!css.includes("888px"));
     assert.equal(await compileCss(path), css);
@@ -38,5 +51,7 @@ test("Tailwind extracts TSX utilities and honors shared sources/exclusions", asy
     await writeFile(path, '@import "tailwindcss/utilities" source(none); @source inline("flex");');
     const explicit = await compileCss(path);
     assert(explicit.includes(".flex {") && !explicit.includes("138px"));
-  } finally { await rm(scratch, { recursive: true, force: true }); }
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 });

@@ -4,13 +4,13 @@ Run `CARGO_BUILD_JOBS=2 moon run :e2e` (or `bun run e2e`).
 The task depends on `app:test`, which builds the original Todo sources from
 `plugins/todo` (with an isolated standalone build at `app/dist/tests/todo`) and retains their native/Solid/compiler regressions.
 
-| Scenario | Automated evidence |
-| --- | --- |
-| Add/toggle/delete | `app/tests/native.rs` drives the retired fixture's UI and real SDK/backend. |
-| Two independent clients | `run.ts` opens two WebSocket SDK connections, subscribes **both**, waits for both initial results, and requires both to receive another client's committed add. |
-| Persistence | `app/tests/e2e.rs` writes through the actual SDK/native connection, awaits shutdown, reopens the same SurrealKV folder, checks exact rows and awaits shutdown again. |
-| Headless shared storage | `run.ts` starts `tokamak` with `app/dist/tests/todo/dist/bundle.js` on the released folder and compares exact rows over WebSocket. |
-| Endless-loop recovery | A separately bundled test-only SDK feature loops on CPU. A one-worker real headless function service must report the wall-clock budget error, then complete the very next mutation on the same connection. |
+| Scenario                | Automated evidence                                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add/toggle/delete       | `app/tests/native.rs` drives the retired fixture's UI and real SDK/backend.                                                                                                                                |
+| Two independent clients | `run.ts` opens two WebSocket SDK connections, subscribes **both**, waits for both initial results, and requires both to receive another client's committed add.                                            |
+| Persistence             | `app/tests/e2e.rs` writes through the actual SDK/native connection, awaits shutdown, reopens the same SurrealKV folder, checks exact rows and awaits shutdown again.                                       |
+| Headless shared storage | `run.ts` starts `tokamak` with `app/dist/tests/todo/dist/bundle.js` on the released folder and compares exact rows over WebSocket.                                                                         |
+| Endless-loop recovery   | A separately bundled test-only SDK feature loops on CPU. A one-worker real headless function service must report the wall-clock budget error, then complete the very next mutation on the same connection. |
 
 No raw DB writes, alternate Todo schema, auth bypass, foreground simulation,
 screenshots or committed evidence. Temporary data is under ignored `target/`;

@@ -9,5 +9,5 @@ export const add = mutation({
   handler: (ctx, value) => ctx.db.insert("todos", value),
 });
 export const byText = query({
-  handler: ctx => ctx.db.query("todos").withIndex("by_owner_created").collect(),
+  handler: (ctx) => ctx.db.query("todos").withIndex("by_owner_created").collect(),
 });

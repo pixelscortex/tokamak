@@ -8,40 +8,116 @@ import { AuthorName } from "./author-name";
 import { authorInitial } from "./use-identity";
 
 export function Mark(props: { user?: boolean; initial?: string }) {
-  return <span aria-hidden="true" class={`mt-1 flex size-4 shrink-0 items-center justify-center font-label text-[10px] leading-4 ${props.user ? "bg-light text-ground" : "border border-text-3"}`}>
-    {props.user ? props.initial ?? "K" : ""}
-  </span>;
+  return (
+    <span
+      aria-hidden="true"
+      class={`mt-1 flex size-4 shrink-0 items-center justify-center font-label text-[10px] leading-4 ${props.user ? "bg-light text-ground" : "border border-text-3"}`}
+    >
+      {props.user ? (props.initial ?? "K") : ""}
+    </span>
+  );
 }
 
-export function Message(props: { loader: PluginLoader; threadId: string; message: ChatMessage; viewerId?: string; onAnswer?: (part: Permission, optionId: string) => void; liveCards?: ReadonlySet<string> }) {
-  const parts = createMemo(() => new Map(props.message.parts.map((part, index) => [
-    part.type === "tool" ? `tool:${part.callId}` : part.type === "permission" ? `permission:${part.requestId}` : `${part.type}:${index}`, part,
-  ])));
+export function Message(props: {
+  loader: PluginLoader;
+  threadId: string;
+  message: ChatMessage;
+  viewerId?: string;
+  onAnswer?: (part: Permission, optionId: string) => void;
+  liveCards?: ReadonlySet<string>;
+}) {
+  const parts = createMemo(
+    () =>
+      new Map(
+        props.message.parts.map((part, index) => [
+          part.type === "tool"
+            ? `tool:${part.callId}`
+            : part.type === "permission"
+              ? `permission:${part.requestId}`
+              : `${part.type}:${index}`,
+          part,
+        ]),
+      ),
+  );
   const partIds = createMemo(() => [...parts().keys()]);
 
   const user = () => props.message.role === "user";
-  const author = () => ({ role: props.message.authorRole ?? (props.message.authorId === "owner" ? "owner" as const : "guest" as const), name: props.message.authorName });
+  const author = () => ({
+    role:
+      props.message.authorRole ??
+      (props.message.authorId === "owner" ? ("owner" as const) : ("guest" as const)),
+    name: props.message.authorName,
+  });
 
-  return <div class="flex shrink-0 items-start gap-3" data-role={props.message.role} data-message={props.message._id} data-status={props.message.status}>
-    <Mark user={user()} initial={authorInitial(author())} />
-    <div class="min-w-0 flex-1">
-      <AuthorName message={props.message} viewerId={props.viewerId} />
-      <Show when={props.message.role === "assistant"} fallback={
-        <p class="m-0 whitespace-pre-wrap break-words text-text">{props.message.parts.map(part => part.type === "text" ? part.text : "").join("")}</p>
-      }>
-        <div class="flex flex-col gap-3"><For each={partIds()}>{id => {
-          const part = () => parts().get(id)!;
-          return id.startsWith("text:")
-            ? <Markdown text={(part() as Extract<ChatMessage["parts"][number], { type: "text" }>).text} />
-            : id.startsWith("permission:")
-            ? <PermissionPart part={part() as Permission} onAnswer={props.onAnswer ? optionId => props.onAnswer?.(part() as Permission, optionId) : undefined} />
-            : id.startsWith("plan:") ? <span class="text-text-3 font-label text-[10px]">{(part() as Extract<ChatMessage["parts"][number], { type: "plan" }>).entries.map(entry => entry.content).join(" · ")}</span>
-            : <ToolPart loader={props.loader} part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>} threadId={props.threadId} live={props.liveCards?.has((part() as Extract<ChatMessage["parts"][number], { type: "tool" }>).callId) ?? true} />;
-        }}</For></div>
-      </Show>
-      <Show when={props.message.status === "streaming"}><p role="status" class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">· working</p></Show>
-      <Show when={props.message.status === "error"}><p role="alert" class="m-0 mt-2 text-text-2">{props.message.error ?? "Unable to complete this reply"}</p></Show>
-      <Show when={props.message.status === "cancelled"}><p class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">Stopped</p></Show>
+  return (
+    <div
+      class="flex shrink-0 items-start gap-3"
+      data-role={props.message.role}
+      data-message={props.message._id}
+      data-status={props.message.status}
+    >
+      <Mark user={user()} initial={authorInitial(author())} />
+      <div class="min-w-0 flex-1">
+        <AuthorName message={props.message} viewerId={props.viewerId} />
+        <Show
+          when={props.message.role === "assistant"}
+          fallback={
+            <p class="m-0 whitespace-pre-wrap break-words text-text">
+              {props.message.parts.map((part) => (part.type === "text" ? part.text : "")).join("")}
+            </p>
+          }
+        >
+          <div class="flex flex-col gap-3">
+            <For each={partIds()}>
+              {(id) => {
+                const part = () => parts().get(id)!;
+                return id.startsWith("text:") ? (
+                  <Markdown text={(part() as Extract<ChatMessage["parts"][number], { type: "text" }>).text} />
+                ) : id.startsWith("permission:") ? (
+                  <PermissionPart
+                    part={part() as Permission}
+                    onAnswer={
+                      props.onAnswer
+                        ? (optionId) => props.onAnswer?.(part() as Permission, optionId)
+                        : undefined
+                    }
+                  />
+                ) : id.startsWith("plan:") ? (
+                  <span class="text-text-3 font-label text-[10px]">
+                    {(part() as Extract<ChatMessage["parts"][number], { type: "plan" }>).entries
+                      .map((entry) => entry.content)
+                      .join(" · ")}
+                  </span>
+                ) : (
+                  <ToolPart
+                    loader={props.loader}
+                    part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>}
+                    threadId={props.threadId}
+                    live={
+                      props.liveCards?.has(
+                        (part() as Extract<ChatMessage["parts"][number], { type: "tool" }>).callId,
+                      ) ?? true
+                    }
+                  />
+                );
+              }}
+            </For>
+          </div>
+        </Show>
+        <Show when={props.message.status === "streaming"}>
+          <p role="status" class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">
+            · working
+          </p>
+        </Show>
+        <Show when={props.message.status === "error"}>
+          <p role="alert" class="m-0 mt-2 text-text-2">
+            {props.message.error ?? "Unable to complete this reply"}
+          </p>
+        </Show>
+        <Show when={props.message.status === "cancelled"}>
+          <p class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">Stopped</p>
+        </Show>
+      </div>
     </div>
-  </div>;
+  );
 }

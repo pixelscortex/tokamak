@@ -426,12 +426,12 @@ Measured on `aarch64-apple-darwin`, Rust 1.97.0, inherited release profile:
 `opt-level=s`, LTO, symbols stripped, one codegen unit. Disk and memory remain
 reachable through a runtime path argument. No root profile or moon task changed.
 
-| Executable | Bytes | Difference from empty host |
-| --- | ---: | ---: |
-| Inherited empty `tokamak` baseline (`moon run :size`) | 286,080 | — |
-| Minimal public-SDK consumer, both engines and transaction/query path | 38,359,216 | +38,073,136 |
-| Initial data-API consumer, both engines and all CRUD/query paths plus probe assertions | 38,425,488 | +38,139,408 |
-| Owned-transaction/static-callback consumer, both engines and CRUD/query paths | 38,392,400 | +38,106,320 |
+| Executable                                                                             |      Bytes | Difference from empty host |
+| -------------------------------------------------------------------------------------- | ---------: | -------------------------: |
+| Inherited empty `tokamak` baseline (`moon run :size`)                                  |    286,080 |                          — |
+| Minimal public-SDK consumer, both engines and transaction/query path                   | 38,359,216 |                +38,073,136 |
+| Initial data-API consumer, both engines and all CRUD/query paths plus probe assertions | 38,425,488 |                +38,139,408 |
+| Owned-transaction/static-callback consumer, both engines and CRUD/query paths          | 38,392,400 |                +38,106,320 |
 
 The second and third measurements used a throwaway
 `server/examples/tkm3_probe.rs`, built with
@@ -486,7 +486,6 @@ Owned-probe formatted source SHA-256:
 `925ff075b150b08e33daf04b9576b03b4e7cb54bcf869db12e030713375c317a`.
 Owned-probe measured release executable SHA-256:
 `e0f4f4a8f97a0e277d3872d04a49cdcefc592dbaa11534b0e9829880bd75f943`.
-
 
 ## ACP agents
 

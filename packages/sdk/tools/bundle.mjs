@@ -32,10 +32,7 @@ function apiType(modules) {
   const render = (node) =>
     "{\n" +
     [...node]
-      .map(
-        ([key, value]) =>
-          `readonly ${quote(key)}: ${typeof value === "string" ? value : render(value)};`,
-      )
+      .map(([key, value]) => `readonly ${quote(key)}: ${typeof value === "string" ? value : render(value)};`)
       .join("\n") +
     "\n}";
   return render(tree);
@@ -84,10 +81,13 @@ export async function bundleFeature(folder, namespace) {
           name: "stable-feature-entry",
           setup(build) {
             build.onResolve({ filter: /^tokamak-feature:entry$/ }, () => ({
-              path: "entry", namespace: "tokamak-feature",
+              path: "entry",
+              namespace: "tokamak-feature",
             }));
             build.onLoad({ filter: /.*/, namespace: "tokamak-feature" }, () => ({
-              contents: source, loader: "ts", resolveDir: root,
+              contents: source,
+              loader: "ts",
+              resolveDir: root,
             }));
           },
         },
@@ -108,9 +108,7 @@ export async function bundleFeature(folder, namespace) {
     const scan = new Bun.Transpiler({ loader: "js" }).scan(await chunks[0].text());
     if (scan.imports.length !== 0)
       throw new Error("Feature bundle retains imports; the runtime loads only one module");
-    console.log(
-      `${relative(process.cwd(), root)} -> dist/bundle.js + source map, _generated/api.ts`,
-    );
+    console.log(`${relative(process.cwd(), root)} -> dist/bundle.js + source map, _generated/api.ts`);
 
     return {
       bundle: join(root, "dist/bundle.js"),
@@ -144,9 +142,7 @@ async function scanFiles(root) {
     if (
       parts.some(
         (part) =>
-          part.startsWith("_") ||
-          part.startsWith(".") ||
-          ["node_modules", "dist", "tests"].includes(part),
+          part.startsWith("_") || part.startsWith(".") || ["node_modules", "dist", "tests"].includes(part),
       )
     )
       continue;
@@ -187,17 +183,14 @@ async function checkFeature(root, temporary, generated, files, entry) {
     stdout: "inherit",
     stderr: "inherit",
   });
-  if (check.exitCode !== 0)
-    throw new Error("Feature type check failed (only ES2022 globals are allowed)");
+  if (check.exitCode !== 0) throw new Error("Feature type check failed (only ES2022 globals are allowed)");
 }
 
 function featureSource(root, files, modules, hasSchema) {
   const source =
     header +
     'import { createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue } from "@tokamak/sdk";\n' +
-    files
-      .map((file, i) => `import * as m${i} from ${quote(join(root, file.slice(0, -3)))};\n`)
-      .join("") +
+    files.map((file, i) => `import * as m${i} from ${quote(join(root, file.slice(0, -3)))};\n`).join("") +
     (hasSchema
       ? `import schemaValue from ${quote(join(root, "schema"))};\nexport const schema = schemaMetadata(schemaValue);\n`
       : "export const schema = schemaMetadata(null);\n") +

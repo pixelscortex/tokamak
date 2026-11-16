@@ -13,11 +13,17 @@ export interface ShellFrameProps {
   onKeyDown?: (event: NativeEvent) => void;
 }
 export function ShellFrame(props: ShellFrameProps) {
-  return <div class="shell-frame" onKeyDown={props.onKeyDown}>
-    <header class="shell-strip" window-drag>
-      <nav class="shell-switcher" aria-label="Workspace">{props.switcher}</nav>
-      <nav class="shell-navigation" aria-label="History">{props.navigation}</nav>
-    </header>
-    <main class="shell-stage">{props.stage}</main>
-  </div>;
+  return (
+    <div class="shell-frame" onKeyDown={props.onKeyDown}>
+      <header class="shell-strip" window-drag>
+        <nav class="shell-switcher" aria-label="Workspace">
+          {props.switcher}
+        </nav>
+        <nav class="shell-navigation" aria-label="History">
+          {props.navigation}
+        </nav>
+      </header>
+      <main class="shell-stage">{props.stage}</main>
+    </div>
+  );
 }

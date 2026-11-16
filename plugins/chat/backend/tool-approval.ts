@@ -10,27 +10,43 @@ export const required = query({
   args: { threadId: v.id("threads") },
   handler: async ({ db }, { threadId }) => {
     const thread = await db.get(threadId);
-    const messages = await db.query("messages").withIndex("by_threadId_createdAt", q => q.eq("threadId", threadId)).collect();
-    return messages.some(message => message.role === "user" &&
-      (message.authorRole === "guest" || (message.authorRole === undefined && message.authorId !== thread?.ownerId)));
+    const messages = await db
+      .query("messages")
+      .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
+      .collect();
+    return messages.some(
+      (message) =>
+        message.role === "user" &&
+        (message.authorRole === "guest" ||
+          (message.authorRole === undefined && message.authorId !== thread?.ownerId)),
+    );
   },
 });
 
 export async function toolApproval(
-  ctx: ActionContext, threadId: Id<"threads">, runId: Id<"runs">, buffer: ReturnType<typeof streamBuffer>,
+  ctx: ActionContext,
+  threadId: Id<"threads">,
+  runId: Id<"runs">,
+  buffer: ReturnType<typeof streamBuffer>,
 ) {
-  if (!await ctx.runQuery(api["tool-approval"].required, { threadId })) return;
+  if (!(await ctx.runQuery(api["tool-approval"].required, { threadId }))) return;
   return async (callId: string, target: ToolTarget, args: JsonValue) => {
     // JSON escapes C0 controls; strip the remaining control and format characters.
     const argumentsText = JSON.stringify(args).replace(/[\u007f-\u009f\p{Cf}]/gu, "");
-    const summary = argumentsText.length > 200
-      ? `${argumentsText.slice(0, 200)}… (${argumentsText.length - 200} more characters)` : argumentsText;
+    const summary =
+      argumentsText.length > 200
+        ? `${argumentsText.slice(0, 200)}… (${argumentsText.length - 200} more characters)`
+        : argumentsText;
     let outcome: string | null | undefined;
-    const permissions = permissionWait(ctx, runId, buffer, async (_requestId, optionId) => { outcome = optionId; });
+    const permissions = permissionWait(ctx, runId, buffer, async (_requestId, optionId) => {
+      outcome = optionId;
+    });
     const declined = new Error(DECLINED);
     try {
       await permissions.request({
-        type: "permission", requestId: `tool:${callId}`, callId,
+        type: "permission",
+        requestId: `tool:${callId}`,
+        callId,
         title: `Run ${target.plugin} tool ${target.toolName}?\n${summary}`,
         options: [
           { optionId: "allow_once", name: "Allow", kind: "allow_once" },
@@ -40,10 +56,10 @@ export async function toolApproval(
       });
       while (outcome === undefined) {
         await permissions.poll();
-        if (outcome === undefined) await new Promise(resolve => setTimeout(resolve, 100));
+        if (outcome === undefined) await new Promise((resolve) => setTimeout(resolve, 100));
       }
     } catch (error) {
-      if (!await ctx.runQuery(api.send.running, { runId })) throw declined;
+      if (!(await ctx.runQuery(api.send.running, { runId }))) throw declined;
       throw error;
     }
     if (outcome !== "allow_once") throw declined;

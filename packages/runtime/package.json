@@ -8,13 +8,13 @@
     "./modules": "./js/modules.ts",
     "./subscriptions": "./js/subscriptions.ts"
   },
+  "dependencies": {
+    "@tanstack/history": "1.162.5",
+    "@tokamak/render": "workspace:*",
+    "@tokamak/sdk": "workspace:*",
+    "solid-js": "1.9.18"
+  },
   "devDependencies": {
     "@types/node": "26.6.6"
-  },
-  "dependencies": {
-    "@tokamak/render": "workspace:*",
-    "@tanstack/history": "1.162.5",
-    "solid-js": "1.9.18",
-    "@tokamak/sdk": "workspace:*"
   }
 }

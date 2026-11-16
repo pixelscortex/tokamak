@@ -9,11 +9,34 @@
 .todo-screen {
   @apply p-6;
 }
-.todo-screen h1 { font-size: 26px; margin: 0 0 12px; }
-.todo-screen h2 { font-size: 20px; margin: 0; }
-.todo-screen p { margin: 6px 0; }
-.todo-screen .panels { @apply flex gap-4; align-items: flex-start; }
-.todo-screen .panel { @apply flex flex-col gap-3 p-4; flex: 1; min-width: 0; }
-.todo-screen .tasks { @apply flex flex-col gap-3; }
-.todo-screen .task { @apply flex gap-2; align-items: center; }
-.todo-screen .toggle { flex: 1; min-width: 0; }
+.todo-screen h1 {
+  font-size: 26px;
+  margin: 0 0 12px;
+}
+.todo-screen h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.todo-screen p {
+  margin: 6px 0;
+}
+.todo-screen .panels {
+  @apply flex gap-4;
+  align-items: flex-start;
+}
+.todo-screen .panel {
+  @apply flex flex-col gap-3 p-4;
+  flex: 1;
+  min-width: 0;
+}
+.todo-screen .tasks {
+  @apply flex flex-col gap-3;
+}
+.todo-screen .task {
+  @apply flex gap-2;
+  align-items: center;
+}
+.todo-screen .toggle {
+  flex: 1;
+  min-width: 0;
+}

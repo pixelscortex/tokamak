@@ -32,15 +32,12 @@ function App() {
     setHost(p.label);
     setCount(p.count);
   });
-  onHostEvent<{ disabled: boolean; readonly: boolean; cancel: boolean; stop: boolean }>(
-    "policy",
-    (p) => {
-      setDisabled(p.disabled);
-      setReadonly(p.readonly);
-      setCancel(p.cancel);
-      setStop(p.stop);
-    },
-  );
+  onHostEvent<{ disabled: boolean; readonly: boolean; cancel: boolean; stop: boolean }>("policy", (p) => {
+    setDisabled(p.disabled);
+    setReadonly(p.readonly);
+    setCancel(p.cancel);
+    setStop(p.stop);
+  });
   onHostEvent<{ items: string[]; visible: boolean }>("tree", (p) => {
     setItems(p.items);
     setVisible(p.visible);
@@ -142,7 +139,11 @@ function App() {
       </Show>
       <div id="clipper" style="height: 60px; width: 300px; overflow: auto; border: 2px solid black">
         <div style="height: 40px" />
-        <div id="observed" ref={(node) => (observed = node)} style={`width: 100px; height: ${tall() ? 50 : 20}px`} />
+        <div
+          id="observed"
+          ref={(node) => (observed = node)}
+          style={`width: 100px; height: ${tall() ? 50 : 20}px`}
+        />
         <div style="height: 200px" />
       </div>
       <Show when={observing() && observed}>

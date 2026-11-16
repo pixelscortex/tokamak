@@ -11,15 +11,7 @@ const runtime = await realpath(resolve(root, "src"));
 
 function checkedFiles(config) {
   const result = Bun.spawnSync(
-    [
-      process.execPath,
-      "check",
-      "--no-script",
-      "--no-pretty",
-      "--listFilesOnly",
-      "--project",
-      config,
-    ],
+    [process.execPath, "check", "--no-script", "--no-pretty", "--listFilesOnly", "--project", config],
     { stdout: "pipe", stderr: "pipe" },
   );
   const output = new TextDecoder().decode(result.stdout);
@@ -52,9 +44,7 @@ try {
   for (const file of checkedFiles(resolve(root, "tsconfig.runtime.json"))) {
     if (libraries.has(file)) continue;
     if (!isAbsolute(file) || !(await realpath(file)).startsWith(runtime + sep)) {
-      throw new Error(
-        `Runtime type dependencies must stay inside sdk/src or ES2022 libraries: ${file}`,
-      );
+      throw new Error(`Runtime type dependencies must stay inside sdk/src or ES2022 libraries: ${file}`);
     }
   }
 } finally {

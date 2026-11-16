@@ -22,7 +22,11 @@ function currentScope(): Scope | undefined {
     // liveness to the surrounding root, retaining the captured error context.
     let lifetime = owner;
     while ("fn" in lifetime && lifetime.owner) lifetime = lifetime.owner;
-    runWithOwner(lifetime, () => onCleanup(() => { captured.alive = false; }));
+    runWithOwner(lifetime, () =>
+      onCleanup(() => {
+        captured.alive = false;
+      }),
+    );
   }
   return scope;
 }
@@ -37,10 +41,18 @@ export function owned<T extends (...args: any[]) => any>(callback: T): T {
       // Finish the update batch before re-entering the owner's error handler.
       // Throwing through runWithOwner would discard valid writes queued by an
       // ordinary host callback before its failure.
-      try { result = callback(...args); }
-      catch (cause) { failure = { cause }; }
+      try {
+        result = callback(...args);
+      } catch (cause) {
+        failure = { cause };
+      }
     });
-    if (failure) { const { cause } = failure; runWithOwner(scope.owner, () => { throw cause; }); }
+    if (failure) {
+      const { cause } = failure;
+      runWithOwner(scope.owner, () => {
+        throw cause;
+      });
+    }
     return result;
   }) as T;
 }
@@ -49,7 +61,10 @@ export function flushRejections() {
   rejections.clear();
   hookFailures.length = 0;
   for (const { scope, cause } of failures) {
-    if (scope.alive) runWithOwner(scope.owner, () => { throw cause; });
+    if (scope.alive)
+      runWithOwner(scope.owner, () => {
+        throw cause;
+      });
   }
 }
 

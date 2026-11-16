@@ -10,9 +10,7 @@ export function SidebarHeader(props: { title: string; action?: string }) {
   return (
     <>
       <div class="flex h-8 shrink-0 items-center justify-between pr-1 pl-2">
-        <span class="text-[14px] leading-5 font-semibold tracking-[-0.01em] text-ink">
-          {props.title}
-        </span>
+        <span class="text-[14px] leading-5 font-semibold tracking-[-0.01em] text-ink">{props.title}</span>
         <Show when={props.action}>
           <Button variant="ghost" size="icon" label="Filter">
             <Icon d={props.action ?? ""} class="size-4" />

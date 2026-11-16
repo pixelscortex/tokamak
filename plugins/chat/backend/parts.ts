@@ -3,26 +3,40 @@ import { v, type Infer } from "@tokamak/sdk";
 
 const toolCompletion = {
   status: v.union(v.literal("running"), v.literal("done"), v.literal("error")),
-  result: v.optional(v.any()), summary: v.optional(v.string()), model: v.optional(v.string()),
-  view: v.optional(v.string()), error: v.optional(v.string()),
+  result: v.optional(v.any()),
+  summary: v.optional(v.string()),
+  model: v.optional(v.string()),
+  view: v.optional(v.string()),
+  error: v.optional(v.string()),
 };
 
 export const textPart = v.object({ type: v.literal("text"), text: v.string() });
 export const toolPart = v.object({
-  type: v.literal("tool"), callId: v.string(), plugin: v.string(), toolName: v.string(),
-  args: v.any(), ...toolCompletion,
+  type: v.literal("tool"),
+  callId: v.string(),
+  plugin: v.string(),
+  toolName: v.string(),
+  args: v.any(),
+  ...toolCompletion,
 });
 export const planPart = v.object({
   type: v.literal("plan"),
   entries: v.array(v.object({ content: v.string(), status: v.string(), priority: v.string() })),
 });
-export type Part = Infer<typeof textPart> | Infer<typeof toolPart> | Infer<typeof planPart> | Infer<typeof permissionPart>;
+export type Part =
+  | Infer<typeof textPart>
+  | Infer<typeof toolPart>
+  | Infer<typeof planPart>
+  | Infer<typeof permissionPart>;
 export type ToolPart = Infer<typeof toolPart>;
 
 export const toolUpdate = v.object({
   type: v.optional(v.literal("tool")),
-  callId: v.string(), plugin: v.optional(v.string()), toolName: v.optional(v.string()),
-  args: v.optional(v.any()), ...toolCompletion,
+  callId: v.string(),
+  plugin: v.optional(v.string()),
+  toolName: v.optional(v.string()),
+  args: v.optional(v.any()),
+  ...toolCompletion,
 });
 
 // Count UTF-8 bytes without requiring Web APIs in mutations.
@@ -50,16 +64,24 @@ export const DECLINED = "The owner declined this tool call";
 
 // Cancellation settles parts immediately, before the action observes it.
 export function declinePendingTools(parts: Part[]) {
-  const pending = new Set(parts.flatMap(part => part.type === "permission" && part.status === "pending" ? [part.callId] : []));
-  return parts.map(part => part.type === "tool" && part.status === "running" && pending.has(part.callId)
-    ? { ...part, status: "error" as const, error: DECLINED } : part);
+  const pending = new Set(
+    parts.flatMap((part) => (part.type === "permission" && part.status === "pending" ? [part.callId] : [])),
+  );
+  return parts.map((part) =>
+    part.type === "tool" && part.status === "running" && pending.has(part.callId)
+      ? { ...part, status: "error" as const, error: DECLINED }
+      : part,
+  );
 }
 
 export function interruptTools(parts: Part[], error: string) {
-  return parts.map(part => part.type === "permission" && part.status === "pending"
-    ? claimPermission({ ...part }, error === "cancelled" ? "cancelled" : "expired")
-    : part.type === "tool" && part.status === "running"
-    ? { ...part, status: "error" as const, error } : part);
+  return parts.map((part) =>
+    part.type === "permission" && part.status === "pending"
+      ? claimPermission({ ...part }, error === "cancelled" ? "cancelled" : "expired")
+      : part.type === "tool" && part.status === "running"
+        ? { ...part, status: "error" as const, error }
+        : part,
+  );
 }
 
 export function appendText(parts: Part[], text: string) {

@@ -14,15 +14,7 @@ import type { Accessor } from "solid-js";
 import type { JSX } from "@tokamak/render";
 import { dismissOutside } from "./dismiss";
 
-type Region =
-  | "top-start"
-  | "top-center"
-  | "top-end"
-  | "stage-top"
-  | "rail"
-  | "sidebar"
-  | "stage"
-  | "bottom";
+type Region = "top-start" | "top-center" | "top-end" | "stage-top" | "rail" | "sidebar" | "stage" | "bottom";
 
 interface Entry {
   content: Accessor<JSX.Element>;
@@ -108,20 +100,21 @@ function ShellFrame(props: ShellProps) {
   return (
     <ShellContext.Provider value={regions}>
       {/* Every click in the window bubbles up to here: open menus that it
-        * missed close (dismiss.ts). */}
-      <div class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink" onClick={dismissOutside}>
+       * missed close (dismiss.ts). */}
+      <div
+        class="flex h-screen w-screen flex-col overflow-hidden bg-base font-ui text-ink"
+        onClick={dismissOutside}
+      >
         <div
           window-drag
           class={`relative isolate flex shrink-0 items-center pr-2 ${
-            props.trafficLights === false
-              ? "pl-3.5"
-              : "pl-(--tk-window-buttons) [[data-fullscreen]_&]:pl-3.5"
+            props.trafficLights === false ? "pl-3.5" : "pl-(--tk-window-buttons) [[data-fullscreen]_&]:pl-3.5"
           }`}
           style={`height: ${topBar.height}px; --tk-window-buttons: ${topBar.reserve}px`}
         >
           {/* Start and end keep their design widths on wide windows and give
-            * way (down to their content) on narrow ones; the centre keeps at
-            * least 220 px, so the three never overlap. */}
+           * way (down to their content) on narrow ones; the centre keeps at
+           * least 220 px, so the three never overlap. */}
           <div class="flex w-[342px] items-center gap-1.5">
             <Slot region="top-start" />
           </div>
@@ -133,10 +126,7 @@ function ShellFrame(props: ShellProps) {
           </div>
         </div>
         <div class="flex min-h-0 flex-1 gap-2 pr-2 pb-2">
-          <div
-            id="shell-sidebar"
-            class="relative flex shrink-0 rounded-[12px] bg-sidebar"
-          >
+          <div id="shell-sidebar" class="relative flex shrink-0 rounded-[12px] bg-sidebar">
             <div
               class="relative isolate flex shrink-0 flex-col items-start"
               style={`width: ${rail.width}px; gap: ${rail.gap}px; padding-left: ${rail.inset}px`}
@@ -149,10 +139,7 @@ function ShellFrame(props: ShellProps) {
               </div>
             </div>
           </div>
-          <div
-            id="shell-stage-surface"
-            class="relative isolate min-w-0 flex-1 rounded-[12px] bg-panel"
-          >
+          <div id="shell-stage-surface" class="relative isolate min-w-0 flex-1 rounded-[12px] bg-panel">
             {/* Keep z-indexed descendants inside the stage. */}
             <div id="shell-stage" class="absolute inset-x-0 inset-y-0 z-0 overflow-y-auto rounded-[12px]">
               <Slot region="stage" />
@@ -161,8 +148,8 @@ function ShellFrame(props: ShellProps) {
               <Slot region="stage-top" />
             </div>
             {/* The bottom bar never takes more than 60% of the stage. Its
-              * content gets that as a definite limit (a flex column), so a
-              * child with `min-h-0` can give up room (the composer's text). */}
+             * content gets that as a definite limit (a flex column), so a
+             * child with `min-h-0` can give up room (the composer's text). */}
             <div class="pointer-events-none absolute inset-x-0 bottom-0 isolate flex max-h-[60%] flex-col items-center *:pointer-events-auto">
               <Slot region="bottom" />
             </div>

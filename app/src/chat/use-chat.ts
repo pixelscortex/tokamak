@@ -16,13 +16,13 @@ export function useChat(client: TokamakClient) {
   const threads = useQuery(client, api.threads.list, () => ({}));
   const [threadId, setThreadId] = createSignal<Id<"threads">>();
   const running = useQuery(client, api.runs.running, () => ({}));
-  const runs = createMemo(() => Object.fromEntries((running.data() ?? []).map(run => [run.threadId, run])));
+  const runs = createMemo(() => Object.fromEntries((running.data() ?? []).map((run) => [run.threadId, run])));
   const [error, setError] = createSignal<string>();
   const [creating, setCreating] = createSignal(false);
   let initialized = false;
   let alive = true;
 
-  const identity = useIdentity(client, cause => setError(cause));
+  const identity = useIdentity(client, (cause) => setError(cause));
   const isOwner = () => identity()?.role === "owner";
   const isGuest = () => identity()?.role === "guest";
 
@@ -59,7 +59,7 @@ export function useChat(client: TokamakClient) {
       else if (viewer.role === "owner") void createThread();
     }
     const selected = untrack(threadId);
-    if ((!selected || !list.some(thread => thread._id === selected)) && !untrack(creating)) {
+    if ((!selected || !list.some((thread) => thread._id === selected)) && !untrack(creating)) {
       setThreadId(list[0]?._id);
     }
   });
@@ -70,7 +70,7 @@ export function useChat(client: TokamakClient) {
 
   useRunRecovery(client, () => isOwner() && Boolean(running.data()?.length), setError);
 
-  const thread = createMemo(() => threads.data()?.find(item => item._id === threadId()));
+  const thread = createMemo(() => threads.data()?.find((item) => item._id === threadId()));
   const active = () => runs()[threadId() ?? ""] ?? null;
 
   // The server enforces this too; the UI only avoids offering a refused stop.
@@ -90,8 +90,22 @@ export function useChat(client: TokamakClient) {
   }
 
   return {
-    client, threads, threadId, thread, open: setThreadId, runs, active,
-    error: () => error() ?? running.error()?.message, setError, creating, createThread, cancel,
-    identity, isOwner, isGuest, canStop, sharing,
+    client,
+    threads,
+    threadId,
+    thread,
+    open: setThreadId,
+    runs,
+    active,
+    error: () => error() ?? running.error()?.message,
+    setError,
+    creating,
+    createThread,
+    cancel,
+    identity,
+    isOwner,
+    isGuest,
+    canStop,
+    sharing,
   };
 }

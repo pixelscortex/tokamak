@@ -4,8 +4,11 @@ import { permissionWait } from "./permission-wait";
 import type { streamBuffer } from "./stream-buffer";
 
 export async function readAcpTurn(
-  ctx: ActionContext, agent: string, runId: Id<"runs">,
-  buffer: ReturnType<typeof streamBuffer>, events: ReturnType<ActionContext["acp"]["prompt"]>,
+  ctx: ActionContext,
+  agent: string,
+  runId: Id<"runs">,
+  buffer: ReturnType<typeof streamBuffer>,
+  events: ReturnType<ActionContext["acp"]["prompt"]>,
 ) {
   const iterator = events[Symbol.asyncIterator]();
   const update = acpEvents(agent, buffer);
@@ -25,7 +28,9 @@ export async function readAcpTurn(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const next = await Promise.race([
       nextEvent,
-      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), Math.max(0, Math.min(100, pollAt - Date.now()))); }),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), Math.max(0, Math.min(100, pollAt - Date.now())));
+      }),
     ]).finally(() => clearTimeout(timer));
     if (!next) {
       await maintain();
@@ -37,8 +42,12 @@ export async function readAcpTurn(
     if (event.type === "update") await update(event.update);
     if (event.type === "permission") {
       await permissions.request({
-        type: "permission", requestId: event.requestId, callId: String(event.toolCall.toolCallId ?? ""),
-        title: String(event.toolCall.title ?? "Permission requested"), options: event.options, status: "pending",
+        type: "permission",
+        requestId: event.requestId,
+        callId: String(event.toolCall.toolCallId ?? ""),
+        title: String(event.toolCall.title ?? "Permission requested"),
+        options: event.options,
+        status: "pending",
       });
     }
     await buffer.maintain();

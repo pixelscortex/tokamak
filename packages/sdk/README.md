@@ -12,7 +12,7 @@ schema for table, document and filter types:
 
 ```ts
 // schema.ts
-import { defineSchema, defineTable, v } from '@tokamak/sdk';
+import { defineSchema, defineTable, v } from "@tokamak/sdk";
 export default defineSchema({
   todos: defineTable({ text: v.string(), done: v.boolean() }),
 });
@@ -20,18 +20,17 @@ export default defineSchema({
 
 ```ts
 // todos.ts
-import { createFunctions, v } from '@tokamak/sdk';
-import schema from './schema';
+import { createFunctions, v } from "@tokamak/sdk";
+import schema from "./schema";
 const { query, mutation } = createFunctions(schema);
 
 export const list = query({
   args: { done: v.boolean() },
-  handler: (ctx, { done }) =>
-    ctx.db.query('todos').where('done', '=', done).order('desc').collect(),
+  handler: (ctx, { done }) => ctx.db.query("todos").where("done", "=", done).order("desc").collect(),
 });
 export const add = mutation({
   args: { text: v.string() },
-  handler: (ctx, { text }) => ctx.db.insert('todos', { text, done: false }),
+  handler: (ctx, { text }) => ctx.db.insert("todos", { text, done: false }),
 });
 ```
 
@@ -54,15 +53,18 @@ Declare indexes on tables before loading the plugin:
 ```ts
 const schema = defineSchema({
   todos: defineTable({ owner: v.string(), text: v.string(), created: v.number() })
-    .index('by_owner_created', ['owner', 'created'])
-    .unique('by_owner_text', ['owner', 'text']),
+    .index("by_owner_created", ["owner", "created"])
+    .unique("by_owner_text", ["owner", "text"]),
 });
 const { query } = createFunctions(schema);
 const recent = query({
   args: { owner: v.string(), since: v.number() },
-  handler: (ctx, { owner, since }) => ctx.db.query('todos')
-    .withIndex('by_owner_created', q => q.eq('owner', owner).gt('created', since))
-    .order('desc').take(20),
+  handler: (ctx, { owner, since }) =>
+    ctx.db
+      .query("todos")
+      .withIndex("by_owner_created", (q) => q.eq("owner", owner).gt("created", since))
+      .order("desc")
+      .take(20),
 });
 ```
 
@@ -100,13 +102,13 @@ itself is never retried; external effects and earlier mutations remain after a
 later failure. Queries and mutations cannot call actions or fetch.
 
 ```ts
-import type {} from '@tokamak/sdk/web';
-import { action } from '@tokamak/sdk';
-import { api } from './_generated/api';
+import type {} from "@tokamak/sdk/web";
+import { action } from "@tokamak/sdk";
+import { api } from "./_generated/api";
 
 export const sync = action({
-  handler: async ctx => {
-    const response = await fetch('https://example.com/data');
+  handler: async (ctx) => {
+    const response = await fetch("https://example.com/data");
     if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
     return ctx.runMutation(api.records.save, { value: await response.json() });
   },
@@ -170,11 +172,11 @@ aliases, consumers of its generated API must share those compiler settings,
 because checking the references also checks the backend source types.
 
 ```ts
-import { TokamakClient } from '@tokamak/sdk';
-import { api } from './_generated/api';
+import { TokamakClient } from "@tokamak/sdk";
+import { api } from "./_generated/api";
 const client = new TokamakClient(transport); // see concrete transports below
 const rows = await client.query(api.todos.list, { done: false });
-const id = await client.mutation(api.todos.add, { text: 'Read this' });
+const id = await client.mutation(api.todos.add, { text: "Read this" });
 const stop = client.subscribe(api.todos.list, { done: false }, (event) => {
   // event is { value: typeof rows } | { error: Error }
 });
@@ -192,7 +194,7 @@ it has not returned a disposer. There is no reconnect/retry.
 ### Concrete transports (TKM-7)
 
 ```ts
-import { TokamakClient, InProcessTransport, WebSocketTransport } from '@tokamak/sdk';
+import { TokamakClient, InProcessTransport, WebSocketTransport } from "@tokamak/sdk";
 // Native host owns a server Session and implements MessageConnection: send a
 // generated Request through Tower, feed its ordered Event stream to listen,
 // and drop Session when close/dispose runs. No port is opened.
@@ -290,7 +292,7 @@ Bun 1.4.4 probes (2026-11-06):
   libraries (including DOM) and external declaration files are rejected.
 - [Rolldown 1.3.0](https://rolldown.rs/guide/getting-started#using-the-api), released
   2026-11-05: `rolldown({ input, platform: 'neutral' }).generate({ format: 'esm',
-sourcemap: true, codeSplitting: false })` is a maintained alternative. npm
+  sourcemap: true, codeSplitting: false })` is a maintained alternative. npm
   reports 981,872 unpacked bytes plus 18,524,990 bytes for the macOS arm64 binding.
 - [oxc-parser 0.157.0](https://oxc.rs/docs/guide/usage/parser), released 2026-11-02:
   `parseSync(filename, source)` exposes ESTree and ESM information; npm reports

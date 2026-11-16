@@ -24,9 +24,11 @@ import { definePlugin } from "@tokamak/sdk";
 import { tokamak } from "@tokamak/build/vite";
 
 export default defineConfig({
-  plugins: [tokamak({
-    plugin: definePlugin({ id: "acme.notes", version: "0.1.0" }),
-  })],
+  plugins: [
+    tokamak({
+      plugin: definePlugin({ id: "acme.notes", version: "0.1.0" }),
+    }),
+  ],
 });
 ```
 

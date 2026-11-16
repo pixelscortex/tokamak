@@ -1,15 +1,26 @@
-import { functionName, type ActionContext, type FunctionReference, type ToolDescription, type ToolOutput, type JsonValue } from "@tokamak/sdk";
+import {
+  functionName,
+  type ActionContext,
+  type FunctionReference,
+  type ToolDescription,
+  type ToolOutput,
+  type JsonValue,
+} from "@tokamak/sdk";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
 import { checkToolArgs } from "./parts";
 
-type ToolsApi = { tools: {
-  describe: FunctionReference<"query", Record<string, never>, ToolDescription[]>;
-  invoke: FunctionReference<"mutation", { name: string; args: JsonValue; threadId: string }, ToolOutput>;
-} };
+type ToolsApi = {
+  tools: {
+    describe: FunctionReference<"query", Record<string, never>, ToolDescription[]>;
+    invoke: FunctionReference<"mutation", { name: string; args: JsonValue; threadId: string }, ToolOutput>;
+  };
+};
 export type ToolTarget = { plugin: string; toolName: string };
 
 export async function discoverTools(
-  ctx: ActionContext, threadId: string, running: () => Promise<boolean>,
+  ctx: ActionContext,
+  threadId: string,
+  running: () => Promise<boolean>,
   acknowledged: (callId: string) => Promise<unknown>,
   approve?: (callId: string, target: ToolTarget, args: JsonValue) => Promise<void>,
 ) {
@@ -25,7 +36,8 @@ export async function discoverTools(
       const target = { plugin, toolName: description.name };
       targets.set(name, target);
       tools[name] = dynamicTool({
-        description: description.description, inputSchema: jsonSchema(description.parameters),
+        description: description.description,
+        inputSchema: jsonSchema(description.parameters),
         toModelOutput: ({ output }) => {
           const out = output as ToolOutput;
           return { type: "text", value: out.model ?? JSON.stringify(out.result) };
@@ -35,15 +47,22 @@ export async function discoverTools(
           seen.add(toolCallId);
           const execute = async () => {
             checkToolArgs(args);
-            if (!await running()) throw new Error("cancelled");
-            if (await acknowledged(toolCallId) !== "running") throw new Error("cancelled");
+            if (!(await running())) throw new Error("cancelled");
+            if ((await acknowledged(toolCallId)) !== "running") throw new Error("cancelled");
             await approve?.(toolCallId, target, args as JsonValue);
-            if (!await running()) throw new Error("cancelled");
-            const out = await ctx.runMutation(provider.tools.invoke, { name: description.name, args: args as JsonValue, threadId });
+            if (!(await running())) throw new Error("cancelled");
+            const out = await ctx.runMutation(provider.tools.invoke, {
+              name: description.name,
+              args: args as JsonValue,
+              threadId,
+            });
             return out;
           };
           const result = lock.then(execute);
-          lock = result.then(() => {}, () => {});
+          lock = result.then(
+            () => {},
+            () => {},
+          );
           return result;
         },
       });

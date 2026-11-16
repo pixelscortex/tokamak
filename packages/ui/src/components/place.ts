@@ -73,8 +73,7 @@ export function place(o: PlaceOptions): Placement {
     );
   const preferred: Side = o.side === "top" ? "top" : "bottom";
   const other: Side = preferred === "top" ? "bottom" : "top";
-  const side =
-    room(preferred) >= size.height || room(other) <= room(preferred) ? preferred : other;
+  const side = room(preferred) >= size.height || room(other) <= room(preferred) ? preferred : other;
   const maxHeight = room(side);
   const height = Math.min(size.height, maxHeight);
   const y = side === "bottom" ? anchor.y + anchor.height + offset : anchor.y - offset - height;

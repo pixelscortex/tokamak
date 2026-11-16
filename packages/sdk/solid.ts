@@ -45,7 +45,6 @@ export function useQuery<A, R>(
   return { data, loading, error };
 }
 
-
 /** The shell supplies its already-connected client; plugins never own sockets. */
 export const ClientContext = createContext<TokamakClient>();
 export function useClient(): TokamakClient {

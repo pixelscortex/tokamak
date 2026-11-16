@@ -12,9 +12,11 @@ export interface FunctionReference<K extends FunctionKind, A, R> {
 }
 
 export type ApiFromModule<M> = {
-  readonly [
-    E in keyof M as M[E] extends FunctionDefinition ? E : never
-  ]: M[E] extends FunctionDefinition<infer K, infer A, infer R>
+  readonly [E in keyof M as M[E] extends FunctionDefinition ? E : never]: M[E] extends FunctionDefinition<
+    infer K,
+    infer A,
+    infer R
+  >
     ? FunctionReference<K, A, R>
     : never;
 };

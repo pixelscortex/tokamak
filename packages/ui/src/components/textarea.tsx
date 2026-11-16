@@ -76,10 +76,16 @@ export function Textarea(props: TextareaProps): JSX.Element {
   const blockCaret = () => props.caret === "block";
   let node: NativeNode | undefined;
   const line = () => textareaLine[props.size ?? "md"];
-  const type = () => props.size === "xs" ? "text-[12px] leading-5"
-    : props.size === "sm" ? "text-[13px] leading-5" : "text-[15px] leading-6";
-  const appearance = () => props.appearance === "inherit" ? "font-[family-name:inherit] text-inherit" : "font-ui text-ink";
-  const rows = () => `min-height: ${(props.minRows ?? 1) * line()}px; max-height: ${(props.maxRows ?? 8) * line()}px`;
+  const type = () =>
+    props.size === "xs"
+      ? "text-[12px] leading-5"
+      : props.size === "sm"
+        ? "text-[13px] leading-5"
+        : "text-[15px] leading-6";
+  const appearance = () =>
+    props.appearance === "inherit" ? "font-[family-name:inherit] text-inherit" : "font-ui text-ink";
+  const rows = () =>
+    `min-height: ${(props.minRows ?? 1) * line()}px; max-height: ${(props.maxRows ?? 8) * line()}px`;
   function input(event: NativeEvent) {
     if (props.disabled || props.readonly) return;
     const next = event.value ?? "";
@@ -98,9 +104,11 @@ export function Textarea(props: TextareaProps): JSX.Element {
     }
   }
   return (
-    <div class={`grid min-h-0 grid-rows-[minmax(0,1fr)] ${blockCaret() ? "relative" : ""} ${props.class ?? ""}`}>
+    <div
+      class={`grid min-h-0 grid-rows-[minmax(0,1fr)] ${blockCaret() ? "relative" : ""} ${props.class ?? ""}`}
+    >
       {/* The mirror: sizes the cell. The trailing space gives a final empty
-        * line its height. */}
+       * line its height. */}
       <div
         aria-hidden="true"
         class={`invisible col-start-1 row-start-1 overflow-hidden break-words whitespace-pre-wrap ${blockCaret() ? "pr-2" : ""} ${type()}`}
@@ -138,24 +146,26 @@ export function Textarea(props: TextareaProps): JSX.Element {
         {untrack(current)}
       </textarea>
       <Show when={current() === "" && props.placeholder}>
-        <span class={`pointer-events-none col-start-1 row-start-1 truncate ${blockCaret() && caret() ? "pl-4" : ""} ${props.appearance === "inherit" ? "text-(--textarea-placeholder)" : "text-ink-4"} ${type()}`}>
+        <span
+          class={`pointer-events-none col-start-1 row-start-1 truncate ${blockCaret() && caret() ? "pl-4" : ""} ${props.appearance === "inherit" ? "text-(--textarea-placeholder)" : "text-ink-4"} ${type()}`}
+        >
           {props.placeholder}
         </span>
       </Show>
-      <Show when={blockCaret() && caret()}>{(box: Accessor<NonNullable<NativeEvent["caret"]>>) => (
-        <BlockCaret box={box()} />
-      )}</Show>
+      <Show when={blockCaret() && caret()}>
+        {(box: Accessor<NonNullable<NativeEvent["caret"]>>) => <BlockCaret box={box()} />}
+      </Show>
     </div>
   );
 }
 
 function BlockCaret(props: { box: NonNullable<NativeEvent["caret"]> }) {
   return (
-        <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
-          <span
-            class="absolute"
-            style={`left: ${props.box.x}px; top: ${props.box.y + 2}px; width: ${props.box.atEnd ? 8 : 2}px; height: ${Math.max(0, props.box.height - 4)}px; background-color: var(--textarea-caret, var(--color-light))`}
-          />
-        </div>
+    <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
+      <span
+        class="absolute"
+        style={`left: ${props.box.x}px; top: ${props.box.y + 2}px; width: ${props.box.atEnd ? 8 : 2}px; height: ${Math.max(0, props.box.height - 4)}px; background-color: var(--textarea-caret, var(--color-light))`}
+      />
+    </div>
   );
 }

@@ -88,7 +88,10 @@ function split(raw: string): { comments: string; code: string } {
     }
     break;
   }
-  const comments = lines.slice(0, index).filter((line) => line.trim() !== "").join("\n");
+  const comments = lines
+    .slice(0, index)
+    .filter((line) => line.trim() !== "")
+    .join("\n");
   return { comments, code: lines.slice(index).join("\n") };
 }
 

@@ -1,10 +1,5 @@
 /** Action/toggle behavior; native button activation stays in the renderer. */
-import {
-  createRenderEffect,
-  createSignal,
-  mergeProps,
-  splitProps,
-} from "solid-js";
+import { createRenderEffect, createSignal, mergeProps, splitProps } from "solid-js";
 import { dispatchClick } from "@tokamak/render";
 import type { JSX, NativeEvent, NativeNode } from "@tokamak/render";
 
@@ -35,17 +30,34 @@ export interface ButtonProps extends JSX.ButtonAttributes {
  */
 export function Button(props: ButtonProps): JSX.Element {
   const [local, rest] = splitProps(props, [
-    "render", "pressed", "defaultPressed", "onPressedChange", "class", "disabled",
-    "onClick", "onFocus", "onBlur", "nativeButton", "onKeyDown", "onKeyUp", "tabindex", "ref",
+    "render",
+    "pressed",
+    "defaultPressed",
+    "onPressedChange",
+    "class",
+    "disabled",
+    "onClick",
+    "onFocus",
+    "onBlur",
+    "nativeButton",
+    "onKeyDown",
+    "onKeyUp",
+    "tabindex",
+    "ref",
   ]);
   const [pressed, setPressed] = createSignal(local.defaultPressed ?? false);
   const [focused, setFocused] = createSignal(false);
-  const toggles = () =>
-    local.pressed !== undefined || local.defaultPressed !== undefined;
+  const toggles = () => local.pressed !== undefined || local.defaultPressed !== undefined;
   const state: ButtonState = {
-    get pressed() { return local.pressed ?? pressed(); },
-    get disabled() { return local.disabled ?? false; },
-    get focused() { return focused() && !state.disabled; },
+    get pressed() {
+      return local.pressed ?? pressed();
+    },
+    get disabled() {
+      return local.disabled ?? false;
+    },
+    get focused() {
+      return focused() && !state.disabled;
+    },
   };
   const native = () => local.nativeButton !== false;
   let node: NativeNode | undefined;
@@ -61,8 +73,7 @@ export function Button(props: ButtonProps): JSX.Element {
     local.onPressedChange?.(next, event);
   }
   function click() {
-    if (!node)
-      throw new Error("Button render must forward ref to its native element");
+    if (!node) throw new Error("Button render must forward ref to its native element");
     dispatchClick(node);
   }
   const keyboard = buttonKeyboard(local, state, native, click);
@@ -71,21 +82,37 @@ export function Button(props: ButtonProps): JSX.Element {
       node = control;
       local.ref?.(control);
     },
-    get type() { return native() ? ("button" as const) : undefined; },
-    get role() { return native() ? rest.role : "button"; },
+    get type() {
+      return native() ? ("button" as const) : undefined;
+    },
+    get role() {
+      return native() ? rest.role : "button";
+    },
     get tabindex() {
-      return state.disabled && !native()
-        ? -1
-        : (local.tabindex ?? (native() ? undefined : 0));
+      return state.disabled && !native() ? -1 : (local.tabindex ?? (native() ? undefined : 0));
     },
     "data-part": "button",
-    get class() { return ["tk-button", local.class].filter(Boolean).join(" "); },
-    get disabled() { return native() ? state.disabled : undefined; },
-    get "aria-disabled"() { return state.disabled; },
-    get "aria-pressed"() { return toggles() ? state.pressed : undefined; },
-    get "data-pressed"() { return toggles() && state.pressed ? "" : undefined; },
-    get "data-disabled"() { return state.disabled ? "" : undefined; },
-    get "data-focused"() { return state.focused ? "" : undefined; },
+    get class() {
+      return ["tk-button", local.class].filter(Boolean).join(" ");
+    },
+    get disabled() {
+      return native() ? state.disabled : undefined;
+    },
+    get "aria-disabled"() {
+      return state.disabled;
+    },
+    get "aria-pressed"() {
+      return toggles() ? state.pressed : undefined;
+    },
+    get "data-pressed"() {
+      return toggles() && state.pressed ? "" : undefined;
+    },
+    get "data-disabled"() {
+      return state.disabled ? "" : undefined;
+    },
+    get "data-focused"() {
+      return state.focused ? "" : undefined;
+    },
     onClick: activate,
     onKeyDown: keyboard.onKeyDown,
     onKeyUp: keyboard.onKeyUp,
@@ -140,6 +167,8 @@ function buttonKeyboard(props: ButtonProps, state: ButtonState, native: () => bo
         click();
       }
     },
-    reset() { spaceArmed = false; },
+    reset() {
+      spaceArmed = false;
+    },
   };
 }
