@@ -1,0 +1,28 @@
+packages/server/tests/chat_sharing.rs
+  s_e330fd84c38107::t_289a47f2147ce8 580,596-597
+  s_e330fd84c38107::t_6c9b5ea120de67 428-431,576-579,581-595,598
+plugins/chat/backend/send.ts
+  s_e330fd84c38107::t_6c9b5ea120de67 19-24,50,52,67,69
+plugins/chat/backend/members.ts
+  s_e330fd84c38107::t_6c9b5ea120de67 7
+plugins/chat/backend/schema.ts
+  s_e330fd84c38107::t_6c9b5ea120de67 19
+plugins/chat/README.md
+  s_e330fd84c38107::t_01e0fe741347c4 51,76-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b8f0423c1e260b5db68215cabbf99761a24210d",
+  "prompts": {},
+  "sessions": {
+    "s_e330fd84c38107": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e241-d56b-77a1-9d34-3f0d896f0313",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
