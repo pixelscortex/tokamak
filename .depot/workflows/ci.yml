@@ -3,7 +3,6 @@ on:
   pull_request:
     paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   push:
-    branches: [main]
     paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   merge_group:
   workflow_dispatch:
@@ -21,13 +20,12 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.ci/setup
-      - run: moon run workspace:ci-ts --summary detailed
-      - name: Report ACP tests to Depot
-        if: ${{ !cancelled() && hashFiles('.ci-results/acp.xml') != '' }}
-        uses: depot/test-report-action@2ad5779840a9c63e884fa26f11d019768a27a941 # v1
         with:
-          path: .ci-results/acp.xml
+          native: "false"
+      - run: moon run workspace:ci-ts --summary detailed
   native:
+    # Warm native validation still took almost 14 minutes; keep it off PRs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: typescript
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 60
@@ -53,35 +51,40 @@ jobs:
       - run: moon run workspace:ci-native --summary detailed
       - if: always()
         run: sccache --show-stats
-      - name: Release server (main only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          moon run workspace:build-release
-          mkdir -p .ci-results
-          tar -czf .ci-results/server-linux-x64.tar.gz -C target/release tokamak
-      # Signing, release publication and deployment will follow artifact validation.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Report ACP tests to Depot
+        if: ${{ !cancelled() && hashFiles('.ci-results/acp.xml') != '' }}
+        uses: depot/test-report-action@2ad5779840a9c63e884fa26f11d019768a27a941 # v1
         with:
-          name: server-linux-x64
-          path: .ci-results/server-linux-x64.tar.gz
-          if-no-files-found: error
-          retention-days: 7
-  release-arm64:
+          path: .ci-results/acp.xml
+  release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: native
-    runs-on: depot-ubuntu-24.04-arm
-    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: depot-ubuntu-24.04
+            arch: x64
+          - runner: depot-ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: write # Depot's built-in GitHub App token can stage release assets.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
       - uses: ./.ci/setup
       - run: |
           moon run workspace:build-release
           mkdir -p .ci-results
-          tar -czf .ci-results/server-linux-arm64.tar.gz -C target/release tokamak
+          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak
+      - name: Stage this commit's release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun .ci/release.mjs stage .ci-results/server-linux-${{ matrix.arch }}.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: server-linux-arm64
-          path: .ci-results/server-linux-arm64.tar.gz
+          name: server-linux-${{ matrix.arch }}
+          path: .ci-results/server-linux-${{ matrix.arch }}.tar.gz*
           if-no-files-found: error
           retention-days: 7

@@ -22,13 +22,13 @@ tasks:
       - "!/.ci-results/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
-    outputs: [".ci-results/acp.xml"]
     options:
       cache: true
       outputStyle: stream
   ci-native:
     command: "bash .ci/check.sh native"
     inputs: *ci-inputs
+    outputs: [".ci-results/acp.xml"]
     options:
       cache: true
       outputStyle: stream

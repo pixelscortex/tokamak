@@ -23,20 +23,21 @@ names remain unchanged; `app` and `lab` are separate application projects.
 
 ## CI
 
-Linux checks run on Depot CI for relevant pull requests, pushes to `main`, and
-merge queues. A 2 CPU job runs formatting, TS lint, typechecks, SDK tests and
-`bun test` in `plugins/acp` before native validation. Native validation includes
-the existing moon check/test tasks, workspace Rust tests, and offline headless
-Vello captures using Mesa lavapipe on Linux and Metal on macOS. Clippy retains
-the local gate's advisory behavior. Login-dependent adapter smoke tests stay
-ignored; CI does not use personal adapter logins.
+Depot CI runs a fast 2 CPU Linux gate on pull requests, pushes to any branch,
+and merge queues: formatting (including Rust), TS lint/typechecks, SDK build/type
+and unit tests, and release coordination tests. Documentation-only changes
+(markdown, `docs/`, `wiki/`, `.tmp/`) skip CI. Per-ref concurrency cancels older runs.
 
-macOS uses Depot's `depot-macos-latest` GitHub Actions runner on `main` and for
-PRs that change native code, build tooling, or toolchain configuration. Add the
-`ci:macos` label to request it for any PR. Documentation-only changes skip Linux
-and macOS native checks (the macOS path selector is a small GitHub-hosted job).
+Rust compilation/clippy, native tests, the 51-second ACP Bun suite, and offline
+Vello captures run on `main`. A measured native run took almost 14 minutes even
+with compiler cache hits, so this heavier gate stays off ordinary PRs. macOS uses
+Depot's `depot-macos-latest` Actions runner on `main`; on a PR it runs only with
+the explicit `ci:macos` label. It checks the full gate using Metal. Linux uses
+Mesa lavapipe for headless rendering. Login-dependent adapter tests stay ignored;
+the interactive GUI smoke task remains manual because it needs a window server.
+Clippy retains the local gate's advisory behavior.
 
-Run Linux against your local worktree, including staged new workflow files:
+Run the Linux workflow against your local worktree (a branch runs only fast checks):
 
 ```sh
 depot ci run --workflow .depot/workflows/ci.yml
@@ -44,25 +45,30 @@ depot ci run --workflow .depot/workflows/ci.yml
 depot ci run --workflow .depot/workflows/ci.yml --job typescript
 ```
 
-Both platforms use Depot Cache for moon verification results, Rust compilation
-through sccache, Cargo registry/git downloads, Bun downloads, and pinned
-proto/moon/Bun/Rust installs. Verification stages hash workspace sources and
-platform identity because the native/type fixtures span package boundaries;
-CI runs the full gate rather than trusting an incomplete affected project graph.
-Generated files and dependency directories are excluded from source hashes.
+Depot Cache stores moon results and release binaries, Rust compiler objects via
+sccache, Cargo registry/git downloads, Bun downloads and pinned proto/moon/Rust
+installs. The fast job skips Cargo downloads, clippy and sccache installation.
+Verification stages hash workspace sources and platform identity because fixtures
+and imports span project boundaries; CI uses the full fast gate instead of an
+incomplete affected-project graph. Generated files and dependencies are excluded.
 Export `DEPOT_TOKEN` locally to share moon's remote cache; without it, moon
-disables remote caching (with a warning) and local commands work normally.
-For local Rust cache sharing, use `depot cargo` or configure sccache with Depot's
+disables remote storage with a warning and local commands work normally.
+For local Rust cache sharing use `depot cargo`, or configure sccache with Depot's
 WebDAV endpoint and your Depot token. CI uses injected short-lived credentials.
 
-ACP tests also emit JUnit XML for Depot's test results dashboard, including on
-failed runs. Cached TS verification restores its report along with its result.
-Use `depot tests <run-id> --job typescript` to inspect those tests in the CLI;
-the remaining suites currently report through normal workflow logs.
+ACP emits JUnit XML for Depot's test results dashboard, including failed runs.
+Moon restores the report when the heavy verification stage is cached. Inspect it
+with `depot tests <run-id> --job native`; other suites use workflow logs.
 
-On `main`, CI builds server binaries for Linux x64/arm64 and desktop + server
-binaries for macOS arm64, retained as workflow artifacts for 7 days. Signing,
-release publication and deployment will be added after artifact validation.
+After the main gates pass, Linux server binaries (x64/arm64) and macOS server +
+desktop binaries (arm64) are archived with SHA-256 checksums. Each platform stages
+assets in a draft for that commit; the Actions publisher replaces the single
+[`nightly` prerelease](https://github.com/pixelscortex/tokamak/releases/tag/nightly)
+only when all four archives are present, valid, and still match `main`. The prior
+nightly remains until the complete replacement is ready. Publication uses the
+built-in `GITHUB_TOKEN` with `contents: write` on Depot and Actions, with no extra
+secret. Workflow artifacts are also retained for 7 days. Signing and macOS
+notarization will be added before packaging; deployment remains a later step.
 
 ## Quick start
 
