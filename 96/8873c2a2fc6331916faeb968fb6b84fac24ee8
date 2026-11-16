@@ -1,0 +1,94 @@
+packages/server/tests/fixtures/worker/src/server/actions.ts
+  s_67a9197b01ecd1::t_8bf7d989e398c4 93-212,215-217
+  s_67a9197b01ecd1::t_3d53d289b68d73 213-214
+packages/server/src/host/worker/sandbox/macos.rs
+  s_67a9197b01ecd1::t_a43779c98b8b48 1-5,13,19-22,35-39,41,67
+  s_67a9197b01ecd1::t_bfb2fb13375711 6,8-12,14-18,23-32,34,43-44,48,55-66
+  s_67a9197b01ecd1::t_62eabc64cee247 7,33,40,42,45-47,49-54,68-70
+plugins/acp/plugin.ts
+  s_67a9197b01ecd1::t_bfb2fb13375711 9-13,16-24
+  s_67a9197b01ecd1::t_3c41f1651db2f3 14-15
+packages/server/src/host/worker/mod.rs
+  s_67a9197b01ecd1::t_e239c819d017c5 5,47,55-57,75,113-114,117-119,129-131,181,191-193,206,210-211,214,222,230
+  s_67a9197b01ecd1::t_bfb2fb13375711 58,91-112,115-116,120-122,132,194-205,207-209,215-218,220-221,225-229
+  s_67a9197b01ecd1::t_ac4fbdbc8ea8f6 59,73,88-90,133,137,142,151-154,157,171-172,182,184-185,212-213,219,223-224,231
+packages/server/tests/fixtures/worker/plugin.ts
+  s_67a9197b01ecd1::t_bfb2fb13375711 2
+  s_67a9197b01ecd1::t_e1330ace1b3335 3-7
+packages/sdk/src/plugin.ts
+  s_67a9197b01ecd1::t_a43779c98b8b48 17
+  s_67a9197b01ecd1::t_9b5d5801838bba 18-21,88,143-158
+packages/server/src/service/action_coordination.rs
+  s_67a9197b01ecd1::t_bfb2fb13375711 10-25
+packages/server/src/host/worker/process.rs
+  s_67a9197b01ecd1::t_e239c819d017c5 59-60,79-81,83-84,87,89-90,93-99,126
+  s_67a9197b01ecd1::t_bfb2fb13375711 65-68,73-74
+  s_67a9197b01ecd1::t_b7cb45822e38e8 69-72,75-78,82,127
+packages/server/src/plugins/manifest.rs
+  s_67a9197b01ecd1::t_a43779c98b8b48 11-19,27-28,57-59,196,202
+  s_67a9197b01ecd1::t_bfb2fb13375711 20-26,197-201,203
+plugins/acp/README.md
+  s_67a9197b01ecd1::t_3e5ace48d8a528 44,53-71
+packages/server/tests/workers.rs
+  s_67a9197b01ecd1::t_8bf7d989e398c4 51-53,60-67,461-522
+  s_67a9197b01ecd1::t_bfb2fb13375711 394-401
+plugins/acp/src/server/backend.ts
+  s_67a9197b01ecd1::t_bfb2fb13375711 15-17
+packages/sdk/tests/plugin.test.mjs
+  s_67a9197b01ecd1::t_8bf7d989e398c4 93-103
+  s_67a9197b01ecd1::t_cdebf13ae7c7c8 87-92,104
+packages/server/src/host/worker/sandbox/mod.rs
+  s_67a9197b01ecd1::t_a43779c98b8b48 1-5,7-16,18-28,34-38,53,57-60,68-73,77-83,85,161,170,180,198,214,225-233,237,241,246-248,252,257,262-270
+  s_67a9197b01ecd1::t_e239c819d017c5 6
+  s_67a9197b01ecd1::t_bfb2fb13375711 17,29-33,39-52,54-56,61-67,74-76,84,86-160,162-169,171-179,181-197,199-200,205-213,220,223-224,234-236,238-240,242-245,249-251,253-256,258-261
+  s_67a9197b01ecd1::t_765a9a6d6de71d 201-203
+  s_67a9197b01ecd1::t_de0fcb85f54101 204,215-219,221-222
+README.md
+  s_67a9197b01ecd1::t_8bf7d989e398c4 229-230,256-257
+  s_67a9197b01ecd1::t_3e5ace48d8a528 93,204-228,231-239,242-255,258-265
+  s_67a9197b01ecd1::t_e35edcbc93c81b 240-241
+packages/server/src/plugins/loading.rs
+  s_67a9197b01ecd1::t_e239c819d017c5 102
+  s_67a9197b01ecd1::t_cf41f4a06d7284 100
+packages/server/src/host/worker/sandbox/linux.rs
+  s_67a9197b01ecd1::t_bfb2fb13375711 4-8,16-22,24-28,30-33,38-40,45-48,66-73,76-79,82-85,88-136,138-142,144-145,147-149,151-162,167-179,181-182,185-216,221-228,235-250,256-261,263-286,293,298-301,307-328
+  s_67a9197b01ecd1::t_e239c819d017c5 1,9,23,29,34-37,42-44,49-64,74-75,80-81,86-87,137,143,146,150,163-166,183,233-234,251-255,262,302-306,329-333
+  s_67a9197b01ecd1::t_da9f440a58c71c 2-3,10-15,41,65,180,184,217-220,229-232,287-292,294-297
+packages/server/tests/actions.rs
+  s_67a9197b01ecd1::t_b97dc707554d34 128-131
+  s_67a9197b01ecd1::t_958837e7915505 123-127,132
+packages/build/src/descriptor.ts
+  s_67a9197b01ecd1::t_c5a6d5fd1a9dfd 49,68-78
+packages/server/src/host/worker/discovery.rs
+  s_67a9197b01ecd1::t_d947dd3a5d02c5 72-90
+packages/server/src/host/worker/sandbox/procfs.rs
+  s_67a9197b01ecd1::t_2e358997f9edae 1-248
+packages/server/src/plugins/artifact.rs
+  s_67a9197b01ecd1::t_a20a0f6540b43d 65
+packages/server/src/plugins/mod.rs
+  s_67a9197b01ecd1::t_9fb599d7a7e7da 17
+packages/server/tests/build-actions.mjs
+  s_67a9197b01ecd1::t_c9ce096bb1110c 99-100
+packages/server/tests/chat-acp-driver.ts
+  s_67a9197b01ecd1::t_d5c90a50893bf1 51,74
+plugins/acp/src/server/agents/client.ts
+  s_67a9197b01ecd1::t_412f3b1ed2f862 74-83,85
+plugins/chat/src/client/ui/backend/backend-picker.tsx
+  s_67a9197b01ecd1::t_cab44577a27079 100,102-103,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "968873c2a2fc6331916faeb968fb6b84fac24ee8",
+  "prompts": {},
+  "sessions": {
+    "s_67a9197b01ecd1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e53f-1544-7952-984b-ae4126e87f7e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
