@@ -134,7 +134,12 @@ impl Process {
         };
         let initialize = serde_json::to_value(InitializeRequest::new(ProtocolVersion::V1))
             .map_err(|e| e.to_string())?;
-        let result = process.request("initialize", initialize).await?;
+        let result = tokio::time::timeout(
+            limits::INITIALIZE_TIMEOUT,
+            process.request("initialize", initialize),
+        )
+        .await
+        .map_err(|_| "ACP initialize timed out after 30 s")??;
         if result["protocolVersion"] != 1 {
             return Err("ACP agent does not support protocol v1".into());
         }

@@ -16,11 +16,13 @@ use tokio::sync::Mutex;
 
 pub(crate) use ops::register;
 
+type ProcessSlot = Arc<Mutex<Option<Arc<Process>>>>;
+
 pub(crate) struct Manager {
     config: Config,
     runtime: std::sync::OnceLock<tokio::runtime::Handle>,
     environment: PathBuf,
-    processes: Mutex<BTreeMap<(String, String), Arc<Process>>>,
+    processes: Mutex<BTreeMap<(String, String), ProcessSlot>>,
 }
 
 impl Manager {
@@ -43,9 +45,10 @@ impl Manager {
             return Err("ACP agent permission denied".into());
         }
 
-        let mut processes = self.processes.lock().await;
         let key = (plugin.to_owned(), agent.to_owned());
-        if let Some(process) = processes.get(&key).filter(|process| !process.closed()) {
+        let slot = self.processes.lock().await.entry(key).or_default().clone();
+        let mut slot = slot.lock().await;
+        if let Some(process) = slot.as_ref().filter(|process| !process.closed()) {
             return Ok(process.clone());
         }
 
@@ -61,7 +64,7 @@ impl Manager {
             runtime.spawn(async move { Process::spawn(&definition, env).await }),
         );
         let process = startup.await.map_err(|e| e.to_string())??;
-        processes.insert(key, process.clone());
+        *slot = Some(process.clone());
         Ok(process)
     }
 }

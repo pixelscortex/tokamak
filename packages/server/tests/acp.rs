@@ -27,6 +27,8 @@ for line in sys.stdin:
     method = request.get('method')
     params = request.get('params', {})
     if method == 'initialize':
+        if os.environ.get('ACP_TEST_HANG_INITIALIZE'):
+            import time; time.sleep(60)
         assert not params.get('clientCapabilities', {}).get('terminal', False)
         assert not params.get('clientCapabilities', {}).get('fs', {}).get('readTextFile', False)
         response(request, dict(protocolVersion=1, agentCapabilities=dict(loadSession=True, sessionCapabilities=dict(resume={}))))
@@ -73,7 +75,7 @@ const PLUGIN: &str = r#"
 import { action, query, mutation, createRegistry, invokeFunction, functionMetadata, v } from 'SDK';
 const probe = action({ args: { mode: v.string() }, handler: async ({ acp }, { mode }) => {
   if (mode === 'agents') return acp.agents();
-  const opened = await acp.open({ agent: mode === 'missing' ? 'absent' : 'fake', cwd: '/tmp' });
+  const opened = await acp.open({ agent: mode === 'missing' ? 'absent' : mode === 'slow-initialize' ? 'slow' : 'fake', cwd: '/tmp' });
   const events = [];
   for await (const event of acp.prompt({ agent: 'fake', sessionId: opened.sessionId, text: mode === 'blocked-write' ? 'x'.repeat(900000) : mode })) {
     events.push(event);
@@ -143,7 +145,7 @@ impl Fixture {
         }).to_string()).unwrap();
         std::fs::write(
             root.join(".env.local"),
-            "ACP_TEST_PASSTHROUGH=from-dotenv\n",
+            "ACP_TEST_PASSTHROUGH=from-dotenv\nACP_TEST_HANG_INITIALIZE=1\n",
         )
         .unwrap();
         let agent = root.join("agent.py");
@@ -151,6 +153,12 @@ impl Fixture {
         std::fs::write(root.join("agents.toml"), format!(
             "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"probe\"]\n", json!(agent.to_str().unwrap())
         )).unwrap();
+        use std::io::Write;
+        writeln!(
+            std::fs::OpenOptions::new().append(true).open(root.join("agents.toml")).unwrap(),
+            "[agents.slow]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_HANG_INITIALIZE\"]\nplugins = [\"probe\"]",
+            json!(agent.to_str().unwrap())
+        ).unwrap();
         let database = Database::open(Storage::Memory).await.unwrap();
         let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
         let server = Server::load_plugins(database, pool, &plugins)
@@ -198,7 +206,7 @@ async fn open_prompt_and_done_round_trip() {
     let fixture = Fixture::new(true).await;
     assert_eq!(
         fixture.action("agents").await.unwrap(),
-        json!([{"id":"fake","title":"fake"}])
+        json!([{"id":"fake","title":"fake"},{"id":"slow","title":"slow"}])
     );
     let result = fixture.action("hello").await.unwrap();
     assert_eq!(
@@ -306,5 +314,18 @@ async fn ignored_cancel_kills_agent_and_allows_restart() {
     let error = fixture.action("ignore-cancel").await.unwrap_err();
     assert!(error.contains("cancellation timed out"), "{error}");
     assert!(fixture.action("hello").await.is_ok());
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn initialize_deadline_does_not_block_other_agents() {
+    let fixture = Fixture::new(true).await;
+    let (slow, fast) = tokio::join!(fixture.action("slow-initialize"), async {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::timeout(Duration::from_secs(5), fixture.action("hello")).await
+    });
+    assert!(fast.unwrap().is_ok());
+    let error = slow.unwrap_err();
+    assert!(error.contains("initialize timed out"), "{error}");
     fixture.close().await;
 }
