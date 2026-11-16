@@ -1,0 +1,37 @@
+.ci/release.mjs
+  s_186fb549a459e6::t_34679afcdb0b8d 1-32,34-162
+  s_186fb549a459e6::t_7922edf5cb6baa 33
+.ci/release.test.ts
+  s_186fb549a459e6::t_7922edf5cb6baa 1-113
+.github/workflows/release.yml
+  s_186fb549a459e6::t_34679afcdb0b8d 1-26
+.ci/check.sh
+  s_186fb549a459e6::t_ff5be7b139c3eb 6,10
+  s_186fb549a459e6::t_b0c398ea70550f 7
+.ci/setup/action.yml
+  s_186fb549a459e6::t_ff5be7b139c3eb 3-6,19,49-50,63-67,74-79
+moon.yml
+  s_186fb549a459e6::t_ff5be7b139c3eb 31
+.github/workflows/macos.yml
+  s_186fb549a459e6::t_ff5be7b139c3eb 18-21,25,52-59,64-65
+.depot/workflows/ci.yml
+  s_186fb549a459e6::t_ff5be7b139c3eb 24-25,27-28,54-56,58-59,62-73,80-84,87-88
+README.md
+  s_186fb549a459e6::t_fc16bc7bf72f8c 26-40,48-53,55-56,59-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6d3c3f9727d59c2b751f8d463f273b16cbe5ff6d",
+  "prompts": {},
+  "sessions": {
+    "s_186fb549a459e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e542-d630-7ef0-aba8-12cca9ea3b71",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
