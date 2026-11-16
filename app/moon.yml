@@ -30,6 +30,12 @@ tasks:
     command: "proto run bun -- tests/build-fixture.ts"
     options:
       cache: false
+  test-fixtures:
+    # Standalone native e2e execution also needs the SDK bridge built here.
+    deps: ["fixture-bundle"]
+    command: "proto run bun -- tests/run.ts"
+    options:
+      cache: false
   build:
     deps: ["bundle"]
     command: "cargo build --locked --release --package tokamak-app --package server --bins --jobs 2"
