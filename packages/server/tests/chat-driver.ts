@@ -5,6 +5,7 @@ import { discoverTools } from "./chat/backend/tools";
 import { send as chatSend } from "./chat/backend/chat";
 import { api } from "./chat/backend/_generated/api";
 import { api as todo } from "./todo/backend/_generated/api";
+import { CHAT_MODELS, DEFAULT_MODEL, currentModel } from "./chat/models";
 import { completionChunk, completionEnd } from "./completions";
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -81,6 +82,10 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     assert.match(echoed.text, /user: new question$/);
     assert.ok(Buffer.byteLength(echoed.text) <= 32768 + 100);
     assert.ok(!echoed.text.includes("user: old"));
+    const model = CHAT_MODELS[1];
+    await client.mutation(api.threads.setBackend, { threadId: fresh, backend: { kind: "model", model } });
+    const selected = (await client.query(api.threads.list, {})).find(thread => thread._id === fresh)!;
+    assert.deepEqual([selected.model, currentModel({ ...selected, model: DEFAULT_MODEL })], [model, model]);
     return;
   }
   if (scenario === "chat-real") {

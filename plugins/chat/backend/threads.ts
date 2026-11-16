@@ -65,6 +65,6 @@ export const setBackend = mutation({
         ...(previous?.kind === "acp" && previous.agent === backend.agent && previous.cwd === backend.cwd && previous.sessionId
           ? { sessionId: previous.sessionId } : {}) };
     }
-    return db.patch(threadId, { backend, updatedAt: Date.now() });
+    return db.patch(threadId, { backend, ...(backend.kind === "model" ? { model: backend.model } : {}), updatedAt: Date.now() });
   },
 });

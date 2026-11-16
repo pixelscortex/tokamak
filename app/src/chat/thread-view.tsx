@@ -1,6 +1,6 @@
 import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { afterDelay, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
-import { DEFAULT_MODEL } from "../../../plugins/chat/models";
+import { currentModel } from "../../../plugins/chat/models";
 import { For, Show, createMemo, createEffect, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
@@ -69,7 +69,7 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
     </div>
     <Show when={messages.error()}><p role="alert" class="m-0 text-text-2">{messages.error()?.message}</p></Show>
     <Show when={props.chat.thread()}>
-      <ComposerStrip title={props.chat.thread()?.title ?? "New thread"} model={props.chat.thread()?.model ?? DEFAULT_MODEL} turns={turns()} copied={copied()} onModel={() => void props.chat.cycleModel()} />
+      <ComposerStrip title={props.chat.thread()?.title ?? "New thread"} model={currentModel(props.chat.thread())} turns={turns()} copied={copied()} onModel={() => void props.chat.cycleModel()} />
     </Show>
   </div>;
 }

@@ -1,7 +1,7 @@
 import { interruptStale, STALE_AFTER_MS } from "./recovery";
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "./parts";
 import { applyToolUpdate } from "./tool-parts";
-import { DEFAULT_MODEL } from "../models";
+import { currentModel } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
 
@@ -12,7 +12,7 @@ export const start = mutation({
     text = nonempty(text);
     const current = await thread(db, threadId);
     const backend = current.backend;
-    const model = backend?.kind === "acp" ? `acp:${backend.agent}` : backend?.model ?? current.model ?? DEFAULT_MODEL;
+    const model = currentModel(current);
     const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
     await interruptStale(db, runs);
     if (runs.some(run => run.status === "running" && Date.now() - (run.updatedAt ?? run.startedAt) < STALE_AFTER_MS)) throw new Error("Thread already has an active run");
