@@ -59,7 +59,7 @@ export const abandon = mutation({
   args: { runId: v.id("runs") },
   handler: async ({ db }, { runId }) => {
     const run = await db.get(runId);
-    return db.patch(runId, { observation: { sweepId: "abandoned", tick: 1, heartbeat: run!.heartbeat ?? 0, unchanged: 2 } });
+    return db.patch(runId, { observations: [{ sweepId: "abandoned", tick: 1, heartbeat: run!.heartbeat ?? 0, unchanged: 2 }] });
   },
 });
 export const run = query({

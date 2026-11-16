@@ -123,8 +123,9 @@ on launch when running runs are observed, then calls the owner-only `runs:observ
 mutation every 30 seconds on its own timer while runs exist. Each sweep has a
 unique `sweepId` and increasing `tick`. Three consecutive observations with an
 unchanged heartbeat counter interrupt a run (at least 60 seconds between the
-first and third). Changing sweepers resets the observation, so multiple clients
-cannot accumulate ticks together. Duplicate ticks are ignored.
+first and third). Each sweeper keeps its own streak; a heartbeat change resets
+that streak to zero. Duplicate and older ticks are ignored. At most four sweepers
+are retained per run, evicting the one with the oldest tick.
 Actions heartbeat every 10 seconds, including while waiting for HTTP headers,
 silent streams, tools, or permissions. Recovery never waits inside an action
 and never uses wall-clock age to decide liveness. A send encountering a running

@@ -59,13 +59,18 @@ export const observe = mutation({
     if (!Number.isSafeInteger(tick) || tick < 0) throw new Error("Invalid sweep tick");
     const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
     for (const run of runs) {
-      const previous = run.observation;
-      if (previous?.sweepId === sweepId && tick <= previous.tick) continue;
+      const previous = run.observations?.find(observation => observation.sweepId === sweepId);
+      if (previous && tick <= previous.tick) continue;
       const heartbeat = run.heartbeat ?? 0;
-      const unchanged = previous?.sweepId === sweepId && tick === previous.tick + 1 && previous.heartbeat === heartbeat
-        ? previous.unchanged + 1 : 1;
+      const unchanged = previous ? (previous.heartbeat === heartbeat ? previous.unchanged + 1 : 0) : 1;
       if (unchanged < 3) {
-        await db.patch(run._id, { observation: { sweepId, tick, heartbeat, unchanged } });
+        const observations = (run.observations ?? []).filter(observation => observation.sweepId !== sweepId);
+        observations.push({ sweepId, tick, heartbeat, unchanged });
+        if (observations.length > 4) {
+          const oldest = observations.reduce((a, b) => a.tick <= b.tick ? a : b);
+          observations.splice(observations.indexOf(oldest), 1);
+        }
+        await db.patch(run._id, { observations });
         continue;
       }
       const now = Date.now();

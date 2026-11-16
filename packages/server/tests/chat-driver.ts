@@ -398,8 +398,21 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
         await client.mutation(api.send.update, { runId: healthy.runId, delta: "" });
         await client.mutation(api.testing.age, { runId: healthy.runId, offset: -61_000 });
         await observe("healthy", tick);
+        await observe("other", tick);
+        assert.equal((await client.query(api.runs.active, { threadId }))!.observations!.find(item => item.sweepId === "healthy")!.unchanged, tick === 0 ? 1 : 0);
       }
-      assert.equal((await client.query(api.runs.active, { threadId }))?._id, healthy.runId);
+      await observe("other", 4);
+      for (let tick = 0; tick < 3; tick++) await observe("healthy", tick);
+      const replayed = (await client.query(api.runs.active, { threadId }))!;
+      assert.equal(replayed._id, healthy.runId);
+      assert.equal(replayed.observations!.find(item => item.sweepId === "healthy")!.tick, 3);
+      // A fifth sweeper evicts the smallest tick without disturbing retained streaks.
+      await observe("oldest", 0);
+      await observe("third", 5);
+      await observe("fourth", 6);
+      const bounded = (await client.query(api.runs.active, { threadId }))!.observations!;
+      assert.equal(bounded.length, 4);
+      assert.ok(!bounded.some(item => item.sweepId === "oldest"));
       await client.mutation(api.runs.cancel, { runId: healthy.runId });
       await observe("healthy", 4);
       assert.equal((await client.query(api.messages.list, { threadId }))[3]!.status, "cancelled");
@@ -407,15 +420,16 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const abandoned = await client.mutation(api.send.start, input);
       await client.mutation(api.testing.age, { runId: abandoned.runId, offset: -61_000 });
       await assert.rejects(client.action(api.chat.send, input), /already has an active run/);
-      for (let tick = 0; tick < 4; tick++) {
+      for (let tick = 0; tick < 2; tick++) {
         await observe("client-a", tick);
         await observe("client-b", tick);
+        assert.equal((await client.query(api.runs.active, { threadId }))?._id, abandoned.runId);
       }
-      assert.equal((await client.query(api.runs.active, { threadId }))?._id, abandoned.runId);
-      // A fresh sweeper on launch recovers persisted runs without timestamp checks.
-      await observe("relaunched", 0);
-      await observe("relaunched", 1);
-      await observe("relaunched", 2);
+      const alternating = (await client.query(api.runs.active, { threadId }))!.observations!;
+      assert.deepEqual(alternating.map(item => item.unchanged), [2, 2]);
+      await observe("client-a", 2);
+      await observe("client-b", 2);
+      assert.equal(await client.query(api.runs.active, { threadId }), null);
       assert.equal((await client.action(api.chat.send, { threadId, text: "Try again" })).status, "done");
       const messages = await client.query(api.messages.list, { threadId });
       assert.equal(messages[5]!.error, "Interrupted");
