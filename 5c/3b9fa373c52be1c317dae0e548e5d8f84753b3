@@ -1,0 +1,196 @@
+app/tests/fixtures/record/src/records.tsx
+  s_62d2de2f706906::t_ec3f6dc8690bcb 10-42
+  s_62d2de2f706906::t_5ff0b049d8d445 1,4-7,9,45-66,70,72-73,75-76
+packages/server/src/websocket.rs
+  s_62d2de2f706906::t_2ff12711abcc38 237
+app/src/chat/use-chat.ts
+  s_62d2de2f706906::t_2ff12711abcc38 24,44,56,63,84
+packages/server/src/service/server.rs
+  s_62d2de2f706906::t_6b359a6e2508f8 40,42
+.gitignore
+  s_62d2de2f706906::t_ec3f6dc8690bcb 33-35
+packages/sdk/src/functions.ts
+  s_62d2de2f706906::t_6b359a6e2508f8 252
+plugins/chat/backend/permissions.ts
+  s_62d2de2f706906::t_2ff12711abcc38 43
+  s_62d2de2f706906::t_ef3e024ac56b4c 35
+plugins/chat/backend/schema.ts
+  s_62d2de2f706906::t_2ff12711abcc38 46
+app/src/chat/map.tsx
+  s_62d2de2f706906::t_2ff12711abcc38 2,84,89,102,113
+app/src/chat/screen.tsx
+  s_62d2de2f706906::t_2ff12711abcc38 87,104
+packages/server/src/main.rs
+  s_62d2de2f706906::t_6b359a6e2508f8 153,239
+  s_62d2de2f706906::t_7a84d68bcf76bf 253
+plugins/chat/backend/send.ts
+  s_62d2de2f706906::t_2ff12711abcc38 12,68-78,80
+packages/server/src/service/command_loop.rs
+  s_62d2de2f706906::t_6b359a6e2508f8 24-25,56,76,80
+packages/server/src/service/requests.rs
+  s_62d2de2f706906::t_6b359a6e2508f8 4,8,40,70,74
+app/src/chat/busy-status.tsx
+  s_62d2de2f706906::t_2ff12711abcc38 1,3,5,7
+packages/runtime/src/client/private_file.rs
+  s_62d2de2f706906::t_2ff12711abcc38 1
+packages/server/src/service/mod.rs
+  s_62d2de2f706906::t_6b359a6e2508f8 106-107
+app/src/chat/use-map.ts
+  s_62d2de2f706906::t_2ff12711abcc38 38
+packages/runtime/src/client/connection.rs
+  s_62d2de2f706906::t_2ff12711abcc38 28-45,58
+  s_62d2de2f706906::t_f29056cf410786 20-27
+plugins/chat/backend/chat.ts
+  s_62d2de2f706906::t_2ff12711abcc38 38
+app/src/chat/composer-strip.tsx
+  s_62d2de2f706906::t_2ff12711abcc38 10,46
+plugins/chat/README.md
+  s_62d2de2f706906::t_0071cccba359c1 31-46
+  s_62d2de2f706906::t_d66e3ac796974d 11,52-53,56,104-105,185-186
+app/src/chat/thread-view.tsx
+  s_62d2de2f706906::t_2ff12711abcc38 50,140,157
+plugins/chat/backend/runs.ts
+  s_62d2de2f706906::t_2ff12711abcc38 2,7-10,35
+app/src/chat/message.tsx
+  s_62d2de2f706906::t_2ff12711abcc38 8,14,49
+app/src/chat/chat-keys.ts
+  s_62d2de2f706906::t_2ff12711abcc38 56,71
+packages/server/src/service/session.rs
+  s_62d2de2f706906::t_6b359a6e2508f8 141
+  s_62d2de2f706906::t_fa9c9624b39850 57
+app/tests/compiler.ts
+  s_62d2de2f706906::t_a7360bfbd8cfad 83,86
+  s_62d2de2f706906::t_1beb9aa9a9b7b5 31,82,88,90,92,174-175,181,190,198
+packages/runtime/src/client.rs
+  s_62d2de2f706906::t_2ff12711abcc38 77
+Cargo.lock
+  s_62d2de2f706906::t_c34b95cb701680 2968,4859
+README.md
+  s_62d2de2f706906::t_9d109316f05efc 20,44,114-115,132,169
+app/README.md
+  s_62d2de2f706906::t_310c21fd380a4a 5,51-52,61,69,72,99,101-102
+app/backend/README.md
+  s_62d2de2f706906::t_c8b31ba9dd3815 4
+app/moon.yml
+  s_62d2de2f706906::t_933575ff208132 10,24
+app/src/chat/chat-composer.tsx
+  s_62d2de2f706906::t_58df1b4764a805 21
+app/src/chat/use-drafts.ts
+  s_62d2de2f706906::t_53d6cdeaa54dde 38
+app/tests/bridge.tsx
+  s_62d2de2f706906::t_68f9f7ae27920a 14,31,34,44,50,55-56,62,93-94,97-99,104,158
+app/tests/build-fixture.ts
+  s_62d2de2f706906::t_78945453d28570 1,5,9,12,16-17,43-50
+app/tests/e2e.rs
+  s_62d2de2f706906::t_12d906f0b0a0bc 50-51,61
+app/tests/fairness.tsx
+  s_62d2de2f706906::t_4b2eae2f7b617e 9,25,27
+app/tests/fixtures/record-main.tsx
+  s_62d2de2f706906::t_4be56981793787 8,15
+app/tests/fixtures/record/api.ts
+  s_62d2de2f706906::t_aa675dc17d89a3 1
+app/tests/fixtures/record/backend/createRecord.ts
+  s_62d2de2f706906::t_43c0403f4dd254 1-7
+app/tests/fixtures/record/backend/record.ts
+  s_62d2de2f706906::t_a287acd6fdb4fc 3,5,8,10,12-13,15
+app/tests/fixtures/record/backend/schema.ts
+  s_62d2de2f706906::t_37b9003b66a2c3 2
+app/tests/fixtures/record/backend/tools.ts
+  s_62d2de2f706906::t_066a9042cf64f3 3-12,14-15
+app/tests/fixtures/record/backend/tsconfig.json
+  s_62d2de2f706906::t_0074751ce6928a 1
+app/tests/fixtures/record/package.json
+  s_62d2de2f706906::t_24f045930856b3 2-3
+app/tests/fixtures/record/src/main.tsx
+  s_62d2de2f706906::t_c1570048471462 1,4-5,7-8,10-14,16-18,20
+app/tests/fixtures/record/src/styles.css
+  s_62d2de2f706906::t_a3d90d7c6e4fad 1-7
+app/tests/fixtures/record/tsconfig.json
+  s_62d2de2f706906::t_04cd9be52098e5 1
+app/tests/fixtures/record/vite.config.ts
+  s_62d2de2f706906::t_ba8e0e692fa7e3 2,4,6
+app/tests/local-server.ts
+  s_62d2de2f706906::t_043a939557e534 10,16,77-78,82,92
+app/tests/native.rs
+  s_62d2de2f706906::t_aba29ed4f0def4 56,72-73,91,274,343,446,586-587,601,609,619,760,1022-1028,1115-1122,1124-1127,1138,1145-1152,1157-1158,1164-1171,1175,1181-1187
+app/tests/plugin-fixtures.mjs
+  s_62d2de2f706906::t_528ade3b51d219 60,97,103
+app/tests/plugins.rs
+  s_62d2de2f706906::t_42a682dd54f982 439,553,556,592,595,1154-1155,1166-1170,1192,1264,1277,1281,1288,1307,1309,1313-1314,1319,1328
+app/tests/run.sh
+  s_62d2de2f706906::t_e6085bcb34e8e2 3,6
+app/tests/socket.rs
+  s_62d2de2f706906::t_ec673dba515cd1 51,94-95,107,127
+e2e/README.md
+  s_62d2de2f706906::t_eba45a75df32db 1,4-5,12,15,28
+e2e/run.ts
+  s_62d2de2f706906::t_cf2d96d96e0f2b 10,134-135,145,201,206,212
+packages/build/tests/plugins.test.mjs
+  s_62d2de2f706906::t_516b60808f6271 2
+packages/render/tests/GPU_SMOKE.md
+  s_62d2de2f706906::t_053b5b886e016d 38
+packages/render/tests/gpu-smoke.py
+  s_62d2de2f706906::t_7a40b07a1d01e8 6
+packages/runtime/Cargo.toml
+  s_62d2de2f706906::t_ee67921eef5314 17,41
+packages/runtime/PLUGINS.md
+  s_62d2de2f706906::t_35347041aa89f3 17,44,47
+packages/sdk/README.md
+  s_62d2de2f706906::t_b46bc5569598e3 17,22,29,33,55,64,178-180
+packages/sdk/tests/acceptance.test.mjs
+  s_62d2de2f706906::t_1b2843a34dff6f 9,46,111,213,296,302,405
+packages/sdk/tests/schema.test.mjs
+  s_62d2de2f706906::t_bd40e62df5190b 304,306-308,402
+packages/server/HOW_IT_WORKS.md
+  s_62d2de2f706906::t_7fb31c0ff77d34 54,56-57,59,64,71,74,97
+packages/server/PLUGINS.md
+  s_62d2de2f706906::t_7a66aff5504847 21
+packages/server/README.md
+  s_62d2de2f706906::t_048f3d742254ca 7,121
+packages/server/src/actions.rs
+  s_62d2de2f706906::t_c60717d8f352d9 30-40
+packages/server/src/service/action_coordination.rs
+  s_62d2de2f706906::t_d495bf67ca4776 4
+packages/server/src/service/subscriptions.rs
+  s_62d2de2f706906::t_8774e6c976313e 58
+packages/server/tests/README.md
+  s_62d2de2f706906::t_91ddf34c3b55e1 259-261
+packages/server/tests/actions-driver.ts
+  s_62d2de2f706906::t_9a15fad56ff4eb 156-163
+packages/server/tests/actions.rs
+  s_62d2de2f706906::t_708fddd0585f57 602-603
+packages/server/tests/build-actions.mjs
+  s_62d2de2f706906::t_719a4b72d68306 20,24,46
+packages/server/tests/chat-driver.ts
+  s_62d2de2f706906::t_68163fe59a3adc 14,149,318,322,325-326,331,335,367,467,487
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_62d2de2f706906::t_4e898e4fe90ec0 155
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_62d2de2f706906::t_cc0e2a492be059 27-31,33-35,42-43
+packages/ui/README.md
+  s_62d2de2f706906::t_ad31c599162944 15,34,63
+packages/ui/src/components/chip.tsx
+  s_62d2de2f706906::t_728bd43ec0ab4f 5
+packages/ui/src/components/composer-types.ts
+  s_62d2de2f706906::t_b015cef8cc622b 30,49,63
+packages/ui/src/elements/input.tsx
+  s_62d2de2f706906::t_28a3b23930cc6d 25
+plugins/chat/backend/threads.ts
+  s_62d2de2f706906::t_5568d61009707f 7,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c3b9fa373c52be1c317dae0e548e5d8f84753b3",
+  "prompts": {},
+  "sessions": {
+    "s_62d2de2f706906": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e3ca-99d3-7033-97db-769e57f2891b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
