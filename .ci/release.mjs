@@ -138,10 +138,16 @@ export async function publish(github, sha) {
     name: `main ${sha.slice(0, 7)}`,
     body: `Built from https://github.com/${github.repository}/commit/${sha}\n\nUnsigned development binaries. SHA-256 checksums are included. Signing and macOS notarization will be added before packaging.`,
   });
-  // Remove abandoned drafts from cancelled older pushes, never other releases.
+  // Clean only this pipeline's temporary tags/drafts, never other releases.
+  const temporaryTags = new Set([candidateTag(sha)]);
   for (const old of await github.releases()) {
-    if (old.draft && /^ci-main-[a-f0-9]{40}$/.test(old.tag_name))
+    if (old.draft && /^ci-main-[a-f0-9]{40}$/.test(old.tag_name)) {
       await github.api(`/releases/${old.id}`, "DELETE");
+      temporaryTags.add(old.tag_name);
+    }
+  }
+  for (const tag of temporaryTags) {
+    if (await github.api(`/git/ref/tags/${tag}`)) await github.api(`/git/refs/tags/${tag}`, "DELETE");
   }
   return "published";
 }

@@ -7,7 +7,8 @@ on:
   merge_group:
   workflow_dispatch:
 concurrency:
-  group: linux-${{ github.event.pull_request.number || github.ref }}
+  # A branch push and its PR update share one group instead of duplicating work.
+  group: linux-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 permissions:
   contents: read

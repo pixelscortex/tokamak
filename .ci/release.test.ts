@@ -36,6 +36,7 @@ function fixture({ missing = false, corrupt = false, stale = false, advance = fa
       if (path === "/releases/2/assets?per_page=100")
         return [...files.keys()].map((name) => ({ name, url: `asset:${name}` }));
       if (path === "/git/ref/tags/nightly") return { object: { sha: "b".repeat(40) } };
+      if (path.startsWith("/git/ref/tags/ci-main-")) return null;
       if (path.startsWith("asset:")) return files.get(path.slice(6));
       throw new Error(`Unexpected request ${path}`);
     },
