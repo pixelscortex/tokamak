@@ -1,4 +1,4 @@
-import { createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import { api, type ChatState } from "./use-chat";
 
 export function useDrafts(chat: ChatState) {
@@ -7,6 +7,11 @@ export function useDrafts(chat: ChatState) {
   const [raced, setRaced] = createSignal<Record<string, boolean>>({});
   let alive = true;
   onCleanup(() => { alive = false; });
+
+  // Clear finished threads even while another thread is selected.
+  createEffect(on(chat.runs, runs => {
+    setRaced(previous => Object.fromEntries(Object.entries(previous).filter(([threadId]) => runs[threadId])));
+  }));
 
   async function send(text: string) {
     const threadId = chat.threadId();

@@ -40,9 +40,6 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
 
   createEffect(on(() => props.chat.threadId(), () => { closePicker(); closeShare(); }));
 
-  // A finished run clears the race notice so the next Enter starts fresh.
-  createEffect(on(() => props.chat.active(), (run, previous) => { if (!run && previous) composer.clearRace(); }));
-
   function closeMap() {
     map.reset();
     setMapOpen(false);
