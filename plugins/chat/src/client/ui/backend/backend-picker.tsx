@@ -97,12 +97,14 @@ export function BackendPicker(props: {
   }
 
   function submitFolder() {
-    if (!folder().startsWith("/")) {
-      setError("Folder must be an absolute path");
+    // Empty means the home folder; the server resolves `~` and checks the path.
+    const path = folder().trim();
+    if (path && !path.startsWith("/") && !path.startsWith("~")) {
+      setError("Use an absolute path, ~/…, or leave empty for your home folder");
       return;
     }
     const backend = selected();
-    if (backend) void save({ kind: "plugin", ...backend, settings: { cwd: folder() } });
+    if (backend) void save({ kind: "plugin", ...backend, settings: { cwd: path } });
   }
 
   function keydown(event: NativeEvent) {
@@ -136,7 +138,7 @@ export function BackendPicker(props: {
             <span>FOLDER · {selected()?.backendId}</span>
             <Textarea
               id="backend-folder"
-              aria-label="Absolute folder path"
+              aria-label="Agent folder"
               autofocus
               appearance="inherit"
               size="xs"
@@ -145,7 +147,7 @@ export function BackendPicker(props: {
               onValueChange={setFolder}
               onSubmit={submitFolder}
               disabled={saving()}
-              placeholder="/absolute/path"
+              placeholder="~ (home folder)"
             />
             <span class="text-text-3">ENTER SAVE · ESC CLOSE</span>
           </>
