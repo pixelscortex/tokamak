@@ -1394,6 +1394,12 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
     };
     assert_eq!(code(app.doc()), "print(1)");
     let pre = app.doc().inner().query_selector("pre").unwrap().unwrap();
+    let paragraph = app
+        .doc()
+        .inner()
+        .query_selector("#markdown p")
+        .unwrap()
+        .unwrap();
     for suffix in ["\nprint(2)\n`", "\nprint(2)\n``", "\nprint(2)\n```"] {
         app.host
             .send("markdown:text", format!("{markdown}{suffix}"))
@@ -1405,6 +1411,10 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
         };
         app.wait(|doc| code(doc) == expected);
         assert_eq!(app.doc().inner().query_selector("pre").unwrap(), Some(pre));
+        assert_eq!(
+            app.doc().inner().query_selector("#markdown p").unwrap(),
+            Some(paragraph)
+        );
         assert!(app.doc_mut().take_error().is_none());
     }
     app.host

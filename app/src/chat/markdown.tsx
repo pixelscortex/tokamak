@@ -4,9 +4,13 @@ import { Lexer, type Token, type Tokens as MarkedTokens } from "marked";
 // CommonMark only: no HTML renderer, DOM APIs, highlighting or GFM extensions.
 // The lexer keeps an unfinished fenced block as code throughout streaming.
 export function Markdown(props: { text: string }) {
-  const tokens = createMemo(() => {
+  const tokens = createMemo<Token[] | undefined>(previous => {
     try {
-      return Lexer.lex(props.text, { gfm: false });
+      return Lexer.lex(props.text, { gfm: false }).map((token, index) => {
+        const before = previous?.[index];
+        // Index keeps each block's slot; unchanged tokens keep its rendered nodes.
+        return before?.type === token.type && JSON.stringify(before) === JSON.stringify(token) ? before : token;
+      });
     } catch {
       return undefined;
     }
