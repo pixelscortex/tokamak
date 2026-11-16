@@ -416,8 +416,13 @@ async fn guest_catalog_assets_acp_and_errors_are_restricted() {
             .contains("Not available to guests")
     );
     assert_eq!(
-        call(&mut socket, "query", "a/test:host", json!({})).await["result"]["Ok"],
-        json!([])
+        call(&mut socket, "query", "a/test:host", json!({})).await["result"]["Err"]
+            .as_str()
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap(),
+        "plugin data space does not own that record"
     );
     let secret = call(&mut socket, "action", "a/test:secret", json!({})).await;
     assert!(
@@ -841,4 +846,24 @@ async fn guest_http_sizes_and_body_deadline_are_bounded() {
         0
     );
     clean(fixture).await;
+}
+
+#[test]
+fn legacy_bundle_cannot_be_shared_or_address_host_tables() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_tokamak"))
+        .args(["--bundle", "missing.js", "--share", "127.0.0.1:0"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("legacy --bundle mode cannot be shared")
+    );
+    let host = Table::new("h__members").unwrap();
+    for space in [
+        server::data::DataSpace::default(),
+        server::data::DataSpace::plugin("a").unwrap(),
+    ] {
+        assert!(space.table(&host).is_err());
+        assert!(space.id("h__members:member").is_err());
+    }
 }

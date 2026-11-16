@@ -291,6 +291,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if share.is_some_and(|address| !address.ip().is_loopback()) {
         return Err("Guest listener must bind loopback".into());
     }
+    if share.is_some() && bundle.is_some() {
+        return Err("--share requires --plugins; legacy --bundle mode cannot be shared".into());
+    }
     let local_data = local.is_some();
     // Sharing always enables authenticated local control, including standalone use.
     if share.is_some() {

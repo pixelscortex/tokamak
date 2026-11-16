@@ -50,6 +50,9 @@ impl DataSpace {
         self.plugin.as_deref()
     }
     pub fn table(&self, logical: &Table) -> Result<Table> {
+        if self.prefix != "h__" && logical.as_str().starts_with("h__") {
+            return Err(Error::AccessDenied);
+        }
         Table::new(format!("{}{}", self.prefix, logical.as_str()))
     }
     pub fn id(&self, text: &str) -> Result<Id> {
