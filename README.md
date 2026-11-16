@@ -23,7 +23,7 @@ names remain unchanged; `app` and `lab` are separate application projects.
 
 ## Quick start
 
-Install [proto](https://moonrepo.dev/proto) and rustup, plus the native build
+Install [Bun](https://bun.sh) (required for plugin workers), [proto](https://moonrepo.dev/proto) and rustup, plus the native build
 prerequisites for your OS (Xcode command-line tools on macOS). From this checkout,
 run `proto use` to install the pins in `.prototools`: Bun 1.4.4, Moon 2.5.6 and
 Rust 1.97.0. Put proto's bin/shims and Cargo's bin directory on `PATH`.
@@ -44,17 +44,6 @@ terminal first. The adapters reuse existing logins in `~/.claude` and `~/.codex`
 `PATH`, `HOME`, `USER`, and `LANG` (when present) are passed through. Each adapter's
 installation directory is prepended to its PATH so toolchain helpers are available.
 
-`agents.toml` is optional, for overriding built-ins, disabling an agent with
-`enabled = false`, or adding custom agents. See `agents.example.toml`.
-Place it at `~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml`
-on macOS or `$XDG_DATA_HOME/tokamak/agents.toml` on Linux (default
-`~/.local/share/tokamak/agents.toml`). `$TOKAMAK_SERVER_DIR` overrides the data
-directory; `TOKAMAK_ACP_AGENTS` selects a config file directly.
-Entries override built-ins by ID, retaining omitted fields. Custom agents must
-allow `plugins = ["acp"]`. To use API keys, add `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY` to the agent's `env` list and set it in the server environment
-or repository-root `.env.local`.
-
 Then run from the repository root:
 
 ```sh
@@ -64,7 +53,7 @@ bun run app
 This installs workspace dependencies, builds Chat, the UI and Rust binaries,
 starts the local server, and opens chat. Type a message and press Enter.
 Closing the desktop leaves the server running; `bun run server:stop` stops it.
-After editing `agents.toml` or the server environment, stop the server and run `bun run app` again.
+After changing the server environment, stop the server and run `bun run app` again.
 
 Enter sends; Shift+Enter adds a line; Esc stops your reply or closes a picker.
 Tab opens/closes Map; type to search, arrows/Enter select, and 1–9 open a row
@@ -79,9 +68,34 @@ working-folder path. Without an agent, the composer shows
 
 See [Chat details](plugins/chat/README.md) for thread and backend contracts, and
 [ACP setup](plugins/acp/README.md) for installed coding agents and smoke tests.
-Agent entries in `agents.toml` must allow `plugins = ["acp"]`.
 `bun run app` builds and loads both plugins. Backend storage changes have no
 migration before beta; existing local data may be reset.
+
+## Plugin workers
+
+A plugin opts its actions into Bun with `runtime: "worker"` in `definePlugin`.
+Queries and mutations continue to run in QuickJS. Each opted-in plugin has one
+lazy, long-lived worker, preserving module state between actions. Bun must be
+installed on the machine; a missing executable produces
+`Plugin <id> needs Bun: install from https://bun.sh`.
+
+The build emits a separate Bun action bundle and a generic SDK worker entry.
+The server and worker exchange newline-delimited JSON with a 1 MiB message cap:
+server → worker: `invoke {id, fn, args}`, `opResult {id, value|error}`,
+`cancel {id}`, and `shutdown`; worker → server: `result {id, value|error}`,
+`op {id, call, name, payload}`, and `log {level, text}`. Messages have a `type`
+field. Invocation and operation IDs correlate concurrent calls. Host operations
+reuse the existing action bridge and permission checks; workers get no database
+handle. Each invocation receives an AbortSignal through `ctx.signal`.
+
+Workers run in per-plugin data folders under the server data directory, with a
+cleared environment containing PATH, HOME, USER, LANG and manifest `env:<name>`
+grants. Worker code has ordinary local process access; this is not an OS sandbox.
+Reload, disable, and server shutdown kill the worker's whole process group.
+Crashes fail pending actions and restart on the next call with a short backoff.
+Actions have a one-hour wall deadline; cancellation allows 500 ms to settle
+before the worker and its children are killed. Plugins without the field keep
+running actions in QuickJS.
 
 ## Commands
 

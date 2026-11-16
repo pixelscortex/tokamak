@@ -7,9 +7,9 @@ Build with `proto run bun -- packages/build/src/build.ts plugins/acp` after chat
 
 Threads store a provider backend with plugin, agent ID, settings and optional session
 state. `threads:setBackend` preserves state when the agent and settings match.
-Only this plugin declares the `acp` grant;
-built-in agents permit this plugin automatically. Custom agents in `agents.toml`
-must allow `plugins = ["acp"]`. `backend:describe` lists agents because ACP is action-only.
+This plugin uses `runtime: "worker"` and requires [Bun](https://bun.sh).
+Its TypeScript client uses the official `@agentclientprotocol/sdk` 2.7.0
+(`ClientApp.connect` and `ndJsonStream`). `backend:describe` refreshes discovery.
 
 ACP opens and saves a session before prompting. Restored sessions receive only
 the new user text; fresh sessions also receive the most recent flattened completed
@@ -52,28 +52,27 @@ Only named environment variables pass through: `PATH`, `HOME`, `USER`, and `LANG
 when present. The executable's directory is prepended to PATH for its helpers.
 Agents have the same access as their CLI; the selected folder is not a sandbox.
 
-[`agents.example.toml`](../../agents.example.toml) documents optional overrides,
-`enabled = false`, and custom agents. Store `agents.toml` in `$TOKAMAK_SERVER_DIR`,
-or the default Tokamak data directory described in the README. Alternatively,
-`TOKAMAK_ACP_AGENTS` selects a config file directly. Entries override built-ins by ID;
-omitted fields retain built-in defaults. Custom agents must allow `plugins = ["acp"]`.
-Restart the server after config edits. API keys are optional: add their names to
-`env` and set them in the server environment or repository-root `.env.local`.
-
-Manual credentialed checks (ignored by the normal suite) discover the installed
-adapters with no config required. `TOKAMAK_ACP_AGENTS` is an optional override.
-Each test uses a temporary copy of this repo's tracked files and refuses
-permission requests.
+Automated plugin tests use a fake adapter and need no credentials:
 
 ```sh
-cargo test -p server --test acp acp_real_claude_smoke -- --ignored --exact --nocapture
-cargo test -p server --test acp acp_real_codex_smoke -- --ignored --exact --nocapture
+bun test plugins/acp/tests
+cargo test -p server --test actions chat_acp_backend
+cargo test -p server --test workers
+```
+
+Real full-stack smoke tests reuse the installed adapters and CLI logins. They
+create an isolated working directory, refuse permission requests, and require a
+text response through chat, the worker, ACP, and chat's storage:
+
+```sh
+cargo test -p server --test workers real_claude -- --ignored --exact --nocapture
+cargo test -p server --test workers real_codex -- --ignored --exact --nocapture
 ```
 
 ## Package layout
 
 `plugin.ts` declares static metadata, the `chat` dependency ID, and the existing
-`acp` permission. The loader still requires `version`; dependencies compile to
+`runtime: "worker"` opt-in. The loader still requires `version`; dependencies compile to
 `"*"` internally. The build infers this server-only package without a Vite config.
 
 `src/server/api.ts` exports the public backend actions. Implementation lives in

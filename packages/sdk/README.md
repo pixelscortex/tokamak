@@ -309,3 +309,12 @@ Bun 1.4.4 probes (2026-11-06):
 The SDK changes do not link JavaScript bundles into the native binary. Native
 size measurements therefore measure the inherited host only; real QuickJS and
 SurrealDB integration remains for the host issues and their tests.
+
+## Plugin actions in Bun
+
+Set `runtime: "worker"` in `definePlugin` to build actions for a long-lived Bun
+process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
+`ctx.runMutation`, and `ctx.use` for host-mediated data and plugin calls;
+`ctx.signal` observes cancellation. Module state persists until reload, disable,
+or process exit. Bun must be installed on the host. See the root README's
+[worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
