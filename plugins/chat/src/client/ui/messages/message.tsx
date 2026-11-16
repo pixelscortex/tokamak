@@ -43,7 +43,11 @@ export function Message(props: {
       data-status={props.message.status}
     >
       <Mark user={user()} />
-      <div class="min-w-0 flex-1">
+      {/* Give flex a definite starting width. In Blitz beta.4, content sizing
+          after a sibling changes can rebreak unchanged inline text at a narrow
+          probe width, then reuse its cached full-width box without restoring
+          the lines. w-0 lets flex-1 allocate the column without that probe. */}
+      <div class="w-0 min-w-0 flex-1">
         <Show
           when={props.message.role === "assistant"}
           fallback={

@@ -7,7 +7,7 @@ import { build } from "vite";
 import { nativeSolid } from "../../packages/build/src/native";
 import { nativeConfig } from "../../packages/render/tools/native-build";
 
-for (const fixture of ["bridge", "fairness"]) {
+for (const fixture of ["bridge", "fairness", "chat-layout"]) {
   await build({
     ...nativeConfig(fileURLToPath(new URL("../../packages/render/", import.meta.url)), {
       entry: fileURLToPath(new URL(`./${fixture}.tsx`, import.meta.url)),
