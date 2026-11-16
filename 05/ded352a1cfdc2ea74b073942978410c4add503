@@ -1,0 +1,101 @@
+packages/build/src/exports.ts
+  s_443901c30d5f37::t_3f32a2bde9b55b 1,24,37
+packages/sdk/tools/plugin-boundary.mjs
+  s_443901c30d5f37::t_33382159597267 160,165-171,177,191-193,198,211-213,225-228
+  s_443901c30d5f37::t_b55d853a9ab28c 1-9,12-45,47-68,70-88,91,95-99,131-158,162-164,172-176,179-183,185-187,189-190,194-197,199-208,210,214-224,229-240,242-271,273-288,298,300,304-309,311,313-332,334-345,348-352
+  s_443901c30d5f37::t_3f32a2bde9b55b 100-130,159,161
+  s_443901c30d5f37::t_1769e4d3d5867f 10-11,46,69,89-90,92-94,178,184,188,209,241,272,289-297,299,301-303,310,312,333,346-347
+packages/build/src/plugin-boundary.ts
+  s_443901c30d5f37::t_077c6c94786e06 2-11
+  s_443901c30d5f37::t_860d5fa2ce5cbf 17-23
+  s_443901c30d5f37::t_a1bc0d15ffee0e 1,12-16,24-36
+packages/server/tests/build-actions.mjs
+  s_443901c30d5f37::t_3f32a2bde9b55b 36-37
+  s_443901c30d5f37::t_87d7f0133c6c8a 1,20,25,27-33,108-109,111,180-181,195-200
+packages/build/src/vite.ts
+  s_443901c30d5f37::t_077c6c94786e06 11-12,36,76
+.gitignore
+  s_443901c30d5f37::t_f0bc255c8ab8ac 7,36-38
+app/tests/plugin-fixtures.mjs
+  s_443901c30d5f37::t_3477d0a0ba5583 76-81,101,107,113,281-285,299,307,310,317,323,338-339,341,343,368,371,387-388,459,473
+packages/build/README.md
+  s_443901c30d5f37::t_75e51db268cd76 5,72-117
+packages/build/src/client-surface.ts
+  s_443901c30d5f37::t_af700ba5483ca5 1,25
+packages/build/src/contributions.ts
+  s_443901c30d5f37::t_fc630b1ddae335 1,27,228-231,239-242
+packages/build/src/descriptor.ts
+  s_443901c30d5f37::t_754192fb88e524 1,130
+packages/build/src/plugin-imports.ts
+  s_443901c30d5f37::t_3c31002f557a70 19-20
+packages/build/tests/boundary.test.mjs
+  s_443901c30d5f37::t_e94fe17d65d9ec 1-308
+packages/build/tests/run.sh
+  s_443901c30d5f37::t_1149a9a775069c 4
+packages/sdk/tools/bundle.mjs
+  s_443901c30d5f37::t_0ff03671ec5f9b 10-16,60-61,87,106,194-199,207
+packages/sdk/tools/worker.mjs
+  s_443901c30d5f37::t_d9fc1a7a0fb1ad 5,7,13,76
+packages/server/tests/build-feature.mjs
+  s_443901c30d5f37::t_e6af8fe7e2d2eb 3,16-21
+packages/server/tests/build-worker.mjs
+  s_443901c30d5f37::t_a85be4698bb3d2 1,10
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_443901c30d5f37::t_d885bb91974355 2-10,13-20,154
+packages/server/tests/fixtures/plugins/a/backend/determinism.ts
+  s_443901c30d5f37::t_e66af38b63d524 11,17-18
+packages/server/tests/fixtures/plugins/a/backend/ops.ts
+  s_443901c30d5f37::t_b5045441bfab3f 1-2,9,19,25,28
+packages/server/tests/fixtures/plugins/a/backend/tsconfig.json
+  s_443901c30d5f37::t_55b46c8f40609f 1
+packages/server/tests/fixtures/plugins/a/vite.config.ts
+  s_443901c30d5f37::t_8b8ba8f42cb86e 1
+packages/server/tests/fixtures/plugins/b/backend/_sample.ts
+  s_443901c30d5f37::t_41308a799eb3ee 1-16
+packages/server/tests/fixtures/plugins/b/backend/determinism.ts
+  s_443901c30d5f37::t_6b422c994ecbd1 2
+packages/server/tests/fixtures/plugins/b/backend/ops.ts
+  s_443901c30d5f37::t_14e733602d7952 9,11-18
+packages/server/tests/fixtures/plugins/b/backend/tsconfig.json
+  s_443901c30d5f37::t_8b836c7e9270f4 1
+packages/server/tests/fixtures/plugins/b/vite.config.ts
+  s_443901c30d5f37::t_f9dfeab9c68167 1
+packages/server/tests/fixtures/plugins/setup.mjs
+  s_443901c30d5f37::t_6ed54d100b87a8 1-15
+packages/server/tests/plugins.rs
+  s_443901c30d5f37::t_5465d4fa77eb0f 557
+packages/server/tests/schema_indexes.rs
+  s_443901c30d5f37::t_cb62561d2b0d41 160
+plugins/acp/README.md
+  s_443901c30d5f37::t_9316253ff84bd9 80-83
+plugins/acp/src/server/events/acp-events.ts
+  s_443901c30d5f37::t_f26c1679415660 2-3,18
+plugins/acp/src/server/tsconfig.json
+  s_443901c30d5f37::t_93086348c6b3bf 3-11
+plugins/acp/src/server/turn/acp-turn.ts
+  s_443901c30d5f37::t_88a07982b75831 2,5-6,13,19,24
+plugins/acp/src/server/turn/acp.ts
+  s_443901c30d5f37::t_9000e8aa64eb41 3-4,40,46,51,75
+plugins/acp/src/server/turn/permission-poller.ts
+  s_443901c30d5f37::t_b3bdbc382205f0 1-50
+plugins/acp/src/server/turn/turn-buffer.ts
+  s_443901c30d5f37::t_f6a5fcf8102246 1-79
+plugins/chat/src/server/api.ts
+  s_443901c30d5f37::t_fc773e9d73eec4 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05ded352a1cfdc2ea74b073942978410c4add503",
+  "prompts": {},
+  "sessions": {
+    "s_443901c30d5f37": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e53e-80d2-75f0-88ad-9176cb083669",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
