@@ -439,6 +439,18 @@ async fn launcher_resolves_command_from_allowed_path() {
     );
     let fixture = Fixture::with_launcher(true, &agent, true).await;
     fixture.action("hello").await.unwrap();
+    let bin = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .next()
+        .unwrap();
+    std::fs::remove_file(bin.join("acp-path-only-launcher")).unwrap();
+    assert_eq!(
+        fixture.action("agents").await.unwrap(),
+        json!([{"id":"slow","title":"slow"}])
+    );
+    // Open, prompt and cancel continue using the already running process.
+    let result = fixture.action("cancel").await.unwrap();
+    assert_eq!(result["events"][1]["stopReason"], "cancelled");
+    assert!(fixture.action("hello").await.is_ok());
     fixture.close().await;
 }
 

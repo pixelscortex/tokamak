@@ -40,17 +40,17 @@ impl Manager {
     }
 
     async fn process(&self, plugin: &str, agent: &str) -> Result<Arc<Process>, String> {
-        let agents = self.config.available();
-        let definition = agents.get(agent).ok_or("Unknown ACP agent")?;
-        if !definition.plugins.iter().any(|id| id == plugin) {
-            return Err("ACP agent permission denied".into());
-        }
-
         let key = (plugin.to_owned(), agent.to_owned());
         let slot = self.processes.lock().await.entry(key).or_default().clone();
         let mut slot = slot.lock().await;
         if let Some(process) = slot.as_ref().filter(|process| !process.closed()) {
             return Ok(process.clone());
+        }
+
+        let agents = self.config.available();
+        let definition = agents.get(agent).ok_or("Unknown ACP agent")?;
+        if !definition.plugins.iter().any(|id| id == plugin) {
+            return Err("ACP agent permission denied".into());
         }
 
         let mut env = BTreeMap::new();

@@ -163,22 +163,41 @@ fn resolve(command: &str, paths: &[PathBuf]) -> Option<PathBuf> {
     let candidates = if command.components().count() > 1 || command.is_absolute() {
         vec![command.to_path_buf()]
     } else {
-        paths.iter().map(|path| path.join(command)).collect()
+        paths
+            .iter()
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join(command))
+            .collect()
     };
     candidates.into_iter().find_map(|path| {
+        if !path.is_absolute() {
+            return None;
+        }
+        let directory = std::fs::metadata(path.parent()?).ok()?;
+        if !directory.is_dir() {
+            return None;
+        }
+        // Follow symlinks when checking the final executable, while retaining
+        // the shim path below for toolchains that depend on its location.
         let metadata = std::fs::metadata(&path).ok()?;
         if !metadata.is_file() {
             return None;
         }
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            if metadata.permissions().mode() & 0o111 == 0 {
+            use std::os::unix::fs::MetadataExt;
+            // SAFETY: geteuid has no preconditions or memory effects.
+            let uid = unsafe { libc::geteuid() };
+            if directory.mode() & 0o022 != 0
+                || metadata.mode() & 0o022 != 0
+                || metadata.mode() & 0o111 == 0
+                || (metadata.uid() != uid && metadata.uid() != 0)
+            {
                 return None;
             }
         }
         // Keep a symlink's toolchain directory (Volta and npm shims rely on it).
-        std::path::absolute(path).ok()
+        Some(path)
     })
 }
 
@@ -195,7 +214,23 @@ mod tests {
         let root = directory.path();
         let bin = root.join("bin");
         std::fs::create_dir(&bin).unwrap();
-        let paths = vec![bin.clone()];
+        let relative = tempfile::tempdir_in(".").unwrap();
+        let relative_path = PathBuf::from(".").join(relative.path().file_name().unwrap());
+        let writable = root.join("writable");
+        std::fs::create_dir(&writable).unwrap();
+        std::fs::set_permissions(&writable, std::fs::Permissions::from_mode(0o777)).unwrap();
+        for directory in [relative.path(), &writable] {
+            let planted = directory.join("claude-agent-acp");
+            std::fs::write(&planted, "#!/bin/sh\nexit 1\n").unwrap();
+            std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let paths = vec![
+            PathBuf::new(),
+            PathBuf::from("."),
+            relative_path,
+            writable,
+            bin.clone(),
+        ];
         let config_path = root.join("agents.toml");
         let config = Config::read_path(&config_path).unwrap();
         assert!(config.discover(&paths).is_empty());
@@ -210,6 +245,13 @@ mod tests {
         // A regular, non-executable file must not be offered.
         assert!(config.discover(&paths).is_empty());
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // Writable targets are rejected even through otherwise trusted shims.
+        let target = bin.join("adapter");
+        std::fs::rename(&executable, &target).unwrap();
+        symlink(&target, &executable).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o775)).unwrap();
+        assert!(config.discover(&paths).is_empty());
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
         // Reusing the same config sees an installation without a restart.
         let discovered = config.discover(&paths);
         let agent = &discovered["claude"];
