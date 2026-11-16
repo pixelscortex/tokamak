@@ -607,3 +607,125 @@ fn record_tools_allow_consumer_and_refuse_non_consumer() {
 fn chat_acp_backend() {
     acceptance("chat-acp");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_tungstenite::{
+        MaybeTlsStream, WebSocketStream,
+        tungstenite::{Message, client::IntoClientRequest},
+    };
+
+    async fn call(
+        socket: &mut WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
+        kind: &str,
+        name: &str,
+        args: Value,
+    ) -> Value {
+        socket
+            .send(Message::Text(
+                json!({"type":kind,"id":1,"name":name,"args":args})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+        let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        serde_json::from_str(message.to_text().unwrap()).unwrap()
+    }
+
+    let installation = Installation::new();
+    let env = installation.0.parent().unwrap().join(".env.local");
+    std::fs::write(&env, "ACTION_TEST_SECRET=action-secret-do-not-echo\n").unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let database = Database::open(Storage::Memory).await.unwrap();
+    let server = Arc::new(
+        Server::load_plugins(database, pool, &installation.0)
+            .await
+            .unwrap(),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut request = format!("ws://{}/ws", listener.local_addr().unwrap())
+        .into_client_request()
+        .unwrap();
+    const OWNER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    request
+        .headers_mut()
+        .insert("authorization", format!("Bearer {OWNER}").parse().unwrap());
+    let (stop, shutdown) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(server::websocket::serve_with_access(
+        listener,
+        server.clone(),
+        async {
+            let _ = shutdown.await;
+        },
+        Some(server::websocket::LocalAccess {
+            token: OWNER.into(),
+            identity: json!({}),
+        }),
+    ));
+    let (mut owner, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    assert_eq!(
+        call(&mut owner, "query", "a/ops:messageError", json!({})).await["result"]["Ok"],
+        json!([{ "error":"failed: action-secret-do-not-echo", "text":"action-secret-do-not-echo" }])
+    );
+    let caught = call(&mut owner, "action", "a/ops:caught", json!({})).await;
+    assert!(
+        caught["result"]["Ok"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("[redacted]"),
+        "{caught}"
+    );
+    assert!(!caught.to_string().contains("action-secret-do-not-echo"));
+
+    let barrier = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/", barrier.local_addr().unwrap());
+    let change = async {
+        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(5), barrier.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            request.push(stream.read_u8().await.unwrap());
+            assert!(request.len() < 8192);
+        }
+        // The HTTP barrier proves the action has already captured its env.
+        std::fs::write(&env, "ACTION_TEST_SECRET=replacement-secret\n").unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+    };
+    let (error, ()) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(
+            call(
+                &mut owner,
+                "action",
+                "a/ops:delayedSecret",
+                json!({"url":url})
+            ),
+            change
+        )
+    })
+    .await
+    .expect("action snapshot regression timeout");
+    assert!(
+        error["result"]["Err"]
+            .as_str()
+            .unwrap()
+            .starts_with("[redacted]:[redacted]"),
+        "{error}"
+    );
+    assert!(!error.to_string().contains("action-secret-do-not-echo"));
+    drop(owner);
+    stop.send(()).unwrap();
+    serving.await.unwrap().unwrap();
+    server.close().await.unwrap();
+}

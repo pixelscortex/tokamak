@@ -50,8 +50,8 @@ Enter sends; Shift+Enter adds a line; Esc stops your reply or closes a picker.
 Tab opens/closes Map; type to search, arrows/Enter select, and 1–9 open a row
 with an empty search. Cmd+N creates a thread. In Map with an empty search,
 R renames and Cmd+Backspace deletes (Enter confirms, Esc cancels).
-Cmd+M selects a model/agent; Cmd+Shift+C copies the last assistant reply;
-Cmd+Shift+S opens sharing. With an empty composer, 1–4 answers agent permissions.
+Cmd+M selects a model/agent; Cmd+Shift+C copies the last assistant reply.
+With an empty composer, 1–4 answers agent permissions.
 
 For agents, copy `agents.example.toml` to
 `~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml` on macOS;

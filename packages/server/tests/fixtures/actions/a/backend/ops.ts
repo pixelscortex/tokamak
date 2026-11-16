@@ -153,3 +153,31 @@ export const sleep = action({
 });
 
 export { recordTools } from "../../b/backend/ops";
+
+export const messageError = query({
+  handler: () => [{ error: "failed: action-secret-do-not-echo", text: "action-secret-do-not-echo" }],
+});
+export const nestedFailure = mutation({
+  args: { secret: v.string() },
+  handler: (_ctx, { secret }): never => {
+    throw new Error(secret);
+  },
+});
+export const caught = action({
+  handler: async (ctx): Promise<{ error: string } | undefined> => {
+    const secret = (await ctx.env("ACTION_TEST_SECRET"))!;
+    try {
+      await ctx.runMutation(self.ops.nestedFailure, { secret });
+    } catch (error) {
+      return { error: (error as Error).message };
+    }
+  },
+});
+export const delayedSecret = action({
+  args: { url: v.string() },
+  handler: async (ctx, { url }): Promise<never> => {
+    const secret = (await ctx.env("ACTION_TEST_SECRET"))!;
+    await (await fetch(url)).text();
+    throw new Error(secret + ":" + (await ctx.env("ACTION_TEST_SECRET")));
+  },
+});

@@ -52,7 +52,7 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
                 permissions: ["acp", "net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"],
               }
             : id === "a"
-              ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1"] }
+              ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
               : {
                   exports: "./api.ts",
                   provides: ["chat.tools"],

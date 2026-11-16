@@ -73,8 +73,8 @@ a thread cascades through messages and runs; its in-flight action also stops.
 The `send:*` transaction steps are implementation details excluded from the
 cross-plugin export surface; use `chat:send` to send messages.
 
-No scheduler, retries, or embedded UI is included. Host authentication and
-per-thread sharing govern access.
+No scheduler, retries, or embedded UI is included. The local owner token governs
+access for the single owner.
 There is no plugin initialization hook today. The owner's desktop starts a sweep
 on launch when running runs are observed, then calls the owner-only `runs:observe`
 mutation every 30 seconds on its own timer while runs exist. Each sweep has a
