@@ -11,6 +11,7 @@ export function useShares(client: TokamakClient, ownerId: string) {
   const members = useQuery(client, api.members.list, () => ({}));
   const shares = useQuery(client, api.threads.shares, () => ({}));
   const [saving, setSaving] = createSignal(false);
+  const loading = () => members.data() === undefined || shares.data() === undefined;
 
   const guests = createMemo(() => (members.data() ?? [])
     .filter(member => member.memberId !== ownerId)
@@ -29,7 +30,7 @@ export function useShares(client: TokamakClient, ownerId: string) {
   const has = (threadId: string, memberId: string) => byThread().get(threadId)?.has(memberId) ?? false;
 
   async function toggle(threadId: Id<"threads">, memberId: string) {
-    if (saving()) return;
+    if (loading() || saving()) return;
     setSaving(true);
     try {
       const reference = has(threadId, memberId) ? api.threads.unshare : api.threads.share;
@@ -41,7 +42,7 @@ export function useShares(client: TokamakClient, ownerId: string) {
 
   return {
     members: guests,
-    loading: () => members.loading(),
+    loading,
     error: () => members.error()?.message ?? shares.error()?.message,
     count: (threadId: string) => byThread().get(threadId)?.size ?? 0,
     has,

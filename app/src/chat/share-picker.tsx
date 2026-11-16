@@ -48,7 +48,7 @@ export function SharePicker(props: { sharing: Sharing; threadId: Id<"threads">; 
         <For each={members()}>{(member, i) => {
           const shared = () => props.sharing.has(props.threadId, member.memberId);
           return <button id={`share-member-${i()}`} role="option" aria-selected={index() === i()} aria-checked={shared()} data-member={member.memberId}
-            disabled={props.sharing.saving()} onClick={() => { setIndex(i()); void toggle(i()); }}
+            disabled={props.sharing.loading() || props.sharing.saving()} onClick={() => { setIndex(i()); void toggle(i()); }}
             class={`m-0 flex box-border w-full cursor-pointer items-center gap-3 border-0 px-2 py-1 text-left font-label text-[11px] ${index() === i() ? "bg-text text-ground" : "bg-transparent text-text-2"}`}>
             <span aria-hidden="true" class={`box-border size-2 shrink-0 border border-current ${shared() ? "bg-current" : ""}`} />
             <span class="min-w-0 flex-1">{member.name}</span>
