@@ -1,0 +1,33 @@
+app/src/chat/tool-part.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 18,22
+packages/ui/src/components/textarea.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 84
+app/src/chat/composer-strip.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 22,52
+app/src/styles.css
+  s_2297d4366353cf::t_8af723c62d8d15 21,23,45,47,140-141,162
+app/src/chat/message.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 11,71,84,94
+app/src/chat/backend-picker.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 129,163
+app/src/chat/map.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 18,44,57,78,90
+app/src/chat/permission-part.tsx
+  s_2297d4366353cf::t_8af723c62d8d15 14,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff5f5e42d8b5974bafe9bddee15ec0f36864dcd8",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
