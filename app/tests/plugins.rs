@@ -1653,7 +1653,7 @@ fn chat_screen_socket_workflow() {
             type_text(&mut window, path);
             key(&mut window, Key::Named(NamedKey::Enter), false);
             window.wait(|doc| {
-                support::text(doc, "backend-picker").contains("not an existing directory")
+                support::text(doc, "backend-picker").contains("does not exist")
             });
             assert!(
                 !window
