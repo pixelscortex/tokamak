@@ -1,5 +1,6 @@
 //! ACP types stay behind this boundary; actions exchange plain JSON only.
 mod config;
+mod limits;
 mod ops;
 mod process;
 mod session;

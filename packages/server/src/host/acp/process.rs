@@ -1,10 +1,11 @@
 use super::{
     config::Agent,
+    limits,
     session::{Events, Turn},
 };
 use agent_client_protocol::{schema::ProtocolVersion, v1::schema::InitializeRequest};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, process::Stdio, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, process::Stdio, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout},
@@ -80,7 +81,7 @@ impl Process {
                 }
                 let mut tail = captured.lock().expect("ACP stderr");
                 tail.extend_from_slice(&buffer[..count]);
-                let excess = tail.len().saturating_sub(2048);
+                let excess = tail.len().saturating_sub(limits::STDERR_BYTES);
                 tail.drain(..excess);
             }
         });
@@ -227,17 +228,18 @@ impl Actor {
         output: ChildStdout,
         mut commands: mpsc::UnboundedReceiver<Command>,
     ) -> String {
-        let mut lines = BufReader::new(output).lines();
+        let mut output = BufReader::new(output);
+        let mut frame = Vec::new();
         loop {
-            let idle = tokio::time::sleep(Duration::from_secs(600));
+            let idle = tokio::time::sleep(limits::IDLE_TIMEOUT);
             tokio::pin!(idle);
             let result = tokio::select! {
                 command = commands.recv() => match command {
                     Some(command) => self.command(command).await,
                     None => return "ACP manager closed".into(),
                 },
-                line = lines.next_line() => match line {
-                    Ok(Some(line)) => match serde_json::from_str(&line) {
+                line = read_frame(&mut output, &mut frame) => match line {
+                    Ok(Some(line)) => match serde_json::from_slice(&line) {
                         Ok(message) => self.message(message).await,
                         Err(_) => return "Invalid ACP message".into(),
                     },
@@ -263,6 +265,34 @@ impl Drop for ProcessGroup {
         // The child leads a private group, including wrapper-launched agents.
         unsafe {
             libc::kill(-(self.0 as i32), libc::SIGKILL);
+        }
+    }
+}
+
+// Keep the partial frame outside the select future so command traffic cannot
+// discard bytes. Never allocate more than the frame limit, even without a newline.
+async fn read_frame(
+    output: &mut BufReader<ChildStdout>,
+    frame: &mut Vec<u8>,
+) -> Result<Option<Vec<u8>>, String> {
+    loop {
+        let available = output.fill_buf().await.map_err(|e| e.to_string())?;
+        if available.is_empty() {
+            return if frame.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(std::mem::take(frame)))
+            };
+        }
+        let end = available.iter().position(|byte| *byte == b'\n');
+        let count = end.map_or(available.len(), |index| index + 1);
+        if frame.len() + count > limits::FRAME_BYTES {
+            return Err("ACP frame exceeds 1 MiB limit".into());
+        }
+        frame.extend_from_slice(&available[..count]);
+        output.consume(count);
+        if end.is_some() {
+            return Ok(Some(std::mem::take(frame)));
         }
     }
 }

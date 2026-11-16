@@ -1,15 +1,73 @@
-use super::process::{Actor, Command, Pending, Process};
+use super::{
+    limits,
+    process::{Actor, Command, Pending, Process},
+};
 use agent_client_protocol::v1::schema::{
     CancelNotification, LoadSessionRequest, NewSessionRequest, PromptRequest, ResumeSessionRequest,
 };
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::sync::mpsc;
 
-pub(super) type Events = mpsc::UnboundedSender<Result<Value, String>>;
+pub(super) struct Events {
+    sender: mpsc::UnboundedSender<Result<Value, String>>,
+    bytes: Arc<AtomicUsize>,
+}
+
+pub(super) struct EventReceiver {
+    receiver: mpsc::UnboundedReceiver<Result<Value, String>>,
+    bytes: Arc<AtomicUsize>,
+}
+
+pub(super) fn events() -> (Events, EventReceiver) {
+    let (sender, receiver) = mpsc::unbounded_channel();
+    let bytes = Arc::new(AtomicUsize::new(0));
+    (
+        Events {
+            sender,
+            bytes: bytes.clone(),
+        },
+        EventReceiver { receiver, bytes },
+    )
+}
+
+fn event_bytes(event: &Result<Value, String>) -> usize {
+    match event {
+        Ok(value) => value.to_string().len(),
+        Err(_) => 0,
+    }
+}
+
+impl Events {
+    pub fn send(&self, event: Result<Value, String>) -> Result<(), String> {
+        let size = event_bytes(&event);
+        let previous = self.bytes.fetch_add(size, Ordering::Relaxed);
+        if previous + size > limits::TURN_BYTES {
+            self.bytes.fetch_sub(size, Ordering::Relaxed);
+            let error = "ACP turn event queue exceeds 4 MiB limit".to_owned();
+            let _ = self.sender.send(Err(error.clone()));
+            return Err(error);
+        }
+        if self.sender.send(event).is_err() {
+            self.bytes.fetch_sub(size, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+}
+
+impl EventReceiver {
+    pub async fn recv(&mut self) -> Option<Result<Value, String>> {
+        let event = self.receiver.recv().await?;
+        self.bytes.fetch_sub(event_bytes(&event), Ordering::Relaxed);
+        Some(event)
+    }
+}
 
 pub(super) struct Turn {
     pub owner: String,
@@ -21,7 +79,7 @@ pub(super) struct Turn {
 pub(super) struct Stream {
     pub process: Arc<Process>,
     pub session: String,
-    pub events: tokio::sync::Mutex<mpsc::UnboundedReceiver<Result<Value, String>>>,
+    pub events: tokio::sync::Mutex<EventReceiver>,
 }
 
 pub(super) struct Lease {
@@ -214,7 +272,7 @@ impl Actor {
         } else {
             Ok(json!({"type":"done", "stopReason":message["result"]["stopReason"]}))
         };
-        let _ = turn.events.send(event);
+        turn.events.send(event)?;
         Ok(())
     }
 
@@ -226,14 +284,14 @@ impl Actor {
                 "session/update" => {
                     // No turn exists during session/load: replay is discarded.
                     if let Some(turn) = self.turns.get(session) {
-                        let _ = turn.events.send(Ok(json!({"type":"update", "update":params["update"]})));
+                        turn.events.send(Ok(json!({"type":"update", "update":params["update"]})))?;
                     }
                 }
                 "session/request_permission" => {
                     if let Some(turn) = self.turns.get_mut(session).filter(|turn| !turn.cancelled) {
                         let id = uuid::Uuid::new_v4().to_string();
                         turn.permissions.insert(id.clone(), message.clone());
-                        let _ = turn.events.send(Ok(json!({"type":"permission","requestId":id,"toolCall":params["toolCall"],"options":params["options"]})));
+                        turn.events.send(Ok(json!({"type":"permission","requestId":id,"toolCall":params["toolCall"],"options":params["options"]})))?;
                     } else { self.permission(message, None).await?; }
                 }
                 _ if message.get("id").is_some() => self.write(json!({"jsonrpc":"2.0","id":message["id"],"error":{"code":-32601,"message":"Method not found"}})).await?,

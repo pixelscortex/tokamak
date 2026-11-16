@@ -103,7 +103,7 @@ async fn dispatch(
         process.cancel_session(session);
         return Ok(Value::Null);
     }
-    let (events, receive) = tokio::sync::mpsc::unbounded_channel();
+    let (events, receive) = session::events();
     let id = uuid::Uuid::new_v4().to_string();
     let stream = Arc::new(Stream {
         process: process.clone(),

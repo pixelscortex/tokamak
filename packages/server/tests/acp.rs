@@ -38,6 +38,14 @@ for line in sys.stdin:
         response(request, dict(sessionId=params.get('sessionId', 'session')))
     elif method == 'session/prompt':
         text = params['prompt'][0]['text']
+        if text == 'huge-line':
+            sys.stdout.write('x' * (1024 * 1024 + 1))
+            sys.stdout.flush()
+            continue
+        if text == 'flood':
+            for _ in range(20):
+                send(dict(method='session/update', params=dict(sessionId='session', update=dict(sessionUpdate='agent_message_chunk', content=dict(type='text', text='x' * 600000)))))
+            continue
         if text == 'crash':
             sys.stderr.write('x' * 3000 + 'ACP_CRASH_TAIL')
             sys.stderr.flush()
@@ -67,6 +75,10 @@ const probe = action({ args: { mode: v.string() }, handler: async ({ acp }, { mo
   const events = [];
   for await (const event of acp.prompt({ agent: 'fake', sessionId: opened.sessionId, text: mode })) {
     events.push(event);
+    if (mode === 'flood' && events.length === 1) {
+      const until = Date.now() + 1000;
+      while (Date.now() < until) {}
+    }
     if (event.type === 'permission') {
       if (mode === 'cancel') await acp.cancel({ agent: 'fake', sessionId: opened.sessionId });
       else await acp.respond({ requestId: event.requestId, optionId: 'yes' });
@@ -254,6 +266,18 @@ async fn queries_and_mutations_have_no_acp() {
     let fixture = Fixture::new(true).await;
     for kind in ["query", "mutation"] {
         assert_eq!(fixture.call(kind, kind, json!({})).await.unwrap(), true);
+    }
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn oversized_frame_and_event_backlog_fail_turns() {
+    let fixture = Fixture::new(true).await;
+    for (mode, error) in [
+        ("huge-line", "frame exceeds 1 MiB"),
+        ("flood", "event queue exceeds 4 MiB"),
+    ] {
+        assert!(fixture.action(mode).await.unwrap_err().contains(error));
     }
     fixture.close().await;
 }
