@@ -9,13 +9,12 @@
 //! the real SurrealKV disk engine.
 
 use serde_json::json;
-use server::data::{
-    ChangeEvent, Database, Document, Error, Id, Object, Order, Storage, Table, Value,
-};
-use std::{
-    path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-};
+#[path = "support/data.rs"]
+mod support;
+use support::{Fixture, fields, table, text};
+
+use server::data::{ChangeEvent, Database, Document, Error, Id, Object, Order, Table, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use surrealdb_types::Number;
 use tokio::sync::broadcast::{Receiver, error::TryRecvError};
 
@@ -24,67 +23,8 @@ use tokio::sync::broadcast::{Receiver, error::TryRecvError};
 // before cleanup, an 8 MiB stack for debug builds of the embedded engines).
 // ---------------------------------------------------------------------------
 
-struct Fixture {
-    storage: Storage,
-    directory: Option<PathBuf>,
-}
-
-impl Fixture {
-    fn new(disk: bool) -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        if !disk {
-            return Self {
-                storage: Storage::Memory,
-                directory: None,
-            };
-        }
-        let parent =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tkm83-index-tests");
-        std::fs::create_dir_all(&parent).unwrap();
-        let directory = parent.join(format!(
-            "{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir(&directory).unwrap();
-        Self {
-            storage: Storage::Disk(directory.join("database")),
-            directory: Some(directory),
-        }
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        if let Some(directory) = &self.directory {
-            // Best effort while panicking: a failed assertion may leave the
-            // engine open, and a second panic would hide the real failure.
-            if std::thread::panicking() {
-                let _ = std::fs::remove_dir_all(directory);
-            } else {
-                std::fs::remove_dir_all(directory).expect("remove this test's owned directory");
-            }
-        }
-    }
-}
-
 fn run<F: std::future::Future<Output = ()>>(scenario: impl FnOnce() -> F + Send + 'static) {
-    fn execute<F: std::future::Future<Output = ()>>(scenario: impl FnOnce() -> F) {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(scenario());
-    }
-    let result = std::thread::Builder::new()
-        .name("tkm83-index-test".into())
-        .stack_size(8 * 1024 * 1024)
-        .spawn(move || execute(scenario))
-        .unwrap()
-        .join();
-    if let Err(panic) = result {
-        std::panic::resume_unwind(panic);
-    }
+    support::run("tkm83-index-test", scenario);
 }
 
 macro_rules! backends {
@@ -100,28 +40,12 @@ macro_rules! backends {
     };
 }
 
-fn fields(entries: &[(&str, Value)]) -> Object {
-    let mut object = Object::new();
-    for (key, value) in entries {
-        object.insert(*key, value.clone());
-    }
-    object
-}
-
-fn text(value: &str) -> Value {
-    Value::String(value.into())
-}
-
 fn int(value: i64) -> Value {
     Value::from_int(value)
 }
 
 fn float(value: f64) -> Value {
     Value::Number(Number::Float(value))
-}
-
-fn table(name: &str) -> Table {
-    Table::new(name).unwrap()
 }
 
 fn keys(rows: &[Document]) -> Vec<String> {
@@ -217,7 +141,7 @@ backends!(memory_index_ranges, disk_index_ranges, index_ranges);
 // prefix boundary ("a" must not match "ab"), ties, and descending limits that
 // must start from the top of the range rather than the top of the prefix.
 async fn index_ranges(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let readings = table("readings");
     let mut tx = db.begin().await.unwrap();
@@ -494,7 +418,7 @@ backends!(
 // name, wrong field order, double bounds, ranges without an index) are errors
 // rather than silently degrading into an unindexed or partial scan.
 async fn index_definitions(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let posts = table("posts");
     let mut events = db.subscribe();
@@ -675,7 +599,7 @@ backends!(
 // Also: the writer's own index reads see its uncommitted writes, while a
 // snapshot opened before the commit keeps seeing the old index state.
 async fn index_maintenance(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let tasks = table("tasks");
     let mut tx = db.begin().await.unwrap();
@@ -892,7 +816,7 @@ backends!(
 // A wrong encoding would make the same `eq` return different rows depending on
 // whether `with_index` is used, which callers cannot detect.
 async fn index_equality_matches_scan(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let items = table("items");
     let values: Vec<Option<Value>> = vec![
@@ -1001,7 +925,7 @@ backends!(memory_unique_indexes, disk_unique_indexes, unique_indexes);
 // fields could never be unique-indexed. A poisoned call that is dropped, not
 // rolled back, must not leak index entries (or partial deletes) to later calls.
 async fn unique_indexes(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let users = table("users");
     let mut tx = db.begin().await.unwrap();
@@ -1254,7 +1178,7 @@ backends!(
 // that are missing from the new index; it must get a retryable conflict, as
 // must a definition racing an active writer, so a replay can succeed.
 async fn index_concurrency(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let accounts = table("accounts");
     let mut tx = db.begin().await.unwrap();
@@ -1447,7 +1371,7 @@ fn disk_indexes_survive_reopen() {
 }
 
 async fn indexes_survive_reopen() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new(true, "tkm83-index-tests");
     let notes = table("notes");
     let pending = table("pending");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
@@ -1622,7 +1546,7 @@ backends!(memory_many_rows, disk_many_rows, many_rows);
 // entries. The large commit's event falls back to a table invalidation.
 async fn many_rows(disk: bool) {
     const COUNT: i64 = 300;
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let points = table("points");
     let mut events = db.subscribe();
@@ -1761,7 +1685,7 @@ backends!(memory_change_records, disk_change_records, change_records);
 // images collapses to a table-level invalidation (records None) that still
 // names every written table. Read-only calls and unique failures publish none.
 async fn change_records(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let things = table("things");
     let other = table("other");
@@ -1941,7 +1865,7 @@ backends!(
 // mixtures; on disk they also survive reopen. Unindexed and indexed equality
 // on whole nested values finds the row.
 async fn values_round_trip(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let docs = table("docs");
     let nested = Value::Object(fields(&[
@@ -2092,7 +2016,7 @@ backends!(
 // comparison, with and without an index and through every terminal, must be
 // `Error::Invalid` and poison the call so its earlier writes are discarded.
 async fn non_json_operands_rejected(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let people = table("people");
     let mut setup = db.begin().await.unwrap();
@@ -2225,7 +2149,7 @@ backends!(
 // and without an index. Values with no exact canonical form stay rejected.
 async fn number_widths_are_one_number(disk: bool) {
     use surrealdb_types::Number;
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let items = table("items");
     let two_ints = || {

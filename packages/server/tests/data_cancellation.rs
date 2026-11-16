@@ -17,75 +17,21 @@
 //!   budget levels are tried so the drop lands at different points; each
 //!   operation must have been Pending at least once, or the test fails.
 
-use server::data::{ChangeEvent, Database, Error, Object, Result, Storage, Table, Value};
+#[path = "support/data.rs"]
+mod support;
+use support::{Fixture, table};
+
+use server::data::{ChangeEvent, Database, Error, Object, Result, Table, Value};
 use std::{
     future::{Future, poll_fn},
-    path::PathBuf,
     pin::Pin,
-    sync::atomic::{AtomicU64, Ordering},
     task::Poll,
     time::Duration,
 };
 use tokio::sync::broadcast::{Receiver, error::TryRecvError};
 
-struct Fixture {
-    storage: Storage,
-    directory: Option<PathBuf>,
-}
-
-impl Fixture {
-    fn new(disk: bool) -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        if !disk {
-            return Self {
-                storage: Storage::Memory,
-                directory: None,
-            };
-        }
-        let parent =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tkm83-cancel-tests");
-        std::fs::create_dir_all(&parent).unwrap();
-        let directory = parent.join(format!(
-            "{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir(&directory).unwrap();
-        Self {
-            storage: Storage::Disk(directory.join("database")),
-            directory: Some(directory),
-        }
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        if let Some(directory) = &self.directory {
-            if std::thread::panicking() {
-                let _ = std::fs::remove_dir_all(directory);
-            } else {
-                std::fs::remove_dir_all(directory).expect("remove this test's owned directory");
-            }
-        }
-    }
-}
-
-fn run<F: Future<Output = ()>>(scenario: impl FnOnce() -> F + Send + 'static) {
-    let result = std::thread::Builder::new()
-        .name("tkm83-cancel-test".into())
-        .stack_size(8 * 1024 * 1024)
-        .spawn(move || {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(scenario())
-        })
-        .unwrap()
-        .join();
-    if let Err(panic) = result {
-        std::panic::resume_unwind(panic);
-    }
+fn run<F: std::future::Future<Output = ()>>(scenario: impl FnOnce() -> F + Send + 'static) {
+    support::run("tkm83-cancel-test", scenario);
 }
 
 macro_rules! backends {
@@ -99,10 +45,6 @@ macro_rules! backends {
             run(|| $behavior(true));
         }
     };
-}
-
-fn table(name: &str) -> Table {
-    Table::new(name).unwrap()
 }
 
 fn k(value: i64) -> Object {
@@ -217,7 +159,7 @@ backends!(
 // a retryable conflict whose replay is indexed. Before 857c326 the epoch moved
 // on cancellation and a racing writer could commit an unindexed row.
 async fn cancelled_definition_commit(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-cancel-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let audit = table("audit");
     let mut events = db.subscribe();
@@ -329,7 +271,7 @@ backends!(
 // be silently missing from the new index; data is all-or-nothing; the
 // detached commit publishes exactly one event (none if it failed).
 async fn cancelled_row_commit(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-cancel-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let audit = table("audit");
     let scratch = table("scratch");
@@ -441,7 +383,7 @@ backends!(
 // same transaction may exist, by unindexed scan or by any index, and no event
 // may be published.
 async fn cancelled_mutations_poison(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-cancel-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let rows = table("rows");
     let side = table("side");
@@ -575,7 +517,7 @@ backends!(
 // asserted here rather than passing vacuously.) A host that abandons a slow read (a timeout, a superseded
 // subscription) must still be able to write and commit in that invocation.
 async fn cancelled_reads_keep_transaction(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm83-cancel-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let rows = table("rows");
     let saved = table("saved");

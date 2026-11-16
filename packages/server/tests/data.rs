@@ -2,68 +2,12 @@
 //! No SQL/client escape hatch is used: these are the calls a future host retains
 //! across awaits. Completed commits are event barriers, not timing guesses.
 
+#[path = "support/data.rs"]
+mod support;
+use support::{Fixture, fields, table, text};
+
 use server::data::{ChangeEvent, Database, Error, Id, Object, Order, Storage, Table, Value};
-use std::{
-    path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-};
 use tokio::sync::broadcast::{Receiver, error::TryRecvError};
-
-struct Fixture {
-    storage: Storage,
-    directory: Option<PathBuf>,
-}
-
-impl Fixture {
-    fn new(disk: bool) -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        if !disk {
-            return Self {
-                storage: Storage::Memory,
-                directory: None,
-            };
-        }
-        // Test-owned workspace only; create_dir fails rather than reusing an
-        // existing directory. Cleanup never traverses an external temp root.
-        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tkm3-tests");
-        std::fs::create_dir_all(&parent).unwrap();
-        let directory = parent.join(format!(
-            "{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir(&directory).unwrap();
-        Self {
-            storage: Storage::Disk(directory.join("database")),
-            directory: Some(directory),
-        }
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        if let Some(directory) = &self.directory {
-            // Every successful test awaits Database::close before this guard.
-            std::fs::remove_dir_all(directory).expect("remove this test's owned directory");
-        }
-    }
-}
-
-fn fields(entries: &[(&str, Value)]) -> Object {
-    let mut object = Object::new();
-    for (key, value) in entries {
-        object.insert(*key, value.clone());
-    }
-    object
-}
-
-fn text(value: &str) -> Value {
-    Value::String(value.into())
-}
-
-fn table(name: &str) -> Table {
-    Table::new(name).unwrap()
-}
 
 fn empty(events: &mut Receiver<ChangeEvent>) {
     assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
@@ -85,27 +29,15 @@ fn event(events: &mut Receiver<ChangeEvent>, names: &[&str]) {
 // deliberately use the default libtest thread, so this is not a claim that the
 // future host can ignore its runtime/thread stack. Panics propagate to libtest.
 fn run<F: std::future::Future<Output = ()>>(scenario: impl FnOnce() -> F + Send + 'static) {
-    fn execute<F: std::future::Future<Output = ()>>(scenario: impl FnOnce() -> F) {
+    if cfg!(debug_assertions) {
+        support::run("tkm3-embedded-test", scenario);
+    } else {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap()
             .block_on(scenario());
     }
-    #[cfg(debug_assertions)]
-    {
-        let result = std::thread::Builder::new()
-            .name("tkm3-embedded-test".into())
-            .stack_size(8 * 1024 * 1024)
-            .spawn(move || execute(scenario))
-            .unwrap()
-            .join();
-        if let Err(panic) = result {
-            std::panic::resume_unwind(panic);
-        }
-    }
-    #[cfg(not(debug_assertions))]
-    execute(scenario);
 }
 
 // Each behavior runs once per actual backend, not against a fake transaction.
@@ -151,7 +83,7 @@ backends!(
 // Compare whole documents to prove these patch/replace calls are storage no-ops;
 // a later positive commit is the barrier proving neither queued a false event.
 async fn storage_normalized_noops(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let mut seed = db.begin().await.unwrap();
@@ -200,7 +132,7 @@ async fn cancelled_disk_close() {
         task::Poll,
     };
 
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new(true, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let mut tx = db.begin().await.unwrap();
     let id = tx
@@ -308,7 +240,7 @@ fn busy_close_recovers_after_commit_rollback_and_drop() {
 }
 
 async fn recoverable_shutdown() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new(true, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let mut events = db.subscribe();
     let mut committed = db.begin().await.unwrap();
@@ -351,7 +283,7 @@ async fn recoverable_shutdown() {
 // Acceptance: fixed CRUD preserves identity/time, patch merges, replace removes
 // omitted fields, and business `id`/`data` survive the private storage envelope.
 async fn crud(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let mut tx = db.begin().await.unwrap();
@@ -406,7 +338,7 @@ async fn crud(disk: bool) {
 // correctly, values stay data, and every terminal applies creation-time order
 // and limits consistently. SQL keywords themselves are legal identifiers.
 async fn queries(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("select");
     let payload = "'; DELETE select; RETURN true; -- \" \\ 雪";
@@ -535,7 +467,7 @@ async fn queries(disk: bool) {
 // One committed footprint deduplicates/sorts tables, including insert+delete;
 // rollback, reads, identical updates and missing deletes publish nothing.
 async fn commit_footprints(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let mut events = db.subscribe();
     let mut second = db.subscribe();
@@ -585,7 +517,7 @@ async fn commit_footprints(disk: bool) {
 // than permitting a partially committed mutation. Also guards all three write
 // entry points against forged SDK metadata and the query identifier boundary.
 async fn failed_calls(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let mut events = db.subscribe();
@@ -660,7 +592,7 @@ async fn failed_calls(disk: bool) {
 // Failure mode: excessive value depth must poison a call at the value
 // boundary, just as it did under the former SDK request validation.
 async fn sdk_validation_failure(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let mut events = db.subscribe();
@@ -699,7 +631,7 @@ fn disk_constraint_error_cannot_commit_partial_call() {
 }
 
 async fn disk_constraint_error() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new(true, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let mut setup = db.begin().await.unwrap();
@@ -743,7 +675,7 @@ async fn disk_constraint_error() {
 // commit; concurrent writers see their own values and the loser returns the
 // engine's typed conflict without retrying or publishing its other table.
 async fn snapshots_and_conflicts(disk: bool) {
-    let fixture = Fixture::new(disk);
+    let fixture = Fixture::new(disk, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let other = table("other");
@@ -851,7 +783,7 @@ fn disk_reopen_preserves_only_committed_state() {
 }
 
 async fn disk_reopen() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new(true, "tkm3-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let todos = table("todos");
     let mut tx = db.begin().await.unwrap();
