@@ -8,7 +8,7 @@ import { retainSubscriptions } from "@tokamak/runtime/subscriptions";
 import type { ModuleRegistry } from "@tokamak/runtime/modules";
 import { Contribution } from "./contribution";
 import { ShellFrame } from "./shell-frame";
-import { ExtensionProvider } from "@tokamak/sdk/client";
+import { ExtensionProvider, ShortcutContext } from "@tokamak/sdk/client";
 
 export function Shell(props: { modules: ModuleRegistry }) {
   const transport = new InProcessTransport(createMessageConnection<Request, Event>());
@@ -16,6 +16,18 @@ export function Shell(props: { modules: ModuleRegistry }) {
   const client = new TokamakClient(subscriptions);
   const router = createMemoryRouter("/chat");
   const loader = createPluginLoader(props.modules, transport);
+  const shortcuts = new Map<string, Set<() => void>>();
+  const shortcutAPI = {
+    registerShortcut(key: string, handler: () => void) {
+      const handlers = shortcuts.get(key) ?? new Set<() => void>();
+      shortcuts.set(key, handlers);
+      handlers.add(handler);
+      return () => {
+        handlers.delete(handler);
+        if (!handlers.size) shortcuts.delete(key);
+      };
+    },
+  };
   const [error, setError] = createSignal<string>();
   void loader.connect().catch((cause) => setError(String(cause)));
   onCleanup(() => {
@@ -50,53 +62,71 @@ export function Shell(props: { modules: ModuleRegistry }) {
         <For each={Object.entries(loader.styles())}>
           {([id, css]) => <style data-plugin={id}>{css}</style>}
         </For>
-        <ExtensionProvider host={loader}>
-          <ShellFrame
-            switcher={
-              <>
-                <For each={views()}>
-                  {(view) => (
-                    <button
-                      data-plugin-view={`${view.plugin}/${view.id}`}
-                      aria-current={
-                        active()?.id === view.id && active()?.plugin === view.plugin ? "page" : undefined
-                      }
-                      onClick={() => router.navigate(href(view))}
-                    >
-                      {view.id}
-                    </button>
-                  )}
-                </For>
-              </>
-            }
-            navigation={
-              <>
-                <button aria-label="Go back" onClick={() => router.back()}>
-                  Back
-                </button>
-                <button aria-label="Go forward" onClick={() => router.forward()}>
-                  Forward
-                </button>
-              </>
-            }
-            stage={
-              <>
-                <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
-                <Show keyed when={activeKey()} fallback={<p>View not found</p>}>
-                  {(_key: string) => (
-                    <div
-                      class={
-                        active()?.options.route === "/" ? "shell-plugin shell-plugin-root" : "shell-plugin"
-                      }
-                    >
-                      <Contribution loader={loader} contribution={active()!} componentProps={{ router }} />
-                    </div>
-                  )}
-                </Show>
-              </>
-            }
-          />
-        </ExtensionProvider>
+        <ShortcutContext.Provider value={shortcutAPI}>
+          <ExtensionProvider host={loader}>
+            <ShellFrame
+              onKeyDown={(event) => {
+                if (event.defaultPrevented || event.isComposing) return;
+                const key = [
+                  event.metaKey && "Meta",
+                  event.ctrlKey && "Control",
+                  event.altKey && "Alt",
+                  event.shiftKey && "Shift",
+                  event.key?.toLowerCase(),
+                ]
+                  .filter(Boolean)
+                  .join("+");
+                const handlers = shortcuts.get(key);
+                if (!handlers?.size) return;
+                event.preventDefault();
+                if (!event.repeat) for (const handler of [...handlers]) handler();
+              }}
+              switcher={
+                <>
+                  <For each={views()}>
+                    {(view) => (
+                      <button
+                        data-plugin-view={`${view.plugin}/${view.id}`}
+                        aria-current={
+                          active()?.id === view.id && active()?.plugin === view.plugin ? "page" : undefined
+                        }
+                        onClick={() => router.navigate(href(view))}
+                      >
+                        {view.id}
+                      </button>
+                    )}
+                  </For>
+                </>
+              }
+              navigation={
+                <>
+                  <button aria-label="Go back" onClick={() => router.back()}>
+                    Back
+                  </button>
+                  <button aria-label="Go forward" onClick={() => router.forward()}>
+                    Forward
+                  </button>
+                </>
+              }
+              stage={
+                <>
+                  <Show when={error()}>{(message: Accessor<string>) => <p role="alert">{message()}</p>}</Show>
+                  <Show keyed when={activeKey()} fallback={<p>View not found</p>}>
+                    {(_key: string) => (
+                      <div
+                        class={
+                          active()?.options.route === "/" ? "shell-plugin shell-plugin-root" : "shell-plugin"
+                        }
+                      >
+                        <Contribution loader={loader} contribution={active()!} componentProps={{ router }} />
+                      </div>
+                    )}
+                  </Show>
+                </>
+              }
+            />
+          </ExtensionProvider>
+        </ShortcutContext.Provider>
       </RouterContext.Provider>
     </ClientContext.Provider>
   );

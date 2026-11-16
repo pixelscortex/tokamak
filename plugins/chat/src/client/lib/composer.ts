@@ -6,7 +6,7 @@ import type { useDrafts } from "./state/use-drafts";
 
 export interface ComposerAPI {
   threadId: Accessor<Id<"threads"> | undefined>;
-  draft: Accessor<string>;
+  getDraft(): string;
   setDraft(text: string): void;
   insertText(text: string): void;
   submit(): Promise<void>;
@@ -31,8 +31,10 @@ export function createComposerAPI(chat: ChatState, drafts: ReturnType<typeof use
   let selection: { thread: string | undefined; start: number; end: number } | undefined;
   return {
     threadId: chat.threadId,
-    draft: drafts.draft,
-    setDraft: drafts.edit,
+    getDraft: () => drafts.draft(),
+    setDraft(text) {
+      drafts.edit(text);
+    },
     insertText(text) {
       const draft = drafts.draft();
       const range = selection?.thread === chat.threadId() ? selection : undefined;

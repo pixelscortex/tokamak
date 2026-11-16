@@ -6,7 +6,7 @@ export function SendButton() {
   return (
     <button
       aria-label="Send"
-      disabled={composer.busy() || !composer.draft().trim()}
+      disabled={composer.busy() || !composer.getDraft().trim()}
       onClick={() => void composer.submit()}
     >
       Send

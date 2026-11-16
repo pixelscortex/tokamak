@@ -1,7 +1,8 @@
 import { view } from "@tokamak/sdk";
 import { useClient } from "@tokamak/sdk/solid";
 import { useRouter } from "@tokamak/runtime/router";
-import { useChat } from "../lib/state/use-chat";
+import { useChatSession } from "../lib/state/session";
+import { useShortcuts } from "@tokamak/sdk/client";
 import { ComposerContext, createComposerAPI } from "../lib/composer";
 import { Show, createEffect, createSignal, on, type Accessor } from "solid-js";
 import { BackendPicker } from "../ui/backend/backend-picker";
@@ -11,12 +12,11 @@ import type { NativeEvent } from "@tokamak/render";
 import { ThreadView } from "../ui/messages/thread-view";
 import { Map, MapHeader } from "../ui/map/map";
 import { useMap } from "../lib/state/use-map";
-import { useDrafts } from "../lib/state/use-drafts";
 import { chatKeys } from "../lib/state/chat-keys";
 
 export const Chat = view({ route: "/" }, () => {
-  const chat = useChat(useClient());
   const router = useRouter();
+  const { chat, composer } = useChatSession(useClient(), router, useShortcuts());
   const props = {
     chat,
     get pathname() {
@@ -30,7 +30,6 @@ export const Chat = view({ route: "/" }, () => {
   const map = useMap(props.chat, closeMap);
   let pickPermission: ((index: number) => boolean) | undefined;
   let copyReply: (() => Promise<void>) | undefined;
-  const composer = useDrafts(props.chat);
 
   function closePicker() {
     setPickerOpen(false);

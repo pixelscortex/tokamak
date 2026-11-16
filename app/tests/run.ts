@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
+import { nativeSolid } from "../../packages/build/src/native";
 import { nativeConfig } from "../../packages/render/tools/native-build";
 
 for (const fixture of ["bridge", "fairness"]) {
@@ -17,15 +18,20 @@ for (const fixture of ["bridge", "fairness"]) {
   });
 }
 
-for (const fixture of ["query-lifecycle", "backend-discovery"]) {
+for (const fixture of ["query-lifecycle", "backend-discovery", "client-extensions"]) {
   await build({
     configFile: false,
     resolve: { conditions: ["browser"] },
+    plugins: [nativeSolid()],
     build: {
       target: "esnext",
       outDir: "dist/tests",
       emptyOutDir: false,
-      lib: { entry: `tests/${fixture}.ts`, formats: ["es"], fileName: () => `${fixture}.js` },
+      lib: {
+        entry: `tests/${fixture}.${fixture === "client-extensions" ? "tsx" : "ts"}`,
+        formats: ["es"],
+        fileName: () => `${fixture}.js`,
+      },
       rolldownOptions: { external: ["node:assert/strict"] },
     },
   });

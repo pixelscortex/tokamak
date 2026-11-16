@@ -9,6 +9,8 @@ import {
   createSignal,
   onCleanup,
   useContext,
+  mergeProps,
+  untrack,
   type Component,
 } from "solid-js";
 import { createComponent, warn, type JSX } from "@tokamak/render";
@@ -58,39 +60,53 @@ const Extensions = createContext<() => Loaded[]>(() => []);
  * its layers synchronously; late loads cannot publish into a retired owner. */
 export function ExtensionProvider(props: { host: ExtensionHost; children?: JSX.Element }) {
   const [loaded, setLoaded] = createSignal<Loaded[]>([]);
+  const plugins = new Map<string, { version: number; stop(): void }>();
+  onCleanup(() => {
+    for (const plugin of plugins.values()) plugin.stop();
+    plugins.clear();
+  });
   createEffect(() => {
     const contributions = ["fill", "wrap", "replace"].flatMap((kind) =>
       props.host.contributions(kind as "fill" | "wrap" | "replace"),
     );
-    for (const c of contributions) props.host.version(c.plugin);
-    let alive = true;
-    const failed = new Set<string>();
-    const stops = [...new Set(contributions.map((c) => c.plugin))].map((id) =>
-      props.host.onError(id, (cause) => {
-        failed.add(id);
+    const groups = new Map<string, ExtensionContribution[]>();
+    for (const c of contributions) {
+      const group = groups.get(c.plugin) ?? [];
+      group.push(c);
+      groups.set(c.plugin, group);
+    }
+    for (const [id, plugin] of plugins) {
+      if (!groups.has(id) || plugin.version !== props.host.version(id)) {
+        plugin.stop();
+        plugins.delete(id);
         setLoaded((previous) => previous.filter((c) => c.plugin !== id));
-        warn(`Extension ${id} failed: ${String(cause)}`);
-      }),
-    );
-    onCleanup(() => {
-      alive = false;
-      for (const stop of stops) stop();
-    });
-    setLoaded([]);
-    void Promise.all(
-      contributions.map(async (c) => {
-        try {
-          const exports = await props.host.load(c.plugin);
-          const component = exports[c.id];
-          return typeof component === "function" ? ({ ...c, component } as Loaded) : undefined;
-        } catch (error) {
-          warn(`Extension ${c.plugin}/${c.id} failed: ${String(error)}`);
-          return undefined;
-        }
-      }),
-    ).then((values) => {
-      if (alive) setLoaded(values.filter((v): v is Loaded => !!v && !failed.has(v.plugin)));
-    });
+      }
+    }
+    for (const [id, group] of groups) {
+      const version = props.host.version(id);
+      if (plugins.has(id)) continue;
+      let failed = false;
+      const plugin = {
+        version,
+        stop: props.host.onError(id, (cause) => {
+          failed = true;
+          setLoaded((previous) => previous.filter((c) => c.plugin !== id));
+          warn(`Extension ${id} failed: ${String(cause)}`);
+        }),
+      };
+      plugins.set(id, plugin);
+      void props.host.load(id).then(
+        (exports) => {
+          if (plugins.get(id) !== plugin || failed) return;
+          const values = group.flatMap((c) => {
+            const component = exports[c.id];
+            return typeof component === "function" ? [{ ...c, component } as Loaded] : [];
+          });
+          setLoaded((previous) => [...previous, ...values]);
+        },
+        (cause) => warn(`Extension ${id} failed: ${String(cause)}`),
+      );
+    }
   });
   return <Extensions.Provider value={loaded}>{props.children}</Extensions.Provider>;
 }
@@ -109,7 +125,14 @@ export function Slot<P extends object>(props: { of: SlotDefinition<P>; props: P 
   return (
     <For each={fills()}>
       {(fill) => (
-        <ErrorBoundary fallback={() => null}>{createComponent(fill.component, props.props)}</ErrorBoundary>
+        <ErrorBoundary fallback={() => null}>
+          {untrack(() =>
+            createComponent(
+              fill.component,
+              mergeProps(() => props.props),
+            ),
+          )}
+        </ErrorBoundary>
       )}
     </For>
   );
@@ -117,14 +140,21 @@ export function Slot<P extends object>(props: { of: SlotDefinition<P>; props: P 
 
 /** Compiler-inserted identity at public component declarations, including local
  * calls. The original implementation is private to this component's fallback. */
-export function publicComponent<P extends object>(name: string, original: Component<P>): Component<P> {
+export function publicComponent<P extends object>(
+  name: string | readonly string[],
+  original: Component<P>,
+): Component<P> {
   return (props) => {
     const extensions = useContext(Extensions);
     const composed = createMemo(() => {
       let result = original;
       let replaced = false;
       for (const mod of extensions()
-        .filter((c) => c.options.target === name && c.kind !== "fill")
+        .filter(
+          (c) =>
+            (typeof name === "string" ? [name] : name).includes(String(c.options.target)) &&
+            c.kind !== "fill",
+        )
         .sort((a, b) =>
           a.kind === b.kind
             ? a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id)
@@ -156,4 +186,15 @@ export function publicComponent<P extends object>(name: string, original: Compon
       </Show>
     );
   };
+}
+
+/** Registrations belong to the calling plugin owner, even when its view leaves. */
+export interface Shortcuts {
+  registerShortcut(key: string, handler: () => void): () => void;
+}
+export const ShortcutContext = createContext<Shortcuts>();
+export function useShortcuts(): Shortcuts {
+  const shortcuts = useContext(ShortcutContext);
+  if (!shortcuts) throw new Error("Plugin UI requires shell shortcuts");
+  return shortcuts;
 }

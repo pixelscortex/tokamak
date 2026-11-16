@@ -1652,9 +1652,7 @@ fn chat_screen_socket_workflow() {
             key(&mut window, Key::Character("a".into()), true);
             type_text(&mut window, path);
             key(&mut window, Key::Named(NamedKey::Enter), false);
-            window.wait(|doc| {
-                support::text(doc, "backend-picker").contains("does not exist")
-            });
+            window.wait(|doc| support::text(doc, "backend-picker").contains("does not exist"));
             assert!(
                 !window
                     .requests
@@ -1882,6 +1880,70 @@ fn chat_screen_socket_workflow() {
     assert_eq!(window.subscriptions_to("threads:list"), 1);
     assert_eq!(window.subscriptions_to("runs:running"), 1);
     assert_eq!(window.subscriptions_to("runs:active"), 0);
+}
+
+// Plugin-owned chat state outlives its view, and its shortcut works from a sibling view.
+#[test]
+fn chat_session_and_global_shortcut_survive_navigation() {
+    use blitz_traits::events::{BlitzKeyEvent, KeyState, UiEvent};
+    use keyboard_types::{Code, Key, Location, Modifiers};
+    let new_thread = |window: &mut Window| {
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
+                key: Key::Character("n".into()),
+                code: Code::KeyN,
+                text: None,
+                modifiers: Modifiers::META,
+                location: Location::Standard,
+                is_auto_repeating: false,
+                is_composing: false,
+                state: KeyState::Pressed,
+            }));
+    };
+    let scratch = Scratch::new();
+    scratch.build("initial");
+    let service = Service::start(&scratch);
+    let mut window = Window::open(&service.directory);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("chat-input").is_some()
+            && support::attr(doc, "chat-screen", "data-thread-id").is_some()
+    });
+    // Select a newly created thread so resetting to the first thread cannot pass.
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    new_thread(&mut window);
+    let selected = support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap();
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("chat-screen").is_some()
+            && support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != selected)
+    });
+    let selected = support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap();
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    support::key(window.doc.as_mut().unwrap(), "k", false, false);
+    window.view("consumer/Consumer");
+    window.wait(|doc| doc.inner().get_element_by_id("local-input").is_some());
+    window.view("chat/Chat");
+    window.wait(|doc| doc.inner().get_element_by_id("chat-input").is_some());
+    assert_eq!(
+        support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap(),
+        selected
+    );
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "k");
+    window.view("consumer/Consumer");
+    window.wait(|doc| doc.inner().get_element_by_id("local-input").is_some());
+    support::pointer(window.doc.as_mut().unwrap(), "local-input");
+    new_thread(&mut window);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("chat-screen").is_some()
+            && support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != selected)
+    });
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "");
+    assert_eq!(window.subscriptions_to("threads:list"), 1);
+    assert_eq!(window.subscriptions_to("runs:running"), 1);
 }
 
 // The production shell discovers chat's view and all mods from manifests. A

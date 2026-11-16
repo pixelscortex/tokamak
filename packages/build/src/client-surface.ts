@@ -6,7 +6,10 @@ import type { Plugin } from "vite";
 import { resolve } from "node:path";
 
 export function clientSurface(root: () => string, pluginId: () => string): Plugin {
-  let declarations: Map<string, Map<string, string>>;
+  let declarations: Map<string, Map<string, string[]>>;
+  let program: ts.Program;
+  let checker: ts.TypeChecker;
+  const slotHelpers = new Set<ts.Symbol>();
   return {
     name: "tokamak-client-surface",
     enforce: "pre",
@@ -18,8 +21,24 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
         const configPath = ts.findConfigFile(root(), ts.sys.fileExists);
         const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
         const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root());
-        const program = ts.createProgram([entry], parsed.options);
-        const checker = program.getTypeChecker();
+        program = ts.createProgram([entry], parsed.options);
+        checker = program.getTypeChecker();
+        for (const file of program.getSourceFiles()) {
+          for (const statement of file.statements) {
+            if (
+              !ts.isImportDeclaration(statement) ||
+              !ts.isStringLiteral(statement.moduleSpecifier) ||
+              statement.moduleSpecifier.text !== "@tokamak/sdk/client"
+            )
+              continue;
+            const sdk = checker.getSymbolAtLocation(statement.moduleSpecifier);
+            const helper = sdk && checker.getExportsOfModule(sdk).find((s) => s.name === "defineSlot");
+            if (helper)
+              slotHelpers.add(
+                helper.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(helper) : helper,
+              );
+          }
+        }
         const source = program.getSourceFile(entry)!;
         const module = checker.getSymbolAtLocation(source)!;
         for (let symbol of checker.getExportsOfModule(module)) {
@@ -38,16 +57,20 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
           if (!file.startsWith(root() + "/src/")) continue;
           let names = declarations.get(file);
           if (!names) declarations.set(file, (names = new Map()));
-          names.set(symbol.name, `${pluginId()}.${name}`);
+          const targets = names.get(symbol.name) ?? [];
+          targets.push(`${pluginId()}.${name}`);
+          names.set(symbol.name, targets);
         }
       }
-      const source = ts.createSourceFile(
-        id,
-        code,
-        ts.ScriptTarget.Latest,
-        true,
-        id.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      );
+      const source =
+        program.getSourceFile(id) ??
+        ts.createSourceFile(
+          id,
+          code,
+          ts.ScriptTarget.Latest,
+          true,
+          id.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+        );
       const output = new MagicString(code);
       let changed = false;
       let imports = false;
@@ -80,12 +103,15 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
           }
         }
       }
+      function isSlotHelper(expression: ts.Expression) {
+        let symbol = checker.getSymbolAtLocation(
+          ts.isPropertyAccessExpression(expression) ? expression.name : expression,
+        );
+        if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+        return !!symbol && slotHelpers.has(symbol);
+      }
       function slots(node: ts.Node) {
-        if (
-          ts.isCallExpression(node) &&
-          ts.isIdentifier(node.expression) &&
-          node.expression.text === "defineSlot"
-        ) {
+        if (ts.isCallExpression(node) && isSlotHelper(node.expression)) {
           const name = node.arguments[0];
           if (!name || !ts.isStringLiteralLike(name)) throw new Error("defineSlot requires a literal name");
           output.overwrite(name.getStart(source), name.end, JSON.stringify(`${pluginId()}.${name.text}`));

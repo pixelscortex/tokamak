@@ -247,3 +247,38 @@ test("builder qualifies slots, extracts extension targets and instruments local 
     }
   });
 }, 30_000);
+
+test("slot aliases and namespaces qualify names and reject dynamic names; all component aliases are moddable", async () => {
+  await scratch(async (root) => {
+    const path = await source(
+      root,
+      "aliases",
+      `
+      import { defineSlot as slot } from "@tokamak/sdk/client";
+      import * as client from "@tokamak/sdk/client";
+      export const actions = slot("actions");
+      export const footer = client.defineSlot("footer");
+      function Impl() { return <p>input</p>; }
+      export { Impl as Input, Impl as Alias };
+    `,
+    );
+    built(path);
+    const code = await artifact(path, "ui.js");
+    for (const identity of ["aliases.actions", "aliases.footer", "aliases.Input", "aliases.Alias"])
+      expect(code).toContain(identity);
+    for (const callee of ["slot", "client.defineSlot"]) {
+      await writeFile(
+        resolve(path, "src/main.tsx"),
+        `
+        import { defineSlot as slot } from "@tokamak/sdk/client";
+        import * as client from "@tokamak/sdk/client";
+        const name = "dynamic";
+        export const bad = ${callee}(name);
+      `,
+      );
+      const result = build(path);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("defineSlot requires a literal name");
+    }
+  });
+}, 30_000);
