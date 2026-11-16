@@ -1,5 +1,5 @@
 import { v } from "@tokamak/sdk";
-import { action } from "./_functions";
+import { action } from "@tokamak/sdk";
 
 export const list = action({ handler: ({ acp }) => acp.agents() });
 

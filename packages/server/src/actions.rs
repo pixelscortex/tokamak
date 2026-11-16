@@ -5,7 +5,7 @@ use crate::{
     plugins::Loaded,
     service::{Command, FunctionKind},
 };
-use engine::OpRegistry;
+use engine::{Limits, OpRegistry, Pool, PoolConfig};
 use serde_json::Value as Json;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -24,6 +24,8 @@ pub(crate) fn operations(
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
+    limits: Limits,
+    path: Vec<String>,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
@@ -97,6 +99,74 @@ pub(crate) fn operations(
         })?;
     }
     if let (Some(loaded), Some(owner)) = (generation, owner) {
+        let catalog = loaded.clone();
+        let caller = owner.clone();
+        ops.register_async("plugin.call", move |payload| {
+            let loaded = catalog.clone();
+            let owner = caller.clone();
+            let commands = commands.clone();
+            let limits = limits.clone();
+            let mut path = path.clone();
+            async move {
+                let name = payload["name"]
+                    .as_str()
+                    .ok_or("plugin call requires a function name")?;
+                let args = payload
+                    .get("args")
+                    .ok_or("plugin call requires args")?
+                    .clone();
+                let target = loaded.action_target(&owner, name, &path)?;
+                if target.kind != FunctionKind::Action {
+                    let (reply, wait) = oneshot::channel();
+                    commands
+                        .upgrade()
+                        .ok_or("server is closed")?
+                        .try_send(Command::RunFunction(NestedCall {
+                            generation: Some(loaded),
+                            owner: Some(owner),
+                            name: name.into(),
+                            args,
+                            kind: target.kind,
+                            reply,
+                        }))
+                        .map_err(|e| format!("nested call not admitted: {e}"))?;
+                    return wait
+                        .await
+                        .map_err(|_| "server closed before plugin call completed".to_owned())?;
+                }
+                path.push(name.into());
+                let environment = Arc::new(crate::environment::Snapshot::new(
+                    Some(&loaded),
+                    Some(&target.owner),
+                ));
+                let ops = operations(
+                    commands,
+                    Some(loaded),
+                    Some(target.owner),
+                    environment.clone(),
+                    limits.clone(),
+                    path,
+                )
+                .map_err(|e| e.to_string())?;
+                // A separate, invocation-owned lane avoids recursive waits on the
+                // bounded root action pool. Dropping it cancels the child on reload.
+                let pool = Pool::new_actions(PoolConfig {
+                    workers: 1,
+                    queue_capacity: 1,
+                    limits,
+                })
+                .map_err(|e| e.to_string())?;
+                let pending = pool
+                    .submit(
+                        target.bundle,
+                        "invoke",
+                        serde_json::json!({"name": target.local_name, "args": args}),
+                        ops,
+                    )
+                    .map_err(|e| e.to_string())?;
+                pending.await.map_err(|e| environment.redact(e.to_string()))
+            }
+        })?;
         register_providers(&mut ops, loaded, owner)?;
     }
     Ok(Arc::new(ops))

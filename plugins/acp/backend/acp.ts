@@ -1,6 +1,6 @@
 import type { ActionContext, Id } from "@tokamak/sdk";
-import { api } from "./_generated/api";
-import { streamBuffer } from "./stream-buffer";
+import { chat } from "../../chat/server";
+import { streamBuffer } from "../../chat/stream";
 import { readAcpTurn } from "./acp-turn";
 
 // Keep the most recent history within the byte budget, without splitting Unicode.
@@ -34,7 +34,7 @@ export async function acpSend(
   backend: Backend,
 ) {
   const { runId, messageId } = started;
-  const buffer = streamBuffer(ctx, runId);
+  const buffer = streamBuffer(ctx, runId, { upsertTools: true });
   let sessionId: string | undefined;
   let finished = false;
   let closed = false;
@@ -42,7 +42,7 @@ export async function acpSend(
   const finish = async (outcome: "done" | "error" | "cancelled", error?: string) => ({
     runId,
     messageId,
-    status: (await ctx.runMutation(api.send.update, {
+    status: (await ctx.use(chat).send.update({
       runId,
       delta: buffer.pending(),
       outcome,
@@ -59,11 +59,12 @@ export async function acpSend(
     });
     const opened = await buffer.waitFor(opening);
     openingSession = false;
-    await ctx.runMutation(api.send.session, {
+    await ctx.use(chat).send.session({
       threadId: args.threadId,
-      agent: backend.agent,
-      cwd: backend.cwd,
-      sessionId: opened.sessionId,
+      plugin: "acp",
+      backendId: backend.agent,
+      settings: { cwd: backend.cwd },
+      state: { sessionId: opened.sessionId },
     });
     const prefix = opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
     const text = prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim();

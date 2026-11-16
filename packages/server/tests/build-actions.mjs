@@ -13,22 +13,23 @@ try {
   const files = {};
   for (const id of ["a", "b"])
     await cp(new URL(`./fixtures/actions/${id}/`, import.meta.url), join(root, id), { recursive: true });
-  await cp(join(workspace, "plugins/chat"), join(root, "chat"), {
-    recursive: true,
-    filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
-  });
+  for (const id of ["chat", "acp"])
+    await cp(join(workspace, `plugins/${id}`), join(root, id), {
+      recursive: true,
+      filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
+    });
   await cp(join(workspace, "app/tests/fixtures/record"), join(root, "record"), {
     recursive: true,
     filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
   });
-  for (const id of ["record", "a", "b", "chat"]) {
+  for (const id of ["record", "a", "b", "chat", "acp"]) {
     const path = join(root, id);
     await writeFile(
       join(path, "backend/tsconfig.json"),
       JSON.stringify({
         extends: join(workspace, "tsconfig.json"),
         compilerOptions: {
-          ...(id === "chat" ? { skipLibCheck: true } : {}),
+          ...(["chat", "acp"].includes(id) ? { skipLibCheck: true } : {}),
           paths: {
             "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")],
             "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")],
@@ -48,29 +49,36 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
           : id === "chat"
             ? {
                 exports: "./api.ts",
-                consumes: ["chat.tools"],
-                permissions: ["acp", "net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"],
+                consumes: ["chat.tools", "chat.backend"],
+                permissions: ["net:127.0.0.1", "env:OPENROUTER_API_KEY", "env:OPENROUTER_BASE_URL"],
               }
-            : id === "a"
-              ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
-              : {
+            : id === "acp"
+              ? {
                   exports: "./api.ts",
-                  provides: ["chat.tools"],
-                  consumes: ["chat.tools"],
-                  permissions: [
-                    "net:localhost",
-                    "net:loopback.tkm.test",
-                    "net:private.tkm.test",
-                    "net:metadata.tkm.test",
-                    "net:mapped.tkm.test",
-                    "net:held.tkm.test",
-                  ],
-                }),
+                  depends: { chat: "*" },
+                  provides: ["chat.backend"],
+                  permissions: ["acp"],
+                }
+              : id === "a"
+                ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
+                : {
+                    exports: "./api.ts",
+                    provides: ["chat.tools"],
+                    consumes: ["chat.tools"],
+                    permissions: [
+                      "net:localhost",
+                      "net:loopback.tkm.test",
+                      "net:private.tkm.test",
+                      "net:metadata.tkm.test",
+                      "net:mapped.tkm.test",
+                      "net:held.tkm.test",
+                    ],
+                  }),
       })} })] };
 `,
     );
     if (id === "chat") {
-      const permissions = join(path, "backend/permissions.ts");
+      const permissions = join(path, "backend/permission-wait.ts");
       await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
       const buffer = join(path, "backend/stream-buffer.ts");
       await writeFile(
@@ -111,7 +119,8 @@ export const age = mutation({
     if (id === "chat") {
       const exported = JSON.parse(await readFile(join(path, "dist/manifest.json"), "utf8")).publicFunctions;
       assert.ok(!exported.includes("threads:setBackend"));
-      assert.ok(!exported.some((name) => name.startsWith("permissions:")));
+      assert.ok(exported.includes("permissions:request"));
+      assert.ok(!exported.includes("permissions:answer"));
     }
     for (const name of ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");
@@ -119,6 +128,7 @@ export const age = mutation({
   const driver = join(root, "driver.ts");
   await cp(new URL("./actions-driver.ts", import.meta.url), driver);
   await cp(new URL("./chat-driver.ts", import.meta.url), join(root, "chat-driver.ts"));
+  await cp(new URL("./acp-driver.ts", import.meta.url), join(root, "acp-driver.ts"));
   await cp(new URL("./helpers/completions.ts", import.meta.url), join(root, "completions.ts"));
   await writeFile(
     join(root, "tsconfig.json"),

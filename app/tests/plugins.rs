@@ -1141,12 +1141,16 @@ fn chat_screen_socket_workflow() {
     let scratch = Scratch::new();
     let plugin = scratch.0.join("installation/chat/dist");
     std::fs::create_dir_all(&plugin).unwrap();
-    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
-        std::fs::copy(
-            root().join("plugins/chat/dist").join(file),
-            plugin.join(file),
-        )
-        .unwrap();
+    for id in ["chat", "acp"] {
+        let destination = scratch.0.join(format!("installation/{id}/dist"));
+        std::fs::create_dir_all(&destination).unwrap();
+        for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+            std::fs::copy(
+                root().join(format!("plugins/{id}/dist")).join(file),
+                destination.join(file),
+            )
+            .unwrap();
+        }
     }
     let tools_live = live && std::env::var("TOKAMAK_CHAT_TOOLS").as_deref() == Ok("1");
     let quickstart = live && std::env::var("TOKAMAK_CHAT_QUICKSTART").as_deref() == Ok("1");
@@ -1178,13 +1182,13 @@ fn chat_screen_socket_workflow() {
         let path = plugin.join("manifest.json");
         let mut manifest: Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        manifest["plugin"]["permissions"] = json!(["acp"]);
+        manifest["plugin"]["permissions"] = json!([]);
         std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     }
     if !live {
         std::fs::create_dir_all(scratch.0.join("server")).unwrap();
         std::fs::write(scratch.0.join("server/agents.toml"),
-            "[agents.claude]\ncommand = \"/usr/bin/false\"\nplugins = [\"chat\"]\n[agents.codex]\ncommand = \"/usr/bin/false\"\nplugins = [\"chat\"]\n").unwrap();
+            "[agents.claude]\ncommand = \"/usr/bin/false\"\nplugins = [\"acp\"]\n[agents.codex]\ncommand = \"/usr/bin/false\"\nplugins = [\"acp\"]\n").unwrap();
     }
     let service = Service::start(&scratch);
     if quickstart {
@@ -1688,7 +1692,7 @@ fn chat_screen_socket_workflow() {
                 .iter()
                 .any(|request| request["name"] == "chat/threads:setBackend"
                     && request["args"]["backend"]
-                        == json!({"kind":"acp", "agent":"claude", "cwd":cwd}))
+                        == json!({"kind":"plugin", "plugin":"acp", "backendId":"claude", "settings":{"cwd":cwd}}))
         );
         assert_eq!(support::text(window.doc(), "chat-messages"), history);
         key(&mut window, Key::Character("m".into()), true);

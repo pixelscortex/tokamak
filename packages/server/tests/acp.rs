@@ -58,7 +58,7 @@ impl Fixture {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
         let plugin = if real.is_some() {
-            "chat"
+            "acp"
         } else {
             "probe"
         };
@@ -196,7 +196,7 @@ impl Fixture {
             .unwrap();
         loop {
             match tokio::time::timeout(
-                Duration::from_secs(if self.plugin == "chat" {
+                Duration::from_secs(if self.plugin == "acp" {
                     360
                 } else {
                     45

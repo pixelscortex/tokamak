@@ -1,11 +1,11 @@
 import type {} from "@tokamak/sdk/web";
 import type { ActionContext, Id, Infer } from "@tokamak/sdk";
-import { api } from "./_generated/api";
+import { chat as api } from "../server";
 import type { planPart, ToolPart } from "./parts";
 
 const HEARTBEAT_MS = 10_000;
 
-export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
+export function streamBuffer(ctx: ActionContext, runId: Id<"runs">, options: { upsertTools?: boolean } = {}) {
   let pending = "";
   let flushDue = false;
   let heartbeatDue = false;
@@ -26,9 +26,10 @@ export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
 
   const update = async (tool?: ToolPart, plan?: Infer<typeof planPart>) => {
     const delta = pending;
-    const status = await ctx.runMutation(api.send.update, {
+    const status = await ctx.use(api).send.update({
       runId,
       delta,
+      ...(options.upsertTools ? { upsertTools: true } : {}),
       ...(tool ? { tool } : {}),
       ...(plan ? { plan } : {}),
     });
@@ -53,7 +54,7 @@ export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
         }),
       ]).finally(() => clearTimeout(timer));
 
-      if (!(await ctx.runQuery(api.send.running, { runId }))) throw new Error("Run cancelled");
+      if (!(await ctx.use(api).send.running({ runId }))) throw new Error("Run cancelled");
       await maintain();
       if (result) return result.value;
     }

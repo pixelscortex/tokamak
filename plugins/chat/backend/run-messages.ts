@@ -1,6 +1,6 @@
 import type { DatabaseWriter, Doc } from "@tokamak/sdk";
 import type { Model } from "./_functions";
-import { declinePendingTools, interruptTools } from "./parts";
+import { interruptTools } from "./parts";
 
 export async function interruptResponse(
   db: DatabaseWriter<Model>,
@@ -13,11 +13,6 @@ export async function interruptResponse(
     await db.patch(run.messageId, {
       status,
       ...(status === "error" ? { error } : {}),
-      parts: interruptTools(
-        status === "cancelled" && !run.model.startsWith("acp:")
-          ? declinePendingTools(message.parts)
-          : message.parts,
-        error,
-      ),
+      parts: interruptTools(message.parts, error),
     });
 }

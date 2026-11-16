@@ -1,7 +1,8 @@
+import { chat } from "../../chat/server";
 import type { ActionContext, Id } from "@tokamak/sdk";
 import { acpEvents } from "./acp-events";
-import { permissionWait } from "./permission-wait";
-import type { streamBuffer } from "./stream-buffer";
+import { permissionWait } from "../../chat/stream";
+import type { streamBuffer } from "../../chat/stream";
 
 export async function readAcpTurn(
   ctx: ActionContext,
@@ -12,7 +13,14 @@ export async function readAcpTurn(
 ) {
   const iterator = events[Symbol.asyncIterator]();
   const update = acpEvents(agent, buffer);
-  const permissions = permissionWait(ctx, runId, buffer);
+  const permissions = permissionWait(ctx, runId, buffer, async (requestId, optionId) => {
+    try {
+      await ctx.acp.respond({ requestId, optionId });
+    } catch (error) {
+      if (!String(error).includes("Unknown ACP permission request")) throw error;
+      await ctx.use(chat).permissions.undelivered({ runId, requestId });
+    }
+  });
   let pollAt = Date.now() + 250;
 
   async function maintain() {

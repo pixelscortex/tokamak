@@ -66,6 +66,7 @@ export interface AcpContext {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext {
+  use<T>(api: T): PluginCalls<T, FunctionKind>;
   readonly acp: AcpContext;
   /** Requires a manifest env:<name> grant; unset values return null. */
   env(name: string): Promise<string | null>;
@@ -128,6 +129,7 @@ function builder<K extends FunctionKind, M extends DataModel>(
         const ctx = Object.freeze(
           kind === "action"
             ? {
+                use: <T>(api: T) => bindCalls(api, host),
                 acp: createAcp(host),
                 env: (name: string) => callHost(host, "action.env", { name }),
                 runQuery: (reference: { [functionName]: string }, args: unknown) =>

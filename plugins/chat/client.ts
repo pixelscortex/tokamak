@@ -23,9 +23,13 @@ export const api = createApi<{
     cancel: FunctionReference<"mutation", { runId: Id<"runs"> }, null>;
     observe: FunctionReference<"mutation", { sweepId: string; tick: number }, null>;
   };
-  agents: {
-    list: FunctionReference<"action", {}, { id: string; title: string }[]>;
-    checkFolder: FunctionReference<"action", { path: string }, null>;
+  backends: {
+    list: FunctionReference<"action", {}, (import("./backends").BackendOption & { plugin: string })[]>;
+    configure: FunctionReference<
+      "action",
+      { plugin: string; backendId: string; settings: import("@tokamak/sdk").JsonValue },
+      import("@tokamak/sdk").JsonValue
+    >;
   };
   chat: {
     send: FunctionReference<

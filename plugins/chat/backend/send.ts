@@ -95,9 +95,10 @@ export const update = mutation({
     outcome: v.optional(v.union(v.literal("done"), v.literal("error"), v.literal("cancelled"))),
     error: v.optional(v.string()),
     tool: v.optional(toolUpdate),
+    upsertTools: v.optional(v.boolean()),
     plan: v.optional(planPart),
   },
-  handler: async ({ db }, { runId, delta, outcome, error, tool, plan }) => {
+  handler: async ({ db }, { runId, delta, outcome, error, tool, plan, upsertTools }) => {
     const run = await db.get(runId);
     if (!run || run.status !== "running") return "cancelled" as const;
     await db.patch(runId, { updatedAt: Date.now(), heartbeat: (run.heartbeat ?? 0) + 1 });
@@ -107,7 +108,7 @@ export const update = mutation({
     if (!message) throw new Error("Response message no longer exists");
     let parts = message.parts;
     if (delta) appendText(parts, delta);
-    if (tool) applyToolUpdate(parts, tool);
+    if (tool) applyToolUpdate(parts, tool, upsertTools);
     if (plan) replacePlan(parts, plan);
     if (outcome) parts = interruptTools(parts, unfinishedToolError(outcome, error));
 
@@ -123,11 +124,23 @@ export const update = mutation({
 });
 
 export const session = mutation({
-  args: { threadId: v.id("threads"), agent: v.string(), cwd: v.string(), sessionId: v.string() },
-  handler: async ({ db }, { threadId, agent, cwd, sessionId }) => {
+  args: {
+    threadId: v.id("threads"),
+    plugin: v.string(),
+    backendId: v.string(),
+    settings: v.any(),
+    state: v.any(),
+  },
+  handler: async ({ db }, { threadId, plugin, backendId, settings, state }) => {
     const current = await db.get(threadId);
-    if (current?.backend?.kind === "acp" && current.backend.agent === agent && current.backend.cwd === cwd)
-      await db.patch(threadId, { backend: { ...current.backend, sessionId } });
+    const backend = current?.backend;
+    if (
+      backend?.kind === "plugin" &&
+      backend.plugin === plugin &&
+      backend.backendId === backendId &&
+      JSON.stringify(backend.settings ?? {}) === JSON.stringify(settings)
+    )
+      await db.patch(threadId, { backend: { ...backend, state } });
     return null;
   },
 });

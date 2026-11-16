@@ -7,7 +7,7 @@ workspace:
 tasks:
   bundle:
     command: "proto run bun -- ../packages/build/src/build.ts"
-    deps: ["chat-plugin-bundle"]
+    deps: ["chat-plugin-bundle", "acp-plugin-bundle"]
     options:
       cache: false
   check:
@@ -18,6 +18,11 @@ tasks:
       mutex: "cargo"
   chat-plugin-bundle:
     command: "proto run bun -- ../packages/build/src/build.ts ../plugins/chat"
+    options:
+      cache: false
+  acp-plugin-bundle:
+    command: "proto run bun -- ../packages/build/src/build.ts ../plugins/acp"
+    deps: ["chat-plugin-bundle"]
     options:
       cache: false
   fixture-bundle:

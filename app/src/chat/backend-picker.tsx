@@ -3,11 +3,21 @@ import type { NativeEvent } from "@tokamak/render";
 import { Textarea } from "@tokamak/ui/components";
 import { CHAT_MODELS, currentModel } from "../../../plugins/chat/models";
 import { api, type ChatState, type Thread } from "./use-chat";
+import type { JsonValue } from "@tokamak/sdk";
+
+function backendFolder(settings: JsonValue | undefined): string {
+  return settings &&
+    typeof settings === "object" &&
+    !Array.isArray(settings) &&
+    typeof settings.cwd === "string"
+    ? settings.cwd
+    : "";
+}
 
 export function backendLabel(thread: Thread | undefined) {
   const backend = thread?.backend;
-  return backend?.kind === "acp"
-    ? `${backend.agent} · ${backend.cwd.split("/").filter(Boolean).at(-1) ?? "/"}`
+  return backend?.kind === "plugin"
+    ? `${backend.backendId}${backendFolder(backend.settings) ? ` · ${backendFolder(backend.settings).split("/").filter(Boolean).at(-1) ?? "/"}` : ""}`
     : currentModel(thread);
 }
 
@@ -20,15 +30,21 @@ export function BackendPicker(props: {
   onFolderChange: (editing: boolean) => void;
   onKeyReady: (handler: (event: NativeEvent) => void) => void;
 }) {
-  const [agents, setAgents] = createSignal<{ id: string; title: string }[]>([]);
+  const [options, setOptions] = createSignal<
+    { id: string; title: string; plugin: string; folder?: boolean }[]
+  >([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string>();
   const [index, setIndex] = createSignal(0);
-  const [agent, setAgent] = createSignal<string>();
+  const [selected, setSelected] = createSignal<{ plugin: string; backendId: string }>();
   const backend = props.chat.thread()?.backend;
-  const previous = props.chat.threads.data()?.find((thread) => thread.backend?.kind === "acp")?.backend;
+  const previous = props.chat.threads.data()?.find((thread) => thread.backend?.kind === "plugin")?.backend;
   const [folder, setFolder] = createSignal(
-    backend?.kind === "acp" ? backend.cwd : lastFolder || (previous?.kind === "acp" ? previous.cwd : ""),
+    String(
+      backend?.kind === "plugin"
+        ? backendFolder(backend.settings)
+        : lastFolder || (previous?.kind === "plugin" ? backendFolder(previous.settings) : ""),
+    ),
   );
   let alive = true;
   onCleanup(() => {
@@ -37,12 +53,16 @@ export function BackendPicker(props: {
   const [saving, setSaving] = createSignal(false);
   const choices = createMemo(() => [
     ...CHAT_MODELS.map((model) => ({ title: model, backend: { kind: "model" as const, model } })),
-    ...agents().map((agent) => ({ title: agent.title, backend: { kind: "acp" as const, agent: agent.id } })),
+    ...options().map((agent) => ({
+      title: agent.title,
+      folder: agent.folder,
+      backend: { kind: "plugin" as const, plugin: agent.plugin, backendId: agent.id },
+    })),
   ]);
   void props.chat.client
-    .action(api.agents.list, {})
+    .action(api.backends.list, {})
     .then((value) => {
-      if (alive) setAgents(value);
+      if (alive) setOptions(value);
     })
     .catch((cause) => {
       if (alive) setError(String(cause));
@@ -52,17 +72,26 @@ export function BackendPicker(props: {
     });
 
   async function save(
-    backend: { kind: "model"; model: string } | { kind: "acp"; agent: string; cwd: string },
+    backend:
+      | { kind: "model"; model: string }
+      | { kind: "plugin"; plugin: string; backendId: string; settings?: import("@tokamak/sdk").JsonValue },
   ) {
     const thread = props.chat.thread();
     if (!thread || saving()) return;
     setSaving(true);
     setError(undefined);
     try {
-      if (backend.kind === "acp")
-        await props.chat.client.action(api.agents.checkFolder, { path: backend.cwd });
+      if (backend.kind === "plugin") {
+        const settings = await props.chat.client.action(api.backends.configure, {
+          plugin: backend.plugin,
+          backendId: backend.backendId,
+          settings: backend.settings ?? {},
+        });
+        backend = { ...backend, settings };
+      }
       await props.chat.client.mutation(api.threads.setBackend, { threadId: thread._id, backend });
-      if (backend.kind === "acp") lastFolder = backend.cwd;
+      if (backend.kind === "plugin" && backendFolder(backend.settings))
+        lastFolder = backendFolder(backend.settings);
       if (alive) props.onClose();
     } catch (cause) {
       if (alive) setError(String(cause));
@@ -76,7 +105,7 @@ export function BackendPicker(props: {
     const choice = choices()[i];
     if (!choice) return;
     setError(undefined);
-    if (choice.backend.kind === "acp") setAgent(choice.backend.agent);
+    if (choice.backend.kind === "plugin" && "folder" in choice && choice.folder) setSelected(choice.backend);
     else void save(choice.backend);
   }
 
@@ -85,8 +114,8 @@ export function BackendPicker(props: {
       setError("Folder must be an absolute path");
       return;
     }
-    const selected = agent();
-    if (selected) void save({ kind: "acp", agent: selected, cwd: folder() });
+    const backend = selected();
+    if (backend) void save({ kind: "plugin", ...backend, settings: { cwd: folder() } });
   }
 
   function keydown(event: NativeEvent) {
@@ -95,7 +124,7 @@ export function BackendPicker(props: {
     if (key === "Escape" || key === "Tab") {
       event.preventDefault();
       if (!saving()) props.onClose();
-    } else if (!agent() && (key === "ArrowDown" || key === "ArrowUp" || key === "Enter")) {
+    } else if (!selected() && (key === "ArrowDown" || key === "ArrowUp" || key === "Enter")) {
       event.preventDefault();
       if (key === "Enter") {
         if (!event.repeat) choose(index());
@@ -104,7 +133,7 @@ export function BackendPicker(props: {
   }
 
   createEffect(() => props.onKeyReady(keydown));
-  createEffect(() => props.onFolderChange(Boolean(agent())));
+  createEffect(() => props.onFolderChange(Boolean(selected())));
 
   return (
     <div
@@ -113,10 +142,10 @@ export function BackendPicker(props: {
       onKeyDown={keydown}
     >
       <Show
-        when={!agent()}
+        when={!selected()}
         fallback={
           <>
-            <span>FOLDER · {agent()}</span>
+            <span>FOLDER · {selected()?.backendId}</span>
             <Textarea
               id="backend-folder"
               aria-label="Absolute folder path"
@@ -151,23 +180,19 @@ export function BackendPicker(props: {
           </For>
         </div>
         <Show when={loading()}>
-          <span class="text-text-3">Loading agents…</span>
+          <span class="text-text-3">Loading backends…</span>
         </Show>
-        <Show when={!loading() && !agents().length}>
-          <span class="text-text-3">
-            No agents — add them to agents.toml and restart the app (server)
-            <br />
-            $TOKAMAK_SERVER_DIR/agents.toml
-            <br />
-            Default: ~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml
-          </span>
+        <Show when={!loading() && !options().length}>
+          <span class="text-text-3">No additional backends configured.</span>
         </Show>
         <span class="text-text-3">↑↓ MOVE · ENTER SELECT · ESC CLOSE</span>
+      </Show>
+      <Show when={options().some((option) => option.folder)}>
+        <p class="m-0 text-text-3">An agent can do anything its CLI can in this folder.</p>
       </Show>
       <Show when={error()}>
         <span role="alert">{error()}</span>
       </Show>
-      <p class="m-0 text-text-3">An agent can do anything its CLI can in this folder.</p>
     </div>
   );
 }

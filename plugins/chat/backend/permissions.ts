@@ -2,9 +2,7 @@ import { v } from "@tokamak/sdk";
 import { mutation, query } from "./_functions";
 import { claimPermission, permissionPart } from "./permission-part";
 
-export const TIMEOUT_MS = 30 * 60_000;
-
-// Internal steps; only answer is exposed to the desktop, none to other plugins.
+// Generic backend permission lifecycle; answer is exposed to the desktop.
 export const request = mutation({
   args: { runId: v.id("runs"), part: permissionPart },
   handler: async ({ db }, { runId, part }) => {

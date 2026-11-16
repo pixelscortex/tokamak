@@ -70,7 +70,11 @@ TOKAMAK_CHAT_LIVE=1 TOKAMAK_CHAT_QUICKSTART=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-s
 ```
 
 The second writes `/tmp/tokamak-chat-shots/quickstart.png` using disposable storage.
-See [Chat details](plugins/chat/README.md) for tools, agents and longer smoke tests.
+See [Chat details](plugins/chat/README.md) for tools and backend contracts, and
+[ACP setup](plugins/acp/README.md) for installed coding agents and smoke tests.
+Agent entries in `agents.toml` must allow `plugins = ["acp"]`.
+`bun run app` builds and loads both plugins. Backend storage changes have no
+migration before beta; existing local data may be reset.
 
 ## Commands
 

@@ -1,6 +1,6 @@
 import type { JsonObject } from "@tokamak/sdk";
-import type { ToolPart } from "./parts";
-import type { streamBuffer } from "./stream-buffer";
+import type { ToolPart } from "../../chat/stream";
+import type { streamBuffer } from "../../chat/stream";
 
 function contentText(content: unknown): string {
   const blocks = Array.isArray(content) ? content : [content];

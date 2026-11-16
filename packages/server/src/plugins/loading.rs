@@ -102,6 +102,23 @@ impl Loaded {
         writable: bool,
         path: &[String],
     ) -> Result<Target, String> {
+        let target = self.action_target(caller, name, path)?;
+        if target.kind == crate::service::FunctionKind::Action {
+            return Err("Queries and mutations cannot call actions".into());
+        }
+        if target.mutation && !writable {
+            return Err("Queries cannot call mutations".into());
+        }
+        Ok(target)
+    }
+
+    /// Actions may delegate to exported functions with the target's own grants.
+    pub fn action_target(
+        &self,
+        caller: &str,
+        name: &str,
+        path: &[String],
+    ) -> Result<Target, String> {
         let target = self
             .targets
             .get(name)
@@ -126,15 +143,7 @@ impl Loaded {
             ));
         }
 
-        if target.kind == crate::service::FunctionKind::Action {
-            return Err("Queries and mutations cannot call actions".into());
-        }
-
-        if target.mutation && !writable {
-            return Err("Queries cannot call mutations".into());
-        }
-
-        if path.iter().any(|entry| entry == name) {
+        if path.len() >= 16 || path.iter().any(|entry| entry == name) {
             return Err("Plugin call cycle".into());
         }
 

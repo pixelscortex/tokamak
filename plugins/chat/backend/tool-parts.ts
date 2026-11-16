@@ -1,7 +1,7 @@
 import type { Infer } from "@tokamak/sdk";
 import { boundedError, checkToolArgs, jsonBytes, toolUpdate, type ToolPart, type Part } from "./parts";
 
-export function applyToolUpdate(parts: Part[], tool: Infer<typeof toolUpdate>) {
+export function applyToolUpdate(parts: Part[], tool: Infer<typeof toolUpdate>, upsert = false) {
   const patch = { ...tool };
   if (patch.args !== undefined) checkToolArgs(patch.args);
   if (patch.error !== undefined) patch.error = boundedError(patch.error);
@@ -9,10 +9,8 @@ export function applyToolUpdate(parts: Part[], tool: Infer<typeof toolUpdate>) {
 
   const existing = parts.find((part) => part.type === "tool" && part.callId === patch.callId);
   if (existing?.type === "tool") {
-    if (patch.status === "running" && !existing.plugin.startsWith("acp:"))
-      throw new Error(`Duplicate tool callId: ${patch.callId}`);
-    if (existing.status !== "running" && !existing.plugin.startsWith("acp:"))
-      throw new Error("Tool is already settled");
+    if (patch.status === "running" && !upsert) throw new Error(`Duplicate tool callId: ${patch.callId}`);
+    if (existing.status !== "running" && !upsert) throw new Error("Tool is already settled");
     checkIdentity(patch, existing);
 
     const { callId: _callId, plugin: _plugin, toolName: _toolName, args: _args, ...completion } = patch;

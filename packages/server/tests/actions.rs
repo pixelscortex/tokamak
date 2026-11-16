@@ -64,7 +64,7 @@ impl Installation {
         std::fs::create_dir_all(&path).unwrap();
         let installation = Self(path);
         for (name, source) in artifacts() {
-            if name.starts_with("chat/") && !chat {
+            if (name.starts_with("chat/") || name.starts_with("acp/")) && !chat {
                 continue;
             }
             let path = installation.0.join(name);
@@ -97,6 +97,9 @@ fn acceptance(scenario: &str) {
 
 fn acceptance_over(scenario: &str, websocket: bool) {
     let installation = Installation::with_chat(scenario.starts_with("chat-"));
+    if scenario == "chat-backend-missing" {
+        std::fs::remove_dir_all(installation.0.join("acp")).unwrap();
+    }
     if scenario == "chat-acp" {
         let directory = installation.0.parent().unwrap();
         let agent = directory.join("agent.py");
@@ -107,7 +110,7 @@ fn acceptance_over(scenario: &str, websocket: bool) {
         )
         .unwrap();
         std::fs::write(directory.join("agents.toml"), format!(
-            "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"chat\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"chat\"]\n", json!(agent), json!(agent)
+            "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"acp\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"acp\"]\n", json!(agent), json!(agent)
         )).unwrap();
     }
     if scenario == "chat-grant" || scenario == "chat-real" {
@@ -606,6 +609,11 @@ fn record_tools_allow_consumer_and_refuse_non_consumer() {
 #[test]
 fn chat_acp_backend() {
     acceptance("chat-acp");
+}
+
+#[test]
+fn chat_missing_backend_finishes_run_with_clear_error() {
+    acceptance("chat-backend-missing");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

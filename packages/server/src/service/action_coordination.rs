@@ -15,7 +15,11 @@ impl Coordinator {
                 Some(target.owner.clone()),
             )
         } else {
-            (self.bundle.clone().expect("legacy bundle"), name, None)
+            (
+                self.bundle.clone().expect("legacy bundle"),
+                name.clone(),
+                None,
+            )
         };
 
         let environment = Arc::new(crate::environment::Snapshot::new(
@@ -27,6 +31,8 @@ impl Coordinator {
             self.plugins.clone(),
             owner,
             environment.clone(),
+            self.action_pool.limits().clone(),
+            vec![name.clone()],
         )
         .and_then(|ops| {
             self.action_pool.submit(

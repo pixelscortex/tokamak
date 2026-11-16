@@ -8,8 +8,8 @@ This follows the thread/message boundary in [Convex Agent](https://github.com/ge
 using ordinary message patches rather than a separate stream delta table.
 
 Build with `proto run bun -- packages/build/src/build.ts plugins/chat`.
-The app's normal bundle task builds Chat; the server discovers
-both from the workspace `plugins/` installation. This plugin has no UI.
+The app's normal bundle task builds the bundled plugins; the server discovers
+them from the workspace `plugins/` installation. This plugin has no UI.
 Generated references are in `backend/_generated/api.ts` (`api.threads.list`, etc.).
 
 Set `OPENROUTER_API_KEY` in the server process environment or the workspace's
@@ -17,7 +17,7 @@ ignored `.env.local`. `OPENROUTER_BASE_URL` optionally overrides
 `https://openrouter.ai/api/v1`. The default model is `openrouter/free`; each thread can select a model from
 `models.ts`. `backend/model.ts`
 is the single provider boundary. For another host, also change the manifest's
-`net:<host>` grant and bump the plugin version. Request arguments cannot supply
+`net:<host>` grant. Request arguments cannot supply
 credentials or select a network grant.
 
 Native UI consumers import `api` from `plugins/chat/client.ts`. It uses the same
@@ -37,7 +37,7 @@ All functions use one argument object. Wire names and results:
 | Mutation | `chat/threads:create`     | `{title?: string}`                 | thread ID                                                      |
 | Mutation | `chat/threads:rename`     | `{threadId, title: string}`        | `null`                                                         |
 | Mutation | `chat/threads:setBackend` | `{threadId, backend}`              | `null`                                                         |
-| Action   | `chat/agents:list`        | `{}`                               | `{id, title}[]`                                                |
+| Action   | `chat/backends:list`      | `{}`                               | `{id, title, plugin, folder?}[]`                               |
 | Mutation | `chat/threads:setModel`   | `{threadId, model: string}`        | `null`                                                         |
 | Mutation | `chat/threads:remove`     | `{threadId}`                       | `null`                                                         |
 | Mutation | `chat/runs:observe`       | `{sweepId: string, tick: number}`  | `null`                                                         |
@@ -157,61 +157,27 @@ them with `error:"Interrupted"`.
 Earlier turns flatten tools to `[tool toolName: model text]`; the current run
 keeps AI SDK tool messages. Rendering these parts belongs to the desktop.
 
-## ACP backend
+## Plugin backends
 
-Threads optionally store `backend: {kind:"model", model}` or
-`{kind:"acp", agent, cwd, sessionId?}`. An absent backend uses the existing
-`model` field and default model without migration. `threads:setBackend` preserves
-an existing session only when agent and cwd match; callers cannot inject sessions.
-`threads:setModel` selects the model backend. The plugin declares the `acp` grant;
-configure permitted agents in the host data directory's `agents.toml` with
-`plugins = ["chat"]`. `agents:list` is an action because ACP is action-only.
+Chat consumes `chat.backend` through `ctx.providers` and host-mediated plugin calls.
+The built-in model backend remains the default. Plugins export `backend:describe`,
+`backend:configure` and `backend:turn`; see [`backends.ts`](backends.ts) for the types.
+Describe returns `{id, title, folder?}[]`; folder opts into the existing folder input.
+Configure validates opaque settings before the picker saves them. Turn receives run,
+message and thread IDs, backend ID, text, history, settings and optional provider state.
+It streams through the public functions re-exported in `api.ts`: `send:update`,
+`send:running`, `send:session` and the permission request/state/claim/undelivered steps.
+[`server.ts`](server.ts) supplies finite references; [`stream.ts`](stream.ts) supplies
+reusable buffering and permission polling helpers without importing backend handlers.
 
-ACP opens and saves a session before prompting. Restored sessions receive only
-the new user text; fresh sessions also receive the most recent flattened completed
-history, capped at 32 KB. Runs identify their backend as `acp:<agent>`.
-Text uses the same ordered persistence and 100 ms buffer as model replies.
-Non-text message content becomes `[image]` or `[resource]`. Tools use
-`plugin:"acp:<agent>"`, retain ACP call IDs and follow the existing size limits.
-Plans use `{type:"plan", entries:[{content, status, priority}]}`; each update
-replaces the message's single plan part. Other updates, including thoughts, are ignored.
+Threads store `{kind:"model", model}` or
+`{kind:"plugin", plugin, backendId, settings?, state?}`. Settings and state are opaque
+JSON. Selecting the same provider, option and settings preserves provider state;
+changing them clears it. Callers cannot inject state through `setBackend`.
+Missing backend plugins finish the run with `error` and a readable message.
+There are no backend-field migrations; pre-beta local data may be reset.
 
-Normal completion and token/turn limits finish successfully (limits append a
-short note); refusals persist `Agent refused`. Cancellation stops the agent and
-settles running tools with `error:"cancelled"`. Authentication errors while
-opening suggest signing in to the agent in a terminal. Permission requests flush text and persist an inline `permission` part with the request
-and call IDs, title, options, and `pending`, `answered`, `expired`, or `cancelled`
-status. The run sets `waiting` while polling for an answer; heartbeats continue.
-The first valid option wins.
-Answers record `optionId`. These mutations are not plugin exports.
-After 30 minutes the request expires and ACP receives cancelled; stopping a run
-cancels its pending permission, and stale recovery expires it.
-
-Map groups waiting threads under NEEDS YOU above RUNNING. Permission options appear
-inline with allow options first. With an empty composer, 1–4 answers the latest
-pending request. Answered rows show the chosen option dimmed; expired and cancelled
-rows show their status.
-
-## Configuring real agents
-
-Copy [`agents.example.toml`](../../agents.example.toml) to `agents.toml` in the
-Tokamak data directory: `$TOKAMAK_SERVER_DIR` when set, otherwise
-`~/Library/Application Support/com.pixelscortex.Tokamak` on macOS
-(`$XDG_DATA_HOME/tokamak` or `~/.local/share/tokamak` on Linux).
-Agents are loaded once at startup; restart the app (server) after editing `agents.toml`.
-The pinned Claude and Codex adapters require Node.js/npx. Only named `env`
-variables are passed through, including `PATH` for npx and its Node interpreter.
-Set API keys in the server environment or `.env.local` in the parent of the
-plugin installation directory (the repository root when using workspace `plugins/`).
-Prefer API keys: subscription logins in third-party apps may break provider terms.
-Agents have the same access as their CLI; the selected folder is not a sandbox.
-
-Manual credentialed checks (never part of the normal suite): set
-`TOKAMAK_ACP_AGENTS` to the absolute path of a real `agents.toml` with the relevant
-`claude` / `codex` entry allowing `chat`. Each test uses a temporary copy of this
-repo's tracked files and refuses permission requests.
-
-```sh
-TOKAMAK_ACP_AGENTS=/absolute/path/agents.toml cargo test -p server --test acp acp_real_claude_smoke -- --ignored --exact --nocapture
-TOKAMAK_ACP_AGENTS=/absolute/path/agents.toml cargo test -p server --test acp acp_real_codex_smoke -- --ignored --exact --nocapture
-```
+Permission parts, first-answer-wins claims, cancellation and recovery belong to
+chat. A backend supplies only the callback that delivers the claimed answer.
+After 30 minutes a request expires. Stopping cancels pending requests; recovery
+expires them. Map and inline permission controls work for every backend.

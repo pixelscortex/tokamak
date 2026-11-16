@@ -75,17 +75,19 @@ export const setBackend = mutation({
       const selected = backend.model;
       if (!CHAT_MODELS.some((model) => model === selected)) throw new Error("Unknown chat model");
     }
-    if (backend.kind === "acp") {
+    if (backend.kind === "plugin") {
       const previous = current.backend;
+      const { state: _state, ...selected } = backend;
       backend = {
-        kind: "acp",
-        agent: nonempty(backend.agent),
-        cwd: nonempty(backend.cwd),
-        ...(previous?.kind === "acp" &&
-        previous.agent === backend.agent &&
-        previous.cwd === backend.cwd &&
-        previous.sessionId
-          ? { sessionId: previous.sessionId }
+        ...selected,
+        plugin: nonempty(backend.plugin),
+        backendId: nonempty(backend.backendId),
+        ...(previous?.kind === "plugin" &&
+        previous.plugin === backend.plugin &&
+        previous.backendId === backend.backendId &&
+        JSON.stringify(previous.settings ?? {}) === JSON.stringify(backend.settings ?? {}) &&
+        previous.state !== undefined
+          ? { state: previous.state }
           : {}),
       };
     }

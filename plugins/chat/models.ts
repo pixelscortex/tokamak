@@ -9,10 +9,10 @@ export const CHAT_MODELS = [
 
 export function currentModel(thread?: {
   model?: string;
-  backend?: { kind: "model"; model: string } | { kind: "acp"; agent: string };
+  backend?: { kind: "model"; model: string } | { kind: "plugin"; plugin: string; backendId: string };
 }): string {
   const backend = thread?.backend;
-  return backend?.kind === "acp"
-    ? `acp:${backend.agent}`
+  return backend?.kind === "plugin"
+    ? `${backend.plugin}:${backend.backendId}`
     : (backend?.model ?? thread?.model ?? DEFAULT_MODEL);
 }

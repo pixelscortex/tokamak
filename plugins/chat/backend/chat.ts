@@ -2,7 +2,8 @@ import type {} from "@tokamak/sdk/web";
 import { v, type Id, type ActionContext } from "@tokamak/sdk";
 import { action } from "./_functions";
 import { api } from "./_generated/api";
-import { acpSend } from "./acp";
+import { functionName } from "@tokamak/sdk";
+import type { BackendApi } from "../backends";
 import { discoverTools } from "./tools";
 import { streamBuffer } from "./stream-buffer";
 import { toolEvents } from "./tool-events";
@@ -17,7 +18,41 @@ export const send = action({
     const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
     if (active) throw new Error("Thread already has an active run");
     const started = await ctx.runMutation(api.send.start, args);
-    if (started.backend?.kind === "acp") return acpSend(ctx, args, started, started.backend);
+    if (started.backend?.kind === "plugin") {
+      const backend = started.backend;
+      try {
+        const provider = (await ctx.providers<BackendApi>("chat.backend")).find(
+          (provider) => provider.backend.turn[functionName].split("/")[0] === backend.plugin,
+        );
+        if (!provider) throw new Error(`Backend plugin unavailable: ${backend.plugin}`);
+        const result = await ctx.use(provider).backend.turn({
+          ...args,
+          runId: started.runId,
+          messageId: started.messageId,
+          history: started.history,
+          backendId: backend.backendId,
+          settings: backend.settings ?? {},
+          ...(backend.state === undefined ? {} : { state: backend.state }),
+        });
+        // A provider must settle the run; a buggy provider cannot leave it running.
+        if (!(await ctx.runQuery(api.send.running, { runId: started.runId })))
+          return { runId: started.runId, messageId: started.messageId, status: result.status };
+        const status = await ctx.runMutation(api.send.update, {
+          runId: started.runId,
+          delta: "",
+          outcome: result.status,
+        });
+        return { runId: started.runId, messageId: started.messageId, status: status as Result["status"] };
+      } catch (cause) {
+        const status = await ctx.runMutation(api.send.update, {
+          runId: started.runId,
+          delta: "",
+          outcome: "error",
+          error: String(cause),
+        });
+        return { runId: started.runId, messageId: started.messageId, status: status as Result["status"] };
+      }
+    }
     const { runId, messageId, history, model } = started;
     const controller = new AbortController();
     const buffer = streamBuffer(ctx, runId);
