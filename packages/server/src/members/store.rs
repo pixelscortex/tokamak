@@ -4,6 +4,7 @@ use super::{
 };
 use crate::data::{DataSpace, Database, Error, Id, Result, Table, Transaction, json_object};
 use serde_json::{Value as Json, json};
+use subtle::ConstantTimeEq;
 
 fn table(name: &str) -> Result<Table> {
     DataSpace::host().table(&Table::new(name)?)
@@ -92,14 +93,20 @@ pub(super) async fn authenticate(database: &Database, token: &str) -> Result<Cal
         return Err(Error::AccessDenied);
     }
     let mut tx = Box::pin(database.read_only()).await?;
-    let result = Box::pin(
-        tx.query(&table("members")?)
-            .eq("tokenHash", hash(token))
-            .first(),
-    )
-    .await;
+    // Read members by their public record keys; never use the credential hash
+    // as a database predicate (database string comparisons are not constant-time).
+    let rows = Box::pin(tx.query(&table("members")?).collect()).await;
     Box::pin(tx.commit()).await?;
-    let row = result?.ok_or(Error::AccessDenied)?.into_json();
+    let token_hash = hash(token);
+    let mut member = None;
+    for row in rows? {
+        let row = row.into_json();
+        let stored = row["tokenHash"].as_str().unwrap_or("");
+        if bool::from(stored.as_bytes().ct_eq(token_hash.as_bytes())) {
+            member = Some(row);
+        }
+    }
+    let row = member.ok_or(Error::AccessDenied)?;
     Ok(Caller {
         member_id: row["memberId"].as_str().ok_or(Error::AccessDenied)?.into(),
         name: row["name"].as_str().ok_or(Error::AccessDenied)?.into(),

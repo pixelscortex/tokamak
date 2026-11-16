@@ -5239,6 +5239,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "subtle",
  "surrealdb-datastore",
  "surrealdb-idx",
  "surrealdb-kvs",

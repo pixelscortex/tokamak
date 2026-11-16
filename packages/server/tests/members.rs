@@ -937,3 +937,25 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
     drop(owner);
     clean(fixture).await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn token_comparison_rejects_mismatches_at_either_end() {
+    let fixture = Fixture::new().await;
+    let member = fixture.member().await;
+    let token = member["token"].as_str().unwrap();
+    for index in [0, token.len() - 1] {
+        let mut wrong = token.as_bytes().to_vec();
+        wrong[index] = if wrong[index] == b'0' {
+            b'1'
+        } else {
+            b'0'
+        };
+        let wrong = String::from_utf8(wrong).unwrap();
+        assert!(
+            matches!(connect(&fixture.guest, &wrong).await, Err(tokio_tungstenite::tungstenite::Error::Http(response)) if response.status() == 401)
+        );
+    }
+    let socket = fixture.socket(token).await;
+    drop(socket);
+    clean(fixture).await;
+}
