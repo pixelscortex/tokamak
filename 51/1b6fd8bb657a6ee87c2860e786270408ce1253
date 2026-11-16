@@ -35,6 +35,7 @@ app/src/chat/use-chat.ts
 plugins/chat/backend/chat.ts
   s_7147fcd8cc388f::t_bce8fae49057ef 2-3,16-21,23-25
   s_7147fcd8cc388f::t_cb3170691c210e 22,31,33-39,41-51,53-56,60-61,63-67
+  s_7147fcd8cc388f::t_cf76410fc66e02 40,52,58
 plugins/chat/backend/backends.ts
   s_7147fcd8cc388f::t_bce8fae49057ef 1,5,7-14
 plugins/chat/backend/send.ts
@@ -73,6 +74,7 @@ app/tests/native.rs
   s_7147fcd8cc388f::t_390eae9d8e55ab 1113
 app/tests/plugins.rs
   s_7147fcd8cc388f::t_002f076fd75dc0 1156,1623-1624,1706-1707,1737,1762,1764,1766-1767,1772,1775-1781
+  s_7147fcd8cc388f::t_cf76410fc66e02 1304
 packages/engine/WEB_APIS.md
   s_7147fcd8cc388f::t_abcf61ff3b386e 110-111
 packages/server/tests/actions-driver.ts
@@ -83,8 +85,11 @@ packages/server/tests/build-actions.mjs
   s_7147fcd8cc388f::t_895e27cf1037cc 48,52
 packages/server/tests/chat-driver.ts
   s_7147fcd8cc388f::t_d6d4a99c2ab43c 2,5,7-13,18-19,27-28,32-34,36-37,43-46,48-65,67-81,83-86,88,90-93,97-98,100-115,117,123-125,127-130,133-148,150-165,167-172,180-185
+  s_7147fcd8cc388f::t_cf76410fc66e02 6,14-17,38-42,47,66,87,89,99,116,120,149,175
 plugins/chat/client.ts
   s_7147fcd8cc388f::t_7cdf6cdc446049 8-18
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_7147fcd8cc388f::t_cf76410fc66e02 2
 ---
 {
   "schema_version": "authorship/3.0.0",
