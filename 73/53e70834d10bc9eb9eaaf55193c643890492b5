@@ -1,0 +1,30 @@
+packages/runtime/Cargo.toml
+  s_84fb57a5a3e41f::t_3a843c127eac6c 10-11,16-17
+app/tests/plugins.rs
+  s_84fb57a5a3e41f::t_3a843c127eac6c 185,187,189-190,1967,1969-1974,1976-2027,2029-2032,2170-2201
+  s_84fb57a5a3e41f::t_21ff1647b06b35 186,1968,1975,2028,2040
+packages/runtime/src/client/connection.rs
+  s_84fb57a5a3e41f::t_3a843c127eac6c 20-47,79
+packages/runtime/src/client/remote.rs
+  s_84fb57a5a3e41f::t_3a843c127eac6c 33-55,69
+app/Cargo.toml
+  s_84fb57a5a3e41f::t_3a843c127eac6c 23-25
+Cargo.lock
+  s_84fb57a5a3e41f::t_d1e5af2a47ebe9 345-383,580-582,1406-1419,3024,3322-3327,3488-3497,3775-3783,4000-4009,4569-4582,4963,4969,5010-5018,6766,6773,8393-8410,8458-8467
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7353e70834d10bc9eb9eaaf55193c643890492b5",
+  "prompts": {},
+  "sessions": {
+    "s_84fb57a5a3e41f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e2bc-1bad-7941-8918-e66758435ca4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
