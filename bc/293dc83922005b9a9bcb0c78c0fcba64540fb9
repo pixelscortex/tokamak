@@ -1,0 +1,23 @@
+packages/server/README.md
+  s_4cb006a39dd732::t_d08ca7c09cb542 487-504
+packages/server/src/host/acp/config.rs
+  s_4cb006a39dd732::t_7275a5cdcefff0 11
+packages/server/tests/acp.rs
+  s_4cb006a39dd732::t_cac02857012447 15,120-123,162,167-199,410-429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bc293dc83922005b9a9bcb0c78c0fcba64540fb9",
+  "prompts": {},
+  "sessions": {
+    "s_4cb006a39dd732": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e1bb-de41-74e1-b118-f821c7f8ac35",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
