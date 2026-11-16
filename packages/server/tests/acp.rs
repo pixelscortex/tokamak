@@ -12,6 +12,7 @@ const AGENT: &str = r#"
 import sys, json, os
 assert os.environ.get('ACP_TEST_PASSTHROUGH') == 'from-dotenv'
 assert 'HOME' not in os.environ
+assert 'ACP_TEST_UNLISTED' not in os.environ
 assert 'PATH' not in os.environ
 pending = None
 cancelled = False
@@ -116,6 +117,10 @@ impl Fixture {
     }
 
     async fn with_agent(granted: bool, agent_source: &str) -> Self {
+        Self::with_launcher(granted, agent_source, false).await
+    }
+
+    async fn with_launcher(granted: bool, agent_source: &str, pass_path: bool) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
         let plugins = root.join("plugins");
@@ -154,14 +159,31 @@ impl Fixture {
         }).to_string()).unwrap();
         std::fs::write(
             root.join(".env.local"),
-            "ACP_TEST_PASSTHROUGH=from-dotenv\nACP_TEST_HANG_INITIALIZE=1\n",
+            "ACP_TEST_PASSTHROUGH=from-dotenv\nACP_TEST_HANG_INITIALIZE=1\nACP_TEST_UNLISTED=not-visible\n",
         )
         .unwrap();
         let agent = root.join("agent.py");
         std::fs::write(&agent, agent_source).unwrap();
-        std::fs::write(root.join("agents.toml"), format!(
-            "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"probe\"]\n", json!(agent.to_str().unwrap())
-        )).unwrap();
+        let command = if pass_path {
+            "acp-path-only-launcher"
+        } else {
+            "/usr/bin/python3"
+        };
+        let env = if pass_path {
+            json!(["ACP_TEST_PASSTHROUGH", "PATH"])
+        } else {
+            json!(["ACP_TEST_PASSTHROUGH"])
+        };
+        std::fs::write(
+            root.join("agents.toml"),
+            format!(
+                "[agents.fake]\ncommand = {}\nargs = [{}]\nenv = {}\nplugins = [\"probe\"]\n",
+                json!(command),
+                json!(agent.to_str().unwrap()),
+                env
+            ),
+        )
+        .unwrap();
         use std::io::Write;
         writeln!(
             std::fs::OpenOptions::new().append(true).open(root.join("agents.toml")).unwrap(),
@@ -370,5 +392,57 @@ async fn crash_reports_tail_even_when_descendant_holds_stderr() {
     }
     assert!(started.elapsed() < Duration::from_secs(3), "{error}");
     assert!(error.contains("ACP_HELD_TAIL"), "{error}");
+    fixture.close().await;
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn launcher_resolves_command_from_allowed_path() {
+    // Set PATH only in an isolated test process; never mutate the test runner's
+    // environment while other tests are launching agents.
+    if std::env::var_os("ACP_TEST_PATH_CHILD").is_none() {
+        let directory = tempfile::tempdir().unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let launcher = directory.path().join("acp-path-only-launcher");
+        std::fs::write(&launcher, "#!/bin/sh\nexec /usr/bin/python3 \"$@\"\n").unwrap();
+        std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let path = format!(
+            "{}:{}",
+            directory.path().display(),
+            std::env::var("PATH").unwrap()
+        );
+        let output = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "launcher_resolves_command_from_allowed_path",
+                "--nocapture",
+            ])
+            .env("ACP_TEST_PATH_CHILD", "1")
+            .env("PATH", path)
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let agent = AGENT.replace(
+        "assert 'PATH' not in os.environ",
+        "assert 'PATH' in os.environ",
+    );
+    let fixture = Fixture::with_launcher(true, &agent, true).await;
+    fixture.action("hello").await.unwrap();
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn launcher_does_not_pass_unlisted_variables() {
+    let fixture = Fixture::new(true).await;
+    // The fake agent asserts the dotenv-only ACP_TEST_UNLISTED is absent.
+    assert!(fixture.action("hello").await.is_ok());
     fixture.close().await;
 }

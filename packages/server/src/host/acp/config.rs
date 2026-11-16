@@ -8,6 +8,7 @@ pub(super) struct Agent {
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]
+    // Passthrough only. npx-based agents must list PATH for node and helpers.
     pub env: Vec<String>,
     #[serde(default)]
     pub plugins: Vec<String>,

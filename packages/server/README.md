@@ -484,3 +484,21 @@ Owned-probe formatted source SHA-256:
 `925ff075b150b08e33daf04b9576b03b4e7cb54bcf869db12e030713375c317a`.
 Owned-probe measured release executable SHA-256:
 `e0f4f4a8f97a0e277d3872d04a49cdcefc592dbaa11534b0e9829880bd75f943`.
+
+
+## ACP agents
+
+Configure agents in `agents.toml` in the Tokamak data directory:
+
+```toml
+[agents.claude]
+command = "npx"
+args = ["-y", "@agentclientprotocol/claude-agent-acp@0.106.0"]
+env = ["PATH", "ANTHROPIC_API_KEY"]
+plugins = ["chat"]
+```
+
+The launcher clears the environment and passes through only names listed in
+`env`, resolving values from the host environment and local dotenv files.
+**npx-based agents must list `PATH` in `env`** so npx can find Node and any
+adapter helpers. Other agents may also need it to locate subprocess commands.
