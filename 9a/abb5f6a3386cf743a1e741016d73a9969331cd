@@ -1,0 +1,19 @@
+app/src/chat/use-drafts.ts
+  s_e6dac773702cd2::t_29cdc3dbd85343 1,11-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9aabb5f6a3386cf743a1e741016d73a9969331cd",
+  "prompts": {},
+  "sessions": {
+    "s_e6dac773702cd2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e25a-35bc-7e12-a71d-fdd7fdef8886",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
