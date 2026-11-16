@@ -1,0 +1,30 @@
+app/src/chat/screen.tsx
+  s_6784d5f8e77511::t_f70b8d3dde5aca 2,26-33,91
+app/src/chat/map.tsx
+  s_6784d5f8e77511::t_f70b8d3dde5aca 44,49
+plugins/chat/README.md
+  s_6784d5f8e77511::t_f70b8d3dde5aca 196,199-200
+app/src/chat/backend-picker.tsx
+  s_6784d5f8e77511::t_f70b8d3dde5aca 81,89-90
+app/src/chat/composer-strip.tsx
+  s_6784d5f8e77511::t_f70b8d3dde5aca 19
+app/tests/plugins.rs
+  s_6784d5f8e77511::t_f70b8d3dde5aca 1705-1710,1716,1727-1728
+  s_6784d5f8e77511::t_3e8e72589dcbef 1717-1726
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6528a4f223514c566275276df821392eb999aad9",
+  "prompts": {},
+  "sessions": {
+    "s_6784d5f8e77511": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e20e-1510-7b51-9c53-2f5f0157f9d3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
