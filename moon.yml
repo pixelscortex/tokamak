@@ -5,6 +5,37 @@ workspace:
   inheritedTasks:
     include: []
 tasks:
+  # Cache complete verification stages, not Cargo target directories. Inputs
+  # cover cross-package imports and native include_str! dependencies. Ignored
+  # generated files are excluded by moon's VCS hasher.
+  ci-ts:
+    command: "bash .ci/check.sh ts"
+    inputs: ["/**/*", "$CI_PLATFORM"]
+    options:
+      cache: true
+  ci-native:
+    command: "bash .ci/check.sh native"
+    inputs: ["/**/*", "$CI_PLATFORM"]
+    options:
+      cache: true
+  acp-test:
+    command: "proto run bun -- test plugins/acp"
+    options:
+      cache: false
+  rust-test:
+    # Includes doctests, unit tests and app/tests/e2e.rs omitted by app:test.
+    # Cargo keeps login-dependent real-adapter tests ignored by default.
+    command: "cargo test --locked --workspace --all-features --jobs 2 -- --test-threads=1"
+    options:
+      cache: false
+      mutex: "cargo"
+  gpu-test:
+    # Explicitly select only offline captures, never all ignored tests.
+    deps: ["lab:bundle"]
+    command: "cargo test --locked --package tokamak-lab --test shell --jobs 2 -- --ignored capture_ --test-threads=1"
+    options:
+      cache: false
+      mutex: "cargo"
   e2e:
     deps: ["app:test"]
     command: "proto run bun -- e2e/run.ts"

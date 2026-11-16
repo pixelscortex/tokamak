@@ -21,6 +21,44 @@ Root `plugins/` contains the installed Chat and ACP plugins.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
 names remain unchanged; `app` and `lab` are separate application projects.
 
+## CI
+
+Linux checks run on Depot CI for relevant pull requests, pushes to `main`, and
+merge queues. A 2 CPU job runs formatting, TS lint, typechecks, SDK tests and
+`bun test` in `plugins/acp` before native validation. Native validation includes
+the existing moon check/test tasks, workspace Rust tests, and offline headless
+Vello captures using Mesa lavapipe on Linux and Metal on macOS. Clippy retains
+the local gate's advisory behavior. Login-dependent adapter smoke tests stay
+ignored; CI does not use personal adapter logins.
+
+macOS uses Depot's `depot-macos-latest` GitHub Actions runner on `main` and for
+PRs that change native code, build tooling, or toolchain configuration. Add the
+`ci:macos` label to request it for any PR. Documentation-only changes skip Linux
+and macOS native checks (the macOS path selector is a small GitHub-hosted job).
+
+Run Linux against your local worktree, including staged new workflow files:
+
+```sh
+depot ci run --workflow .depot/workflows/ci.yml
+# Or iterate on one job:
+depot ci run --workflow .depot/workflows/ci.yml --job typescript
+```
+
+Both platforms use Depot Cache for moon verification results, Rust compilation
+through sccache, Cargo registry/git downloads, Bun downloads, and pinned
+proto/moon/Bun/Rust installs. Verification stages hash workspace sources and
+platform identity because the native/type fixtures span package boundaries;
+CI runs the full gate rather than trusting an incomplete affected project graph.
+Generated files and dependency directories are excluded from source hashes.
+Export `DEPOT_TOKEN` locally to share moon's remote cache; without it, moon
+disables remote caching (with a warning) and local commands work normally.
+For local Rust cache sharing, use `depot cargo` or configure sccache with Depot's
+WebDAV endpoint and your Depot token. CI uses injected short-lived credentials.
+
+On `main`, CI builds server binaries for Linux x64/arm64 and desktop + server
+binaries for macOS arm64, retained as workflow artifacts for 7 days. Signing,
+release publication and deployment will be added after artifact validation.
+
 ## Quick start
 
 Install [Bun](https://bun.sh) (required for plugin workers), [proto](https://moonrepo.dev/proto) and rustup, plus the native build
