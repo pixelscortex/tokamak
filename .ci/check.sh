@@ -10,7 +10,8 @@ case "$1" in
     # its normalized comparison before concurrent TS fixture/type checks.
     moon run server:check
     # Existing scripts supply bundles, generated references and type fixtures.
-    moon run workspace:lint-rust app:check lab:check runtime:check render:check engine:check :test
+    moon run workspace:lint-rust app:check lab:check runtime:check render:check engine:check
+    moon run :test
     moon run workspace:rust-test workspace:gpu-test
     ;;
   *) exit 2 ;;
