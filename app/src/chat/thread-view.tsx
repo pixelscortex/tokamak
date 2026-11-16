@@ -22,13 +22,14 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
     part.type === "permission" && part.status === "pending" && part.optionId === undefined ? [{ messageId: message._id, part }] : [])).at(-1);
 
   async function answer(messageId: Id<"messages">, part: Permission, optionId: string) {
-    if (answering()) return;
+    if (!props.chat.isOwner() || answering()) return;
     setAnswering(true);
     try { await props.chat.client.mutation(api.permissions.answer, { messageId, requestId: part.requestId, optionId }); }
     catch (cause) { props.chat.setError(String(cause)); }
     finally { setAnswering(false); }
   }
   createEffect(() => props.onPermissionReady?.(index => {
+    if (!props.chat.isOwner()) return false;
     const latest = latestPermission();
     const option = latest && permissionOptions(latest.part)[index];
     if (!latest || !option) return false;
@@ -84,7 +85,7 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
   return <div class={props.hidden ? "hidden" : "flex min-h-0 flex-1 flex-col gap-5"}>
     {/* Blitz only supports non-negative scroll offsets; keep history in normal flow. */}
     <div ref={follow} id="chat-messages" role="log" aria-label="Conversation" class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain">
-      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} viewerId={props.chat.identity()?.memberId} onAnswer={(part, optionId) => void answer(byId().get(id)!._id, part, optionId)} liveCards={props.hidden ? new Set<string>() : liveCards()} />}</For>
+      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} viewerId={props.chat.identity()?.memberId} onAnswer={props.chat.isOwner() ? (part, optionId) => void answer(byId().get(id)!._id, part, optionId) : undefined} liveCards={props.hidden ? new Set<string>() : liveCards()} />}</For>
     </div>
     <Show when={messages.error()}><p role="alert" class="m-0 text-text-2">{messages.error()?.message}</p></Show>
     <Show when={props.chat.thread()}>

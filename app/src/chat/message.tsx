@@ -34,7 +34,7 @@ export function Message(props: { loader: PluginLoader; threadId: string; message
           return id.startsWith("text:")
             ? <Markdown text={(part() as Extract<ChatMessage["parts"][number], { type: "text" }>).text} />
             : id.startsWith("permission:")
-            ? <PermissionPart part={part() as Permission} onAnswer={optionId => props.onAnswer?.(part() as Permission, optionId)} />
+            ? <PermissionPart part={part() as Permission} onAnswer={props.onAnswer ? optionId => props.onAnswer?.(part() as Permission, optionId) : undefined} />
             : id.startsWith("plan:") ? <span class="text-text-3 font-label text-[10px]">{(part() as Extract<ChatMessage["parts"][number], { type: "plan" }>).entries.map(entry => entry.content).join(" · ")}</span>
             : <ToolPart loader={props.loader} part={part() as Extract<ChatMessage["parts"][number], { type: "tool" }>} threadId={props.threadId} live={props.liveCards?.has((part() as Extract<ChatMessage["parts"][number], { type: "tool" }>).callId) ?? true} />;
         }}</For></div>

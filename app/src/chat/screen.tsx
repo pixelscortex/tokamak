@@ -70,7 +70,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
       }
     } else if (mapOpen()) {
       map.keydown(event);
-    } else if (!composer.draft() && /^[1-4]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.repeat && pickPermission?.(Number(key) - 1)) {
+    } else if (props.chat.isOwner() && !composer.draft() && /^[1-4]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.repeat && pickPermission?.(Number(key) - 1)) {
       event.preventDefault();
     } else stopRun(event);
   }
