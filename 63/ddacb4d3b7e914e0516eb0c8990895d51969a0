@@ -1,0 +1,60 @@
+packages/server/Cargo.toml
+  s_077fa15fee6edd::t_8ba2e20621af96 21-22,47
+  s_077fa15fee6edd::t_41d3f506e837a3 48-50
+packages/server/src/plugins/catalog.rs
+  s_077fa15fee6edd::t_1a379c4bb66896 9-16,85-90,96-97
+packages/server/src/service/startup.rs
+  s_077fa15fee6edd::t_1a379c4bb66896 73
+  s_077fa15fee6edd::t_75bd7358eafb09 70-72
+packages/server/src/host/acp/config.rs
+  s_077fa15fee6edd::t_c0b78c76a2721d 1-31
+packages/sdk/src/functions.ts
+  s_077fa15fee6edd::t_cce623ff881078 40-49
+  s_077fa15fee6edd::t_5b53344c03df5e 38-39,50-59,62,117,141-165
+  s_077fa15fee6edd::t_092a921fccfff0 166
+packages/server/src/actions.rs
+  s_077fa15fee6edd::t_1a379c4bb66896 29-39
+packages/server/src/host/acp/session.rs
+  s_077fa15fee6edd::t_c0b78c76a2721d 5,10-33,38-48,54-63,70-73,80-264
+  s_077fa15fee6edd::t_1a379c4bb66896 6-9,34-37,49-53,74,76-79
+  s_077fa15fee6edd::t_dffa4a03ceac87 1-4,64-69,75
+packages/server/src/host/acp/mod.rs
+  s_077fa15fee6edd::t_d82f97ae38d451 35,37-38
+  s_077fa15fee6edd::t_1a379c4bb66896 9-13,57
+  s_077fa15fee6edd::t_c0b78c76a2721d 1-8,14-19,21-28,30-34,39-56,63-66
+  s_077fa15fee6edd::t_6229a28fb7a9e0 20,29,36,58-62
+packages/server/src/host/acp/ops.rs
+  s_077fa15fee6edd::t_d82f97ae38d451 15
+  s_077fa15fee6edd::t_1a379c4bb66896 1-14,16-70,72-147,149-154
+  s_077fa15fee6edd::t_f0b3305aa8a08c 71,148
+packages/server/src/host.rs
+  s_077fa15fee6edd::t_8ba2e20621af96 263-264
+packages/server/src/host/acp/process.rs
+  s_077fa15fee6edd::t_1a379c4bb66896 1-4,8-12,23-44,59-67,78-80,90-93,105-110,112-115,119-121,126-128,132-136,140-146,148-154,158-163,165-170,175-185,189-191,206-209,220-221,224-229,250-251
+  s_077fa15fee6edd::t_62f6483a1d0466 5-7,13,15,20,45-53,70-77,81-89,94-102,111,116-118,122-125,129-131,137-139,147,155-157,164,171-174,186-188,192-194,200-202,204-205,210-211,213-215,217-218,222-223,230-249,252-268
+  s_077fa15fee6edd::t_0866377b1e655e 14,16-19,21-22,54-58,68-69,103-104,195-199,203,212,216,219
+Cargo.lock
+  s_077fa15fee6edd::t_f3d439a19dca93 97-138,751-759,1024-1032,1255-1266,1282-1294,1301,1306-1316,1369-1371,1388,1393,1563-1568,1752-1757,1881-1893,2261-2266,2761-2771,2780-2781,2823-2874,3327,3346,3372,4527-4546,5010-5033,5171-5172,5189-5221,5226,5233,5247,5598-5600,5630,5687,6620,6744,6768,7030-7035,7515
+packages/server/src/data/mod.rs
+  s_077fa15fee6edd::t_b992cf7213c2a8 53,80-88,106,110-113
+packages/server/src/plugins/mod.rs
+  s_077fa15fee6edd::t_0a305073665778 30
+packages/server/tests/acp.rs
+  s_077fa15fee6edd::t_7651f47920e8a6 1-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63ddacb4d3b7e914e0516eb0c8990895d51969a0",
+  "prompts": {},
+  "sessions": {
+    "s_077fa15fee6edd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e1a3-77ed-7cd3-90e6-da7f8776af25",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
