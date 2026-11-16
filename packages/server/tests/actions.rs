@@ -100,7 +100,14 @@ fn acceptance_over(scenario: &str, websocket: bool) {
     if scenario == "chat-backend-missing" {
         std::fs::remove_dir_all(installation.0.join("acp")).unwrap();
     }
-    if scenario == "chat-acp" {
+    if matches!(scenario, "chat-acp" | "chat-turn-token") {
+        if scenario == "chat-turn-token" {
+            let path = installation.0.join("b/manifest.json");
+            let mut manifest: Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            manifest["plugin"]["depends"]["chat"] = json!("*");
+            std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        }
         let directory = installation.0.parent().unwrap();
         let agent = directory.join("agent.py");
         std::fs::write(&agent, include_str!("support/acp_agent.py")).unwrap();
@@ -736,4 +743,9 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
     stop.send(()).unwrap();
     serving.await.unwrap().unwrap();
     server.close().await.unwrap();
+}
+
+#[test]
+fn chat_turn_token_rejects_another_plugin() {
+    acceptance("chat-turn-token");
 }

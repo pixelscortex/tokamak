@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createApi, type ActionContext, type TokamakClient } from "@tokamak/sdk";
 import { discoverTools } from "./chat/backend/tools";
-import { acpScenario } from "./acp-driver";
+import { acpScenario, turnTokenScenario } from "./acp-driver";
 import { send as chatSend } from "./chat/backend/chat";
 import { api } from "./chat/backend/_generated/api";
 import { api as record } from "./record/backend/_generated/api";
@@ -41,6 +41,7 @@ export async function chatScenario(
     }
     return;
   }
+  if (scenario === "chat-turn-token") return turnTokenScenario(client);
   if (scenario === "chat-acp") return acpScenario(client);
   if (scenario === "chat-real") {
     const failures: string[] = [];
@@ -268,12 +269,17 @@ export async function chatScenario(
       assert.equal(invocations, 1);
 
       const testThread = await client.mutation(api.threads.create, {});
-      const run = await client.mutation(api.send.start, { threadId: testThread, text: "Tools" });
+      const run = await client.mutation(api.send.start, {
+        token: "fixture-turn-token",
+        threadId: testThread,
+        text: "Tools",
+      });
       const update = (
         tool:
           | import("./chat/backend/parts").ToolPart
           | { callId: string; status: "done" | "error"; result?: {} },
-      ) => client.mutation(api.send.update, { runId: run.runId, delta: "", tool });
+      ) =>
+        client.mutation(api.send.update, { token: "fixture-turn-token", runId: run.runId, delta: "", tool });
       const tool = {
         type: "tool" as const,
         callId: "unique",
@@ -292,6 +298,7 @@ export async function chatScenario(
       await assert.rejects(update({ callId: tool.callId, status: "error" }), /settled/);
       await update({ ...tool, callId: "long-error" });
       await client.mutation(api.send.update, {
+        token: "fixture-turn-token",
         runId: run.runId,
         delta: "",
         tool: {
@@ -327,8 +334,9 @@ export async function chatScenario(
     const threadId = await client.mutation(api.threads.create, {});
     const input = { threadId, text: "Say hello" };
     if (scenario === "chat-recovery") {
-      const stale = await client.mutation(api.send.start, input);
+      const stale = await client.mutation(api.send.start, { ...input, token: "fixture-turn-token" });
       await client.mutation(api.send.update, {
+        token: "fixture-turn-token",
         runId: stale.runId,
         delta: "",
         tool: {
@@ -355,9 +363,13 @@ export async function chatScenario(
       assert.ok(interrupted.parts[0]!.type === "tool" && interrupted.parts[0]!.error === "Interrupted");
       assert.deepEqual(await client.query(api.runs.running, {}), []);
 
-      const healthy = await client.mutation(api.send.start, input);
+      const healthy = await client.mutation(api.send.start, { ...input, token: "fixture-turn-token" });
       for (let tick = 0; tick < 4; tick++) {
-        await client.mutation(api.send.update, { runId: healthy.runId, delta: "" });
+        await client.mutation(api.send.update, {
+          token: "fixture-turn-token",
+          runId: healthy.runId,
+          delta: "",
+        });
         await client.mutation(api.testing.age, { runId: healthy.runId, offset: -61_000 });
         await observe("healthy", tick);
         await observe("other", tick);
@@ -384,7 +396,7 @@ export async function chatScenario(
       await observe("healthy", 4);
       assert.equal((await client.query(api.messages.list, { threadId }))[3]!.status, "cancelled");
 
-      const abandoned = await client.mutation(api.send.start, input);
+      const abandoned = await client.mutation(api.send.start, { ...input, token: "fixture-turn-token" });
       await client.mutation(api.testing.age, { runId: abandoned.runId, offset: -61_000 });
       await assert.rejects(client.action(api.chat.send, input), /already has an active run/);
       for (let tick = 0; tick < 2; tick++) {

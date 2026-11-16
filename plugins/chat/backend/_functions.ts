@@ -17,3 +17,11 @@ export function nonempty(text: string) {
   if (!value) throw new Error("Text must not be empty");
   return value;
 }
+
+// Backend writes carry a capability issued only to the action owning this turn.
+export async function turn(db: DatabaseReader<Model>, runId: Id<"runs">, token: string) {
+  const run = await db.get(runId);
+  if (!run || run.status !== "running") throw new Error("Run is no longer running");
+  if (!run.token || run.token !== token) throw new Error("Invalid turn token");
+  return run;
+}

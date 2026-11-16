@@ -26,6 +26,8 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_threadId_createdAt", ["threadId", "createdAt"]),
   runs: defineTable({
+    token: v.optional(v.union(v.string(), v.null())),
+    backendPlugin: v.optional(v.string()),
     threadId: v.id("threads"),
     messageId: v.id("messages"),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),

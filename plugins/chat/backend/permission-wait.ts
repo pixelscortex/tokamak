@@ -7,6 +7,7 @@ import type { streamBuffer } from "./stream-buffer";
 export function permissionWait(
   ctx: ActionContext,
   runId: Id<"runs">,
+  token: string,
   buffer: ReturnType<typeof streamBuffer>,
   respond: (requestId: string, optionId: string | null) => Promise<void>,
 ) {
@@ -15,7 +16,7 @@ export function permissionWait(
   return {
     async request(part: PermissionPart) {
       await buffer.update();
-      if (!(await ctx.use(api).permissions.request({ runId, part }))) throw new Error("Run cancelled");
+      if (!(await ctx.use(api).permissions.request({ runId, token, part }))) throw new Error("Run cancelled");
       pending.set(part.requestId, Date.now() + TIMEOUT_MS);
     },
     async poll() {
@@ -24,7 +25,20 @@ export function permissionWait(
         const part = state.parts.find((part) => part.requestId === requestId);
         const expired = Date.now() >= deadline;
         if (state.running && part?.status === "pending" && part.optionId === undefined && !expired) continue;
-        const outcome = await ctx.use(api).permissions.claim({ runId, requestId, expired });
+        if (!state.running) {
+          pending.delete(requestId);
+          await respond(requestId, null);
+          continue;
+        }
+        let outcome;
+        try {
+          outcome = await ctx.use(api).permissions.claim({ runId, token, requestId, expired });
+        } catch (error) {
+          if (await ctx.use(api).send.running({ runId })) throw error;
+          pending.delete(requestId);
+          await respond(requestId, null);
+          continue;
+        }
         if (!outcome) continue;
         pending.delete(requestId);
         await respond(requestId, outcome.optionId);

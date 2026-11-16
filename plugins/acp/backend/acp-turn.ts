@@ -8,17 +8,18 @@ export async function readAcpTurn(
   ctx: ActionContext,
   agent: string,
   runId: Id<"runs">,
+  token: string,
   buffer: ReturnType<typeof streamBuffer>,
   events: ReturnType<ActionContext["acp"]["prompt"]>,
 ) {
   const iterator = events[Symbol.asyncIterator]();
   const update = acpEvents(agent, buffer);
-  const permissions = permissionWait(ctx, runId, buffer, async (requestId, optionId) => {
+  const permissions = permissionWait(ctx, runId, token, buffer, async (requestId, optionId) => {
     try {
       await ctx.acp.respond({ requestId, optionId });
     } catch (error) {
       if (!String(error).includes("Unknown ACP permission request")) throw error;
-      await ctx.use(chat).permissions.undelivered({ runId, requestId });
+      await ctx.use(chat).permissions.undelivered({ runId, token, requestId });
     }
   });
   let pollAt = Date.now() + 250;

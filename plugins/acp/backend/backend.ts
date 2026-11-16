@@ -19,6 +19,7 @@ export const configure = action({
 export const turn = action({
   args: {
     runId: v.id("runs"),
+    token: v.string(),
     messageId: v.id("messages"),
     threadId: v.id("threads"),
     backendId: v.string(),

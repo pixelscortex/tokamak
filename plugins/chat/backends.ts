@@ -2,6 +2,7 @@ import type { FunctionReference, Id, JsonValue } from "@tokamak/sdk";
 export type BackendOption = { id: string; title: string; folder?: boolean };
 export type TurnArgs = {
   runId: Id<"runs">;
+  token: string;
   messageId: Id<"messages">;
   threadId: Id<"threads">;
   backendId: string;

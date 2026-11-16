@@ -3,12 +3,12 @@ import { applyToolUpdate } from "./tool-parts";
 import { currentModel } from "../models";
 import { v, type Infer } from "@tokamak/sdk";
 import type { Part } from "./parts";
-import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
+import { DEFAULT_TITLE, mutation, nonempty, query, thread, turn } from "./_functions";
 
 // Only chat.send uses these transactional steps; they are not plugin exports.
 export const start = mutation({
-  args: { threadId: v.id("threads"), text: v.string() },
-  handler: async (ctx, { threadId, text }) => {
+  args: { threadId: v.id("threads"), text: v.string(), token: v.string() },
+  handler: async (ctx, { threadId, text, token }) => {
     const { db } = ctx;
     text = nonempty(text);
     const current = await thread(db, threadId);
@@ -46,6 +46,8 @@ export const start = mutation({
       threadId,
       messageId,
       status: "running",
+      token,
+      ...(backend?.kind === "plugin" ? { backendPlugin: backend.plugin } : {}),
       model,
       startedAt: Date.now(),
     });
@@ -91,6 +93,7 @@ export const running = query({
 export const update = mutation({
   args: {
     runId: v.id("runs"),
+    token: v.string(),
     delta: v.string(),
     outcome: v.optional(v.union(v.literal("done"), v.literal("error"), v.literal("cancelled"))),
     error: v.optional(v.string()),
@@ -98,9 +101,8 @@ export const update = mutation({
     upsertTools: v.optional(v.boolean()),
     plan: v.optional(planPart),
   },
-  handler: async ({ db }, { runId, delta, outcome, error, tool, plan, upsertTools }) => {
-    const run = await db.get(runId);
-    if (!run || run.status !== "running") return "cancelled" as const;
+  handler: async ({ db }, { runId, token, delta, outcome, error, tool, plan, upsertTools }) => {
+    const run = await turn(db, runId, token);
     await db.patch(runId, { updatedAt: Date.now(), heartbeat: (run.heartbeat ?? 0) + 1 });
     if (![delta, outcome, tool, plan].some(Boolean)) return "running" as const;
 
@@ -118,20 +120,25 @@ export const update = mutation({
       ...(error === undefined ? {} : { error: boundedError(error) }),
     });
     await db.patch(run.threadId, { updatedAt: Date.now() });
-    if (outcome) await db.patch(runId, { status: outcome, waiting: false, finishedAt: Date.now() });
+    if (outcome)
+      await db.patch(runId, { status: outcome, token: null, waiting: false, finishedAt: Date.now() });
     return outcome ?? "running";
   },
 });
 
 export const session = mutation({
   args: {
+    runId: v.id("runs"),
+    token: v.string(),
     threadId: v.id("threads"),
     plugin: v.string(),
     backendId: v.string(),
     settings: v.any(),
     state: v.any(),
   },
-  handler: async ({ db }, { threadId, plugin, backendId, settings, state }) => {
+  handler: async ({ db }, { runId, token, threadId, plugin, backendId, settings, state }) => {
+    const run = await turn(db, runId, token);
+    if (run.threadId !== threadId || run.backendPlugin !== plugin) throw new Error("Turn backend mismatch");
     const current = await db.get(threadId);
     const backend = current?.backend;
     if (

@@ -164,7 +164,10 @@ The built-in model backend remains the default. Plugins export `backend:describe
 `backend:configure` and `backend:turn`; see [`backends.ts`](backends.ts) for the types.
 Describe returns `{id, title, folder?}[]`; folder opts into the existing folder input.
 Configure validates opaque settings before the picker saves them. Turn receives run,
-message and thread IDs, backend ID, text, history, settings and optional provider state.
+message and thread IDs, a per-turn capability token, backend ID, text, history, settings
+and optional provider state. Every backend storage write requires `{runId, token}`
+and a running turn. Tokens are private to the delegated turn, omitted from queries,
+and cleared on completion, cancellation or recovery.
 It streams through the public functions re-exported in `api.ts`: `send:update`,
 `send:running`, `send:session` and the permission request/state/claim/undelivered steps.
 [`server.ts`](server.ts) supplies finite references; [`stream.ts`](stream.ts) supplies

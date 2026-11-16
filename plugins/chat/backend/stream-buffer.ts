@@ -5,7 +5,12 @@ import type { planPart, ToolPart } from "./parts";
 
 const HEARTBEAT_MS = 10_000;
 
-export function streamBuffer(ctx: ActionContext, runId: Id<"runs">, options: { upsertTools?: boolean } = {}) {
+export function streamBuffer(
+  ctx: ActionContext,
+  runId: Id<"runs">,
+  token: string,
+  options: { upsertTools?: boolean } = {},
+) {
   let pending = "";
   let flushDue = false;
   let heartbeatDue = false;
@@ -28,6 +33,7 @@ export function streamBuffer(ctx: ActionContext, runId: Id<"runs">, options: { u
     const delta = pending;
     const status = await ctx.use(api).send.update({
       runId,
+      token,
       delta,
       ...(options.upsertTools ? { upsertTools: true } : {}),
       ...(tool ? { tool } : {}),

@@ -25,7 +25,10 @@ export const active = query({
       .query("runs")
       .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
       .collect();
-    return runs.find((run) => run.status === "running") ?? null;
+    const run = runs.find((run) => run.status === "running");
+    if (!run) return null;
+    const { token: _token, ...visible } = run;
+    return visible;
   },
 });
 
@@ -41,6 +44,7 @@ export const cancel = mutation({
     await db.patch(run.threadId, { updatedAt: Date.now() });
     return db.patch(runId, {
       status: "cancelled",
+      token: null,
       waiting: false,
       finishedAt: Date.now(),
     });
@@ -74,7 +78,13 @@ export const observe = mutation({
         continue;
       }
       const now = Date.now();
-      await db.patch(run._id, { status: "error", waiting: false, error: "Interrupted", finishedAt: now });
+      await db.patch(run._id, {
+        status: "error",
+        token: null,
+        waiting: false,
+        error: "Interrupted",
+        finishedAt: now,
+      });
       await interruptResponse(db, run, "error", "Interrupted");
       await db.patch(run.threadId, { updatedAt: now });
     }

@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { functionName, type ActionContext, type FunctionReference, type TokamakClient } from "@tokamak/sdk";
+import {
+  createApi,
+  functionName,
+  type ActionContext,
+  type FunctionReference,
+  type TokamakClient,
+} from "@tokamak/sdk";
 import { acpSend } from "./acp/backend/acp";
 import { api as acp } from "./acp/backend/_generated/api";
 import { api } from "./chat/backend/_generated/api";
@@ -196,7 +202,11 @@ export async function acpScenario(client: TokamakClient) {
 
   // Exercise both sides of the claim/cancel boundary with real transactions.
   for (const cancelBeforeClaim of [true, false]) {
-    const started = await client.mutation(api.send.start, { threadId, text: "race" });
+    const started = await client.mutation(api.send.start, {
+      token: "fixture-turn-token",
+      threadId,
+      text: "race",
+    });
     const delivered: (string | null)[] = [];
     let release!: () => void;
     const stopped = new Promise<void>((resolve) => {
@@ -246,10 +256,15 @@ export async function acpScenario(client: TokamakClient) {
         },
       },
     } as unknown as ActionContext;
-    const action = acpSend(context, { threadId, text: "race" }, started, {
-      agent: backend.backendId,
-      cwd: backend.settings.cwd,
-    });
+    const action = acpSend(
+      context,
+      { threadId, text: "race" },
+      { ...started, token: "fixture-turn-token" },
+      {
+        agent: backend.backendId,
+        cwd: backend.settings.cwd,
+      },
+    );
     await until(async () => (await messages()).at(-1)!.parts.some((part) => part.type === "permission"));
     await client.mutation(api.permissions.answer, {
       messageId: started.messageId,
@@ -297,10 +312,12 @@ export async function acpScenario(client: TokamakClient) {
   assert.equal((await messages()).at(-1)!.error, "Sign in to `fake` in a terminal");
   const fresh = await client.mutation(api.threads.create, {});
   const seeded = await client.mutation(api.send.start, {
+    token: "fixture-turn-token",
     threadId: fresh,
     text: "old" + "界".repeat(12000),
   });
   await client.mutation(api.send.update, {
+    token: "fixture-turn-token",
     runId: seeded.runId,
     delta: "previous answer",
     outcome: "done",
@@ -325,4 +342,40 @@ export async function acpScenario(client: TokamakClient) {
   const selected = (await client.query(api.threads.list, {})).find((thread) => thread._id === fresh)!;
   assert.deepEqual([selected.model, currentModel({ ...selected, model: DEFAULT_MODEL })], [model, model]);
   return;
+}
+
+export async function turnTokenScenario(client: TokamakClient) {
+  const attacker = createApi<{ ops: import("@tokamak/sdk").ApiFromModule<typeof import("./b/backend/ops")> }>(
+    "b",
+  );
+  const threadId = await client.mutation(api.threads.create, {});
+  await client.mutation(api.threads.setBackend, {
+    threadId,
+    backend: { kind: "plugin", plugin: "acp", backendId: "fake", settings: { cwd: "/tmp" } },
+  });
+  const pending = client.action(api.chat.send, { threadId, text: "chat:permission" });
+  const messages = () => client.query(api.messages.list, { threadId });
+  await until(
+    async () => (await messages()).at(-1)?.parts.some((part) => part.type === "permission") ?? false,
+  );
+  const before = (await messages()).at(-1)!;
+  const permission = before.parts.find((part) => part.type === "permission")!;
+  const attack = await client.action(attacker.ops.attackTurn, { threadId, requestId: permission.requestId });
+  assert.equal(attack.errors.length, 6);
+  for (const error of attack.errors) assert.match(error, /token|Expected string/i);
+  assert.ok(!("token" in attack.run));
+  assert.ok(!JSON.stringify(await client.query(api.runs.running, {})).includes("token"));
+  assert.deepEqual((await messages()).at(-1), before);
+  assert.equal((await client.query(api.runs.active, { threadId }))!._id, attack.run._id);
+  await client.mutation(api.permissions.answer, {
+    messageId: before._id,
+    requestId: permission.requestId,
+    optionId: "yes",
+  });
+  const result = await pending;
+  assert.equal(result.status, "done");
+  const settled = (await messages()).at(-1)!;
+  assert.equal(settled.parts.find((part) => part.type === "permission")!.status, "answered");
+  assert.match(JSON.stringify(settled.parts), /selected/);
+  assert.equal((await client.query(api.testing.run, { runId: result.runId }))!.hasToken, false);
 }

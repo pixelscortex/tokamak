@@ -22,6 +22,7 @@ export function historyPrefix(history: { role: string; content: string }[]): str
 
 type Started = {
   runId: Id<"runs">;
+  token: string;
   messageId: Id<"messages">;
   history: { role: string; content: string }[];
 };
@@ -33,22 +34,27 @@ export async function acpSend(
   started: Started,
   backend: Backend,
 ) {
-  const { runId, messageId } = started;
-  const buffer = streamBuffer(ctx, runId, { upsertTools: true });
+  const { runId, messageId, token } = started;
+  const buffer = streamBuffer(ctx, runId, token, { upsertTools: true });
   let sessionId: string | undefined;
   let finished = false;
   let closed = false;
   let openingSession = true;
-  const finish = async (outcome: "done" | "error" | "cancelled", error?: string) => ({
-    runId,
-    messageId,
-    status: (await ctx.use(chat).send.update({
+  const finish = async (outcome: "done" | "error" | "cancelled", error?: string) => {
+    if (!(await ctx.use(chat).send.running({ runId })))
+      return { runId, messageId, status: "cancelled" as const };
+    return {
       runId,
-      delta: buffer.pending(),
-      outcome,
-      ...(error === undefined ? {} : { error }),
-    })) as "done" | "error" | "cancelled",
-  });
+      messageId,
+      status: (await ctx.use(chat).send.update({
+        runId,
+        token,
+        delta: buffer.pending(),
+        outcome,
+        ...(error === undefined ? {} : { error }),
+      })) as "done" | "error" | "cancelled",
+    };
+  };
 
   try {
     // Keep ownership of an open that completes after cancellation so it can be cancelled too.
@@ -60,6 +66,8 @@ export async function acpSend(
     const opened = await buffer.waitFor(opening);
     openingSession = false;
     await ctx.use(chat).send.session({
+      runId,
+      token,
       threadId: args.threadId,
       plugin: "acp",
       backendId: backend.agent,
@@ -69,7 +77,7 @@ export async function acpSend(
     const prefix = opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
     const text = prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim();
     const events = ctx.acp.prompt({ agent: backend.agent, sessionId: opened.sessionId, text });
-    const stopReason = await readAcpTurn(ctx, backend.agent, runId, buffer, events);
+    const stopReason = await readAcpTurn(ctx, backend.agent, runId, token, buffer, events);
     finished = true;
     if (stopReason === "refusal") return await finish("error", "Agent refused");
     if (stopReason === "cancelled") return await finish("cancelled");

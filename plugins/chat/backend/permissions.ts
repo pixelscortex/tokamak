@@ -1,13 +1,12 @@
 import { v } from "@tokamak/sdk";
-import { mutation, query } from "./_functions";
+import { mutation, query, turn } from "./_functions";
 import { claimPermission, permissionPart } from "./permission-part";
 
 // Generic backend permission lifecycle; answer is exposed to the desktop.
 export const request = mutation({
-  args: { runId: v.id("runs"), part: permissionPart },
-  handler: async ({ db }, { runId, part }) => {
-    const run = await db.get(runId);
-    if (!run || run.status !== "running") return false;
+  args: { runId: v.id("runs"), token: v.string(), part: permissionPart },
+  handler: async ({ db }, { runId, token, part }) => {
+    const run = await turn(db, runId, token);
     const message = await db.get(run.messageId);
     if (!message) return false;
     await db.patch(message._id, { parts: [...message.parts, part] });
@@ -54,10 +53,9 @@ export const answer = mutation({
 
 // Atomically arbitrate answer delivery against timeout and run cancellation.
 export const claim = mutation({
-  args: { runId: v.id("runs"), requestId: v.string(), expired: v.boolean() },
-  handler: async ({ db }, { runId, requestId, expired }) => {
-    const run = await db.get(runId);
-    if (!run) return null;
+  args: { runId: v.id("runs"), token: v.string(), requestId: v.string(), expired: v.boolean() },
+  handler: async ({ db }, { runId, token, requestId, expired }) => {
+    const run = await turn(db, runId, token);
     const message = await db.get(run.messageId);
     const part = message?.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission") return null;
@@ -79,10 +77,10 @@ export const claim = mutation({
 // The agent ended the turn before an answer reached it: the host already
 // answered the request "cancelled", so the stored answer never took effect.
 export const undelivered = mutation({
-  args: { runId: v.id("runs"), requestId: v.string() },
-  handler: async ({ db }, { runId, requestId }) => {
-    const run = await db.get(runId);
-    const message = run && (await db.get(run.messageId));
+  args: { runId: v.id("runs"), token: v.string(), requestId: v.string() },
+  handler: async ({ db }, { runId, token, requestId }) => {
+    const run = await turn(db, runId, token);
+    const message = await db.get(run.messageId);
     const part = message?.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission" || part.status !== "answered") return null;
 

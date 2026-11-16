@@ -17,7 +17,11 @@ export const send = action({
   handler: async (ctx, args): Promise<Result> => {
     const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
     if (active) throw new Error("Thread already has an active run");
-    const started = await ctx.runMutation(api.send.start, args);
+    // Web crypto is action-only; mutation replay stores the supplied capability.
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const started = await ctx.runMutation(api.send.start, { ...args, token });
     if (started.backend?.kind === "plugin") {
       const backend = started.backend;
       try {
@@ -28,6 +32,7 @@ export const send = action({
         const result = await ctx.use(provider).backend.turn({
           ...args,
           runId: started.runId,
+          token,
           messageId: started.messageId,
           history: started.history,
           backendId: backend.backendId,
@@ -39,13 +44,17 @@ export const send = action({
           return { runId: started.runId, messageId: started.messageId, status: result.status };
         const status = await ctx.runMutation(api.send.update, {
           runId: started.runId,
+          token,
           delta: "",
           outcome: result.status,
         });
         return { runId: started.runId, messageId: started.messageId, status: status as Result["status"] };
       } catch (cause) {
+        if (!(await ctx.runQuery(api.send.running, { runId: started.runId })))
+          return { runId: started.runId, messageId: started.messageId, status: "cancelled" };
         const status = await ctx.runMutation(api.send.update, {
           runId: started.runId,
+          token,
           delta: "",
           outcome: "error",
           error: String(cause),
@@ -55,19 +64,24 @@ export const send = action({
     }
     const { runId, messageId, history, model } = started;
     const controller = new AbortController();
-    const buffer = streamBuffer(ctx, runId);
+    const buffer = streamBuffer(ctx, runId, token);
     const acknowledgements = toolAcknowledgements();
 
-    const finish = async (outcome: "done" | "error", error?: string): Promise<Result> => ({
-      runId,
-      messageId,
-      status: (await ctx.runMutation(api.send.update, {
+    const finish = async (outcome: "done" | "error", error?: string): Promise<Result> => {
+      if (!(await ctx.runQuery(api.send.running, { runId })))
+        return { runId, messageId, status: "cancelled" };
+      return {
         runId,
-        delta: buffer.pending(),
-        outcome,
-        ...(error === undefined ? {} : { error }),
-      })) as Result["status"],
-    });
+        messageId,
+        status: (await ctx.runMutation(api.send.update, {
+          runId,
+          token,
+          delta: buffer.pending(),
+          outcome,
+          ...(error === undefined ? {} : { error }),
+        })) as Result["status"],
+      };
+    };
 
     try {
       const { tools, targets } = await modelTools(ctx, args.threadId, runId, acknowledgements);

@@ -102,7 +102,12 @@ export const abandon = mutation({
 });
 export const run = query({
   args: { runId: v.id("runs") },
-  handler: ({ db }, { runId }) => db.get(runId),
+  handler: async ({ db }, { runId }) => {
+    const run = await db.get(runId);
+    if (!run) return null;
+    const { token, ...visible } = run;
+    return { ...visible, hasToken: !!token };
+  },
 });
 export const age = mutation({
   args: { runId: v.id("runs"), offset: v.number() },
