@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, process::Stdio, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    process::{Child, ChildStdout},
+    process::{Child, ChildStderr, ChildStdin, ChildStdout},
     sync::{mpsc, oneshot},
 };
 
@@ -68,40 +68,17 @@ impl Process {
             .map_err(|e| format!("Cannot start ACP agent: {e}"))?;
         #[cfg(unix)]
         let group = ProcessGroup(child.id().ok_or("ACP process has no pid")?);
-        let mut input = child.stdin.take().ok_or("ACP stdin missing")?;
+        let input = child.stdin.take().ok_or("ACP stdin missing")?;
         let output = child.stdout.take().ok_or("ACP stdout missing")?;
-        let mut stderr = child.stderr.take().ok_or("ACP stderr missing")?;
+        let stderr = child.stderr.take().ok_or("ACP stderr missing")?;
         let tail = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
-        let captured = tail.clone();
-        let stderr_task = tokio::spawn(async move {
-            let mut buffer = [0; 1024];
-            while let Ok(count) = stderr.read(&mut buffer).await {
-                if count == 0 {
-                    break;
-                }
-                let mut tail = captured.lock().expect("ACP stderr");
-                tail.extend_from_slice(&buffer[..count]);
-                let excess = tail.len().saturating_sub(limits::STDERR_BYTES);
-                tail.drain(..excess);
-            }
-        });
+        let mut stderr_task = capture_stderr(stderr, tail.clone());
         let (commands, receive) = mpsc::unbounded_channel();
         tokio::spawn(async move {
-            let (writes, mut outgoing) = mpsc::channel::<Vec<u8>>(limits::WRITE_QUEUE);
+            let (writes, outgoing) = mpsc::channel(limits::WRITE_QUEUE);
             let (write_error, mut failed_write) = oneshot::channel();
             let _writer = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
-                while let Some(bytes) = outgoing.recv().await {
-                    let error =
-                        match tokio::time::timeout(limits::WRITE_TIMEOUT, input.write_all(&bytes))
-                            .await
-                        {
-                            Ok(Ok(())) => continue,
-                            Ok(Err(error)) => format!("ACP write failed: {error}"),
-                            Err(_) => "ACP stdin write timed out after 10 s".into(),
-                        };
-                    let _ = write_error.send(error);
-                    return;
-                }
+                let _ = write_error.send(write_stdin(input, outgoing).await);
             }));
             let mut actor = Actor {
                 input: writes,
@@ -116,7 +93,13 @@ impl Process {
             drop(group);
             let _ = child.kill().await;
             let _ = child.wait().await;
-            let _ = stderr_task.await;
+            if tokio::time::timeout(limits::STDERR_TIMEOUT, &mut stderr_task)
+                .await
+                .is_err()
+            {
+                stderr_task.abort();
+                let _ = stderr_task.await;
+            }
             let tail = tail.lock().expect("ACP stderr");
             let error = format!("{error}: {}", String::from_utf8_lossy(&tail));
             for (_, pending) in actor.pending {
@@ -293,6 +276,35 @@ impl Actor {
             }
         }
     }
+}
+
+fn capture_stderr(
+    mut stderr: ChildStderr,
+    tail: Arc<std::sync::Mutex<Vec<u8>>>,
+) -> tokio_util::task::AbortOnDropHandle<()> {
+    tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+        let mut buffer = [0; 1024];
+        while let Ok(count) = stderr.read(&mut buffer).await {
+            if count == 0 {
+                break;
+            }
+            let mut tail = tail.lock().expect("ACP stderr");
+            tail.extend_from_slice(&buffer[..count]);
+            let excess = tail.len().saturating_sub(limits::STDERR_BYTES);
+            tail.drain(..excess);
+        }
+    }))
+}
+
+async fn write_stdin(mut input: ChildStdin, mut outgoing: mpsc::Receiver<Vec<u8>>) -> String {
+    while let Some(bytes) = outgoing.recv().await {
+        match tokio::time::timeout(limits::WRITE_TIMEOUT, input.write_all(&bytes)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => return format!("ACP write failed: {error}"),
+            Err(_) => return "ACP stdin write timed out after 10 s".into(),
+        }
+    }
+    "ACP stdin writer closed".into()
 }
 
 #[cfg(unix)]

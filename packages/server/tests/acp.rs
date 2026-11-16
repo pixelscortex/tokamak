@@ -48,6 +48,15 @@ for line in sys.stdin:
             for _ in range(20):
                 send(dict(method='session/update', params=dict(sessionId='session', update=dict(sessionUpdate='agent_message_chunk', content=dict(type='text', text='x' * 600000)))))
             continue
+        if text == 'stderr-held':
+            import subprocess
+            descendant = subprocess.Popen(
+                [sys.executable, '-c', 'import time; time.sleep(60)'],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                start_new_session=True)
+            sys.stderr.write('ACP_STDERR_CHILD:' + str(descendant.pid) + ':ACP_HELD_TAIL')
+            sys.stderr.flush()
+            sys.exit(9)
         if text == 'crash':
             sys.stderr.write('x' * 3000 + 'ACP_CRASH_TAIL')
             sys.stderr.flush()
@@ -337,5 +346,29 @@ async fn cwd_must_be_an_absolute_existing_directory() {
         let error = fixture.action(mode).await.unwrap_err();
         assert!(error.contains("ACP cwd"), "{mode}: {error}");
     }
+    fixture.close().await;
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn crash_reports_tail_even_when_descendant_holds_stderr() {
+    let fixture = Fixture::new(true).await;
+    let started = std::time::Instant::now();
+    let error = fixture.action("stderr-held").await.unwrap_err();
+    let pid: i32 = error
+        .split("ACP_STDERR_CHILD:")
+        .nth(1)
+        .unwrap()
+        .split(':')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    // The deliberately detached descendant is outside the agent's process group.
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+    assert!(started.elapsed() < Duration::from_secs(3), "{error}");
+    assert!(error.contains("ACP_HELD_TAIL"), "{error}");
     fixture.close().await;
 }
