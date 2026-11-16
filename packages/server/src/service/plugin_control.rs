@@ -107,6 +107,11 @@ impl Coordinator {
         // Cancel old-generation actions so a reload cannot leave revoked network
         // grants running in old worlds; the old pool tears down detached.
         self.action_pool.cancel_actions();
+        if let Some(previous) = &self.plugins {
+            for worker in previous.workers.values() {
+                worker.stop().await;
+            }
+        }
         self.action_pool = action_pool;
         self.kinds = candidate
             .targets

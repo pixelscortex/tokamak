@@ -1027,9 +1027,8 @@ fn hundred_megabyte_ui_asset_streams_in_pages_with_matching_contents() {
 #[path = "support/capture.rs"]
 mod capture;
 
-// Default: an offline permission error. Opt in to the real provider/captures
-// with TOKAMAK_CHAT_LIVE=1, TOKAMAK_ACP_AGENTS=/absolute/agents.toml, and
-// TK_CAPTURE_DIR. Optional credentials come from .env.local beside agents.toml.
+// Default: an offline backend error. Opt in to the real provider/captures
+// with TOKAMAK_CHAT_LIVE=1 and TK_CAPTURE_DIR; adapters reuse CLI logins.
 // The agent runs in a disposable working folder.
 #[test]
 fn chat_screen_socket_workflow() {
@@ -1150,6 +1149,9 @@ fn chat_screen_socket_workflow() {
             "manifest.json",
             "bundle.js",
             "bundle.js.map",
+            "worker.js",
+            "worker.js.map",
+            "worker-entry.js",
             "api.ts",
             "ui.js",
             "ui.js.map",
@@ -1193,40 +1195,40 @@ fn chat_screen_socket_workflow() {
     }
     std::fs::create_dir_all(scratch.0.join("server")).unwrap();
     if live {
-        let config = std::env::var_os("TOKAMAK_ACP_AGENTS").expect(
-            "TOKAMAK_CHAT_LIVE=1 requires TOKAMAK_ACP_AGENTS=/absolute/path/to/agents.toml",
-        );
-        let config = Path::new(&config);
-        assert!(
-            config.is_absolute(),
-            "TOKAMAK_ACP_AGENTS must be an absolute agents.toml path"
-        );
-        std::fs::copy(config, scratch.0.join("server/agents.toml"))
-            .expect("could not copy TOKAMAK_ACP_AGENTS into the isolated server directory");
-        let environment = config.parent().unwrap().join(".env.local");
-        if environment.is_file() {
-            std::fs::copy(environment, scratch.0.join("server/.env.local")).unwrap();
-        }
         std::fs::create_dir_all(scratch.0.join("workspace")).unwrap();
     } else {
-        let path = plugin.join("manifest.json");
-        let mut manifest: Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        manifest["plugin"]["permissions"] = json!([]);
-        std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-    }
-    if !live {
-        std::fs::write(scratch.0.join("server/agents.toml"),
-            "[agents.claude]\ncommand = \"/usr/bin/false\"\nplugins = [\"acp\"]\n[agents.codex]\ncommand = \"/usr/bin/false\"\nplugins = [\"acp\"]\n").unwrap();
+        // Keep the native offline fixture independent of installed adapters.
+        // It exercises the same backend contract through ordinary SDK actions.
+        success(
+            Command::new("bun")
+                .arg("-e")
+                .arg(
+                    r#"
+import {readFileSync, writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const root = process.argv[1];
+const manifest = JSON.parse(readFileSync(root + '/manifest.json', 'utf8'));
+let source = readFileSync(root + '/worker.js', 'utf8');
+for (const command of ['claude-agent-acp', 'codex-acp']) {
+  const pattern = `command: "${command}"`;
+  if (!source.includes(pattern)) throw new Error('Offline adapter command missing: ' + command);
+  source = source.replaceAll(pattern, 'command: "/usr/bin/false"');
+}
+source = source.replaceAll('command: "gemini"', 'command: "/missing-tokamak-agent"');
+writeFileSync(root + '/worker.js', source);
+manifest.hashes['worker.js'] = createHash('sha256').update(source).digest('hex');
+writeFileSync(root + '/manifest.json', JSON.stringify(manifest));
+"#,
+                )
+                .arg(scratch.0.join("installation/acp/dist")),
+        );
     }
     fn configure_live_thread(service: &Service, thread: &str, cwd: &Path) {
         let options = call(service, "action", "chat/backends:list", json!({}));
         let backend = options
             .as_array()
             .and_then(|options| options.first())
-            .expect(
-                "TOKAMAK_ACP_AGENTS must configure at least one agent with plugins = [\"acp\"]",
-            );
+            .expect("Install claude-agent-acp or codex-acp for live chat tests");
         let settings = call(
             service,
             "action",
@@ -1647,7 +1649,7 @@ fn chat_screen_socket_workflow() {
         window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
         type_text(&mut window, "relative");
         key(&mut window, Key::Named(NamedKey::Enter), false);
-        assert!(support::text(window.doc(), "backend-picker").contains("absolute path"));
+        window.wait(|doc| support::text(doc, "backend-picker").contains("absolute path"));
         for path in ["/tmp/tokamak-missing-folder/child", "/dev/null"] {
             key(&mut window, Key::Character("a".into()), true);
             type_text(&mut window, path);

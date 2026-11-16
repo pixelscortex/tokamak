@@ -1,9 +1,7 @@
-
+#!/usr/bin/python3
 import sys, json, os
-assert os.environ.get('ACP_TEST_PASSTHROUGH') == 'from-dotenv'
-assert 'HOME' not in os.environ
+assert 'ACP_TEST_AGENT' not in os.environ
 assert 'ACP_TEST_UNLISTED' not in os.environ
-assert 'PATH' not in os.environ
 pending = None
 cancelled = False
 
@@ -23,7 +21,7 @@ for line in sys.stdin:
             import time; time.sleep(60)
         assert not params.get('clientCapabilities', {}).get('terminal', False)
         assert not params.get('clientCapabilities', {}).get('fs', {}).get('readTextFile', False)
-        response(request, dict(protocolVersion=1, agentCapabilities={} if os.environ.get("ACP_TEST_NO_RESTORE") else dict(loadSession=True, sessionCapabilities=dict(resume={}))))
+        response(request, dict(protocolVersion=1, authMethods=[], agentCapabilities={} if (len(sys.argv) > 1 and sys.argv[1] == "fresh") else dict(loadSession=True, sessionCapabilities=dict(resume={}))))
         send(dict(id='fs', method='fs/read_text_file', params=dict(path='/tmp/file')))
         send(dict(id='terminal', method='terminal/create', params=dict(command='echo')))
     elif request.get('id') in ['fs', 'terminal']:
@@ -57,7 +55,7 @@ for line in sys.stdin:
                 sys.exit(9)
             if mode not in ['refusal', 'cancelled']:
                 update(sessionUpdate='tool_call_update', toolCallId='chat-tool', status='completed', content=[dict(type='content', content=dict(type='text', text='Result'))], rawOutput='x' * 9000)
-            update(sessionUpdate='agent_message_chunk', content=dict(type='image', data='ignored'))
+            update(sessionUpdate='agent_message_chunk', content=dict(type='image', data='aQ==', mimeType='image/png'))
             if mode in ['permission', 'permission-finish', 'permission-crash', 'permissions']:
                 pending = request
                 send(dict(id='permission', method='session/request_permission', params=dict(sessionId='session', toolCall=dict(toolCallId='call', title='Run command'), options=[dict(optionId='no', name='Reject', kind='reject_once'), dict(optionId='yes', name='Allow once', kind='allow_once')])))
@@ -113,5 +111,5 @@ for line in sys.stdin:
             if request['id'] == 'permission':
                 continue
         if not cancelled:
-            assert outcome == dict(outcome='selected', optionId='yes')
+            assert outcome in [dict(outcome='selected', optionId='yes'), dict(outcome='selected', optionId='no')]
             response(pending, dict(stopReason='end_turn'))

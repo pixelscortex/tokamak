@@ -86,12 +86,29 @@ impl Loaded {
 
         let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
 
+        let mut workers = BTreeMap::new();
+        for (id, artifact) in &catalog.plugins {
+            if let Some(entry) = &artifact.manifest.entries.worker {
+                workers.insert(
+                    id.clone(),
+                    crate::host::worker::Supervisor::new(
+                        id.clone(),
+                        artifact.assets[&entry.entry].clone(),
+                        artifact.assets[&entry.code].clone(),
+                        catalog.directory.join("plugin-data").join(id),
+                        &catalog.environment,
+                        &artifact.manifest.plugin.permissions,
+                    )?,
+                );
+            }
+        }
         Ok(Arc::new(Self {
             catalog,
             targets,
             descriptor,
             catalog_text,
             inspected,
+            workers,
         }))
     }
 

@@ -1,17 +1,19 @@
 import { action, v, type JsonValue } from "@tokamak/sdk";
+import { agents } from "./agents/client";
+import { checkFolder } from "./agents/discovery";
 import { acpSend } from "./turn/acp";
 
 export const describe = action({
-  handler: ({ acp }) => acp.agents().map((agent) => ({ ...agent, folder: true })),
+  handler: () => agents.agents().map((agent) => ({ ...agent, folder: true })),
 });
 
 // Settings validation belongs to the provider; chat treats them as opaque JSON.
 export const configure = action({
   args: { backendId: v.string(), settings: v.any() },
-  handler: async ({ acp }, { backendId, settings }) => {
-    if (!acp.agents().some((agent) => agent.id === backendId)) throw new Error("Unknown agent");
+  handler: async (_, { backendId, settings }) => {
+    if (!agents.agents().some((agent) => agent.id === backendId)) throw new Error("Unknown agent");
     // An empty folder means the home folder, so a new thread works without setup.
-    const cwd = await acp.checkFolder({ path: String((settings as { cwd?: unknown })?.cwd ?? "") });
+    const cwd = await checkFolder({ path: String((settings as { cwd?: unknown })?.cwd ?? "") });
     return { cwd };
   },
 });
@@ -31,7 +33,7 @@ export const turn = action({
   handler: async (ctx, args) => {
     const settings = args.settings as { cwd?: JsonValue };
     const state = args.state as { sessionId?: string } | undefined;
-    const cwd = await ctx.acp.checkFolder({ path: typeof settings?.cwd === "string" ? settings.cwd : "" });
+    const cwd = await checkFolder({ path: typeof settings?.cwd === "string" ? settings.cwd : "" });
     return acpSend(ctx, args, args, {
       agent: args.backendId,
       cwd,

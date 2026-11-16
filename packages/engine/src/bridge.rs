@@ -135,6 +135,16 @@ impl OpRegistry {
         self.insert(name.into(), Op::Module(Box::new(resolver)))
     }
 
+    /// Dispatch an action's existing capabilities from a process transport.
+    /// Module operations belong to transactional QuickJS worlds, not actions.
+    pub async fn dispatch(&self, name: &str, args: Json) -> OpResult {
+        match self.0.get(name) {
+            Some(Op::Sync(op)) => op(args),
+            Some(Op::Async(op)) => op(args).await,
+            _ => Err(format!("unknown action host op: {name}")),
+        }
+    }
+
     fn insert(&mut self, name: String, op: Op) -> Result<(), crate::Error> {
         if name.is_empty() || self.0.contains_key(&name) {
             return Err(crate::Error::InvalidInput(format!(

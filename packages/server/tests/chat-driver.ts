@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { TokamakClient } from "@tokamak/sdk";
-import { acpScenario, turnTokenScenario } from "./acp-driver";
+import { acpScenario, turnTokenScenario } from "./chat-acp-driver";
 import { api } from "./chat/src/server/_generated/api";
 export async function chatScenario(client: TokamakClient, scenario: string) {
   if (scenario === "chat-turn-token") return turnTokenScenario(client);

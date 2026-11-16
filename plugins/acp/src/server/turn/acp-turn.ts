@@ -1,3 +1,4 @@
+import { agents, type AgentClient } from "../agents/client";
 import { chat } from "../../../../chat/src/server/api";
 import type { ActionContext, Id } from "@tokamak/sdk";
 import { acpEvents } from "../events/acp-events";
@@ -10,13 +11,14 @@ export async function readAcpTurn(
   runId: Id<"runs">,
   token: string,
   buffer: ReturnType<typeof streamBuffer>,
-  events: ReturnType<ActionContext["acp"]["prompt"]>,
+  events: ReturnType<AgentClient["prompt"]>,
+  client: AgentClient = agents,
 ) {
   const iterator = events[Symbol.asyncIterator]();
   const update = acpEvents(agent, buffer);
   const permissions = permissionWait(ctx, runId, token, buffer, async (requestId, optionId) => {
     try {
-      await ctx.acp.respond({ requestId, optionId });
+      await client.respond({ requestId, optionId });
     } catch (error) {
       if (!String(error).includes("Unknown ACP permission request")) throw error;
       await ctx.use(chat).permissions.undelivered({ runId, token, requestId });

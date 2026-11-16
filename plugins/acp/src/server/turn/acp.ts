@@ -1,3 +1,4 @@
+import { agents, type AgentClient } from "../agents/client";
 import type { ActionContext, Id } from "@tokamak/sdk";
 import { chat } from "../../../../chat/src/server/api";
 import { streamBuffer } from "../../../../chat/src/server/api";
@@ -33,6 +34,7 @@ export async function acpSend(
   args: { threadId: Id<"threads">; text: string },
   started: Started,
   backend: Backend,
+  client: AgentClient = agents,
 ) {
   const { runId, messageId, token } = started;
   const buffer = streamBuffer(ctx, runId, token, { upsertTools: true });
@@ -56,11 +58,16 @@ export async function acpSend(
     };
   };
 
+  const cancel = () => {
+    if (sessionId) void client.cancel({ agent: backend.agent, sessionId }).catch(() => {});
+  };
+  ctx.signal?.addEventListener("abort", cancel, { once: true });
   try {
+    if (ctx.signal?.aborted) throw new Error("Plugin action cancelled");
     // Keep ownership of an open that completes after cancellation so it can be cancelled too.
-    const opening = ctx.acp.open(backend).then(async (opened) => {
+    const opening = client.open(backend).then(async (opened) => {
       sessionId = opened.sessionId;
-      if (closed) await ctx.acp.cancel({ agent: backend.agent, sessionId });
+      if (closed) await client.cancel({ agent: backend.agent, sessionId });
       return opened;
     });
     const opened = await buffer.waitFor(opening);
@@ -76,8 +83,8 @@ export async function acpSend(
     });
     const prefix = opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
     const text = prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim();
-    const events = ctx.acp.prompt({ agent: backend.agent, sessionId: opened.sessionId, text });
-    const stopReason = await readAcpTurn(ctx, backend.agent, runId, token, buffer, events);
+    const events = client.prompt({ agent: backend.agent, sessionId: opened.sessionId, text });
+    const stopReason = await readAcpTurn(ctx, backend.agent, runId, token, buffer, events, client);
     finished = true;
     if (stopReason === "refusal") return await finish("error", "Agent refused");
     if (stopReason === "cancelled") return await finish("cancelled");
@@ -97,8 +104,9 @@ export async function acpSend(
         : error,
     );
   } finally {
+    ctx.signal?.removeEventListener("abort", cancel);
     buffer.close();
     closed = true;
-    if (sessionId && !finished) await ctx.acp.cancel({ agent: backend.agent, sessionId }).catch(() => {});
+    if (sessionId && !finished) await client.cancel({ agent: backend.agent, sessionId }).catch(() => {});
   }
 }

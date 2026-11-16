@@ -1,6 +1,6 @@
 // Extend the existing isolated-fixture build pattern to public plugin artifacts
 // and a checked consumer of the actual generated action references.
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { symlink, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -18,6 +18,7 @@ try {
       recursive: true,
       filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
     });
+  await symlink(join(workspace, "plugins/acp/node_modules"), join(root, "acp/node_modules"), "dir");
   await cp(join(workspace, "app/tests/fixtures/record"), join(root, "record"), {
     recursive: true,
     filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
@@ -37,6 +38,7 @@ try {
         extends: join(workspace, "tsconfig.json"),
         compilerOptions: {
           ...(["chat", "acp"].includes(id) ? { skipLibCheck: true } : {}),
+          ...(id === "acp" ? { types: ["node"], lib: ["ES2022", "DOM"] } : {}),
           paths: {
             "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")],
             "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")],
@@ -73,6 +75,32 @@ try {
       `import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vite.ts"))};
 export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
     );
+    if (id === "acp") {
+      await writeFile(
+        join(path, "src/server/testing.ts"),
+        `import {action} from "@tokamak/sdk"; export const crash = action({handler: () => process.exit(9)});`,
+      );
+      const discovery = join(path, "src/server/agents/discovery.ts");
+      const original = await readFile(discovery, "utf8");
+      await writeFile(
+        discovery,
+        original.replace(
+          /export const BUILTINS: Agent\[\] = \[[\s\S]*?\n\];/,
+          `export const BUILTINS: Agent[] = [
+        {id: "fake", title: "fake", command: process.env.ACP_TEST_AGENT ?? "/missing-agent", args: ["fake"]},
+        {id: "fresh", title: "fresh", command: process.env.ACP_TEST_AGENT ?? "/missing-agent", args: ["fresh"]},
+      ];`,
+        ),
+      );
+      const descriptor = join(path, "plugin.ts");
+      await writeFile(
+        descriptor,
+        (await readFile(descriptor, "utf8")).replace(
+          'runtime: "worker",',
+          'runtime: "worker", permissions: ["env:ACP_TEST_AGENT"],',
+        ),
+      );
+    }
     if (id === "chat") {
       const permissions = join(path, "src/server/permissions/permission-wait.ts");
       await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
@@ -123,13 +151,19 @@ export const age = mutation({
       assert.ok(exported.includes("permissions:request"));
       assert.ok(!exported.includes("permissions:answer"));
     }
-    for (const name of ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"])
+    for (const name of [
+      "manifest.json",
+      "bundle.js",
+      "bundle.js.map",
+      "api.ts",
+      ...(id === "acp" ? ["worker-entry.js", "worker.js", "worker.js.map"] : []),
+    ])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");
   }
   const driver = join(root, "driver.ts");
   await cp(new URL("./actions-driver.ts", import.meta.url), driver);
   await cp(new URL("./chat-driver.ts", import.meta.url), join(root, "chat-driver.ts"));
-  await cp(new URL("./acp-driver.ts", import.meta.url), join(root, "acp-driver.ts"));
+  await cp(new URL("./chat-acp-driver.ts", import.meta.url), join(root, "chat-acp-driver.ts"));
   await writeFile(
     join(root, "tsconfig.json"),
     JSON.stringify({

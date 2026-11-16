@@ -27,7 +27,7 @@ pub struct Catalog {
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
     pub(crate) environment: PathBuf,
-    pub(crate) acp: Arc<crate::host::acp::Manager>,
+    pub(crate) directory: PathBuf,
 }
 
 /// One immutable, fully inspected generation. Function lookup selects the owner;
@@ -37,6 +37,7 @@ pub(crate) struct Loaded {
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
     pub catalog_text: String,
+    pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 

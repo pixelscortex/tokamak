@@ -6,7 +6,13 @@ impl Catalog {
     }
 
     pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
-        Self::read_in_directory(root, previous, root.parent().unwrap_or(root))
+        Self::read_in_directory(
+            root,
+            previous,
+            previous
+                .map(|p| p.directory.as_path())
+                .unwrap_or(root.parent().unwrap_or(root)),
+        )
     }
 
     pub(crate) fn read_in_directory(
@@ -83,10 +89,6 @@ impl Catalog {
         }
 
         let environment = root.parent().unwrap_or(root).join(".env.local");
-        let acp = match previous {
-            Some(previous) => previous.acp.clone(),
-            None => crate::host::acp::Manager::read(directory, &environment).map_err(invalid)?,
-        };
 
         Ok(Self {
             order,
@@ -94,7 +96,7 @@ impl Catalog {
             revision: format!("{:x}", hash.finalize()),
             providers,
             environment,
-            acp,
+            directory: directory.to_owned(),
         })
     }
 

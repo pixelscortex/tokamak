@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@agentclientprotocol/sdk": "~2.7.0",
     "@tokamak/sdk": "workspace:*"
   },
   "devDependencies": {

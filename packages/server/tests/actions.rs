@@ -47,9 +47,6 @@ fn artifacts() -> &'static BTreeMap<String, String> {
         serde_json::from_str(stdout.lines().last().unwrap()).unwrap()
     })
 }
-// Offline fixtures must not depend on adapters installed on the developer's host.
-const DISABLED_AGENTS: &str = "[agents.claude]\nenabled = false\n[agents.codex]\nenabled = false\n[agents.gemini]\nenabled = false\n";
-
 struct Installation(PathBuf);
 impl Installation {
     fn new() -> Self {
@@ -66,11 +63,6 @@ impl Installation {
             .join("plugins");
         std::fs::create_dir_all(&path).unwrap();
         let installation = Self(path);
-        std::fs::write(
-            installation.0.parent().unwrap().join("agents.toml"),
-            DISABLED_AGENTS,
-        )
-        .unwrap();
         for (name, source) in artifacts() {
             if (name.starts_with("chat/") || name.starts_with("acp/")) && !chat {
                 continue;
@@ -118,15 +110,21 @@ fn acceptance_over(scenario: &str, websocket: bool) {
         }
         let directory = installation.0.parent().unwrap();
         let agent = directory.join("agent.py");
-        std::fs::write(&agent, include_str!("support/acp_agent.py")).unwrap();
         std::fs::write(
-            directory.join(".env.local"),
-            "ACP_TEST_PASSTHROUGH=from-dotenv\nACP_TEST_NO_RESTORE=1\n",
+            &agent,
+            include_str!("../../../plugins/acp/tests/fake-agent.py"),
         )
         .unwrap();
-        std::fs::write(directory.join("agents.toml"), format!(
-            "{DISABLED_AGENTS}[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"acp\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"acp\"]\n", json!(agent), json!(agent)
-        )).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::fs::write(
+            directory.join(".env.local"),
+            format!("ACP_TEST_AGENT={}\n", agent.display()),
+        )
+        .unwrap();
     }
     tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
         .block_on(async {

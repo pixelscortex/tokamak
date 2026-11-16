@@ -33,6 +33,8 @@ pub struct Definition {
     pub permissions: Vec<String>,
     #[serde(default = "hub")]
     pub placement: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<String>,
     #[serde(default)]
     pub contributes: BTreeMap<String, Vec<Value>>,
     #[serde(default)]
@@ -56,9 +58,19 @@ pub struct UiEntry {
     pub shell: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkerEntry {
+    pub entry: String,
+    pub code: String,
+    pub map: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entries {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker: Option<WorkerEntry>,
     #[serde(default)]
     pub backend: Option<BackendEntry>,
     #[serde(default)]
@@ -150,6 +162,16 @@ impl Manifest {
             }
         }
 
+        if self
+            .plugin
+            .runtime
+            .as_deref()
+            .is_some_and(|v| v != "worker")
+            || (self.plugin.runtime.as_deref() == Some("worker")) != self.entries.worker.is_some()
+            || (self.entries.worker.is_some() && self.entries.backend.is_none())
+        {
+            return Err(invalid("Invalid plugin worker runtime/entry"));
+        }
         let mut names = BTreeSet::new();
 
         let backend_paths = self
@@ -166,7 +188,13 @@ impl Manifest {
             .into_iter()
             .flat_map(|entry| [&entry.code, &entry.map, &entry.css, &entry.shell]);
 
-        for name in backend_paths.chain(ui_paths) {
+        for name in backend_paths.chain(ui_paths).chain(
+            self.entries
+                .worker
+                .as_ref()
+                .into_iter()
+                .flat_map(|e| [&e.entry, &e.code, &e.map]),
+        ) {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

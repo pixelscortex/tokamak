@@ -29,17 +29,6 @@ pub(crate) fn operations(
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
-        crate::host::acp::register(
-            &mut ops,
-            loaded.catalog.acp.clone(),
-            owner.clone(),
-            loaded.catalog.plugins[owner]
-                .manifest
-                .plugin
-                .permissions
-                .iter()
-                .any(|p| p == "acp"),
-        )?;
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
                 .manifest
@@ -139,6 +128,7 @@ pub(crate) fn operations(
                     Some(&loaded),
                     Some(&target.owner),
                 ));
+                let worker = loaded.workers.get(&target.owner).cloned();
                 let ops = operations(
                     commands,
                     Some(loaded),
@@ -148,6 +138,12 @@ pub(crate) fn operations(
                     path,
                 )
                 .map_err(|e| e.to_string())?;
+                if let Some(worker) = worker {
+                    return worker
+                        .invoke(target.local_name, args, ops)
+                        .await
+                        .map_err(|e| environment.redact(e));
+                }
                 // A separate, invocation-owned lane avoids recursive waits on the
                 // bounded root action pool. Dropping it cancels the child on reload.
                 let pool = Pool::new_actions(PoolConfig {

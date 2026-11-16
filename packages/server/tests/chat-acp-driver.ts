@@ -70,6 +70,10 @@ export async function acpScenario(client: TokamakClient) {
   assert.equal((await client.query(api.threads.list, {}))[0]!.backend?.kind, "plugin");
   const stored = (await client.query(api.threads.list, {}))[0]!.backend;
   assert.ok(stored?.kind === "plugin" && (stored.state as { sessionId: string }).sessionId === "session");
+  await assert.rejects(client.action(acp.testing.crash, {}), /worker exited/);
+  assert.equal((await send("chat:normal")).status, "done");
+  // The new worker resumes the session saved in chat, without replaying history.
+  assert.deepEqual((await messages()).at(-1)!.parts[0], { type: "text", text: "Before." });
   // The fake recognizes only exact prompts: a history prefix on a restored turn fails these checks.
   for (const reason of ["max_tokens", "max_turn_requests", "refusal", "cancelled", "crash"]) {
     assert.equal(
@@ -239,7 +243,7 @@ export async function acpScenario(client: TokamakClient) {
           await client.mutation(api.runs.cancel, { runId: started.runId });
         return result;
       },
-      acp: {
+      agent: {
         open: async () => ({ sessionId: "session", restored: true }),
         prompt: async function* () {
           yield {
@@ -259,7 +263,7 @@ export async function acpScenario(client: TokamakClient) {
           release();
         },
       },
-    } as unknown as ActionContext;
+    } as unknown as ActionContext & { agent: import("./acp/src/server/agents/client").AgentClient };
     const action = acpSend(
       context,
       { threadId, text: "race" },
@@ -268,6 +272,7 @@ export async function acpScenario(client: TokamakClient) {
         agent: backend.backendId,
         cwd: backend.settings.cwd,
       },
+      context.agent,
     );
     await until(async () => (await messages()).at(-1)!.parts.some((part) => part.type === "permission"));
     await client.mutation(api.permissions.answer, {

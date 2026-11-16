@@ -42,6 +42,10 @@ impl SourceStamp {
 }
 
 impl Asset {
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub fn read(&self, offset: u64, maximum: usize) -> Result<Vec<u8>, Error> {
         if offset > self.len {
             return Err(invalid("Invalid asset offset"));
@@ -142,7 +146,12 @@ pub(super) fn asset(
     }
 
     let mut snapshot = if reusable.is_none() {
-        Some(tempfile::NamedTempFile::new().map_err(|e| invalid(e.to_string()))?)
+        Some(
+            tempfile::Builder::new()
+                .suffix(".mjs")
+                .tempfile()
+                .map_err(|e| invalid(e.to_string()))?,
+        )
     } else {
         None
     };

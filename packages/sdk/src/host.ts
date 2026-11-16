@@ -57,7 +57,15 @@ export interface HostOperations {
 
 export type HostOperation = keyof HostOperations;
 
+/** Structural AbortSignal subset keeps the portable SDK free of DOM globals. */
+export interface ActionSignal {
+  readonly aborted: boolean;
+  addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;
+  removeEventListener(type: "abort", listener: () => void): void;
+}
+
 export interface HostBridge {
+  readonly signal?: ActionSignal;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
   op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;
 }

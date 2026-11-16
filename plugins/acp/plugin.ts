@@ -5,5 +5,5 @@ export default definePlugin({
   name: "ACP",
   description: "Agent Client Protocol chat backend.",
   depends: ["chat"],
-  permissions: ["acp"],
+  runtime: "worker",
 });

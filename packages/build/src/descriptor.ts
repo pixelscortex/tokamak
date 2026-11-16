@@ -64,7 +64,7 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
     return fail();
   }
   const value = literal(call.arguments[0]!) as Record<string, unknown>;
-  const allowed = ["id", "version", "name", "description", "depends", "optional", "permissions"];
+  const allowed = ["id", "version", "name", "description", "depends", "optional", "permissions", "runtime"];
   if (!value || Array.isArray(value) || Object.keys(value).some((key) => !allowed.includes(key)))
     return fail();
   for (const key of ["depends", "optional"]) {

@@ -48,6 +48,7 @@ export type {
 
 export type {
   HostBridge,
+  ActionSignal,
   HostOperations,
   HostOperation,
   StoredDocument,

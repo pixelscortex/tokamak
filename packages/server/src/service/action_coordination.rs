@@ -26,24 +26,44 @@ impl Coordinator {
             self.plugins.as_deref(),
             owner.as_deref(),
         ));
-        let pending = crate::actions::operations(
+        let ops = match crate::actions::operations(
             self.commands.clone(),
             self.plugins.clone(),
-            owner,
+            owner.clone(),
             environment.clone(),
             self.action_pool.limits().clone(),
             vec![name.clone()],
-        )
-        .and_then(|ops| {
-            self.action_pool.submit(
-                bundle,
-                "invoke",
-                serde_json::json!({"name":local_name,"args":args}),
-                ops,
-            )
-        });
-
-        match pending {
+        ) {
+            Ok(ops) => ops,
+            Err(error) => {
+                self.respond(session, id, Err(environment.redact(error.to_string())));
+                return;
+            }
+        };
+        let worker = self
+            .plugins
+            .as_ref()
+            .and_then(|p| owner.as_ref().and_then(|owner| p.workers.get(owner)))
+            .cloned();
+        if let Some(worker) = worker {
+            self.action_jobs.spawn(async move {
+                (
+                    session,
+                    id,
+                    worker
+                        .invoke(local_name, args, ops)
+                        .await
+                        .map_err(|e| environment.redact(e)),
+                )
+            });
+            return;
+        }
+        match self.action_pool.submit(
+            bundle,
+            "invoke",
+            serde_json::json!({"name":local_name,"args":args}),
+            ops,
+        ) {
             Ok(pending) => {
                 self.action_jobs.spawn(async move {
                     (
@@ -53,13 +73,17 @@ impl Coordinator {
                     )
                 });
             }
-
             Err(error) => self.respond(session, id, Err(environment.redact(error.to_string()))),
         }
     }
 
     pub(super) async fn stop_actions(&mut self) {
         self.action_pool.cancel_actions();
+        if let Some(loaded) = &self.plugins {
+            for worker in loaded.workers.values() {
+                worker.stop().await;
+            }
+        }
 
         while let Some(completion) = self.action_jobs.join_next().await {
             if let Ok((session, id, result)) = completion {

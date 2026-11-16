@@ -6,6 +6,8 @@ import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { workerSources } from "./worker.mjs";
+
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,7 +47,7 @@ function apiType(modules, files) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace) {
+export async function bundleFeature(folder, namespace, worker = false) {
   const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const files = await scanFiles(root);
@@ -70,10 +72,16 @@ export async function bundleFeature(folder, namespace) {
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
-    const source = featureSource(root, files, modules, hasSchema);
+    let source = featureSource(root, files, modules, hasSchema);
+    let workerPlugins = [];
+    if (worker) {
+      const result = await workerSources({ root, files, modules, hasSchema, sdkRoot, header });
+      source = result.source;
+      workerPlugins = result.plugins;
+    }
     await Bun.write(entry, source);
 
-    await checkFeature(root, temporary, generated, files, entry);
+    await checkFeature(root, temporary, generated, files, entry, worker);
     const built = await Bun.build({
       entrypoints: ["tokamak-feature:entry"],
       target: "browser",
@@ -86,6 +94,7 @@ export async function bundleFeature(folder, namespace) {
       env: "disable",
       allowUnresolved: [],
       plugins: [
+        ...workerPlugins,
         {
           name: "stable-feature-entry",
           setup(build) {
@@ -129,7 +138,14 @@ export async function bundleFeature(folder, namespace) {
 }
 
 if (import.meta.main) {
-  if (process.argv.length !== 3 && !(process.argv.length === 5 && process.argv[3] === "--plugin")) {
+  if (
+    process.argv.length !== 3 &&
+    !(
+      [5, 6].includes(process.argv.length) &&
+      process.argv[3] === "--plugin" &&
+      (process.argv.length === 5 || process.argv[5] === "--worker")
+    )
+  ) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
@@ -137,7 +153,7 @@ if (import.meta.main) {
   const feature = resolve(sdkRoot, "../..", process.argv[2]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4]);
+  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker");
 }
 
 async function scanFiles(root) {
@@ -157,7 +173,7 @@ async function scanFiles(root) {
   return files;
 }
 
-async function checkFeature(root, temporary, generated, files, entry) {
+async function checkFeature(root, temporary, generated, files, entry, worker) {
   const config = join(temporary, "tsconfig.json");
   // Inherit resolution options unchanged, including paths relative to the
   // config that declared them. A build-only SDK alias or TS-extension opt-in
@@ -170,8 +186,8 @@ async function checkFeature(root, temporary, generated, files, entry) {
     JSON.stringify({
       extends: parentConfig,
       compilerOptions: {
-        lib: ["ES2022"],
-        types: [],
+        lib: worker ? ["ES2022", "DOM"] : ["ES2022"],
+        types: worker ? ["node"] : [],
         noEmit: true,
         strict: true,
       },
