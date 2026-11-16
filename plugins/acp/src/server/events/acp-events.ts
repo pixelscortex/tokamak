@@ -1,6 +1,6 @@
 import type { JsonObject } from "@tokamak/sdk";
-import type { ToolPart } from "../../../../chat/src/server/api";
-import type { streamBuffer } from "../../../../chat/src/server/api";
+import type { ToolPart } from "plugin:chat/server";
+import type { turnBuffer } from "../turn/turn-buffer";
 
 function contentText(content: unknown): string {
   const blocks = Array.isArray(content) ? content : [content];
@@ -15,7 +15,7 @@ function contentText(content: unknown): string {
     .join("");
 }
 
-export function acpEvents(agent: string, buffer: ReturnType<typeof streamBuffer>) {
+export function acpEvents(agent: string, buffer: ReturnType<typeof turnBuffer>) {
   const tools = new Map<string, ToolPart>();
 
   return async (update: JsonObject) => {

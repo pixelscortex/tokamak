@@ -157,8 +157,7 @@ fn artifact(variant: &Variant) -> PathBuf {
     std::fs::write(
         target.join("backend/tsconfig.json"),
         json!({
-            "extends": root.join("tsconfig.json"),
-            "compilerOptions": {"paths": {"@tokamak/sdk": [root.join("packages/sdk/src/index.ts")]}}
+            "extends": root.join("tsconfig.json")
         })
         .to_string(),
     )

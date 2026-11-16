@@ -8,6 +8,8 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
+import { pluginBoundary } from "./plugin-boundary.ts";
 import { pluginImports } from "./plugin-imports.ts";
 import { artifactBundle } from "./artifact-bundle.ts";
 import { publicFunctions } from "./exports.ts";
@@ -31,6 +33,7 @@ export function tokamak(
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   return [
+    pluginBoundary(() => root, options),
     ...(!options.standalone && options.ui !== false
       ? [
           clientSurface(
@@ -70,6 +73,7 @@ export function tokamak(
         if (id === "\0tokamak-empty-ui") return "export {};";
       },
       async buildStart() {
+        if (!options.standalone || existsSync(resolve(root, "plugin.ts"))) checkPluginImports(root);
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
           options.plugin ??

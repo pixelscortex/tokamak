@@ -1,8 +1,23 @@
 /// <reference lib="dom" />
-import { action, mutation, query, createApi, v, type ApiFromModule } from "@tokamak/sdk";
+import {
+  action,
+  mutation,
+  query,
+  createApi,
+  v,
+  type ApiFromModule,
+  type FunctionReference,
+} from "@tokamak/sdk";
 
 const self = createApi<{ ops: ApiFromModule<typeof import("./ops")> }>("a");
-const b = createApi<{ ops: ApiFromModule<typeof import("../../b/backend/ops")> }>("b");
+import { publicRead } from "plugin:b/server";
+// Deliberately forged private names exercise host denial without importing private source.
+const b = createApi<{
+  ops: {
+    privateRead: FunctionReference<"query", {}, string>;
+    privateWrite: FunctionReference<"mutation", {}, string>;
+  };
+}>("b");
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 export const append = mutation({
   args: { value: v.string() },
@@ -136,7 +151,7 @@ export const exports = action({
     return ctx.runQuery(b.ops.privateRead, {});
   },
 });
-export const publicCall = action({ handler: (ctx): Promise<string> => ctx.runQuery(b.ops.publicRead, {}) });
+export const publicCall = action({ handler: (ctx): Promise<string> => ctx.runQuery(publicRead, {}) });
 export const missing = action({ handler: () => new WebSocket("ws://127.0.0.1:1") });
 // TKM-44 x TKM-45: an action result is one wire response under the shared
 // 1 MiB limit, and a timer-only action lets reload cancel it without network.
