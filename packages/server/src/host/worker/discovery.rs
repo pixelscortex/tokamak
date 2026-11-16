@@ -69,3 +69,22 @@ pub(super) fn resolve(command: &str, paths: &[PathBuf]) -> Option<PathBuf> {
         Some(path)
     })
 }
+
+/// Resolve toolchain shims outside the sandbox; execute only the actual Bun
+/// binary inside it, so a shim cannot require undeclared process authority.
+pub(super) fn bun() -> Option<PathBuf> {
+    static BUN: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    BUN.get_or_init(|| {
+        let shim = resolve("bun", &search_paths())?;
+        let output = std::process::Command::new(shim)
+            .args(["--print", "process.execPath"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let path = String::from_utf8(output.stdout).ok()?;
+        resolve(path.trim(), &[]).and_then(|p| p.canonicalize().ok())
+    })
+    .clone()
+}

@@ -8,6 +8,24 @@ fn hub() -> String {
     "hub".into()
 }
 
+/// Per-worker aggregate Linux cgroup limits; macOS has no cgroup equivalent.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkerLimits {
+    pub memory_bytes: u64,
+    pub pids: u64,
+    pub cpu_percent: u64,
+}
+impl Default for WorkerLimits {
+    fn default() -> Self {
+        Self {
+            memory_bytes: 8 * 1024 * 1024 * 1024,
+            pids: 512,
+            cpu_percent: 200,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
@@ -35,6 +53,9 @@ pub struct Definition {
     pub placement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "workerLimits")]
+    pub worker_limits: WorkerLimits,
     #[serde(default)]
     pub contributes: BTreeMap<String, Vec<Value>>,
     #[serde(default)]
@@ -171,6 +192,14 @@ impl Manifest {
             || (self.entries.worker.is_some() && self.entries.backend.is_none())
         {
             return Err(invalid("Invalid plugin worker runtime/entry"));
+        }
+        let limits = &self.plugin.worker_limits;
+        if limits.memory_bytes < 64 * 1024 * 1024
+            || limits.pids < 16
+            || limits.cpu_percent == 0
+            || limits.cpu_percent > 10000
+        {
+            return Err(invalid("Invalid worker limits"));
         }
         let mut names = BTreeSet::new();
 

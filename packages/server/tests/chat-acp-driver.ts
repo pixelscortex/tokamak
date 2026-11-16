@@ -48,7 +48,7 @@ export async function acpScenario(client: TokamakClient) {
   await client.mutation(api.threads.setBackend, { threadId, backend });
   const send = (text: string) => client.action(api.chat.send, { threadId, text });
   const messages = () => client.query(api.messages.list, { threadId });
-  assert.equal((await send("chat:normal")).status, "done");
+  assert.equal((await send("chat:normal")).status, "done", JSON.stringify(await messages()));
   const parts = (await messages())[1]!.parts;
   assert.deepEqual(
     parts.map((part) => part.type),
@@ -71,7 +71,7 @@ export async function acpScenario(client: TokamakClient) {
   const stored = (await client.query(api.threads.list, {}))[0]!.backend;
   assert.ok(stored?.kind === "plugin" && (stored.state as { sessionId: string }).sessionId === "session");
   await assert.rejects(client.action(acp.testing.crash, {}), /worker exited/);
-  assert.equal((await send("chat:normal")).status, "done");
+  assert.equal((await send("chat:normal")).status, "done", JSON.stringify(await messages()));
   // The new worker resumes the session saved in chat, without replaying history.
   assert.deepEqual((await messages()).at(-1)!.parts[0], { type: "text", text: "Before." });
   // The fake recognizes only exact prompts: a history prefix on a restored turn fails these checks.

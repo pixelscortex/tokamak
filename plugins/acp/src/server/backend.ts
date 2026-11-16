@@ -12,7 +12,9 @@ export const configure = action({
   args: { backendId: v.string(), settings: v.any() },
   handler: async (_, { backendId, settings }) => {
     if (!agents.agents().some((agent) => agent.id === backendId)) throw new Error("Unknown agent");
-    // An empty folder means the home folder, so a new thread works without setup.
+    // The host grants an explicit picker folder before this action runs.
+    if (!String((settings as { cwd?: unknown })?.cwd ?? "").trim())
+      throw new Error("Select an agent folder before starting a conversation");
     const cwd = await checkFolder({ path: String((settings as { cwd?: unknown })?.cwd ?? "") });
     return { cwd };
   },

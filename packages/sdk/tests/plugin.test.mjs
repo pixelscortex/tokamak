@@ -84,3 +84,21 @@ test("authored plugin dependencies are unversioned IDs", () => {
   expect(plugin.depends).toEqual({ chat: "*" });
   expect(definePlugin({ id: "chat", version: "0.3.0", depends: [] }).depends).toEqual({});
 });
+
+test("worker limit overrides remain explicit validated manifest data", () => {
+  const limits = { memoryBytes: 1073741824, pids: 64, cpuPercent: 50 };
+  const plugin = definePlugin({ id: "limited", version: "1.0.0", runtime: "worker", workerLimits: limits });
+  expect(plugin.workerLimits).toEqual(limits);
+  expect(Object.isFrozen(plugin.workerLimits)).toBe(true);
+  for (const workerLimits of [
+    { memoryBytes: 1 },
+    { pids: 15 },
+    { cpuPercent: 0 },
+    { cpuPercent: 10001 },
+    { pids: 64.5 },
+    { unknown: 1 },
+  ])
+    expect(() => definePlugin({ id: "limited", version: "1.0.0", workerLimits })).toThrow(
+      "Invalid worker limits",
+    );
+});

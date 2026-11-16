@@ -48,11 +48,22 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
+        Self::with_permissions(None).await
+    }
+    async fn with_permissions(permissions: Option<Vec<String>>) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("plugins/worker-test");
         std::fs::create_dir_all(&path).unwrap();
         for (name, text) in artifacts() {
             std::fs::write(path.join(name), text).unwrap();
+        }
+        if let Some(permissions) = permissions {
+            let manifest = path.join("manifest.json");
+            let mut value: Value =
+                serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+            value["plugin"]["permissions"] = json!(permissions);
+            value["plugin"]["workerLimits"] = json!({"pids":64});
+            std::fs::write(manifest, serde_json::to_vec(&value).unwrap()).unwrap();
         }
         let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
         let server = Server::load_plugins(
@@ -380,6 +391,14 @@ async fn real_turn(agent: &str) {
         json!({}),
     )
     .await;
+    call(
+        &mut session,
+        &mut id,
+        "action",
+        "chat/backends:configure",
+        json!({"plugin":"acp","backendId":agent,"settings":{"cwd":cwd}}),
+    )
+    .await;
     call(&mut session, &mut id, "mutation", "chat/threads:setBackend", json!({"threadId":thread,"backend":{"kind":"plugin","plugin":"acp","backendId":agent,"settings":{"cwd":cwd}}})).await;
     session.sender().request(Request::Action {id:1000, name:"chat/chat:send".into(), args:json!({"threadId":thread,"text":"Reply with the single word: ready. Do not use tools."})}).unwrap();
     // A second session polls the public permission API without consuming the
@@ -438,4 +457,66 @@ async fn real_claude() {
 #[ignore = "requires installed adapter and owner CLI login"]
 async fn real_codex() {
     real_turn("codex").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sandbox_denies_ungranted_files_network_and_executables() {
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("secret");
+    std::fs::write(&secret, "outside grants").unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut fixture = Fixture::new().await;
+    let result = fixture.call("sandbox", json!({"read":secret,"write":outside.path().join("escape"),"port":listener.local_addr().unwrap().port()})).await.unwrap();
+    assert_eq!(
+        result,
+        json!({"readDenied":true,"writeDenied":true,"execDenied":true,"networkDenied":true,"own":"inside data","temporary":"inside temp"})
+    );
+    let descendant = fixture
+        .call(
+            "descendant",
+            json!({"read":secret,"write":outside.path().join("descendant-escape")}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(descendant.as_str().unwrap()).unwrap(),
+        json!({"readDenied":true,"writeDenied":true})
+    );
+    assert!(!outside.path().join("descendant-escape").exists());
+    assert!(!outside.path().join("escape").exists());
+    fixture.close().await;
+    let mut granted = Fixture::with_permissions(Some(vec![
+        format!("fs:write:{}", outside.path().display()),
+        "net:localhost".into(),
+    ]))
+    .await;
+    assert_eq!(
+        granted
+            .call("granted", json!({"path":outside.path()}))
+            .await
+            .unwrap(),
+        "granted path"
+    );
+    let result = granted.call("sandbox", json!({"read":secret,"write":outside.path().join("escape"),"port":listener.local_addr().unwrap().port()})).await.unwrap();
+    assert_eq!(result["networkDenied"], false);
+    assert_eq!(result["readDenied"], false);
+    assert_eq!(result["writeDenied"], false);
+    assert_eq!(result["execDenied"], true);
+    granted.close().await;
+}
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sandbox_linux_pids_max_bounds_descendants() {
+    let mut fixture = Fixture::with_permissions(Some(vec!["proc:/bin/sleep".into()])).await;
+    let result = fixture.call("pids", json!({})).await.unwrap();
+    if result["delegated"] == false {
+        eprintln!("SKIP pids.max: server has no delegated cgroup v2");
+        assert!(
+            std::env::var_os("TOKAMAK_REQUIRE_CGROUP").is_none(),
+            "Linux CI requires cgroup delegation"
+        );
+    } else {
+        assert_eq!(result["denied"], true, "{result}");
+    }
+    fixture.close().await;
 }

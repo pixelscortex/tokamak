@@ -90,3 +90,128 @@ export const envDenied = action({ handler: (ctx) => ctx.env("WORKER_UNGRANTED") 
 export const dbDenied = action({ handler: (ctx) => (ctx as unknown as { db: unknown }).db ?? null });
 // A mixed module must not pull this file's Node actions into QuickJS.
 export const pure = query({ handler: () => "QuickJS" });
+
+// Exercise the OS boundary, rather than a JavaScript API wrapper.
+export const sandbox = action({
+  args: { read: v.string(), write: v.string(), port: v.number() },
+  handler: async (_, { read, write, port }) => {
+    const { readFileSync } = await import("node:fs");
+    const { createConnection } = await import("node:net");
+    let readDenied = false;
+    let writeDenied = false;
+    try {
+      readFileSync(read);
+    } catch {
+      readDenied = true;
+    }
+    try {
+      writeFileSync(write, "escaped");
+    } catch {
+      writeDenied = true;
+    }
+    writeFileSync("granted", "inside data");
+    const own = readFileSync("granted", "utf8");
+    const temp = `${process.env.TMPDIR}/granted`;
+    writeFileSync(temp, "inside temp");
+    const temporary = readFileSync(temp, "utf8");
+    const execDenied = await new Promise<boolean>((resolve) => {
+      try {
+        const child = spawn("/bin/echo", ["escaped"], { stdio: "ignore" });
+        child.on("error", () => resolve(true));
+        child.on("exit", (code) => resolve(code !== 0));
+      } catch {
+        resolve(true);
+      }
+    });
+    const networkDenied = await new Promise<boolean>((resolve) => {
+      const socket = createConnection({ host: "127.0.0.1", port });
+      socket.on("error", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on("connect", () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.setTimeout(1000, () => {
+        socket.destroy();
+        resolve(true);
+      });
+    });
+    return { readDenied, writeDenied, execDenied, networkDenied, own, temporary };
+  },
+});
+export const granted = action({
+  args: { path: v.string() },
+  handler: async (_, { path }) => {
+    const { readFileSync } = await import("node:fs");
+    writeFileSync(`${path}/granted`, "granted path");
+    return readFileSync(`${path}/granted`, "utf8");
+  },
+});
+export const pids = action({
+  handler: async () => {
+    const { readFileSync, existsSync } = await import("node:fs");
+    const path = readFileSync("/proc/self/cgroup", "utf8").trim().split("::")[1];
+    // A bounded fork-pressure fixture: stop at 128, clean every child up, and
+    // skip only when the host couldn't obtain a delegated cgroup.
+    if (!path?.includes("tokamak-worker-")) return { delegated: false, denied: false };
+    const children = [];
+    let denied = false;
+    try {
+      for (let i = 0; i < 128; i++) {
+        let child;
+        try {
+          child = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+        } catch {
+          denied = true;
+          break;
+        }
+        children.push(child);
+        const started = await new Promise<boolean>((resolve) => {
+          child.on("spawn", () => resolve(true));
+          child.on("error", () => resolve(false));
+        });
+        if (!started) {
+          denied = true;
+          break;
+        }
+      }
+      return { delegated: true, denied, count: children.length, exists: existsSync("/sys/fs/cgroup") };
+    } finally {
+      for (const child of children) child.kill();
+    }
+  },
+});
+export const descendant = action({
+  args: { read: v.string(), write: v.string() },
+  handler: (_, { read, write }) =>
+    new Promise<string>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "--eval",
+          `
+      const fs = require("node:fs");
+      let readDenied = false, writeDenied = false;
+      try { fs.readFileSync(${JSON.stringify(read)}); } catch { readDenied = true; }
+      try { fs.writeFileSync(${JSON.stringify(write)}, "escaped"); } catch { writeDenied = true; }
+      process.stdout.write(JSON.stringify({readDenied, writeDenied}));
+    `,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      let text = "";
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      child.stdout.on("data", (chunk) => {
+        text += chunk;
+      });
+      child.on("error", reject);
+      child.on("exit", (code, signal) =>
+        code === 0 ? resolve(text) : reject(new Error(`Descendant exited ${code}/${signal}: ${stderr}`)),
+      );
+    }),
+});

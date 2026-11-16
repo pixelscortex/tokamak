@@ -97,10 +97,10 @@ export function BackendPicker(props: {
   }
 
   function submitFolder() {
-    // Empty means the home folder; the server resolves `~` and checks the path.
+    // Choosing a folder grants the agent full access inside it.
     const path = folder().trim();
-    if (path && !path.startsWith("/") && !path.startsWith("~")) {
-      setError("Use an absolute path, ~/…, or leave empty for your home folder");
+    if (!path || (!path.startsWith("/") && !path.startsWith("~"))) {
+      setError("Choose an absolute path or ~/… (use ~ to grant your home folder)");
       return;
     }
     const backend = selected();
@@ -147,7 +147,7 @@ export function BackendPicker(props: {
               onValueChange={setFolder}
               onSubmit={submitFolder}
               disabled={saving()}
-              placeholder="~ (home folder)"
+              placeholder="/path/to/project"
             />
             <span class="text-text-3">ENTER SAVE · ESC CLOSE</span>
           </>

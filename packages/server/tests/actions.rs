@@ -120,6 +120,16 @@ fn acceptance_over(scenario: &str, websocket: bool) {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
+        let path = installation.0.join("acp/manifest.json");
+        let mut manifest: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        manifest["plugin"]["permissions"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(format!(
+                "proc:{}",
+                agent.canonicalize().unwrap().display()
+            )));
+        std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         std::fs::write(
             directory.join(".env.local"),
             format!("ACP_TEST_AGENT={}\n", agent.display()),

@@ -97,7 +97,9 @@ impl Loaded {
                         artifact.assets[&entry.code].clone(),
                         catalog.directory.join("plugin-data").join(id),
                         &catalog.environment,
+                        &artifact.root,
                         &artifact.manifest.plugin.permissions,
+                        artifact.manifest.plugin.worker_limits.clone(),
                     )?,
                 );
             }

@@ -71,8 +71,18 @@ class AgentProcess {
   private failure?: Error;
   constructor(readonly definition: Agent) {
     const env: Record<string, string> = {};
-    for (const name of ["PATH", "HOME", "USER", "LANG"])
+    for (const name of [
+      "PATH",
+      "HOME",
+      "USER",
+      "LANG",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
+    ])
       if (process.env[name] !== undefined) env[name] = process.env[name]!;
+    if (env.TMPDIR) env.CLAUDE_CODE_TMPDIR = env.TMPDIR;
     env.PATH = [dirname(definition.command), env.PATH].filter(Boolean).join(delimiter);
     this.child = spawn(definition.command, definition.args, { env, stdio: "pipe", detached: true });
     // The adapter has its own group. A separate process watches worker death,

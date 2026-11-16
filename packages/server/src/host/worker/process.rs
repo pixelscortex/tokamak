@@ -56,19 +56,47 @@ pub(super) fn spawn(
     code: Arc<Asset>,
     cwd: &Path,
     env: &BTreeMap<String, String>,
+    policy: &sandbox::Policy,
+    selected: &[PathBuf],
 ) -> Result<Arc<Process>, String> {
     // Nested QuickJS actions can run on a short-lived runtime. Bind child I/O
     // to the server runtime that owns the long-lived worker instead.
     let _entered = runtime.enter();
-    let mut command = tokio::process::Command::new(bun);
+    let temporary = tempfile::Builder::new()
+        .prefix("tokamak-worker-")
+        .tempdir()
+        .map_err(|e| e.to_string())?;
+    // Bun scans a module's directory. Give it a private snapshot directory,
+    // never a read grant for the host's shared temp directory.
+    let modules = tempfile::Builder::new()
+        .prefix("tokamak-modules-")
+        .tempdir()
+        .map_err(|e| e.to_string())?;
+    let worker_entry = modules.path().join("entry.mjs");
+    let worker_code = modules.path().join("code.mjs");
+    std::fs::copy(entry.path(), &worker_entry).map_err(|e| e.to_string())?;
+    std::fs::copy(code.path(), &worker_code).map_err(|e| e.to_string())?;
+    let mut policy = policy.clone();
+    policy.read.push(modules.path().to_path_buf());
+    policy.write.extend_from_slice(selected);
+    policy.prepare(bun, &worker_entry, &worker_code, cwd, temporary.path())?;
+    let mut command = policy.command(bun)?;
+    let sandbox = policy.apply(&mut command)?;
     #[cfg(unix)]
     command.process_group(0);
-    // Future OS sandbox hooks (Linux cgroups/Landlock) belong here.
+
     let mut child = command
-        .arg(entry.path())
-        .arg(code.path())
+        .arg(&worker_entry)
+        .arg(&worker_code)
         .env_clear()
         .envs(env)
+        .env("TMPDIR", temporary.path())
+        .env("TMP", temporary.path())
+        .env("TEMP", temporary.path())
+        .env(
+            "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
+            temporary.path().join("bun-cache"),
+        )
         .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -95,6 +123,8 @@ pub(super) fn spawn(
         let _finished = finished;
         // Keep the verified snapshots alive through exit; never reopen build output.
         let _snapshots = (entry, code);
+        let _sandbox = sandbox;
+        let _temporary = (temporary, modules);
         let _guardian_input = guardian_input;
         let label = id.clone();
         let _stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {

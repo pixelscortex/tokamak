@@ -14,6 +14,11 @@ export interface PluginDefinition {
   readonly consumes?: readonly string[];
   readonly permissions?: readonly string[];
   readonly runtime?: "worker";
+  readonly workerLimits?: {
+    readonly memoryBytes?: number;
+    readonly pids?: number;
+    readonly cpuPercent?: number;
+  };
   readonly placement?: "hub" | "runner" | "hybrid";
   readonly contributes?: Readonly<Record<string, readonly JsonValue[]>>;
   readonly exports?: string;
@@ -80,6 +85,7 @@ export function definePlugin(
     "permissions",
     "placement",
     "runtime",
+    "workerLimits",
     "contributes",
     "exports",
   ];
@@ -134,6 +140,22 @@ function validateLists(definition: PluginDefinition) {
 }
 
 function validateMetadata(definition: PluginDefinition) {
+  if (definition.workerLimits !== undefined) {
+    const limits = definition.workerLimits;
+    if (
+      !limits ||
+      typeof limits !== "object" ||
+      Array.isArray(limits) ||
+      Object.entries(limits).some(
+        ([key, value]) =>
+          !["memoryBytes", "pids", "cpuPercent"].includes(key) ||
+          !Number.isSafeInteger(value) ||
+          value < ({ memoryBytes: 64 * 1024 * 1024, pids: 16, cpuPercent: 1 }[key] ?? 1) ||
+          (key === "cpuPercent" && value > 10000),
+      )
+    )
+      throw new Error("Invalid worker limits");
+  }
   if (definition.runtime !== undefined && definition.runtime !== "worker")
     throw new Error("Invalid plugin runtime");
   for (const field of ["name", "description"] as const)

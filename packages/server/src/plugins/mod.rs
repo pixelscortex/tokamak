@@ -14,6 +14,7 @@ use std::{
 };
 
 pub struct Artifact {
+    pub(crate) root: PathBuf,
     pub manifest: Manifest,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,

@@ -7,6 +7,22 @@ impl Coordinator {
             return;
         }
 
+        // Only requests admitted from a user session may approve picker folders.
+        // Nested plugin calls bypass start_action and cannot mint this authority.
+        if name == "chat/backends:configure" {
+            if let Some(worker) = self
+                .plugins
+                .as_ref()
+                .and_then(|p| args["plugin"].as_str().and_then(|id| p.workers.get(id)))
+            {
+                let folder = args["settings"]["cwd"].as_str().unwrap_or("");
+                if let Err(error) = worker.select_folder(folder) {
+                    self.respond(session, id, Err(error));
+                    return;
+                }
+            }
+        }
+
         let (bundle, local_name, owner) = if let Some(loaded) = &self.plugins {
             let target = &loaded.targets[&name];
             (

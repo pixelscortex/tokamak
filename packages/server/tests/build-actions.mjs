@@ -96,8 +96,8 @@ export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
       await writeFile(
         descriptor,
         (await readFile(descriptor, "utf8")).replace(
-          'runtime: "worker",',
-          'runtime: "worker", permissions: ["env:ACP_TEST_AGENT"],',
+          /permissions: \[[\s\S]*?\],/,
+          'permissions: ["env:ACP_TEST_AGENT", "fs:write:selected", "proc:/bin/sh", "proc:/bin/bash", "proc:/bin/sleep", "proc:/usr/bin/python3", "proc:/Library/Developer/CommandLineTools/usr/bin/python3", "proc:/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python", "fs:read:/Library/Developer/CommandLineTools"],',
         ),
       );
     }

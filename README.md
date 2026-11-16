@@ -90,7 +90,7 @@ handle. Each invocation receives an AbortSignal through `ctx.signal`.
 
 Workers run in per-plugin data folders under the server data directory, with a
 cleared environment containing PATH, HOME, USER, LANG and manifest `env:<name>`
-grants. Worker code has ordinary local process access; this is not an OS sandbox.
+grants. OS confinement is applied before exec; see the worker grants below.
 Reload, disable, and server shutdown kill the worker's whole process group.
 Crashes fail pending actions and restart on the next call with a short backoff.
 Actions have a one-hour wall deadline; cancellation allows 500 ms to settle
@@ -201,3 +201,65 @@ paused; automated checks do not establish physical native input acceptance.
 `python3 tests/compiler-selection.py` failed before compilation because its
 existing `git clone --local` setup tried to hardlink across filesystems. That
 separate harness defect was not changed as part of this layout refactor.
+
+### Worker grants and OS confinement
+
+Workers and their descendants receive only their data folder and private temp
+folder (read/write), verified code and installed plugin files (read-only), Bun
+and OS libraries (read/execute as needed), and declared manifest grants:
+
+- `fs:read:<absolute path>` and `fs:write:<absolute path>` (write includes read).
+  `~` and `~/…` expand on the host. Relative paths and `..` are rejected. Symlinks
+  resolve before launch; missing optional paths confer no authority.
+- `fs:write:selected` opts into folders explicitly selected through the backend
+  picker's configure action. Only the user-session coordinator approves these;
+  plugin calls cannot approve themselves. Host records live in `worker-grants/`,
+  outside plugin data. Adding a folder restarts the worker, cancelling active
+  actions. Grants accumulate until their host record is removed and the worker
+  is restarted. Select `~` explicitly to grant a whole home directory.
+- `net` enables network. For workers, existing `net:<host>` grants also enable
+  **all** network, including local sockets; these OS policies do not enforce
+  per-host DNS/IP rules. Omission denies network.
+- `proc:<absolute executable>` (also supports `~/…`) allows that executable.
+  `proc:tool:<name>` resolves a securely discovered installed tool, includes its
+  package read-only and enumerates executable helpers within that package plus
+  its sibling Node runtime. No downloads, shell expansion or executable-directory
+  grants occur. Script interpreters such as `/usr/bin/env` must be declared too.
+  Executable grants permit arbitrary code interpreted by that runtime; they are
+  not argument filters. Permitted interpreters and the Linux dynamic loader can
+  run code from readable files; process grants do not constrain interpreted code. With any process grant, Bun itself remains executable.
+- `keychain` permits macOS SecurityServer access for CLI login reuse. It does not
+  grant direct reads of keychain files. Unknown permissions confer no authority.
+
+`workerLimits: { memoryBytes: 8589934592, pids: 512, cpuPercent: 200 }`
+overrides the defaults (8 GiB, 512 tasks including threads, two CPUs). CPU is a
+rate limit, not a lifetime budget. Limits must be positive integers; minimum
+memory is 64 MiB and minimum task count is 16.
+
+Linux installs Landlock using the kernel's available ABI, `no_new_privs`, and a
+small seccomp filter before exec. Anonymous Unix stream socketpairs remain
+available for child stdio, including without `net`. Filesystem writes never imply executable
+access. The filter blocks network socket creation without a grant, process
+creation without a process grant (threads remain possible), and host-inspection
+or namespace escape syscalls. Landlock ABI 6 also scopes signals and abstract
+Unix sockets to the worker's domain. Older ABIs log a warning about missing
+protections; ABI 1 lacks REFER, ABI 1–2 lack TRUNCATE, and ABI 1–4 lack device
+IOCTL mediation. Without Landlock the host refuses to start an unconfined worker.
+Landlock inode rules cannot express each future child's `/proc/self`. A narrow
+seccomp notification broker supplies only `maps`, `stat`, `statm`, `status`,
+`auxv` and `cgroup`, read-only, for the kernel-identified calling task. Other opens
+continue through Landlock. This lets Bun descendants initialize without granting
+access to other processes' procfs files.
+A delegated cgroup v2 with memory/cpu/pids controllers creates a per-worker group;
+children join it before exec. Without delegation, the host logs a warning and
+continues **without aggregate resource limits**. Configure the service manager
+with delegation (for example systemd `Delegate=memory cpu pids` and
+`DelegateSubgroup=supervisor`, keeping the server in a leaf and workers as siblings).
+
+macOS uses `sandbox-exec`, which is deprecated by Apple but remains functional,
+with a deny-by-default profile for file content, execution and network. Metadata
+checks remain available (as with Landlock). Signals are restricted to the same
+sandbox. File descriptors are capped at 4096 and core dumps disabled using
+`setrlimit`; aggregate memory, CPU rate and per-worker pids limits are unavailable
+on macOS. `RLIMIT_AS` is deliberately unused because Bun/V8 reserve large virtual
+address spaces. Other OSes refuse worker launch.

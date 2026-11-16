@@ -41,7 +41,7 @@ rows show their status.
 Install the pinned adapters globally once:
 
 ```sh
-npm install -g @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
+bun add --global @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
 ```
 
 Tokamak discovers Claude Code, Codex, and Gemini CLI (`gemini --acp`) automatically
@@ -50,7 +50,25 @@ Discovery refreshes each time agents are listed. Sign in with `claude` or `codex
 in a terminal first; adapters reuse existing CLI logins through HOME.
 Only named environment variables pass through: `PATH`, `HOME`, `USER`, and `LANG`
 when present. The executable's directory is prepended to PATH for its helpers.
-Agents have the same access as their CLI; the selected folder is not a sandbox.
+The host confines adapters and their descendants to explicitly selected folders,
+ACP data/temp, and the grants in `plugin.ts`. Select a folder in the backend picker
+before sending; an empty selection never grants the home directory. Choosing `~`
+explicitly grants full home access. Each selected folder has full read/write
+access, including project-local settings and tools' files.
+
+ACP declares network and the installed Claude/Codex tool packages, bundled native
+helpers and their Node runtimes read-only. `/usr/bin/env` handles script shebangs;
+`/bin/sh`, `/bin/bash` (macOS's sh trampoline), and `/bin/sleep` support the process
+cleanup guardian. Claude writes `~/.claude` and `~/.claude.json`; Codex writes
+`~/.codex` (login, config, sessions, SQLite state and caches). macOS login reuse
+also permits `/usr/bin/security` and SecurityServer, and reads the user's
+`.CFUserTextEncoding`. These are shared with the user's existing CLI login.
+ACP forwards only the host's private temp/cache variables in addition to the
+four identity variables, and sets `CLAUDE_CODE_TMPDIR` there because Claude would
+otherwise use `/tmp/claude-<uid>`. It receives no grant for the shared `/tmp`.
+See [worker confinement](../../README.md#worker-grants-and-os-confinement) for
+resource limits and platform limitations. Gemini requires its own explicit tool
+and config grants before it can be used in a confined worker.
 
 Automated plugin tests use a fake adapter and need no credentials:
 

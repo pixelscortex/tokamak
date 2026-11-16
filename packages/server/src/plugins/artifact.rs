@@ -62,6 +62,7 @@ impl Artifact {
         let permissions = manifest.plugin.permissions.iter().cloned().collect();
 
         Ok(Self {
+            root,
             manifest,
             bundle,
             assets,
