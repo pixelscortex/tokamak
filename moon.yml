@@ -1,30 +1,30 @@
 # Workspace-only operations; language tasks belong to the individual projects.
-language: 'unknown'
-layer: 'configuration'
+language: "unknown"
+layer: "configuration"
 workspace:
   inheritedTasks:
     include: []
 tasks:
   e2e:
-    deps: ['app:test']
-    command: 'proto run bun -- e2e/run.ts'
+    deps: ["app:test"]
+    command: "proto run bun -- e2e/run.ts"
     options:
       cache: false
-      mutex: 'cargo'
+      mutex: "cargo"
   build-release:
-    command: 'cargo build --locked --release --package server --bin tokamak --target-dir target'
+    command: "cargo build --locked --release --package server --bin tokamak --target-dir target"
     options:
       cache: false
-      mutex: 'cargo'
+      mutex: "cargo"
   size:
-    deps: ['app:build']
+    deps: ["app:build"]
     # stat fails on a missing artifact, unlike reporting an absent baseline as zero.
     command:
-      - 'proto'
-      - 'run'
-      - 'bun'
-      - '--'
-      - '-e'
+      - "proto"
+      - "run"
+      - "bun"
+      - "--"
+      - "-e"
       - >-
         import { stat } from "node:fs/promises";
         for (const binary of ["tokamak", "tokamak-desktop"]) {
@@ -34,17 +34,26 @@ tasks:
         }
     options:
       cache: false
-  lint-rust:
-    command: 'cargo clippy --locked --workspace --lib --bins --all-features'
+  format:
+    command: "proto run bun -- run oxfmt --write . && cargo fmt --all"
     options:
       cache: false
-      mutex: 'cargo'
+      shell: true
+  format-check:
+    command: "proto run bun -- run oxfmt --check . && cargo fmt --all --check"
+    options:
+      cache: false
+      shell: true
+  lint-rust:
+    command: "cargo clippy --locked --workspace --lib --bins --all-features"
+    options:
+      cache: false
+      mutex: "cargo"
       allowFailure: true
   lint-ts:
-    command: 'bun run oxlint packages app lab plugins'
+    command: "proto run bun -- run oxlint packages app lab plugins"
     options:
       cache: false
-      allowFailure: true
   duplicates:
     command: 'bun run jscpd packages app lab plugins --format rust,typescript,tsx,javascript --ignore "**/tests/**,**/vendor/**,**/dist/**,**/target/**,**/node_modules/**,**/protocol.ts" --min-lines 6 --min-tokens 50'
     options:

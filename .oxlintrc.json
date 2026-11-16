@@ -1,22 +1,18 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
-    "**/tests/**",
     "**/vendor/**",
     "**/dist/**",
     "**/target/**",
     "**/generated/**",
-    "**/protocol.ts"
+    "**/protocol.ts",
+    "**/_generated/**",
+    "packages/engine/tests/fixtures/array-initializer.js",
+    "packages/engine/tests/fixtures/startup.js"
   ],
   "rules": {
-    "max-depth": [
-      "warn",
-      4
-    ],
-    "complexity": [
-      "warn",
-      15
-    ],
+    "max-depth": ["warn", 4],
+    "complexity": ["warn", 15],
     "max-lines": [
       "warn",
       {
@@ -32,6 +28,23 @@
         "skipBlankLines": true,
         "skipComments": true
       }
-    ]
-  }
+    ],
+    "no-unused-vars": "error",
+    "no-console": "error",
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-debugger": "error",
+    "typescript/no-explicit-any": "warn",
+    "import/no-cycle": "error"
+  },
+  "plugins": ["typescript", "import"],
+  "overrides": [
+    {
+      "files": ["packages/build/**", "**/tools/**", "**/tests/**", "**/*.test.*", "**/*.spec.*"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
 }

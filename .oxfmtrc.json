@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "tabWidth": 2,
+  "useTabs": false,
+  "singleQuote": false,
+  "semi": true,
+  "printWidth": 110,
+  "trailingComma": "all",
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/_generated/**",
+    "**/node_modules/**",
+    "**/target/**",
+    "**/vendor/**",
+    "**/*lock*",
+    "packages/engine/tests/fixtures/*.js",
+    "packages/engine/tests/fixtures/*.js.map"
+  ]
+}
