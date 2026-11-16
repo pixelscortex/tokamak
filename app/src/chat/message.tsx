@@ -4,22 +4,28 @@ import { PermissionPart, type Permission } from "./permission-part";
 import { ToolPart } from "./tool-part";
 import { Markdown } from "./markdown";
 import type { Message as ChatMessage } from "./use-chat";
+import { AuthorName } from "./author-name";
+import { authorInitial } from "./use-identity";
 
-export function Mark(props: { user?: boolean }) {
+export function Mark(props: { user?: boolean; initial?: string }) {
   return <span aria-hidden="true" class={`mt-1 flex size-4 shrink-0 items-center justify-center font-label text-[10px] leading-4 ${props.user ? "bg-light text-ground" : "border border-text-3"}`}>
-    {props.user ? "K" : ""}
+    {props.user ? props.initial ?? "K" : ""}
   </span>;
 }
 
-export function Message(props: { loader: PluginLoader; threadId: string; message: ChatMessage; onAnswer?: (part: Permission, optionId: string) => void; liveCards?: ReadonlySet<string> }) {
+export function Message(props: { loader: PluginLoader; threadId: string; message: ChatMessage; viewerId?: string; onAnswer?: (part: Permission, optionId: string) => void; liveCards?: ReadonlySet<string> }) {
   const parts = createMemo(() => new Map(props.message.parts.map((part, index) => [
     part.type === "tool" ? `tool:${part.callId}` : part.type === "permission" ? `permission:${part.requestId}` : `${part.type}:${index}`, part,
   ])));
   const partIds = createMemo(() => [...parts().keys()]);
 
+  const user = () => props.message.role === "user";
+  const author = () => ({ role: props.message.authorRole ?? (props.message.authorId === "owner" ? "owner" as const : "guest" as const), name: props.message.authorName });
+
   return <div class="flex shrink-0 items-start gap-3" data-role={props.message.role} data-message={props.message._id} data-status={props.message.status}>
-    <Mark user={props.message.role === "user"} />
+    <Mark user={user()} initial={authorInitial(author())} />
     <div class="min-w-0 flex-1">
+      <AuthorName message={props.message} viewerId={props.viewerId} />
       <Show when={props.message.role === "assistant"} fallback={
         <p class="m-0 whitespace-pre-wrap break-words text-text">{props.message.parts.map(part => part.type === "text" ? part.text : "").join("")}</p>
       }>

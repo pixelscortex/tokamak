@@ -1,7 +1,8 @@
 import { observeLayout } from "@tokamak/render";
 import { createSignal, Show } from "solid-js";
+import { BusyStatus } from "./busy-status";
 
-export function ComposerStrip(props: { title: string; model: string; turns: number; copied: boolean; onModel: () => void }) {
+export function ComposerStrip(props: { title: string; model: string; turns: number; copied: boolean; starter?: string; raced: boolean; onModel?: () => void }) {
   const [available, setAvailable] = createSignal(0);
   const [width, setWidth] = createSignal(0);
 
@@ -16,7 +17,12 @@ export function ComposerStrip(props: { title: string; model: string; turns: numb
     </span>
     <span id="chat-strip-model" class="flex shrink-0 items-center gap-2 whitespace-nowrap">
       <Show when={props.copied}><span role="status">COPIED</span></Show>
-      <button aria-label="Change backend (CMD+M)" onClick={() => props.onModel()} class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[9px] uppercase text-text-3">{props.model}</button>
+      <BusyStatus starter={props.starter} raced={props.raced} />
+
+      {/* Guests see the backend but cannot change it. */}
+      <Show when={props.onModel} fallback={<span id="chat-strip-backend">{props.model}</span>}>
+        <button aria-label="Change backend (CMD+M)" onClick={() => props.onModel?.()} class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[9px] uppercase text-text-3">{props.model}</button>
+      </Show>
       <span>· {props.turns} {props.turns === 1 ? "turn" : "turns"}</span>
     </span>
   </div>;

@@ -72,6 +72,13 @@ struct Service {
 }
 impl Service {
     fn start(scratch: &Scratch) -> Self {
+        Self::launch(scratch, None)
+    }
+    /// Also serves guests on a loopback share listener.
+    fn start_shared(scratch: &Scratch, share: &str) -> Self {
+        Self::launch(scratch, Some(share))
+    }
+    fn launch(scratch: &Scratch, share: Option<&str>) -> Self {
         let directory = scratch.0.join("server");
         std::fs::create_dir_all(&directory).unwrap();
         let token = directory.join("server.token");
@@ -82,11 +89,16 @@ impl Service {
             std::fs::set_permissions(token, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
         let log = std::fs::File::create(directory.join("server.log")).unwrap();
-        let child = Command::new(binary())
+        let mut command = Command::new(binary());
+        command
             .arg("--local-dir")
             .arg(&directory)
             .arg("--plugins")
-            .arg(scratch.0.join("installation"))
+            .arg(scratch.0.join("installation"));
+        if let Some(address) = share {
+            command.arg("--share").arg(address);
+        }
+        let child = command
             .stdout(Stdio::from(log.try_clone().unwrap()))
             .stderr(Stdio::from(log))
             .spawn()
@@ -166,12 +178,38 @@ impl Window {
         Self::with_ui(directory, &root().join("app/dist"))
     }
     fn with_ui(directory: &Path, bundle: &Path) -> Self {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+        let runtime = Self::runtime();
+        let connection = runtime.block_on(socket::connect(directory)).unwrap();
+        Self::attach(runtime, connection, bundle)
+    }
+    /// A guest desktop on the share listener. Remote profiles require wss://,
+    /// so the test hands the shell an already-authenticated loopback socket.
+    fn guest(url: &str, token: &str) -> Self {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let runtime = Self::runtime();
+        let mut request = url.into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert("authorization", format!("Bearer {token}").parse().unwrap());
+        let (connection, _) = runtime
+            .block_on(tokio_tungstenite::connect_async(request))
+            .unwrap();
+        Self::attach(runtime, connection, &root().join("app/dist"))
+    }
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
             .build()
-            .unwrap();
-        let connection = runtime.block_on(socket::connect(directory)).unwrap();
+            .unwrap()
+    }
+    fn attach(
+        runtime: tokio::runtime::Runtime,
+        connection: tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        bundle: &Path,
+    ) -> Self {
         let (send, receiver) = socket::admission();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let captured = requests.clone();
@@ -1807,4 +1845,294 @@ fn chat_screen_socket_workflow() {
     assert_eq!(window.subscriptions_to("threads:list"), 1);
     assert_eq!(window.subscriptions_to("runs:running"), 1);
     assert_eq!(window.subscriptions_to("runs:active"), 0);
+}
+
+/// Offline OpenAI-compatible stream: four chunks 400 ms apart keep each run
+/// visible long enough for the other desktop to observe it.
+fn slow_model() -> String {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                return;
+            };
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut length = 0;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                        break;
+                    }
+                    if let Some((name, value)) = line.split_once(':')
+                        && name.eq_ignore_ascii_case("content-length")
+                    {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0; length];
+                let _ = reader.read_exact(&mut body);
+
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n"
+                );
+                let mut chunk = |data: String| {
+                    let event = format!("data: {data}\n\n");
+                    write!(stream, "{:x}\r\n{event}\r\n", event.len()).is_ok()
+                        && stream.flush().is_ok()
+                };
+                for text in ["Sure. ", "Here is ", "a short ", "reply."] {
+                    let data = json!({"id":"mock","object":"chat.completion.chunk","created":1,"model":"mock","choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]});
+                    if !chunk(data.to_string()) {
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(400));
+                }
+                let done = json!({"id":"mock","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
+                chunk(done.to_string());
+                chunk("[DONE]".into());
+                drop(chunk);
+                let _ = write!(stream, "0\r\n\r\n");
+            });
+        }
+    });
+    url
+}
+
+/// Redeems an invite on the share listener, like `tokamak-desktop join`.
+fn join_guest(share: &str, link: &str, name: &str) -> (String, String) {
+    use std::io::{Read, Write};
+    let code = link.split("code=").nth(1).unwrap().trim();
+    let body = json!({"code": code, "name": name}).to_string();
+    let mut stream = std::net::TcpStream::connect(share).unwrap();
+    write!(
+        stream,
+        "POST /join HTTP/1.1\r\nhost: {share}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    let joined: Value = serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    (
+        joined["memberId"].as_str().unwrap().into(),
+        joined["token"].as_str().unwrap().into(),
+    )
+}
+
+// Two desktops on one server: the owner shares a thread with Sam, both see each
+// other's turns with author names, the busy strip names the starter, a guest's
+// Escape cannot stop the owner's run, and Enter during a run keeps the draft.
+// Captures go to TK_CAPTURE_DIR when set.
+#[test]
+fn chat_sharing_owner_and_guest_desktops() {
+    use blitz_traits::events::*;
+    use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
+
+    fn press(window: &mut Window, key: Key, modifiers: Modifiers) {
+        let doc = window.doc.as_mut().unwrap();
+        doc.resolve_layout(0.0);
+        doc.handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
+            key,
+            code: Code::Unidentified,
+            text: None,
+            modifiers,
+            location: Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: KeyState::Pressed,
+        }));
+        doc.resolve_layout(0.0);
+    }
+    fn named(window: &mut Window, key: NamedKey) {
+        press(window, Key::Named(key), Modifiers::empty());
+    }
+    fn type_text(window: &mut Window, text: &str) {
+        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
+    }
+    fn exists(doc: &NativeDocument, selector: &str) -> bool {
+        doc.inner().query_selector(selector).unwrap().is_some()
+    }
+    fn text_of(doc: &NativeDocument, selector: &str) -> String {
+        let inner = doc.inner();
+        inner
+            .query_selector(selector)
+            .unwrap()
+            .map(|id| inner.get_node(id).unwrap().text_content())
+            .unwrap_or_default()
+    }
+    fn completed(doc: &NativeDocument) -> usize {
+        doc.inner()
+            .query_selector_all("[data-role=assistant][data-status=complete]")
+            .unwrap()
+            .len()
+    }
+    fn sized(mut window: Window) -> Window {
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .inner_mut()
+            .set_viewport(Viewport {
+                window_size: (680, 820),
+                ..Default::default()
+            });
+        window
+    }
+    let shortcut = Modifiers::META | Modifiers::SHIFT;
+    let capture = |window: &mut Window, name: &str| {
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join(name),
+            );
+        }
+    };
+
+    // Chat only, with an offline model reachable through a loopback grant.
+    let scratch = Scratch::new();
+    let plugin = scratch.0.join("installation/chat/dist");
+    std::fs::create_dir_all(&plugin).unwrap();
+    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        std::fs::copy(
+            root().join("plugins/chat/dist").join(file),
+            plugin.join(file),
+        )
+        .unwrap();
+    }
+    let path = plugin.join("manifest.json");
+    let mut manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    manifest["plugin"]["permissions"] = json!([
+        "net:127.0.0.1",
+        "env:OPENROUTER_API_KEY",
+        "env:OPENROUTER_BASE_URL"
+    ]);
+    std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    std::fs::write(
+        scratch.0.join(".env.local"),
+        format!(
+            "OPENROUTER_API_KEY=offline-test\nOPENROUTER_BASE_URL={}\n",
+            slow_model()
+        ),
+    )
+    .unwrap();
+
+    let share = {
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        probe.local_addr().unwrap().to_string()
+    };
+    let service = Service::start_shared(&scratch, &share);
+
+    // Owner: controls are present, and the picker explains how to invite.
+    let mut owner = sized(Window::open(&service.directory));
+    owner.wait(|doc| {
+        support::attr(doc, "chat-screen", "data-thread-id").is_some()
+            && exists(doc, "#chat-strip button")
+    });
+    let thread = support::attr(owner.doc(), "chat-screen", "data-thread-id").unwrap();
+    press(&mut owner, Key::Character("S".into()), shortcut);
+    owner.wait(|doc| text_of(doc, "#share-empty").contains("tokamak member invite"));
+
+    // Sam joins; their desktop says hello and sees nothing yet.
+    let link = service.cli(&["member", "invite", "--url", &format!("ws://{share}/ws")]);
+    let (sam, token) = join_guest(&share, link.trim(), "Sam");
+    let mut guest = sized(Window::guest(&format!("ws://{share}/ws"), &token));
+    guest.wait(|doc| exists(doc, "#chat-nothing-shared"));
+    assert!(support::attr(guest.doc(), "chat-screen", "data-thread-id").is_none());
+
+    // The owner's open picker lists Sam live; Enter shares and marks them.
+    let row = format!("[data-member=\"{sam}\"]");
+    owner.wait(|doc| exists(doc, &row));
+    named(&mut owner, NamedKey::Enter);
+    let shared = format!("{row}[aria-checked=true]");
+    owner.wait(|doc| exists(doc, &shared));
+    capture(&mut owner, "mp-owner-share.png");
+    named(&mut owner, NamedKey::Escape);
+    owner.wait(|doc| !exists(doc, "#share-picker"));
+
+    named(&mut owner, NamedKey::Tab);
+    owner.wait(|doc| text_of(doc, "[data-shared-count]") == "· 1");
+    named(&mut owner, NamedKey::Escape);
+
+    // Guest: the shared thread arrives without owner controls.
+    guest.wait(|doc| {
+        support::attr(doc, "chat-screen", "data-thread-id").as_deref() == Some(thread.as_str())
+    });
+    guest.wait(|doc| exists(doc, "#chat-strip-backend"));
+    assert!(!exists(guest.doc(), "#chat-strip button"));
+    press(&mut guest, Key::Character("S".into()), shortcut);
+    press(&mut guest, Key::Character("m".into()), Modifiers::META);
+    guest.wait(|doc| !exists(doc, "#share-picker") && !exists(doc, "#backend-picker"));
+    named(&mut guest, NamedKey::Tab);
+    guest.wait(|doc| exists(doc, "#chat-map"));
+    let footer = text_of(guest.doc(), "footer");
+    assert!(
+        !footer.contains("RENAME") && !footer.contains("DELETE") && !footer.contains("NEW THREAD"),
+        "{footer}"
+    );
+    assert!(!exists(guest.doc(), "[data-shared-count]"));
+    press(&mut guest, Key::Character("r".into()), Modifiers::empty());
+    assert!(!exists(guest.doc(), "#chat-rename"));
+    named(&mut guest, NamedKey::Escape);
+    guest.wait(|doc| !exists(doc, "#chat-map"));
+
+    // The owner's run: Sam sees the starter and the owner's name, cannot stop it,
+    // and Enter keeps their draft.
+    type_text(&mut owner, "Plan the launch with Sam");
+    named(&mut owner, NamedKey::Enter);
+    guest.wait(|doc| text_of(doc, "#chat-busy") == "REPLYING · Owner");
+    guest.wait(|doc| text_of(doc, "[data-role=user] [data-author]") == "Owner");
+    assert!(
+        !exists(owner.doc(), "[data-author]"),
+        "the owner's own turn is unlabelled"
+    );
+    type_text(&mut guest, "Can we ship Friday?");
+    named(&mut guest, NamedKey::Enter);
+    named(&mut guest, NamedKey::Escape);
+    guest.wait(|doc| completed(doc) == 1 && !exists(doc, "#chat-busy"));
+    assert!(!exists(guest.doc(), "[data-status=cancelled]"));
+    assert_eq!(
+        guest
+            .doc()
+            .inner()
+            .query_selector_all("[data-role=user]")
+            .unwrap()
+            .len(),
+        1,
+        "Enter during the run must not send"
+    );
+
+    // The kept draft sends now; the owner sees Sam's name and Sam as starter.
+    named(&mut guest, NamedKey::Enter);
+    owner.wait(|doc| text_of(doc, "#chat-busy") == "REPLYING · Sam");
+    owner.wait(|doc| {
+        let inner = doc.inner();
+        inner
+            .query_selector_all("[data-author]")
+            .unwrap()
+            .iter()
+            .any(|id| inner.get_node(*id).unwrap().text_content() == "Sam")
+    });
+    guest.wait(|doc| {
+        text_of(doc, "#chat-busy") == "REPLYING · Sam"
+            && doc
+                .inner()
+                .query_selector_all("[data-role=user]")
+                .unwrap()
+                .len()
+                == 2
+    });
+    capture(&mut guest, "mp-guest.png");
+    guest.wait(|doc| completed(doc) == 2 && !exists(doc, "#chat-busy"));
+    owner.wait(|doc| completed(doc) == 2);
 }

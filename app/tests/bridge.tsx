@@ -95,6 +95,7 @@ function PermissionFixture() {
   const chat = {
     threads: { data: () => [{ _id: "running", title: "Running thread", updatedAt: 2 }, { _id: "waiting", title: "Waiting thread", updatedAt: 1 }], loading: () => false },
     runs: () => ({ waiting: { waiting: part().status === "pending" }, running: { waiting: false } }),
+    isOwner: () => true, isGuest: () => false, sharing: () => undefined,
   } as unknown as ChatState;
   const map = useMap(chat, () => {});
   const message = () => ({ _id: "permission-message", role: "assistant", status: "streaming", parts: [part()] }) as ChatMessage;

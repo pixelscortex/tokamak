@@ -71,7 +71,7 @@ queries through the shared SDK client. The normal bundle task builds both Chat
 and Todo. Set `OPENROUTER_API_KEY` in the ignored workspace `.env.local` before
 starting the server; restart an existing server after changing its environment.
 
-Enter sends; Shift+Enter adds a line; Escape stops the current run. Tab opens
+Enter sends; Shift+Enter adds a line; Escape stops the current run (its starter or the owner only). Cmd+Shift+S opens the owner's share picker. Tab opens
 Map and Tab/Escape closes it. Type to filter thread titles, use arrows and Enter
 or 1–9 to open a thread, and use Cmd+Enter in Map or Cmd+N to create one.
 Cmd+Shift+C copies the last assistant reply and briefly shows COPIED in the strip.
@@ -101,6 +101,10 @@ long reply at the bottom. Captures use the production Blitz painter with the bun
 Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the Todo card flow
 instead: `liquid/lfm-3-1.7b:free` creates a milk todo, the harness toggles the
 card, checks the saved task is done, and captures `tool-card.png`.
+
+`chat_sharing_owner_and_guest_desktops` runs an owner and a guest desktop on one
+server with `--share` and an offline streaming model. Add `TK_CAPTURE_DIR` to save
+`mp-owner-share.png` (share picker) and `mp-guest.png` (guest view mid-run).
 
 ## Remote profile
 
