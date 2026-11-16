@@ -21,6 +21,55 @@ Root `plugins/` contains the installed Chat and ACP plugins.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
 names remain unchanged; `app` and `lab` are separate application projects.
 
+## CI
+
+Depot CI runs a fast 2 CPU Linux gate on pull requests, pushes to any branch,
+and merge queues: formatting (including Rust), TS lint/typechecks, SDK build/type
+and unit tests, and release coordination tests. Documentation-only changes
+(markdown, `docs/`, `wiki/`, `.tmp/`) skip CI. Per-ref concurrency cancels older runs.
+
+Rust compilation/clippy, native tests, the 51-second ACP Bun suite, and offline
+Vello captures run on `main`. A measured native run took almost 14 minutes even
+with compiler cache hits, so this heavier gate stays off ordinary PRs. macOS uses
+Depot's `depot-macos-latest` Actions runner on `main`; on a PR it runs only with
+the explicit `ci:macos` label. It checks the full gate using Metal. Linux uses
+Mesa lavapipe for headless rendering. Login-dependent adapter tests stay ignored;
+the interactive GUI smoke task remains manual because it needs a window server.
+Clippy retains the local gate's advisory behavior.
+
+Run the Linux workflow against your local worktree (a branch runs only fast checks):
+
+```sh
+depot ci run --workflow .depot/workflows/ci.yml
+# Or iterate on one job:
+depot ci run --workflow .depot/workflows/ci.yml --job typescript
+```
+
+Depot Cache stores moon results and release binaries, Rust compiler objects via
+sccache, Cargo registry/git downloads, Bun downloads and pinned proto/moon/Rust
+installs. The fast job skips Cargo downloads, clippy and sccache installation.
+Verification stages hash workspace sources and platform identity because fixtures
+and imports span project boundaries; CI uses the full fast gate instead of an
+incomplete affected-project graph. Generated files and dependencies are excluded.
+Export `DEPOT_TOKEN` locally to share moon's remote cache; without it, moon
+disables remote storage with a warning and local commands work normally.
+For local Rust cache sharing use `depot cargo`, or configure sccache with Depot's
+WebDAV endpoint and your Depot token. CI uses injected short-lived credentials.
+
+ACP emits JUnit XML for Depot's test results dashboard, including failed runs.
+Moon restores the report when the heavy verification stage is cached. Inspect it
+with `depot tests <run-id> --job native`; other suites use workflow logs.
+
+After the main gates pass, Linux server binaries (x64/arm64) and macOS server +
+desktop binaries (arm64) are archived with SHA-256 checksums. Each platform stages
+assets in a draft for that commit; the Actions publisher replaces the single
+[`nightly` prerelease](https://github.com/pixelscortex/tokamak/releases/tag/nightly)
+only when all four archives are present, valid, and still match `main`. The prior
+nightly remains until the complete replacement is ready. Publication uses the
+built-in `GITHUB_TOKEN` with `contents: write` on Depot and Actions, with no extra
+secret. Workflow artifacts are also retained for 7 days. Signing and macOS
+notarization will be added before packaging; deployment remains a later step.
+
 ## Quick start
 
 Install [Bun](https://bun.sh) (required for plugin workers), [proto](https://moonrepo.dev/proto) and rustup, plus the native build

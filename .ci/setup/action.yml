@@ -1,0 +1,97 @@
+name: Set up cached toolchains
+description: Pinned proto/moon/Bun/Rust and Depot-backed download caches
+inputs:
+  native:
+    description: Install compiler caches and Cargo downloads for native compilation
+    default: "true"
+runs:
+  using: composite
+  steps:
+    # Explicit saves also work on Depot's composite-action implementation and
+    # preserve downloads when later validation fails.
+    - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      id: tools
+      with:
+        path: |
+          ~/.proto
+          ~/.rustup
+          ~/.cargo/bin
+        key: tools-v2-${{ inputs.native }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.prototools', 'rust-toolchain.toml') }}
+    - name: Install proto
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "$HOME/.proto/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.proto/shims" >> "$GITHUB_PATH"
+        if [ ! -x "$HOME/.proto/bin/proto" ]; then
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64) triple=x86_64-unknown-linux-gnu ;;
+            Linux-aarch64) triple=aarch64-unknown-linux-gnu ;;
+            Darwin-arm64) triple=aarch64-apple-darwin ;;
+            *) exit 1 ;;
+          esac
+          asset="proto_cli-$triple.tar.xz"
+          url="https://github.com/moonrepo/proto/releases/download/v0.62.3"
+          curl --retry 3 -fsSL "$url/$asset" -o "$RUNNER_TEMP/$asset"
+          curl --retry 3 -fsSL "$url/$asset.sha256" -o "$RUNNER_TEMP/$asset.sha256"
+          (cd "$RUNNER_TEMP" && shasum -a 256 -c "$asset.sha256")
+          mkdir -p "$RUNNER_TEMP/proto" "$HOME/.proto/bin"
+          tar -xJf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/proto" --strip-components=1
+          cp "$RUNNER_TEMP/proto/proto" "$RUNNER_TEMP/proto/proto-shim" "$HOME/.proto/bin/"
+        fi
+    - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      id: deps
+      with:
+        path: |
+          ~/.bun/install/cache
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: deps-v2-${{ inputs.native }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Cargo.lock') }}
+        restore-keys: deps-v2-${{ inputs.native }}-${{ runner.os }}-${{ runner.arch }}-
+    - name: Install pinned toolchains and dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        proto install moon
+        proto install bun
+        proto install rust
+        # Workers clear their environment and run outside the checkout, where
+        # proto's shim cannot find .prototools. Give them the pinned executable.
+        mkdir -p "$HOME/.bun/bin"
+        ln -sf "$(proto bin bun --reporter text)" "$HOME/.bun/bin/bun"
+        echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+        rustup component add rustfmt
+        if [ "${{ inputs.native }}" = "true" ]; then
+          rustup component add clippy
+          cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+        fi
+        proto run bun -- install --frozen-lockfile
+        # Both Depot services inject short-lived cache credentials. Keep their
+        # preconfigured endpoint (it may be an authenticated local proxy).
+        if [ -n "${DEPOT_CACHE_TOKEN:-}" ]; then
+          echo "DEPOT_TOKEN=$DEPOT_CACHE_TOKEN" >> "$GITHUB_ENV"
+        fi
+        if [ "${{ inputs.native }}" = "true" ]; then
+          echo 'RUSTC_WRAPPER=sccache' >> "$GITHUB_ENV"
+          echo 'CARGO_INCREMENTAL=0' >> "$GITHUB_ENV"
+        fi
+    - if: inputs.native == 'true'
+      uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+      with:
+        version: v0.19.0
+    - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      if: steps.tools.outputs.cache-hit != 'true'
+      with:
+        path: |
+          ~/.proto
+          ~/.rustup
+          ~/.cargo/bin
+        key: ${{ steps.tools.outputs.cache-primary-key }}
+    - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      if: steps.deps.outputs.cache-hit != 'true'
+      with:
+        path: |
+          ~/.bun/install/cache
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ steps.deps.outputs.cache-primary-key }}

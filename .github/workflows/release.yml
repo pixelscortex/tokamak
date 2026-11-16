@@ -1,0 +1,26 @@
+name: Publish nightly
+on:
+  repository_dispatch:
+    types: [nightly-ready]
+  workflow_dispatch:
+concurrency:
+  # Serialize replacement of the single rolling release across both CI services.
+  group: nightly-publish
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4" # Keep aligned with .prototools.
+      - name: Verify all platforms and replace nightly
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.event.client_payload.sha || github.sha }}
+        run: bun .ci/release.mjs publish

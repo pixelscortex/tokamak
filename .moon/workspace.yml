@@ -16,3 +16,8 @@ projects:
 vcs:
   defaultBranch: "main"
   provider: "github"
+# Depot's documentation calls this unstable_remote; moon 2.5.6 calls it remote.
+remote:
+  host: "grpcs://cache.depot.dev"
+  auth:
+    token: "DEPOT_TOKEN"
