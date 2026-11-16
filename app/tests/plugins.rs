@@ -1847,17 +1847,19 @@ fn chat_screen_socket_workflow() {
     assert_eq!(window.subscriptions_to("runs:active"), 0);
 }
 
-/// Offline OpenAI-compatible stream: four chunks 400 ms apart keep each run
-/// visible long enough for the other desktop to observe it.
-fn slow_model() -> String {
+/// Offline OpenAI-compatible stream that finishes only when the test releases it.
+fn gated_model() -> (String, std::sync::mpsc::Sender<()>) {
     use std::io::{BufRead, BufReader, Read, Write};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let (release, completion) = std::sync::mpsc::channel();
+    let completion = Arc::new(Mutex::new(completion));
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else {
                 return;
             };
+            let completion = completion.clone();
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut length = 0;
@@ -1889,7 +1891,9 @@ fn slow_model() -> String {
                     if !chunk(data.to_string()) {
                         return;
                     }
-                    std::thread::sleep(Duration::from_millis(400));
+                }
+                if completion.lock().unwrap().recv().is_err() {
+                    return;
                 }
                 let done = json!({"id":"mock","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
                 chunk(done.to_string());
@@ -1899,7 +1903,7 @@ fn slow_model() -> String {
             });
         }
     });
-    url
+    (url, release)
 }
 
 /// Redeems an invite on the share listener, like `tokamak-desktop join`.
@@ -1976,6 +1980,22 @@ fn chat_sharing_owner_and_guest_desktops() {
             .unwrap()
             .len()
     }
+    fn wait_both(
+        owner: &mut Window,
+        guest: &mut Window,
+        check: impl Fn(&NativeDocument, &NativeDocument) -> bool,
+    ) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            owner.wait(|_| true);
+            guest.wait(|_| true);
+            if check(owner.doc(), guest.doc()) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "two-desktop workflow timeout");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
     fn sized(mut window: Window) -> Window {
         window
             .doc
@@ -2018,12 +2038,10 @@ fn chat_sharing_owner_and_guest_desktops() {
         "env:OPENROUTER_BASE_URL"
     ]);
     std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let (model_url, release) = gated_model();
     std::fs::write(
         scratch.0.join(".env.local"),
-        format!(
-            "OPENROUTER_API_KEY=offline-test\nOPENROUTER_BASE_URL={}\n",
-            slow_model()
-        ),
+        format!("OPENROUTER_API_KEY=offline-test\nOPENROUTER_BASE_URL={model_url}\n"),
     )
     .unwrap();
 
@@ -2090,8 +2108,12 @@ fn chat_sharing_owner_and_guest_desktops() {
     // and Enter keeps their draft.
     type_text(&mut owner, "Plan the launch with Sam");
     named(&mut owner, NamedKey::Enter);
-    guest.wait(|doc| text_of(doc, "#chat-busy") == "REPLYING · Owner");
-    guest.wait(|doc| text_of(doc, "[data-role=user] [data-author]") == "Owner");
+    wait_both(&mut owner, &mut guest, |owner, guest| {
+        text_of(owner, "#chat-busy") == "REPLYING · Owner"
+            && exists(owner, "[data-role=user]")
+            && text_of(guest, "#chat-busy") == "REPLYING · Owner"
+            && text_of(guest, "[data-role=user] [data-author]") == "Owner"
+    });
     assert!(
         !exists(owner.doc(), "[data-author]"),
         "the owner's own turn is unlabelled"
@@ -2099,7 +2121,14 @@ fn chat_sharing_owner_and_guest_desktops() {
     type_text(&mut guest, "Can we ship Friday?");
     named(&mut guest, NamedKey::Enter);
     named(&mut guest, NamedKey::Escape);
-    guest.wait(|doc| completed(doc) == 1 && !exists(doc, "#chat-busy"));
+    wait_both(&mut owner, &mut guest, |_, guest| {
+        text_of(guest, "#chat-busy") == "REPLYING · Owner"
+            && support::editor(guest, "chat-input") == "Can we ship Friday?"
+    });
+    release.send(()).unwrap();
+    wait_both(&mut owner, &mut guest, |owner, guest| {
+        completed(owner) == 1 && completed(guest) == 1 && !exists(guest, "#chat-busy")
+    });
     assert!(!exists(guest.doc(), "[data-status=cancelled]"));
     assert_eq!(
         guest
@@ -2114,18 +2143,16 @@ fn chat_sharing_owner_and_guest_desktops() {
 
     // The kept draft sends now; the owner sees Sam's name and Sam as starter.
     named(&mut guest, NamedKey::Enter);
-    owner.wait(|doc| text_of(doc, "#chat-busy") == "REPLYING · Sam");
-    owner.wait(|doc| {
-        let inner = doc.inner();
-        inner
-            .query_selector_all("[data-author]")
-            .unwrap()
-            .iter()
-            .any(|id| inner.get_node(*id).unwrap().text_content() == "Sam")
-    });
-    guest.wait(|doc| {
-        text_of(doc, "#chat-busy") == "REPLYING · Sam"
-            && doc
+    wait_both(&mut owner, &mut guest, |owner, guest| {
+        let inner = owner.inner();
+        text_of(owner, "#chat-busy") == "REPLYING · Sam"
+            && inner
+                .query_selector_all("[data-author]")
+                .unwrap()
+                .iter()
+                .any(|id| inner.get_node(*id).unwrap().text_content() == "Sam")
+            && text_of(guest, "#chat-busy") == "REPLYING · Sam"
+            && guest
                 .inner()
                 .query_selector_all("[data-role=user]")
                 .unwrap()
@@ -2133,6 +2160,8 @@ fn chat_sharing_owner_and_guest_desktops() {
                 == 2
     });
     capture(&mut guest, "mp-guest.png");
-    guest.wait(|doc| completed(doc) == 2 && !exists(doc, "#chat-busy"));
-    owner.wait(|doc| completed(doc) == 2);
+    release.send(()).unwrap();
+    wait_both(&mut owner, &mut guest, |owner, guest| {
+        completed(owner) == 2 && completed(guest) == 2 && !exists(guest, "#chat-busy")
+    });
 }
