@@ -20,6 +20,8 @@ tasks:
       - "!/.moon/cache/**"
       - "!/.proto/**"
       - "!/.ci-results/**"
+      - "$RUSTFLAGS"
+      - "$CARGO_ENCODED_RUSTFLAGS"
     outputs: [".ci-results/acp.xml"]
     options:
       cache: true
@@ -59,7 +61,23 @@ tasks:
       mutex: "cargo"
   build-release:
     command: "cargo build --locked --release --package server --bin tokamak --target-dir target"
-    inputs: *ci-inputs
+    # The server depends on engine, not the UI/app/plugin bundles. Keep an
+    # unrelated frontend change from forcing another release link.
+    inputs:
+      - "/packages/server/**/*"
+      - "/packages/engine/**/*"
+      - "/Cargo.toml"
+      - "/Cargo.lock"
+      - "/rust-toolchain.toml"
+      - "/.prototools"
+      - "/.cargo/**/*"
+      - "/.moon/**/*"
+      - "/moon.yml"
+      - "!/**/node_modules/**"
+      - "!/**/dist/**"
+      - "!/.moon/cache/**"
+      - "$RUSTFLAGS"
+      - "$CARGO_ENCODED_RUSTFLAGS"
     outputs: ["target/release/tokamak"]
     options:
       cache: true

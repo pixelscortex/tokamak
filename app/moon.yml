@@ -45,6 +45,8 @@ tasks:
       - "!/.moon/cache/**"
       - "!/.proto/**"
       - "!/.ci-results/**"
+      - "$RUSTFLAGS"
+      - "$CARGO_ENCODED_RUSTFLAGS"
     outputs: ["/target/release/tokamak", "/target/release/tokamak-desktop"]
     options:
       cache: true
