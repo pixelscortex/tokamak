@@ -1,0 +1,23 @@
+app/src/chat/markdown.tsx
+  s_2297d4366353cf::t_25dc2e6dc56be8 24-26,28-30
+  s_2297d4366353cf::t_0d74d143782789 1-2
+  s_2297d4366353cf::t_01348c814c0572 11
+app/tests/native.rs
+  s_2297d4366353cf::t_c051a38ce0a951 1412-1413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e33c4de44af6eb2cd5277ab7429cb5118a3d7c91",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
