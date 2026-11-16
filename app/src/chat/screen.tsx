@@ -1,5 +1,6 @@
 import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { Show, createSignal, type Accessor } from "solid-js";
+import { BackendPicker } from "./backend-picker";
 import { ComposerInput } from "./composer-input";
 import type { Id } from "@tokamak/sdk";
 import type { NativeEvent } from "@tokamak/render";
@@ -11,6 +12,9 @@ import { useMap } from "./use-map";
 import { useDrafts } from "./use-drafts";
 
 export function Chat(props: { loader: PluginLoader; pathname: string; chat: ChatState }) {
+  const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [pickerFolder, setPickerFolder] = createSignal(false);
+  let pickerKey: ((event: NativeEvent) => void) | undefined;
   const [mapOpen, setMapOpen] = createSignal(false);
   const map = useMap(props.chat, closeMap);
   let pickPermission: ((index: number) => boolean) | undefined;
@@ -32,6 +36,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
     if (event.defaultPrevented || event.isComposing) return;
     const key = event.key ?? "";
     if (shortcut(event, key)) return;
+    if (pickerOpen()) { pickerKey?.(event); return; }
     if (mapOpen() && map.editing()) {
       map.keydown(event);
     } else if (key === "Tab" || (key === "Escape" && mapOpen())) {
@@ -64,7 +69,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
       if (!event.repeat) void copyReply?.();
     } else if (!mapOpen() && event.metaKey && key.toLowerCase() === "m") {
       event.preventDefault();
-      if (!event.repeat) void props.chat.cycleModel();
+      if (!event.repeat) setPickerOpen(open => !open);
     } else return false;
     return true;
   }
@@ -73,10 +78,11 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
     class="flex min-h-0 min-w-0 flex-1 justify-center px-6 pb-6">
     <div class={`flex min-h-0 w-[560px] max-w-full flex-col gap-4 ${mapOpen() ? "pt-6" : ""}`}>
       <Show when={mapOpen()}><MapHeader /></Show>
-      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView loader={props.loader} chat={props.chat} threadId={threadId} hidden={mapOpen()} onPermissionReady={pick => { pickPermission = pick; }} onCopyReady={copy => { copyReply = copy; }} />}</Show>
+      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView loader={props.loader} chat={props.chat} threadId={threadId} hidden={mapOpen()} onBackend={() => setPickerOpen(open => !open)} onPermissionReady={pick => { pickPermission = pick; }} onCopyReady={copy => { copyReply = copy; }} />}</Show>
       <Show when={props.chat.error() ?? props.chat.threads.error()?.message}>{(error: Accessor<string>) => <p role="alert" class="m-0 text-text-2">{error()}</p>}</Show>
+      <Show when={pickerOpen() && !mapOpen()}><BackendPicker chat={props.chat} onClose={() => { setPickerOpen(false); setPickerFolder(false); }} onFolderChange={setPickerFolder} onKeyReady={handler => { pickerKey = handler; }} /></Show>
       {/* Retire the focused native editor only while the row editor owns focus. */}
-      <Show when={map.editing() !== "rename"}>
+      <Show when={map.editing() !== "rename" && !(pickerOpen() && pickerFolder())}>
         <div class={`flex shrink-0 items-start gap-3 ${editorClass()}`}>
           <Show when={!mapOpen()}><Mark user /></Show>
           <ComposerInput mapOpen={mapOpen()} autofocus id="chat-input" aria-label={mapOpen() ? "Search threads" : "Message"} size="md" appearance="inherit" caret="block"

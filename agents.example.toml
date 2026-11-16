@@ -1,0 +1,13 @@
+# Copy to the Tokamak data directory as agents.toml. Only listed environment
+# variables reach the adapter. Set API keys in the server environment or .env.local.
+[agents.claude]
+command = "npx"
+args = ["-y", "@agentclientprotocol/claude-agent-acp@0.106.0"]
+env = ["PATH", "ANTHROPIC_API_KEY"]
+plugins = ["chat"]
+
+[agents.codex]
+command = "npx"
+args = ["-y", "@agentclientprotocol/codex-acp@2.6.0"]
+env = ["PATH", "OPENAI_API_KEY"]
+plugins = ["chat"]

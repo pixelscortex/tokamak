@@ -1164,8 +1164,13 @@ fn chat_screen_socket_workflow() {
         let path = plugin.join("manifest.json");
         let mut manifest: Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        manifest["plugin"]["permissions"] = json!([]);
+        manifest["plugin"]["permissions"] = json!(["acp"]);
         std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    }
+    if !live {
+        std::fs::create_dir_all(scratch.0.join("server")).unwrap();
+        std::fs::write(scratch.0.join("server/agents.toml"),
+            "[agents.claude]\ncommand = \"/usr/bin/false\"\nplugins = [\"chat\"]\n[agents.codex]\ncommand = \"/usr/bin/false\"\nplugins = [\"chat\"]\n").unwrap();
     }
     let service = Service::start(&scratch);
     let mut window = Window::open(&service.directory);
@@ -1559,6 +1564,72 @@ fn chat_screen_socket_workflow() {
         });
     }
 
+    if !live {
+        let history = support::text(window.doc(), "chat-messages");
+        key(&mut window, Key::Character("m".into()), true);
+        window.wait(|doc| support::text(doc, "backend-picker").contains("codex"));
+        let picker = support::text(window.doc(), "backend-picker");
+        for model in [
+            "openrouter/free",
+            "inclusionai/ling-3.2-flash:free",
+            "liquid/lfm-3-1.7b:free",
+            "google/gemma-4-26b-a4b-it:free",
+        ] {
+            assert!(picker.contains(model));
+        }
+        assert!(picker.contains("claude"));
+        assert_eq!(
+            picker
+                .matches("An agent can do anything its CLI can in this folder.")
+                .count(),
+            1
+        );
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("backend-picker.png"),
+            );
+        }
+        for _ in 0..4 {
+            key(&mut window, Key::Named(NamedKey::ArrowDown), false);
+        }
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+        type_text(&mut window, "relative");
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        assert!(support::text(window.doc(), "backend-picker").contains("absolute path"));
+        key(&mut window, Key::Character("a".into()), true);
+        let cwd = root().canonicalize().unwrap().to_str().unwrap().to_owned();
+        type_text(&mut window, &cwd);
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
+        window.wait(|doc| support::text(doc, "chat-strip").contains("claude"));
+        assert!(
+            window
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|request| request["name"] == "chat/threads:setBackend"
+                    && request["args"]["backend"]
+                        == json!({"kind":"acp", "agent":"claude", "cwd":cwd}))
+        );
+        assert_eq!(support::text(window.doc(), "chat-messages"), history);
+        key(&mut window, Key::Character("m".into()), true);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-4").is_some());
+        window.click("id", "backend-choice-4");
+        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+        window.doc.as_mut().unwrap().resolve_layout(0.0);
+        assert_eq!(support::editor(window.doc(), "backend-folder"), cwd);
+        key(&mut window, Key::Named(NamedKey::Escape), false);
+        key(&mut window, Key::Character("m".into()), true);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_some());
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
+        window.wait(|doc| support::text(doc, "chat-strip").contains("openrouter/free"));
+        assert_eq!(support::text(window.doc(), "chat-messages"), history);
+    }
+
     type_text(&mut window, "draft to keep");
     key(&mut window, Key::Named(NamedKey::Tab), false);
     assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
@@ -1682,6 +1753,9 @@ fn chat_screen_socket_workflow() {
     key(&mut window, Key::Character("m".into()), true);
     window
         .wait(|doc| support::text(doc, "chat-screen").contains("inclusionai/ling-3.2-flash:free"));
+    key(&mut window, Key::Named(NamedKey::ArrowDown), false);
+    key(&mut window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
     support::pointer(window.doc.as_mut().unwrap(), "chat-input");
     type_text(&mut window, "Say hello in five words");
     key(&mut window, Key::Named(NamedKey::Enter), false);

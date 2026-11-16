@@ -38,6 +38,7 @@ export const invoke = (args, host) => invokeFunction(registry, args, host);
 struct Fixture {
     directory: tempfile::TempDir,
     server: Server,
+    plugin: &'static str,
 }
 
 impl Fixture {
@@ -50,14 +51,28 @@ impl Fixture {
     }
 
     async fn with_launcher(granted: bool, agent_source: &str, pass_path: bool) -> Self {
+        Self::build(granted, agent_source, pass_path, None).await
+    }
+
+    async fn build(granted: bool, agent_source: &str, pass_path: bool, real: Option<&str>) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
+        let plugin = if real.is_some() {
+            "chat"
+        } else {
+            "probe"
+        };
         let plugins = root.join("plugins");
-        let artifact = plugins.join("probe");
+        let artifact = plugins.join(plugin);
         std::fs::create_dir_all(&artifact).unwrap();
         let sdk = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sdk/src/index.ts");
         let source = root.join("plugin.ts");
-        std::fs::write(&source, PLUGIN.replace("SDK", sdk.to_str().unwrap())).unwrap();
+        let code = if let Some(agent) = real {
+            REAL_PLUGIN.replace("AGENT", agent)
+        } else {
+            PLUGIN.to_owned()
+        };
+        std::fs::write(&source, code.replace("SDK", sdk.to_str().unwrap())).unwrap();
         let output = std::process::Command::new("proto")
             .args(["run", "bun", "--", "build"])
             .arg(&source)
@@ -83,7 +98,7 @@ impl Fixture {
             );
         }
         std::fs::write(artifact.join("manifest.json"), json!({
-            "formatVersion":1, "plugin":{"id":"probe","version":"1.0.0", "permissions":if granted {vec!["acp"]} else {vec![]}},
+            "formatVersion":1, "plugin":{"id":plugin,"version":"1.0.0", "permissions":if granted {vec!["acp"]} else {vec![]}},
             "entries":{"backend":{"code":"bundle.js","map":"bundle.js.map","api":"api.ts"}}, "hashes":hashes
         }).to_string()).unwrap();
         std::fs::write(
@@ -119,12 +134,53 @@ impl Fixture {
             "[agents.slow]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_HANG_INITIALIZE\"]\nplugins = [\"probe\"]",
             json!(agent.to_str().unwrap())
         ).unwrap();
+        if real.is_some() {
+            let config = std::env::var_os("TOKAMAK_ACP_AGENTS")
+                .expect("set TOKAMAK_ACP_AGENTS to an absolute real agents.toml path");
+            assert!(Path::new(&config).is_absolute());
+            std::fs::copy(&config, root.join("agents.toml")).unwrap();
+            let environment = Path::new(&config).parent().unwrap().join(".env.local");
+            if environment.is_file() {
+                std::fs::copy(environment, root.join(".env.local")).unwrap();
+            } else {
+                std::fs::remove_file(root.join(".env.local")).unwrap();
+            }
+            // A detached snapshot of tracked repo files keeps agent access away
+            // from the owner's working tree, with no persistent git worktree.
+            let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let archive = root.join("repo.tar");
+            assert!(
+                std::process::Command::new("git")
+                    .current_dir(repo)
+                    .args(["archive", "HEAD", "-o"])
+                    .arg(&archive)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            let cwd = root.join("repo");
+            std::fs::create_dir(&cwd).unwrap();
+            assert!(
+                std::process::Command::new("tar")
+                    .arg("-xf")
+                    .arg(archive)
+                    .arg("-C")
+                    .arg(cwd)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
         let database = Database::open(Storage::Memory).await.unwrap();
         let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
         let server = Server::load_plugins(database, pool, &plugins)
             .await
             .unwrap();
-        Self { directory, server }
+        Self {
+            directory,
+            server,
+            plugin,
+        }
     }
 
     async fn call(&self, kind: &str, name: &str, args: Value) -> Result<Value, String> {
@@ -133,17 +189,24 @@ impl Fixture {
             .sender()
             .request(
                 serde_json::from_value(
-                    json!({"type":kind,"id":1,"name":format!("probe/ops:{name}"),"args":args}),
+                    json!({"type":kind,"id":1,"name":format!("{}/ops:{name}", self.plugin),"args":args}),
                 )
                 .unwrap(),
             )
             .unwrap();
         loop {
-            match tokio::time::timeout(Duration::from_secs(45), session.recv())
-                .await
-                .expect("ACP call timed out")
-                .unwrap()
-                .unwrap()
+            match tokio::time::timeout(
+                Duration::from_secs(if self.plugin == "chat" {
+                    360
+                } else {
+                    45
+                }),
+                session.recv(),
+            )
+            .await
+            .expect("ACP call timed out")
+            .unwrap()
+            .unwrap()
             {
                 Event::Response { result, .. } => return result.map_err(|e| format!("{e:?}")),
                 _ => continue,
@@ -374,4 +437,56 @@ async fn launcher_does_not_pass_unlisted_variables() {
     // The fake agent asserts the dotenv-only ACP_TEST_UNLISTED is absent.
     assert!(fixture.action("hello").await.is_ok());
     fixture.close().await;
+}
+
+const REAL_PLUGIN: &str = r#"
+import { action, createRegistry, invokeFunction, functionMetadata, v } from 'SDK';
+const probe = action({ args: { cwd: v.string() }, handler: async ({ acp }, { cwd }) => {
+  const { sessionId } = await acp.open({ agent: 'AGENT', cwd });
+  let text = '';
+  let stopReason;
+  for await (const event of acp.prompt({ agent: 'AGENT', sessionId, text: 'Reply with the single word: ready' })) {
+    if (event.type === 'update' && event.update.sessionUpdate === 'agent_message_chunk' && event.update.content.type === 'text') text += event.update.content.text;
+    if (event.type === 'permission') await acp.respond({ requestId: event.requestId, optionId: null });
+    if (event.type === 'done') stopReason = event.stopReason;
+  }
+  return { text, stopReason };
+} });
+const registry = createRegistry({ ops: { probe } });
+export const describe = () => ({ schema: {}, functions: functionMetadata(registry) });
+export const invoke = (args, host) => invokeFunction(registry, args, host);
+"#;
+
+async fn real_smoke(agent: &str) {
+    let fixture = Fixture::build(true, AGENT, false, Some(agent)).await;
+    let result = fixture
+        .call(
+            "action",
+            "probe",
+            json!({"cwd": fixture.directory.path().join("repo")}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result["stopReason"], "end_turn", "{result}");
+    assert!(
+        result["text"]
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("ready"),
+        "{result}"
+    );
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "owner credentials required; set TOKAMAK_ACP_AGENTS"]
+async fn acp_real_claude_smoke() {
+    real_smoke("claude").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "owner credentials required; set TOKAMAK_ACP_AGENTS"]
+async fn acp_real_codex_smoke() {
+    real_smoke("codex").await;
 }

@@ -100,7 +100,10 @@ alone. Escape stops the run. Tab opens Map. With an empty search, R renames the
 selected row inline (Enter saves, Escape cancels). Cmd+Backspace asks
 `Delete? Enter / Esc` on that row before removing it and its messages/runs.
 
-Click the model above the composer or press Cmd+M to cycle the per-thread model.
+Click the backend above the composer or press Cmd+M to open the backend picker.
+Use arrows and Enter to select a model or agent; Escape closes it. Agents ask for
+an absolute folder path (Enter saves), prefilled with the last used folder.
+Switching backends preserves all messages.
 An active run retains the model it started with; the next send uses the selection.
 The shared list in `models.ts` contains `openrouter/free`,
 `inclusionai/ling-3.2-flash:free`, `liquid/lfm-3-1.7b:free`, and
@@ -183,3 +186,25 @@ Map groups waiting threads under NEEDS YOU above RUNNING. Permission options app
 inline with allow options first. With an empty composer, 1–4 answers the latest
 pending request. Answered rows show the chosen option dimmed; expired and cancelled
 rows show their status.
+
+## Configuring real agents
+
+Copy [`agents.example.toml`](../../agents.example.toml) to `agents.toml` in the
+Tokamak data directory: `$TOKAMAK_SERVER_DIR` when set, otherwise
+`~/Library/Application Support/com.pixelscortex.Tokamak` on macOS
+(`$XDG_DATA_HOME/tokamak` or `~/.local/share/tokamak` on Linux).
+The pinned Claude and Codex adapters require Node.js/npx. Only named `env`
+variables are passed through, including `PATH` for npx and its Node interpreter.
+Set API keys in the server environment or the data directory's `.env.local`.
+Prefer API keys: subscription logins in third-party apps may break provider terms.
+Agents have the same access as their CLI; the selected folder is not a sandbox.
+
+Manual credentialed checks (never part of the normal suite): set
+`TOKAMAK_ACP_AGENTS` to the absolute path of a real `agents.toml` with the relevant
+`claude` / `codex` entry allowing `chat`. Each test uses a temporary copy of this
+repo's tracked files and refuses permission requests.
+
+```sh
+TOKAMAK_ACP_AGENTS=/absolute/path/agents.toml cargo test -p server --test acp acp_real_claude_smoke -- --ignored --exact --nocapture
+TOKAMAK_ACP_AGENTS=/absolute/path/agents.toml cargo test -p server --test acp acp_real_codex_smoke -- --ignored --exact --nocapture
+```

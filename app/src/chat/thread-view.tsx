@@ -1,6 +1,6 @@
 import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { afterDelay, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
-import { currentModel } from "../../../plugins/chat/models";
+import { backendLabel } from "./backend-picker";
 import { For, Show, createMemo, createEffect, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
@@ -9,7 +9,7 @@ import { permissionOptions, type Permission } from "./permission-part";
 import { Message } from "./message";
 import { ComposerStrip } from "./composer-strip";
 
-export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threadId: Id<"threads">; hidden: boolean; onPermissionReady?: (pick: (index: number) => boolean) => void; onCopyReady?: (copy: () => Promise<void>) => void }) {
+export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threadId: Id<"threads">; hidden: boolean; onBackend: () => void; onPermissionReady?: (pick: (index: number) => boolean) => void; onCopyReady?: (copy: () => Promise<void>) => void }) {
   const messages = useQuery(props.chat.client, api.messages.list, () => ({ threadId: props.threadId }));
   const byId = createMemo(() => new Map((messages.data() ?? []).map(message => [message._id, message])));
   const messageIds = createMemo(() => [...byId().keys()]);
@@ -88,7 +88,7 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
     </div>
     <Show when={messages.error()}><p role="alert" class="m-0 text-text-2">{messages.error()?.message}</p></Show>
     <Show when={props.chat.thread()}>
-      <ComposerStrip title={props.chat.thread()?.title ?? "New thread"} model={currentModel(props.chat.thread())} turns={turns()} copied={copied()} onModel={() => void props.chat.cycleModel()} />
+      <ComposerStrip title={props.chat.thread()?.title ?? "New thread"} model={backendLabel(props.chat.thread())} turns={turns()} copied={copied()} onModel={props.onBackend} />
     </Show>
   </div>;
 }
