@@ -1,3 +1,4 @@
+import { isServerModule } from "../../sdk/tools/server-files.mjs";
 import { serverDirectory, serverModule } from "./descriptor.ts";
 /** Resolve public aliases with the compiler so re-exports never execute plugin code. */
 import ts from "typescript";
@@ -64,22 +65,6 @@ export function publicFunctions(root: string, entry: string | undefined): string
   return [...result].sort();
 }
 
-function isBackendModule(local: string): boolean {
-  return !(
-    !local.endsWith(".ts") ||
-    local === "schema.ts" ||
-    local === "api.ts" ||
-    local.startsWith("../") ||
-    /\.(d|test|spec)\.ts$/.test(local) ||
-    local
-      .split("/")
-      .some(
-        (part) =>
-          part.startsWith("_") || part.startsWith(".") || ["node_modules", "dist", "tests"].includes(part),
-      )
-  );
-}
-
 function backendFunctionNames(
   root: string,
   program: ts.Program,
@@ -89,7 +74,7 @@ function backendFunctionNames(
   const names = new Map<ts.Symbol, string[]>();
   for (const file of program.getSourceFiles()) {
     const local = relative(serverDirectory(root), file.fileName).split(sep).join("/");
-    if (!isBackendModule(local)) continue;
+    if (!isServerModule(serverDirectory(root), local)) continue;
     const symbol = checker.getSymbolAtLocation(file);
     if (!symbol) continue;
     for (const exported of checker.getExportsOfModule(symbol)) {

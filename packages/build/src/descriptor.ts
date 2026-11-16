@@ -1,7 +1,8 @@
 /** Static package conventions. Never import or evaluate an authored descriptor. */
+import { isServerModule } from "../../sdk/tools/server-files.mjs";
 import ts from "typescript";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, relative, resolve, sep } from "node:path";
 import type { PluginDefinition } from "@tokamak/sdk";
 
 export function serverDirectory(root: string): string {
@@ -84,10 +85,11 @@ export function deriveInterfaces(root: string) {
   if (!existsSync(server)) return {};
   function visitDirectory(directory: string) {
     for (const item of readdirSync(directory, { withFileTypes: true })) {
-      if (item.name.startsWith("_") || item.name === "dist") continue;
       const path = resolve(directory, item.name);
-      if (item.isDirectory()) visitDirectory(path);
-      else if (path.endsWith(".ts")) {
+      if (item.isDirectory()) {
+        if (isServerModule(server, relative(server, resolve(path, "module.ts")).split(sep).join("/")))
+          visitDirectory(path);
+      } else if (isServerModule(server, relative(server, path).split(sep).join("/"))) {
         const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
         function visit(node: ts.Node) {
           if (
@@ -108,8 +110,8 @@ export function deriveInterfaces(root: string) {
   return { consumes: [...consumes].sort() };
 }
 
-/** Legacy interface types describe the callable module shape. Match dependency
- * contracts against the provider's public module/function names. */
+/** Match dependency contracts against public, generated SDK references without
+ * evaluating provider code. Arguments are contravariant; results are covariant. */
 export function deriveProviders(root: string, plugin: PluginDefinition, functions: string[]): string[] {
   const provides = new Set<string>();
   for (const id of Object.keys(plugin.depends ?? {})) {
@@ -122,8 +124,15 @@ export function deriveProviders(root: string, plugin: PluginDefinition, function
       ts.sys,
       configPath ? resolve(configPath, "..") : root,
     );
-    const program = ts.createProgram([entry], parsed.options);
+    const apiPath = resolve(serverDirectory(root), "_generated/api.ts");
+    if (!existsSync(apiPath)) continue;
+    const program = ts.createProgram([entry, apiPath], parsed.options);
     const checker = program.getTypeChecker();
+    const apiFile = program.getSourceFile(apiPath)!;
+    const apiModule = checker.getSymbolAtLocation(apiFile);
+    const api = apiModule && checker.getExportsOfModule(apiModule).find((symbol) => symbol.name === "api");
+    if (!api) continue;
+    const provider = checker.getTypeOfSymbolAtLocation(api, apiFile);
     const file = program.getSourceFile(entry)!;
     const module = checker.getSymbolAtLocation(file);
     for (const exported of module ? checker.getExportsOfModule(module) : []) {
@@ -134,10 +143,48 @@ export function deriveProviders(root: string, plugin: PluginDefinition, function
         const declaration = member.valueDeclaration ?? member.declarations?.[0];
         if (!declaration) continue;
         const methods = checker.getTypeOfSymbolAtLocation(member, declaration).getProperties();
-        if (methods.length && methods.every((method) => functions.includes(`${member.name}:${method.name}`)))
+        const implementation = provider.getProperty(member.name);
+        if (!implementation) continue;
+        const moduleType = checker.getTypeOfSymbolAtLocation(implementation, apiFile);
+        if (
+          methods.length &&
+          methods.every((method) => {
+            if (!functions.includes(`${member.name}:${method.name}`)) return false;
+            const actual = moduleType.getProperty(method.name);
+            if (!actual) return false;
+            return compatibleReference(
+              checker,
+              checker.getTypeOfSymbolAtLocation(actual, apiFile),
+              checker.getTypeOfSymbolAtLocation(method, declaration),
+              declaration,
+            );
+          })
+        )
           provides.add(`${id}.${member.name}`);
       }
     }
   }
   return [...provides].sort();
+}
+
+function compatibleReference(checker: ts.TypeChecker, actual: ts.Type, expected: ts.Type, node: ts.Node) {
+  function payload(type: ts.Type) {
+    const brand = type.getProperties().find((property) => property.name.startsWith("__@referenceTypes@"));
+    return brand && checker.getTypeOfSymbolAtLocation(brand, node);
+  }
+  const source = payload(actual);
+  const target = payload(expected);
+  if (!source || !target) return false;
+  return ["kind", "args", "result"].every((name) => {
+    const a = source.getProperty(name);
+    const b = target.getProperty(name);
+    if (!a || !b) return false;
+    const actualType = checker.getTypeOfSymbolAtLocation(a, node);
+    const expectedType = checker.getTypeOfSymbolAtLocation(b, node);
+    // An unresolved contract must never advertise a provider.
+    if ((actualType.flags | expectedType.flags) & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return false;
+    return name === "args"
+      ? checker.isTypeAssignableTo(expectedType, actualType)
+      : checker.isTypeAssignableTo(actualType, expectedType);
+  });
 }
