@@ -105,15 +105,27 @@ impl Drop for Lease {
     }
 }
 
-pub(super) fn validate_cwd(cwd: &str) -> Result<(), String> {
-    let path = std::path::Path::new(cwd);
+/// An empty folder or `~` means the home folder; `~/x` expands under it.
+pub(super) fn resolve_cwd(cwd: &str) -> Result<String, String> {
+    let home = || {
+        directories::BaseDirs::new()
+            .map(|dirs| dirs.home_dir().to_path_buf())
+            .ok_or_else(|| "No home folder to use as the agent folder".to_owned())
+    };
+
+    let path = match cwd.trim() {
+        "" | "~" => home()?,
+        rest if rest.starts_with("~/") => home()?.join(&rest[2..]),
+        rest => std::path::PathBuf::from(rest),
+    };
+
     if !path.is_absolute() {
-        return Err("ACP cwd must be an absolute path to an existing directory".into());
+        return Err(format!("Agent folder must be an absolute path: {cwd}"));
     }
     if !path.is_dir() {
-        return Err(format!("ACP cwd is not an existing directory: {cwd}"));
+        return Err(format!("Agent folder does not exist: {}", path.display()));
     }
-    Ok(())
+    Ok(path.to_string_lossy().into_owned())
 }
 
 pub(super) async fn open(

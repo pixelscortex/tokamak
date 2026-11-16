@@ -8,6 +8,17 @@ import type { BackendApi } from "../backends";
 
 type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "error" | "cancelled" };
 
+// Show people the reason, not the JS stack the host appends to messages.
+function readableError(cause: unknown) {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return (
+    message
+      .split(/\n|\s+at\s+\S+\s+\(/)[0]!
+      .replace(/^Error:\s*/, "")
+      .trim() || "The agent failed"
+  );
+}
+
 export const send = action({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
@@ -62,7 +73,7 @@ export const send = action({
         token,
         delta: "",
         outcome: "error",
-        error: String(cause),
+        error: readableError(cause),
       });
       return { runId: started.runId, messageId: started.messageId, status: status as Result["status"] };
     }

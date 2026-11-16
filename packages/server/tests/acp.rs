@@ -369,7 +369,7 @@ async fn cwd_must_be_an_absolute_existing_directory() {
     let fixture = Fixture::new(true).await;
     for mode in ["cwd-relative", "cwd-missing", "cwd-file"] {
         let error = fixture.action(mode).await.unwrap_err();
-        assert!(error.contains("ACP cwd"), "{mode}: {error}");
+        assert!(error.contains("Agent folder"), "{mode}: {error}");
     }
     fixture.close().await;
 }

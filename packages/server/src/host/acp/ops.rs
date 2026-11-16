@@ -31,8 +31,9 @@ pub(crate) fn register(
 
     ops.register_sync("acp.checkFolder", move |payload| {
         authorize(granted)?;
-        session::validate_cwd(text(&payload, "path")?)?;
-        Ok(Value::Null)
+        Ok(Value::String(session::resolve_cwd(text(
+            &payload, "path",
+        )?)?))
     })?;
 
     for name in ["open", "prompt", "next", "respond", "cancel", "close"] {
@@ -95,18 +96,14 @@ async fn dispatch(
         return Err("Unknown ACP permission request".into());
     }
 
-    if name == "open" {
-        session::validate_cwd(text(&payload, "cwd")?)?;
-    }
+    let cwd = match name {
+        "open" => Some(session::resolve_cwd(text(&payload, "cwd")?)?),
+        _ => None,
+    };
 
     let process = manager.process(plugin, text(&payload, "agent")?).await?;
-    if name == "open" {
-        return session::open(
-            &process,
-            text(&payload, "cwd")?,
-            payload["sessionId"].as_str(),
-        )
-        .await;
+    if let Some(cwd) = cwd {
+        return session::open(&process, &cwd, payload["sessionId"].as_str()).await;
     }
     let session = text(&payload, "sessionId")?;
     if name == "cancel" {

@@ -10,8 +10,8 @@ export const configure = action({
   args: { backendId: v.string(), settings: v.any() },
   handler: async ({ acp }, { backendId, settings }) => {
     if (!acp.agents().some((agent) => agent.id === backendId)) throw new Error("Unknown agent");
-    const cwd = String((settings as { cwd?: unknown })?.cwd ?? "");
-    await acp.checkFolder({ path: cwd });
+    // An empty folder means the home folder, so a new thread works without setup.
+    const cwd = await acp.checkFolder({ path: String((settings as { cwd?: unknown })?.cwd ?? "") });
     return { cwd };
   },
 });
@@ -31,8 +31,7 @@ export const turn = action({
   handler: async (ctx, args) => {
     const settings = args.settings as { cwd?: JsonValue };
     const state = args.state as { sessionId?: string } | undefined;
-    const cwd = typeof settings?.cwd === "string" ? settings.cwd : "";
-    await ctx.acp.checkFolder({ path: cwd });
+    const cwd = await ctx.acp.checkFolder({ path: typeof settings?.cwd === "string" ? settings.cwd : "" });
     return acpSend(ctx, args, args, {
       agent: args.backendId,
       cwd,

@@ -24,7 +24,7 @@ export async function acpScenario(client: TokamakClient) {
   ]);
   await client.action(acp.agents.checkFolder, { path: "/tmp" });
   for (const path of ["relative", "/tmp/tokamak-missing-folder/child", "/dev/null"]) {
-    await assert.rejects(client.action(acp.agents.checkFolder, { path }), /ACP cwd/);
+    await assert.rejects(client.action(acp.agents.checkFolder, { path }), /Agent folder/);
   }
   assert.deepEqual(await client.action(api.backends.list, {}), [
     { plugin: "acp", id: "fake", title: "fake", folder: true },

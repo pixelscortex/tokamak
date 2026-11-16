@@ -53,7 +53,8 @@ export type AcpEvent =
 
 export interface AcpContext {
   agents(): { id: string; title: string }[];
-  checkFolder(input: { path: string }): Promise<void>;
+  /** Resolves `""`/`~` to the home folder and `~/x` under it; returns the absolute path. */
+  checkFolder(input: { path: string }): Promise<string>;
   open(input: {
     agent: string;
     cwd: string;
@@ -167,9 +168,7 @@ function createAcp(host: HostBridge): AcpContext {
     (host.op as (name: string, payload: JsonValue) => JsonValue | Promise<JsonValue>)(`acp.${name}`, payload);
   return Object.freeze({
     agents: () => op("agents", {}) as { id: string; title: string }[],
-    checkFolder: async (input: { path: string }) => {
-      await op("checkFolder", input);
-    },
+    checkFolder: async (input: { path: string }) => (await op("checkFolder", input)) as string,
     open: async (input: { agent: string; cwd: string; sessionId?: string }) =>
       (await op("open", jsonSnapshot(input, "ACP open"))) as { sessionId: string; restored: boolean },
     async *prompt(input: { agent: string; sessionId: string; text: string }): AsyncIterable<AcpEvent> {
