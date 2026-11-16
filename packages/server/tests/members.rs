@@ -46,6 +46,8 @@ const functions = {
   host: query({guest:true,handler:ctx=>ctx.db.query("h__members").collect()}),
   acp: action({guest:true,handler:ctx=>ctx.acp.agents()}),
   messageError: action({guest:true,handler:async ctx=>[{error:"failed: "+await ctx.env("MEMBER_TEST_SECRET")}]}),
+  failure: query({guest:true,handler:()=>{throw new Error("Public failure\nprivate /source/plugin.ts:10")}}),
+  pathFailure: action({guest:true,handler:()=>{throw new Error("Cannot open /private/plugin.ts")}}),
   secret: action({guest:true,handler:async ctx=>{throw new Error("failed: "+await ctx.env("MEMBER_TEST_SECRET"))}}),
 };
 "#;
@@ -866,4 +868,32 @@ fn legacy_bundle_cannot_be_shared_or_address_host_tables() {
         assert!(space.table(&host).is_err());
         assert!(space.id("h__members:member").is_err());
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn guest_errors_hide_stacks_and_paths_while_owners_keep_details() {
+    let fixture = Fixture::new().await;
+    let member = fixture.member().await;
+    let mut guest = fixture.socket(member["token"].as_str().unwrap()).await;
+    let mut owner = connect(&fixture.local, OWNER).await.unwrap();
+    for kind in ["query", "subscribe"] {
+        assert_eq!(
+            call(&mut guest, kind, "a/test:failure", json!({})).await["result"]["Err"],
+            "Public failure"
+        );
+    }
+    assert_eq!(
+        call(&mut guest, "action", "a/test:pathFailure", json!({})).await["result"]["Err"],
+        "Cannot open [path]"
+    );
+    let error = call(&mut owner, "query", "a/test:failure", json!({})).await;
+    assert!(
+        error["result"]["Err"]
+            .as_str()
+            .unwrap()
+            .contains("private /source/plugin.ts:10")
+    );
+    drop(guest);
+    drop(owner);
+    clean(fixture).await;
 }
