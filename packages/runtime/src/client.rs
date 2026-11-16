@@ -1,5 +1,8 @@
 //! Native UI host and bounded client drain; never owns server/storage lifetime.
 pub mod connection;
+pub mod invite;
+mod private_file;
+pub mod remote;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -46,13 +49,7 @@ pub fn run(config: ClientConfig<'_>) -> Result<(), Error> {
 /// page-drawn title bar). Start from `config.window_options()` to keep the
 /// configured minimum size.
 pub fn run_with(config: ClientConfig<'_>, options: render::WindowOptions) -> Result<(), Error> {
-    let directory = std::env::var_os("TOKAMAK_SERVER_DIR")
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            directories::ProjectDirs::from("com", "pixelscortex", "Tokamak")
-                .map(|p| p.data_local_dir().to_owned())
-        })
-        .ok_or("Cannot locate application data directory")?;
+    let directory = data_directory()?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -77,4 +74,15 @@ pub fn run_with(config: ClientConfig<'_>, options: render::WindowOptions) -> Res
     runtime.block_on(worker)?;
     result?;
     Ok(())
+}
+
+/// Shared by desktop commands and connection discovery.
+pub fn data_directory() -> Result<std::path::PathBuf, Error> {
+    std::env::var_os("TOKAMAK_SERVER_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            directories::ProjectDirs::from("com", "pixelscortex", "Tokamak")
+                .map(|p| p.data_local_dir().to_owned())
+        })
+        .ok_or_else(|| "Cannot locate application data directory".into())
 }

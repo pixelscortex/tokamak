@@ -1,8 +1,7 @@
 //! Exercise the production Rust socket bridge against the actual server process.
-#[path = "../../packages/runtime/src/client/connection.rs"]
-mod socket;
 use futures_util::{SinkExt, StreamExt};
 use render::{HostMailbox, NativeDocument};
+use runtime::client::connection as socket;
 use serde_json::{Value, json};
 use std::{
     path::PathBuf,

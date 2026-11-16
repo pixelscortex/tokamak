@@ -2,7 +2,7 @@
 use futures_util::{SinkExt, StreamExt};
 use render::HostSender;
 use serde_json::Value;
-use std::{collections::BTreeSet, net::IpAddr, path::Path, time::Duration};
+use std::{collections::BTreeSet, path::Path, time::Duration};
 use tokio::{
     net::TcpStream,
     sync::{mpsc, oneshot},
@@ -17,42 +17,24 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub async fn connect(directory: &Path) -> Result<Socket, Error> {
-    let descriptor: Value = serde_json::from_str(
-        &std::fs::read_to_string(directory.join("server.json"))
-            .map_err(|_| "Local server is not running; use `bun run app`")?,
-    )?;
-    let mut request = descriptor["url"]
-        .as_str()
-        .ok_or("Invalid server discovery")?
-        .into_client_request()?;
-    let uri = request.uri();
-    let host = uri
-        .host()
-        .ok_or("Missing local host")?
-        .trim_matches(['[', ']']);
-    if uri.scheme_str() != Some("ws")
-        || !host.parse::<IpAddr>()?.is_loopback()
-        || uri.path() != "/ws"
-        || uri.query().is_some()
-    {
-        return Err("Only loopback ws:// endpoints are supported".into());
-    }
-    let path = directory.join("server.token");
-    let metadata = std::fs::symlink_metadata(&path)?;
-    if !metadata.is_file() {
-        return Err("Capability must be a regular file".into());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
-            return Err("Capability must be private (chmod 600)".into());
-        }
-    }
-    let token = std::fs::read_to_string(path)?;
-    if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("Invalid local capability".into());
-    }
+    let (server, token) = if let Some(profile) = super::remote::load(directory)? {
+        (profile.server, profile.token)
+    } else {
+        let descriptor: Value = serde_json::from_str(
+            &std::fs::read_to_string(directory.join("server.json"))
+                .map_err(|_| "Local server is not running; use `bun run app`")?,
+        )?;
+        let server = descriptor["url"]
+            .as_str()
+            .ok_or("Invalid server discovery")?;
+        super::invite::server_url(server, false)?;
+        let path = directory.join("server.token");
+        super::private_file::check(&path)?;
+        let token = std::fs::read_to_string(path)?;
+        super::private_file::validate_token(&token)?;
+        (server.to_owned(), token)
+    };
+    let mut request = server.into_client_request()?;
     let mut authorization =
         format!("Bearer {token}").parse::<tokio_tungstenite::tungstenite::http::HeaderValue>()?;
     authorization.set_sensitive(true);
@@ -249,7 +231,7 @@ pub async fn serve(
         if !sender.is_document_retired() {
             let _ = sender.finish(
                 "connection:close",
-                "Local server connection closed; mutation outcomes may be unknown",
+                "Server connection closed; mutation outcomes may be unknown",
             );
         }
     }

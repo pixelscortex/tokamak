@@ -13,6 +13,7 @@ path = "src/main.rs"
 runtime = { path = "../packages/runtime", features = ["client"] }
 # Window options only: the page-drawn title bar and window-button placement.
 render = { path = "../packages/render" }
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "time"] }
 
 [build-dependencies]
 tokamak-build = { path = "../packages/build" }

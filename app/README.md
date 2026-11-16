@@ -35,8 +35,7 @@ The directory also holds private `server.token`, public discovery `server.json`
 and `server.log`. The launcher verifies readiness and the canonical plugin installation root
 before reuse. Plugin edits use `tokamak plugin reload <id>`. Legacy bundle
 regressions still verify the loaded bundle hash. Native server
-code changes likewise require restart. Capability authentication is local-only,
-not account authentication, remote deployment, TLS or crash supervision.
+code changes likewise require restart. Local discovery accepts only loopback WebSockets.
 
 `TOKAMAK_SERVER_DIR` selects an isolated directory. Launcher-relative overrides
 resolve from the repository root. A crashed launcher can leave `server-start.lock`;
@@ -102,3 +101,22 @@ long reply at the bottom. Captures use the production Blitz painter with the bun
 Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the Todo card flow
 instead: `liquid/lfm-3-1.7b:free` creates a milk todo, the harness toggles the
 card, checks the saved task is done, and captures `tool-card.png`.
+
+## Remote profile
+
+Redeem an invite without opening a window:
+
+```sh
+target/debug/tokamak-desktop join "tokamak://join?server=wss://host/ws&code=…" --name Sam
+target/debug/tokamak-desktop     # connect using the saved remote profile
+target/debug/tokamak-desktop leave
+```
+
+The same application data directory (or `TOKAMAK_SERVER_DIR`) holds `remote.json`
+with the server URL, member ID and bearer token. This private regular file is
+created with mode 0600 and takes precedence over local `server.json` discovery.
+Remote profiles allow `wss://` hosts; unencrypted `ws://` requires a loopback IP.
+Invite endpoints must use `/ws` without credentials, query or fragment. Join uses
+`/join` on the same origin over HTTPS (HTTP for loopback), without redirects.
+Names must have 1–32 characters and no control characters. `leave` removes the
+saved profile; restart an open desktop window to use the changed profile.

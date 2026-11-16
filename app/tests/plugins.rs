@@ -1,7 +1,5 @@
 //! Public plugin builder -> independent server -> production socket bridge ->
 //! one QuickJS/Blitz shell. Storage and build outputs belong to this test only.
-#[path = "../../packages/runtime/src/client/connection.rs"]
-mod socket;
 #[allow(dead_code)]
 #[path = "../../packages/render/tests/support/mod.rs"]
 mod support;
@@ -9,6 +7,7 @@ mod support;
 use blitz_dom::{Document, Namespace, QualName};
 use blitz_traits::shell::Viewport;
 use render::{HostMailbox, NativeDocument};
+use runtime::client::connection as socket;
 use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},

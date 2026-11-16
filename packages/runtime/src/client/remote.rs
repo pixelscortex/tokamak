@@ -1,0 +1,101 @@
+//! Invite redemption and the private desktop remote profile.
+use super::{
+    Error,
+    invite::{parse_link, server_url, validate_name},
+    private_file,
+};
+use serde::{Deserialize, Serialize};
+use std::{fs, io::Write, path::Path, time::Duration};
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Profile {
+    pub server: String,
+    pub member_id: String,
+    pub token: String,
+}
+
+pub(crate) fn load(directory: &Path) -> Result<Option<Profile>, Error> {
+    let path = directory.join("remote.json");
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        result => {
+            result?;
+        }
+    }
+    private_file::check(&path)?;
+    let profile: Profile =
+        serde_json::from_slice(&fs::read(path)?).map_err(|_| "Invalid remote profile")?;
+    server_url(&profile.server, true)?;
+    private_file::validate_token(&profile.token)?;
+    if profile.member_id.is_empty() {
+        return Err("Invalid remote member ID".into());
+    }
+    Ok(Some(profile))
+}
+
+pub async fn join(directory: &Path, link: &str, name: &str) -> Result<(), Error> {
+    validate_name(name)?;
+    let invite = parse_link(link)?;
+    // Check existing credentials before spending a potentially single-use invite.
+    load(directory)?;
+    let response = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(15))
+        .build()?
+        .post(invite.join_url())
+        .json(&serde_json::json!({"code": invite.code, "name": name}))
+        .send()
+        .await
+        .map_err(|_| "Join request failed")?;
+    if !response.status().is_success() {
+        return Err(format!("Join refused ({})", response.status()).into());
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Joined {
+        member_id: String,
+        token: String,
+    }
+    let joined: Joined = response.json().await.map_err(|_| "Invalid join response")?;
+    private_file::validate_token(&joined.token)?;
+    if joined.member_id.is_empty() {
+        return Err("Invalid join response".into());
+    }
+    let profile = Profile {
+        server: invite.server.into(),
+        member_id: joined.member_id,
+        token: joined.token,
+    };
+    fs::create_dir_all(directory)?;
+    let path = directory.join("remote.json");
+    let temporary = directory.join(format!("remote.json.{}.tmp", std::process::id()));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary)?;
+    let result = (|| -> Result<(), Error> {
+        private_file::check(&temporary)?;
+        file.write_all(&serde_json::to_vec(&profile)?)?;
+        file.sync_all()?;
+        // Rename replaces the directory entry rather than following a symlink.
+        fs::rename(&temporary, path)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(temporary);
+    }
+    result
+}
+
+pub fn leave(directory: &Path) -> Result<(), Error> {
+    match fs::remove_file(directory.join("remote.json")) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
