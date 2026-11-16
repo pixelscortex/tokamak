@@ -98,7 +98,8 @@ function PermissionFixture() {
     isOwner: () => true, isGuest: () => false, sharing: () => undefined,
   } as unknown as ChatState;
   const map = useMap(chat, () => {});
-  const message = () => ({ _id: "permission-message", role: "assistant", status: "streaming", parts: [part()] }) as ChatMessage;
+  const tool = { type: "tool", callId: "call-one", plugin: "todo", toolName: "pending.create", status: "running", args: { title: "x".repeat(250), target: "consequential\u202e\u007f\u001b target" } };
+  const message = () => ({ _id: "permission-message", role: "assistant", status: "streaming", parts: [tool, part()] }) as ChatMessage;
   return <div id="permission-fixture">
     <Message loader={{} as PluginLoader} threadId="waiting" message={message()} onAnswer={(_, optionId) => setPart(before => ({ ...before, status: "answered", optionId }))} />
     <Map chat={chat} map={map} />

@@ -1485,10 +1485,19 @@ fn permission_row_and_needs_you_group() {
     let map = support::text(app.doc(), "chat-map");
     assert!(map.find("NEEDS YOU").unwrap() < map.find("RUNNING").unwrap());
     assert!(map.find("Waiting thread").unwrap() < map.find("Running thread").unwrap());
+    app.click("permission-fixture", "Details for pending.create");
+    let text = support::text(app.doc(), "permission-fixture");
+    assert!(
+        text.contains("NEEDS YOU")
+            && text.contains(&format!(
+                "{{\n  \"args\": {{\n    \"title\": \"{}\",\n    \"target\": \"consequential\\u001b target\"\n  }}\n}}",
+                "x".repeat(250)
+            ))
+    );
     let allow = app
         .doc()
         .inner()
-        .query_selector("#permission-fixture button")
+        .query_selector("#permission-fixture [data-permission] button")
         .unwrap()
         .unwrap();
     click(app.doc_mut(), allow);
@@ -1497,7 +1506,7 @@ fn permission_row_and_needs_you_group() {
     assert!(
         app.doc()
             .inner()
-            .query_selector("#permission-fixture button")
+            .query_selector("#permission-fixture [data-permission] button")
             .unwrap()
             .is_none()
     );

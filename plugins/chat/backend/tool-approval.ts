@@ -21,13 +21,17 @@ export async function toolApproval(
 ) {
   if (!await ctx.runQuery(api["tool-approval"].required, { threadId })) return;
   return async (callId: string, target: ToolTarget, args: JsonValue) => {
+    // JSON escapes C0 controls; strip the remaining control and format characters.
+    const argumentsText = JSON.stringify(args).replace(/[\u007f-\u009f\p{Cf}]/gu, "");
+    const summary = argumentsText.length > 200
+      ? `${argumentsText.slice(0, 200)}… (${argumentsText.length - 200} more characters)` : argumentsText;
     let outcome: string | null | undefined;
     const permissions = permissionWait(ctx, runId, buffer, async (_requestId, optionId) => { outcome = optionId; });
     const declined = new Error(DECLINED);
     try {
       await permissions.request({
         type: "permission", requestId: `tool:${callId}`, callId,
-        title: `Run ${target.plugin} tool ${target.toolName}?\n${JSON.stringify(args).slice(0, 200)}`,
+        title: `Run ${target.plugin} tool ${target.toolName}?\n${summary}`,
         options: [
           { optionId: "allow_once", name: "Allow", kind: "allow_once" },
           { optionId: "reject_once", name: "Deny", kind: "reject_once" },
