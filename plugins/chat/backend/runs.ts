@@ -1,16 +1,15 @@
 import { canSee } from "./access";
 import { interruptResponse } from "./run-messages";
 import { interruptStale } from "./recovery";
-import { v } from "@tokamak/sdk";
+import { v, type Caller, type DatabaseReader } from "@tokamak/sdk";
+import type { Model } from "./_functions";
 import { mutation, query } from "./_functions";
 
 export const running = query({
   guest: true,
   handler: async (ctx) => {
     const { db } = ctx;
-    const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
-    const visible = [];
-    for (const run of runs) if (await canSee(ctx, run.threadId)) visible.push(run);
+    const visible = await visibleRuns(ctx);
 
     // Starter names let every viewer label the busy strip without members:list.
     const names = new Map<string, string>();
@@ -59,10 +58,15 @@ export const recover = mutation({
   guest: true,
   handler: async (ctx) => {
     const { db } = ctx;
-    const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
-    const visible = [];
-    for (const run of runs) if (await canSee(ctx, run.threadId)) visible.push(run);
+    const visible = await visibleRuns(ctx);
     await interruptStale(db, visible);
     return null;
   },
 });
+
+async function visibleRuns(ctx: { db: DatabaseReader<Model>; caller: Caller }) {
+  const runs = await ctx.db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
+  const visible = [];
+  for (const run of runs) if (await canSee(ctx, run.threadId)) visible.push(run);
+  return visible;
+}

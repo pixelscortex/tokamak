@@ -3,7 +3,8 @@ import { interruptStale, STALE_AFTER_MS } from "./recovery";
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "./parts";
 import { applyToolUpdate } from "./tool-parts";
 import { currentModel } from "../models";
-import { v } from "@tokamak/sdk";
+import { v, type Infer } from "@tokamak/sdk";
+import type { Part } from "./parts";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
 
 // UTF-8 bytes, including surrogate pairs, without action-only Web APIs.
@@ -87,24 +88,19 @@ export const update = mutation({
     const run = await db.get(runId);
     if (!run || run.status !== "running") return "cancelled" as const;
     await db.patch(runId, { updatedAt: Date.now() });
-    if (!delta && !outcome && !tool && !plan) return "running" as const;
+    if (![delta, outcome, tool, plan].some(Boolean)) return "running" as const;
 
     const message = await db.get(run.messageId);
     if (!message) throw new Error("Response message no longer exists");
     let parts = message.parts;
     if (delta) appendText(parts, delta);
     if (tool) applyToolUpdate(parts, tool);
-    if (plan) {
-      const index = parts.findIndex(part => part.type === "plan");
-      if (index < 0) parts.push(plan);
-      else parts[index] = plan;
-    }
-    if (outcome) parts = interruptTools(parts, outcome === "error"
-      ? boundedError(error ?? "Agent failed") : outcome === "cancelled" ? "cancelled" : "Tool did not complete");
+    if (plan) replacePlan(parts, plan);
+    if (outcome) parts = interruptTools(parts, unfinishedToolError(outcome, error));
 
     await db.patch(run.messageId, {
       parts,
-      status: outcome === "done" ? "complete" : outcome === "error" ? "error" : outcome === "cancelled" ? "cancelled" : "streaming",
+      status: outcome ? messageStatus[outcome] : "streaming",
       ...(error === undefined ? {} : { error: boundedError(error) }),
     });
     await db.patch(run.threadId, { updatedAt: Date.now() });
@@ -122,3 +118,16 @@ export const session = mutation({
     return null;
   },
 });
+
+const messageStatus = { done: "complete", error: "error", cancelled: "cancelled" } as const;
+
+function unfinishedToolError(outcome: "done" | "error" | "cancelled", error?: string) {
+  if (outcome === "error") return boundedError(error ?? "Agent failed");
+  return outcome === "cancelled" ? "cancelled" : "Tool did not complete";
+}
+
+function replacePlan(parts: Part[], plan: Infer<typeof planPart>) {
+  const index = parts.findIndex(part => part.type === "plan");
+  if (index < 0) parts.push(plan);
+  else parts[index] = plan;
+}

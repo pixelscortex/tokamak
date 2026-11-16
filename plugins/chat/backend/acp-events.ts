@@ -34,15 +34,19 @@ export function acpEvents(agent: string, buffer: ReturnType<typeof streamBuffer>
     }
     if (!tool) return;
 
-    if (update.title !== undefined) tool.summary = String(update.title);
-    if (update.status === "completed") tool.status = "done";
-    if (update.status === "failed") tool.status = "error";
-    const result = { ...(tool.result as object ?? {}) } as JsonObject;
-    for (const key of ["content", "locations", "rawOutput"]) {
-      if (update[key] !== undefined) result[key] = update[key];
-    }
-    tool.result = result;
-    if (update.content !== undefined) tool.model = contentText(update.content);
+    updateTool(tool, update);
     await buffer.update(tool);
   };
+}
+
+function updateTool(tool: ToolPart, update: JsonObject) {
+  if (update.title !== undefined) tool.summary = String(update.title);
+  if (update.status === "completed") tool.status = "done";
+  if (update.status === "failed") tool.status = "error";
+  const result = { ...tool.result as object } as JsonObject;
+  for (const key of ["content", "locations", "rawOutput"]) {
+    if (update[key] !== undefined) result[key] = update[key];
+  }
+  tool.result = result;
+  if (update.content !== undefined) tool.model = contentText(update.content);
 }

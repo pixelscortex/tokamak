@@ -1,17 +1,16 @@
 import type { PluginLoader } from "@tokamak/runtime/plugins";
 import { Show, createEffect, createSignal, on, type Accessor } from "solid-js";
 import { BackendPicker } from "./backend-picker";
-import { ComposerInput } from "./composer-input";
+import { ChatComposer } from "./chat-composer";
 import type { Id } from "@tokamak/sdk";
 import type { NativeEvent } from "@tokamak/render";
 import type { ChatState } from "./use-chat";
-import { Mark } from "./message";
 import { ThreadView } from "./thread-view";
 import { Map, MapHeader } from "./map";
 import { useMap } from "./use-map";
 import { useDrafts } from "./use-drafts";
 import { SharePicker } from "./share-picker";
-import { authorInitial } from "./use-identity";
+import { chatKeys } from "./chat-keys";
 
 export function Chat(props: { loader: PluginLoader; pathname: string; chat: ChatState }) {
   const [pickerOpen, setPickerOpen] = createSignal(false);
@@ -24,8 +23,6 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
   let pickPermission: ((index: number) => boolean) | undefined;
   let copyReply: (() => Promise<void>) | undefined;
   const composer = useDrafts(props.chat);
-  const busy = () => Boolean(props.chat.active() || composer.sending());
-  const editorClass = () => mapOpen() ? "order-1 border-b border-hairline py-3" : "";
 
   function closePicker() {
     setPickerOpen(false);
@@ -49,59 +46,13 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
     if (await props.chat.createThread()) closeMap();
   }
 
-  function keydown(event: NativeEvent) {
-    if (event.defaultPrevented || event.isComposing) return;
-    const key = event.key ?? "";
-    if (shortcut(event, key)) return;
-    if (pickerOpen()) { pickerKey?.(event); return; }
-    if (shareOpen()) { shareKey?.(event); return; }
-    if (mapOpen() && map.editing()) {
-      map.keydown(event);
-    } else if (key === "Tab" || (key === "Escape" && mapOpen())) {
-      event.preventDefault();
-      if (event.repeat) return;
-      if (mapOpen()) closeMap();
-      else {
-        map.reset();
-        setMapOpen(true);
-      }
-    } else if (mapOpen()) {
-      map.keydown(event);
-    } else if (props.chat.isOwner() && !composer.draft() && /^[1-4]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.repeat && pickPermission?.(Number(key) - 1)) {
-      event.preventDefault();
-    } else stopRun(event);
-  }
-
-  // Escape stops a run only for its starter or the owner.
-  function stopRun(event: NativeEvent) {
-    if (event.key !== "Escape" || !props.chat.canStop()) return;
-    event.preventDefault();
-    if (!event.repeat) void props.chat.cancel();
-  }
-
-  function shortcut(event: NativeEvent, key: string) {
-    const owner = props.chat.isOwner();
-    const letter = key.toLowerCase();
-
-    if (owner && event.metaKey && (letter === "n" || key === "Enter")) {
-      event.preventDefault();
-      if (!event.repeat) void newThread();
-    } else if (!mapOpen() && event.metaKey && event.shiftKey && letter === "c") {
-      event.preventDefault();
-      if (!event.repeat) void copyReply?.();
-    } else if (owner && !mapOpen() && event.metaKey && event.shiftKey && letter === "s") {
-      event.preventDefault();
-      if (event.repeat) return true;
-      closePicker();
-      setShareOpen(open => !open);
-    } else if (owner && !mapOpen() && event.metaKey && letter === "m") {
-      event.preventDefault();
-      if (event.repeat) return true;
-      closeShare();
-      setPickerOpen(open => !open);
-    } else return false;
-    return true;
-  }
+  const keydown = chatKeys({
+    chat: props.chat, composer, map, mapOpen, setMapOpen, closeMap, newThread,
+    pickerOpen, pickerKey: event => pickerKey?.(event), closePicker, setPickerOpen,
+    shareOpen, shareKey: event => shareKey?.(event), closeShare, setShareOpen,
+    pickPermission: index => pickPermission?.(index) ?? false,
+    copyReply: () => { void copyReply?.(); },
+  });
 
   return <section id="chat-screen" data-thread-id={props.chat.threadId()} aria-label={mapOpen() ? "Map" : "Chat"} data-chat-route={props.pathname} onKeyDown={keydown}
     class="flex min-h-0 min-w-0 flex-1 justify-center px-6 pb-6">
@@ -120,18 +71,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
       <Show when={pickerOpen() && !mapOpen() && props.chat.isOwner()}><BackendPicker chat={props.chat} onClose={closePicker} onFolderChange={setPickerFolder} onKeyReady={handler => { pickerKey = handler; }} /></Show>
       {/* Retire the focused native editor only while the row editor owns focus. */}
       <Show when={map.editing() !== "rename" && !(pickerOpen() && pickerFolder())}>
-        <div class={`flex shrink-0 items-start gap-3 ${editorClass()}`}>
-          <Show when={!mapOpen()}><Mark user initial={authorInitial(props.chat.identity() ?? {})} /></Show>
-          <ComposerInput mapOpen={mapOpen()} autofocus id="chat-input" aria-label={mapOpen() ? "Search threads" : "Message"} size="md" appearance="inherit" caret="block"
-            class={`chat-input min-w-0 flex-1 ${!mapOpen() && busy() ? "chat-input-busy" : ""}`} maxRows={mapOpen() ? 1 : 8}
-            placeholder={mapOpen() ? "Search threads" : "Ask anything, or tell Tokamak what to do"}
-            value={mapOpen() ? map.query() : composer.draft()}
-            onValueChange={text => {
-              if (mapOpen()) map.search(text);
-              else { composer.edit(text); composer.clearRace(); }
-            }}
-            onKeyDown={keydown} onSubmit={text => { if (!mapOpen()) void composer.send(text); }} />
-        </div>
+        <ChatComposer chat={props.chat} composer={composer} map={map} mapOpen={mapOpen()} onKeyDown={keydown} />
       </Show>
       <Show when={mapOpen()}><Map chat={props.chat} map={map} /></Show>
     </div>

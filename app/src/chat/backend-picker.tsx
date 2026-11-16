@@ -45,6 +45,7 @@ export function BackendPicker(props: { chat: ChatState; onClose: () => void; onF
     } catch (cause) { if (alive) setError(String(cause)); }
     finally { if (alive) setSaving(false); }
   }
+
   function choose(i: number) {
     if (saving()) return;
     const choice = choices()[i];
@@ -53,11 +54,13 @@ export function BackendPicker(props: { chat: ChatState; onClose: () => void; onF
     if (choice.backend.kind === "acp") setAgent(choice.backend.agent);
     else void save(choice.backend);
   }
+
   function submitFolder() {
     if (!folder().startsWith("/")) { setError("Folder must be an absolute path"); return; }
     const selected = agent();
     if (selected) void save({ kind: "acp", agent: selected, cwd: folder() });
   }
+
   function keydown(event: NativeEvent) {
     if (event.defaultPrevented || event.isComposing) return;
     const key = event.key;
@@ -70,6 +73,7 @@ export function BackendPicker(props: { chat: ChatState; onClose: () => void; onF
       else setIndex(i => (i + (key === "ArrowDown" ? 1 : -1) + choices().length) % choices().length);
     }
   }
+
   createEffect(() => props.onKeyReady(keydown));
   createEffect(() => props.onFolderChange(Boolean(agent())));
 

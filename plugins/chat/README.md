@@ -2,6 +2,8 @@
 
 Threads own messages and runs. Clients subscribe to `messages.list` to observe
 the same persisted response text, flushed roughly every 100 ms. Parts contain text and persisted tool calls.
+Live queries deliver current snapshots and can coalesce intermediate commits;
+a fast tool may already be settled in its first visible snapshot.
 This follows the thread/message boundary in [Convex Agent](https://github.com/get-convex/agent/blob/main/src/component/schema.ts),
 using ordinary message patches rather than a separate stream delta table.
 

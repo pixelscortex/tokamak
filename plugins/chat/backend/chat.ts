@@ -1,5 +1,5 @@
 import type {} from "@tokamak/sdk/web";
-import { v, type Id } from "@tokamak/sdk";
+import { v, type Id, type ActionContext } from "@tokamak/sdk";
 import { action } from "./_functions";
 import { api } from "./_generated/api";
 import { acpSend } from "./acp";
@@ -28,8 +28,7 @@ export const send = action({
     });
 
     try {
-      const { tools, targets } = ctx.caller.role === "guest" ? { tools: {}, targets: new Map() } : await discoverTools(ctx, args.threadId,
-        () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgements.get(callId).promise);
+      const { tools, targets } = await modelTools(ctx, args.threadId, runId, acknowledgements);
       const events = toolEvents(ctx, targets, buffer, acknowledgements);
       const source = await buffer.waitFor(modelStream(ctx, history, controller.signal, model, tools));
       const iterator = source.stream[Symbol.asyncIterator]();
@@ -61,3 +60,9 @@ export const send = action({
     }
   },
 });
+
+function modelTools(ctx: ActionContext, threadId: Id<"threads">, runId: Id<"runs">, acknowledgements: ReturnType<typeof toolAcknowledgements>) {
+  if (ctx.caller.role === "guest") return { tools: {}, targets: new Map() };
+  return discoverTools(ctx, threadId,
+    () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgements.get(callId).promise);
+}
