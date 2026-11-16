@@ -1,0 +1,28 @@
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_6324f25f31e9a5::t_42b18886aa9ee1 168-179
+  s_6324f25f31e9a5::t_ea3700f52a6371 156-167,180-183
+README.md
+  s_6324f25f31e9a5::t_88095ba5645ecd 53-54
+packages/server/tests/actions.rs
+  s_6324f25f31e9a5::t_8817d24f8fd506 610-731
+packages/server/tests/build-actions.mjs
+  s_6324f25f31e9a5::t_29f6e85dad61ed 55
+plugins/chat/README.md
+  s_6324f25f31e9a5::t_1e024ece5b79ce 76-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38c52935268f4fd353c7d84bf124a91287cac119",
+  "prompts": {},
+  "sessions": {
+    "s_6324f25f31e9a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e3e5-0768-7d53-874c-30c5551d1f2c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
