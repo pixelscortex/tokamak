@@ -40,7 +40,8 @@ impl Manager {
     }
 
     async fn process(&self, plugin: &str, agent: &str) -> Result<Arc<Process>, String> {
-        let definition = self.config.agents.get(agent).ok_or("Unknown ACP agent")?;
+        let agents = self.config.available();
+        let definition = agents.get(agent).ok_or("Unknown ACP agent")?;
         if !definition.plugins.iter().any(|id| id == plugin) {
             return Err("ACP agent permission denied".into());
         }
@@ -58,6 +59,7 @@ impl Manager {
                 env.insert(name.clone(), value);
             }
         }
+        definition.prepare_path(&mut env)?;
         let definition = definition.clone();
         let runtime = self.runtime.get().ok_or("ACP host runtime missing")?;
         let startup = tokio_util::task::AbortOnDropHandle::new(

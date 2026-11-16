@@ -12,7 +12,7 @@ export const start = mutation({
     text = nonempty(text);
     const current = await thread(db, threadId);
     const backend = current.backend;
-    if (!backend) throw new Error("No agent configured: see agents.example.toml");
+    if (!backend) throw new Error("No agents found. Install `claude-agent-acp` or `codex-acp` (see README)");
     const runs = await db
       .query("runs")
       .withIndex("by_threadId", (q) => q.eq("threadId", threadId))

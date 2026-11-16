@@ -34,7 +34,7 @@ export function ChatComposer(props: {
           props.mapOpen
             ? "Search threads"
             : props.chat.noAgents()
-              ? "No agent configured: see agents.example.toml"
+              ? "No agents found. Install `claude-agent-acp` or `codex-acp` (see README)"
               : "Ask anything, or tell Tokamak what to do"
         }
         value={props.mapOpen ? props.map.query() : props.composer.draft()}

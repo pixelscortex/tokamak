@@ -135,15 +135,15 @@ impl Fixture {
             json!(agent.to_str().unwrap())
         ).unwrap();
         if real.is_some() {
-            let config = std::env::var_os("TOKAMAK_ACP_AGENTS")
-                .expect("set TOKAMAK_ACP_AGENTS to an absolute real agents.toml path");
-            assert!(Path::new(&config).is_absolute());
-            std::fs::copy(&config, root.join("agents.toml")).unwrap();
-            let environment = Path::new(&config).parent().unwrap().join(".env.local");
-            if environment.is_file() {
-                std::fs::copy(environment, root.join(".env.local")).unwrap();
-            } else {
-                std::fs::remove_file(root.join(".env.local")).unwrap();
+            std::fs::remove_file(root.join("agents.toml")).unwrap();
+            std::fs::remove_file(root.join(".env.local")).unwrap();
+            if let Some(config) = std::env::var_os("TOKAMAK_ACP_AGENTS") {
+                assert!(Path::new(&config).is_absolute());
+                std::fs::copy(&config, root.join("agents.toml")).unwrap();
+                let environment = Path::new(&config).parent().unwrap().join(".env.local");
+                if environment.is_file() {
+                    std::fs::copy(environment, root.join(".env.local")).unwrap();
+                }
             }
             // A detached snapshot of tracked repo files keeps agent access away
             // from the owner's working tree, with no persistent git worktree.
@@ -491,13 +491,13 @@ async fn real_smoke(agent: &str) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "owner credentials required; set TOKAMAK_ACP_AGENTS"]
+#[ignore = "owner credentials and installed adapter required; optional TOKAMAK_ACP_AGENTS"]
 async fn acp_real_claude_smoke() {
     real_smoke("claude").await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "owner credentials required; set TOKAMAK_ACP_AGENTS"]
+#[ignore = "owner credentials and installed adapter required; optional TOKAMAK_ACP_AGENTS"]
 async fn acp_real_codex_smoke() {
     real_smoke("codex").await;
 }

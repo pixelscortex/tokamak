@@ -34,17 +34,26 @@ Install the agent adapters once (requires Node.js/npm):
 npm install -g @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
 ```
 
-Copy `agents.example.toml` to
-`~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml` on macOS;
-on Linux use `$XDG_DATA_HOME/tokamak/agents.toml` (default
-`~/.local/share/tokamak/agents.toml`). If set, `$TOKAMAK_SERVER_DIR/agents.toml`
-overrides these paths. The adapters run directly from the global installation;
-downloading an adapter at each launch can exceed the 30-second initialization timeout.
-The example forwards `PATH`, `HOME`, and `USER`. `HOME` lets the adapters reuse
-existing Claude Code and Codex logins in `~/.claude` and `~/.codex`.
-API keys are optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to the corresponding
-agent's `env` list only if you prefer keys, and set them in the server environment
-or the repository-root `.env.local`.
+Tokamak automatically finds `claude-agent-acp`, `codex-acp`, and Gemini CLI
+(`gemini --acp`) on PATH and in common global install directories, including
+`~/.local/bin`, `~/.npm-global/bin`, `~/.bun/bin`, `~/.local/share/vite-plus/bin`,
+`/opt/homebrew/bin`, `/usr/local/bin`, and `~/.volta/bin`.
+Discovery refreshes whenever agents are listed, so adapters installed while the
+app is running appear without restarting. Sign in with `claude` or `codex` in a
+terminal first. The adapters reuse existing logins in `~/.claude` and `~/.codex`;
+`PATH`, `HOME`, `USER`, and `LANG` (when present) are passed through. Each adapter's
+installation directory is prepended to its PATH so toolchain helpers are available.
+
+`agents.toml` is optional, for overriding built-ins, disabling an agent with
+`enabled = false`, or adding custom agents. See `agents.example.toml`.
+Place it at `~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml`
+on macOS or `$XDG_DATA_HOME/tokamak/agents.toml` on Linux (default
+`~/.local/share/tokamak/agents.toml`). `$TOKAMAK_SERVER_DIR` overrides the data
+directory; `TOKAMAK_ACP_AGENTS` selects a config file directly.
+Entries override built-ins by ID, retaining omitted fields. Custom agents must
+allow `plugins = ["acp"]`. To use API keys, add `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` to the agent's `env` list and set it in the server environment
+or repository-root `.env.local`.
 
 Then run from the repository root:
 
@@ -55,7 +64,7 @@ bun run app
 This installs workspace dependencies, builds Chat, the UI and Rust binaries,
 starts the local server, and opens chat. Type a message and press Enter.
 Closing the desktop leaves the server running; `bun run server:stop` stops it.
-After changing agents or their environment, stop the server and run `bun run app` again.
+After editing `agents.toml` or the server environment, stop the server and run `bun run app` again.
 
 Enter sends; Shift+Enter adds a line; Esc stops your reply or closes a picker.
 Tab opens/closes Map; type to search, arrows/Enter select, and 1–9 open a row
@@ -66,7 +75,7 @@ With an empty composer, 1–4 answers agent permissions.
 
 New threads select the first available agent. Use Cmd+M to configure its absolute
 working-folder path. Without an agent, the composer shows
-"No agent configured: see agents.example.toml" and sending is refused.
+"No agents found. Install `claude-agent-acp` or `codex-acp` (see README)" and sending is refused.
 
 See [Chat details](plugins/chat/README.md) for thread and backend contracts, and
 [ACP setup](plugins/acp/README.md) for installed coding agents and smoke tests.

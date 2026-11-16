@@ -21,7 +21,7 @@ export function backendLabel(
   return backend?.kind === "plugin"
     ? `${options?.find((option) => option.id === backend.backendId && option.plugin === backend.plugin)?.title ?? backend.backendId}${backendFolder(backend.settings) ? ` · ${backendFolder(backend.settings).split("/").filter(Boolean).at(-1) ?? "/"}` : ""}`
     : options?.length === 0
-      ? "No agent configured: see agents.example.toml"
+      ? "No agents found. Install `claude-agent-acp` or `codex-acp` (see README)"
       : "Select agent";
 }
 
@@ -171,7 +171,9 @@ export function BackendPicker(props: {
           <span class="text-text-3">Loading backends…</span>
         </Show>
         <Show when={!loading() && props.chat.noAgents()}>
-          <span class="text-text-3">No agent configured: see agents.example.toml</span>
+          <span class="text-text-3">
+            No agents found. Install `claude-agent-acp` or `codex-acp` (see README)
+          </span>
         </Show>
         <span class="text-text-3">↑↓ MOVE · ENTER SELECT · ESC CLOSE</span>
       </Show>

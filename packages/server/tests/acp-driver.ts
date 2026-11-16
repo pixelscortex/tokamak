@@ -306,7 +306,7 @@ export async function acpScenario(client: TokamakClient) {
     settings: { cwd: "/" },
   });
   await client.mutation(api.threads.setBackend, { threadId, backend: { ...backend, backendId: "other" } });
-  await assert.rejects(send("hello"), /No agent configured/);
+  await assert.rejects(send("hello"), /No agents found/);
   await client.mutation(api.threads.setBackend, {
     threadId,
     backend: { ...backend, settings: { cwd: "/var" } },

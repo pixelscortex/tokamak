@@ -7,13 +7,10 @@ export async function chatScenario(client: TokamakClient, scenario: string) {
   if (scenario === "chat-acp") return acpScenario(client);
   const threadId = await client.action(api.threads.create, {});
   assert.equal((await client.query(api.threads.list, {}))[0]!.backend, undefined);
-  await assert.rejects(
-    client.action(api.chat.send, { threadId, text: "hello" }),
-    /No agent configured: see agents.example.toml/,
-  );
+  await assert.rejects(client.action(api.chat.send, { threadId, text: "hello" }), /No agents found/);
   await assert.rejects(
     client.mutation(api.send.start, { token: "fixture-turn-token", threadId, text: "hello" }),
-    /No agent configured/,
+    /No agents found/,
   );
   assert.deepEqual(await client.query(api.messages.list, { threadId }), []);
   assert.equal(await client.query(api.runs.active, { threadId }), null);
@@ -24,7 +21,7 @@ export async function chatScenario(client: TokamakClient, scenario: string) {
         threadId,
         backend: { kind: "plugin", plugin, backendId: "missing" },
       });
-      await assert.rejects(client.action(api.chat.send, { threadId, text: "hello" }), /No agent configured/);
+      await assert.rejects(client.action(api.chat.send, { threadId, text: "hello" }), /No agents found/);
       assert.deepEqual(await client.query(api.messages.list, { threadId }), []);
     }
     return;

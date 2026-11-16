@@ -21,7 +21,7 @@ pub(crate) fn register(
         Ok(json!(
             catalog
                 .config
-                .agents
+                .available()
                 .iter()
                 .filter(|(_, agent)| agent.plugins.contains(&caller))
                 .map(|(id, _)| json!({"id":id,"title":id}))

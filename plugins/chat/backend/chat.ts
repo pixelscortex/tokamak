@@ -22,7 +22,7 @@ export const send = action({
         (option) => option.plugin === current.backend!.plugin && option.id === current.backend!.backendId,
       )
     )
-      throw new Error("No agent configured: see agents.example.toml");
+      throw new Error("No agents found. Install `claude-agent-acp` or `codex-acp` (see README)");
     // Web crypto is action-only; mutation replay stores the supplied capability.
     const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
       byte.toString(16).padStart(2, "0"),

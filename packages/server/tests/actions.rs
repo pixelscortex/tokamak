@@ -47,6 +47,9 @@ fn artifacts() -> &'static BTreeMap<String, String> {
         serde_json::from_str(stdout.lines().last().unwrap()).unwrap()
     })
 }
+// Offline fixtures must not depend on adapters installed on the developer's host.
+const DISABLED_AGENTS: &str = "[agents.claude]\nenabled = false\n[agents.codex]\nenabled = false\n[agents.gemini]\nenabled = false\n";
+
 struct Installation(PathBuf);
 impl Installation {
     fn new() -> Self {
@@ -63,6 +66,11 @@ impl Installation {
             .join("plugins");
         std::fs::create_dir_all(&path).unwrap();
         let installation = Self(path);
+        std::fs::write(
+            installation.0.parent().unwrap().join("agents.toml"),
+            DISABLED_AGENTS,
+        )
+        .unwrap();
         for (name, source) in artifacts() {
             if (name.starts_with("chat/") || name.starts_with("acp/")) && !chat {
                 continue;
@@ -117,7 +125,7 @@ fn acceptance_over(scenario: &str, websocket: bool) {
         )
         .unwrap();
         std::fs::write(directory.join("agents.toml"), format!(
-            "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"acp\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"acp\"]\n", json!(agent), json!(agent)
+            "{DISABLED_AGENTS}[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"acp\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"acp\"]\n", json!(agent), json!(agent)
         )).unwrap();
     }
     tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()

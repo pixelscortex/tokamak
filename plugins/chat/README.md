@@ -16,7 +16,7 @@ for providers that need to seed a fresh agent session.
 
 New threads select the first available provider option. Thread creation is an
 action so discovery happens outside a database transaction. With no available
-agent, sending fails with "No agent configured: see agents.example.toml" before
+agent, sending fails with "No agents found. Install `claude-agent-acp` or `codex-acp` (see README)" before
 creating messages or a run. Cmd+M lists only provider options and configures the
 selected agent's folder. Threads preserve session state when the same backend
 and settings are selected again.

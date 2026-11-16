@@ -8,8 +8,8 @@ Build with `proto run bun -- packages/build/src/build.ts plugins/acp` after chat
 Threads store a provider backend with plugin, agent ID, settings and optional session
 state. `threads:setBackend` preserves state when the agent and settings match.
 Only this plugin declares the `acp` grant;
-configure permitted agents in the host data directory's `agents.toml` with
-`plugins = ["acp"]`. `backend:describe` lists agents because ACP is action-only.
+built-in agents permit this plugin automatically. Custom agents in `agents.toml`
+must allow `plugins = ["acp"]`. `backend:describe` lists agents because ACP is action-only.
 
 ACP opens and saves a session before prompting. Restored sessions receive only
 the new user text; fresh sessions also receive the most recent flattened completed
@@ -38,32 +38,34 @@ rows show their status.
 
 ## Configuring real agents
 
-Copy [`agents.example.toml`](../../agents.example.toml) to `agents.toml` in the
-Tokamak data directory: `$TOKAMAK_SERVER_DIR` when set, otherwise
-`~/Library/Application Support/com.pixelscortex.Tokamak` on macOS
-(`$XDG_DATA_HOME/tokamak` or `~/.local/share/tokamak` on Linux).
-Agents are loaded once at startup; restart the app (server) after editing `agents.toml`.
 Install the pinned adapters globally once:
 
 ```sh
 npm install -g @agentclientprotocol/claude-agent-acp@0.106.0 @agentclientprotocol/codex-acp@2.6.0
 ```
 
-The example runs `claude-agent-acp` and `codex-acp` directly, avoiding downloads
-that can exceed the 30-second initialization timeout. Only named `env` variables
-are passed through: `PATH`, `HOME`, and `USER` by default. `HOME` lets adapters
-reuse existing Claude Code and Codex logins in `~/.claude` and `~/.codex`.
-API keys are optional: list `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `env` only
-if you prefer keys, and set them in the server environment or repository-root
-`.env.local`.
+Tokamak discovers Claude Code, Codex, and Gemini CLI (`gemini --acp`) automatically
+on PATH and in common global install directories (see the [README](../../README.md)).
+Discovery refreshes each time agents are listed. Sign in with `claude` or `codex`
+in a terminal first; adapters reuse existing CLI logins through HOME.
+Only named environment variables pass through: `PATH`, `HOME`, `USER`, and `LANG`
+when present. The executable's directory is prepended to PATH for its helpers.
 Agents have the same access as their CLI; the selected folder is not a sandbox.
 
-Manual credentialed checks (never part of the normal suite): set
-`TOKAMAK_ACP_AGENTS` to the absolute path of a real `agents.toml` with the relevant
-`claude` / `codex` entry allowing `acp`. Each test uses a temporary copy of this
-repo's tracked files and refuses permission requests.
+[`agents.example.toml`](../../agents.example.toml) documents optional overrides,
+`enabled = false`, and custom agents. Store `agents.toml` in `$TOKAMAK_SERVER_DIR`,
+or the default Tokamak data directory described in the README. Alternatively,
+`TOKAMAK_ACP_AGENTS` selects a config file directly. Entries override built-ins by ID;
+omitted fields retain built-in defaults. Custom agents must allow `plugins = ["acp"]`.
+Restart the server after config edits. API keys are optional: add their names to
+`env` and set them in the server environment or repository-root `.env.local`.
+
+Manual credentialed checks (ignored by the normal suite) discover the installed
+adapters with no config required. `TOKAMAK_ACP_AGENTS` is an optional override.
+Each test uses a temporary copy of this repo's tracked files and refuses
+permission requests.
 
 ```sh
-TOKAMAK_ACP_AGENTS=/absolute/path/agents.toml cargo test -p server --test acp acp_real_claude_smoke -- --ignored --exact --nocapture
-TOKAMAK_ACP_AGENTS=/absolute/path/agents.toml cargo test -p server --test acp acp_real_codex_smoke -- --ignored --exact --nocapture
+cargo test -p server --test acp acp_real_claude_smoke -- --ignored --exact --nocapture
+cargo test -p server --test acp acp_real_codex_smoke -- --ignored --exact --nocapture
 ```
