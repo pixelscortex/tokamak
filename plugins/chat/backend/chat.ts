@@ -12,6 +12,7 @@ import { modelStream, safeErrorMessage } from "./model";
 type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "error" | "cancelled" };
 
 export const send = action({
+  guest: true,
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
     const started = await ctx.runMutation(api.send.start, args);
@@ -27,7 +28,7 @@ export const send = action({
     });
 
     try {
-      const { tools, targets } = await discoverTools(ctx, args.threadId,
+      const { tools, targets } = ctx.caller.role === "guest" ? { tools: {}, targets: new Map() } : await discoverTools(ctx, args.threadId,
         () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgements.get(callId).promise);
       const events = toolEvents(ctx, targets, buffer, acknowledgements);
       const source = await buffer.waitFor(modelStream(ctx, history, controller.signal, model, tools));

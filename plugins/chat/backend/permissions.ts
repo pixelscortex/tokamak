@@ -1,5 +1,5 @@
 import { v } from "@tokamak/sdk";
-import { OWNER, mutation, query } from "./_functions";
+import { mutation, query } from "./_functions";
 import { claimPermission, permissionPart } from "./permission-part";
 
 export const TIMEOUT_MS = 30 * 60_000;
@@ -29,20 +29,21 @@ export const state = query({
 
 export const answer = mutation({
   args: { messageId: v.id("messages"), requestId: v.string(), optionId: v.string() },
-  handler: async ({ db }, { messageId, requestId, optionId }) => {
+  handler: async ({ db, caller }, { messageId, requestId, optionId }) => {
+    if (caller.role !== "owner") throw new Error("Not available to guests");
     const message = await db.get(messageId);
     if (!message) throw new Error("Permission no longer exists");
     const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", message.threadId)).collect();
     const run = runs.find(run => run.messageId === messageId && run.status === "running");
     const thread = await db.get(message.threadId);
-    if (!run || (run.startedBy !== OWNER && thread?.ownerId !== OWNER)) throw new Error("Only the run starter or thread owner can answer");
+    if (!run || (run.startedBy !== caller.memberId && thread?.ownerId !== caller.memberId)) throw new Error("Only the run starter or thread owner can answer");
     const part = message.parts.find(part => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission" || part.status !== "pending") throw new Error("Permission is no longer pending");
     if (!part.options.some(option => option.optionId === optionId)) throw new Error("Unknown permission option");
     // Reserve the answer atomically; the action claims it before responding.
     if (part.optionId !== undefined) throw new Error("Permission already answered");
     part.optionId = optionId;
-    part.answeredBy = OWNER;
+    part.answeredBy = caller.memberId;
     await db.patch(messageId, { parts: message.parts });
     return null;
   },

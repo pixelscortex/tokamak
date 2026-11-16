@@ -67,6 +67,19 @@ export const identities = mutation({
     return null;
   },
 });
+// Seed completed history to exercise rolling guest quotas without 100 HTTP calls.
+export const quota = mutation({
+  args: { memberId: v.string(), messageId: v.id("messages"), count: v.number(), age: v.number() },
+  handler: async ({ db }, { memberId, messageId, count, age }) => {
+    for (const run of await db.query("runs").withIndex("by_starter", q => q.eq("startedBy", memberId)).collect()) await db.delete(run._id);
+    const message = await db.get(messageId);
+    for (let i = 0; i < count; i++) await db.insert("runs", {
+      threadId: message!.threadId, messageId, startedBy: memberId, status: "done",
+      model: "openrouter/free", startedAt: Date.now() - age,
+    });
+    return null;
+  },
+});
 export const age = mutation({
   args: { runId: v.id("runs") },
   handler: ({ db }, { runId }) => db.patch(runId, { startedAt: Date.now() - 61_000, updatedAt: Date.now() - 61_000 }),

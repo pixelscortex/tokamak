@@ -48,16 +48,38 @@ A text part is `{type: "text", text: string}`; tool parts are described below.
 Documents include `_id: string` and `_creationTime: number`, plus:
 
 - `Thread`: `ownerId: string`, `title`, `createdAt`, `updatedAt`, optional `model` (defaults to `openrouter/free`).
-- `Message`: `threadId`, `authorId: string`, `role: "user" | "assistant"`, `parts`,
+- `Message`: `threadId`, `authorId: string`, optional `authorName: string`, `role: "user" | "assistant"`, `parts`,
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
   `startedBy: string`, optional `cancelledBy: string`, `model`, `startedAt`,
   optional `updatedAt` (heartbeat), `error`, and `finishedAt` (present for terminal runs).
 
-`Thread.ownerId`, user `Message.authorId`, and `Run.startedBy` are currently
-`"owner"`; assistant `Message.authorId` is `"assistant"`. `runs:cancel` sets
-`Run.cancelledBy` to `"owner"` when cancelling a running run. The shared `OWNER`
-constant becomes the host's member id when threads are shared.
+## Sharing
+
+The host supplies `ctx.caller = {memberId, name, role}` on every call. Thread
+ownership, user message authors, run starters, cancellations and permission
+answers record the caller's member ID. User messages also store `authorName`;
+assistant messages retain `authorId: "assistant"`.
+
+Call `chat/members:hello {}` on connect to upsert the caller's name and last-seen
+time. The owner can query `chat/members:list {}` and share or unshare with
+`chat/threads:share {threadId, memberId}` and
+`chat/threads:unshare {threadId, memberId}`. Shares are idempotent and thread
+deletion removes them. `shares` indexes membership and threads; `members` stores
+only member IDs, display names and last-seen timestamps, with no credentials.
+
+Owners see every thread. Guests see shared threads only, including their live
+messages and running runs. Unsharing removes the thread and its messages from
+live subscriptions. Guests can watch ACP threads but can send only to model
+backends. Their sends use the owner's selected model and key, with no tools,
+at most 20 runs per rolling hour and 100 per rolling day per member, and a
+16 KB UTF-8 text limit. Shared history prefixes user turns with `Name: `.
+
+Only `threads:list`, `messages:list`, `runs:running`, `runs:active`, `chat:send`,
+`runs:cancel`, `runs:recover` and `members:hello` accept guest wire calls. Guests
+may cancel only their own runs in visible threads; the owner may cancel any run.
+Guests cannot create, rename or remove threads, change models or backends,
+list agents, share threads, list members, or answer ACP permissions.
 
 The shell uses one `runs:running` subscription for Map grouping and active-run state,
 regardless of thread count. This query uses the runs `by_status` index.
@@ -76,7 +98,8 @@ a thread cascades through messages and runs; its in-flight action also stops.
 The `send:*` transaction steps are implementation details excluded from the
 cross-plugin export surface; use `chat:send` to send messages.
 
-No scheduler, retries, auth, multi-user isolation, or embedded UI is included.
+No scheduler, retries, or embedded UI is included. Host authentication and
+per-thread sharing govern access.
 There is no plugin initialization hook today. Recovery is
 lazy: `send.start` checks stale runs before admitting a new reply; the native
 client calls `runs:recover` on observing running runs and every 30 seconds while
