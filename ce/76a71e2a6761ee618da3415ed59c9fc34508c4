@@ -1,0 +1,48 @@
+plugins/chat/client.ts
+  s_a4eafea936df57::t_695bbc2f61d6d4 3-5,12-15
+  s_a4eafea936df57::t_07b2d47404ef5f 16-17
+plugins/chat/backend/acp.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 69
+plugins/chat/backend/runs.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 3,6,56-57,59
+plugins/chat/backend/recovery.ts
+  s_a4eafea936df57::t_90c94ce5a49116 4,29
+  s_a4eafea936df57::t_07b2d47404ef5f 1,3,5,11-22,24-25,27,30-32,34-35,39-48
+  s_a4eafea936df57::t_ca48d81f034bc0 2,26,28,33
+plugins/chat/backend/chat.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 65
+  s_a4eafea936df57::t_efafdc4e8ee10a 8,20-24
+plugins/chat/backend/stream-buffer.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 9-20,26,31,50-51
+plugins/chat/backend/schema.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 30
+app/src/chat/use-run-recovery.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 47
+plugins/chat/backend/send.ts
+  s_a4eafea936df57::t_07b2d47404ef5f 42,88
+plugins/chat/README.md
+  s_a4eafea936df57::t_f8fbc1b26e0d43 123-124,131-132
+  s_a4eafea936df57::t_07b2d47404ef5f 43,57,122,125-130
+packages/server/tests/build-actions.mjs
+  s_a4eafea936df57::t_5d8040214e0fb7 52
+  s_a4eafea936df57::t_5e1dd191618861 57-64
+packages/server/tests/chat-driver.ts
+  s_a4eafea936df57::t_5d8040214e0fb7 232,290,380,390,392-394,397,414
+  s_a4eafea936df57::t_ac7a4060ea04f7 83-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce76a71e2a6761ee618da3415ed59c9fc34508c4",
+  "prompts": {},
+  "sessions": {
+    "s_a4eafea936df57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e2bb-fbf2-7482-9c16-b35df546e14e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
