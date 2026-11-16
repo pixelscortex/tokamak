@@ -59,8 +59,10 @@ tasks:
       mutex: "cargo"
   build-release:
     command: "cargo build --locked --release --package server --bin tokamak --target-dir target"
+    inputs: *ci-inputs
+    outputs: ["target/release/tokamak"]
     options:
-      cache: false
+      cache: true
       mutex: "cargo"
   size:
     deps: ["app:build"]

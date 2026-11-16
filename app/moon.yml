@@ -33,8 +33,21 @@ tasks:
   build:
     deps: ["bundle"]
     command: "cargo build --locked --release --package tokamak-app --package server --bins --jobs 2"
+    # Bundle tasks prepare generated inputs; source hashing covers the complete
+    # native workspace, while Rust's hash separates OS/architecture artifacts.
+    inputs:
+      - "/**/*"
+      - "!/**/node_modules/**"
+      - "!/**/dist/**"
+      - "!/**/_generated/**"
+      - "!/target/**"
+      - "!/.git/**"
+      - "!/.moon/cache/**"
+      - "!/.proto/**"
+      - "!/.ci-results/**"
+    outputs: ["/target/release/tokamak", "/target/release/tokamak-desktop"]
     options:
-      cache: false
+      cache: true
       mutex: "cargo"
   run:
     deps: ["dev-build"]
