@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, process::Stdio, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    process::{Child, ChildStdin, ChildStdout},
+    process::{Child, ChildStdout},
     sync::{mpsc, oneshot},
 };
 
@@ -68,7 +68,7 @@ impl Process {
             .map_err(|e| format!("Cannot start ACP agent: {e}"))?;
         #[cfg(unix)]
         let group = ProcessGroup(child.id().ok_or("ACP process has no pid")?);
-        let input = child.stdin.take().ok_or("ACP stdin missing")?;
+        let mut input = child.stdin.take().ok_or("ACP stdin missing")?;
         let output = child.stdout.take().ok_or("ACP stdout missing")?;
         let mut stderr = child.stderr.take().ok_or("ACP stderr missing")?;
         let tail = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
@@ -87,13 +87,31 @@ impl Process {
         });
         let (commands, receive) = mpsc::unbounded_channel();
         tokio::spawn(async move {
+            let (writes, mut outgoing) = mpsc::channel::<Vec<u8>>(limits::WRITE_QUEUE);
+            let (write_error, mut failed_write) = oneshot::channel();
+            let _writer = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+                while let Some(bytes) = outgoing.recv().await {
+                    let error =
+                        match tokio::time::timeout(limits::WRITE_TIMEOUT, input.write_all(&bytes))
+                            .await
+                        {
+                            Ok(Ok(())) => continue,
+                            Ok(Err(error)) => format!("ACP write failed: {error}"),
+                            Err(_) => "ACP stdin write timed out after 10 s".into(),
+                        };
+                    let _ = write_error.send(error);
+                    return;
+                }
+            }));
             let mut actor = Actor {
-                input,
+                input: writes,
                 next: 0,
                 pending: BTreeMap::new(),
                 turns: BTreeMap::new(),
             };
-            let error = actor.run(&mut child, output, receive).await;
+            let error = actor
+                .run(&mut child, output, receive, &mut failed_write)
+                .await;
             #[cfg(unix)]
             drop(group);
             let _ = child.kill().await;
@@ -194,7 +212,7 @@ impl Process {
 }
 
 pub(super) struct Actor {
-    pub(super) input: ChildStdin,
+    pub(super) input: mpsc::Sender<Vec<u8>>,
     pub(super) next: u64,
     pub(super) pending: BTreeMap<u64, Pending>,
     pub(super) turns: BTreeMap<String, Turn>,
@@ -204,10 +222,12 @@ impl Actor {
     pub(super) async fn write(&mut self, message: Value) -> Result<(), String> {
         let mut bytes = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
         bytes.push(b'\n');
+        if bytes.len() > limits::FRAME_BYTES {
+            return Err("ACP outgoing frame exceeds 1 MiB limit".into());
+        }
         self.input
-            .write_all(&bytes)
-            .await
-            .map_err(|e| e.to_string())
+            .try_send(bytes)
+            .map_err(|_| "ACP stdin write queue full or closed".into())
     }
 
     pub(super) async fn request(
@@ -227,6 +247,7 @@ impl Actor {
         child: &mut Child,
         output: ChildStdout,
         mut commands: mpsc::UnboundedReceiver<Command>,
+        failed_write: &mut oneshot::Receiver<String>,
     ) -> String {
         let mut output = BufReader::new(output);
         let mut frame = Vec::new();
@@ -246,6 +267,7 @@ impl Actor {
                     Ok(None) => return "ACP process exited".into(),
                     Err(error) => return format!("ACP read failed: {error}"),
                 },
+                error = &mut *failed_write => return error.unwrap_or_else(|_| "ACP stdin writer closed".into()),
                 status = child.wait() => return format!("ACP process exited ({status:?})"),
                 _ = &mut idle, if self.pending.is_empty() && self.turns.is_empty() => return "ACP idle timeout".into(),
             };

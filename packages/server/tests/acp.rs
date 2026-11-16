@@ -73,7 +73,7 @@ const probe = action({ args: { mode: v.string() }, handler: async ({ acp }, { mo
   if (mode === 'agents') return acp.agents();
   const opened = await acp.open({ agent: mode === 'missing' ? 'absent' : 'fake', cwd: '/tmp' });
   const events = [];
-  for await (const event of acp.prompt({ agent: 'fake', sessionId: opened.sessionId, text: mode })) {
+  for await (const event of acp.prompt({ agent: 'fake', sessionId: opened.sessionId, text: mode === 'blocked-write' ? 'x'.repeat(900000) : mode })) {
     events.push(event);
     if (mode === 'flood' && events.length === 1) {
       const until = Date.now() + 1000;
@@ -99,6 +99,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new(granted: bool) -> Self {
+        Self::with_agent(granted, AGENT).await
+    }
+
+    async fn with_agent(granted: bool, agent_source: &str) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
         let plugins = root.join("plugins");
@@ -141,7 +145,7 @@ impl Fixture {
         )
         .unwrap();
         let agent = root.join("agent.py");
-        std::fs::write(&agent, AGENT).unwrap();
+        std::fs::write(&agent, agent_source).unwrap();
         std::fs::write(root.join("agents.toml"), format!(
             "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"probe\"]\n", json!(agent.to_str().unwrap())
         )).unwrap();
@@ -165,7 +169,7 @@ impl Fixture {
             )
             .unwrap();
         loop {
-            match tokio::time::timeout(Duration::from_secs(10), session.recv())
+            match tokio::time::timeout(Duration::from_secs(45), session.recv())
                 .await
                 .expect("ACP call timed out")
                 .unwrap()
@@ -279,5 +283,17 @@ async fn oversized_frame_and_event_backlog_fail_turns() {
     ] {
         assert!(fixture.action(mode).await.unwrap_err().contains(error));
     }
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn blocked_stdin_has_a_write_deadline() {
+    let agent = AGENT.replace(
+        "response(request, dict(sessionId=params.get('sessionId', 'session')))",
+        "response(request, dict(sessionId=params.get('sessionId', 'session')))\n        import time; time.sleep(60)",
+    );
+    let fixture = Fixture::with_agent(true, &agent).await;
+    let error = fixture.action("blocked-write").await.unwrap_err();
+    assert!(error.contains("stdin write timed out"), "{error}");
     fixture.close().await;
 }

@@ -209,15 +209,13 @@ impl Actor {
                     .values_mut()
                     .filter(|turn| turn.owner == owner)
                     .find_map(|turn| turn.permissions.remove(&request));
-                let result = match permission {
-                    Some(permission) => self
-                        .permission(permission, option)
-                        .await
-                        .map(|()| Value::Null),
-                    None => Err("Unknown ACP permission request".into()),
+                let Some(permission) = permission else {
+                    let _ = reply.send(Err("Unknown ACP permission request".into()));
+                    return Ok(());
                 };
-                let _ = reply.send(result);
-                Ok(())
+                let result = self.permission(permission, option).await;
+                let _ = reply.send(result.clone().map(|()| Value::Null));
+                result
             }
             Command::Cancel { owner, session } => {
                 self.cancel_turn(owner.as_deref(), &session).await
@@ -261,12 +259,14 @@ impl Actor {
     }
 
     async fn finish_turn(&mut self, session: &str, message: &Value) -> Result<(), String> {
-        let Some(turn) = self.turns.remove(session) else {
+        let Some(turn) = self.turns.get_mut(session) else {
             return Ok(());
         };
-        for (_, permission) in turn.permissions {
+        let permissions = std::mem::take(&mut turn.permissions);
+        for (_, permission) in permissions {
             self.permission(permission, None).await?;
         }
+        let turn = self.turns.remove(session).expect("checked turn");
         let event = if let Some(error) = message.get("error") {
             Err(format!("ACP error: {error}"))
         } else {
