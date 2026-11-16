@@ -1177,7 +1177,8 @@ fn chat_screen_socket_workflow() {
         .unwrap();
     }
     let tools_live = live && std::env::var("TOKAMAK_CHAT_TOOLS").as_deref() == Ok("1");
-    if tools_live {
+    let quickstart = live && std::env::var("TOKAMAK_CHAT_QUICKSTART").as_deref() == Ok("1");
+    if tools_live || quickstart {
         let todo = scratch.0.join("installation/todo/dist");
         std::fs::create_dir_all(&todo).unwrap();
         for file in [
@@ -1210,6 +1211,18 @@ fn chat_screen_socket_workflow() {
             "[agents.claude]\ncommand = \"/usr/bin/false\"\nplugins = [\"chat\"]\n[agents.codex]\ncommand = \"/usr/bin/false\"\nplugins = [\"chat\"]\n").unwrap();
     }
     let service = Service::start(&scratch);
+    if quickstart {
+        let catalog: Value = serde_json::from_str(&service.cli(&["plugin", "list"])).unwrap();
+        for id in ["chat", "todo"] {
+            assert!(
+                catalog["plugins"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|plugin| plugin["plugin"]["id"] == id)
+            );
+        }
+    }
     let mut window = Window::open(&service.directory);
     window
         .doc
@@ -1241,6 +1254,41 @@ fn chat_screen_socket_workflow() {
     key(&mut window, Key::Named(NamedKey::Tab), false);
     assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
     key(&mut window, Key::Named(NamedKey::Escape), false);
+    if quickstart {
+        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+        type_text(&mut window, "Say hello in one short sentence.");
+        key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+            doc.inner()
+                .query_selector("[data-role=assistant][data-status=complete]")
+                .unwrap()
+                .is_some()
+        });
+        let messages = call(
+            &service,
+            "query",
+            "chat/messages:list",
+            json!({"threadId": selected(&window)}),
+        );
+        let reply = messages.as_array().unwrap().last().unwrap();
+        assert_eq!(reply["role"], "assistant");
+        assert!(reply["parts"].as_array().unwrap().iter().any(|part| {
+            part["type"] == "text"
+                && part["text"]
+                    .as_str()
+                    .is_some_and(|text| !text.trim().is_empty())
+        }));
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("quickstart.png"),
+            );
+        }
+        println!(
+            "Quick start: Chat and Todo loaded; native composer sent a message and rendered a live reply."
+        );
+        return;
+    }
     if tools_live {
         let thread = selected(&window);
         call(

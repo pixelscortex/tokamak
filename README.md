@@ -17,9 +17,69 @@ sources in `app/src/` and SDK backend functions in `app/backend/`.
 | `app/` | Thin product shell, reserved for Core and plugins |
 | `lab/` | Independent native UI component catalog and interaction checks |
 
-Root `plugins/` is reserved for future first-class plugins; it is not scaffolded.
+Root `plugins/` contains the installed Chat and Todo plugins.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
 names remain unchanged; `app` and `lab` are separate application projects.
+
+## Quick start
+
+Install [proto](https://moonrepo.dev/proto) and rustup, plus the native build
+prerequisites for your OS (Xcode command-line tools on macOS). From this checkout,
+run `proto use` to install the pins in `.prototools`: Bun 1.4.4, Moon 2.5.6 and
+Rust 1.97.0. Put proto's bin/shims and Cargo's bin directory on `PATH`.
+
+Create `.env.local` **at the repository root**, next to `package.json`
+(`/Volumes/mypixel/tokamak/.env.local` in this checkout), containing:
+```dotenv
+OPENROUTER_API_KEY=your-key-here
+```
+
+Then run from the repository root:
+```sh
+bun run app
+```
+This installs workspace dependencies, builds Chat, Todo, the UI and Rust binaries,
+starts the local server, and opens chat. Type a message and press Enter.
+Closing the desktop leaves the server running; `bun run server:stop` stops it.
+After changing keys or agents, stop the server and run `bun run app` again.
+
+Enter sends; Shift+Enter adds a line; Esc stops your reply or closes a picker.
+Tab opens/closes Map; type to search, arrows/Enter select, and 1–9 open a row
+with an empty search. Cmd+N creates a thread. In Map with an empty search,
+R renames and Cmd+Backspace deletes (Enter confirms, Esc cancels).
+Cmd+M selects a model/agent; Cmd+Shift+C copies the last assistant reply;
+Cmd+Shift+S opens sharing. With an empty composer, 1–4 answers agent permissions.
+
+For agents, copy `agents.example.toml` to
+`~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml` on macOS;
+on Linux use `$XDG_DATA_HOME/tokamak/agents.toml` (default
+`~/.local/share/tokamak/agents.toml`). If set, `$TOKAMAK_SERVER_DIR/agents.toml`
+overrides these paths. Install Node.js/npx; the example forwards `PATH` and
+`ANTHROPIC_API_KEY` for Claude, `PATH` and `OPENAI_API_KEY` for Codex.
+Set those keys in the root `.env.local` or server environment, restart the server,
+then select an agent with Cmd+M and enter an absolute working-folder path.
+
+To share with a friend, install/sign into Tailscale with Funnel enabled. Stop the
+local server, then run these in separate terminals from the repository root:
+```sh
+bun run server:stop
+target/debug/tokamak --local-dir "$(target/debug/tokamak --local-path)" --plugins "$PWD/plugins" --share 127.0.0.1:3001
+tailscale funnel 3001
+target/debug/tokamak member invite --url wss://YOUR-FUNNEL-HOST/ws
+```
+
+Reopen with `bun run app`. Send the invite link to your friend, who builds this
+checkout with `moon run app:dev-build`, runs `target/debug/tokamak-desktop join 'INVITE-LINK' --name Sam`,
+then `target/debug/tokamak-desktop`. Once they join, use Cmd+Shift+S to share a thread.
+
+Two credentialed smoke checks after building (both use the root `.env.local`):
+```sh
+cargo test --locked -p server --test actions chat_real_openrouter_smoke -- --ignored --exact --nocapture
+TOKAMAK_CHAT_LIVE=1 TOKAMAK_CHAT_QUICKSTART=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --exact --nocapture --test-threads=1
+```
+
+The second writes `/tmp/tokamak-chat-shots/quickstart.png` using disposable storage.
+See [Chat details](plugins/chat/README.md) for tools, agents and longer smoke tests.
 
 ## Commands
 
@@ -45,8 +105,9 @@ reuses it; desktop exit does not stop it. `bun run server:status`,
 `bun run server:stop` and `bun run server:start` control the local service.
 
 `bun run ui:lab` opens the component catalog without starting a server or
-touching user storage. Todo is retired from the product and retained only in
-`plugins/todo` (with an isolated standalone build at `app/dist/tests/todo`) for the native, compiler and five E2E regressions.
+touching user storage. Todo lives in `plugins/todo` and supplies chat tool cards.
+An isolated standalone build at `app/dist/tests/todo` supports the native,
+compiler and five E2E regressions.
 
 `.prototools` pins moon, Bun, and Rust. Moon's built-in toolchains read those
 pins and manage their tool caches and dependency installation; no custom proto
@@ -62,7 +123,7 @@ artifacts. SDK tooling uses Bun; UI and renderer use TypeScript + Vite's native
 Solid universal build, not browser DOM output. Package tests include real native
 QuickJS/Blitz fixtures. The desktop application has real build/check tasks and
 independently authored application regressions. Its zero-options Vite integration
-uses fixed internal conventions; Todo remains core application code, not a plugin.
+uses fixed internal conventions; Todo is an installed plugin.
 Linting is deferred.
 
 ### Opt-in compiler-selection regression

@@ -59,7 +59,7 @@ No tests open the real user store.
 close/IME/VoiceOver and visual presentation remain separate manual acceptance.
 
 
-The application is a shared-runtime plugin shell. `bun run app` builds Todo and
+The application is a shared-runtime plugin shell. `bun run app` builds Chat and Todo and
 starts/reuses the independent server with `--plugins <workspace>/plugins`.
 [The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,
 module loading and the separate presentation frame for the current zen screen.
@@ -98,9 +98,12 @@ contents on macOS, and stopping, and exercises Map search and thread switching.
 seconds and the native app reopens. `ux-autoscroll.png` captures the completed
 long reply at the bottom. Captures use the production Blitz painter with the bundled fonts.
 
+Add `TOKAMAK_CHAT_QUICKSTART=1` for a single-message check with Chat and Todo
+installed; it saves `quickstart.png` and skips the longer UX checks.
+
 Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the Todo card flow
 instead: `liquid/lfm-3-1.7b:free` creates a milk todo, the harness toggles the
-card, checks the saved task is done, and captures `tool-card.png`.
+card, checks the saved task is done, and captures `tool-card-2.png`.
 
 `chat_sharing_owner_and_guest_desktops` runs an owner and a guest desktop on one
 server with `--share` and an offline streaming model. Add `TK_CAPTURE_DIR` to save
