@@ -1,0 +1,21 @@
+app/src/chat/share-picker.tsx
+  s_e6dac773702cd2::t_5cf18422e451ac 51
+app/src/chat/use-shares.ts
+  s_e6dac773702cd2::t_612b926da5a2b7 14,33,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "052321ae409bcdff46ea59e4b6d9bd0fb9eab942",
+  "prompts": {},
+  "sessions": {
+    "s_e6dac773702cd2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e25a-35bc-7e12-a71d-fdd7fdef8886",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
