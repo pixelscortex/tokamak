@@ -74,6 +74,7 @@ pub(super) struct Turn {
     pub events: Events,
     pub permissions: BTreeMap<String, Value>,
     pub cancelled: bool,
+    pub cancel_deadline: Option<tokio::time::Instant>,
 }
 
 pub(super) struct Stream {
@@ -186,6 +187,7 @@ impl Actor {
                         events,
                         permissions: BTreeMap::new(),
                         cancelled: false,
+                        cancel_deadline: None,
                     },
                 );
                 let request = self
@@ -237,6 +239,8 @@ impl Actor {
         }
         let turn = self.turns.get_mut(session).expect("checked turn");
         turn.cancelled = true;
+        turn.cancel_deadline
+            .get_or_insert_with(|| tokio::time::Instant::now() + limits::CANCEL_TIMEOUT);
         let permissions = std::mem::take(&mut turn.permissions);
         for (_, permission) in permissions {
             self.permission(permission, None).await?;

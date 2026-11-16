@@ -50,13 +50,15 @@ for line in sys.stdin:
             sys.stderr.write('x' * 3000 + 'ACP_CRASH_TAIL')
             sys.stderr.flush()
             sys.exit(9)
-        if text in ['permission', 'cancel']:
+        if text in ['permission', 'cancel', 'ignore-cancel']:
             pending = request
             send(dict(id='permission', method='session/request_permission', params=dict(sessionId='session', toolCall=dict(toolCallId='call', title='Run command'), options=[dict(optionId='yes', name='Allow once', kind='allow_once')])))
         else:
             send(dict(method='session/update', params=dict(sessionId='session', update=dict(sessionUpdate='agent_message_chunk', content=dict(type='text', text='hello')))))
             response(request, dict(stopReason='end_turn'))
     elif method == 'session/cancel':
+        if pending['params']['prompt'][0]['text'] == 'ignore-cancel':
+            continue
         assert cancelled, 'pending permission must be cancelled before notification'
         response(pending, dict(stopReason='cancelled'))
     elif request.get('id') == 'permission':
@@ -80,7 +82,7 @@ const probe = action({ args: { mode: v.string() }, handler: async ({ acp }, { mo
       while (Date.now() < until) {}
     }
     if (event.type === 'permission') {
-      if (mode === 'cancel') await acp.cancel({ agent: 'fake', sessionId: opened.sessionId });
+      if (mode === 'cancel' || mode === 'ignore-cancel') await acp.cancel({ agent: 'fake', sessionId: opened.sessionId });
       else await acp.respond({ requestId: event.requestId, optionId: 'yes' });
     }
   }
@@ -295,5 +297,14 @@ async fn blocked_stdin_has_a_write_deadline() {
     let fixture = Fixture::with_agent(true, &agent).await;
     let error = fixture.action("blocked-write").await.unwrap_err();
     assert!(error.contains("stdin write timed out"), "{error}");
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ignored_cancel_kills_agent_and_allows_restart() {
+    let fixture = Fixture::new(true).await;
+    let error = fixture.action("ignore-cancel").await.unwrap_err();
+    assert!(error.contains("cancellation timed out"), "{error}");
+    assert!(fixture.action("hello").await.is_ok());
     fixture.close().await;
 }

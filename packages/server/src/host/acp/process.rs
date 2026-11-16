@@ -254,7 +254,19 @@ impl Actor {
         loop {
             let idle = tokio::time::sleep(limits::IDLE_TIMEOUT);
             tokio::pin!(idle);
+            let cancel_deadline = self
+                .turns
+                .values()
+                .filter_map(|turn| turn.cancel_deadline)
+                .min();
+            let cancelled = async {
+                match cancel_deadline {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => std::future::pending::<()>().await,
+                }
+            };
             let result = tokio::select! {
+                _ = cancelled => return "ACP cancellation timed out after 5 s".into(),
                 command = commands.recv() => match command {
                     Some(command) => self.command(command).await,
                     None => return "ACP manager closed".into(),
