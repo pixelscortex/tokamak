@@ -5,10 +5,11 @@ import { For, Show, createMemo, createEffect, createSignal, onCleanup } from "so
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
 import { api, type ChatState } from "./use-chat";
+import { permissionOptions, type Permission } from "./permission-part";
 import { Message } from "./message";
 import { ComposerStrip } from "./composer-strip";
 
-export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threadId: Id<"threads">; hidden: boolean; onCopyReady?: (copy: () => Promise<void>) => void }) {
+export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threadId: Id<"threads">; hidden: boolean; onPermissionReady?: (pick: (index: number) => boolean) => void; onCopyReady?: (copy: () => Promise<void>) => void }) {
   const messages = useQuery(props.chat.client, api.messages.list, () => ({ threadId: props.threadId }));
   const byId = createMemo(() => new Map((messages.data() ?? []).map(message => [message._id, message])));
   const messageIds = createMemo(() => [...byId().keys()]);
@@ -16,6 +17,24 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
     message.parts.filter(part => part.type === "tool" && part.status === "done" && part.view)
       .map(part => part.type === "tool" ? part.callId : ""),
   ).slice(-20)));
+  const [answering, setAnswering] = createSignal(false);
+  const latestPermission = () => (messages.data() ?? []).flatMap(message => message.parts.flatMap(part =>
+    part.type === "permission" && part.status === "pending" && part.optionId === undefined ? [{ messageId: message._id, part }] : [])).at(-1);
+
+  async function answer(messageId: Id<"messages">, part: Permission, optionId: string) {
+    if (answering()) return;
+    setAnswering(true);
+    try { await props.chat.client.mutation(api.permissions.answer, { messageId, requestId: part.requestId, optionId }); }
+    catch (cause) { props.chat.setError(String(cause)); }
+    finally { setAnswering(false); }
+  }
+  createEffect(() => props.onPermissionReady?.(index => {
+    const latest = latestPermission();
+    const option = latest && permissionOptions(latest.part)[index];
+    if (!latest || !option) return false;
+    void answer(latest.messageId, latest.part, option.optionId);
+    return true;
+  }));
   const turns = () => messages.data()?.filter(message => message.role === "user").length ?? 0;
 
   const [copied, setCopied] = createSignal(false);
@@ -65,7 +84,7 @@ export function ThreadView(props: { loader: PluginLoader; chat: ChatState; threa
   return <div class={props.hidden ? "hidden" : "flex min-h-0 flex-1 flex-col gap-5"}>
     {/* Blitz only supports non-negative scroll offsets; keep history in normal flow. */}
     <div ref={follow} id="chat-messages" role="log" aria-label="Conversation" class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain">
-      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} liveCards={props.hidden ? new Set<string>() : liveCards()} />}</For>
+      <For each={messageIds()}>{id => <Message loader={props.loader} threadId={props.threadId} message={byId().get(id)!} onAnswer={(part, optionId) => void answer(byId().get(id)!._id, part, optionId)} liveCards={props.hidden ? new Set<string>() : liveCards()} />}</For>
     </div>
     <Show when={messages.error()}><p role="alert" class="m-0 text-text-2">{messages.error()?.message}</p></Show>
     <Show when={props.chat.thread()}>

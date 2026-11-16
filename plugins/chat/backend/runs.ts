@@ -6,7 +6,7 @@ import { OWNER, mutation, query } from "./_functions";
 export const running = query({
   handler: async ({ db }) => {
     const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
-    return runs.map(run => ({ runId: run._id, threadId: run.threadId, model: run.model }));
+    return runs.map(run => ({ runId: run._id, threadId: run.threadId, model: run.model, waiting: run.waiting ?? false }));
   },
 });
 
@@ -26,7 +26,7 @@ export const cancel = mutation({
 
     await interruptResponse(db, run, "cancelled", "cancelled");
     await db.patch(run.threadId, { updatedAt: Date.now() });
-    return db.patch(runId, { status: "cancelled", cancelledBy: OWNER, finishedAt: Date.now() });
+    return db.patch(runId, { status: "cancelled", waiting: false, cancelledBy: OWNER, finishedAt: Date.now() });
   },
 });
 

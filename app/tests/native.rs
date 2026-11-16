@@ -1474,3 +1474,31 @@ fn tool_plugin_uninstalled_falls_back_to_line() {
     app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_none());
     assert!(support::text(app.doc(), "tool-message").contains("Created a task in Todo"));
 }
+
+#[test]
+fn permission_row_and_needs_you_group() {
+    let store = Store::new();
+    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    app.wait(|doc| support::text(doc, "permission-fixture").contains("NEEDS YOU"));
+    let text = support::text(app.doc(), "permission-fixture");
+    assert!(text.contains("Run commandAllow onceReject"));
+    let map = support::text(app.doc(), "chat-map");
+    assert!(map.find("NEEDS YOU").unwrap() < map.find("RUNNING").unwrap());
+    assert!(map.find("Waiting thread").unwrap() < map.find("Running thread").unwrap());
+    let allow = app
+        .doc()
+        .inner()
+        .query_selector("#permission-fixture button")
+        .unwrap()
+        .unwrap();
+    click(app.doc_mut(), allow);
+    app.wait(|doc| !support::text(doc, "permission-fixture").contains("NEEDS YOU"));
+    assert!(support::text(app.doc(), "permission-fixture").contains("Run commandAllow once"));
+    assert!(
+        app.doc()
+            .inner()
+            .query_selector("#permission-fixture button")
+            .unwrap()
+            .is_none()
+    );
+}

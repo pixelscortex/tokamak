@@ -10,7 +10,7 @@ export async function interruptStale(db: DatabaseWriter<Model>, runs: Doc<Model,
   for (const run of runs) {
     if (run.status !== "running" || now - (run.updatedAt ?? run.startedAt) < STALE_AFTER_MS) continue;
 
-    await db.patch(run._id, { status: "error", error: "Interrupted", finishedAt: now });
+    await db.patch(run._id, { status: "error", waiting: false, error: "Interrupted", finishedAt: now });
     await interruptResponse(db, run, "error", "Interrupted");
     await db.patch(run.threadId, { updatedAt: now });
   }

@@ -9,7 +9,7 @@ export function useMap(chat: ChatState, close: () => void) {
   const rows = createMemo(() => {
     const matches = (chat.threads.data() ?? []).filter(thread => thread.title.toLowerCase().includes(query().trim().toLowerCase()));
     const recent = matches.sort((a, b) => b.updatedAt - a.updatedAt);
-    return [...recent.filter(thread => chat.runs()[thread._id]), ...recent.filter(thread => !chat.runs()[thread._id])];
+    return recent.sort((a, b) => mapGroup(chat, a._id) - mapGroup(chat, b._id));
   });
   const index = () => Math.max(0, rows().findIndex(thread => thread._id === selected()));
 
@@ -79,4 +79,9 @@ function arrowDirection(key: string) {
   if (key === "ArrowDown") return 1;
   if (key === "ArrowUp") return -1;
   return 0;
+}
+
+export function mapGroup(chat: ChatState, threadId: string) {
+  const run = chat.runs()[threadId];
+  return run?.waiting ? 0 : run ? 1 : 2;
 }

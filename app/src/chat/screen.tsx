@@ -13,6 +13,7 @@ import { useDrafts } from "./use-drafts";
 export function Chat(props: { loader: PluginLoader; pathname: string; chat: ChatState }) {
   const [mapOpen, setMapOpen] = createSignal(false);
   const map = useMap(props.chat, closeMap);
+  let pickPermission: ((index: number) => boolean) | undefined;
   let copyReply: (() => Promise<void>) | undefined;
   const composer = useDrafts(props.chat);
   const busy = () => Boolean(props.chat.active() || composer.sending());
@@ -43,6 +44,8 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
       }
     } else if (mapOpen()) {
       map.keydown(event);
+    } else if (!composer.draft() && /^[1-4]$/.test(key) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.repeat && pickPermission?.(Number(key) - 1)) {
+      event.preventDefault();
     } else stopRun(event);
   }
 
@@ -70,7 +73,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
     class="flex min-h-0 min-w-0 flex-1 justify-center px-6 pb-6">
     <div class={`flex min-h-0 w-[560px] max-w-full flex-col gap-4 ${mapOpen() ? "pt-6" : ""}`}>
       <Show when={mapOpen()}><MapHeader /></Show>
-      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView loader={props.loader} chat={props.chat} threadId={threadId} hidden={mapOpen()} onCopyReady={copy => { copyReply = copy; }} />}</Show>
+      <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView loader={props.loader} chat={props.chat} threadId={threadId} hidden={mapOpen()} onPermissionReady={pick => { pickPermission = pick; }} onCopyReady={copy => { copyReply = copy; }} />}</Show>
       <Show when={props.chat.error() ?? props.chat.threads.error()?.message}>{(error: Accessor<string>) => <p role="alert" class="m-0 text-text-2">{error()}</p>}</Show>
       {/* Retire the focused native editor only while the row editor owns focus. */}
       <Show when={map.editing() !== "rename"}>

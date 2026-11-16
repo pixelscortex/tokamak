@@ -38,7 +38,7 @@ export const start = mutation({
     await db.patch(threadId, { title, updatedAt: Date.now() });
     return { runId, messageId, model, ...(backend ? { backend } : {}), history: [
       ...history.filter(message => message.status === "complete").map(message => ({
-        role: message.role, content: message.parts.map(part => part.type === "text" ? part.text : part.type === "plan" ? `[plan: ${part.entries.map(entry => entry.content).join("; ")}]` : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`).join(""),
+        role: message.role, content: message.parts.map(part => part.type === "text" ? part.text : part.type === "plan" ? `[plan: ${part.entries.map(entry => entry.content).join("; ")}]` : part.type === "permission" ? `[permission: ${part.title} (${part.status})]` : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`).join(""),
       })),
       { role: "user" as const, content: text },
     ] };
@@ -82,7 +82,7 @@ export const update = mutation({
       ...(error === undefined ? {} : { error: boundedError(error) }),
     });
     await db.patch(run.threadId, { updatedAt: Date.now() });
-    if (outcome) await db.patch(runId, { status: outcome, finishedAt: Date.now() });
+    if (outcome) await db.patch(runId, { status: outcome, waiting: false, finishedAt: Date.now() });
     return outcome ?? "running";
   },
 });

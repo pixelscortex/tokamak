@@ -30,7 +30,7 @@ All functions use one argument object. Wire names and results:
 | --- | --- | --- | --- |
 | Query | `chat/threads:list` | `{}` | `Thread[]`, newest updated first |
 | Query | `chat/messages:list` | `{threadId}` | `Message[]`, oldest first |
-| Query | `chat/runs:running` | `{}` | `{runId, threadId, model}[]`, all running runs |
+| Query | `chat/runs:running` | `{}` | `{runId, threadId, model, waiting}[]`, all running runs |
 | Query | `chat/runs:active` | `{threadId}` | `Run \| null` |
 | Mutation | `chat/threads:create` | `{title?: string}` | thread ID |
 | Mutation | `chat/threads:rename` | `{threadId, title: string}` | `null` |
@@ -39,6 +39,7 @@ All functions use one argument object. Wire names and results:
 | Mutation | `chat/threads:setModel` | `{threadId, model: string}` | `null` |
 | Mutation | `chat/threads:remove` | `{threadId}` | `null` |
 | Mutation | `chat/runs:recover` | `{}` | `null` |
+| Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null` |
 | Mutation | `chat/runs:cancel` | `{runId}` | `null` |
 | Action | `chat/chat:send` | `{threadId, text: string}` | `{runId, messageId, status: "done" \| "error" \| "cancelled"}` |
 
@@ -170,5 +171,15 @@ replaces the message's single plan part. Other updates, including thoughts, are 
 Normal completion and token/turn limits finish successfully (limits append a
 short note); refusals persist `Agent refused`. Cancellation stops the agent and
 settles running tools with `error:"cancelled"`. Authentication errors while
-opening suggest signing in to the agent in a terminal. Permission requests are
-answered cancelled and append a short note until the permission UI is implemented.
+opening suggest signing in to the agent in a terminal. Permission requests flush text and persist an inline `permission` part with the request
+and call IDs, title, options, and `pending`, `answered`, `expired`, or `cancelled`
+status. The run sets `waiting` while polling for an answer; heartbeats continue.
+Only the run starter or thread owner may answer, and the first valid option wins.
+Answers record `optionId` and `answeredBy`. These mutations are not plugin exports.
+After 30 minutes the request expires and ACP receives cancelled; stopping a run
+cancels its pending permission, and stale recovery expires it.
+
+Map groups waiting threads under NEEDS YOU above RUNNING. Permission options appear
+inline with allow options first. With an empty composer, 1–4 answers the latest
+pending request. Answered rows show the chosen option dimmed; expired and cancelled
+rows show their status.

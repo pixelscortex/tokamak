@@ -1,6 +1,7 @@
 import type { ActionContext, Id } from "@tokamak/sdk";
 import { api } from "./_generated/api";
 import { streamBuffer } from "./stream-buffer";
+import { waitForPermission } from "./permission-wait";
 import { acpEvents } from "./acp-events";
 
 // Keep the most recent history within the byte budget, without splitting Unicode.
@@ -60,8 +61,10 @@ export async function acpSend(ctx: ActionContext, args: { threadId: Id<"threads"
       const event = next.value;
       if (event.type === "update") await update(event.update);
       if (event.type === "permission") {
-        await ctx.acp.respond({ requestId: event.requestId, optionId: null });
-        buffer.append("\n[Agent permission request cancelled.]\n");
+        await waitForPermission(ctx, runId, messageId, {
+          type: "permission", requestId: event.requestId, callId: String(event.toolCall.toolCallId ?? ""),
+          title: String(event.toolCall.title ?? "Permission requested"), options: event.options, status: "pending",
+        }, buffer);
       }
       if (event.type !== "done") continue;
 

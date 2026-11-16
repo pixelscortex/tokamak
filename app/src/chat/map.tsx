@@ -1,3 +1,4 @@
+import { mapGroup } from "./use-map";
 import { For, Show } from "solid-js";
 import { Textarea } from "@tokamak/ui/components";
 import { Icon } from "@tokamak/ui";
@@ -22,8 +23,8 @@ export function Map(props: { chat: ChatState; map: MapState }) {
   return <>
     <div id="chat-map" role="listbox" aria-label="Threads" class="order-2 min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <For each={props.map.rows()}>{(thread, index) => <>
-        <Show when={index() === 0 || Boolean(props.chat.runs()[thread._id]) !== Boolean(props.chat.runs()[props.map.rows()[index() - 1]!._id])}>
-          <h2 class="m-0 pb-2 pt-5 font-label text-[9px] font-normal leading-4 tracking-[0.08em] text-text-3">{props.chat.runs()[thread._id] ? "RUNNING" : "RECENT"}</h2>
+        <Show when={index() === 0 || mapGroup(props.chat, thread._id) !== mapGroup(props.chat, props.map.rows()[index() - 1]!._id)}>
+          <h2 class="m-0 pb-2 pt-5 font-label text-[9px] font-normal leading-4 tracking-[0.08em] text-text-3">{["NEEDS YOU", "RUNNING", "RECENT"][mapGroup(props.chat, thread._id)]}</h2>
         </Show>
         <div role="option" aria-selected={props.map.index() === index()} data-thread={thread._id}
           onClick={() => { if (!props.map.editing()) props.map.open(thread); }}

@@ -7,7 +7,9 @@ import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { ArgsOf, Event, Request } from "@tokamak/sdk";
 import type { PluginLoader, SlotContribution } from "@tokamak/runtime/plugins";
 import { Message } from "../src/chat/message";
-import type { Message as ChatMessage } from "../src/chat/use-chat";
+import { Map } from "../src/chat/map";
+import { useMap } from "../src/chat/use-map";
+import type { ChatState, Message as ChatMessage } from "../src/chat/use-chat";
 import { Markdown } from "../src/chat/markdown";
 import { api } from "../dist/tests/todo/backend/_legacyApi";
 
@@ -59,6 +61,7 @@ function Trace() {
   return (
     <div>
       <ToolMessage />
+      <PermissionFixture />
       <div id="markdown"><Markdown text={markdown()} /></div>
       <p id="trace">{JSON.stringify(trace())}</p>
       <p id="first-titles">{JSON.stringify(firstTitles())}</p>
@@ -83,4 +86,20 @@ function ToolMessage() {
   const message = { _id: "message-one", role: "assistant", status: "complete", parts: [{ type: "text", text: "Before tool" }, part, { type: "text", text: "After tool" }] } as ChatMessage;
 
   return <div id="tool-message"><Message loader={loader} threadId="thread-one" message={message} /></div>;
+}
+
+function PermissionFixture() {
+  const [part, setPart] = createSignal({ type: "permission" as const, requestId: "permission-one", callId: "call-one", title: "Run command",
+    options: [{ optionId: "no", name: "Reject", kind: "reject_once" }, { optionId: "yes", name: "Allow once", kind: "allow_once" }],
+    status: "pending" as "pending" | "answered", optionId: undefined as string | undefined });
+  const chat = {
+    threads: { data: () => [{ _id: "running", title: "Running thread", updatedAt: 2 }, { _id: "waiting", title: "Waiting thread", updatedAt: 1 }], loading: () => false },
+    runs: () => ({ waiting: { waiting: part().status === "pending" }, running: { waiting: false } }),
+  } as unknown as ChatState;
+  const map = useMap(chat, () => {});
+  const message = () => ({ _id: "permission-message", role: "assistant", status: "streaming", parts: [part()] }) as ChatMessage;
+  return <div id="permission-fixture">
+    <Message loader={{} as PluginLoader} threadId="waiting" message={message()} onAnswer={(_, optionId) => setPart(before => ({ ...before, status: "answered", optionId }))} />
+    <Map chat={chat} map={map} />
+  </div>;
 }

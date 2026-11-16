@@ -1,3 +1,4 @@
+import { permissionPart } from "./permission-part";
 import { v, type Infer } from "@tokamak/sdk";
 
 const toolCompletion = {
@@ -15,7 +16,7 @@ export const planPart = v.object({
   type: v.literal("plan"),
   entries: v.array(v.object({ content: v.string(), status: v.string(), priority: v.string() })),
 });
-export type Part = Infer<typeof textPart> | Infer<typeof toolPart> | Infer<typeof planPart>;
+export type Part = Infer<typeof textPart> | Infer<typeof toolPart> | Infer<typeof planPart> | Infer<typeof permissionPart>;
 export type ToolPart = Infer<typeof toolPart>;
 
 export const toolUpdate = v.object({
@@ -46,7 +47,9 @@ export function boundedError(error: string): string {
 }
 
 export function interruptTools(parts: Part[], error: string) {
-  return parts.map(part => part.type === "tool" && part.status === "running"
+  return parts.map(part => part.type === "permission" && part.status === "pending"
+    ? { ...part, status: error === "cancelled" ? "cancelled" as const : "expired" as const }
+    : part.type === "tool" && part.status === "running"
     ? { ...part, status: "error" as const, error } : part);
 }
 

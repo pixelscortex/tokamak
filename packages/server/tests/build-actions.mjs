@@ -45,9 +45,24 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
         : { exports: "./api.ts", provides: ["chat.tools"], consumes: ["chat.tools"], permissions: ["net:localhost", "net:loopback.tkm.test", "net:private.tkm.test", "net:metadata.tkm.test", "net:mapped.tkm.test", "net:held.tkm.test"] }),
     })} })] };
 `);
+    if (id === "chat") {
+      const permissions = join(path, "backend/permissions.ts");
+      await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
+      const recovery = join(path, "backend/recovery.ts");
+      await writeFile(recovery, (await readFile(recovery, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200"));
+    }
     if (id === "chat") await writeFile(join(path, "backend/testing.ts"), `
 import { v } from "@tokamak/sdk";
 import { mutation } from "./_functions";
+export const identities = mutation({
+  args: { runId: v.id("runs"), starter: v.string(), owner: v.string() },
+  handler: async ({ db }, { runId, starter, owner }) => {
+    const run = await db.get(runId);
+    await db.patch(runId, { startedBy: starter });
+    await db.patch(run!.threadId, { ownerId: owner });
+    return null;
+  },
+});
 export const age = mutation({
   args: { runId: v.id("runs") },
   handler: ({ db }, { runId }) => db.patch(runId, { startedAt: Date.now() - 61_000, updatedAt: Date.now() - 61_000 }),
@@ -57,7 +72,11 @@ export const age = mutation({
       cwd: workspace, stdout: "inherit", stderr: "inherit",
     });
     if (await child.exited !== 0) throw new Error(`Public plugin build failed: ${id}`);
-    if (id === "chat") assert.ok(!JSON.parse(await readFile(join(path, "dist/manifest.json"), "utf8")).publicFunctions.includes("threads:setBackend"));
+    if (id === "chat") {
+      const exported = JSON.parse(await readFile(join(path, "dist/manifest.json"), "utf8")).publicFunctions;
+      assert.ok(!exported.includes("threads:setBackend"));
+      assert.ok(!exported.some(name => name.startsWith("permissions:")));
+    }
     for (const name of ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");
   }

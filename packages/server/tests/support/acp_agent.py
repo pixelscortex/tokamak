@@ -59,7 +59,7 @@ for line in sys.stdin:
             update(sessionUpdate='agent_message_chunk', content=dict(type='image', data='ignored'))
             if mode == 'permission':
                 pending = request
-                send(dict(id='permission', method='session/request_permission', params=dict(sessionId='session', toolCall=dict(toolCallId='call', title='Run command'), options=[dict(optionId='yes', name='Allow once', kind='allow_once')])))
+                send(dict(id='permission', method='session/request_permission', params=dict(sessionId='session', toolCall=dict(toolCallId='call', title='Run command'), options=[dict(optionId='no', name='Reject', kind='reject_once'), dict(optionId='yes', name='Allow once', kind='allow_once')])))
                 continue
             response(request, dict(stopReason=mode if mode in ['refusal', 'cancelled', 'max_tokens', 'max_turn_requests'] else 'end_turn'))
             continue
@@ -86,7 +86,7 @@ for line in sys.stdin:
             sys.exit(9)
         if text in ['permission', 'cancel', 'ignore-cancel']:
             pending = request
-            send(dict(id='permission', method='session/request_permission', params=dict(sessionId='session', toolCall=dict(toolCallId='call', title='Run command'), options=[dict(optionId='yes', name='Allow once', kind='allow_once')])))
+            send(dict(id='permission', method='session/request_permission', params=dict(sessionId='session', toolCall=dict(toolCallId='call', title='Run command'), options=[dict(optionId='no', name='Reject', kind='reject_once'), dict(optionId='yes', name='Allow once', kind='allow_once')])))
         else:
             send(dict(method='session/update', params=dict(sessionId='session', update=dict(sessionUpdate='agent_message_chunk', content=dict(type='text', text='hello')))))
             response(request, dict(stopReason='end_turn'))
@@ -98,6 +98,8 @@ for line in sys.stdin:
     elif request.get('id') == 'permission':
         outcome = request['result']['outcome']
         cancelled = outcome['outcome'] == 'cancelled'
+        if pending['params']['prompt'][0]['text'] == 'chat:permission':
+            send(dict(method='session/update', params=dict(sessionId='session', update=dict(sessionUpdate='agent_message_chunk', content=dict(type='text', text=json.dumps(outcome))))))
         if cancelled and pending['params']['prompt'][0]['text'] == 'chat:permission':
             response(pending, dict(stopReason='end_turn'))
         if not cancelled:

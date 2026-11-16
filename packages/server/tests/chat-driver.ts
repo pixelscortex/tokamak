@@ -42,7 +42,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     const stored = (await client.query(api.threads.list, {}))[0]!.backend;
     assert.ok(stored?.kind === "acp" && stored.sessionId === "session");
     // The fake recognizes only exact prompts: a history prefix on a restored turn fails these checks.
-    for (const reason of ["max_tokens", "max_turn_requests", "refusal", "cancelled", "permission", "crash"]) {
+    for (const reason of ["max_tokens", "max_turn_requests", "refusal", "cancelled", "crash"]) {
       assert.equal((await send(`chat:${reason}`)).status, reason === "refusal" || reason === "crash" ? "error" : reason === "cancelled" ? "cancelled" : "done");
       const last = (await messages()).at(-1)!;
       if (reason === "refusal") assert.equal(last.error, "Agent refused");
@@ -50,8 +50,51 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
         const tool = last.parts.find(part => part.type === "tool");
         assert.deepEqual(tool && { status: tool.status, error: tool.error }, { status: "error", error: reason === "cancelled" ? "cancelled" : last.error });
       }
-      if (reason.startsWith("max_") || reason === "permission")
-        assert.match(last.parts.filter(part => part.type === "text").map(part => part.text).join(""), reason === "permission" ? /permission request cancelled/ : /limit/);
+      if (reason.startsWith("max_"))
+        assert.match(last.parts.filter(part => part.type === "text").map(part => part.text).join(""), /limit/);
+    }
+    for (const mode of ["allow", "timeout", "cancel", "recovery"]) {
+      const pendingPermission = send("chat:permission");
+      await until(async () => (await messages()).at(-1)?.parts.some(part => part.type === "permission" && part.status === "pending") ?? false);
+      const message = (await messages()).at(-1)!;
+      const part = message.parts.find(part => part.type === "permission")!;
+      assert.ok(part.type === "permission");
+      assert.equal(part.status, "pending");
+      assert.equal(message.parts[message.parts.indexOf(part) - 1]!.type, "text", "text flushed before permission");
+      const run = (await client.query(api.runs.active, { threadId }))!;
+      assert.equal((await client.query(api.runs.running, {})).find(item => item.runId === run._id)!.waiting, true);
+      const args = { messageId: message._id, requestId: part.requestId, optionId: "yes" };
+      if (mode === "allow") {
+        await assert.rejects(client.mutation(api.permissions.answer, { ...args, optionId: "invalid" }), /Unknown permission option/);
+        await client.mutation(api.testing.identities, { runId: run._id, starter: "someone", owner: "someone" });
+        await assert.rejects(client.mutation(api.permissions.answer, args), /Only the run starter or thread owner/);
+        // Owner can answer even when another member started the run.
+        await client.mutation(api.testing.identities, { runId: run._id, starter: "someone", owner: "owner" });
+        const answers = await Promise.allSettled([client.mutation(api.permissions.answer, args), client.mutation(api.permissions.answer, args)]);
+        assert.deepEqual(answers.map(answer => answer.status), ["fulfilled", "rejected"]);
+      } else if (mode === "cancel") {
+        await client.mutation(api.runs.cancel, { runId: run._id });
+      } else if (mode === "recovery") {
+        await client.mutation(api.testing.age, { runId: run._id });
+        await client.mutation(api.runs.recover, {});
+      } else {
+        await wait(500);
+        assert.ok((await client.query(api.runs.active, { threadId }))!.updatedAt! > run.updatedAt!, "heartbeats continue while waiting");
+      }
+      const result = await pendingPermission;
+      assert.equal(result.status, mode === "cancel" || mode === "recovery" ? "cancelled" : "done");
+      const settled = (await messages()).at(-1)!;
+      const permission = settled.parts.find(part => part.type === "permission")!;
+      assert.ok(permission.type === "permission");
+      assert.equal(permission.status, mode === "allow" ? "answered" : mode === "cancel" ? "cancelled" : "expired");
+      if (mode === "allow") {
+        assert.deepEqual([permission.optionId, permission.answeredBy], ["yes", "owner"]);
+        assert.match(JSON.stringify(settled.parts), /selected/);
+      }
+      if (mode === "timeout") assert.match(JSON.stringify(settled.parts), /cancelled/);
+      if (mode === "recovery") assert.equal(settled.error, "Interrupted");
+      assert.equal((await client.query(api.runs.running, {})).some(item => item.runId === run._id), false);
+      await assert.rejects(client.mutation(api.permissions.answer, args));
     }
     const pending = send("chat:cancel");
     await until(async () => (await messages()).at(-1)?.parts.some(part => part.type === "tool" && part.status === "running") ?? false);

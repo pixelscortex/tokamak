@@ -5,6 +5,7 @@ import { createApi, type ApiFromModule, type FunctionReference, type Id } from "
 export const api = createApi<{
   threads: ApiFromModule<typeof import("./backend/threads")>;
   messages: ApiFromModule<typeof import("./backend/messages")>;
+  permissions: Pick<ApiFromModule<typeof import("./backend/permissions")>, "answer">;
   runs: ApiFromModule<typeof import("./backend/runs")>;
   agents: { list: FunctionReference<"action", {}, { id: string; title: string }[]> };
   chat: {
