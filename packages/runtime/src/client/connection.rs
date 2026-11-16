@@ -235,6 +235,10 @@ pub async fn serve(
             }
         }
     }
+    finish_connection(socket, output).await;
+}
+
+async fn finish_connection(mut socket: Socket, output: Option<HostSender>) {
     if let Some(sender) = output
         && !sender.is_document_retired()
     {

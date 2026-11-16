@@ -17,6 +17,7 @@ use std::{
     },
     time::Duration,
 };
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -97,86 +98,76 @@ fn acceptance(scenario: &str) {
 
 fn acceptance_over(scenario: &str, websocket: bool) {
     let installation = Installation::with_chat(scenario.starts_with("chat-"));
-    if scenario == "chat-backend-missing" {
-        std::fs::remove_dir_all(installation.0.join("acp")).unwrap();
-    }
-    if matches!(scenario, "chat-acp" | "chat-turn-token") {
-        if scenario == "chat-turn-token" {
-            let path = installation.0.join("b/manifest.json");
-            let mut manifest: Value =
-                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-            manifest["plugin"]["depends"]["chat"] = json!("*");
-            std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-        }
-        let directory = installation.0.parent().unwrap();
-        let agent = directory.join("agent.py");
-        std::fs::write(
-            &agent,
-            include_str!("../../../plugins/acp/tests/fake-agent.py"),
-        )
-        .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        std::fs::write(
-            directory.join(".env.local"),
-            format!("ACP_TEST_AGENT={}\n", agent.display()),
-        )
-        .unwrap();
-    }
-    tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
+    prepare_action_scenario(scenario, &installation);
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
         .block_on(async {
             tokio::time::timeout(Duration::from_secs(30), async {
-                let pool = Arc::new(Pool::new(PoolConfig {
-                    workers: 1,
-                    limits: Limits {
-                        // Only the contract probe asserts the deliberately short
-                        // budget; other scenarios retain the normal transaction
-                        // budget under concurrent regression-test load.
-                        call_timeout: if scenario == "contract" { Duration::from_millis(150) } else { Limits::default().call_timeout },
-                        load_timeout: Duration::from_secs(5),
-                        ..Limits::default()
-                    }, ..PoolConfig::default()
-                }).unwrap());
+                let pool = Arc::new(
+                    Pool::new(PoolConfig {
+                        workers: 1,
+                        limits: Limits {
+                            // Only the contract probe asserts the deliberately short
+                            // budget; other scenarios retain the normal transaction
+                            // budget under concurrent regression-test load.
+                            call_timeout: if scenario == "contract" {
+                                Duration::from_millis(150)
+                            } else {
+                                Limits::default().call_timeout
+                            },
+                            load_timeout: Duration::from_secs(5),
+                            ..Limits::default()
+                        },
+                        ..PoolConfig::default()
+                    })
+                    .unwrap(),
+                );
                 let database = Database::open(Storage::Memory).await.unwrap();
-                let server = Arc::new(Server::load_plugins(database, pool, &installation.0).await.unwrap());
+                let server = Arc::new(
+                    Server::load_plugins(database, pool, &installation.0)
+                        .await
+                        .unwrap(),
+                );
                 let (url, serving) = if websocket {
                     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                     let url = format!("ws://{}/ws", listener.local_addr().unwrap());
                     let (stop, shutdown) = tokio::sync::oneshot::channel();
-                    let serving = tokio::spawn(server::websocket::serve(listener, server.clone(), async { let _ = shutdown.await; }));
+                    let serving =
+                        tokio::spawn(server::websocket::serve(listener, server.clone(), async {
+                            let _ = shutdown.await;
+                        }));
                     (url, Some((stop, serving)))
-                } else { (String::new(), None) };
+                } else {
+                    (String::new(), None)
+                };
                 let mut session = server.connect().await.unwrap();
-                let mut child = Child(Command::new("proto")
-                    .args(["run", "bun", "--"]).arg(installation.0.join("driver.mjs")).arg(scenario).arg(url)
-                    .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
-                    .spawn().unwrap());
+                let mut child = Child(
+                    Command::new("proto")
+                        .args(["run", "bun", "--"])
+                        .arg(installation.0.join("driver.mjs"))
+                        .arg(scenario)
+                        .arg(url)
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::inherit())
+                        .spawn()
+                        .unwrap(),
+                );
                 let mut input = child.0.stdin.take().unwrap();
                 let output = child.0.stdout.take().unwrap();
                 let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
                 let reader = std::thread::spawn(move || {
-                    for line in BufReader::new(output).lines() {
-                        if send.send(line.unwrap()).is_err() { break; }
-                    }
+                    forward_driver_stdout(output, send);
                 });
-                loop {
-                    tokio::select! {
-                        line = receive.recv() => {
-                            let message: Value = serde_json::from_str(&line.expect("SDK exited before acceptance completed; see failing assertion above")).unwrap();
-                            if message["done"] == true { break; }
-                            session.sender().request(serde_json::from_value(message["request"].clone()).unwrap()).unwrap();
-                        }
-                        event = session.recv() => {
-                            let event: Event = event.unwrap().unwrap();
-                            writeln!(input, "{}", json!({"event":event})).unwrap();
-                        }
-                    }
-                }
+                relay_action_driver(&mut session, &mut input, &mut receive).await;
                 drop(input);
-                assert!(child.0.wait().unwrap().success(), "SDK acceptance failed: {scenario}");
+                assert!(
+                    child.0.wait().unwrap().success(),
+                    "SDK acceptance failed: {scenario}"
+                );
                 reader.join().unwrap();
                 drop(session);
                 if let Some((stop, serving)) = serving {
@@ -184,7 +175,9 @@ fn acceptance_over(scenario: &str, websocket: bool) {
                     serving.await.unwrap().unwrap();
                 }
                 server.close().await.unwrap();
-            }).await.expect("TKM-45 action acceptance timeout");
+            })
+            .await
+            .expect("TKM-45 action acceptance timeout");
         });
 }
 
@@ -486,54 +479,49 @@ fn web_fix_network_checks_resolved_addresses_and_canonical_hosts() {
 // not be what finally closes a response abandoned without JS cleanup.
 #[test]
 fn web_fix_cancel_disconnects_with_worker_idle() {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let bundle = Arc::new(Bundle::new(artifacts()["a/bundle.js"].clone(), None).unwrap());
-    tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap().block_on(async {
-        tokio::time::timeout(Duration::from_secs(5), async {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let url = format!("http://{}/hold", listener.local_addr().unwrap());
-            let (ready, ready_rx) = tokio::sync::oneshot::channel();
-            let (closed, closed_rx) = tokio::sync::oneshot::channel();
-            let mock = tokio::spawn(async move {
-                let mut ready = Some(ready);
-                let mut closed = Some(closed);
-                let mut peers = Vec::new();
-                for _ in 0..2 {
-                    let (mut peer, _) = listener.accept().await.unwrap();
-                    let mut headers = Vec::new();
-                    while !headers.ends_with(b"\r\n\r\n") {
-                        headers.push(peer.read_u8().await.unwrap());
-                        assert!(headers.len() < 8192);
-                    }
-                    if headers.starts_with(b"GET /ready ") {
-                        peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").await.unwrap();
-                        ready.take().unwrap().send(()).unwrap();
-                    } else {
-                        peer.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nfirst\r\n").await.unwrap();
-                        let closed = closed.take().unwrap();
-                        peers.push(tokio::spawn(async move {
-                            let mut byte = [0];
-                            let result = peer.read(&mut byte).await;
-                            assert!(matches!(result, Ok(0) | Err(_)), "expected disconnect, got {result:?}");
-                            closed.send(()).unwrap();
-                        }));
-                    }
-                }
-                for peer in peers { peer.await.unwrap(); }
-            });
-            let pool = Pool::new_actions(PoolConfig { workers: 1, ..PoolConfig::default() }).unwrap();
-            let mut ops = OpRegistry::new();
-            ops.set_network_permissions(vec!["net:127.0.0.1".into()]);
-            let pending = pool.submit(bundle, "invoke", json!({"name":"web:abandoned", "args":{"url":url,"mode":"cancel"}}), Arc::new(ops)).unwrap();
-            ready_rx.await.unwrap();
-            pool.cancel_actions();
-            assert_eq!(pending.await.unwrap_err(), engine::Error::Closed);
-            tokio::time::timeout(Duration::from_secs(2), closed_rx).await
-                .expect("HTTP stayed open after cancellation while worker idle").unwrap();
-            mock.await.unwrap();
-            drop(pool);
-        }).await.expect("cancelled action regression timeout");
-    });
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let url = format!("http://{}/hold", listener.local_addr().unwrap());
+                let (ready, ready_rx) = tokio::sync::oneshot::channel();
+                let (closed, closed_rx) = tokio::sync::oneshot::channel();
+                let mock = tokio::spawn(async move {
+                    serve_cancellation_peers(listener, ready, closed).await;
+                });
+                let pool = Pool::new_actions(PoolConfig {
+                    workers: 1,
+                    ..PoolConfig::default()
+                })
+                .unwrap();
+                let mut ops = OpRegistry::new();
+                ops.set_network_permissions(vec!["net:127.0.0.1".into()]);
+                let pending = pool
+                    .submit(
+                        bundle,
+                        "invoke",
+                        json!({"name":"web:abandoned", "args":{"url":url,"mode":"cancel"}}),
+                        Arc::new(ops),
+                    )
+                    .unwrap();
+                ready_rx.await.unwrap();
+                pool.cancel_actions();
+                assert_eq!(pending.await.unwrap_err(), engine::Error::Closed);
+                tokio::time::timeout(Duration::from_secs(2), closed_rx)
+                    .await
+                    .expect("HTTP stayed open after cancellation while worker idle")
+                    .unwrap();
+                mock.await.unwrap();
+                drop(pool);
+            })
+            .await
+            .expect("cancelled action regression timeout");
+        });
 }
 
 #[cfg(unix)]
@@ -565,35 +553,6 @@ fn chat_missing_backend_refuses_send_without_creating_run() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot() {
-    use futures_util::{SinkExt, StreamExt};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio_tungstenite::{
-        MaybeTlsStream, WebSocketStream,
-        tungstenite::{Message, client::IntoClientRequest},
-    };
-
-    async fn call(
-        socket: &mut WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
-        kind: &str,
-        name: &str,
-        args: Value,
-    ) -> Value {
-        socket
-            .send(Message::Text(
-                json!({"type":kind,"id":1,"name":name,"args":args})
-                    .to_string()
-                    .into(),
-            ))
-            .await
-            .unwrap();
-        let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        serde_json::from_str(message.to_text().unwrap()).unwrap()
-    }
-
     let installation = Installation::new();
     let env = installation.0.parent().unwrap().join(".env.local");
     std::fs::write(&env, "ACTION_TEST_SECRET=action-secret-do-not-echo\n").unwrap();
@@ -605,13 +564,7 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
             .unwrap(),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let mut request = format!("ws://{}/ws", listener.local_addr().unwrap())
-        .into_client_request()
-        .unwrap();
-    const OWNER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    request
-        .headers_mut()
-        .insert("authorization", format!("Bearer {OWNER}").parse().unwrap());
+    let request = owner_websocket_request(&listener);
     let (stop, shutdown) = tokio::sync::oneshot::channel();
     let serving = tokio::spawn(server::websocket::serve_with_access(
         listener,
@@ -620,16 +573,16 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
             let _ = shutdown.await;
         },
         Some(server::websocket::LocalAccess {
-            token: OWNER.into(),
+            token: ACTION_TEST_OWNER.into(),
             identity: json!({}),
         }),
     ));
     let (mut owner, _) = tokio_tungstenite::connect_async(request).await.unwrap();
     assert_eq!(
-        call(&mut owner, "query", "a/ops:messageError", json!({})).await["result"]["Ok"],
+        call_owner_function(&mut owner, "query", "a/ops:messageError", json!({})).await["result"]["Ok"],
         json!([{ "error":"failed: action-secret-do-not-echo", "text":"action-secret-do-not-echo" }])
     );
-    let caught = call(&mut owner, "action", "a/ops:caught", json!({})).await;
+    let caught = call_owner_function(&mut owner, "action", "a/ops:caught", json!({})).await;
     assert!(
         caught["result"]["Ok"]["error"]
             .as_str()
@@ -641,26 +594,10 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
 
     let barrier = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/", barrier.local_addr().unwrap());
-    let change = async {
-        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(5), barrier.accept())
-            .await
-            .unwrap()
-            .unwrap();
-        let mut request = Vec::new();
-        while !request.ends_with(b"\r\n\r\n") {
-            request.push(stream.read_u8().await.unwrap());
-            assert!(request.len() < 8192);
-        }
-        // The HTTP barrier proves the action has already captured its env.
-        std::fs::write(&env, "ACTION_TEST_SECRET=replacement-secret\n").unwrap();
-        stream
-            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-            .await
-            .unwrap();
-    };
+    let change = change_action_environment(barrier, &env);
     let (error, ()) = tokio::time::timeout(Duration::from_secs(10), async {
         tokio::join!(
-            call(
+            call_owner_function(
                 &mut owner,
                 "action",
                 "a/ops:delayedSecret",
@@ -689,3 +626,176 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
 fn chat_turn_token_rejects_another_plugin() {
     acceptance("chat-turn-token");
 }
+
+async fn call_owner_function(
+    socket: &mut WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
+    kind: &str,
+    name: &str,
+    args: Value,
+) -> Value {
+    use futures_util::{SinkExt, StreamExt};
+
+    use tokio_tungstenite::tungstenite::Message;
+    socket
+        .send(Message::Text(
+            json!({"type":kind,"id":1,"name":name,"args":args})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+    let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    serde_json::from_str(message.to_text().unwrap()).unwrap()
+}
+
+fn prepare_action_scenario(scenario: &str, installation: &Installation) {
+    if scenario == "chat-backend-missing" {
+        std::fs::remove_dir_all(installation.0.join("acp")).unwrap();
+    }
+    if matches!(scenario, "chat-acp" | "chat-turn-token") {
+        if scenario == "chat-turn-token" {
+            let path = installation.0.join("b/manifest.json");
+            let mut manifest: Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            manifest["plugin"]["depends"]["chat"] = json!("*");
+            std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        }
+        let directory = installation.0.parent().unwrap();
+        let agent = directory.join("agent.py");
+        std::fs::write(
+            &agent,
+            include_str!("../../../plugins/acp/tests/fake-agent.py"),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::fs::write(
+            directory.join(".env.local"),
+            format!("ACP_TEST_AGENT={}\n", agent.display()),
+        )
+        .unwrap();
+    }
+}
+
+async fn serve_cancellation_peers(
+    listener: tokio::net::TcpListener,
+    ready: tokio::sync::oneshot::Sender<()>,
+    closed: tokio::sync::oneshot::Sender<()>,
+) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut ready = Some(ready);
+    let mut closed = Some(closed);
+    let mut peers = Vec::new();
+    for _ in 0..2 {
+        let (mut peer, _) = listener.accept().await.unwrap();
+        let mut headers = Vec::new();
+        while !headers.ends_with(b"\r\n\r\n") {
+            headers.push(peer.read_u8().await.unwrap());
+            assert!(headers.len() < 8192);
+        }
+        if headers.starts_with(b"GET /ready ") {
+            peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+            ready.take().unwrap().send(()).unwrap();
+        } else {
+            peer.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nfirst\r\n")
+                .await
+                .unwrap();
+            let closed = closed.take().unwrap();
+            peers.push(tokio::spawn(async move {
+                let mut byte = [0];
+                let result = peer.read(&mut byte).await;
+                assert!(
+                    matches!(result, Ok(0) | Err(_)),
+                    "expected disconnect, got {result:?}"
+                );
+                closed.send(()).unwrap();
+            }));
+        }
+    }
+    for peer in peers {
+        peer.await.unwrap();
+    }
+}
+
+async fn relay_action_driver(
+    session: &mut server::Session,
+    input: &mut std::process::ChildStdin,
+    receive: &mut tokio::sync::mpsc::UnboundedReceiver<String>,
+) {
+    loop {
+        tokio::select! {
+            line = receive.recv() => {
+                let message: Value = serde_json::from_str(&line.expect("SDK exited before acceptance completed; see failing assertion above")).unwrap();
+                if message["done"] == true { break; }
+                session.sender().request(serde_json::from_value(message["request"].clone()).unwrap()).unwrap();
+            }
+            event = session.recv() => {
+                let event: Event = event.unwrap().unwrap();
+                writeln!(input, "{}", json!({"event":event})).unwrap();
+            }
+        }
+    }
+}
+
+fn change_action_environment(
+    barrier: tokio::net::TcpListener,
+    env: &std::path::Path,
+) -> impl std::future::Future<Output = ()> + '_ {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async move {
+        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(5), barrier.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            request.push(stream.read_u8().await.unwrap());
+            assert!(request.len() < 8192);
+        }
+        // The HTTP barrier proves the action has already captured its env.
+        std::fs::write(env, "ACTION_TEST_SECRET=replacement-secret\n").unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+    }
+}
+
+fn forward_driver_stdout(
+    output: std::process::ChildStdout,
+    send: tokio::sync::mpsc::UnboundedSender<String>,
+) {
+    for line in BufReader::new(output).lines() {
+        if send.send(line.unwrap()).is_err() {
+            break;
+        }
+    }
+}
+
+fn owner_websocket_request(
+    listener: &tokio::net::TcpListener,
+) -> tokio_tungstenite::tungstenite::handshake::client::Request {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut request = format!("ws://{}/ws", listener.local_addr().unwrap())
+        .into_client_request()
+        .unwrap();
+
+    request.headers_mut().insert(
+        "authorization",
+        format!("Bearer {ACTION_TEST_OWNER}").parse().unwrap(),
+    );
+
+    request
+}
+
+const ACTION_TEST_OWNER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

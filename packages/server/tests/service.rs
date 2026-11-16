@@ -233,29 +233,7 @@ fn equality_dependencies_skip_other_threads_and_track_moves_deletes_and_empty_re
         call(&mut writer, 13, "remove", json!({"id":id})).await;
         assert_eq!(probe.count("filtered"), 6);
         assert_eq!(update(&mut reader, 2).await, json!([]));
-        writer
-            .call(14, "probe:rollback", json!({"caught":false}))
-            .unwrap();
-        assert!(response(&mut writer, 14).await.is_err());
-        assert_eq!(
-            probe.count("filtered"),
-            6,
-            "rolled-back writes cannot invalidate"
-        );
-        call(
-            &mut writer,
-            15,
-            "insert",
-            json!({"table":"items","value":{
-                "thread":"C","body":"x".repeat(40000)
-            }}),
-        )
-        .await;
-        assert_eq!(
-            probe.count("filtered"),
-            8,
-            "oversized footprints safely fall back to whole table"
-        );
+        assert_rollback_and_footprint_invalidation(&mut writer, &probe).await;
         drop(reader);
         drop(writer);
         server.close().await.unwrap();
@@ -514,27 +492,7 @@ fn sdk_json_filter_order_and_document_metadata() {
             1,
             "missing is not null; field names are not SQL"
         );
-        let before = call(&mut s, 8, "get", json!({"id":a})).await;
-        call(&mut s, 9, "patch", json!({"id":a,"value":{"new":7}})).await;
-        let patched = call(&mut s, 10, "get", json!({"id":a})).await;
-        assert_eq!(patched["a.b"], rows[0]["a.b"]);
-        call(
-            &mut s,
-            11,
-            "replace",
-            json!({"id":a,"value":{"replacement":true}}),
-        )
-        .await;
-        assert_eq!(
-            call(&mut s, 12, "get", json!({"id":a})).await,
-            json!({"_id":a,"_creationTime":before["_creationTime"],"replacement":true})
-        );
-        call(&mut s, 13, "remove", json!({"id":a})).await;
-        assert_eq!(call(&mut s, 14, "get", json!({"id":a})).await, Json::Null);
-        assert_eq!(
-            call(&mut s, 15, "remove", json!({"id":a})).await,
-            Json::Null
-        );
+        assert_document_metadata_edits(&mut s, a, rows).await;
         server.close().await.unwrap();
     });
 }
@@ -834,83 +792,7 @@ fn whole_handler_conflict_retry_and_exhaustion() {
     run(async {
         for disk in [false, true] {
             for conflicts in [1, 3] {
-                let directory = disk.then(Disk::new);
-                let db = Database::open(directory.as_ref().map_or(Storage::Memory, Disk::storage))
-                    .await
-                    .unwrap();
-                let mut seed = db.begin().await.unwrap();
-                let mut ids = Vec::<Id>::new();
-                for _ in 0..3 {
-                    ids.push(seed.insert(&table("items"), fields(0)).await.unwrap());
-                }
-                seed.commit().await.unwrap();
-                let mut winners = Vec::new();
-                for i in 0..conflicts {
-                    let mut tx = db.begin().await.unwrap();
-                    tx.patch(&ids[i], fields(10)).await.unwrap();
-                    winners.push(tx);
-                }
-                let probe = Probe::default();
-                let mut barriers = VecDeque::new();
-                for _ in 0..conflicts {
-                    barriers.push_back(probe.pause("increment"));
-                }
-                let server = Server::load(db, probe.pool(), bundle()).await.unwrap();
-                let mut s = server.connect().await.unwrap();
-                s.call(
-                    1,
-                    "probe:increment",
-                    json!({"ids":ids.iter().map(ToString::to_string).collect::<Vec<_>>()}),
-                )
-                .unwrap();
-                for (i, winner) in winners.into_iter().enumerate() {
-                    let (arrived, resume) = barriers.pop_front().unwrap();
-                    let values = arrived.await.unwrap().unwrap();
-                    for j in 0..3 {
-                        assert_eq!(
-                            values[j],
-                            if j < i {
-                                11
-                            } else {
-                                1
-                            },
-                            "whole-handler snapshot must advance on replay"
-                        );
-                    }
-                    winner.commit().await.unwrap();
-                    resume.send(()).unwrap();
-                }
-                let result = response(&mut s, 1).await;
-                if conflicts == 1 {
-                    assert_eq!(result.unwrap(), json!([11, 1, 1]));
-                    assert_eq!(probe.count("increment"), 2);
-                    assert_eq!(
-                        call(&mut s, 2, "list", json!({"table":"audit"}))
-                            .await
-                            .as_array()
-                            .unwrap()
-                            .len(),
-                        1
-                    );
-                } else {
-                    assert!(
-                        result
-                            .unwrap_err()
-                            .contains("conflict retry limit exceeded")
-                    );
-                    assert_eq!(probe.count("increment"), 3);
-                    assert_eq!(
-                        call(&mut s, 2, "list", json!({"table":"audit"})).await,
-                        json!([])
-                    );
-                    for id in &ids {
-                        assert_eq!(
-                            call(&mut s, 3, "get", json!({"id":id.to_string()})).await["value"],
-                            10
-                        );
-                    }
-                }
-                server.close().await.unwrap();
+                assert_conflict_replay(disk, conflicts).await;
             }
         }
     });
@@ -962,4 +844,131 @@ fn timeout_and_abandoned_host_operations_do_not_leak_writes() {
         );
         server.close().await.unwrap();
     });
+}
+
+async fn assert_rollback_and_footprint_invalidation(writer: &mut server::Session, probe: &Probe) {
+    writer
+        .call(14, "probe:rollback", json!({"caught":false}))
+        .unwrap();
+    assert!(response(writer, 14).await.is_err());
+    assert_eq!(
+        probe.count("filtered"),
+        6,
+        "rolled-back writes cannot invalidate"
+    );
+    call(
+        writer,
+        15,
+        "insert",
+        json!({"table":"items","value":{
+            "thread":"C","body":"x".repeat(40000)
+        }}),
+    )
+    .await;
+    assert_eq!(
+        probe.count("filtered"),
+        8,
+        "oversized footprints safely fall back to whole table"
+    );
+}
+
+async fn assert_document_metadata_edits(s: &mut server::Session, a: Json, rows: Json) {
+    let before = call(s, 8, "get", json!({"id":a})).await;
+    call(s, 9, "patch", json!({"id":a,"value":{"new":7}})).await;
+    let patched = call(s, 10, "get", json!({"id":a})).await;
+    assert_eq!(patched["a.b"], rows[0]["a.b"]);
+    call(
+        s,
+        11,
+        "replace",
+        json!({"id":a,"value":{"replacement":true}}),
+    )
+    .await;
+    assert_eq!(
+        call(s, 12, "get", json!({"id":a})).await,
+        json!({"_id":a,"_creationTime":before["_creationTime"],"replacement":true})
+    );
+    call(s, 13, "remove", json!({"id":a})).await;
+    assert_eq!(call(s, 14, "get", json!({"id":a})).await, Json::Null);
+    assert_eq!(call(s, 15, "remove", json!({"id":a})).await, Json::Null);
+}
+
+async fn assert_conflict_replay(disk: bool, conflicts: usize) {
+    let directory = disk.then(Disk::new);
+    let db = Database::open(directory.as_ref().map_or(Storage::Memory, Disk::storage))
+        .await
+        .unwrap();
+    let mut seed = db.begin().await.unwrap();
+    let mut ids = Vec::<Id>::new();
+    for _ in 0..3 {
+        ids.push(seed.insert(&table("items"), fields(0)).await.unwrap());
+    }
+    seed.commit().await.unwrap();
+    let mut winners = Vec::new();
+    for id in ids.iter().take(conflicts) {
+        let mut tx = db.begin().await.unwrap();
+        tx.patch(id, fields(10)).await.unwrap();
+        winners.push(tx);
+    }
+    let probe = Probe::default();
+    let mut barriers = VecDeque::new();
+    for _ in 0..conflicts {
+        barriers.push_back(probe.pause("increment"));
+    }
+    let server = Server::load(db, probe.pool(), bundle()).await.unwrap();
+    let mut s = server.connect().await.unwrap();
+    s.call(
+        1,
+        "probe:increment",
+        json!({"ids":ids.iter().map(ToString::to_string).collect::<Vec<_>>()}),
+    )
+    .unwrap();
+    for (i, winner) in winners.into_iter().enumerate() {
+        let (arrived, resume) = barriers.pop_front().unwrap();
+        let values = arrived.await.unwrap().unwrap();
+        for j in 0..3 {
+            assert_eq!(
+                values[j],
+                if j < i {
+                    11
+                } else {
+                    1
+                },
+                "whole-handler snapshot must advance on replay"
+            );
+        }
+        winner.commit().await.unwrap();
+        resume.send(()).unwrap();
+    }
+    let result = response(&mut s, 1).await;
+    if conflicts == 1 {
+        assert_eq!(result.unwrap(), json!([11, 1, 1]));
+        assert_eq!(probe.count("increment"), 2);
+        assert_eq!(
+            call(&mut s, 2, "list", json!({"table":"audit"}))
+                .await
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+    } else {
+        assert!(
+            result
+                .unwrap_err()
+                .contains("conflict retry limit exceeded")
+        );
+        assert_eq!(probe.count("increment"), 3);
+        assert_eq!(
+            call(&mut s, 2, "list", json!({"table":"audit"})).await,
+            json!([])
+        );
+        for id in &ids {
+            assert_eq!(
+                call(&mut s, 3, "get", json!({"id":id.to_string()})).await["value"],
+                10
+            );
+        }
+    }
+    server.close().await.unwrap();
 }

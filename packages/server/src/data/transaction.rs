@@ -69,28 +69,6 @@ pub struct Transaction {
     catalog_changed: bool,
 }
 
-#[cfg(test)]
-mod keyed_tests {
-    use super::*;
-    use crate::data::{Database, Object, Storage};
-
-    #[tokio::test]
-    async fn kernel_keyed_create_is_not_an_upsert_and_duplicates_poison_the_transaction() {
-        let mut database = Database::open(Storage::Memory).await.unwrap();
-        let id = Id::new(Table::new("kernel_metadata").unwrap(), "stable").unwrap();
-        let mut tx = database.begin().await.unwrap();
-        assert_eq!(tx.insert_keyed(&id, Object::new()).await.unwrap(), id);
-        tx.commit().await.unwrap();
-        let mut tx = database.begin().await.unwrap();
-        assert!(tx.insert_keyed(&id, Object::new()).await.is_err());
-        assert!(tx.commit().await.is_err());
-        let mut tx = database.read_only().await.unwrap();
-        assert!(tx.get(&id).await.unwrap().is_some());
-        tx.commit().await.unwrap();
-        database.close().await.unwrap();
-    }
-}
-
 impl Transaction {
     pub(super) fn new(
         inner: StorageTransaction,
@@ -265,5 +243,27 @@ impl Transaction {
         })
         .await
         .map_err(|error| Error::Database(error.into()))?
+    }
+}
+
+#[cfg(test)]
+mod keyed_tests {
+    use super::*;
+    use crate::data::{Database, Object, Storage};
+
+    #[tokio::test]
+    async fn kernel_keyed_create_is_not_an_upsert_and_duplicates_poison_the_transaction() {
+        let mut database = Database::open(Storage::Memory).await.unwrap();
+        let id = Id::new(Table::new("kernel_metadata").unwrap(), "stable").unwrap();
+        let mut tx = database.begin().await.unwrap();
+        assert_eq!(tx.insert_keyed(&id, Object::new()).await.unwrap(), id);
+        tx.commit().await.unwrap();
+        let mut tx = database.begin().await.unwrap();
+        assert!(tx.insert_keyed(&id, Object::new()).await.is_err());
+        assert!(tx.commit().await.is_err());
+        let mut tx = database.read_only().await.unwrap();
+        assert!(tx.get(&id).await.unwrap().is_some());
+        tx.commit().await.unwrap();
+        database.close().await.unwrap();
     }
 }

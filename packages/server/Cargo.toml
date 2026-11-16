@@ -31,7 +31,7 @@ tower = { version = "0.5.3", default-features = false }
 # accepted TCP I/O, including HTTP peers that never finish upgrade headers.
 tokio-util = { version = "0.7.20", default-features = false, features = ["rt"] }
 serde = { version = "1.0.228", features = ["derive"] }
-ts-rs = { version = "12.0.1", optional = true, features = ["serde-json-impl"] }
+ts-rs = { version = "12.0.1", optional = true, default-features = false, features = ["serde-json-impl"] }
 # Direct storage/catalog/index APIs are pinned together: their contracts are internal.
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }

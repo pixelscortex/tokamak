@@ -1,5 +1,6 @@
 //! Anchor late Metal frames and place custom title bar buttons on macOS.
 use crate::{TrafficLights, WindowOptions};
+use objc2::{Encode, Encoding};
 
 pub(super) fn place_window_buttons(options: &WindowOptions, window: &dyn winit::window::Window) {
     if let (true, Some(at)) = (options.custom_titlebar, options.traffic_lights)
@@ -137,37 +138,8 @@ unsafe fn objc2_foundation_string(text: &std::ffi::CStr) -> *mut objc2::runtime:
 /// them), and AppKit lays the buttons out again on resize, focus and title
 /// bar changes, so the host re-applies this then.
 fn place_traffic_lights(window: &dyn winit::window::Window, at: TrafficLights) {
-    use objc2::{Encode, Encoding, msg_send, runtime::AnyObject};
+    use objc2::{msg_send, runtime::AnyObject};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug)]
-    struct Point {
-        x: f64,
-        y: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug)]
-    struct Size {
-        width: f64,
-        height: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy, Debug)]
-    struct Frame {
-        origin: Point,
-        size: Size,
-    }
-    // SAFETY: the layouts and names of CGPoint, CGSize and CGRect.
-    unsafe impl Encode for Point {
-        const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
-    }
-    unsafe impl Encode for Size {
-        const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
-    }
-    unsafe impl Encode for Frame {
-        const ENCODING: Encoding = Encoding::Struct("CGRect", &[Point::ENCODING, Size::ENCODING]);
-    }
 
     let Ok(handle) = window.window_handle() else {
         return;
@@ -226,4 +198,33 @@ fn place_traffic_lights(window: &dyn winit::window::Window, at: TrafficLights) {
             }
         }
     }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct Size {
+    width: f64,
+    height: f64,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct Frame {
+    origin: Point,
+    size: Size,
+}
+// SAFETY: the layouts and names of CGPoint, CGSize and CGRect.
+unsafe impl Encode for Point {
+    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+}
+unsafe impl Encode for Size {
+    const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
+}
+unsafe impl Encode for Frame {
+    const ENCODING: Encoding = Encoding::Struct("CGRect", &[Point::ENCODING, Size::ENCODING]);
 }

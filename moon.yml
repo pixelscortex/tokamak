@@ -22,6 +22,14 @@ tasks:
       - "!/.ci-results/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
+      - "$RUNNER_OS"
+      - "$RUNNER_ARCH"
+    options:
+      cache: true
+      outputStyle: stream
+  ci-rust:
+    command: "bash .ci/check.sh rust"
+    inputs: *ci-inputs
     options:
       cache: true
       outputStyle: stream
@@ -110,12 +118,11 @@ tasks:
     options:
       cache: false
   lint-rust:
-    deps: ["app:bundle", "lab:bundle", "render:bundle", "render:styles"]
-    command: "cargo clippy --locked --workspace --lib --bins --all-features"
+    deps: ["app:bundle", "app:test-fixtures", "lab:bundle", "render:bundle", "render:styles"]
+    command: "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
     options:
       cache: false
       mutex: "cargo"
-      allowFailure: true
   lint-ts:
     command: "proto run bun -- run oxlint packages app lab plugins"
     options:

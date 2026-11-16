@@ -199,15 +199,7 @@ impl ApplicationHandler for Host {
                 WindowEvent::Focused(_) | WindowEvent::ScaleFactorChanged { .. } => {
                     place_window_buttons(&self.2, &*view.window);
                 }
-                WindowEvent::SurfaceResized(_) => {
-                    #[cfg(target_os = "macos")]
-                    place_window_buttons(&self.2, &*view.window);
-                    if self.2.custom_titlebar {
-                        let full = view.window.fullscreen().is_some();
-                        let doc = view.downcast_doc_mut::<NativeDocument>();
-                        mark_fullscreen(&mut doc.inner_mut(), full);
-                    }
-                }
+                WindowEvent::SurfaceResized(_) => sync_window_resize(view, &self.2),
                 _ => {}
             }
         }
@@ -249,14 +241,7 @@ impl ApplicationHandler for Host {
                     "Tokamak GPU: {} ({:?}, {:?})",
                     info.name, info.backend, info.device_type
                 );
-                handle.device.set_device_lost_callback(|reason, message| {
-                    if reason != wgpu::DeviceLostReason::Destroyed {
-                        eprintln!(
-                            "Tokamak GPU device lost ({reason:?}): {message}. \
-                             Restart the application; no CPU fallback is available."
-                        );
-                    }
-                });
+                handle.device.set_device_lost_callback(report_device_loss);
                 // The Metal layer exists now (created by the renderer's
                 // resume); nothing reconfigures the properties set here.
                 #[cfg(target_os = "macos")]
@@ -384,5 +369,25 @@ impl ShellProvider for ImeShell {
         if let Err(error) = self.window.request_ime_update(ImeRequest::Update(data)) {
             eprintln!("IME cursor: {error}");
         }
+    }
+}
+
+fn report_device_loss(reason: wgpu::DeviceLostReason, message: String) {
+    if reason == wgpu::DeviceLostReason::Destroyed {
+        return;
+    }
+    eprintln!(
+        "Tokamak GPU device lost ({reason:?}): {message}. \
+        Restart the application; no CPU fallback is available."
+    );
+}
+
+fn sync_window_resize(view: &mut blitz_shell::View<VelloWindowRenderer>, options: &WindowOptions) {
+    #[cfg(target_os = "macos")]
+    place_window_buttons(options, &*view.window);
+    if options.custom_titlebar {
+        let full = view.window.fullscreen().is_some();
+        let doc = view.downcast_doc_mut::<NativeDocument>();
+        mark_fullscreen(&mut doc.inner_mut(), full);
     }
 }

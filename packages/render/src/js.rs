@@ -173,25 +173,7 @@ impl Js {
         block_on(world.context().async_with(async |ctx| {
             // Install before evaluating: initial Solid subscriptions must have
             // a valid destination, not wait for window creation or first input.
-            if let Some(send) = send {
-                ctx.globals()
-                    .set(
-                        "__tokamakSend",
-                        Function::new(
-                            ctx.clone(),
-                            move |callback_ctx: engine::rquickjs::Ctx<'_>, message: String| {
-                                send(message).map_err(|error| {
-                                    engine::rquickjs::Exception::throw_message(
-                                        &callback_ctx,
-                                        &error.0,
-                                    )
-                                })
-                            },
-                        )
-                        .map_err(|e| Error(e.to_string()))?,
-                    )
-                    .map_err(|e| Error(e.to_string()))?;
-            }
+            install_sender(&ctx, send)?;
             crate::capabilities::install(&ctx, host.clone())?;
             ctx.eval::<(), _>(bundle)
                 .map_err(|e| Error(CaughtError::from_error(&ctx, e).to_string()))?;
@@ -230,14 +212,7 @@ impl Js {
                 match block_on(self.0.runtime().execute_pending_job()) {
                     Ok(false) => return Ok(()),
                     Ok(true) => {}
-                    Err(error) => {
-                        return Err(block_on(error.0.async_with(async |ctx| {
-                            Error(
-                                CaughtError::from_error(&ctx, engine::rquickjs::Error::Exception)
-                                    .to_string(),
-                            )
-                        })));
-                    }
+                    Err(error) => return Err(pending_job_error(error.0)),
                 }
             }
             Err(Error("UI microtask budget exceeded".into()))
@@ -335,4 +310,30 @@ fn physical_memory() -> Option<usize> {
 #[cfg(not(unix))]
 fn physical_memory() -> Option<usize> {
     None
+}
+
+fn install_sender(ctx: &Ctx<'_>, send: Option<crate::MessageSender>) -> Result<()> {
+    let Some(send) = send else {
+        return Ok(());
+    };
+    ctx.globals()
+        .set(
+            "__tokamakSend",
+            Function::new(
+                ctx.clone(),
+                move |callback_ctx: Ctx<'_>, message: String| {
+                    send(message).map_err(|error| {
+                        engine::rquickjs::Exception::throw_message(&callback_ctx, &error.0)
+                    })
+                },
+            )
+            .map_err(|e| Error(e.to_string()))?,
+        )
+        .map_err(|e| Error(e.to_string()))
+}
+
+fn pending_job_error(context: engine::rquickjs::AsyncContext) -> Error {
+    block_on(context.async_with(async |ctx| {
+        Error(CaughtError::from_error(&ctx, engine::rquickjs::Error::Exception).to_string())
+    }))
 }
