@@ -75,10 +75,10 @@ export class ModuleRegistry {
     if (this.accepting) throw new Error("Nested module registration");
     this.accepting = name;
     try {
-      // Assets come from the owner's verified immutable installation, not user
-      // data. Function scope keeps declarations outside the shell's scope.
-      // Evaluation gets one capability for this module only. Never publish the
-      // registry itself: provide/remove/require are host administration APIs.
+      // This compatibility loader shares its context with its caller. Function
+      // scope and the facade below are not a security boundary. The experimental
+      // IsolatedModuleRegistry invokes this loader inside a native plugin realm.
+      // Registry administration is intentionally absent from the module API.
       let registering = true;
       let registered: Definition | undefined;
       const api = Object.freeze({
@@ -99,8 +99,8 @@ export class ModuleRegistry {
         },
       });
       try {
-        // The globalThis spelling supports existing artifacts, but its facade
-        // has the same scoped capability, never the host's global object.
+        // Preserve existing artifact registration syntax. Code can escape this
+        // facade to this context's real global; only a native realm isolates it.
         const globals = Object.create(globalThis);
         Object.defineProperties(globals, {
           __tokamakModules: { value: api },

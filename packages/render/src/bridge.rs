@@ -35,7 +35,22 @@ impl Bridge {
                 .js
                 .call("drain", None)?
                 .ok_or_else(|| Error("Missing mutation batch".into()))?;
-            self.tree.apply(doc, &mutations)
+            #[derive(Deserialize)]
+            struct Batch {
+                realm: String,
+                mutations: Value,
+            }
+            let batches: Vec<Batch> = serde_json::from_str(&mutations)
+                .map_err(|error| Error(format!("Invalid realm batch: {error}")))?;
+            for batch in batches {
+                if let Err(error) = self.tree.apply(doc, &batch.mutations.to_string()) {
+                    if batch.realm.is_empty() {
+                        return Err(error);
+                    }
+                    self.js.disable_realm(&batch.realm, &error);
+                }
+            }
+            Ok(())
         })();
         // drain consumes the JS batch. A rejected batch cannot safely resume:
         // the JS topology is ahead of Blitz. Freeze this generation and reject

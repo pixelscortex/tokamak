@@ -116,6 +116,7 @@ pub(crate) struct Js(
     QuickJsContext,
     Rc<HookState>,
     pub(crate) crate::capabilities::Host,
+    Rc<crate::realms::Realms>,
 );
 
 impl Js {
@@ -132,6 +133,7 @@ impl Js {
             block_on(QuickJsContext::new(window_heap_bytes())).map_err(|e| Error(e.to_string()))?;
         let hooks = Rc::new(HookState::default());
         let host = Rc::new(RefCell::new(None));
+        let realms = crate::realms::Realms::new(bundle);
         block_on(world.context().async_with(async |ctx| {
             ctx.store_userdata(hooks.clone())
                 .map_err(|e| Error(e.to_string()))
@@ -193,6 +195,7 @@ impl Js {
                     .map_err(|e| Error(e.to_string()))?;
             }
             crate::capabilities::install(&ctx, host.clone())?;
+            realms.install(&ctx, "")?;
             ctx.eval::<(), _>(bundle)
                 .map_err(|e| Error(CaughtError::from_error(&ctx, e).to_string()))?;
             let api: Object = ctx
@@ -208,7 +211,7 @@ impl Js {
         let expired = hooks.expired();
         world.set_deadline(None);
         hooks.deadline.set(None);
-        let js = Self(world, hooks, host);
+        let js = Self(world, hooks, host, realms);
         js.report_hook_errors();
         if expired {
             return Err(Error("UI initialization deadline exceeded".into()));
@@ -268,6 +271,14 @@ impl Js {
         }
     }
 
+    pub(crate) fn memory_used_bytes(&self) -> i64 {
+        block_on(self.0.runtime().memory_usage()).memory_used_size
+    }
+
+    pub(crate) fn disable_realm(&self, realm: &str, error: &Error) {
+        self.3.disable(realm, error);
+    }
+
     pub fn call(&self, method: &str, json: Option<&str>) -> Result<Option<String>> {
         self.arm(Some(Instant::now() + Duration::from_millis(250)));
         let result = block_on(self.0.context().async_with(async |ctx| {
@@ -280,10 +291,23 @@ impl Js {
                 }
                 let function: Function = api.get(method)?;
                 match method {
-                    "drain" => function.call::<_, String>(()).map(Some),
-                    "dispatch" => function
-                        .call::<_, String>((json.unwrap_or("null"),))
-                        .map(Some),
+                    "drain" => {
+                        let shell = function.call::<_, String>(())?;
+                        self.3
+                            .drain(shell)
+                            .map(Some)
+                            .map_err(|e| engine::rquickjs::Exception::throw_message(&ctx, &e.0))
+                    }
+                    "dispatch" => self
+                        .3
+                        .dispatch(json.unwrap_or("null"))
+                        .map(Some)
+                        .map_err(|e| engine::rquickjs::Exception::throw_message(&ctx, &e.0)),
+                    "host" => self
+                        .3
+                        .host_event(json.unwrap_or("null"))
+                        .map(|()| None)
+                        .map_err(|e| engine::rquickjs::Exception::throw_message(&ctx, &e.0)),
                     _ => function
                         .call::<_, ()>((json.unwrap_or("null"),))
                         .map(|()| None),
@@ -300,6 +324,7 @@ impl Drop for Js {
         if let Err(error) = self.call("dispose", None) {
             eprintln!("UI cleanup: {error}");
         }
+        block_on(self.0.context().async_with(async |_ctx| self.3.release()));
     }
 }
 

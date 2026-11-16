@@ -12,6 +12,7 @@ mod layout;
 #[cfg(target_os = "macos")]
 mod macos;
 mod mailbox;
+mod realms;
 mod shell;
 mod wire;
 pub use document::{MessageSender, NativeDocument};

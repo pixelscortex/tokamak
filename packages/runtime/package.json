@@ -6,7 +6,8 @@
     "./router": "./js/router.ts",
     "./plugins": "./js/plugins.ts",
     "./modules": "./js/modules.ts",
-    "./subscriptions": "./js/subscriptions.ts"
+    "./subscriptions": "./js/subscriptions.ts",
+    "./realms": "./js/realms.tsx"
   },
   "dependencies": {
     "@tanstack/history": "1.162.5",

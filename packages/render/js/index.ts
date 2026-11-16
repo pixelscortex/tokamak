@@ -92,6 +92,26 @@ let pending: Mutation[] = [];
 let dispose: (() => void) | undefined;
 let disposed = false;
 
+/** The experimental realm adapter installs a component portal hook. */
+let portal: ((component: Function, props: object) => NativeNode | undefined) | undefined;
+export function installComponentPortal(handler: NonNullable<typeof portal>): void {
+  portal = handler;
+}
+export const createComponent: typeof localComponent = (component, props) =>
+  portal?.(component, props as object) ?? localComponent(component, props);
+export function mountRealm(rootId: number, component: () => JSX.Element): () => void {
+  if (rootId < 0x80000000 || nodes.has(rootId)) throw new Error("Invalid realm mount");
+  const container = new NativeNode(rootId, false);
+  nodes.set(rootId, container);
+  return createRoot((stop) => {
+    insert(container, component());
+    return () => {
+      stop();
+      nodes.delete(rootId);
+    };
+  });
+}
+
 const subscriptions = new Map<string, Set<(value: unknown) => void>>();
 
 function allocate(text: boolean): NativeNode {
@@ -171,7 +191,7 @@ export const {
   setProp,
   effect,
   memo,
-  createComponent,
+  createComponent: localComponent,
   mergeProps,
   use,
 } = adapter;
@@ -288,7 +308,7 @@ interface Dispatch {
 }
 
 function dispatch(data: Dispatch) {
-  let prevented = false,
+  let prevented = !!(data as Dispatch & { prevented?: boolean }).prevented,
     stopped = false,
     error: string | null = null;
   const event: NativeEvent = {

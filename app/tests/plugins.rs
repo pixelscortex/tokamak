@@ -2058,3 +2058,186 @@ fn composer_extensions_load_reload_and_unload_without_forking_chat() {
     window.wait(|doc| doc.inner().get_element_by_id("mod-frame").is_some());
     assert_eq!(window.subscriptions_to("threads:list"), 1);
 }
+
+// Opt-in vertical slice: the production shell, real chat artifact, and a hostile
+// filler each execute in a different QuickJS context in the same window runtime.
+#[test]
+fn client_realm_slice_blocks_escapes_and_keeps_chat_sending() {
+    let scratch = Scratch::new();
+    scratch.build("isolation");
+    let host = Scratch::new();
+    host.build("isolation-host");
+    let service = Service::start(&scratch);
+    let start = Instant::now();
+    let mut window = Window::with_ui(
+        &service.directory,
+        &host.0.join("installation/isolation-host/dist"),
+    );
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("hostile-insert").is_some()
+            && support::attr(doc, "chat-screen", "data-thread-id").is_some()
+    });
+    eprintln!(
+        "realm slice shell + chat + hostile ready: {:?}",
+        start.elapsed()
+    );
+    eprintln!(
+        "realm slice ready heap: {} bytes",
+        window.doc().js_memory_used_bytes()
+    );
+    let generation = window.doc().generation();
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .host_event(generation, "isolation:probe", Value::Null)
+        .unwrap();
+    assert_eq!(support::text(window.doc(), "isolation-status"), "isolated");
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .host_event(generation, "isolation:echo", json!("first"))
+        .unwrap();
+    assert_eq!(support::text(window.doc(), "hostile-echo"), "first");
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .host_event(generation, "isolation:echo", json!("second"))
+        .unwrap();
+    assert_eq!(support::text(window.doc(), "hostile-echo"), "second");
+    assert_eq!(
+        support::attr(window.doc(), "hostile-echo", "data-mount").as_deref(),
+        Some("1")
+    );
+    window.click("id", "hostile-insert");
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "isolated text");
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    support::key(window.doc.as_mut().unwrap(), "Enter", false, false);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("chat-messages").is_some()
+            && support::text(doc, "chat-messages").contains("isolated text")
+    });
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .host_event(generation, "isolation:probe", Value::Null)
+        .unwrap();
+    assert_eq!(support::text(window.doc(), "isolation-status"), "isolated");
+    window.wait(|doc| {
+        doc.inner()
+            .query_selector("[data-status=error]")
+            .unwrap()
+            .is_some()
+    });
+    window.wait(|doc| {
+        doc.inner()
+            .query_selector(".chat-input-busy")
+            .unwrap()
+            .is_none()
+    });
+    window.click("id", "hostile-corrupt");
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-input")
+            .is_some()
+    );
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(blitz_traits::events::UiEvent::Ime(
+            blitz_traits::events::BlitzImeEvent::Commit("after rejection".into()),
+        ));
+    assert_eq!(
+        support::editor(window.doc(), "chat-input"),
+        "after rejection"
+    );
+    support::key(window.doc.as_mut().unwrap(), "Enter", false, false);
+    window.wait(|doc| support::text(doc, "chat-messages").contains("after rejection"));
+    assert!(!support::text(window.doc(), "app").contains("chat failed"));
+}
+
+// Same hostile fixture on the legacy shared-context loader is a positive control:
+// its globals, intrinsic patches and module-object mutation reach the shell.
+#[test]
+fn client_realm_shared_control_reproduces_escape() {
+    let scratch = Scratch::new();
+    scratch.build("isolation");
+    let host = Scratch::new();
+    host.build("isolation-host-shared");
+    let service = Service::start(&scratch);
+    let start = Instant::now();
+    let mut window = Window::with_ui(
+        &service.directory,
+        &host.0.join("installation/isolation-host/dist"),
+    );
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("hostile-insert").is_some()
+            && support::attr(doc, "chat-screen", "data-thread-id").is_some()
+    });
+    eprintln!(
+        "shared shell + chat + hostile ready: {:?}; heap: {} bytes",
+        start.elapsed(),
+        window.doc().js_memory_used_bytes()
+    );
+    let generation = window.doc().generation();
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .host_event(generation, "isolation:probe", Value::Null)
+        .unwrap();
+    assert_eq!(support::text(window.doc(), "isolation-status"), "ESCAPED");
+}
+
+// Explicit benchmark keeps network/build variance out of normal test assertions.
+// Two warmups, then five alternating window startups against the same server.
+#[test]
+#[ignore = "run explicitly with --ignored --nocapture for client realm cost"]
+fn client_realm_cost() {
+    let scratch = Scratch::new();
+    scratch.build("isolation");
+    let isolated = Scratch::new();
+    isolated.build("isolation-host");
+    let shared = Scratch::new();
+    shared.build("isolation-host-shared");
+    let service = Service::start(&scratch);
+    let mut times = [Vec::new(), Vec::new()];
+    let mut heaps = [Vec::new(), Vec::new()];
+    for sample in 0..6 {
+        for (mode, host) in [&shared, &isolated].into_iter().enumerate() {
+            let start = Instant::now();
+            let mut window = Window::with_ui(
+                &service.directory,
+                &host.0.join("installation/isolation-host/dist"),
+            );
+            window.wait(|doc| {
+                doc.inner().get_element_by_id("hostile-insert").is_some()
+                    && support::attr(doc, "chat-screen", "data-thread-id").is_some()
+            });
+            if sample > 0 {
+                times[mode].push(start.elapsed().as_micros());
+                heaps[mode].push(window.doc().js_memory_used_bytes());
+            }
+        }
+    }
+    for (mode, name) in ["shared", "isolated"].into_iter().enumerate() {
+        eprintln!(
+            "{name} samples: startup_us={:?}, heap_bytes={:?}",
+            times[mode], heaps[mode]
+        );
+        times[mode].sort();
+        heaps[mode].sort();
+        eprintln!(
+            "{name} median: startup_us={}, heap_bytes={}",
+            times[mode][2], heaps[mode][2]
+        );
+    }
+}

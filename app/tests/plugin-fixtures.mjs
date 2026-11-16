@@ -526,6 +526,91 @@ async function partsHost(root) {
   built(path);
 }
 
+async function isolationHost(root, shared = false) {
+  const entry = (await readFile(resolve(workspace, "app/src/main.tsx"), "utf8"))
+    .replace(
+      'import { Shell } from "./shell";',
+      `import { Shell } from ${JSON.stringify(resolve(workspace, "app/src/shell.tsx"))};`,
+    )
+    .replace(
+      'import { ModuleRegistry } from "@tokamak/runtime/modules";',
+      'import { ModuleRegistry } from "@tokamak/runtime/modules"; import { IsolatedModuleRegistry } from "@tokamak/runtime/realms";',
+    )
+    .replace(
+      "const modules = new ModuleRegistry();",
+      "const modules = __tokamakRealmName ? new ModuleRegistry() : new IsolatedModuleRegistry();",
+    )
+    .replace(
+      "installRealmEntry(modules);",
+      `
+      const baseline = [Array.prototype.map, Promise.prototype.then, JSON.parse];
+      installRealmEntry(modules);
+    `,
+    )
+    .replace(
+      "mount(() => <Shell modules={modules} />);",
+      `mount(() => {
+      const [status, setStatus] = solid.createSignal("pending");
+      const [echo, setEcho] = solid.createSignal<any>();
+      const [text, setText] = solid.createSignal("");
+      render.onHostEvent<string>("isolation:echo", (value) => {
+        setText(value);
+        setEcho(() => modules.require("@plugins/hostile/ui").Echo);
+      });
+      render.onHostEvent("isolation:probe", () => {
+        const safe = !(globalThis as any).hostile && !(globalThis as any).insideFill &&
+          Array.prototype.map === baseline[0] && Promise.prototype.then === baseline[1] && JSON.parse === baseline[2] &&
+          !Object.hasOwn(modules.require("@plugins/chat/ui").api as object, "poisoned");
+        setStatus(safe ? "isolated" : "ESCAPED");
+      });
+      return <><Shell modules={modules} /><span id="isolation-status">{status()}</span>
+        {echo() && render.createComponent(echo(), { get text() { return text(); } })}</>;
+    });`,
+    );
+  const path = await source(
+    root,
+    "isolation-host",
+    shared ? entry.replaceAll("new IsolatedModuleRegistry()", "new ModuleRegistry()") : entry,
+    { backend: false, standalone: true },
+  );
+  await writeFile(
+    resolve(path, "src/styles.css"),
+    (await readFile(resolve(workspace, "app/src/styles.css"), "utf8"))
+      .replaceAll("../../packages/ui/src/styles.css", resolve(workspace, "packages/ui/src/styles.css"))
+      .replaceAll("../../plugins/chat/src/client", resolve(workspace, "plugins/chat/src/client")),
+  );
+  built(path);
+}
+async function isolation(root) {
+  await installChat(root);
+  const acp = resolve(root, "acp/dist");
+  await cp(resolve(workspace, "plugins/acp/dist"), acp, { recursive: true });
+  const manifest = JSON.parse(await readFile(resolve(acp, "manifest.json"), "utf8"));
+  let worker = await readFile(resolve(acp, "worker.js"), "utf8");
+  for (const command of ["claude-agent-acp", "codex-acp", "gemini"])
+    worker = worker.replaceAll(`command: "${command}"`, 'command: "/usr/bin/false"');
+  await writeFile(resolve(acp, "worker.js"), worker);
+  manifest.hashes["worker.js"] = createHash("sha256").update(worker).digest("hex");
+  await writeFile(resolve(acp, "manifest.json"), JSON.stringify(manifest));
+
+  const path = await source(
+    root,
+    "hostile",
+    await readFile(resolve(workspace, "app/tests/fixtures/hostile/src/client/api.tsx"), "utf8"),
+  );
+  await writeFile(
+    resolve(path, "tsconfig.json"),
+    JSON.stringify({
+      extends: resolve(workspace, "app/tsconfig.json"),
+      compilerOptions: {
+        paths: { "@plugins/chat/ui": [resolve(workspace, "plugins/chat/src/client/api.ts")] },
+      },
+      include: ["src"],
+    }),
+  );
+  built(path);
+}
+
 if (import.meta.main) {
   const [root, action] = process.argv.slice(2);
   if (action === "reload") await library(root, "after");
@@ -550,7 +635,10 @@ if (import.meta.main) {
     }
     built(fixture);
     await cp(resolve(fixture, "dist"), resolve(root, "composer-mod/dist"), { recursive: true });
-  } else if (action === "parts-host") await partsHost(root);
+  } else if (action === "isolation-host") await isolationHost(root);
+  else if (action === "isolation-host-shared") await isolationHost(root, true);
+  else if (action === "isolation") await isolation(root);
+  else if (action === "parts-host") await partsHost(root);
   else if (action === "errors") await errors(root);
   else if (action === "lazy") await lazy(root);
   else if (action === "guards") await guards(root);

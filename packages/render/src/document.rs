@@ -89,6 +89,12 @@ impl NativeDocument {
         *self.bridge.js.2.borrow_mut() = Some(sender);
     }
 
+    /// QuickJS's current accounted heap for this window, including client realms.
+    /// Excludes Rust/Blitz allocations; useful for repeatable runtime diagnostics.
+    pub fn js_memory_used_bytes(&self) -> i64 {
+        self.bridge.js.memory_used_bytes()
+    }
+
     pub fn generation(&self) -> u64 {
         self.generation
     }

@@ -1,10 +1,11 @@
 import { For, Show, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
 import { createMessageConnection } from "@tokamak/render/connection";
-import { InProcessTransport, TokamakClient, type Event, type Request } from "@tokamak/sdk";
+import { functionName, InProcessTransport, TokamakClient, type Event, type Request } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
 import { RouterContext, createMemoryRouter, matchRoute } from "@tokamak/runtime/router";
 import { createPluginLoader, type SlotContribution } from "@tokamak/runtime/plugins";
 import { retainSubscriptions } from "@tokamak/runtime/subscriptions";
+import { IsolatedModuleRegistry } from "@tokamak/runtime/realms";
 import type { ModuleRegistry } from "@tokamak/runtime/modules";
 import { Contribution } from "./contribution";
 import { ShellFrame } from "./shell-frame";
@@ -28,6 +29,46 @@ export function Shell(props: { modules: ModuleRegistry }) {
       };
     },
   };
+  if (props.modules instanceof IsolatedModuleRegistry)
+    props.modules.setServices((plugin) => {
+      const allowed = (reference: { [functionName]: string }) => {
+        if (!reference[functionName].startsWith(`${plugin}/`)) throw new Error("Foreign server API");
+      };
+      return {
+        client: {
+          query(reference: any, args: any) {
+            allowed(reference);
+            return client.query(reference, args);
+          },
+          mutation(reference: any, args: any) {
+            allowed(reference);
+            return client.mutation(reference, args);
+          },
+          action(reference: any, args: any) {
+            allowed(reference);
+            return client.action(reference, args);
+          },
+          subscribe(reference: any, args: any, callback: any) {
+            allowed(reference);
+            return client.subscribe(reference, args, callback);
+          },
+        },
+        router: {
+          location: router.location,
+          navigate: router.navigate,
+          back: router.back,
+          forward: router.forward,
+          match: router.match,
+        },
+        shortcuts: shortcutAPI,
+        extensions: {
+          contributions: loader.contributions,
+          version: loader.version,
+          load: loader.load,
+          onError: loader.onError,
+        },
+      };
+    });
   const [error, setError] = createSignal<string>();
   void loader.connect().catch((cause) => setError(String(cause)));
   onCleanup(() => {
