@@ -1,0 +1,161 @@
+packages/server/tests/fixtures/worker/plugin.ts
+  s_a47f6807404cdc::t_57b4f8b9208a89 1
+  s_a47f6807404cdc::t_1f8be2aea99c2c 2
+packages/sdk/tools/worker.mjs
+  s_a47f6807404cdc::t_16ec0370de34cd 1-9,14-36,45,58,65-66,90-92,101,137
+  s_a47f6807404cdc::t_1f8be2aea99c2c 10-13,37-44,46-57,60-64,67-89,93-100,102-136
+  s_a47f6807404cdc::t_27ccea3840def7 59
+packages/server/tests/build-worker.mjs
+  s_a47f6807404cdc::t_57b4f8b9208a89 4-5,7-8,25-26,37
+  s_a47f6807404cdc::t_1f8be2aea99c2c 1-3,6,9-24,27-36,38-40
+packages/server/src/actions.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 142-145
+  s_a47f6807404cdc::t_12c7f6de95fc5c 131,141,146
+packages/server/src/host/worker/tests.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 9-126
+  s_a47f6807404cdc::t_dd6714044c27f8 1-3,5-8
+packages/build/src/descriptor.ts
+  s_a47f6807404cdc::t_53ab968210632e 67
+packages/server/tests/chat-acp-driver.ts
+  s_a47f6807404cdc::t_64876356249d3d 1-72,77-384
+  s_a47f6807404cdc::t_27ccea3840def7 73-76
+packages/server/tests/fixtures/worker/src/server/actions.ts
+  s_a47f6807404cdc::t_1f8be2aea99c2c 6-63
+  s_a47f6807404cdc::t_57b4f8b9208a89 2-5
+  s_a47f6807404cdc::t_e04b9f67e50aa4 1
+packages/server/tests/chat-driver.ts
+  s_a47f6807404cdc::t_64876356249d3d 3
+packages/server/tests/fixtures/worker/package.json
+  s_a47f6807404cdc::t_1f8be2aea99c2c 1-5
+packages/server/src/service/action_coordination.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 32,36-66,82-85
+  s_a47f6807404cdc::t_f624784eaebc06 29,86
+plugins/acp/src/server/agents/discovery.ts
+  s_a47f6807404cdc::t_1f8be2aea99c2c 14-61
+  s_a47f6807404cdc::t_9b858e913a220b 1-13,62-64
+packages/server/src/plugins/loading.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 92-102
+  s_a47f6807404cdc::t_16ec0370de34cd 89-91,103-104,111
+packages/sdk/tsconfig.worker.json
+  s_a47f6807404cdc::t_27ccea3840def7 1-5
+packages/server/src/plugins/assets.rs
+  s_a47f6807404cdc::t_16ec0370de34cd 48
+  s_a47f6807404cdc::t_1f8be2aea99c2c 45-47,149-154
+packages/server/src/host.rs
+  s_a47f6807404cdc::t_16ec0370de34cd 264
+plugins/acp/tests/client.test.ts
+  s_a47f6807404cdc::t_bc846a5fdd4804 17,19-20,33-35,38,40-46,60-62,70,74-77,84,95-98,101,104,111-112,121-122,130,235
+  s_a47f6807404cdc::t_a31c09c7937c63 18,22,134-232
+  s_a47f6807404cdc::t_1f8be2aea99c2c 1-10,12-16,21,23-32,36-37,39,47-59,63-69,71-73,78-83,85-94,99-100,102-103,105-110,113-120,123-129,131-133,233-234
+  s_a47f6807404cdc::t_bd08d011fd8cc0 11
+packages/sdk/src/plugin.ts
+  s_a47f6807404cdc::t_53ab968210632e 16,82,137-138
+packages/server/src/host/worker/process.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 3-244
+  s_a47f6807404cdc::t_99723bc6fce554 1-2
+packages/server/src/plugins/catalog.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 9-15
+  s_a47f6807404cdc::t_16ec0370de34cd 99
+packages/sdk/src/host.ts
+  s_a47f6807404cdc::t_53ab968210632e 60-66,68
+app/tests/plugins.rs
+  s_a47f6807404cdc::t_5ed178faf30471 1031,1152-1154,1200-1201
+  s_a47f6807404cdc::t_1f8be2aea99c2c 1231
+  s_a47f6807404cdc::t_bc846a5fdd4804 1202-1210,1220
+  s_a47f6807404cdc::t_8f665276b3a830 1030,1211-1219,1221-1224,1652
+packages/server/src/service/plugin_control.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 111-113
+  s_a47f6807404cdc::t_7c6209a8ef91b5 110,114
+packages/engine/src/bridge.rs
+  s_a47f6807404cdc::t_16ec0370de34cd 138-147
+packages/server/src/host/worker/mod.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 8-214
+  s_a47f6807404cdc::t_f52b8e677d8c87 1-2,5-7,215-217
+packages/server/tests/workers.rs
+  s_a47f6807404cdc::t_57b4f8b9208a89 1-2,15,19-21,41-42,49-51,57,65,72-74,84-85,97,108,110-112,142-143,146,180-183,187,189-194,201,206-209
+  s_a47f6807404cdc::t_1f8be2aea99c2c 3-14,16-18,22-40,43-48,52-56,58-64,66-71,75-83,93-95,99-107,109,114-141,144-145,147-179,184-186,188,195-199,202-205,215-337
+  s_a47f6807404cdc::t_e5c1fa27cf338e 86-92,96,113,200,211-214
+packages/sdk/tools/bundle.mjs
+  s_a47f6807404cdc::t_53ab968210632e 9-10,50,75,84,156,176,189-190
+  s_a47f6807404cdc::t_1f8be2aea99c2c 76-81,97,141-148
+packages/build/src/vite.ts
+  s_a47f6807404cdc::t_1f8be2aea99c2c 139-143
+  s_a47f6807404cdc::t_53ab968210632e 109,137-138,144-146
+packages/sdk/worker/entry.ts
+  s_a47f6807404cdc::t_1f8be2aea99c2c 10-13,22-23,27-31,40-41,46-51,57-58,60-63,84-88
+  s_a47f6807404cdc::t_27ccea3840def7 89,94-98
+  s_a47f6807404cdc::t_16ec0370de34cd 1-9,14-21,24-26,32-39,42-45,52-56,59,64-83,90-93
+  s_a47f6807404cdc::t_98482d72db1af4 99-102
+plugins/acp/package.json
+  s_a47f6807404cdc::t_9ade51353dce0d 7
+packages/server/tests/actions.rs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 113-119,125
+  s_a47f6807404cdc::t_64876356249d3d 120-122
+packages/server/tests/fixtures/worker/src/server/database.ts
+  s_a47f6807404cdc::t_1f8be2aea99c2c 2-6
+  s_a47f6807404cdc::t_57b4f8b9208a89 1
+packages/server/src/plugins/manifest.rs
+  s_a47f6807404cdc::t_16ec0370de34cd 36-37,61-68,72-73,170,173-174
+  s_a47f6807404cdc::t_1f8be2aea99c2c 165-169,171-172,191-197
+packages/server/src/plugins/mod.rs
+  s_a47f6807404cdc::t_16ec0370de34cd 30,40
+packages/server/tests/build-actions.mjs
+  s_a47f6807404cdc::t_1f8be2aea99c2c 41,82-86,89-91,93-99,154-157
+  s_a47f6807404cdc::t_bc846a5fdd4804 3,21
+  s_a47f6807404cdc::t_27ccea3840def7 79
+  s_a47f6807404cdc::t_64876356249d3d 78,80-81,87-88,92,100
+  s_a47f6807404cdc::t_958501c191dbd5 101-103,158-160,166
+plugins/acp/tests/fake-agent.py
+  s_a47f6807404cdc::t_64876356249d3d 1-113,115
+  s_a47f6807404cdc::t_5ed178faf30471 114
+plugins/acp/src/server/agents/client.ts
+  s_a47f6807404cdc::t_27ccea3840def7 113-115,133-134
+  s_a47f6807404cdc::t_5ed178faf30471 13,262,278
+  s_a47f6807404cdc::t_21a65054aff463 230-232
+  s_a47f6807404cdc::t_a31c09c7937c63 136-138,263,280-281,285,306-307
+  s_a47f6807404cdc::t_1f8be2aea99c2c 4-11,16-112,135,139-220,222,224,229,234-259,266-270,272,283-284,286-305,308-311
+  s_a47f6807404cdc::t_655a60322aa95a 1-3,12,14-15,116-132,221,223,225-228,233,260-261,264-265,271,273-277,279,282,312
+packages/sdk/moon.yml
+  s_a47f6807404cdc::t_27ccea3840def7 9-10,12
+plugins/acp/src/server/turn/acp.ts
+  s_a47f6807404cdc::t_1f8be2aea99c2c 61-63
+  s_a47f6807404cdc::t_c661ab05380514 1,37,64,66,68,70,86-87,107,110
+packages/sdk/src/functions.ts
+  s_a47f6807404cdc::t_53ab968210632e 43,106
+Cargo.lock
+  s_a47f6807404cdc::t_17d5f01f004197 1195-1196,1218,3132,3151,3177,5355,5412,6345,6469,6493,7234
+bun.lock
+  s_a47f6807404cdc::t_32fc8bfbd3aff6 96-98,125,173-174
+packages/sdk/package.json
+  s_a47f6807404cdc::t_cac2f8b738296f 17-19
+packages/sdk/src/index.ts
+  s_a47f6807404cdc::t_a1fb30bd54dbd8 51
+packages/server/src/host/worker/discovery.rs
+  s_a47f6807404cdc::t_a830379b16580c 1,3,30
+plugins/acp/plugin.ts
+  s_a47f6807404cdc::t_7a7a1691096422 8
+plugins/acp/src/server/agents/agents.ts
+  s_a47f6807404cdc::t_a24e6199c29e03 1-2,6,10
+plugins/acp/src/server/backend.ts
+  s_a47f6807404cdc::t_3b3ca4d024f9dd 2-3,7,13-14,16,36
+plugins/acp/src/server/tsconfig.json
+  s_a47f6807404cdc::t_5004242d84984b 3
+plugins/acp/src/server/turn/acp-turn.ts
+  s_a47f6807404cdc::t_0b119b3f869693 1,14-15,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5eaa80cd94e5a31688bdffd5f639901570ea9df",
+  "prompts": {},
+  "sessions": {
+    "s_a47f6807404cdc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e4ea-2500-7a01-aaf9-b58272ca14bf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
