@@ -1,0 +1,67 @@
+plugins/chat/backend/acp.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 4,64,67
+  s_142cd14cc0e4f7::t_0544ef44287f78 65-66
+plugins/chat/backend/permissions.ts
+  s_142cd14cc0e4f7::t_cab2a9033a75c5 48-64
+  s_142cd14cc0e4f7::t_274f9990d2f602 1-47,65-76
+plugins/chat/backend/recovery.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 13
+plugins/chat/backend/schema.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 4,16,24
+plugins/chat/backend/permission-part.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 1-9
+plugins/chat/backend/runs.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 9,29
+plugins/chat/client.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 8
+app/src/chat/use-map.ts
+  s_142cd14cc0e4f7::t_0544ef44287f78 12,83-86
+  s_142cd14cc0e4f7::t_6ebb1a7c8cc160 87
+app/src/chat/permission-part.tsx
+  s_142cd14cc0e4f7::t_0544ef44287f78 1-12,14-19
+  s_142cd14cc0e4f7::t_d1f7e82cae750d 13
+plugins/chat/backend/send.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 41,85
+app/tests/native.rs
+  s_142cd14cc0e4f7::t_ed846f0aeb55e4 1488-1503
+  s_142cd14cc0e4f7::t_d44e64d18e0997 1477-1487,1504
+app/src/chat/map.tsx
+  s_142cd14cc0e4f7::t_0544ef44287f78 1,26-27
+plugins/chat/backend/permission-wait.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 1-24,30-33,38-39
+  s_142cd14cc0e4f7::t_cab2a9033a75c5 25-29,34-37
+app/src/chat/message.tsx
+  s_142cd14cc0e4f7::t_0544ef44287f78 3,14,16,30-32
+app/src/chat/screen.tsx
+  s_142cd14cc0e4f7::t_0544ef44287f78 16,47-48,76
+app/src/chat/thread-view.tsx
+  s_142cd14cc0e4f7::t_0544ef44287f78 8,12,20-37,87
+plugins/chat/backend/parts.ts
+  s_142cd14cc0e4f7::t_274f9990d2f602 1,19,50-52
+app/tests/bridge.tsx
+  s_142cd14cc0e4f7::t_68efeda47c96e4 10-12,64,90-105
+packages/server/tests/build-actions.mjs
+  s_142cd14cc0e4f7::t_5c5688e5f9112a 48-53,57-65,75-79
+packages/server/tests/chat-driver.ts
+  s_142cd14cc0e4f7::t_ee33cfc56e37a6 45,53-97
+packages/server/tests/support/acp_agent.py
+  s_142cd14cc0e4f7::t_e29e3acbe59ac9 62,89,101-102
+plugins/chat/README.md
+  s_142cd14cc0e4f7::t_e33614a8ccb104 33,42,174-185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "19219767980528db0b95019109117136d531c5ee",
+  "prompts": {},
+  "sessions": {
+    "s_142cd14cc0e4f7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e1de-2187-7513-9f57-0a7e466264fc",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
