@@ -1,0 +1,24 @@
+packages/server/src/data/space.rs
+  s_6405c719b90da9::t_00ef9c509a0e55 53-55
+packages/server/src/main.rs
+  s_6405c719b90da9::t_00ef9c509a0e55 294-296
+packages/server/tests/members.rs
+  s_6405c719b90da9::t_00ef9c509a0e55 419-425,850-868
+  s_6405c719b90da9::t_c6b26f850c4ef4 869
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b49b9f603e946ffce94305d8afe8b6ef1453858",
+  "prompts": {},
+  "sessions": {
+    "s_6405c719b90da9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e232-0e5e-71e3-8148-c8b738d2a325",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
