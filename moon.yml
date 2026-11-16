@@ -40,6 +40,7 @@ tasks:
     # :test already runs per-crate integration/doc suites. Add feature-unified
     # unit/bin tests and the app's e2e suite omitted by its selected test script,
     # without repeating all server integration tests and their deadline waits.
+    deps: ["app:bundle", "app:fixture-bundle", "lab:bundle", "render:bundle", "render:styles"]
     script: >-
       cargo test --locked --workspace --all-features --lib --bins --jobs 2 -- --test-threads=1 &&
       cargo test --locked --package tokamak-app --test e2e --jobs 2 -- --test-threads=1
