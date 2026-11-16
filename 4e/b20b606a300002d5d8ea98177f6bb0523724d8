@@ -1,0 +1,42 @@
+packages/engine/tests/fixtures/README.md
+  s_d6581ae8dd0e12::t_2c972c373712a2 47-50
+.oxfmtrc.json
+  s_d6581ae8dd0e12::t_d89773d60d7e9e 16-22
+.git-blame-ignore-revs
+  s_d6581ae8dd0e12::t_2c972c373712a2 1-2
+moon.yml
+  s_d6581ae8dd0e12::t_46f5ae1faf54df 46
+  s_d6581ae8dd0e12::t_885ee9810f6877 38,42
+packages/server/demo/client.ts
+  s_d6581ae8dd0e12::t_2c972c373712a2 1
+README.md
+  s_d6581ae8dd0e12::t_46f5ae1faf54df 104-118
+packages/engine/src/web/surface.js
+  s_d6581ae8dd0e12::t_2c972c373712a2 35,441,535
+packages/render/js/index.ts
+  s_d6581ae8dd0e12::t_2c972c373712a2 142-143,152,156-160
+app/tests/query-lifecycle.ts
+  s_d6581ae8dd0e12::t_b3a118dcbeb545 18
+bun.lock
+  s_d6581ae8dd0e12::t_1b06ec71d21efc 38
+lab/package.json
+  s_d6581ae8dd0e12::t_812b7eafc5748b 6
+packages/server/tests/schema_indexes.rs
+  s_d6581ae8dd0e12::t_ce7988f4da3201 91-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4eb20b606a300002d5d8ea98177f6bb0523724d8",
+  "prompts": {},
+  "sessions": {
+    "s_d6581ae8dd0e12": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e3ae-1ce0-7ec0-8e63-8a485b260b22",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
