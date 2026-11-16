@@ -1,0 +1,29 @@
+.oxfmtrc.json
+  s_d6581ae8dd0e12::t_483ad065a6638a 1-17
+  s_d6581ae8dd0e12::t_99cc095294dd96 18-19
+.oxlintrc.json
+  s_d6581ae8dd0e12::t_483ad065a6638a 8-11,14-15,31-47
+  s_d6581ae8dd0e12::t_a93ede73f8f1a1 48-49
+bun.lock
+  s_d6581ae8dd0e12::t_5823763fadeb0a 13,304-341,1034-1035,1152-1153
+moon.yml
+  s_d6581ae8dd0e12::t_7f6b87c9864453 2-3,9-10,13,15,18,20,23-27,37-46,48,51,54
+package.json
+  s_d6581ae8dd0e12::t_45daca978b259a 15,18,34-35,37-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f41ef3ba6ffef3f0dfb59f8da2e8cc8a872eed8",
+  "prompts": {},
+  "sessions": {
+    "s_d6581ae8dd0e12": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e3ae-1ce0-7ec0-8e63-8a485b260b22",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
