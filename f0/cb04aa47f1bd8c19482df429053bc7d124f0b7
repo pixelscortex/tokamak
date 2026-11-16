@@ -1,0 +1,203 @@
+packages/server/src/plugins/manifest.rs
+  s_62b8e9393f055c::t_d00da0f4d25e56 16-19
+plugins/acp/src/server/backend.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-41
+app/tests/fixtures/record/src/server/record.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-15
+plugins/chat/src/client/lib/api.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-54
+plugins/acp/src/server/agents/agents.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-2,4-8
+plugins/chat/src/client/lib/state/use-backends.ts
+  s_62b8e9393f055c::t_34690bcf999da7 3
+app/tests/compiler.ts
+  s_62b8e9393f055c::t_63461d699489b5 30-31,170,178,187,212,215,303
+  s_62b8e9393f055c::t_f65ccd71da70c3 89,91
+packages/server/tests/build-actions.mjs
+  s_62b8e9393f055c::t_63461d699489b5 32-33,35,47-70,73-74,77,79,87
+  s_62b8e9393f055c::t_5ffc7e0c579927 34
+app/tests/build-fixture.ts
+  s_62b8e9393f055c::t_63461d699489b5 11,16-18,24-25,29,31
+  s_62b8e9393f055c::t_4e99f843b96fb7 5
+plugins/chat/README.md
+  s_62b8e9393f055c::t_8d22d7feec03dd 12,61-69
+app/tests/fixtures/record/src/server/api.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1
+app/tests/fixtures/record/src/server/_legacyApi.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1,3
+packages/build/README.md
+  s_62b8e9393f055c::t_8d22d7feec03dd 16
+plugins/acp/README.md
+  s_62b8e9393f055c::t_8d22d7feec03dd 72-83
+packages/server/tests/chat-driver.ts
+  s_62b8e9393f055c::t_63461d699489b5 4,42
+plugins/acp/src/server/events/acp-events.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 2-3
+  s_62b8e9393f055c::t_34690bcf999da7 1,4-64
+plugins/chat/src/server/_stream.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-3
+app/tests/fixtures/record/src/client/records.tsx
+  s_62b8e9393f055c::t_34690bcf999da7 1-80
+plugins/acp/src/server/turn/acp.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1,4-104
+  s_62b8e9393f055c::t_d00da0f4d25e56 2-3
+app/tests/fixtures/composer-mod/plugin.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1-2
+  s_62b8e9393f055c::t_10bcc34cbb3301 3-8
+plugins/acp/src/server/api.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1
+app/tests/fixtures/record/src/client/styles.css
+  s_62b8e9393f055c::t_8d22d7feec03dd 1-7
+.gitignore
+  s_62b8e9393f055c::t_8d22d7feec03dd 26,35
+packages/build/src/ui-build-config.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1,26,36
+app/tests/bridge.tsx
+  s_62b8e9393f055c::t_63461d699489b5 13
+plugins/chat/src/server/runs/chat.ts
+  s_62b8e9393f055c::t_63461d699489b5 5
+  s_62b8e9393f055c::t_34690bcf999da7 1-4,6-81
+packages/sdk/tests/plugin.test.mjs
+  s_62b8e9393f055c::t_49cf32eb00bdf5 57-60,73-85
+  s_62b8e9393f055c::t_095527aef8383a 86
+app/tests/fixtures/record/tsconfig.json
+  s_62b8e9393f055c::t_d00da0f4d25e56 1
+packages/server/tests/acp-driver.ts
+  s_62b8e9393f055c::t_63461d699489b5 9-11
+plugins/chat/src/server/messages/parts.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-91
+packages/build/src/exports.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1,13,21,61
+  s_62b8e9393f055c::t_109a229b6248cf 71-72,91,103
+plugins/chat/src/client/lib/state/use-chat.ts
+  s_62b8e9393f055c::t_34690bcf999da7 4
+plugins/acp/src/server/tsconfig.json
+  s_62b8e9393f055c::t_34690bcf999da7 1,3-5
+  s_62b8e9393f055c::t_63461d699489b5 2
+app/tests/plugin-fixtures.mjs
+  s_62b8e9393f055c::t_63461d699489b5 64
+plugins/acp/src/server/turn/acp-turn.ts
+  s_62b8e9393f055c::t_34690bcf999da7 2-3,6-71
+  s_62b8e9393f055c::t_d00da0f4d25e56 1,4-5
+app/tests/fixtures/record/src/server/schema.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-2
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_62b8e9393f055c::t_34690bcf999da7 2
+plugins/chat/src/server/permissions/permission-wait.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-50
+plugins/chat/tsconfig.json
+  s_62b8e9393f055c::t_d00da0f4d25e56 1
+plugins/chat/src/client/lib/state/use-run-recovery.ts
+  s_62b8e9393f055c::t_34690bcf999da7 4
+app/tests/local-server.ts
+  s_62b8e9393f055c::t_63461d699489b5 10
+app/moon.yml
+  s_62b8e9393f055c::t_8d22d7feec03dd 19
+plugins/chat/src/server/schema.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-47
+app/tests/fairness.tsx
+  s_62b8e9393f055c::t_63461d699489b5 9
+plugins/chat/src/server/backends/backend.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-8
+plugins/chat/src/server/runs/runs.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-92
+plugins/chat/src/shared/backends.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-26
+packages/sdk/tools/bundle.mjs
+  s_62b8e9393f055c::t_d00da0f4d25e56 18,60
+  s_62b8e9393f055c::t_b93591abaeb4e9 6,13-17,29-33,56-59,161-164
+  s_62b8e9393f055c::t_36499a96897cdf 165-166
+app/tests/fixtures/record/src/server/tsconfig.json
+  s_62b8e9393f055c::t_d00da0f4d25e56 1
+app/tests/fixtures/record/src/server/createRecord.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-7
+plugins/acp/plugin.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1-2
+  s_62b8e9393f055c::t_992bae28e6e78f 3-9
+app/tests/fixtures/record/plugin.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1-2
+  s_62b8e9393f055c::t_29c39455c9af87 3-8
+plugins/chat/src/server/messages/messages.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-12
+plugins/chat/src/server/backends/backends.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-24
+plugins/chat/src/server/runs/stream-buffer.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-83
+plugins/chat/src/server/threads/threads.ts
+  s_62b8e9393f055c::t_63461d699489b5 3
+  s_62b8e9393f055c::t_34690bcf999da7 1-2,4-92
+packages/build/src/vite.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 2,56,59,75-79,81-85,87-88,106,117,120,131,139
+  s_62b8e9393f055c::t_a596b87cca4521 19-23,25,149-151
+  s_62b8e9393f055c::t_62645513951d3e 24,57-58,86,133,156
+plugins/chat/src/server/messages/tool-parts.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-34
+plugins/chat/src/server/runs/send.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-163
+plugins/chat/src/server/messages/permission-part.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-22
+plugins/chat/src/server/_functions.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-27
+plugins/chat/src/server/tsconfig.json
+  s_62b8e9393f055c::t_63461d699489b5 2
+  s_62b8e9393f055c::t_34690bcf999da7 1,3-5
+packages/runtime/PLUGINS.md
+  s_62b8e9393f055c::t_8d22d7feec03dd 12-30,78
+plugins/chat/src/client/styles.css
+  s_62b8e9393f055c::t_8d22d7feec03dd 3-88
+  s_62b8e9393f055c::t_117d77aff19108 1-2
+packages/build/src/descriptor.ts
+  s_62b8e9393f055c::t_a596b87cca4521 1-13,15,17-25,27-32,36-66,68-71,73,75-122,124-136,138-143
+  s_62b8e9393f055c::t_312e7ae0ae97c4 14,16,26,33-35,67,72,74,123,137
+plugins/chat/src/server/permissions/permissions.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-91
+plugins/chat/src/server/runs/run-messages.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-18
+packages/build/src/client-surface.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1,20
+plugins/chat/src/server/api.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-11
+  s_62b8e9393f055c::t_d00da0f4d25e56 12-15
+  s_62b8e9393f055c::t_bf6e77a2c0f558 16
+packages/sdk/src/plugin.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 7-8,70-71
+  s_62b8e9393f055c::t_7f3140a7f43781 42-43,45,59
+  s_62b8e9393f055c::t_63461d699489b5 40-41,51-53,55-56,58
+  s_62b8e9393f055c::t_49cf32eb00bdf5 46-50
+  s_62b8e9393f055c::t_75e0583ce9b7ac 44,54,57,135-137
+plugins/chat/src/server/_references.ts
+  s_62b8e9393f055c::t_34690bcf999da7 1-9
+plugins/chat/plugin.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1-2
+  s_62b8e9393f055c::t_092b827b513900 3-9
+plugins/chat/src/client/api.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 15-17
+packages/build/src/contributions.ts
+  s_62b8e9393f055c::t_d00da0f4d25e56 1,18
+app/tests/fixtures/composer-mod/src/client/api.ts
+  s_62b8e9393f055c::t_787ed05cbf3489 1
+app/tests/fixtures/record/src/client/api.ts
+  s_62b8e9393f055c::t_d151140f998e23 1
+e2e/run.ts
+  s_62b8e9393f055c::t_377c579424791a 10
+packages/build/tests/descriptor.test.ts
+  s_62b8e9393f055c::t_42ef90536a7be1 1-53
+packages/build/tests/run.sh
+  s_62b8e9393f055c::t_e9669c70606cc3 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f0cb04aa47f1bd8c19482df429053bc7d124f0b7",
+  "prompts": {},
+  "sessions": {
+    "s_62b8e9393f055c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e447-4baa-7841-ab03-0e5ff1f24885",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
