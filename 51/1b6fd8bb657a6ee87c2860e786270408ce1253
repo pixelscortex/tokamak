@@ -1,0 +1,104 @@
+app/tests/fixtures/record/src/main.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 1
+lab/src/composer-states.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 27
+plugins/chat/README.md
+  s_7147fcd8cc388f::t_532ebf2042c275 1-50
+lab/src/select.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 25
+packages/server/tests/acp-driver.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 41,43-47,309,316
+lab/src/chat.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 62,187
+plugins/chat/package.json
+  s_7147fcd8cc388f::t_bce8fae49057ef 7
+plugins/acp/README.md
+  s_7147fcd8cc388f::t_532ebf2042c275 8-10,16-17
+  s_7147fcd8cc388f::t_86f68cff928c32 46-58
+plugins/chat/backend/threads.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 2-3,5,11,13-24,29
+plugins/chat/api.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 1
+app/src/chat/tool-part.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 1,4-5
+agents.example.toml
+  s_7147fcd8cc388f::t_532ebf2042c275 1-2,4-5,7-9,13-15
+plugins/chat/vite.config.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 11
+app/src/chat/backend-picker.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 23,185
+  s_7147fcd8cc388f::t_8bce4c89949ed2 45,71-76,127
+  s_7147fcd8cc388f::t_8f3fe501d44645 16-19,22
+app/src/chat/use-chat.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 39
+  s_7147fcd8cc388f::t_e5620b4ff434d8 22-32,84-88
+plugins/chat/backend/chat.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 2-3,16-21,23-25
+  s_7147fcd8cc388f::t_cb3170691c210e 22,31,33-39,41-51,53-56,60-61,63-67
+plugins/chat/backend/backends.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 1,5,7-14
+plugins/chat/backend/send.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 15
+  s_7147fcd8cc388f::t_69c5911372c172 61
+app/src/chat/chat-composer.tsx
+  s_7147fcd8cc388f::t_bce8fae49057ef 33-35,37-39
+  s_7147fcd8cc388f::t_aca96b13b90ec7 36
+plugins/chat/backend/backend.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 2-8
+app/src/chat/use-drafts.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 28-30
+  s_7147fcd8cc388f::t_6d0c17b726fc5b 27
+README.md
+  s_7147fcd8cc388f::t_532ebf2042c275 31,33-34,37-48,58,64,67-69,71
+  s_7147fcd8cc388f::t_a903b2a44d21a5 20
+lab/src/mocks.ts
+  s_7147fcd8cc388f::t_bce8fae49057ef 8-10
+app/README.md
+  s_7147fcd8cc388f::t_8c5aece4cbe784 69-70
+app/src/chat/composer-strip.tsx
+  s_7147fcd8cc388f::t_d3d1609f428983 7,12,42,48,51,54
+app/src/chat/message.tsx
+  s_7147fcd8cc388f::t_96fdd91ffa112c 77
+app/src/chat/screen.tsx
+  s_7147fcd8cc388f::t_6f9677f614587d 13
+app/src/chat/thread-view.tsx
+  s_7147fcd8cc388f::t_f7a5692a030aca 137,142
+app/src/shell.tsx
+  s_7147fcd8cc388f::t_ef6daccb48fdca 109
+app/tests/bridge.tsx
+  s_7147fcd8cc388f::t_56cdb91dd98b76 109
+app/tests/fixtures/record/vite.config.ts
+  s_7147fcd8cc388f::t_814bba0daf5f1a 3
+app/tests/native.rs
+  s_7147fcd8cc388f::t_390eae9d8e55ab 1113
+app/tests/plugins.rs
+  s_7147fcd8cc388f::t_002f076fd75dc0 1156,1623-1624,1706-1707,1737,1762,1764,1766-1767,1772,1775-1781
+packages/engine/WEB_APIS.md
+  s_7147fcd8cc388f::t_abcf61ff3b386e 110-111
+packages/server/tests/actions-driver.ts
+  s_7147fcd8cc388f::t_7c7732eb2e586b 104,115-116,138-139
+packages/server/tests/actions.rs
+  s_7147fcd8cc388f::t_f6941f28ae7d9e 125,546-547,556
+packages/server/tests/build-actions.mjs
+  s_7147fcd8cc388f::t_895e27cf1037cc 48,52
+packages/server/tests/chat-driver.ts
+  s_7147fcd8cc388f::t_d6d4a99c2ab43c 2,5,7-13,18-19,27-28,32-34,36-37,43-46,48-65,67-81,83-86,88,90-93,97-98,100-115,117,123-125,127-130,133-148,150-165,167-172,180-185
+plugins/chat/client.ts
+  s_7147fcd8cc388f::t_7cdf6cdc446049 8-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "511b6fd8bb657a6ee87c2860e786270408ce1253",
+  "prompts": {},
+  "sessions": {
+    "s_7147fcd8cc388f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e3f7-a133-7242-a8c6-7373caac421c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
