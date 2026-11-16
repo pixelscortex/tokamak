@@ -8,7 +8,10 @@ export const api = createApi<{
   messages: ApiFromModule<typeof import("./backend/messages")>;
   permissions: Pick<ApiFromModule<typeof import("./backend/permissions")>, "answer">;
   runs: ApiFromModule<typeof import("./backend/runs")>;
-  agents: { list: FunctionReference<"action", {}, { id: string; title: string }[]> };
+  agents: {
+    list: FunctionReference<"action", {}, { id: string; title: string }[]>;
+    checkFolder: FunctionReference<"action", { path: string }, null>;
+  };
   chat: {
     send: FunctionReference<"action", { threadId: Id<"threads">; text: string }, {
       runId: Id<"runs">;

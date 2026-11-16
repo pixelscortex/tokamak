@@ -21,6 +21,10 @@ async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
 export async function chatScenario(client: TokamakClient, scenario: string, configure: (url: string) => Promise<void>) {
   if (scenario === "chat-acp") {
     assert.deepEqual(await client.action(api.agents.list, {}), [{ id: "fake", title: "fake" }, { id: "fresh", title: "fresh" }]);
+    await client.action(api.agents.checkFolder, { path: "/tmp" });
+    for (const path of ["relative", "/tmp/tokamak-missing-folder/child", "/dev/null"]) {
+      await assert.rejects(client.action(api.agents.checkFolder, { path }), /ACP cwd/);
+    }
     const threadId = await client.mutation(api.threads.create, {});
     const backend = { kind: "acp" as const, agent: "fake", cwd: "/tmp" };
     await client.mutation(api.threads.setBackend, { threadId, backend });

@@ -39,6 +39,7 @@ export function BackendPicker(props: { chat: ChatState; onClose: () => void; onF
     setSaving(true);
     setError(undefined);
     try {
+      if (backend.kind === "acp") await props.chat.client.action(api.agents.checkFolder, { path: backend.cwd });
       await props.chat.client.mutation(api.threads.setBackend, { threadId: thread._id, backend });
       if (backend.kind === "acp") lastFolder = backend.cwd;
       if (alive) props.onClose();

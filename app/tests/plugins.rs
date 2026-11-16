@@ -1683,6 +1683,23 @@ fn chat_screen_socket_workflow() {
         type_text(&mut window, "relative");
         key(&mut window, Key::Named(NamedKey::Enter), false);
         assert!(support::text(window.doc(), "backend-picker").contains("absolute path"));
+        for path in ["/tmp/tokamak-missing-folder/child", "/dev/null"] {
+            key(&mut window, Key::Character("a".into()), true);
+            type_text(&mut window, path);
+            key(&mut window, Key::Named(NamedKey::Enter), false);
+            window.wait(|doc| {
+                support::text(doc, "backend-picker").contains("not an existing directory")
+            });
+            assert!(
+                !window
+                    .requests
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|request| request["name"] == "chat/threads:setBackend")
+            );
+            assert_eq!(support::text(window.doc(), "chat-messages"), history);
+        }
         key(&mut window, Key::Character("a".into()), true);
         let cwd = root().canonicalize().unwrap().to_str().unwrap().to_owned();
         type_text(&mut window, &cwd);

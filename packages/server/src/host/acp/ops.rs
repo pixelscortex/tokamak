@@ -29,6 +29,12 @@ pub(crate) fn register(
         ))
     })?;
 
+    ops.register_sync("acp.checkFolder", move |payload| {
+        authorize(granted)?;
+        session::validate_cwd(text(&payload, "path")?)?;
+        Ok(Value::Null)
+    })?;
+
     for name in ["open", "prompt", "next", "respond", "cancel", "close"] {
         let manager = manager.clone();
         let plugin = plugin.clone();
