@@ -40,7 +40,7 @@ All functions use one argument object. Wire names and results:
 | Action | `chat/agents:list` | `{}` | `{id, title}[]` |
 | Mutation | `chat/threads:setModel` | `{threadId, model: string}` | `null` |
 | Mutation | `chat/threads:remove` | `{threadId}` | `null` |
-| Mutation | `chat/runs:recover` | `{}` | `null` |
+| Action | `chat/runs:recover` | `{}` | `null` |
 | Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null` |
 | Mutation | `chat/runs:cancel` | `{runId}` | `null` |
 | Action | `chat/chat:send` | `{threadId, text: string}` | `{runId, messageId, status: "done" \| "error" \| "cancelled"}` |
@@ -54,7 +54,7 @@ Documents include `_id: string` and `_creationTime: number`, plus:
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
   `startedBy: string`, optional `cancelledBy: string`, `model`, `startedAt`,
-  optional `updatedAt` (heartbeat), `error`, and `finishedAt` (present for terminal runs).
+  optional `updatedAt` (heartbeat timestamp), `heartbeat` (counter), `error`, and `finishedAt` (present for terminal runs).
 
 ## Sharing
 
@@ -119,15 +119,17 @@ cross-plugin export surface; use `chat:send` to send messages.
 No scheduler, retries, or embedded UI is included. Host authentication and
 per-thread sharing govern access.
 There is no plugin initialization hook today. Recovery is
-lazy: `send.start` checks stale runs before admitting a new reply; the native
-client calls `runs:recover` on observing running runs and every 30 seconds while
-they exist (queries themselves remain read-only). Actions heartbeat every 10
-seconds, including while waiting for HTTP headers or silent streams. Runs with
-no update for 60 seconds become `error` with `error: "Interrupted"`; their response
-messages also become `error` with `error: "Interrupted"`. Legacy runs without
-`updatedAt` use `startedAt`. Terminal runs are left alone. Recovery uses ordinary
-transactions and does not resume or retry work; durable runs (TKM-103) remain out
-of scope.
+lazy: `chat.send` checks running runs before admitting a new reply; the native
+client calls `runs:recover` on observing running runs and schedules another check
+30 seconds after each recovery while they exist (queries remain read-only). Recovery snapshots heartbeat
+counters, waits 60 seconds using an action timer, then interrupts only runs whose
+counters have not advanced. Actions heartbeat every 10 seconds using timers,
+including while waiting for HTTP headers or silent streams. Wall-clock changes
+do not affect liveness. Abandoned runs, including legacy runs without a counter,
+become `error` with `error: "Interrupted"`; their response messages do too.
+Terminal runs are left alone. Recovery does not resume or retry work; durable
+runs (TKM-103) remain out of scope. Retrying a run with an old heartbeat timestamp
+waits for this observation window before admitting a new reply.
 
 Offline integration tests run in `cargo test -p server`. The ignored
 `chat_real_openrouter_smoke` test is a manual real-provider check with `.env.local`:

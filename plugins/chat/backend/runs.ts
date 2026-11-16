@@ -1,9 +1,9 @@
 import { canSee } from "./access";
 import { interruptResponse } from "./run-messages";
-import { interruptStale } from "./recovery";
+import { recoverRuns } from "./recovery";
 import { v, type Caller, type DatabaseReader } from "@tokamak/sdk";
 import type { Model } from "./_functions";
-import { mutation, query } from "./_functions";
+import { action, mutation, query } from "./_functions";
 
 export const running = query({
   guest: true,
@@ -53,15 +53,10 @@ export const cancel = mutation({
   },
 });
 
-// Queries stay read-only; clients sweep when observing running runs.
-export const recover = mutation({
+// Queries stay read-only; clients observe liveness through a timed action.
+export const recover = action({
   guest: true,
-  handler: async (ctx) => {
-    const { db } = ctx;
-    const visible = await visibleRuns(ctx);
-    await interruptStale(db, visible);
-    return null;
-  },
+  handler: (ctx): Promise<null> => recoverRuns(ctx),
 });
 
 async function visibleRuns(ctx: { db: DatabaseReader<Model>; caller: Caller }) {

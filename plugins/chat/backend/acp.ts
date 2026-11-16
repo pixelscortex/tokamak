@@ -66,6 +66,7 @@ export async function acpSend(ctx: ActionContext, args: { threadId: Id<"threads"
     return await finish("error", openingSession && /auth|sign.?in|log.?in/i.test(error)
       ? `Sign in to \`${backend.agent}\` in a terminal` : error);
   } finally {
+    buffer.close();
     closed = true;
     if (sessionId && !finished) await ctx.acp.cancel({ agent: backend.agent, sessionId }).catch(() => {});
   }

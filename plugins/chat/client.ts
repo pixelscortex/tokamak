@@ -1,13 +1,20 @@
 /** UI-safe references: importing the backend action's inferred type also imports
  * its Web API declarations, which do not belong in a native QuickJS UI. */
-import { createApi, type ApiFromModule, type FunctionReference, type Id } from "@tokamak/sdk";
+import { createApi, type ApiFromModule, type FunctionReference, type Id, type Doc } from "@tokamak/sdk";
+
+import type { Model } from "./backend/_functions";
 
 export const api = createApi<{
   threads: ApiFromModule<typeof import("./backend/threads")>;
   members: ApiFromModule<typeof import("./backend/members")>;
   messages: ApiFromModule<typeof import("./backend/messages")>;
   permissions: Pick<ApiFromModule<typeof import("./backend/permissions")>, "answer">;
-  runs: ApiFromModule<typeof import("./backend/runs")>;
+  runs: {
+    running: FunctionReference<"query", {}, { runId: Id<"runs">; threadId: Id<"threads">; model: string; waiting: boolean; startedBy: string; starterName: string }[]>;
+    active: FunctionReference<"query", { threadId: Id<"threads"> }, Doc<Model, "runs"> | null>;
+    cancel: FunctionReference<"mutation", { runId: Id<"runs"> }, null>;
+    recover: FunctionReference<"action", {}, null>;
+  };
   agents: {
     list: FunctionReference<"action", {}, { id: string; title: string }[]>;
     checkFolder: FunctionReference<"action", { path: string }, null>;

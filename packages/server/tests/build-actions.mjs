@@ -49,11 +49,19 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
       const permissions = join(path, "backend/permissions.ts");
       await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
       const recovery = join(path, "backend/recovery.ts");
-      await writeFile(recovery, (await readFile(recovery, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200"));
+      await writeFile(recovery, (await readFile(recovery, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200").replace("STALE_AFTER_MS = 60_000", "STALE_AFTER_MS = 600"));
     }
     if (id === "chat") await writeFile(join(path, "backend/testing.ts"), `
 import { v } from "@tokamak/sdk";
 import { mutation, query } from "./_functions";
+import { interruptObserved } from "./recovery";
+export const interrupt = mutation({
+  args: { runId: v.id("runs") },
+  handler: async (ctx, { runId }) => {
+    const run = await ctx.db.get(runId);
+    return interruptObserved(ctx, [{ runId, heartbeat: run!.heartbeat ?? 0 }]);
+  },
+});
 export const run = query({
   args: { runId: v.id("runs") },
   handler: ({ db }, { runId }) => db.get(runId),

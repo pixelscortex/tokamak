@@ -1,5 +1,4 @@
 import { canSee } from "./access";
-import { interruptStale, STALE_AFTER_MS } from "./recovery";
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "./parts";
 import { applyToolUpdate } from "./tool-parts";
 import { currentModel } from "../models";
@@ -40,8 +39,7 @@ export const start = mutation({
     }
     const model = currentModel(current);
     const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
-    await interruptStale(db, runs);
-    if (runs.some(run => run.status === "running" && Date.now() - (run.updatedAt ?? run.startedAt) < STALE_AFTER_MS)) throw new Error("Thread already has an active run");
+    if (runs.some(run => run.status === "running")) throw new Error("Thread already has an active run");
 
     const history = await db.query("messages").withIndex("by_threadId_createdAt", q => q.eq("threadId", threadId)).collect();
     // Milliseconds can tie across consecutive sends. Keep user before assistant
@@ -87,7 +85,7 @@ export const update = mutation({
   handler: async ({ db }, { runId, delta, outcome, error, tool, plan }) => {
     const run = await db.get(runId);
     if (!run || run.status !== "running") return "cancelled" as const;
-    await db.patch(runId, { updatedAt: Date.now() });
+    await db.patch(runId, { updatedAt: Date.now(), heartbeat: (run.heartbeat ?? 0) + 1 });
     if (![delta, outcome, tool, plan].some(Boolean)) return "running" as const;
 
     const message = await db.get(run.messageId);

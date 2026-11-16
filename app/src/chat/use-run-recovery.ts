@@ -44,7 +44,7 @@ export function useRunRecovery(client: TokamakClient, running: Accessor<boolean>
     async function recover() {
       recovering = true;
       try {
-        await client.mutation(api.runs.recover, {});
+        await client.action(api.runs.recover, {});
       } catch (cause) {
         if (!stopped) setError(String(cause));
       } finally {

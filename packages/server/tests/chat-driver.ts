@@ -80,8 +80,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       } else if (mode === "cancel") {
         await client.mutation(api.runs.cancel, { runId: run._id });
       } else if (mode === "recovery") {
-        await client.mutation(api.testing.age, { runId: run._id });
-        await client.mutation(api.runs.recover, {});
+        // Simulate the final recovery transaction after an abandoned observation.
+        await client.mutation(api.testing.interrupt, { runId: run._id });
       } else {
         await until(async () => ((await client.query(api.runs.active, { threadId }))?.updatedAt ?? 0) > run.updatedAt!);
       }
@@ -229,7 +229,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     for await (const chunk of req) body += chunk;
     history = JSON.parse(body).messages;
     if (scenario === "chat-recovery") {
-      if (holdHeaders) await until(() => releaseHeaders, 750);
+      if (holdHeaders) await until(() => releaseHeaders, 3_000);
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end(completionChunk("Recovered") + completionEnd());
       return;
@@ -287,6 +287,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
           const input = payload as { name?: string; args?: { delta?: string; tool?: unknown; outcome?: string } };
           if (operation === "plugin.providers") return ["b", "todo"];
           if (operation === "action.env") return input.name === "OPENROUTER_API_KEY" ? "fixture" : `http://127.0.0.1:${address.port}/v1`;
+          if (input.name === "chat/runs:active") return null;
           if (input.name === "chat/send:start") return { runId: "run", messageId: "message", history: [{ role: "user", content: "Say hello" }], model: "mock" };
           if (input.name === "chat/send:running") return true;
           if (input.name === "chat/tool-approval:required") return false;
@@ -376,7 +377,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
         callId: "stale-tool", plugin: "b", toolName: "fixture.create", args: {}, status: "running",
       } });
       await client.mutation(api.testing.age, { runId: stale.runId });
-      await client.mutation(api.runs.recover, {});
+      await client.action(api.runs.recover, {});
       const interrupted = (await client.query(api.messages.list, { threadId }))[1]!;
       assert.equal(interrupted.status, "error");
       assert.equal(interrupted.error, "Interrupted");
@@ -386,11 +387,14 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
 
       const healthy = await client.mutation(api.send.start, input);
       await client.mutation(api.testing.age, { runId: healthy.runId });
+      const observed = await client.query(api.recovery.snapshot, {});
       await client.mutation(api.send.update, { runId: healthy.runId, delta: "" });
-      await client.mutation(api.runs.recover, {});
+      // A heartbeat wins even when its wall timestamp is made older again.
+      await client.mutation(api.testing.age, { runId: healthy.runId });
+      await client.mutation(api.recovery.interrupt, { observed });
       assert.equal((await client.query(api.runs.active, { threadId }))?._id, healthy.runId);
       await client.mutation(api.runs.cancel, { runId: healthy.runId });
-      await client.mutation(api.runs.recover, {});
+      await client.action(api.runs.recover, {});
       assert.equal((await client.query(api.messages.list, { threadId }))[3]!.status, "cancelled");
 
       const abandoned = await client.mutation(api.send.start, input);
@@ -407,7 +411,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const quiet = (await client.query(api.runs.active, { threadId }))!;
       await client.mutation(api.testing.age, { runId: quiet._id });
       await until(async () => Date.now() - ((await client.query(api.runs.active, { threadId }))?.updatedAt ?? 0) < 60_000, 750);
-      await client.mutation(api.runs.recover, {});
+      await client.action(api.runs.recover, {});
       assert.equal((await client.query(api.runs.active, { threadId }))?._id, quiet._id);
       releaseHeaders = true;
       assert.equal((await silent).status, "done");
