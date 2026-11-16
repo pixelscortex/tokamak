@@ -18,7 +18,10 @@ type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub async fn connect(directory: &Path) -> Result<Socket, Error> {
     let (server, token) = if let Some(profile) = super::remote::load(directory)? {
-        (profile.server, profile.token)
+        (
+            super::invite::server_url(&profile.server, true)?,
+            profile.token,
+        )
     } else {
         let descriptor: Value = serde_json::from_str(
             &std::fs::read_to_string(directory.join("server.json"))
@@ -27,14 +30,14 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
         let server = descriptor["url"]
             .as_str()
             .ok_or("Invalid server discovery")?;
-        super::invite::server_url(server, false)?;
+        let server = super::invite::server_url(server, false)?;
         let path = directory.join("server.token");
         super::private_file::check(&path)?;
         let token = std::fs::read_to_string(path)?;
         super::private_file::validate_token(&token)?;
-        (server.to_owned(), token)
+        (server, token)
     };
-    let mut request = server.into_client_request()?;
+    let mut request = server.as_str().into_client_request()?;
     let mut authorization =
         format!("Bearer {token}").parse::<tokio_tungstenite::tungstenite::http::HeaderValue>()?;
     authorization.set_sensitive(true);

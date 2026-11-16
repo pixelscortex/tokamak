@@ -11,11 +11,26 @@ pub struct Invite {
 /// Local discovery never opts into the remote profile's TLS policy.
 pub(crate) fn server_url(server: &str, remote: bool) -> Result<Url, Error> {
     let url = Url::parse(server).map_err(|_| "Invalid server URL")?;
+    // Compare the original host too: URL parsers accept alternate IPv4 spellings
+    // that system resolvers can interpret differently.
+    let original_host = server
+        .split_once("://")
+        .map(|(_, rest)| rest.split('/').next().unwrap_or_default())
+        .and_then(|authority| {
+            if authority.starts_with('[') {
+                authority
+                    .split_once(']')
+                    .map(|(host, _)| &authority[..host.len() + 1])
+            } else {
+                authority.split(':').next()
+            }
+        });
     let loopback = url
         .host_str()
         .and_then(|host| host.trim_matches(['[', ']']).parse::<IpAddr>().ok())
         .is_some_and(|ip| ip.is_loopback());
-    if !(url.scheme() == "ws" && loopback || remote && url.scheme() == "wss")
+    if (!remote && original_host != url.host_str())
+        || !(url.scheme() == "ws" && loopback || remote && url.scheme() == "wss")
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -116,6 +131,11 @@ mod tests {
             ("wss://example.com/ws", false, false),
             ("ws://127.0.0.1/ws", true, true),
             ("ws://[::1]/ws", false, true),
+            ("ws://127.0.0.1/ws", false, true),
+            ("ws://0177.0.0.1/ws", false, false),
+            ("ws://0x7f.0.0.1/ws", false, false),
+            ("ws://127.1/ws", false, false),
+            ("ws://2130706433/ws", false, false),
             ("ws://example.com/ws", true, false),
             ("ws://192.168.1.2/ws", true, false),
             ("https://example.com/ws", true, false),
@@ -125,6 +145,17 @@ mod tests {
             ("wss://example.com/other", true, false),
         ] {
             assert_eq!(server_url(url, remote).is_ok(), valid, "{url}");
+        }
+    }
+
+    #[test]
+    fn remote_endpoints_use_canonical_hosts() {
+        for host in ["0177.0.0.1", "0x7f.0.0.1", "127.1", "2130706433"] {
+            let server = server_url(&format!("wss://{host}/ws"), true).unwrap();
+            assert_eq!(server.as_str(), "wss://127.0.0.1/ws");
+            let invite =
+                parse_link(&format!("tokamak://join?server=wss://{host}/ws&code=abc")).unwrap();
+            assert_eq!(invite.join_url().as_str(), "https://127.0.0.1/join");
         }
     }
 
