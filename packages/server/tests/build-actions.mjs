@@ -3,6 +3,7 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
 
 const workspace = fileURLToPath(new URL("../../../", import.meta.url));
 const target = join(workspace, "packages/server/target");
@@ -56,6 +57,7 @@ export const age = mutation({
       cwd: workspace, stdout: "inherit", stderr: "inherit",
     });
     if (await child.exited !== 0) throw new Error(`Public plugin build failed: ${id}`);
+    if (id === "chat") assert.ok(!JSON.parse(await readFile(join(path, "dist/manifest.json"), "utf8")).publicFunctions.includes("threads:setBackend"));
     for (const name of ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");
   }
