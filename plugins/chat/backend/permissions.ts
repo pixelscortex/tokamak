@@ -66,3 +66,19 @@ export const claim = mutation({
     return { status: part.status, optionId: part.status === "answered" ? part.optionId! : null };
   },
 });
+
+// The agent ended the turn before an answer reached it: the host already
+// answered the request "cancelled", so the stored answer never took effect.
+export const undelivered = mutation({
+  args: { runId: v.id("runs"), requestId: v.string() },
+  handler: async ({ db }, { runId, requestId }) => {
+    const run = await db.get(runId);
+    const message = run && await db.get(run.messageId);
+    const part = message?.parts.find(part => part.type === "permission" && part.requestId === requestId);
+    if (part?.type !== "permission" || part.status !== "answered") return null;
+
+    part.status = "expired";
+    await db.patch(message!._id, { parts: message!.parts });
+    return null;
+  },
+});

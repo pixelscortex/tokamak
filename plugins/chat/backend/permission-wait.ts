@@ -6,6 +6,18 @@ import type { streamBuffer } from "./stream-buffer";
 
 export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: ReturnType<typeof streamBuffer>) {
   const pending = new Map<string, number>();
+
+  // The host drops a request once the turn ends; an answer that arrives later
+  // is not an error for the run, only an answer that never took effect.
+  async function deliver(requestId: string, optionId: string | null) {
+    try {
+      await ctx.acp.respond({ requestId, optionId });
+    } catch (error) {
+      if (!String(error).includes("Unknown ACP permission request")) throw error;
+      await ctx.runMutation(api.permissions.undelivered, { runId, requestId });
+    }
+  }
+
   return {
     async request(part: PermissionPart) {
       await buffer.update();
@@ -21,7 +33,7 @@ export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: Re
         const outcome = await ctx.runMutation(api.permissions.claim, { runId, requestId, expired });
         if (!outcome) continue;
         pending.delete(requestId);
-        await ctx.acp.respond({ requestId, optionId: outcome.optionId });
+        await deliver(requestId, outcome.optionId);
       }
       if (!state.running) throw new Error("Run cancelled");
       await buffer.maintain();
