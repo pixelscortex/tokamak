@@ -7,7 +7,7 @@ use crate::{Server, websocket};
 use axum::{
     Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, State, WebSocketUpgrade},
+    extract::{DefaultBodyLimit, Extension, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -25,7 +25,7 @@ use tokio_util::sync::CancellationToken;
 struct GuestListener {
     server: Arc<Server>,
     stopping: CancellationToken,
-    connections: Arc<Semaphore>,
+    authentication: Arc<Mutex<Joins>>,
     joins: Arc<Mutex<Joins>>,
 }
 
@@ -45,7 +45,7 @@ pub async fn serve(
     let state = GuestListener {
         server,
         stopping: stopping.clone(),
-        connections: connections.clone(),
+        authentication: Arc::new(Mutex::new(Joins::new())),
         joins: Arc::new(Mutex::new(Joins::new())),
     };
     let app = Router::new()
@@ -57,18 +57,45 @@ pub async fn serve(
         .layer(DefaultBodyLimit::max(limits::MESSAGE_BYTES))
         .layer(middleware::from_fn(no_origin))
         .with_state(state);
-    let listener = websocket::ShutdownListener {
-        listener,
-        stopping: stopping.clone(),
+    // Own the permit before any HTTP bytes or credentials are parsed. The
+    // upgrade callback shares it so WebSockets keep counting after Hyper exits.
+    let mut tasks = tokio::task::JoinSet::new();
+    tokio::pin!(shutdown);
+    let result = loop {
+        tokio::select! {
+            _ = &mut shutdown => break Ok(()),
+            Some(_) = tasks.join_next(), if !tasks.is_empty() => {},
+            accepted = listener.accept() => {
+                let (stream, _) = match accepted {
+                    Ok(accepted) => accepted,
+                    Err(error) => break Err(error),
+                };
+                let Ok(permit) = connections.clone().try_acquire_owned() else {
+                    drop(stream);
+                    continue;
+                };
+                let app = app.clone().layer(Extension(Arc::new(permit)));
+                let stopping = stopping.clone();
+                tasks.spawn(async move {
+                    let mut http = hyper::server::conn::http1::Builder::new();
+                    http.max_buf_size(limits::MESSAGE_BYTES)
+                        .timer(hyper_util::rt::TokioTimer::new())
+                        .header_read_timeout(std::time::Duration::from_secs(5));
+                    let connection = http.serve_connection(
+                        hyper_util::rt::TokioIo::new(stream),
+                        hyper_util::service::TowerToHyperService::new(app),
+                    ).with_upgrades();
+                    // Also bounds body reads, authentication and upgrade writes.
+                    tokio::select! {
+                        _ = stopping.cancelled() => {},
+                        _ = tokio::time::timeout(std::time::Duration::from_secs(5), connection) => {},
+                    }
+                });
+            }
+        }
     };
-    let trigger = stopping.clone();
-    let result = axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown.await;
-            trigger.cancel();
-        })
-        .await;
     stopping.cancel();
+    while tasks.join_next().await.is_some() {}
     let _all = connections.acquire_many(limits::CONNECTIONS).await;
     result
 }
@@ -125,8 +152,17 @@ async fn join(State(state): State<GuestListener>, body: Bytes) -> Response {
 async fn upgrade(
     State(state): State<GuestListener>,
     headers: HeaderMap,
+    Extension(permit): Extension<Arc<tokio::sync::OwnedSemaphorePermit>>,
     ws: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
 ) -> Response {
+    if !state
+        .authentication
+        .lock()
+        .expect("authentication limit")
+        .allow()
+    {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
     let Some(token) = headers
         .get("authorization")
         .and_then(|h| h.to_str().ok())
@@ -139,9 +175,11 @@ async fn upgrade(
         Ok(session) => session,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
-    let Ok(permit) = state.connections.clone().try_acquire_owned() else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    };
+    state
+        .authentication
+        .lock()
+        .expect("authentication limit")
+        .refund();
     if state.stopping.is_cancelled() {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }

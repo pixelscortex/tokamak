@@ -5231,6 +5231,8 @@ dependencies = [
  "engine",
  "futures-util",
  "getrandom 0.4.3",
+ "hyper",
+ "hyper-util",
  "libc",
  "reqwest",
  "semver",

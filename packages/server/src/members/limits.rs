@@ -38,6 +38,10 @@ impl Joins {
         Self(std::collections::VecDeque::new())
     }
 
+    pub(crate) fn refund(&mut self) {
+        self.0.pop_back();
+    }
+
     pub(crate) fn allow(&mut self) -> bool {
         let now = Instant::now();
         while self

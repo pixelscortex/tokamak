@@ -578,9 +578,7 @@ async fn guest_connection_and_message_size_limits() {
     for _ in 0..16 {
         sockets.push(fixture.socket(token).await);
     }
-    assert!(
-        matches!(connect(&fixture.guest,token).await,Err(tokio_tungstenite::tungstenite::Error::Http(response)) if response.status()==503)
-    );
+    assert!(connect(&fixture.guest, token).await.is_err());
     sockets[0]
         .send(Message::Text("x".repeat(16385).into()))
         .await
@@ -736,5 +734,111 @@ async fn invite_defaults_expiry_and_guest_subscription_identity() {
     assert_eq!(event["result"]["Ok"]["memberId"], member["memberId"]);
     assert_eq!(event["result"]["Ok"]["role"], "guest");
     drop(socket);
+    clean(fixture).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn idle_tcp_connections_count_before_upgrade_and_expire() {
+    use tokio::io::AsyncReadExt;
+    let fixture = Fixture::new().await;
+    let address = fixture.guest.trim_start_matches("http://");
+    let mut sockets = Vec::new();
+    for _ in 0..16 {
+        sockets.push(TcpStream::connect(address).await.unwrap());
+    }
+    let mut excess = TcpStream::connect(address).await.unwrap();
+    let mut byte = [0];
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(1), excess.read(&mut byte))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(6), sockets[0].read(&mut byte))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+    drop(sockets);
+    clean(fixture).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn failed_authentication_is_limited_globally() {
+    let fixture = Fixture::new().await;
+    for _ in 0..10 {
+        assert_eq!(
+            fixture
+                .client()
+                .get(format!("{}/ws", fixture.guest))
+                .bearer_auth("invalid")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+    }
+    assert_eq!(
+        fixture
+            .client()
+            .get(format!("{}/ws", fixture.guest))
+            .bearer_auth("different")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        429
+    );
+    clean(fixture).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn guest_http_sizes_and_body_deadline_are_bounded() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let fixture = Fixture::new().await;
+    assert_eq!(
+        fixture
+            .client()
+            .post(format!("{}/join", fixture.guest))
+            .body("x".repeat(16385))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        413
+    );
+    let address = fixture.guest.trim_start_matches("http://");
+    let mut socket = TcpStream::connect(address).await.unwrap();
+    socket
+        .write_all(
+            format!(
+                "GET /ws HTTP/1.1\r\nHost: localhost\r\nX-Fill: {}",
+                "x".repeat(20000)
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let mut response = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(1), socket.read_to_end(&mut response))
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 431"));
+    let mut socket = TcpStream::connect(address).await.unwrap();
+    socket
+        .write_all(b"POST /join HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n{")
+        .await
+        .unwrap();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(6), socket.read(&mut [0]))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
     clean(fixture).await;
 }
