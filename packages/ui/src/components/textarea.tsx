@@ -81,7 +81,7 @@ export function Textarea(props: TextareaProps): JSX.Element {
       ? "text-[12px] leading-5"
       : props.size === "sm"
         ? "text-[13px] leading-5"
-        : "text-[15px] leading-6";
+        : "text-[16px] leading-[26px]";
   const appearance = () =>
     props.appearance === "inherit" ? "font-[family-name:inherit] text-inherit" : "font-ui text-ink";
   const rows = () =>

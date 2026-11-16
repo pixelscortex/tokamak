@@ -15,11 +15,11 @@ function ToolLine(props: { part: Tool }) {
         : (props.part.summary ?? props.part.toolName);
 
   return (
-    <div class="font-label text-[10px] text-text-3">
+    <div class="font-label text-[12px] text-text-3">
       <div class="flex items-center gap-2">
         <span>{label()}</span>
         <button
-          class="border-0 bg-transparent p-0 font-label text-[10px] text-text-3"
+          class="border-0 bg-transparent p-0 font-label text-[12px] text-text-3"
           aria-label={`Details for ${props.part.toolName}`}
           aria-expanded={expanded()}
           onClick={() => setExpanded((value) => !value)}

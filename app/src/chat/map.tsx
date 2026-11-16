@@ -15,7 +15,7 @@ function relativeTime(time: number) {
 
 export function MapHeader() {
   return (
-    <header class="order-0 flex shrink-0 justify-between gap-4 border-b border-hairline pb-4 font-label text-[10px] leading-4 tracking-[0.08em] text-text-3">
+    <header class="order-0 flex shrink-0 justify-between gap-4 border-b border-hairline pb-4 font-label text-[12px] leading-4 tracking-[0.08em] text-text-3">
       <span>MAP</span>
       <span>TAB OR ESC TO CLOSE</span>
     </header>
@@ -41,7 +41,7 @@ export function Map(props: { chat: ChatState; map: MapState }) {
                     mapGroup(props.chat, props.map.rows()[index() - 1]!._id)
                 }
               >
-                <h2 class="m-0 pb-2 pt-5 font-label text-[9px] font-normal leading-4 tracking-[0.08em] text-text-3">
+                <h2 class="m-0 pb-2 pt-5 font-label text-[11px] font-normal leading-4 tracking-[0.08em] text-text-3">
                   {["NEEDS YOU", "RUNNING", "RECENT"][mapGroup(props.chat, thread._id)]}
                 </h2>
               </Show>
@@ -54,7 +54,7 @@ export function Map(props: { chat: ChatState; map: MapState }) {
                 }}
                 class={`flex cursor-pointer items-center gap-4 px-3 py-3 ${props.map.index() === index() ? "bg-text text-ground" : "text-text-2"}`}
               >
-                <span class="w-4 shrink-0 font-label text-[10px]">{index() + 1}</span>
+                <span class="w-4 shrink-0 font-label text-[12px]">{index() + 1}</span>
                 <Show
                   when={props.map.index() === index() && props.map.editing()}
                   fallback={<span class="min-w-0 flex-1 truncate">{thread.title}</span>}
@@ -75,7 +75,7 @@ export function Map(props: { chat: ChatState; map: MapState }) {
                     />
                   </Show>
                 </Show>
-                <span class="shrink-0 font-label text-[10px]">{relativeTime(thread.updatedAt)}</span>
+                <span class="shrink-0 font-label text-[12px]">{relativeTime(thread.updatedAt)}</span>
               </div>
             </>
           )}
@@ -87,7 +87,7 @@ export function Map(props: { chat: ChatState; map: MapState }) {
 
       <footer
         aria-label="↑↓ MOVE  ENTER OPEN  1-9 JUMP  CMD+ENTER NEW THREAD  R RENAME  CMD+BACKSPACE DELETE"
-        class="order-3 flex shrink-0 flex-wrap items-center gap-5 border-t border-hairline pt-4 font-label text-[9px] leading-4 text-text-3"
+        class="order-3 flex shrink-0 flex-wrap items-center gap-5 border-t border-hairline pt-4 font-label text-[11px] leading-4 text-text-3"
       >
         <span class="flex items-center gap-1">
           <Icon d="M7 20V4 M3 8l4-4 4 4 M17 4v16 M13 16l4 4 4-4" class="size-3" />

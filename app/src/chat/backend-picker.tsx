@@ -126,7 +126,7 @@ export function BackendPicker(props: {
   return (
     <div
       id="backend-picker"
-      class="flex shrink-0 flex-col gap-2 border border-hairline bg-ground p-3 font-label text-[11px] leading-5 text-text-2"
+      class="flex shrink-0 flex-col gap-2 border border-hairline bg-ground p-3 font-label text-[12px] leading-5 text-text-2"
       onKeyDown={keydown}
     >
       <Show
@@ -160,7 +160,7 @@ export function BackendPicker(props: {
                 aria-selected={index() === i()}
                 disabled={saving()}
                 onClick={() => choose(i())}
-                class={`m-0 block box-border w-full cursor-pointer border-0 px-2 py-1 text-left font-label text-[11px] ${index() === i() ? "bg-text text-ground" : "bg-transparent text-text-2"}`}
+                class={`m-0 block box-border w-full cursor-pointer border-0 px-2 py-1 text-left font-label text-[12px] ${index() === i() ? "bg-text text-ground" : "bg-transparent text-text-2"}`}
               >
                 {choice.title}
               </button>

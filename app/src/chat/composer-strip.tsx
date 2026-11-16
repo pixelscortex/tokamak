@@ -19,7 +19,7 @@ export function ComposerStrip(props: {
   return (
     <div
       id="chat-strip"
-      class="flex min-w-0 items-center gap-4 border-t border-hairline pt-3 font-label text-[9px] leading-4 uppercase tracking-[0.08em] text-text-3"
+      class="flex min-w-0 items-center gap-4 border-t border-hairline pt-3 font-label text-[11px] leading-4 uppercase tracking-[0.08em] text-text-3"
     >
       <span
         id="chat-strip-title"
@@ -49,7 +49,7 @@ export function ComposerStrip(props: {
           <button
             aria-label="Change backend (CMD+M)"
             onClick={() => props.onBackend?.()}
-            class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[9px] uppercase text-text-3"
+            class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[11px] uppercase text-text-3"
           >
             {props.backend}
           </button>

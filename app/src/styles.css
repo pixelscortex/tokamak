@@ -18,9 +18,9 @@ body {
   background: var(--color-ground);
   color: var(--color-text-2);
   font-family: var(--font-read);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 400;
-  line-height: 24px;
+  line-height: 26px;
 }
 
 /* A fixed window gives the stage (and its scrollers) a bounded height. */
@@ -42,9 +42,9 @@ body {
   padding: 0 24px 0 88px;
   color: var(--color-text-3);
   font-family: var(--font-label);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 400;
-  line-height: 12px;
+  line-height: 16px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -137,8 +137,8 @@ body {
   margin-bottom: 0;
 }
 .chat-markdown h3 {
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 18px;
+  line-height: 28px;
   font-weight: 600;
   color: var(--color-text);
 }
@@ -159,7 +159,7 @@ body {
 }
 .chat-markdown code {
   font-family: var(--font-label);
-  font-size: 13px;
+  font-size: 14px;
   background: var(--color-raised);
 }
 .chat-markdown pre {

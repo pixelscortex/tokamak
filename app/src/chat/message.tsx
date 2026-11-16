@@ -8,7 +8,7 @@ export function Mark(props: { user?: boolean }) {
   return (
     <span
       aria-hidden="true"
-      class={`mt-1 flex size-4 shrink-0 items-center justify-center font-label text-[10px] leading-4 ${props.user ? "bg-light text-ground" : "border border-text-3"}`}
+      class={`mt-1 flex size-4 shrink-0 items-center justify-center font-label text-[12px] leading-4 ${props.user ? "bg-light text-ground" : "border border-text-3"}`}
     >
       {props.user ? "K" : ""}
     </span>
@@ -68,7 +68,7 @@ export function Message(props: {
                     }
                   />
                 ) : id.startsWith("plan:") ? (
-                  <span class="text-text-3 font-label text-[10px]">
+                  <span class="text-text-3 font-label text-[12px]">
                     {(part() as Extract<ChatMessage["parts"][number], { type: "plan" }>).entries
                       .map((entry) => entry.content)
                       .join(" · ")}
@@ -81,7 +81,7 @@ export function Message(props: {
           </div>
         </Show>
         <Show when={props.message.status === "streaming"}>
-          <p role="status" class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">
+          <p role="status" class="m-0 mt-2 font-label text-[12px] uppercase text-text-3">
             · working
           </p>
         </Show>
@@ -91,7 +91,7 @@ export function Message(props: {
           </p>
         </Show>
         <Show when={props.message.status === "cancelled"}>
-          <p class="m-0 mt-2 font-label text-[10px] uppercase text-text-3">Stopped</p>
+          <p class="m-0 mt-2 font-label text-[12px] uppercase text-text-3">Stopped</p>
         </Show>
       </div>
     </div>

@@ -11,7 +11,7 @@ export function PermissionPart(props: { part: Permission; onAnswer?: (optionId: 
   return (
     <div
       data-permission={props.part.requestId}
-      class={`flex flex-wrap items-center gap-2 font-label text-[10px] ${pending() ? "text-text-2" : "text-text-3"}`}
+      class={`flex flex-wrap items-center gap-2 font-label text-[12px] ${pending() ? "text-text-2" : "text-text-3"}`}
     >
       <span>
         {pending() ? (props.onAnswer ? "NEEDS YOU · " : "AWAITING OWNER · ") : ""}
@@ -32,7 +32,7 @@ export function PermissionPart(props: { part: Permission; onAnswer?: (optionId: 
             {(option) => (
               <button
                 type="button"
-                class="border border-text-3 bg-ground px-2 py-1 font-label text-[10px] text-text-2"
+                class="border border-text-3 bg-ground px-2 py-1 font-label text-[12px] text-text-2"
                 onClick={() => props.onAnswer?.(option.optionId)}
               >
                 {option.name}
