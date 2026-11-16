@@ -1,0 +1,26 @@
+plugins/chat/backend/tool-approval.ts
+  s_3803dc3311a780::t_15ce4aefdd6815 24-27,34
+app/tests/native.rs
+  s_3803dc3311a780::t_6b371db9a22a74 1488-1496,1500,1509
+app/src/chat/tool-part.tsx
+  s_3803dc3311a780::t_15ce4aefdd6815 36
+  s_3803dc3311a780::t_52719ee9597f1a 28-34
+app/tests/bridge.tsx
+  s_3803dc3311a780::t_15ce4aefdd6815 101-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "32943377a154a9a5b908a612820c55c1d784b957",
+  "prompts": {},
+  "sessions": {
+    "s_3803dc3311a780": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e2b3-8442-7560-855e-c311c216fa96",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
