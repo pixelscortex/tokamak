@@ -1,0 +1,23 @@
+.ci/release.mjs
+  s_186fb549a459e6::t_adc82837e4f796 141-142,144,146-150
+.ci/release.test.ts
+  s_186fb549a459e6::t_5b092e3dc87699 39
+.depot/workflows/ci.yml
+  s_186fb549a459e6::t_8167d9c3b52371 10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a100785dd6d509a9ae6364a48af4337277070471",
+  "prompts": {},
+  "sessions": {
+    "s_186fb549a459e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e542-d630-7ef0-aba8-12cca9ea3b71",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
