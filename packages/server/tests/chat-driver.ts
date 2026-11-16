@@ -79,8 +79,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
         await client.mutation(api.testing.age, { runId: run._id });
         await client.mutation(api.runs.recover, {});
       } else {
-        await wait(500);
-        assert.ok((await client.query(api.runs.active, { threadId }))!.updatedAt! > run.updatedAt!, "heartbeats continue while waiting");
+        await until(async () => ((await client.query(api.runs.active, { threadId }))?.updatedAt ?? 0) > run.updatedAt!);
       }
       const result = await pendingPermission;
       assert.equal(result.status, mode === "cancel" || mode === "recovery" ? "cancelled" : "done");
@@ -330,6 +329,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const tool = { type: "tool" as const, callId: "unique", plugin: "b", toolName: "fixture.create", args: {}, status: "running" as const };
       await assert.rejects(update({ ...tool, args: { title: "x".repeat(17_000) } }), /16 KB/);
       await update(tool);
+      const runningTool = (await client.query(api.messages.list, { threadId: testThread }))[1]!.parts[0]!;
+      assert.ok(runningTool.type === "tool" && runningTool.status === "running");
       await assert.rejects(update(tool), /Duplicate/);
       await assert.rejects(update({ ...tool, plugin: "other", status: "done" }), /immutable/);
       await update({ callId: tool.callId, status: "done", result: {} });
@@ -459,7 +460,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
           assert.equal(tool.toolName, "fixture.create");
           assert.equal(tool.status, scenario === "chat-tools-error" ? "error" : "done");
           if (scenario === "chat-tools-error") assert.match(tool.error!, /fixture tool failed/);
-          assert.ok(toolStates.includes("running"), JSON.stringify(toolStates));
+          // Live queries may coalesce the running and settled commits.
+          // The transaction probe above checks running before settlement.
           await until(() => toolStates.includes(tool.status));
           assert.equal(response.parts[0]!.type === "text" && response.parts[0]!.text, "Before.");
           assert.equal(response.parts[2]!.type === "text" && response.parts[2]!.text, "After.");

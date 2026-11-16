@@ -255,3 +255,17 @@ binary passed all 27 tests, including these 17 new regressions. The invalid-UTF-
 The same command with `CLAUDECODE=1 AI_AGENT=1` completed all 28 tasks in
 3m 23s; all 27 action tests passed again. `cargo fmt --all -- --check`,
 `git diff --check`, and a zero product-source diff also passed.
+
+## Chat, ACP and member synchronization
+
+Chat tool tests assert the persisted running part before explicitly settling it,
+then await the settled live snapshot. They do not require every intermediate
+commit to reach a subscription: dirty live queries can coalesce commits. Each
+scenario owns its mock state and an ephemeral listener.
+
+Sharing streams hold the next chunk behind a semaphore until the owner/guest
+assertions finish. ACP concurrency waits for the fake agent's initialize marker;
+permission heartbeat checks wait for a changed timestamp. The member environment
+snapshot test holds an HTTP response until the credential file changes, after
+the action has read its original secret. The invite-expiry delay exercises the
+real wall-clock TTL rather than inferring asynchronous work completion.

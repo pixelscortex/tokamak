@@ -57,6 +57,7 @@ fn bundles() -> BTreeMap<String, String> {
 struct Fixture {
     directory: tempfile::TempDir,
     server: Arc<Server>,
+    model_chunks: Arc<tokio::sync::Semaphore>,
     local: String,
     guest: String,
     stop: CancellationToken,
@@ -78,16 +79,29 @@ impl Fixture {
         let model_url = format!("http://{}/v1", model.local_addr().unwrap());
         let requests = Arc::new(Mutex::new(Vec::new()));
         let captured = requests.clone();
+        let model_chunks = Arc::new(tokio::sync::Semaphore::new(0));
+        let chunks = model_chunks.clone();
         let router = axum::Router::new().route("/v1/chat/completions", axum::routing::post(move |body: String| {
             let captured = captured.clone();
+            let chunks = chunks.clone();
             async move {
-                captured.lock().unwrap().push(serde_json::from_str::<Value>(&body).unwrap());
+                let request_number = {
+                    let mut requests = captured.lock().unwrap();
+                    requests.push(serde_json::from_str::<Value>(&body).unwrap());
+                    requests.len()
+                };
                 let (send, receive) = tokio::sync::mpsc::channel(4);
                 tokio::spawn(async move {
                     for text in ["Hello ", "world"] {
                         let data = json!({"id":"mock","object":"chat.completion.chunk","created":1,"model":"mock","choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]});
                         if send.send(Ok::<_, std::io::Error>(format!("data: {data}\n\n"))).await.is_err() { return; }
-                        tokio::time::sleep(Duration::from_millis(300)).await;
+                        // Hold the visibility probe and the run that the guest cancels.
+                        if text == "Hello " && matches!(request_number, 1 | 3) {
+                            tokio::select! {
+                                permit = chunks.acquire() => permit.unwrap().forget(),
+                                _ = send.closed() => return,
+                            }
+                        }
                     }
                     let data = json!({"id":"mock","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
                     let _ = send.send(Ok(format!("data: {data}\n\ndata: [DONE]\n\n"))).await;
@@ -134,6 +148,7 @@ impl Fixture {
         Self {
             directory,
             server,
+            model_chunks,
             local: local_url,
             guest: guest_url,
             stop,
@@ -387,6 +402,7 @@ async fn shared_chat_streams_with_caller_identity_and_revokes_live_access() {
         "Only the run starter",
     )
     .await;
+    fixture.model_chunks.add_permits(1);
     assert_eq!(reply(&mut owner, 2).await["result"]["Ok"]["status"], "done");
     let sent = call(
         &mut guest,

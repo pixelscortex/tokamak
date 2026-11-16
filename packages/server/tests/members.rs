@@ -48,7 +48,7 @@ const functions = {
   messageError: query({handler:()=>[{error:"failed: member-secret-do-not-echo", text:"member-secret-do-not-echo"}]}),
   nestedFailure: mutation({handler:(_ctx,args)=>{throw new Error(args.secret)},args:{secret:v.string()}}),
   caught: action({handler:async ctx=>{const secret=await ctx.env("MEMBER_TEST_SECRET");try{await ctx.runMutation(api.test.nestedFailure,{secret})}catch(error){return {error:error.message}}}}),
-  delayedSecret: action({handler:async ctx=>{const secret=await ctx.env("MEMBER_TEST_SECRET");await new Promise(resolve=>setTimeout(resolve,300));throw new Error(secret+":"+await ctx.env("MEMBER_TEST_SECRET"))}}),
+  delayedSecret: action({args:{url:v.string()},handler:async (ctx,{url})=>{const secret=await ctx.env("MEMBER_TEST_SECRET");await (await fetch(url)).text();throw new Error(secret+":"+await ctx.env("MEMBER_TEST_SECRET"))}}),
   failure: query({guest:true,handler:()=>{throw new Error("Public failure\nprivate /source/plugin.ts:10")}}),
   pathFailure: action({guest:true,handler:()=>{throw new Error("Cannot open /private/plugin.ts")}}),
   secret: action({guest:true,handler:async ctx=>{throw new Error("failed: "+await ctx.env("MEMBER_TEST_SECRET"))}}),
@@ -101,7 +101,7 @@ impl Fixture {
             let mut plugin = json!({"id":id,"version":"1.0.0","exports":"./api.ts"});
             if id == "a" {
                 plugin["depends"] = json!({"b":"^1"});
-                plugin["permissions"] = json!(["acp", "env:MEMBER_TEST_SECRET"]);
+                plugin["permissions"] = json!(["acp", "env:MEMBER_TEST_SECRET", "net:127.0.0.1"]);
             }
             let manifest = json!({"formatVersion":1,"plugin":plugin,"entries":{"backend":{"code":"bundle.js","map":"bundle.js.map","api":"api.ts"}},"publicFunctions":["test:identity"],"hashes":hashes});
             std::fs::write(path.join("manifest.json"), manifest.to_string()).unwrap();
@@ -915,16 +915,33 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
             .contains("[redacted]")
     );
     assert!(!caught.to_string().contains("member-secret-do-not-echo"));
+    let barrier = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/", barrier.local_addr().unwrap());
     let change = async {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(5), barrier.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut request = [0; 1024];
+        assert!(stream.read(&mut request).await.unwrap() > 0);
         std::fs::write(
             fixture.directory.path().join(".env.local"),
             "MEMBER_TEST_SECRET=replacement-secret\n",
         )
         .unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
     };
     let (error, ()) = tokio::join!(
-        call(&mut owner, "action", "a/test:delayedSecret", json!({})),
+        call(
+            &mut owner,
+            "action",
+            "a/test:delayedSecret",
+            json!({"url":url})
+        ),
         change
     );
     assert!(

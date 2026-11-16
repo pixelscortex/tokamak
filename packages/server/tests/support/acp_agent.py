@@ -19,6 +19,7 @@ for line in sys.stdin:
     params = request.get('params', {})
     if method == 'initialize':
         if os.environ.get('ACP_TEST_HANG_INITIALIZE'):
+            open(__file__ + '.initializing', 'w').close()
             import time; time.sleep(60)
         assert not params.get('clientCapabilities', {}).get('terminal', False)
         assert not params.get('clientCapabilities', {}).get('fs', {}).get('readTextFile', False)

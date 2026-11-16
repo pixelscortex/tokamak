@@ -344,7 +344,18 @@ async fn ignored_cancel_kills_agent_and_allows_restart() {
 async fn initialize_deadline_does_not_block_other_agents() {
     let fixture = Fixture::new(true).await;
     let (slow, fast) = tokio::join!(fixture.action("slow-initialize"), async {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !fixture
+                .directory
+                .path()
+                .join("agent.py.initializing")
+                .exists()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("slow agent entered initialize");
         tokio::time::timeout(Duration::from_secs(5), fixture.action("hello")).await
     });
     assert!(fast.unwrap().is_ok());
