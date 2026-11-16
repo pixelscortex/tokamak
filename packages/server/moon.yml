@@ -8,6 +8,7 @@ tasks:
     # Fixture isolation is part of normal validation, not an opt-in regression.
     deps: ["server:fixture-test"]
   protocol-check:
-    command: "cargo run --locked --package server --features protocol-codegen --bin export-protocol -- --check"
+    # Compare formatted generator output: Oxfmt owns the committed TS layout.
+    command: "bash ../../.ci/check-protocol.sh"
   check:
     deps: ["server:protocol-check"]

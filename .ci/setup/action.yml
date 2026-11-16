@@ -3,7 +3,10 @@ description: Pinned proto/moon/Bun/Rust and Depot-backed download caches
 runs:
   using: composite
   steps:
-    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+    # Explicit saves also work on Depot's composite-action implementation and
+    # preserve downloads when later validation fails.
+    - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      id: tools
       with:
         path: |
           ~/.proto
@@ -32,7 +35,8 @@ runs:
           tar -xJf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/proto" --strip-components=1
           cp "$RUNNER_TEMP/proto/proto" "$RUNNER_TEMP/proto/proto-shim" "$HOME/.proto/bin/"
         fi
-    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+    - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      id: deps
       with:
         path: |
           ~/.bun/install/cache
@@ -49,7 +53,9 @@ runs:
         proto install rust
         rustup component add rustfmt clippy
         proto run bun -- install --frozen-lockfile
-        echo "CI_PLATFORM=$(uname -s)-$(uname -m)" >> "$GITHUB_ENV"
+        # Populate Cargo's download cache even when the cheap job saves it
+        # first. actions/cache entries are immutable after the initial save.
+        cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
         # Both Depot services inject short-lived cache credentials. Keep their
         # preconfigured endpoint (it may be an authenticated local proxy).
         if [ -n "${DEPOT_CACHE_TOKEN:-}" ]; then
@@ -60,3 +66,19 @@ runs:
     - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
       with:
         version: v0.19.0
+    - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      if: steps.tools.outputs.cache-hit != 'true'
+      with:
+        path: |
+          ~/.proto
+          ~/.rustup
+          ~/.cargo/bin
+        key: ${{ steps.tools.outputs.cache-primary-key }}
+    - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      if: steps.deps.outputs.cache-hit != 'true'
+      with:
+        path: |
+          ~/.bun/install/cache
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ steps.deps.outputs.cache-primary-key }}

@@ -55,6 +55,11 @@ disables remote caching (with a warning) and local commands work normally.
 For local Rust cache sharing, use `depot cargo` or configure sccache with Depot's
 WebDAV endpoint and your Depot token. CI uses injected short-lived credentials.
 
+ACP tests also emit JUnit XML for Depot's test results dashboard, including on
+failed runs. Cached TS verification restores its report along with its result.
+Use `depot tests <run-id> --job typescript` to inspect those tests in the CLI;
+the remaining suites currently report through normal workflow logs.
+
 On `main`, CI builds server binaries for Linux x64/arm64 and desktop + server
 binaries for macOS arm64, retained as workflow artifacts for 7 days. Signing,
 release publication and deployment will be added after artifact validation.

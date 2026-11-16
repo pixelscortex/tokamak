@@ -21,7 +21,3 @@ remote:
   host: "grpcs://cache.depot.dev"
   auth:
     token: "DEPOT_TOKEN"
-hasher:
-  # Bun links workspace packages under nested node_modules. Never hash those
-  # symlinks or generated build output as source inputs.
-  ignorePatterns: ["**/node_modules/**", "**/dist/**", "target/**", ".moon/cache/**"]

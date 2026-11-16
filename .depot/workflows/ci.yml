@@ -22,6 +22,11 @@ jobs:
           fetch-depth: 0
       - uses: ./.ci/setup
       - run: moon run workspace:ci-ts --summary detailed
+      - name: Report ACP tests to Depot
+        if: ${{ !cancelled() && hashFiles('.ci-results/acp.xml') != '' }}
+        uses: depot/test-report-action@2ad5779840a9c63e884fa26f11d019768a27a941 # v1
+        with:
+          path: .ci-results/acp.xml
   native:
     needs: typescript
     runs-on: depot-ubuntu-24.04
@@ -50,13 +55,16 @@ jobs:
         run: sccache --show-stats
       - name: Release server (main only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: moon run workspace:build-release
+        run: |
+          moon run workspace:build-release
+          mkdir -p .ci-results
+          tar -czf .ci-results/server-linux-x64.tar.gz -C target/release tokamak
       # Signing, release publication and deployment will follow artifact validation.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: server-linux-x64
-          path: target/release/tokamak
+          path: .ci-results/server-linux-x64.tar.gz
           if-no-files-found: error
           retention-days: 7
   release-arm64:
@@ -67,10 +75,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
       - uses: ./.ci/setup
-      - run: moon run workspace:build-release
+      - run: |
+          moon run workspace:build-release
+          mkdir -p .ci-results
+          tar -czf .ci-results/server-linux-arm64.tar.gz -C target/release tokamak
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: server-linux-arm64
-          path: target/release/tokamak
+          path: .ci-results/server-linux-arm64.tar.gz
           if-no-files-found: error
           retention-days: 7
