@@ -1,0 +1,25 @@
+packages/server/tests/acp.rs
+  s_48097b1535258f::t_db50d00618e788 442-453
+packages/server/src/host/acp/mod.rs
+  s_48097b1535258f::t_db50d00618e788 50-53
+  s_48097b1535258f::t_4ba67ca1d9015f 54-55
+packages/server/src/host/acp/config.rs
+  s_48097b1535258f::t_db50d00618e788 166-170,173-181,188-195,200,217,219-229,231-233,248-254
+  s_48097b1535258f::t_942768caef08f1 218,230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7c7b4108bbe2633d4d6099327fd59163f6de5881",
+  "prompts": {},
+  "sessions": {
+    "s_48097b1535258f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e424-1033-7223-bb71-4219529fc7aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
