@@ -4,3 +4,4 @@ export const insert = mutation({
   handler: ({ db }, { value }) => db.insert("items", { value }),
 });
 export const get = query({ args: { id: v.id("items") }, handler: ({ db }, { id }) => db.get(id) });
+export const large = query({ handler: () => "x".repeat(1024 * 1024) });

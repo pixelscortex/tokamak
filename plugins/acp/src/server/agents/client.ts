@@ -67,14 +67,29 @@ class AgentProcess {
   private capabilities: AgentCapabilities = {};
   private tail = "";
   private readonly child;
+  private readonly guardian;
   private failure?: Error;
   constructor(readonly definition: Agent) {
     const env: Record<string, string> = {};
     for (const name of ["PATH", "HOME", "USER", "LANG"])
       if (process.env[name] !== undefined) env[name] = process.env[name]!;
     env.PATH = [dirname(definition.command), env.PATH].filter(Boolean).join(delimiter);
-    // Inherit the worker's process group so server cleanup includes adapters.
-    this.child = spawn(definition.command, definition.args, { env, stdio: "pipe" });
+    this.child = spawn(definition.command, definition.args, { env, stdio: "pipe", detached: true });
+    // The adapter has its own group. A separate process watches worker death,
+    // including when plugin JavaScript is stuck and cannot run an exit handler.
+    this.guardian = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        'trap "" TERM; while IFS= read -r line; do :; done; kill -TERM -"$1" 2>/dev/null; /bin/sleep 0.2; kill -KILL -"$1" 2>/dev/null',
+        "acp-guardian",
+        String(this.child.pid),
+      ],
+      { env: {}, detached: true, stdio: ["pipe", "ignore", "ignore"] },
+    );
+    this.guardian.stdin.on("error", () => {});
+    this.guardian.on("error", (error) => this.close(error));
+    this.guardian.on("exit", () => this.close(new Error("ACP process guardian exited")));
     this.child.stderr.on("data", (data: Buffer) => {
       this.tail = (this.tail + data.toString()).slice(-2048);
     });
@@ -247,7 +262,19 @@ class AgentProcess {
     if (this.failure) return;
     this.failure = error;
     this.connection?.close(error);
-    this.child.kill("SIGKILL");
+    const pid = this.child.pid;
+    const kill = (signal: NodeJS.Signals) => {
+      if (pid) {
+        try {
+          process.kill(-pid, signal);
+        } catch {
+          /* group already exited */
+        }
+      }
+    };
+    kill("SIGTERM");
+    setTimeout(() => kill("SIGKILL"), 200).unref();
+    this.guardian.stdin.end();
     for (const [session, turn] of this.turns) {
       this.settle(session, turn);
       turn.events.fail(error);

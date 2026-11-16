@@ -208,6 +208,110 @@ async fn disable_kills_worker_and_children_and_fails_stuck_calls() {
     panic!("worker or child survived disable: {pids}");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn oversized_messages_fail_only_their_invocation() {
+    let mut fixture = Fixture::new().await;
+    let first = fixture.call("state", json!({})).await.unwrap();
+    let waiting = fixture.start("waitForLarge", json!({}));
+    let large = fixture.start("large", json!({}));
+    let results = BTreeMap::from([fixture.result().await, fixture.result().await]);
+    let error = results[&large].as_ref().unwrap_err();
+    assert!(
+        error.contains("Host operation result exceeds 1 MiB worker limit"),
+        "{error}"
+    );
+    assert_eq!(results[&waiting], Ok(json!("waiting")));
+    assert!(
+        fixture
+            .call("echo", json!({"value":"x".repeat(1024 * 1024),"delay":0}))
+            .await
+            .unwrap_err()
+            .contains("Worker invocation exceeds 1 MiB limit")
+    );
+    let second = fixture.call("state", json!({})).await.unwrap();
+    assert_eq!(first["pid"], second["pid"]);
+    assert_eq!(second["count"], 2);
+    fixture.close().await;
+}
+
+#[cfg(unix)]
+fn worker_lifecycle(scenario: &str) {
+    use std::io::BufRead;
+    use std::process::Stdio;
+    struct ServerGuard(std::process::Child);
+    impl Drop for ServerGuard {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let plugins = directory.path().join("plugins/worker-test");
+    std::fs::create_dir_all(&plugins).unwrap();
+    for (name, text) in artifacts() {
+        std::fs::write(plugins.join(name), text).unwrap();
+    }
+    let mut server = ServerGuard(
+        Command::new(env!("CARGO_BIN_EXE_tokamak"))
+            .args([
+                "--plugins",
+                directory.path().join("plugins").to_str().unwrap(),
+                "--data",
+                directory.path().join("db").to_str().unwrap(),
+                "--listen",
+                "127.0.0.1:0",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    // Keep the actual OS stderr pipe undrained. Bun.spawn eagerly buffers its
+    // pipes, which would hide this regression even without a consumer.
+    let mut line = String::new();
+    std::io::BufReader::new(server.0.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    let url = line
+        .split_whitespace()
+        .find(|part| part.starts_with("ws://"))
+        .expect(&line);
+    let output = Command::new("bun")
+        .arg("packages/server/tests/worker-lifecycle-driver.mjs")
+        .arg(url)
+        .arg(server.0.id().to_string())
+        .arg(scenario)
+        .current_dir(root())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{scenario}: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for _ in 0..150 {
+        if let Some(status) = server.0.try_wait().unwrap() {
+            if scenario == "logs" {
+                assert!(status.success(), "{status}");
+            }
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("server did not shut down promptly");
+}
+#[cfg(unix)]
+#[test]
+fn worker_logs_cannot_block_invocation_or_shutdown() {
+    worker_lifecycle("logs");
+}
+#[cfg(unix)]
+#[test]
+fn busy_worker_and_children_die_with_server() {
+    worker_lifecycle("parent-death");
+}
+
 async fn real_turn(agent: &str) {
     let directory = tempfile::tempdir().unwrap();
     let plugins = directory.path().join("plugins");

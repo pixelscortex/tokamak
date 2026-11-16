@@ -109,6 +109,133 @@ test("cancellation settles pending permission and prompt", async () => {
     f.close();
   }
 });
+test("a second prompt is refused while the session has a running turn", async () => {
+  const f = fixture();
+  try {
+    const { sessionId } = await f.agents.open({ agent: "fake", cwd: "/tmp" });
+    const first = f.agents.prompt({ agent: "fake", sessionId, text: "cancel" })[Symbol.asyncIterator]();
+    expect((await first.next()).value?.type).toBe("permission");
+    const second = f.agents.prompt({ agent: "fake", sessionId, text: "hello" })[Symbol.asyncIterator]();
+    await expect(second.next()).rejects.toThrow("ACP session is busy");
+    await f.agents.cancel({ agent: "fake", sessionId });
+    expect((await first.next()).value).toEqual({ type: "done", stopReason: "cancelled" });
+    await first.return?.();
+  } finally {
+    f.close();
+  }
+});
+test("a load-only adapter restores via session/load", async () => {
+  const f = fixture((source) =>
+    source
+      .replace("sessionCapabilities=dict(resume={})", "sessionCapabilities={}")
+      .replace(
+        "elif method in ['session/new', 'session/resume', 'session/load']:",
+        "elif method in ['session/new', 'session/resume', 'session/load']:\n        assert method != 'session/resume'\n        if params.get('sessionId'): assert method == 'session/load'",
+      ),
+  );
+  try {
+    expect(await f.agents.open({ agent: "fake", cwd: "/tmp", sessionId: "saved" })).toEqual({
+      sessionId: "saved",
+      restored: true,
+    });
+  } finally {
+    f.close();
+  }
+});
+
+async function gone(pid: number) {
+  for (let i = 0; i < 100; i++) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await Bun.sleep(20);
+  }
+  throw new Error(`ACP child ${pid} survived`);
+}
+for (const mode of ["crash", "cancel", "close"]) {
+  test(`adapter descendants are killed after ${mode}`, async () => {
+    const f = fixture((source) =>
+      source.replace(
+        "pending = None",
+        "import subprocess\n# Exercise the SIGKILL escalation too.\nchild = subprocess.Popen(['/bin/sh', '-c', 'trap \"\" TERM; exec /bin/sleep 60'])\nopen(__file__ + '.child', 'w').write(str(child.pid))\npending = None",
+      ),
+    );
+    let child: number | undefined;
+    try {
+      const { sessionId } = await f.agents.open({ agent: "fake", cwd: "/tmp" });
+      child = Number(readFileSync(f.command + ".child", "utf8"));
+      if (mode === "crash") await expect(turn(f.agents, "crash")).rejects.toThrow(/ACP/);
+      else if (mode === "close") f.agents.close();
+      else {
+        const stream = f.agents
+          .prompt({ agent: "fake", sessionId, text: "ignore-cancel" })
+          [Symbol.asyncIterator]();
+        expect((await stream.next()).value?.type).toBe("permission");
+        await f.agents.cancel({ agent: "fake", sessionId });
+        await expect(stream.next()).rejects.toThrow(/cancel|closed/i);
+      }
+      await gone(child);
+    } finally {
+      if (child) {
+        try {
+          process.kill(child, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+      f.close();
+    }
+  }, 10_000);
+}
+test("adapter groups are killed when a busy worker dies", async () => {
+  const f = fixture((source) =>
+    source.replace(
+      "pending = None",
+      "import subprocess\nchild = subprocess.Popen(['/bin/sleep', '60'])\nopen(__file__ + '.child', 'w').write(str(child.pid))\nopen(__file__ + '.pid', 'w').write(str(os.getpid()))\npending = None",
+    ),
+  );
+  const worker = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `
+    import { Agents } from ${JSON.stringify(new URL("../src/server/agents/client.ts", import.meta.url).pathname)};
+    const agents = new Agents([{ id: "fake", title: "fake", command: ${JSON.stringify(f.command)}, args: [] }]);
+    await agents.open({agent: "fake", cwd: "/tmp"});
+    process.stdout.write("ready\\n");
+    for (;;) {}
+  `,
+    ],
+    { stdout: "pipe", stderr: "inherit" },
+  );
+  let adapter: number | undefined;
+  let child: number | undefined;
+  try {
+    const reader = worker.stdout.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("ready");
+    reader.releaseLock();
+    adapter = Number(readFileSync(f.command + ".pid", "utf8"));
+    child = Number(readFileSync(f.command + ".child", "utf8"));
+    worker.kill("SIGKILL");
+    await worker.exited;
+    await gone(adapter);
+    await gone(child);
+  } finally {
+    worker.kill("SIGKILL");
+    await worker.exited;
+    for (const pid of [adapter, child])
+      if (pid) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+    f.close();
+  }
+});
 test("folder expansion and unsafe executable discovery", () => {
   expect(checkFolder({ path: "" })).toBe(homedir());
   expect(checkFolder({ path: "~" })).toBe(homedir());

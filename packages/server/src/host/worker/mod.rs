@@ -1,5 +1,6 @@
 //! Generic process actions. Database authority stays in invocation-bound ops.
 mod discovery;
+mod logs;
 mod process;
 
 use crate::plugins::Asset;

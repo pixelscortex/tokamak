@@ -1,7 +1,9 @@
 import { action, query, v } from "@tokamak/sdk";
 import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { api } from "./_generated/api";
 let count = 0;
+let releaseLarge: (() => void) | undefined;
 let retained: (() => Promise<unknown>) | undefined;
 export const state = action({
   handler: () => ({
@@ -44,7 +46,34 @@ export const crash = action({ handler: () => process.exit(7) });
 export const stuck = action({ handler: () => new Promise(() => {}) });
 export const cpu = action({
   handler: () => {
+    writeFileSync("cpu-started", "");
     for (;;) {}
+  },
+});
+export const flood = action({
+  args: { stderr: v.boolean() },
+  handler: async (_, { stderr }) => {
+    for (let i = 0; i < 4096; i++) {
+      if (stderr) process.stderr.write("x".repeat(8192) + "\n");
+      else console.log("x".repeat(8192));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    return "flooded";
+  },
+});
+export const waitForLarge = action({
+  handler: () =>
+    new Promise<string>((resolve) => {
+      releaseLarge = () => resolve("waiting");
+    }),
+});
+export const large = action({
+  handler: async (ctx) => {
+    try {
+      return await ctx.runQuery(api.database.large, {});
+    } finally {
+      releaseLarge?.();
+    }
   },
 });
 export const cooperative = action({

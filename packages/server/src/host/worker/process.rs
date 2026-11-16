@@ -23,6 +23,31 @@ impl Drop for Group {
     }
 }
 
+fn guardian(group: u32) -> Result<Option<Child>, String> {
+    #[cfg(unix)]
+    {
+        // stdin is a private liveness pipe. Only the server holds its write end;
+        // EOF works even if the worker's JS event loop is blocked indefinitely.
+        let mut command = tokio::process::Command::new("/bin/sh");
+        command.process_group(group as i32);
+        command.args(["-c", "trap '' TERM; while IFS= read -r line; do :; done; kill -TERM -\"$1\" 2>/dev/null; /bin/sleep 0.2; kill -KILL -\"$1\" 2>/dev/null", "worker-guardian", &group.to_string()]);
+        command
+            .env_clear()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map(Some)
+            .map_err(|e| format!("Worker guardian could not start: {e}"))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = group;
+        Ok(None)
+    }
+}
+
 pub(super) fn spawn(
     runtime: &tokio::runtime::Handle,
     id: &str,
@@ -52,6 +77,8 @@ pub(super) fn spawn(
         .spawn()
         .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
     let group = Group(child.id().ok_or("Worker has no pid")?);
+    let mut guardian = guardian(group.0)?;
+    let guardian_input = guardian.as_mut().and_then(|child| child.stdin.take());
     let mut input = child.stdin.take().ok_or("Worker stdin missing")?;
     let output = child.stdout.take().ok_or("Worker stdout missing")?;
     let mut stderr = child.stderr.take().ok_or("Worker stderr missing")?;
@@ -68,6 +95,7 @@ pub(super) fn spawn(
         let _finished = finished;
         // Keep the verified snapshots alive through exit; never reopen build output.
         let _snapshots = (entry, code);
+        let _guardian_input = guardian_input;
         let label = id.clone();
         let _stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
             let mut chunk = [0u8; 4096];
@@ -75,7 +103,10 @@ pub(super) fn spawn(
                 if n == 0 {
                     break;
                 }
-                eprintln!("Plugin {label}: {}", String::from_utf8_lossy(&chunk[..n]));
+                logs::send(format!(
+                    "Plugin {label}: {}",
+                    String::from_utf8_lossy(&chunk[..n])
+                ));
             }
         }));
         let (writes, mut outgoing) = mpsc::channel::<Value>(128);
@@ -99,7 +130,7 @@ pub(super) fn spawn(
             let _ = failed.send(result.err().unwrap_or_else(|| "Worker stdin closed".into()));
         }));
         let mut calls = BTreeMap::new();
-        let error = run(
+        let supervise = run(
             &id,
             &mut child,
             output,
@@ -108,14 +139,25 @@ pub(super) fn spawn(
             &mut failure,
             &running.kill,
             &mut calls,
-        )
-        .await
+        );
+        let error = tokio::select! {
+            result = supervise => result,
+            status = async {
+                match guardian.as_mut() {
+                    Some(child) => child.wait().await,
+                    None => std::future::pending().await,
+                }
+            } => Err(format!("Worker guardian exited: {status:?}")),
+        }
         .err()
         .unwrap_or_else(|| "Worker stopped".into());
         let _ = writes.try_send(json!({"type":"shutdown"}));
         drop(group);
         let _ = child.kill().await;
         let _ = child.wait().await;
+        if let Some(mut guardian) = guardian {
+            let _ = guardian.wait().await;
+        }
         for (_, call) in calls {
             call.active.cancel();
             let _ = call
@@ -127,12 +169,15 @@ pub(super) fn spawn(
     Ok(process)
 }
 fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
-    if serde_json::to_vec(&value).map_err(|e| e.to_string())?.len() >= FRAME {
+    if oversized(&value)? {
         return Err("Worker message exceeds 1 MiB limit".into());
     }
     input
         .try_send(value)
         .map_err(|_| "Worker write queue full or closed".into())
+}
+fn oversized(value: &Value) -> Result<bool, String> {
+    Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= FRAME)
 }
 async fn run(
     id: &str,
@@ -163,7 +208,10 @@ async fn run(
             Some(result) = ops.join_next() => {
                 if let Ok((call, op, result)) = result {
                     if calls.get(&call).is_some_and(|c| !c.active.is_cancelled()) {
-                        let message = match result { Ok(value) => json!({"type":"opResult","id":op,"value":value}), Err(error) => json!({"type":"opResult","id":op,"error":error}) };
+                        let mut message = match result { Ok(value) => json!({"type":"opResult","id":op,"value":value}), Err(error) => json!({"type":"opResult","id":op,"error":error}) };
+                        if oversized(&message)? {
+                            message = json!({"type":"opResult","id":op,"error":"Host operation result exceeds 1 MiB worker limit"});
+                        }
                         write(input, message)?;
                     }
                 }
@@ -172,6 +220,10 @@ async fn run(
                 Some(Command::Invoke {id, name, args, ops, reply}) => {
                     if calls.len() >= 128 { let _ = reply.send(Err("Worker invocation capacity exceeded".into())); continue; }
                     let message = json!({"type":"invoke","id":id,"fn":name,"args":args});
+                    if oversized(&message)? {
+                        let _ = reply.send(Err("Worker invocation exceeds 1 MiB limit".into()));
+                        continue;
+                    }
                     calls.insert(id, Call {reply, ops, active: CancellationToken::new(), cancel_at: None});
                     write(input, message)?;
                 }
@@ -211,7 +263,7 @@ async fn run(
                             (call_id, op, result)
                         });
                     }
-                    Some("log") => eprintln!("Plugin {id} [{}]: {}", message["level"].as_str().unwrap_or("info"), message["text"].as_str().unwrap_or("")),
+                    Some("log") => logs::send(format!("Plugin {id} [{}]: {}", message["level"].as_str().unwrap_or("info"), message["text"].as_str().unwrap_or(""))),
                     _ => return Err("Invalid worker message".into()),
                 }
             }
