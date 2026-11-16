@@ -1,0 +1,43 @@
+.github/workflows/macos.yml
+  s_186fb549a459e6::t_a0bdb49f84e57c 74-77,83
+  s_186fb549a459e6::t_00f566fe891e08 12-13,30-33,42-43
+  s_186fb549a459e6::t_3ad1a3af3f35c8 49-51,65-69
+moon.yml
+  s_186fb549a459e6::t_caefb8d6e50bb8 9-10,26,32
+  s_186fb549a459e6::t_01ce1a75cb30f3 38-43
+  s_186fb549a459e6::t_c66528fbfc26ac 13-21,29
+  s_186fb549a459e6::t_3ad1a3af3f35c8 22-23,34
+.gitignore
+  s_186fb549a459e6::t_3ad1a3af3f35c8 6
+.ci/check-protocol.sh
+  s_186fb549a459e6::t_3ad1a3af3f35c8 1-17
+.depot/workflows/ci.yml
+  s_186fb549a459e6::t_3ad1a3af3f35c8 25-29
+  s_186fb549a459e6::t_a0bdb49f84e57c 58-61,67,78-81,85
+.ci/setup/action.yml
+  s_186fb549a459e6::t_caefb8d6e50bb8 56-58
+  s_186fb549a459e6::t_fe17c17d53e0ab 6-9,38-39,69-84
+README.md
+  s_186fb549a459e6::t_fe17c17d53e0ab 58-62
+.ci/check.sh
+  s_186fb549a459e6::t_8c25b27c73925a 5-6
+  s_186fb549a459e6::t_fe17c17d53e0ab 9-11,13
+packages/server/moon.yml
+  s_186fb549a459e6::t_3ad1a3af3f35c8 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0bb4801e993a59299d47272b0558a4dbb27fa7c6",
+  "prompts": {},
+  "sessions": {
+    "s_186fb549a459e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e542-d630-7ef0-aba8-12cca9ea3b71",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
