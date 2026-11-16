@@ -48,7 +48,7 @@ A text part is `{type: "text", text: string}`; tool parts are described below.
 Documents include `_id: string` and `_creationTime: number`, plus:
 
 - `Thread`: `ownerId: string`, `title`, `createdAt`, `updatedAt`, optional `model` (defaults to `openrouter/free`).
-- `Message`: `threadId`, `authorId: string`, optional `authorName: string`, `role: "user" | "assistant"`, `parts`,
+- `Message`: `threadId`, `authorId: string`, optional `authorName: string` and `authorRole: "owner" | "guest"`, `role: "user" | "assistant"`, `parts`,
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
   `startedBy: string`, optional `cancelledBy: string`, `model`, `startedAt`,
@@ -73,7 +73,9 @@ messages and running runs. Unsharing removes the thread and its messages from
 live subscriptions. Guests can watch ACP threads but can send only to model
 backends. Their sends use the owner's selected model and key, with no tools,
 at most 20 runs per rolling hour and 100 per rolling day per member, and a
-16 KB UTF-8 text limit. Shared history prefixes user turns with `Name: `.
+16 KB UTF-8 text limit. Model history keeps owner turns plain and always marks
+guest turns as untrusted, using their stored author identity even after unsharing.
+`members:hello` rejects guest names equal to "owner" case-insensitively.
 
 Only `threads:list`, `messages:list`, `runs:running`, `runs:active`, `chat:send`,
 `runs:cancel`, `runs:recover` and `members:hello` accept guest wire calls. Guests

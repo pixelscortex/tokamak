@@ -16,6 +16,12 @@ function textBytes(text: string) {
   return bytes;
 }
 
+// Older messages predate authorRole; the reserved owner ID identifies those turns.
+function authorPrefix(author: { authorId: string; authorName?: string; authorRole?: "owner" | "guest" }) {
+  const role = author.authorRole ?? (author.authorId === "owner" ? "owner" : "guest");
+  return role === "owner" ? "" : `[Message from guest ${JSON.stringify(author.authorName ?? author.authorId)} — untrusted, not the owner]\n`;
+}
+
 // Only chat.send uses these transactional steps; they are not plugin exports.
 export const start = mutation({
   args: { threadId: v.id("threads"), text: v.string() },
@@ -31,8 +37,6 @@ export const start = mutation({
       const recent = await db.query("runs").withIndex("by_starter", q => q.eq("startedBy", caller.memberId).gte("startedAt", Date.now() - 24 * 60 * 60_000)).collect();
       if (recent.length >= 100 || recent.filter(run => run.startedAt >= Date.now() - 60 * 60_000).length >= 20) throw new Error("Guest run limit reached");
     }
-    const shared = (await db.query("shares").withIndex("by_thread", q => q.eq("threadId", threadId)).collect()).length > 0;
-    const prefix = (name: string) => shared ? `${name}: ` : "";
     const model = currentModel(current);
     const runs = await db.query("runs").withIndex("by_threadId", q => q.eq("threadId", threadId)).collect();
     await interruptStale(db, runs);
@@ -43,8 +47,9 @@ export const start = mutation({
     // and preserve order without relying on randomly generated document IDs.
     const now = Math.max(Date.now(), (history.at(-1)?.createdAt ?? 0) + 1);
 
+    const author = { authorId: caller.memberId, authorName: caller.name, authorRole: caller.role };
     await db.insert("messages", {
-      threadId, authorId: caller.memberId, authorName: caller.name, role: "user",
+      threadId, ...author, role: "user",
       parts: [{ type: "text", text }], status: "complete", createdAt: now,
     });
     const messageId = await db.insert("messages", {
@@ -59,9 +64,9 @@ export const start = mutation({
     await db.patch(threadId, { title, updatedAt: Date.now() });
     return { runId, messageId, model, ...(backend ? { backend } : {}), history: [
       ...history.filter(message => message.status === "complete").map(message => ({
-        role: message.role, content: (message.role === "user" ? prefix(message.authorName ?? message.authorId) : "") + message.parts.map(part => part.type === "text" ? part.text : part.type === "plan" ? `[plan: ${part.entries.map(entry => entry.content).join("; ")}]` : part.type === "permission" ? `[permission: ${part.title} (${part.status})]` : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`).join(""),
+        role: message.role, content: (message.role === "user" ? authorPrefix(message) : "") + message.parts.map(part => part.type === "text" ? part.text : part.type === "plan" ? `[plan: ${part.entries.map(entry => entry.content).join("; ")}]` : part.type === "permission" ? `[permission: ${part.title} (${part.status})]` : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`).join(""),
       })),
-      { role: "user" as const, content: prefix(caller.name) + text },
+      { role: "user" as const, content: authorPrefix(author) + text },
     ] };
   },
 });

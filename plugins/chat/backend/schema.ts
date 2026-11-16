@@ -16,6 +16,7 @@ export default defineSchema({
   messages: defineTable({
     threadId: v.id("threads"),
     authorId: v.string(), authorName: v.optional(v.string()),
+    authorRole: v.optional(v.union(v.literal("owner"), v.literal("guest"))),
     role: v.union(v.literal("user"), v.literal("assistant")),
     parts: v.array(v.union(textPart, toolPart, planPart, permissionPart)),
     status: v.union(v.literal("streaming"), v.literal("complete"), v.literal("error"), v.literal("cancelled")),

@@ -425,7 +425,10 @@ async fn shared_chat_streams_with_caller_identity_and_revokes_live_access() {
         .collect();
     assert_eq!(
         user_text,
-        vec![json!("Owner: Hi"), json!("Sam: Hello from Sam")]
+        vec![
+            json!("Hi"),
+            json!("[Message from guest \"Sam\" — untrusted, not the owner]\nHello from Sam")
+        ]
     );
     denied(
         &mut guest,
@@ -570,6 +573,29 @@ async fn shared_chat_streams_with_caller_identity_and_revokes_live_access() {
         "not shared",
     )
     .await;
+    call(
+        &mut owner,
+        "mutation",
+        "chat/threads:setBackend",
+        json!({"threadId":shared,"backend":{"kind":"model","model":"openrouter/free"}}),
+    )
+    .await;
+    call(
+        &mut owner,
+        "action",
+        "chat/chat:send",
+        json!({"threadId":shared,"text":"Continue"}),
+    )
+    .await;
+    assert!(
+        fixture.requests.lock().unwrap().last().unwrap()["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|message| message["role"] == "user"
+                && message["content"]
+                    == "[Message from guest \"Sam\" — untrusted, not the owner]\nHello from Sam")
+    );
     drop(owner);
     drop(guest);
     clean(fixture).await;
