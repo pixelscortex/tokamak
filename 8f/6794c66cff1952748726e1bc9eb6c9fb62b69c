@@ -1,0 +1,43 @@
+packages/build/src/client-surface.ts
+  s_72a310939c8740::t_b490c68b2a72c6 9-12,24-41,60-62,65-73,106-112,114
+packages/sdk/client.tsx
+  s_72a310939c8740::t_b52ea851bac948 12-13,63-67,72-81,83-109,190-200
+  s_72a310939c8740::t_b490c68b2a72c6 128-135,143-146,153-157
+app/tests/run.ts
+  s_72a310939c8740::t_787a83ed032bd8 7,21,25,30-34
+app/tests/plugins.rs
+  s_72a310939c8740::t_3c773c4cd354da 1888-1938
+  s_72a310939c8740::t_c691022914b68b 1655,1885-1887,1939-1948
+app/src/shell.tsx
+  s_72a310939c8740::t_b490c68b2a72c6 66-128
+  s_72a310939c8740::t_b52ea851bac948 11,19-30,65,129
+plugins/chat/src/client/lib/state/session.ts
+  s_72a310939c8740::t_b490c68b2a72c6 16-25
+  s_72a310939c8740::t_b52ea851bac948 1-15,26-28
+plugins/chat/src/client/lib/composer.ts
+  s_72a310939c8740::t_b52ea851bac948 9,34-37
+plugins/chat/src/client/pages/screen.tsx
+  s_72a310939c8740::t_b52ea851bac948 4-5,19
+packages/build/tests/plugins.test.mjs
+  s_72a310939c8740::t_b490c68b2a72c6 250-284
+plugins/chat/src/client/ui/composer/send-button.tsx
+  s_72a310939c8740::t_b52ea851bac948 9
+app/tests/client-extensions.tsx
+  s_72a310939c8740::t_787a83ed032bd8 1-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8f6794c66cff1952748726e1bc9eb6c9fb62b69c",
+  "prompts": {},
+  "sessions": {
+    "s_72a310939c8740": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e43e-a4de-7d20-89d8-8f1608973cf9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
