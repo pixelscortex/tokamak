@@ -1393,7 +1393,6 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
         inner.get_node(id).unwrap().text_content()
     };
     assert_eq!(code(app.doc()), "print(1)");
-    let pre = app.doc().inner().query_selector("pre").unwrap().unwrap();
     let paragraph = app
         .doc()
         .inner()
@@ -1410,7 +1409,8 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
             format!("print(1){suffix}")
         };
         app.wait(|doc| code(doc) == expected);
-        assert_eq!(app.doc().inner().query_selector("pre").unwrap(), Some(pre));
+        // The growing block is rebuilt (Blitz would keep its old layout);
+        // finished blocks before it keep their nodes.
         assert_eq!(
             app.doc().inner().query_selector("#markdown p").unwrap(),
             Some(paragraph)

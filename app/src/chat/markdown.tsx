@@ -1,5 +1,5 @@
-import { ErrorBoundary, Index, Show, createEffect, createMemo, on } from "solid-js";
-import { Lexer, type Token, type Tokens as MarkedTokens } from "marked";
+import { ErrorBoundary, For, Index, Show, createEffect, createMemo, on } from "solid-js";
+import { Lexer, type Token } from "marked";
 
 // CommonMark only: no HTML renderer, DOM APIs, highlighting or GFM extensions.
 // The lexer keeps an unfinished fenced block as code throughout streaming.
@@ -8,7 +8,7 @@ export function Markdown(props: { text: string }) {
     try {
       return Lexer.lex(props.text, { gfm: false }).map((token, index) => {
         const before = previous?.[index];
-        // Index keeps each block's slot; unchanged tokens keep its rendered nodes.
+        // Unchanged tokens keep their identity, so For keeps their rendered nodes.
         return before?.type === token.type && JSON.stringify(before) === JSON.stringify(token) ? before : token;
       });
     } catch {
@@ -21,10 +21,13 @@ export function Markdown(props: { text: string }) {
   }}><Show when={tokens()} fallback={props.text}><Tokens tokens={tokens()} depth={0} /></Show></ErrorBoundary></div>;
 }
 
+// Keyed by token identity: a changed block gets new nodes. Blitz does not
+// re-measure a block whose text node changes in place, so a streaming
+// paragraph would keep its first, narrow layout and overlap the next one.
 function Tokens(props: { tokens: Token[] | undefined; depth: number }) {
-  return <Index each={props.tokens}>{token => <Show when={props.depth < 8} fallback={token().raw}><Show when={token().type === "code"} fallback={<>{renderToken(token(), props.depth)}</>}>
-    <pre><code>{(token() as MarkedTokens.Code).text}</code></pre>
-  </Show></Show>}</Index>;
+  return <For each={props.tokens}>{token => props.depth >= 8 ? token.raw
+    : token.type === "code" ? <pre><code>{token.text}</code></pre>
+    : renderToken(token, props.depth)}</For>;
 }
 
 function renderToken(token: Token, depth: number) {
