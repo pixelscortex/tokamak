@@ -28,6 +28,7 @@ export default defineSchema({
     status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),
     waiting: v.optional(v.boolean()), startedBy: v.string(), cancelledBy: v.optional(v.string()),
     error: v.optional(v.string()), updatedAt: v.optional(v.number()), heartbeat: v.optional(v.number()),
+    observation: v.optional(v.object({ sweepId: v.string(), tick: v.number(), heartbeat: v.number(), unchanged: v.number() })),
     model: v.string(), startedAt: v.number(), finishedAt: v.optional(v.number()),
   }).index("by_threadId", ["threadId"]).index("by_status", ["status"]).index("by_starter", ["startedBy", "startedAt"]),
 });

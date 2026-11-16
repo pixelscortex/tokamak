@@ -19,6 +19,8 @@ export function useRunRecovery(client: TokamakClient, running: Accessor<boolean>
       sweep.schedule();
       return;
     }
+    const sweepId = `${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    let tick = 0;
     let stopped = false;
     let recovering = false;
     let cancelDelay: (() => void) | undefined;
@@ -44,7 +46,7 @@ export function useRunRecovery(client: TokamakClient, running: Accessor<boolean>
     async function recover() {
       recovering = true;
       try {
-        await client.action(api.runs.recover, {});
+        await client.mutation(api.runs.observe, { sweepId, tick: tick++ });
       } catch (cause) {
         if (!stopped) setError(String(cause));
       } finally {

@@ -1,9 +1,8 @@
 import { canSee } from "./access";
 import { interruptResponse } from "./run-messages";
-import { recoverRuns } from "./recovery";
 import { v, type Caller, type DatabaseReader } from "@tokamak/sdk";
 import type { Model } from "./_functions";
-import { action, mutation, query } from "./_functions";
+import { mutation, query } from "./_functions";
 
 export const running = query({
   guest: true,
@@ -53,10 +52,29 @@ export const cancel = mutation({
   },
 });
 
-// Queries stay read-only; clients observe liveness through a timed action.
-export const recover = action({
-  guest: true,
-  handler: (ctx): Promise<null> => recoverRuns(ctx),
+// Three observations span two intervals on the desktop's 30-second timer.
+export const observe = mutation({
+  args: { sweepId: v.string(), tick: v.number() },
+  handler: async ({ db }, { sweepId, tick }) => {
+    if (!Number.isSafeInteger(tick) || tick < 0) throw new Error("Invalid sweep tick");
+    const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
+    for (const run of runs) {
+      const previous = run.observation;
+      if (previous?.sweepId === sweepId && tick <= previous.tick) continue;
+      const heartbeat = run.heartbeat ?? 0;
+      const unchanged = previous?.sweepId === sweepId && tick === previous.tick + 1 && previous.heartbeat === heartbeat
+        ? previous.unchanged + 1 : 1;
+      if (unchanged < 3) {
+        await db.patch(run._id, { observation: { sweepId, tick, heartbeat, unchanged } });
+        continue;
+      }
+      const now = Date.now();
+      await db.patch(run._id, { status: "error", waiting: false, error: "Interrupted", finishedAt: now });
+      await interruptResponse(db, run, "error", "Interrupted");
+      await db.patch(run.threadId, { updatedAt: now });
+    }
+    return null;
+  },
 });
 
 async function visibleRuns(ctx: { db: DatabaseReader<Model>; caller: Caller }) {

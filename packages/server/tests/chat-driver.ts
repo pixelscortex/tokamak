@@ -81,7 +81,8 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
         await client.mutation(api.runs.cancel, { runId: run._id });
       } else if (mode === "recovery") {
         // Simulate the final recovery transaction after an abandoned observation.
-        await client.mutation(api.testing.interrupt, { runId: run._id });
+        await client.mutation(api.testing.abandon, { runId: run._id });
+        await client.mutation(api.runs.observe, { sweepId: "abandoned", tick: 2 });
       } else {
         await until(async () => ((await client.query(api.runs.active, { threadId }))?.updatedAt ?? 0) > run.updatedAt!);
       }
@@ -376,8 +377,15 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       await client.mutation(api.send.update, { runId: stale.runId, delta: "", tool: {
         callId: "stale-tool", plugin: "b", toolName: "fixture.create", args: {}, status: "running",
       } });
-      await client.mutation(api.testing.age, { runId: stale.runId });
-      await client.action(api.runs.recover, {});
+      const observe = (sweepId: string, tick: number) => client.mutation(api.runs.observe, { sweepId, tick });
+      // Future timestamps model a backward clock jump; sends still refuse busy runs.
+      await client.mutation(api.testing.age, { runId: stale.runId, offset: 3_600_000 });
+      await assert.rejects(client.action(api.chat.send, input), /already has an active run/);
+      await observe("first", 0);
+      await observe("first", 0); // Retried ticks cannot advance the observation.
+      await observe("first", 1);
+      assert.equal((await client.query(api.runs.active, { threadId }))?._id, stale.runId);
+      await observe("first", 2);
       const interrupted = (await client.query(api.messages.list, { threadId }))[1]!;
       assert.equal(interrupted.status, "error");
       assert.equal(interrupted.error, "Interrupted");
@@ -386,19 +394,28 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       assert.deepEqual(await client.query(api.runs.running, {}), []);
 
       const healthy = await client.mutation(api.send.start, input);
-      await client.mutation(api.testing.age, { runId: healthy.runId });
-      const observed = await client.query(api.recovery.snapshot, {});
-      await client.mutation(api.send.update, { runId: healthy.runId, delta: "" });
-      // A heartbeat wins even when its wall timestamp is made older again.
-      await client.mutation(api.testing.age, { runId: healthy.runId });
-      await client.mutation(api.recovery.interrupt, { observed });
+      for (let tick = 0; tick < 4; tick++) {
+        await client.mutation(api.send.update, { runId: healthy.runId, delta: "" });
+        await client.mutation(api.testing.age, { runId: healthy.runId, offset: -61_000 });
+        await observe("healthy", tick);
+      }
       assert.equal((await client.query(api.runs.active, { threadId }))?._id, healthy.runId);
       await client.mutation(api.runs.cancel, { runId: healthy.runId });
-      await client.action(api.runs.recover, {});
+      await observe("healthy", 4);
       assert.equal((await client.query(api.messages.list, { threadId }))[3]!.status, "cancelled");
 
       const abandoned = await client.mutation(api.send.start, input);
-      await client.mutation(api.testing.age, { runId: abandoned.runId });
+      await client.mutation(api.testing.age, { runId: abandoned.runId, offset: -61_000 });
+      await assert.rejects(client.action(api.chat.send, input), /already has an active run/);
+      for (let tick = 0; tick < 4; tick++) {
+        await observe("client-a", tick);
+        await observe("client-b", tick);
+      }
+      assert.equal((await client.query(api.runs.active, { threadId }))?._id, abandoned.runId);
+      // A fresh sweeper on launch recovers persisted runs without timestamp checks.
+      await observe("relaunched", 0);
+      await observe("relaunched", 1);
+      await observe("relaunched", 2);
       assert.equal((await client.action(api.chat.send, { threadId, text: "Try again" })).status, "done");
       const messages = await client.query(api.messages.list, { threadId });
       assert.equal(messages[5]!.error, "Interrupted");
@@ -409,9 +426,11 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const silent = client.action(api.chat.send, { threadId, text: "Quiet provider" });
       await until(async () => !!await client.query(api.runs.active, { threadId }));
       const quiet = (await client.query(api.runs.active, { threadId }))!;
-      await client.mutation(api.testing.age, { runId: quiet._id });
-      await until(async () => Date.now() - ((await client.query(api.runs.active, { threadId }))?.updatedAt ?? 0) < 60_000, 750);
-      await client.action(api.runs.recover, {});
+      for (let tick = 0; tick < 4; tick++) {
+        const before = (await client.query(api.runs.active, { threadId }))!.heartbeat ?? 0;
+        await until(async () => ((await client.query(api.runs.active, { threadId }))?.heartbeat ?? 0) > before, 750);
+        await observe("quiet", tick);
+      }
       assert.equal((await client.query(api.runs.active, { threadId }))?._id, quiet._id);
       releaseHeaders = true;
       assert.equal((await silent).status, "done");

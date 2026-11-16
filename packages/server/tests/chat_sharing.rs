@@ -470,6 +470,14 @@ async fn shared_chat_streams_with_caller_identity_and_revokes_live_access() {
         "Not available to guests",
     )
     .await;
+    denied(
+        &mut guest,
+        "mutation",
+        "chat/runs:observe",
+        json!({"sweepId":"guest","tick":0}),
+        "Not available to guests",
+    )
+    .await;
     for (count, age) in [(20, 0), (100, 2 * 60 * 60 * 1000)] {
         call(
             &mut owner,

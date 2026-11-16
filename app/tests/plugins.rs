@@ -1389,9 +1389,7 @@ fn chat_screen_socket_workflow() {
             json!({"threadId": thread, "text": "Simulated interrupted reply"}),
         );
         drop(window);
-        // No action owns this persisted run. Reopen after the stale threshold,
-        // as when the native app exits while a reply is abandoned.
-        std::thread::sleep(Duration::from_secs(61));
+        // No action owns this persisted run. A fresh launch starts observing it.
         window = Window::open(&service.directory);
         window
             .doc
@@ -1402,7 +1400,7 @@ fn chat_screen_socket_workflow() {
                 window_size: (680, 820),
                 ..Default::default()
             });
-        window.wait(|doc| {
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
             doc.inner().get_element_by_id("chat-messages").is_some()
                 && support::text(doc, "chat-messages").contains("Interrupted")
         });

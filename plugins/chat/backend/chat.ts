@@ -5,7 +5,6 @@ import { api } from "./_generated/api";
 import { acpSend } from "./acp";
 import { discoverTools } from "./tools";
 import { toolApproval } from "./tool-approval";
-import { recoverRuns, STALE_AFTER_MS } from "./recovery";
 import { streamBuffer } from "./stream-buffer";
 import { toolEvents } from "./tool-events";
 import { toolAcknowledgements } from "./acknowledgements";
@@ -18,10 +17,7 @@ export const send = action({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
     const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
-    if (active) {
-      if (Date.now() - (active.updatedAt ?? active.startedAt) < STALE_AFTER_MS) throw new Error("Thread already has an active run");
-      await recoverRuns(ctx, args.threadId);
-    }
+    if (active) throw new Error("Thread already has an active run");
     const started = await ctx.runMutation(api.send.start, args);
     if (started.backend?.kind === "acp") return acpSend(ctx, args, started, started.backend);
     const { runId, messageId, history, model } = started;

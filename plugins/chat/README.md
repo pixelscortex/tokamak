@@ -40,7 +40,7 @@ All functions use one argument object. Wire names and results:
 | Action | `chat/agents:list` | `{}` | `{id, title}[]` |
 | Mutation | `chat/threads:setModel` | `{threadId, model: string}` | `null` |
 | Mutation | `chat/threads:remove` | `{threadId}` | `null` |
-| Action | `chat/runs:recover` | `{}` | `null` |
+| Mutation | `chat/runs:observe` | `{sweepId: string, tick: number}` | `null` |
 | Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null` |
 | Mutation | `chat/runs:cancel` | `{runId}` | `null` |
 | Action | `chat/chat:send` | `{threadId, text: string}` | `{runId, messageId, status: "done" \| "error" \| "cancelled"}` |
@@ -94,7 +94,7 @@ their existing behavior.
 or `Guest`), so every viewer can label the busy strip.
 
 Only `threads:list`, `messages:list`, `runs:running`, `runs:active`, `chat:send`,
-`runs:cancel`, `runs:recover` and `members:hello` accept guest wire calls. Guests
+`runs:cancel` and `members:hello` accept guest wire calls. Guests
 may cancel only their own runs in visible threads; the owner may cancel any run.
 Guests cannot create, rename or remove threads, change models or backends,
 list agents, share threads, list members, or answer permissions.
@@ -118,18 +118,23 @@ cross-plugin export surface; use `chat:send` to send messages.
 
 No scheduler, retries, or embedded UI is included. Host authentication and
 per-thread sharing govern access.
-There is no plugin initialization hook today. Recovery is
-lazy: `chat.send` checks running runs before admitting a new reply; the native
-client calls `runs:recover` on observing running runs and schedules another check
-30 seconds after each recovery while they exist (queries remain read-only). Recovery snapshots heartbeat
-counters, waits 60 seconds using an action timer, then interrupts only runs whose
-counters have not advanced. Actions heartbeat every 10 seconds using timers,
-including while waiting for HTTP headers or silent streams. Wall-clock changes
-do not affect liveness. Abandoned runs, including legacy runs without a counter,
-become `error` with `error: "Interrupted"`; their response messages do too.
+There is no plugin initialization hook today. The owner's desktop starts a sweep
+on launch when running runs are observed, then calls the owner-only `runs:observe`
+mutation every 30 seconds on its own timer while runs exist. Each sweep has a
+unique `sweepId` and increasing `tick`. Three consecutive observations with an
+unchanged heartbeat counter interrupt a run (at least 60 seconds between the
+first and third). Changing sweepers resets the observation, so multiple clients
+cannot accumulate ticks together. Duplicate ticks are ignored.
+Actions heartbeat every 10 seconds, including while waiting for HTTP headers,
+silent streams, tools, or permissions. Recovery never waits inside an action
+and never uses wall-clock age to decide liveness. A send encountering a running
+run returns the busy error until that run finishes or the sweep interrupts it.
+A dead run clears within about 90 seconds while the owner's app is open;
+otherwise it clears on the next launch, after the sweep's observation window.
+Abandoned runs, including legacy runs without a counter, become `error` with
+`error: "Interrupted"`; their messages, tools, and pending permissions settle too.
 Terminal runs are left alone. Recovery does not resume or retry work; durable
-runs (TKM-103) remain out of scope. Retrying a run with an old heartbeat timestamp
-waits for this observation window before admitting a new reply.
+runs (TKM-103) remain out of scope.
 
 Offline integration tests run in `cargo test -p server`. The ignored
 `chat_real_openrouter_smoke` test is a manual real-provider check with `.env.local`:

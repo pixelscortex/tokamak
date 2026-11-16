@@ -1,8 +1,9 @@
 import type {} from "@tokamak/sdk/web";
 import type { ActionContext, Id, Infer } from "@tokamak/sdk";
 import { api } from "./_generated/api";
-import { HEARTBEAT_MS } from "./recovery";
 import type { planPart, ToolPart } from "./parts";
+
+const HEARTBEAT_MS = 10_000;
 
 export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
   let pending = "";

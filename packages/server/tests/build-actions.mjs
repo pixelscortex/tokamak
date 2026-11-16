@@ -48,18 +48,18 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
     if (id === "chat") {
       const permissions = join(path, "backend/permissions.ts");
       await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
-      const recovery = join(path, "backend/recovery.ts");
-      await writeFile(recovery, (await readFile(recovery, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200").replace("STALE_AFTER_MS = 60_000", "STALE_AFTER_MS = 600"));
+      const buffer = join(path, "backend/stream-buffer.ts");
+      await writeFile(buffer, (await readFile(buffer, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200"));
     }
     if (id === "chat") await writeFile(join(path, "backend/testing.ts"), `
 import { v } from "@tokamak/sdk";
 import { mutation, query } from "./_functions";
-import { interruptObserved } from "./recovery";
-export const interrupt = mutation({
+// Simulate two prior observations of a now-abandoned permission run.
+export const abandon = mutation({
   args: { runId: v.id("runs") },
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId);
-    return interruptObserved(ctx, [{ runId, heartbeat: run!.heartbeat ?? 0 }]);
+  handler: async ({ db }, { runId }) => {
+    const run = await db.get(runId);
+    return db.patch(runId, { observation: { sweepId: "abandoned", tick: 1, heartbeat: run!.heartbeat ?? 0, unchanged: 2 } });
   },
 });
 export const run = query({
@@ -89,8 +89,8 @@ export const quota = mutation({
   },
 });
 export const age = mutation({
-  args: { runId: v.id("runs") },
-  handler: ({ db }, { runId }) => db.patch(runId, { startedAt: Date.now() - 61_000, updatedAt: Date.now() - 61_000 }),
+  args: { runId: v.id("runs"), offset: v.number() },
+  handler: ({ db }, { runId, offset }) => db.patch(runId, { startedAt: Date.now() + offset, updatedAt: Date.now() + offset }),
 });
 `);
     const child = Bun.spawn([process.execPath, join(workspace, "packages/build/src/build.ts"), path], {

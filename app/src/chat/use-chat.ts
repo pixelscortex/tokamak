@@ -68,7 +68,7 @@ export function useChat(client: TokamakClient) {
     alive = false;
   });
 
-  useRunRecovery(client, () => Boolean(running.data()?.length), setError);
+  useRunRecovery(client, () => isOwner() && Boolean(running.data()?.length), setError);
 
   const thread = createMemo(() => threads.data()?.find(item => item._id === threadId()));
   const active = () => runs()[threadId() ?? ""] ?? null;

@@ -13,7 +13,7 @@ export const api = createApi<{
     running: FunctionReference<"query", {}, { runId: Id<"runs">; threadId: Id<"threads">; model: string; waiting: boolean; startedBy: string; starterName: string }[]>;
     active: FunctionReference<"query", { threadId: Id<"threads"> }, Doc<Model, "runs"> | null>;
     cancel: FunctionReference<"mutation", { runId: Id<"runs"> }, null>;
-    recover: FunctionReference<"action", {}, null>;
+    observe: FunctionReference<"mutation", { sweepId: string; tick: number }, null>;
   };
   agents: {
     list: FunctionReference<"action", {}, { id: string; title: string }[]>;
