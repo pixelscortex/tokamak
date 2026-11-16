@@ -1,0 +1,21 @@
+app/src/chat/markdown.tsx
+  s_a4eafea936df57::t_2a52a238d36a2b 7,9-13
+app/tests/native.rs
+  s_a4eafea936df57::t_695bbc2f61d6d4 1397-1402,1414-1417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d338f53c9aaa746965dd8694b3f94d7eace81547",
+  "prompts": {},
+  "sessions": {
+    "s_a4eafea936df57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e2bb-fbf2-7482-9c16-b35df546e14e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
