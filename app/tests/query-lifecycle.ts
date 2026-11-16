@@ -15,7 +15,7 @@ type Registration = {
   stops: number;
 };
 const registrations: Registration[] = [];
-let registrationFailure: unknown;
+let registrationFailure: unknown = undefined;
 const transport: ClientTransport = {
   query: async () => null,
   mutation: async () => null,

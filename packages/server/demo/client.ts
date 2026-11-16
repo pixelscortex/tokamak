@@ -1,5 +1,6 @@
 // Run with Bun after bundling ./feature. Two real independent connections use
 // one SDK client implementation; the second observes the first client's commit.
+import { format } from "node:util";
 import { TokamakClient, WebSocketTransport } from "../../sdk/src/index";
 import { api } from "./feature/_generated/api";
 
@@ -30,17 +31,17 @@ try {
   const text = `headless demo ${Date.now()}`;
   const stop = second.client.subscribe(api.todos.list, {}, (event) => {
     if ("error" in event) {
-      console.error(event.error);
+      process.stderr.write(`${format(event.error)}\n`);
       return;
     }
-    console.log("client 2 live update:", event.value);
+    process.stdout.write(`${format("client 2 live update:", event.value)}\n`);
     initial();
     if (event.value.some((row) => row.text === text)) updated();
   });
   await ready;
   const id = await first.client.mutation(api.todos.add, { text });
-  console.log("client 1 added:", id);
-  console.log("client 1 list:", await first.client.query(api.todos.list, {}));
+  process.stdout.write(`${format("client 1 added:", id)}\n`);
+  process.stdout.write(`${format("client 1 list:", await first.client.query(api.todos.list, {}))}\n`);
   await live;
   stop();
 } finally {

@@ -12,8 +12,13 @@
     "**/node_modules/**",
     "**/target/**",
     "**/vendor/**",
-    "**/*lock*",
     "packages/engine/tests/fixtures/*.js",
-    "packages/engine/tests/fixtures/*.js.map"
+    "packages/engine/tests/fixtures/*.js.map",
+    "**/bun.lock",
+    "**/bun.lockb",
+    "**/Cargo.lock",
+    "**/package-lock.json",
+    "**/yarn.lock",
+    "**/pnpm-lock.yaml"
   ]
 }

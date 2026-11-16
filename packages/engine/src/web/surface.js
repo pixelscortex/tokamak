@@ -32,7 +32,7 @@
   class EventTarget {
     #listeners = new Map();
     addEventListener(type, callback, options = {}) {
-      if (callback == null) return;
+      if (callback === null || callback === undefined) return;
       let list = this.#listeners.get(type);
       if (!list) this.#listeners.set(type, (list = []));
       if (!list.some((x) => x.callback === callback)) list.push({ callback, once: !!options.once });
@@ -438,7 +438,7 @@
     }
   }
   const bodyStream = (body, headers) => {
-    if (body == null) return null;
+    if (body === null || body === undefined) return null;
     if (body instanceof ReadableStream) {
       if (body.locked || body._disturbed) throw new TypeError("Body has already been consumed");
       return body;
@@ -532,7 +532,7 @@
   class Request extends Body {
     constructor(input, init = {}) {
       const source = input instanceof Request ? input : null;
-      const sourceBody = init.body == null ? source?.body : null;
+      const sourceBody = init.body === null || init.body === undefined ? source?.body : null;
       super(init.body ?? sourceBody, init.headers ?? source?.headers);
       this.url = new URL(source ? source.url : String(input)).href;
       this.method = String(init.method ?? source?.method ?? "GET").toUpperCase();

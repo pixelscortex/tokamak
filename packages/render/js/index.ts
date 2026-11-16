@@ -139,7 +139,8 @@ const adapter = createRenderer<NativeNode>({
   },
   setProperty(node, name, value) {
     if (/^on[A-Z]/.test(name)) {
-      if (value != null && typeof value !== "function") throw new TypeError(`${name} must be a handler`);
+      if (value !== null && value !== undefined && typeof value !== "function")
+        throw new TypeError(`${name} must be a handler`);
       const event = name.slice(2).toLowerCase();
       if (typeof value === "function") node.handlers.set(event, owned(value as EventHandler));
       else node.handlers.delete(event);
@@ -148,11 +149,15 @@ const adapter = createRenderer<NativeNode>({
     // ARIA and data booleans are strings. Only HTML boolean attributes use
     // presence/absence; aria-disabled is deliberately not native disabled.
     const boolean = name === "disabled" || name === "readonly" || name === "hidden" || name === "autofocus";
-    if (value != null && !["string", "number", "boolean"].includes(typeof value)) {
+    if (value !== null && value !== undefined && !["string", "number", "boolean"].includes(typeof value)) {
       throw new TypeError(`${name} must be a scalar attribute`);
     }
     const attribute =
-      value == null || (boolean && value === false) ? null : boolean && value === true ? "" : String(value);
+      value === null || value === undefined || (boolean && value === false)
+        ? null
+        : boolean && value === true
+          ? ""
+          : String(value);
     pending.push({ op: "attribute", id: node.id, name, value: attribute });
   },
 });

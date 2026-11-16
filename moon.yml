@@ -35,16 +35,15 @@ tasks:
     options:
       cache: false
   format:
-    command: "proto run bun -- run oxfmt --write . && cargo fmt --all"
+    script: "proto run bun -- run oxfmt --write . && cargo fmt --all"
     options:
       cache: false
-      shell: true
   format-check:
-    command: "proto run bun -- run oxfmt --check . && cargo fmt --all --check"
+    script: "proto run bun -- run oxfmt --check . && cargo fmt --all --check"
     options:
       cache: false
-      shell: true
   lint-rust:
+    deps: ["app:bundle", "lab:bundle", "render:bundle", "render:styles"]
     command: "cargo clippy --locked --workspace --lib --bins --all-features"
     options:
       cache: false

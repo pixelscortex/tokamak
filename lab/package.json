@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@tokamak/render": "workspace:*",
     "@tokamak/ui": "workspace:*",
     "solid-js": "1.9.18"
   },

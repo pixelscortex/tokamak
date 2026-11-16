@@ -16,7 +16,6 @@ import {
 } from "../src/index.ts";
 
 const ownerCaller = { memberId: "owner", name: "Owner", role: "owner" };
-const callerHost = { op: () => ownerCaller };
 
 const sdk = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspace = resolve(sdk, "../..");

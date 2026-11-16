@@ -88,8 +88,8 @@ const ALPHA_CHANGED_FIELDS: Variant = Variant {
     id: "alpha",
     version: "1.1.0",
     edits: &[(
-        "    .index(\"by_topic\", [\"topic\"]),",
-        "    .index(\"by_topic\", [\"body\"]),",
+        ".index(\"by_topic\", [\"topic\"]),",
+        ".index(\"by_topic\", [\"body\"]),",
     )],
 };
 const ALPHA_CHANGED_UNIQUE: Variant = Variant {

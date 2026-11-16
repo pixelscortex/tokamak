@@ -101,6 +101,21 @@ Root Bun aliases are `bun run build` (server + desktop release), `bun run check`
 `bun run test`, and `bun run app` / `bun run app:dev` (debug build and launch). They invoke the existing
 Moon/Cargo orchestration, not browser HMR or an unpinned installer.
 
+`proto run bun -- run check` runs the formatting check, TS lint, and advisory Rust
+lint. Run `moon run workspace:format` to apply Oxfmt and rustfmt, or
+`moon run workspace:format-check` to check without writing. Oxfmt is pinned at
+0.78.0 with 2-space indentation, double quotes, semicolons, a 110-column width,
+and trailing commas. Generated output, dependencies, vendor code, and lockfiles
+are excluded. The minified engine source-map fixtures also stay byte-for-byte intact.
+
+Oxlint errors enforce unused variables, console usage (except build tooling,
+tools, and tests), strict equality, const declarations, no `var`, no debugger,
+and import cycles. Explicit `any` and the existing size/complexity rules warn.
+The command-line server demo writes its results directly to stdout/stderr.
+Clippy remains advisory because existing Rust warnings do not pass `-D warnings`.
+Use `.git-blame-ignore-revs` to skip the repository-wide formatting commit:
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+
 `bun run plugin:build <folder>` produces the versioned artifact described in
 `packages/build/README.md`. Unchanged output bytes are not rewritten; generated
 native context keeps embed paths out of application entry points.

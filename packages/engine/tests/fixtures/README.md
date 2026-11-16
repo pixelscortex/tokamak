@@ -44,3 +44,7 @@ bun build packages/engine/tests/fixtures/array-initializer.ts --target=browser -
 Run these from the repository root to regenerate. Do not hand-edit mappings or
 adjust the expected throwing line to follow runtime output. Tests include the
 checked-in output, so Cargo tests do not need Bun or a bundler installation.
+
+The generated `array-initializer.js` and `startup.js` bundles are excluded from
+formatting and linting so their source-map coordinates remain intact. Regenerate
+them with Bun rather than editing them by hand.

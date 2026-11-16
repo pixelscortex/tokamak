@@ -35,6 +35,7 @@
     "lab": {
       "name": "@tokamak/lab",
       "dependencies": {
+        "@tokamak/render": "workspace:*",
         "@tokamak/ui": "workspace:*",
         "solid-js": "1.9.18",
       },
