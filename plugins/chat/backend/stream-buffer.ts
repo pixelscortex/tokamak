@@ -18,6 +18,17 @@ export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
 
   let heartbeatAt = flushedAt;
 
+  async function maintain() {
+    if (pending && Date.now() - flushedAt >= 100) {
+      await update();
+      heartbeatAt = flushedAt;
+    }
+    if (Date.now() - heartbeatAt >= HEARTBEAT_MS) {
+      await ctx.runMutation(api.send.update, { runId, delta: "" });
+      heartbeatAt = Date.now();
+    }
+  }
+
   // Include the initial HTTP request: a quiet provider still owns a live run.
   async function waitFor<T>(promise: Promise<T>): Promise<T> {
     const settled = promise.then(value => ({ value }));
@@ -29,17 +40,10 @@ export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
       ]).finally(() => clearTimeout(timer));
 
       if (!await ctx.runQuery(api.send.running, { runId })) throw new Error("Run cancelled");
-      if (pending && Date.now() - flushedAt >= 100) {
-        await update();
-        heartbeatAt = flushedAt;
-      }
-      if (Date.now() - heartbeatAt >= HEARTBEAT_MS) {
-        await ctx.runMutation(api.send.update, { runId, delta: "" });
-        heartbeatAt = Date.now();
-      }
+      await maintain();
       if (result) return result.value;
     }
   }
 
-  return { update, waitFor, pending: () => pending, append: (text: string) => { pending += text; } };
+  return { update, waitFor, maintain, pending: () => pending, append: (text: string) => { pending += text; } };
 }

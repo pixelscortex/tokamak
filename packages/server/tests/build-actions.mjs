@@ -53,7 +53,11 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
     }
     if (id === "chat") await writeFile(join(path, "backend/testing.ts"), `
 import { v } from "@tokamak/sdk";
-import { mutation } from "./_functions";
+import { mutation, query } from "./_functions";
+export const run = query({
+  args: { runId: v.id("runs") },
+  handler: ({ db }, { runId }) => db.get(runId),
+});
 export const identities = mutation({
   args: { runId: v.id("runs"), starter: v.string(), owner: v.string() },
   handler: async ({ db }, { runId, starter, owner }) => {

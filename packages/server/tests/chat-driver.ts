@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { createApi, type ActionContext, type TokamakClient } from "@tokamak/sdk";
+import { createApi, functionName, type ActionContext, type FunctionReference, type TokamakClient } from "@tokamak/sdk";
 import { discoverTools } from "./chat/backend/tools";
+import { acpSend } from "./chat/backend/acp";
 import { send as chatSend } from "./chat/backend/chat";
 import { api } from "./chat/backend/_generated/api";
 import { api as todo } from "./todo/backend/_generated/api";
@@ -95,6 +96,62 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       if (mode === "recovery") assert.equal(settled.error, "Interrupted");
       assert.equal((await client.query(api.runs.running, {})).some(item => item.runId === run._id), false);
       await assert.rejects(client.mutation(api.permissions.answer, args));
+    }
+    for (const mode of ["permission-finish", "permission-crash"]) {
+      const result = await send(`chat:${mode}`);
+      assert.equal(result.status, mode === "permission-finish" ? "done" : "error");
+      const message = (await messages()).at(-1)!;
+      assert.equal(message.parts.find(part => part.type === "permission")?.status, "expired");
+      assert.equal((await client.query(api.testing.run, { runId: result.runId }))!.waiting, false);
+      await assert.rejects(client.mutation(api.permissions.answer, {
+        messageId: message._id, requestId: message.parts.find(part => part.type === "permission")!.requestId, optionId: "yes",
+      }));
+    }
+    const concurrent = send("chat:permissions");
+    await until(async () => (await messages()).at(-1)!.parts.filter(part => part.type === "permission" && part.status === "pending").length === 2);
+    const concurrentMessage = (await messages()).at(-1)!;
+    const requests = concurrentMessage.parts.filter(part => part.type === "permission");
+    await client.mutation(api.permissions.answer, { messageId: concurrentMessage._id, requestId: requests[0]!.requestId, optionId: "yes" });
+    await until(async () => (await messages()).at(-1)!.parts.some(part => part.type === "permission" && part.status === "answered"));
+    assert.equal((await client.query(api.runs.running, {})).find(run => run.threadId === threadId)!.waiting, true);
+    await client.mutation(api.permissions.answer, { messageId: concurrentMessage._id, requestId: requests[1]!.requestId, optionId: "yes" });
+    assert.equal((await concurrent).status, "done");
+
+    // Exercise both sides of the claim/cancel boundary with real transactions.
+    for (const cancelBeforeClaim of [true, false]) {
+      const started = await client.mutation(api.send.start, { threadId, text: "race" });
+      const delivered: (string | null)[] = [];
+      let release!: () => void;
+      const stopped = new Promise<void>(resolve => { release = resolve; });
+      const context = {
+        runQuery: client.query.bind(client),
+        runMutation: async <A, R>(ref: FunctionReference<"mutation", A, R>, args: A) => {
+          if (ref[functionName] === api.permissions.claim[functionName] && cancelBeforeClaim)
+            await client.mutation(api.runs.cancel, { runId: started.runId });
+          const result = await client.mutation(ref, args);
+          if (ref[functionName] === api.permissions.claim[functionName] && !cancelBeforeClaim)
+            await client.mutation(api.runs.cancel, { runId: started.runId });
+          return result;
+        },
+        acp: {
+          open: async () => ({ sessionId: "session", restored: true }),
+          prompt: async function* () {
+            yield { type: "permission", requestId: "race", toolCall: {}, options: [{ optionId: "yes", name: "Allow", kind: "allow_once" }] };
+            await stopped;
+            yield { type: "done", stopReason: "cancelled" };
+          },
+          respond: async ({ optionId }: { optionId: string | null }) => { delivered.push(optionId); release(); },
+          cancel: async () => { release(); },
+        },
+      } as unknown as ActionContext;
+      const action = acpSend(context, { threadId, text: "race" }, started, backend);
+      await until(async () => (await messages()).at(-1)!.parts.some(part => part.type === "permission"));
+      await client.mutation(api.permissions.answer, { messageId: started.messageId, requestId: "race", optionId: "yes" });
+      await action;
+      const permission = (await messages()).at(-1)!.parts.find(part => part.type === "permission")!;
+      assert.equal(permission.status, cancelBeforeClaim ? "cancelled" : "answered");
+      assert.deepEqual(delivered, [cancelBeforeClaim ? null : "yes"]);
+      assert.equal((await client.query(api.runs.running, {})).some(run => run.runId === started.runId), false);
     }
     const pending = send("chat:cancel");
     await until(async () => (await messages()).at(-1)?.parts.some(part => part.type === "tool" && part.status === "running") ?? false);

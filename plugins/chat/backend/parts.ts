@@ -1,4 +1,4 @@
-import { permissionPart } from "./permission-part";
+import { claimPermission, permissionPart } from "./permission-part";
 import { v, type Infer } from "@tokamak/sdk";
 
 const toolCompletion = {
@@ -48,7 +48,7 @@ export function boundedError(error: string): string {
 
 export function interruptTools(parts: Part[], error: string) {
   return parts.map(part => part.type === "permission" && part.status === "pending"
-    ? { ...part, status: error === "cancelled" ? "cancelled" as const : "expired" as const }
+    ? claimPermission({ ...part }, error === "cancelled" ? "cancelled" : "expired")
     : part.type === "tool" && part.status === "running"
     ? { ...part, status: "error" as const, error } : part);
 }
