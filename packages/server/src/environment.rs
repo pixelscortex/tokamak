@@ -20,46 +20,46 @@ pub(crate) fn get(name: &str, path: &Path) -> Result<Option<String>, String> {
     Ok(None)
 }
 
-/// Runtime failures can include a plugin's environment values (for example an
-/// upstream error quoting a URL). Scrub granted values before wire delivery.
-pub(crate) fn redact(error: &mut String, loaded: &crate::plugins::Loaded) {
-    let mut values: Vec<String> = loaded
-        .catalog
-        .plugins
-        .values()
-        .flat_map(|plugin| &plugin.manifest.plugin.permissions)
-        .filter_map(|permission| permission.strip_prefix("env:"))
-        .filter_map(|name| get(name, &loaded.catalog.environment).ok().flatten())
-        .filter(|value| !value.is_empty())
-        .collect();
-    // Replace longer secrets first, so a shorter one cannot expose a suffix.
-    values.sort_by_key(|value| std::cmp::Reverse(value.len()));
-    for value in values {
-        *error = error.replace(&value, "[redacted]");
-    }
-}
+/// Values and read failures are frozen before an action is admitted.
+#[derive(Default)]
+pub(crate) struct Snapshot(std::collections::BTreeMap<String, Result<Option<String>, String>>);
 
-/// Message documents may contain errors caught and persisted by a plugin.
-pub(crate) fn redact_messages(value: &mut serde_json::Value, loaded: &crate::plugins::Loaded) {
-    match value {
-        serde_json::Value::Object(fields) => {
-            for (key, value) in fields {
-                if key == "error"
-                    && let Some(error) = value.as_str()
-                {
-                    let mut error = error.to_owned();
-                    redact(&mut error, loaded);
-                    *value = error.into();
-                } else {
-                    redact_messages(value, loaded);
-                }
-            }
+impl Snapshot {
+    pub(crate) fn new(loaded: Option<&crate::plugins::Loaded>, owner: Option<&str>) -> Self {
+        let (Some(loaded), Some(owner)) = (loaded, owner) else {
+            return Self::default();
+        };
+        Self(
+            loaded.catalog.plugins[owner]
+                .manifest
+                .plugin
+                .permissions
+                .iter()
+                .filter_map(|permission| permission.strip_prefix("env:"))
+                .map(|name| (name.to_owned(), get(name, &loaded.catalog.environment)))
+                .collect(),
+        )
+    }
+
+    pub(crate) fn get(&self, name: &str) -> Result<Option<String>, String> {
+        self.0.get(name).cloned().unwrap_or_else(|| {
+            Err(format!(
+                "environment permission denied: requires env:{name}"
+            ))
+        })
+    }
+
+    pub(crate) fn redact(&self, mut error: String) -> String {
+        let mut values: Vec<_> = self
+            .0
+            .values()
+            .filter_map(|value| value.as_ref().ok()?.as_deref())
+            .filter(|value| !value.is_empty())
+            .collect();
+        values.sort_by_key(|value| std::cmp::Reverse(value.len()));
+        for value in values {
+            error = error.replace(value, "[redacted]");
         }
-        serde_json::Value::Array(values) => {
-            for value in values {
-                redact_messages(value, loaded);
-            }
-        }
-        _ => {}
+        error
     }
 }

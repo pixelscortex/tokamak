@@ -25,6 +25,7 @@ pub(crate) fn operations(
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     identity: crate::members::Caller,
+    environment: Arc<crate::environment::Snapshot>,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
     identity.register(&mut ops);
@@ -50,10 +51,12 @@ pub(crate) fn operations(
                 .clone(),
         );
     }
-    let environment = generation.clone();
-    let caller = owner.clone();
+    let values = environment.clone();
     ops.register_sync("action.env", move |payload| {
-        environment_value(&environment, &caller, &payload)
+        let name = payload["name"].as_str().ok_or("env requires a name")?;
+        values
+            .get(name)
+            .map(|value| value.map(Json::String).unwrap_or(Json::Null))
     })?;
     for (operation, kind) in [
         ("action.runQuery", FunctionKind::Query),
@@ -63,7 +66,9 @@ pub(crate) fn operations(
         let commands = commands.clone();
         let generation = generation.clone();
         let owner = owner.clone();
+        let environment = environment.clone();
         ops.register_async(operation, move |payload| {
+            let environment = environment.clone();
             let identity = identity.clone();
             let commands = commands.clone();
             let generation = generation.clone();
@@ -95,6 +100,7 @@ pub(crate) fn operations(
                 // commit. The coordinator owns finalization and the writer barrier.
                 wait.await
                     .map_err(|_| "server closed before nested call completed".to_owned())?
+                    .map_err(|error| environment.redact(error))
             }
         })?;
     }
@@ -111,27 +117,4 @@ pub(crate) fn operations(
         })?;
     }
     Ok(Arc::new(ops))
-}
-
-fn environment_value(
-    environment: &Option<Arc<Loaded>>,
-    caller: &Option<String>,
-    payload: &Json,
-) -> Result<Json, String> {
-    let name = payload["name"].as_str().ok_or("env requires a name")?;
-    let grant = format!("env:{name}");
-    let loaded = environment
-        .as_ref()
-        .ok_or("env requires an installed plugin")?;
-    let owner = caller.as_ref().ok_or("env requires an installed plugin")?;
-    if !loaded.catalog.plugins[owner]
-        .manifest
-        .plugin
-        .permissions
-        .contains(&grant)
-    {
-        return Err(format!("environment permission denied: requires {grant}"));
-    }
-    crate::environment::get(name, &loaded.catalog.environment)
-        .map(|value| value.map(Json::String).unwrap_or(Json::Null))
 }

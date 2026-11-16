@@ -45,7 +45,10 @@ const functions = {
   denied: query({handler:()=>"owner only"}),
   host: query({guest:true,handler:ctx=>ctx.db.query("h__members").collect()}),
   acp: action({guest:true,handler:ctx=>ctx.acp.agents()}),
-  messageError: action({guest:true,handler:async ctx=>[{error:"failed: "+await ctx.env("MEMBER_TEST_SECRET")}]}),
+  messageError: query({handler:()=>[{error:"failed: member-secret-do-not-echo", text:"member-secret-do-not-echo"}]}),
+  nestedFailure: mutation({handler:(_ctx,args)=>{throw new Error(args.secret)},args:{secret:v.string()}}),
+  caught: action({handler:async ctx=>{const secret=await ctx.env("MEMBER_TEST_SECRET");try{await ctx.runMutation(api.test.nestedFailure,{secret})}catch(error){return {error:error.message}}}}),
+  delayedSecret: action({handler:async ctx=>{const secret=await ctx.env("MEMBER_TEST_SECRET");await new Promise(resolve=>setTimeout(resolve,300));throw new Error(secret+":"+await ctx.env("MEMBER_TEST_SECRET"))}}),
   failure: query({guest:true,handler:()=>{throw new Error("Public failure\nprivate /source/plugin.ts:10")}}),
   pathFailure: action({guest:true,handler:()=>{throw new Error("Cannot open /private/plugin.ts")}}),
   secret: action({guest:true,handler:async ctx=>{throw new Error("failed: "+await ctx.env("MEMBER_TEST_SECRET"))}}),
@@ -431,8 +434,6 @@ async fn guest_catalog_assets_acp_and_errors_are_restricted() {
         !secret.to_string().contains("member-secret-do-not-echo"),
         "{secret}"
     );
-    let message = call(&mut socket, "action", "a/test:messageError", json!({})).await;
-    assert!(!message.to_string().contains("member-secret-do-not-echo"));
     fixture.server.reload_plugin("a".into()).await.unwrap();
     assert!(
         tokio::time::timeout(Duration::from_millis(100), socket.next())
@@ -894,6 +895,45 @@ async fn guest_errors_hide_stacks_and_paths_while_owners_keep_details() {
             .contains("private /source/plugin.ts:10")
     );
     drop(guest);
+    drop(owner);
+    clean(fixture).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot() {
+    let fixture = Fixture::new().await;
+    let mut owner = connect(&fixture.local, OWNER).await.unwrap();
+    assert_eq!(
+        call(&mut owner, "query", "a/test:messageError", json!({})).await["result"]["Ok"],
+        json!([{ "error":"failed: member-secret-do-not-echo", "text":"member-secret-do-not-echo" }])
+    );
+    let caught = call(&mut owner, "action", "a/test:caught", json!({})).await;
+    assert!(
+        caught["result"]["Ok"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("[redacted]")
+    );
+    assert!(!caught.to_string().contains("member-secret-do-not-echo"));
+    let change = async {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        std::fs::write(
+            fixture.directory.path().join(".env.local"),
+            "MEMBER_TEST_SECRET=replacement-secret\n",
+        )
+        .unwrap();
+    };
+    let (error, ()) = tokio::join!(
+        call(&mut owner, "action", "a/test:delayedSecret", json!({})),
+        change
+    );
+    assert!(
+        error["result"]["Err"]
+            .as_str()
+            .unwrap()
+            .starts_with("[redacted]:[redacted]"),
+        "{error}"
+    );
     drop(owner);
     clean(fixture).await;
 }

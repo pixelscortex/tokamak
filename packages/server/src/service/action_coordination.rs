@@ -25,24 +25,38 @@ impl Coordinator {
             (self.bundle.clone().expect("legacy bundle"), name, None)
         };
 
-        let pending =
-            crate::actions::operations(self.commands.clone(), self.plugins.clone(), owner, caller)
-                .and_then(|ops| {
-                    self.action_pool.submit(
-                        bundle,
-                        "invoke",
-                        serde_json::json!({"name":local_name,"args":args}),
-                        ops,
-                    )
-                });
+        let environment = Arc::new(crate::environment::Snapshot::new(
+            self.plugins.as_deref(),
+            owner.as_deref(),
+        ));
+        let pending = crate::actions::operations(
+            self.commands.clone(),
+            self.plugins.clone(),
+            owner,
+            caller,
+            environment.clone(),
+        )
+        .and_then(|ops| {
+            self.action_pool.submit(
+                bundle,
+                "invoke",
+                serde_json::json!({"name":local_name,"args":args}),
+                ops,
+            )
+        });
 
         match pending {
             Ok(pending) => {
-                self.action_jobs
-                    .spawn(async move { (session, id, pending.await.map_err(|e| e.to_string())) });
+                self.action_jobs.spawn(async move {
+                    (
+                        session,
+                        id,
+                        pending.await.map_err(|e| environment.redact(e.to_string())),
+                    )
+                });
             }
 
-            Err(error) => self.respond(session, id, Err(error.to_string())),
+            Err(error) => self.respond(session, id, Err(environment.redact(error.to_string()))),
         }
     }
 
