@@ -51,11 +51,11 @@ impl Coordinator {
                 let result = members::execute(&self.database, operation)
                     .await
                     .map_err(Error::Invalid);
-                if result.is_ok() {
-                    if let Some(id) = revoked {
-                        self.sessions
-                            .retain(|_, client| client.caller.member_id != id);
-                    }
+                if result.is_ok()
+                    && let Some(id) = revoked
+                {
+                    self.sessions
+                        .retain(|_, client| client.caller.member_id != id);
                 }
                 let _ = reply.send(result);
             }

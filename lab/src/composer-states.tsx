@@ -81,8 +81,7 @@ export default function ComposerStatesView() {
               tag: "/todo",
               placeholder: "Task title",
               fields: [
-                { id: "list", label: "List", options: mocks.lists, value: list(), onChange: setList },
-                { id: "due", label: "Due", options: mocks.due, value: due(), onChange: setDue },
+                ...mocks.todoFields([list(), setList], [due(), setDue]),
                 { id: "priority", label: "Priority", options: mocks.priorities, value: priority(), onChange: setPriority },
               ],
               onSubmit: (title) => setCreated(`created: ${title || "untitled"} (${list()}, ${due()})`),

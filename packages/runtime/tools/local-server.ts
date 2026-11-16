@@ -95,31 +95,9 @@ export async function ensure(binary: string, bundle: string, directory: string, 
   try {
     const running = await status(directory);
     if (running) return compatible(running);
-    const temporary = resolve(directory, `server.token.${process.pid}.tmp`);
-    try {
-      await writeFile(temporary, randomBytes(32).toString("hex"), { flag: "wx", mode: 0o600 });
-      try { await link(temporary, resolve(directory, "server.token")); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-    } finally { await rm(temporary, { force: true }); }
+    await createToken(directory);
     await token(directory);
-    const log = await open(resolve(directory, "server.log"), "a", 0o600);
-    const child = spawn(binary, ["--local-dir", directory, mode === "plugins" ? "--plugins" : "--bundle", bundle], {
-      detached: true, stdio: ["ignore", log.fd, log.fd],
-    });
-    let failure: Error | undefined;
-    child.on("error", error => { failure = error; });
-    child.unref();
-    await log.close();
-    while (Date.now() < deadline) {
-      const ready = await status(directory);
-      if (ready) return compatible(ready);
-      if (failure) throw failure;
-      if (child.exitCode !== null || child.signalCode !== null) {
-        throw new Error("Local server exited before readiness; inspect server.log");
-      }
-      await wait();
-    }
-    throw new Error("Local server did not become ready; inspect server.log");
+    return compatible(await startServer(binary, bundle, directory, mode, deadline));
   } finally {
     await rm(lock, { recursive: true, force: true });
   }
@@ -149,4 +127,34 @@ export async function stop(directory: string): Promise<void> {
     await wait();
   }
   throw new Error("Local server has not completed storage shutdown; inspect server.log");
+}
+
+async function createToken(directory: string) {
+  const temporary = resolve(directory, `server.token.${process.pid}.tmp`);
+  try {
+    await writeFile(temporary, randomBytes(32).toString("hex"), { flag: "wx", mode: 0o600 });
+    try { await link(temporary, resolve(directory, "server.token")); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  } finally { await rm(temporary, { force: true }); }
+}
+
+async function startServer(binary: string, bundle: string, directory: string, mode: "bundle" | "plugins", deadline: number): Promise<Identity> {
+  const log = await open(resolve(directory, "server.log"), "a", 0o600);
+  const child = spawn(binary, ["--local-dir", directory, mode === "plugins" ? "--plugins" : "--bundle", bundle], {
+    detached: true, stdio: ["ignore", log.fd, log.fd],
+  });
+  let failure: Error | undefined;
+  child.on("error", error => { failure = error; });
+  child.unref();
+  await log.close();
+  while (Date.now() < deadline) {
+    const ready = await status(directory);
+    if (ready) return ready;
+    if (failure) throw failure;
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error("Local server exited before readiness; inspect server.log");
+    }
+    await wait();
+  }
+  throw new Error("Local server did not become ready; inspect server.log");
 }

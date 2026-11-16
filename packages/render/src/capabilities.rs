@@ -20,23 +20,7 @@ pub(crate) fn install(ctx: &Ctx<'_>, host: Host) -> Result<()> {
         std::thread::Builder::new()
             .name("ui-clipboard".into())
             .spawn(move || {
-                let mut clipboard = None;
-                for (sender, id, text) in requests {
-                    let result = (|| {
-                        if clipboard.is_none() {
-                            clipboard = Some(arboard::Clipboard::new()?);
-                        }
-                        match clipboard.as_mut() {
-                            Some(clipboard) => clipboard.set_text(text),
-                            None => Err(arboard::Error::ClipboardNotSupported),
-                        }
-                    })();
-                    let error = result.err().map(|error| error.to_string());
-                    let _ = sender.send(
-                        "tk:clipboard",
-                        serde_json::json!({ "id": id, "error": error }),
-                    );
-                }
+                write_clipboard(requests);
             })
             .map_err(|error| Exception::throw_message(ctx, &error.to_string()))?;
 
@@ -90,4 +74,24 @@ pub(crate) fn install(ctx: &Ctx<'_>, host: Host) -> Result<()> {
         Ok(())
     };
     install().map_err(|error| Error(error.to_string()))
+}
+
+fn write_clipboard(requests: mpsc::Receiver<(HostSender, u32, String)>) {
+    let mut clipboard = None;
+    for (sender, id, text) in requests {
+        let result = (|| {
+            if clipboard.is_none() {
+                clipboard = Some(arboard::Clipboard::new()?);
+            }
+            match clipboard.as_mut() {
+                Some(clipboard) => clipboard.set_text(text),
+                None => Err(arboard::Error::ClipboardNotSupported),
+            }
+        })();
+        let error = result.err().map(|error| error.to_string());
+        let _ = sender.send(
+            "tk:clipboard",
+            serde_json::json!({ "id": id, "error": error }),
+        );
+    }
 }

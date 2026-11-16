@@ -110,6 +110,48 @@ export function validate(description: ValidatorDescription, value: unknown, path
     case "any":
       assertJson(value, path);
       return;
+    case "optional":
+      validate(description.inner, value, path);
+      return;
+    case "array":
+      if (!Array.isArray(value)) return fail("array");
+      for (let i = 0; i < value.length; i++) validate(description.item, value[i], `${path}[${i}]`);
+      return;
+    case "object":
+      validateObject(description.fields, value, path);
+      return;
+    case "union":
+      for (const member of description.members) {
+        try {
+          validate(member, value, path);
+          return;
+        } catch {
+          /* Try the next alternative. */
+        }
+      }
+      fail("one of the declared union members");
+    default:
+      validateScalar(description, value, path);
+  }
+}
+
+function validateObject(fields: Record<string, ValidatorDescription>, value: unknown, path: string) {
+  if (!isPlainObject(value)) throw new Error(`${path}: expected object`);
+  for (const [key, field] of Object.entries(fields)) {
+    if (!Object.hasOwn(value, key)) {
+      if (field.kind !== "optional")
+        throw new Error(`${path}.${key}: required field is missing`);
+    } else validate(field, value[key], `${path}.${key}`);
+  }
+  for (const key of Object.keys(value)) {
+    if (!Object.hasOwn(fields, key))
+      throw new Error(`${path}.${key}: unexpected field`);
+  }
+}
+
+function validateScalar(description: ValidatorDescription, value: unknown, path: string) {
+  const fail = (expected: string): never => { throw new Error(`${path}: expected ${expected}`); };
+  switch (description.kind) {
     case "string":
       if (typeof value !== "string") fail("string");
       return;
@@ -132,36 +174,5 @@ export function validate(description: ValidatorDescription, value: unknown, path
         fail(`id of table ${description.table}`);
       }
       return;
-    case "optional":
-      validate(description.inner, value, path);
-      return;
-    case "array":
-      if (!Array.isArray(value)) return fail("array");
-      for (let i = 0; i < value.length; i++) validate(description.item, value[i], `${path}[${i}]`);
-      return;
-    case "object": {
-      if (!isPlainObject(value)) return fail("object");
-      for (const [key, field] of Object.entries(description.fields)) {
-        if (!Object.hasOwn(value, key)) {
-          if (field.kind !== "optional")
-            throw new Error(`${path}.${key}: required field is missing`);
-        } else validate(field, value[key], `${path}.${key}`);
-      }
-      for (const key of Object.keys(value)) {
-        if (!Object.hasOwn(description.fields, key))
-          throw new Error(`${path}.${key}: unexpected field`);
-      }
-      return;
-    }
-    case "union":
-      for (const member of description.members) {
-        try {
-          validate(member, value, path);
-          return;
-        } catch {
-          /* Try the next alternative. */
-        }
-      }
-      fail("one of the declared union members");
   }
 }

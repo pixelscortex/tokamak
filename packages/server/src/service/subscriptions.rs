@@ -24,6 +24,15 @@ impl Coordinator {
         self.invalidate(None);
     }
 
+    fn subscription(&mut self, owner: u64, id: u64) -> &mut Subscription {
+        self.sessions
+            .get_mut(&owner)
+            .unwrap()
+            .subscriptions
+            .get_mut(&id)
+            .unwrap()
+    }
+
     pub(super) async fn refresh(&mut self) {
         // Register before executing, then install the NEW readset before draining
         // events accumulated during that run. This includes initial/empty/get
@@ -44,13 +53,7 @@ impl Coordinator {
             let Some((owner, id, name, args)) = next else {
                 return;
             };
-            self.sessions
-                .get_mut(&owner)
-                .unwrap()
-                .subscriptions
-                .get_mut(&id)
-                .unwrap()
-                .dirty = false;
+            self.subscription(owner, id).dirty = false;
 
             let call = if self.kinds.get(&name) == Some(&FunctionKind::Query)
                 && (!self.sessions[&owner].caller.is_guest() || self.guest_available(&name))
@@ -78,24 +81,12 @@ impl Coordinator {
                 }
             };
 
-            let sub = self
-                .sessions
-                .get_mut(&owner)
-                .unwrap()
-                .subscriptions
-                .get_mut(&id)
-                .unwrap();
+            let sub = self.subscription(owner, id);
             sub.reads = call.reads;
             sub.uncertain = call.result.is_err();
             self.drain_changes();
 
-            let sub = self
-                .sessions
-                .get_mut(&owner)
-                .unwrap()
-                .subscriptions
-                .get_mut(&id)
-                .unwrap();
+            let sub = self.subscription(owner, id);
 
             if sub.dirty {
                 let count = reruns.entry((owner, id)).or_default();

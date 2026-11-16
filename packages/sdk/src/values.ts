@@ -43,11 +43,7 @@ export function assertJson(
 ): asserts value is JsonValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number" && Number.isFinite(value)) return;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    (!Array.isArray(value) && !isPlainObject(value))
-  ) {
+  if (!isJsonContainer(value)) {
     throw new Error(`${path} must be a JSON value (numbers must be finite)`);
   }
 
@@ -57,14 +53,7 @@ export function assertJson(
     if (Reflect.ownKeys(value).some((key) => typeof key === "symbol"))
       throw new Error(`${path} has a symbol key`);
     if (Array.isArray(value)) {
-      if (Object.getOwnPropertyNames(value).length !== value.length + 1)
-        throw new Error(`${path} must be a dense JSON array without extra properties`);
-      for (let i = 0; i < value.length; i++) {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
-        if (!descriptor?.enumerable || !("value" in descriptor))
-          throw new Error(`${path}[${i}] must be an enumerable data property`);
-        assertJson(descriptor.value, `${path}[${i}]`, ancestors);
-      }
+      assertJsonArray(value, path, ancestors);
     } else {
       for (const key of Object.getOwnPropertyNames(value)) {
         const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
@@ -82,4 +71,19 @@ export function assertJson(
 export function jsonSnapshot(value: unknown, path = "value"): JsonValue {
   assertJson(value, path);
   return JSON.parse(JSON.stringify(value)) as JsonValue;
+}
+
+function assertJsonArray(value: unknown[], path: string, ancestors: Set<object>) {
+  if (Object.getOwnPropertyNames(value).length !== value.length + 1)
+    throw new Error(`${path} must be a dense JSON array without extra properties`);
+  for (let i = 0; i < value.length; i++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+    if (!descriptor?.enumerable || !("value" in descriptor))
+      throw new Error(`${path}[${i}] must be an enumerable data property`);
+    assertJson(descriptor.value, `${path}[${i}]`, ancestors);
+  }
+}
+
+function isJsonContainer(value: unknown): value is Record<string, unknown> | unknown[] {
+  return typeof value === "object" && value !== null && (Array.isArray(value) || isPlainObject(value));
 }

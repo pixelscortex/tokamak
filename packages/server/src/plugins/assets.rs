@@ -112,24 +112,7 @@ pub(super) fn asset(
     previous: Option<&Artifact>,
     whole_backend: bool,
 ) -> Result<Arc<Asset>, Error> {
-    let relative = Path::new(name);
-
-    if relative.is_absolute()
-        || relative
-            .components()
-            .any(|c| !matches!(c, std::path::Component::Normal(_)))
-    {
-        return Err(invalid("Artifact paths must stay inside their directory"));
-    }
-
-    let path = root
-        .join(relative)
-        .canonicalize()
-        .map_err(|e| invalid(e.to_string()))?;
-
-    if !path.starts_with(root) {
-        return Err(invalid("Artifact symlink escapes its directory"));
-    }
+    let path = artifact_path(root, name)?;
 
     let expected = hashes
         .get(name)
@@ -151,10 +134,11 @@ pub(super) fn asset(
     // Other platforms conservatively rehash rather than trusting a restorable
     // modification timestamp. Missing timestamps also disable this fast path.
     #[cfg(unix)]
-    if let Some(previous) = reusable {
-        if stamp.modified.is_some() && previous.source == stamp {
-            return Ok(previous.clone());
-        }
+    if let Some(previous) = reusable
+        && stamp.modified.is_some()
+        && previous.source == stamp
+    {
+        return Ok(previous.clone());
     }
 
     let mut snapshot = if reusable.is_none() {
@@ -214,4 +198,27 @@ pub(super) fn asset(
             len,
         }),
     })
+}
+
+fn artifact_path(root: &Path, name: &str) -> Result<PathBuf, Error> {
+    let relative = Path::new(name);
+
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err(invalid("Artifact paths must stay inside their directory"));
+    }
+
+    let path = root
+        .join(relative)
+        .canonicalize()
+        .map_err(|e| invalid(e.to_string()))?;
+
+    if !path.starts_with(root) {
+        return Err(invalid("Artifact symlink escapes its directory"));
+    }
+
+    Ok(path)
 }

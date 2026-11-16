@@ -118,10 +118,10 @@ pub(super) fn report_caret(bridge: &mut Bridge, html: &mut HtmlDocument) -> Resu
     let previous = std::mem::replace(&mut observed.last, now);
     // Clear the old element even when focus moved to an unobserved input or
     // the editor/IME stopped exposing a caret. Selection painting stays native.
-    if let Some((id, _)) = previous {
-        if now.is_none_or(|(next, _)| next != id) {
-            send(bridge, html, id, json!(null))?;
-        }
+    if let Some((id, _)) = previous
+        && now.is_none_or(|(next, _)| next != id)
+    {
+        send(bridge, html, id, json!(null))?;
     }
     if let Some((id, caret)) = now {
         send(bridge, html, id, json!(caret))?;

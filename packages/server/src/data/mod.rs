@@ -57,9 +57,11 @@ pub struct Database {
 // close calls makes the next close await the SAME disk-lock release barrier.
 // Mutex supplies Sync for a Send future; close has &mut self and uses get_mut,
 // so there is no runtime lock or competing shutdown poller.
+type Shutdown = Pin<Box<dyn Future<Output = std::result::Result<(), String>> + Send>>;
+
 enum Lifecycle {
     Open(Arc<DatabaseState>),
-    Closing(Mutex<Pin<Box<dyn Future<Output = std::result::Result<(), String>> + Send>>>),
+    Closing(Mutex<Shutdown>),
     Closed(std::result::Result<(), String>),
 }
 

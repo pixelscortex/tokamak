@@ -26,25 +26,11 @@ export interface InputProps extends Omit<JSX.InputAttributes, "children"> {
  * @example <Input defaultValue="Buy milk" render={(props) => <input {...props} />} />
  * `value !== undefined` means controlled; defaultValue is read only on mount.
  */
-export function Input(props: InputProps): JSX.Element {
+function createInput(props: InputProps) {
   const [local, rest] = splitProps(props, [
-    "render",
-    "value",
-    "defaultValue",
-    "onValueChange",
-    "onInput",
-    "class",
-    "disabled",
-    "invalid",
-    "label",
-    "description",
-    "id",
-    "ref",
-    "onFocus",
-    "onBlur",
-    "aria-labelledby",
-    "aria-describedby",
-    "aria-invalid",
+    "render", "value", "defaultValue", "onValueChange", "onInput", "class",
+    "disabled", "invalid", "label", "description", "id", "ref", "onFocus", "onBlur",
+    "aria-labelledby", "aria-describedby", "aria-invalid",
   ]);
   const generated = `tk-input-${createUniqueId()}`;
   const id = () => local.id ?? generated;
@@ -52,41 +38,25 @@ export function Input(props: InputProps): JSX.Element {
   const [focused, setFocused] = createSignal(false);
   let node: NativeNode | undefined;
   const state: InputState = {
-    get disabled() {
-      return local.disabled ?? false;
-    },
+    get disabled() { return local.disabled ?? false; },
     get invalid() {
       return (
         local.invalid ??
         (local["aria-invalid"] === true || local["aria-invalid"] === "true")
       );
     },
-    get focused() {
-      return focused() && !state.disabled;
-    },
+    get focused() { return focused() && !state.disabled; },
   };
   const currentValue = () => local.value ?? value();
   const element = mergeProps(rest, {
     type: "text" as const,
-    get id() {
-      return id();
-    },
+    get id() { return id(); },
     "data-part": "input",
-    get class() {
-      return ["tk-input", local.class].filter(Boolean).join(" ");
-    },
-    get value() {
-      return currentValue();
-    },
-    get disabled() {
-      return state.disabled;
-    },
-    get "aria-disabled"() {
-      return state.disabled;
-    },
-    get "aria-invalid"() {
-      return state.invalid;
-    },
+    get class() { return ["tk-input", local.class].filter(Boolean).join(" "); },
+    get value() { return currentValue(); },
+    get disabled() { return state.disabled; },
+    get "aria-disabled"() { return state.disabled; },
+    get "aria-invalid"() { return state.invalid; },
     get "aria-labelledby"() {
       return (
         [
@@ -107,15 +77,9 @@ export function Input(props: InputProps): JSX.Element {
           .join(" ") || undefined
       );
     },
-    get "data-disabled"() {
-      return state.disabled ? "" : undefined;
-    },
-    get "data-invalid"() {
-      return state.invalid ? "" : undefined;
-    },
-    get "data-focused"() {
-      return state.focused ? "" : undefined;
-    },
+    get "data-disabled"() { return state.disabled ? "" : undefined; },
+    get "data-invalid"() { return state.invalid ? "" : undefined; },
+    get "data-focused"() { return state.focused ? "" : undefined; },
     ref(control: NativeNode) {
       node = control;
       local.ref?.(control);
@@ -142,6 +106,11 @@ export function Input(props: InputProps): JSX.Element {
       local.onBlur?.(event);
     },
   });
+  return { local, id, element, state };
+}
+
+export function Input(props: InputProps): JSX.Element {
+  const { local, id, element, state } = createInput(props);
   return (
     <div class="tk-field" data-part="field">
       {local.label !== undefined && (

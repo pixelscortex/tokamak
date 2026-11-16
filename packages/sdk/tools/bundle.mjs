@@ -45,29 +45,7 @@ function apiType(modules) {
 export async function bundleFeature(folder, namespace) {
   const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
-  const files = [];
-  const scanner = new Bun.Transpiler({ loader: "ts" });
-  for await (const file of new Bun.Glob("**/*.ts").scan({
-    cwd: root,
-    onlyFiles: true,
-  })) {
-    const parts = file.split("/");
-    if (
-      parts.some(
-        (part) =>
-          part.startsWith("_") ||
-          part.startsWith(".") ||
-          ["node_modules", "dist", "tests"].includes(part),
-      )
-    )
-      continue;
-    if (file === "schema.ts" || /\.(d|test|spec)\.ts$/.test(file)) continue;
-    // scan is a real parser, not a regexp. We do not interpret initializer
-    // syntax: exported definitions are recognized by their runtime brand.
-    scanner.scan(await Bun.file(join(root, file)).text());
-    files.push(file);
-  }
-  files.sort();
+  const files = await scanFiles(root);
   // An explicit empty product backend is valid; a missing root still fails.
   const modules = files.map((file) => file.slice(0, -3));
   const type = apiType(modules);
@@ -86,51 +64,10 @@ export async function bundleFeature(folder, namespace) {
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
-    const source =
-      header +
-      'import { createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue } from "@tokamak/sdk";\n' +
-      files
-        .map((file, i) => `import * as m${i} from ${quote(join(root, file.slice(0, -3)))};\n`)
-        .join("") +
-      (hasSchema
-        ? `import schemaValue from ${quote(join(root, "schema"))};\nexport const schema = schemaMetadata(schemaValue);\n`
-        : "export const schema = schemaMetadata(null);\n") +
-      `export const functions = createRegistry({${modules.map((module, i) => `${quote(module)}: m${i}`).join(",")}});\n` +
-      "export const metadata = functionMetadata(functions);\n" +
-      // Pool invokes functions only. Inspect the SAME registry/schema values,
-      // without inventing a second build-time manifest or executing a handler.
-      "export const describe = () => ({ schema, functions: metadata });\n" +
-      "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n";
+    const source = featureSource(root, files, modules, hasSchema);
     await Bun.write(entry, source);
 
-    const config = join(temporary, "tsconfig.json");
-    // Inherit resolution options unchanged, including paths relative to the
-    // config that declared them. A build-only SDK alias or TS-extension opt-in
-    // would accept code that generated-reference consumers cannot type-check.
-    const parentConfig = (await Bun.file(join(root, "tsconfig.json")).exists())
-      ? join(root, "tsconfig.json")
-      : join(sdkRoot, "../..", "tsconfig.json");
-    await Bun.write(
-      config,
-      JSON.stringify({
-        extends: parentConfig,
-        compilerOptions: {
-          lib: ["ES2022"],
-          types: [],
-          noEmit: true,
-          strict: true,
-        },
-        files: [entry, join(generated, "api.ts"), ...files.map((file) => join(root, file))],
-        include: [],
-        exclude: [],
-      }),
-    );
-    const check = Bun.spawnSync([process.execPath, "check", "--no-script", "--project", config], {
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    if (check.exitCode !== 0)
-      throw new Error("Feature type check failed (only ES2022 globals are allowed)");
+    await checkFeature(root, temporary, generated, files, entry);
     const built = await Bun.build({
       entrypoints: ["tokamak-feature:entry"],
       target: "browser",
@@ -194,4 +131,81 @@ if (import.meta.main) {
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
   await bundleFeature(feature, process.argv[4]);
+}
+
+async function scanFiles(root) {
+  const files = [];
+  const scanner = new Bun.Transpiler({ loader: "ts" });
+  for await (const file of new Bun.Glob("**/*.ts").scan({
+    cwd: root,
+    onlyFiles: true,
+  })) {
+    const parts = file.split("/");
+    if (
+      parts.some(
+        (part) =>
+          part.startsWith("_") ||
+          part.startsWith(".") ||
+          ["node_modules", "dist", "tests"].includes(part),
+      )
+    )
+      continue;
+    if (file === "schema.ts" || /\.(d|test|spec)\.ts$/.test(file)) continue;
+    // scan is a real parser, not a regexp. We do not interpret initializer
+    // syntax: exported definitions are recognized by their runtime brand.
+    scanner.scan(await Bun.file(join(root, file)).text());
+    files.push(file);
+  }
+  files.sort();
+  return files;
+}
+
+async function checkFeature(root, temporary, generated, files, entry) {
+  const config = join(temporary, "tsconfig.json");
+  // Inherit resolution options unchanged, including paths relative to the
+  // config that declared them. A build-only SDK alias or TS-extension opt-in
+  // would accept code that generated-reference consumers cannot type-check.
+  const parentConfig = (await Bun.file(join(root, "tsconfig.json")).exists())
+    ? join(root, "tsconfig.json")
+    : join(sdkRoot, "../..", "tsconfig.json");
+  await Bun.write(
+    config,
+    JSON.stringify({
+      extends: parentConfig,
+      compilerOptions: {
+        lib: ["ES2022"],
+        types: [],
+        noEmit: true,
+        strict: true,
+      },
+      files: [entry, join(generated, "api.ts"), ...files.map((file) => join(root, file))],
+      include: [],
+      exclude: [],
+    }),
+  );
+  const check = Bun.spawnSync([process.execPath, "check", "--no-script", "--project", config], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  if (check.exitCode !== 0)
+    throw new Error("Feature type check failed (only ES2022 globals are allowed)");
+}
+
+function featureSource(root, files, modules, hasSchema) {
+  const source =
+    header +
+    'import { createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue } from "@tokamak/sdk";\n' +
+    files
+      .map((file, i) => `import * as m${i} from ${quote(join(root, file.slice(0, -3)))};\n`)
+      .join("") +
+    (hasSchema
+      ? `import schemaValue from ${quote(join(root, "schema"))};\nexport const schema = schemaMetadata(schemaValue);\n`
+      : "export const schema = schemaMetadata(null);\n") +
+    `export const functions = createRegistry({${modules.map((module, i) => `${quote(module)}: m${i}`).join(",")}});\n` +
+    "export const metadata = functionMetadata(functions);\n" +
+    // Pool invokes functions only. Inspect the SAME registry/schema values,
+    // without inventing a second build-time manifest or executing a handler.
+    "export const describe = () => ({ schema, functions: metadata });\n" +
+    "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n";
+  return source;
 }

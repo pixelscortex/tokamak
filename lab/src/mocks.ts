@@ -95,3 +95,10 @@ export const approval = {
   question: "Todo wants to add a task to your inbox.",
   detail: "todo.tasks.write",
 };
+
+export function todoFields(list: [string, (value: string) => void], date: [string, (value: string) => void]) {
+  return [
+    { id: "list", label: "List", options: lists, value: list[0], onChange: list[1] },
+    { id: "due", label: "Due", options: due, value: date[0], onChange: date[1] },
+  ];
+}

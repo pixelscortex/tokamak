@@ -123,12 +123,7 @@ export class ModuleRegistry {
         names.add(name);
       }
     }
-    const queue = [...affected];
-    for (let index = 0; index < queue.length; index++) {
-      for (const name of importers.get(queue[index]!) ?? []) {
-        if (!affected.has(name)) { affected.add(name); queue.push(name); }
-      }
-    }
+    expandImporters(affected, importers);
     return affected;
   }
   remove(names: Iterable<string>): void {
@@ -136,6 +131,15 @@ export class ModuleRegistry {
       try { this.disposers.get(name)?.(); }
       catch { /* One plugin cleanup must not strand the other retiring modules. */ }
       finally { this.disposers.delete(name); this.instances.delete(name); this.definitions.delete(name); this.errors.delete(name); }
+    }
+  }
+}
+
+export function expandImporters(affected: Set<string>, importers: ReadonlyMap<string, ReadonlySet<string>>): void {
+  const queue = [...affected];
+  for (let index = 0; index < queue.length; index++) {
+    for (const name of importers.get(queue[index]!) ?? []) {
+      if (!affected.has(name)) { affected.add(name); queue.push(name); }
     }
   }
 }

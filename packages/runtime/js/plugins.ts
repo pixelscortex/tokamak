@@ -2,7 +2,7 @@
  * until load() is called by a contribution or a cross-plugin import. */
 import { batch, createMemo, createSignal } from "solid-js";
 import type { ContributionKind, JsonValue } from "@tokamak/sdk";
-import { ModuleRegistry, type ModuleExports } from "./modules";
+import { expandImporters, ModuleRegistry, type ModuleExports } from "./modules";
 
 export interface PluginManifest {
   plugin: {
@@ -54,12 +54,7 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
         names.add(moduleName(p.plugin.id));
       }
     }
-    const queue = [...affected];
-    for (let index = 0; index < queue.length; index++) {
-      for (const name of importers.get(queue[index]!) ?? []) {
-        if (!affected.has(name)) { affected.add(name); queue.push(name); }
-      }
-    }
+    expandImporters(affected, importers);
     for (const id of pending.keys()) affected.add(moduleName(id));
     batch(() => {
       const updated = { ...versions() };

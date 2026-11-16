@@ -105,11 +105,9 @@ export class TokamakClient {
       registering = false;
     }
     if (initialFailure) {
-      try {
-        stop();
-      } finally {
-        throw initialError;
-      }
+      try { stop(); }
+      catch { /* The observer failure takes precedence over cleanup failures. */ }
+      throw initialError;
     }
     // Closing twice is harmless; late transport events must not reach the UI.
     return () => {

@@ -143,13 +143,19 @@ export function Textarea(props: TextareaProps): JSX.Element {
         </span>
       </Show>
       <Show when={blockCaret() && caret()}>{(box: Accessor<NonNullable<NativeEvent["caret"]>>) => (
+        <BlockCaret box={box()} />
+      )}</Show>
+    </div>
+  );
+}
+
+function BlockCaret(props: { box: NonNullable<NativeEvent["caret"]> }) {
+  return (
         <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
           <span
             class="absolute"
-            style={`left: ${box().x}px; top: ${box().y + 2}px; width: ${box().atEnd ? 8 : 2}px; height: ${Math.max(0, box().height - 4)}px; background-color: var(--textarea-caret, var(--color-light))`}
+            style={`left: ${props.box.x}px; top: ${props.box.y + 2}px; width: ${props.box.atEnd ? 8 : 2}px; height: ${Math.max(0, props.box.height - 4)}px; background-color: var(--textarea-caret, var(--color-light))`}
           />
         </div>
-      )}</Show>
-    </div>
   );
 }

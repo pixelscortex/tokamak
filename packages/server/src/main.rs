@@ -381,11 +381,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let serving = serving.and(guest_result);
     let closed = backend.close().await;
-    if closed.is_ok() {
-        if let Some(directory) = local {
-            // Readiness disappears only after the datastore shutdown barrier.
-            let _ = std::fs::remove_file(directory.join("server.json"));
-        }
+    if closed.is_ok()
+        && let Some(directory) = local
+    {
+        // Readiness disappears only after the datastore shutdown barrier.
+        let _ = std::fs::remove_file(directory.join("server.json"));
     }
     // Always await storage cleanup even when serving failed; retain both errors.
     match (serving, closed) {

@@ -103,32 +103,7 @@ impl NativeDocument {
             self.html.inner_mut().resolve(time);
             // Keep an opted-in text editor ready on launch and after a click
             // on non-focusable content. Never steal focus from another control.
-            let autofocus = {
-                let inner = self.html.inner();
-                inner
-                    .get_focussed_node_id()
-                    .is_none_or(|target| {
-                        inner
-                            .get_node(target)
-                            .and_then(|node| node.element_data())
-                            .is_some_and(|element| matches!(&*element.name.local, "html" | "body"))
-                    })
-                    .then(|| {
-                        inner
-                            .query_selector("[autofocus]:not([disabled])")
-                            .ok()
-                            .flatten()
-                            .filter(|target| {
-                                inner.get_node(*target).is_some_and(|node| {
-                                    node.element_data()
-                                        .is_some_and(|element| element.text_input_data().is_some())
-                                        && node.final_layout().size.width > 0.0
-                                        && node.final_layout().size.height > 0.0
-                                })
-                            })
-                    })
-                    .flatten()
-            };
+            let autofocus = autofocus(&self.html.inner());
             if let Some(target) = autofocus {
                 self.html.inner_mut().set_focus_to(target);
             }
@@ -215,4 +190,30 @@ impl Document for NativeDocument {
             self.bridge.composition = Composition::Idle;
         }
     }
+}
+
+fn autofocus(inner: &blitz_dom::BaseDocument) -> Option<blitz_traits::NodeId> {
+    inner
+        .get_focussed_node_id()
+        .is_none_or(|target| {
+            inner
+                .get_node(target)
+                .and_then(|node| node.element_data())
+                .is_some_and(|element| matches!(&*element.name.local, "html" | "body"))
+        })
+        .then(|| {
+            inner
+                .query_selector("[autofocus]:not([disabled])")
+                .ok()
+                .flatten()
+                .filter(|target| {
+                    inner.get_node(*target).is_some_and(|node| {
+                        node.element_data()
+                            .is_some_and(|element| element.text_input_data().is_some())
+                            && node.final_layout().size.width > 0.0
+                            && node.final_layout().size.height > 0.0
+                    })
+                })
+        })
+        .flatten()
 }

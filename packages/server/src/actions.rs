@@ -105,16 +105,24 @@ pub(crate) fn operations(
         })?;
     }
     if let (Some(loaded), Some(owner)) = (generation, owner) {
-        ops.register_sync("plugin.providers", move |payload| {
-            let interface = payload["interface"]
-                .as_str()
-                .ok_or("providers requires an interface")?;
-            loaded
-                .catalog
-                .providers(&owner, interface)
-                .map(|ids| serde_json::json!(ids))
-                .map_err(|e| e.to_string())
-        })?;
+        register_providers(&mut ops, loaded, owner)?;
     }
     Ok(Arc::new(ops))
+}
+
+fn register_providers(
+    ops: &mut OpRegistry,
+    loaded: Arc<Loaded>,
+    owner: String,
+) -> Result<(), engine::Error> {
+    ops.register_sync("plugin.providers", move |payload| {
+        let interface = payload["interface"]
+            .as_str()
+            .ok_or("providers requires an interface")?;
+        loaded
+            .catalog
+            .providers(&owner, interface)
+            .map(|ids| serde_json::json!(ids))
+            .map_err(|e| e.to_string())
+    })
 }

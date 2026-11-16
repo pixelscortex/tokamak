@@ -67,10 +67,7 @@ function ChatComposer(props: { context: boolean; send: (text: string) => void })
   const todoForm = (): ComposerForm => ({
     tag: "/todo",
     placeholder: "Task title",
-    fields: [
-      { id: "list", label: "List", options: mocks.lists, value: list(), onChange: setList },
-      { id: "due", label: "Due", options: mocks.due, value: due(), onChange: setDue },
-    ],
+    fields: mocks.todoFields([list(), setList], [due(), setDue]),
     onSubmit: (title) => {
       setForm(false);
       if (title) props.send(`/todo ${title}`);

@@ -188,43 +188,44 @@ fn activate_button(
     let target = event.target;
     // beta.4 does not supply button Enter/Space activation. Own it once,
     // suppressing repeats, IME confirmation and canceled/disabled keys.
-    if tag(doc, target, "button") {
-        let disabled = attribute(doc, target, "disabled");
-        match &event.data {
-            DomEventData::KeyDown(key) if !bridge.composition.active() && !key.is_composing => {
-                if key.key == Key::Character(" ".into()) {
-                    if !key.is_auto_repeating {
-                        bridge.space = if !state.is_cancelled() && !disabled {
-                            Some(target)
-                        } else {
-                            None
-                        };
-                    }
-                    state.prevent_default();
-                } else if key.key == Key::Named(NamedKey::Enter)
-                    && !key.is_auto_repeating
-                    && !state.is_cancelled()
-                    && !disabled
-                {
-                    state.prevent_default();
-                    bridge.activate(doc, target)?;
-                }
-            }
-            DomEventData::KeyUp(key) if key.key == Key::Character(" ".into()) => {
-                let armed = bridge.space.take() == Some(target);
-                if armed
-                    && !state.is_cancelled()
-                    && !disabled
-                    && !bridge.composition.active()
-                    && !key.is_composing
-                    && doc.inner().get_focussed_node_id() == Some(target)
-                {
-                    bridge.activate(doc, target)?;
+    if !tag(doc, target, "button") {
+        return Ok(());
+    }
+    let disabled = attribute(doc, target, "disabled");
+    match &event.data {
+        DomEventData::KeyDown(key) if !bridge.composition.active() && !key.is_composing => {
+            if key.key == Key::Character(" ".into()) {
+                if !key.is_auto_repeating {
+                    bridge.space = if !state.is_cancelled() && !disabled {
+                        Some(target)
+                    } else {
+                        None
+                    };
                 }
                 state.prevent_default();
+            } else if key.key == Key::Named(NamedKey::Enter)
+                && !key.is_auto_repeating
+                && !state.is_cancelled()
+                && !disabled
+            {
+                state.prevent_default();
+                bridge.activate(doc, target)?;
             }
-            _ => {}
         }
+        DomEventData::KeyUp(key) if key.key == Key::Character(" ".into()) => {
+            let armed = bridge.space.take() == Some(target);
+            if armed
+                && !state.is_cancelled()
+                && !disabled
+                && !bridge.composition.active()
+                && !key.is_composing
+                && doc.inner().get_focussed_node_id() == Some(target)
+            {
+                bridge.activate(doc, target)?;
+            }
+            state.prevent_default();
+        }
+        _ => {}
     }
     Ok(())
 }

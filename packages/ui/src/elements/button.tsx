@@ -35,42 +35,20 @@ export interface ButtonProps extends JSX.ButtonAttributes {
  */
 export function Button(props: ButtonProps): JSX.Element {
   const [local, rest] = splitProps(props, [
-    "render",
-    "pressed",
-    "defaultPressed",
-    "onPressedChange",
-    "class",
-    "disabled",
-    "onClick",
-    "onFocus",
-    "onBlur",
-    "nativeButton",
-    "onKeyDown",
-    "onKeyUp",
-    "tabindex",
-    "ref",
+    "render", "pressed", "defaultPressed", "onPressedChange", "class", "disabled",
+    "onClick", "onFocus", "onBlur", "nativeButton", "onKeyDown", "onKeyUp", "tabindex", "ref",
   ]);
   const [pressed, setPressed] = createSignal(local.defaultPressed ?? false);
   const [focused, setFocused] = createSignal(false);
   const toggles = () =>
     local.pressed !== undefined || local.defaultPressed !== undefined;
   const state: ButtonState = {
-    get pressed() {
-      return local.pressed ?? pressed();
-    },
-    get disabled() {
-      return local.disabled ?? false;
-    },
-    get focused() {
-      return focused() && !state.disabled;
-    },
+    get pressed() { return local.pressed ?? pressed(); },
+    get disabled() { return local.disabled ?? false; },
+    get focused() { return focused() && !state.disabled; },
   };
   const native = () => local.nativeButton !== false;
   let node: NativeNode | undefined;
-  let spaceArmed = false;
-  createRenderEffect(() => {
-    if (state.disabled) spaceArmed = false;
-  });
   function activate(event: NativeEvent) {
     if (state.disabled) {
       event.preventDefault();
@@ -87,47 +65,52 @@ export function Button(props: ButtonProps): JSX.Element {
       throw new Error("Button render must forward ref to its native element");
     dispatchClick(node);
   }
+  const keyboard = buttonKeyboard(local, state, native, click);
   const element = mergeProps(rest, {
     ref(control: NativeNode) {
       node = control;
       local.ref?.(control);
     },
-    get type() {
-      return native() ? ("button" as const) : undefined;
-    },
-    get role() {
-      return native() ? rest.role : "button";
-    },
+    get type() { return native() ? ("button" as const) : undefined; },
+    get role() { return native() ? rest.role : "button"; },
     get tabindex() {
       return state.disabled && !native()
         ? -1
         : (local.tabindex ?? (native() ? undefined : 0));
     },
     "data-part": "button",
-    get class() {
-      return ["tk-button", local.class].filter(Boolean).join(" ");
-    },
-    get disabled() {
-      return native() ? state.disabled : undefined;
-    },
-    get "aria-disabled"() {
-      return state.disabled;
-    },
-    get "aria-pressed"() {
-      return toggles() ? state.pressed : undefined;
-    },
-    get "data-pressed"() {
-      return toggles() && state.pressed ? "" : undefined;
-    },
-    get "data-disabled"() {
-      return state.disabled ? "" : undefined;
-    },
-    get "data-focused"() {
-      return state.focused ? "" : undefined;
-    },
+    get class() { return ["tk-button", local.class].filter(Boolean).join(" "); },
+    get disabled() { return native() ? state.disabled : undefined; },
+    get "aria-disabled"() { return state.disabled; },
+    get "aria-pressed"() { return toggles() ? state.pressed : undefined; },
+    get "data-pressed"() { return toggles() && state.pressed ? "" : undefined; },
+    get "data-disabled"() { return state.disabled ? "" : undefined; },
+    get "data-focused"() { return state.focused ? "" : undefined; },
     onClick: activate,
+    onKeyDown: keyboard.onKeyDown,
+    onKeyUp: keyboard.onKeyUp,
+    onFocus(event: NativeEvent) {
+      setFocused(true);
+      local.onFocus?.(event);
+    },
+    onBlur(event: NativeEvent) {
+      keyboard.reset();
+      setFocused(false);
+      local.onBlur?.(event);
+    },
+  });
+  return local.render ? local.render(element, state) : <button {...element} />;
+}
+
+function buttonKeyboard(props: ButtonProps, state: ButtonState, native: () => boolean, click: () => void) {
+  let spaceArmed = false;
+  createRenderEffect(() => {
+    if (state.disabled) spaceArmed = false;
+  });
+
+  return {
     onKeyDown(event: NativeEvent) {
-      local.onKeyDown?.(event);
+      props.onKeyDown?.(event);
       if (native() || event.target !== event.currentTarget) return;
       if (event.defaultPrevented || event.isComposing || state.disabled) {
         spaceArmed = false;
@@ -142,7 +125,7 @@ export function Button(props: ButtonProps): JSX.Element {
       }
     },
     onKeyUp(event: NativeEvent) {
-      local.onKeyUp?.(event);
+      props.onKeyUp?.(event);
       if (native() || event.key !== " ") return;
       const armed = spaceArmed;
       spaceArmed = false;
@@ -157,15 +140,6 @@ export function Button(props: ButtonProps): JSX.Element {
         click();
       }
     },
-    onFocus(event: NativeEvent) {
-      setFocused(true);
-      local.onFocus?.(event);
-    },
-    onBlur(event: NativeEvent) {
-      spaceArmed = false;
-      setFocused(false);
-      local.onBlur?.(event);
-    },
-  });
-  return local.render ? local.render(element, state) : <button {...element} />;
+    reset() { spaceArmed = false; },
+  };
 }

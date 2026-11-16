@@ -208,14 +208,13 @@ impl<'tx> Query<'tx> {
         }
         // Contradictory ranges are empty; never hand an inverted byte range to
         // a backend. Validate all clauses and index existence before this exit.
-        if let (Some((lo, lv)), Some((hi, hv))) = (&lower, &upper) {
-            if lv > hv
+        if let (Some((lo, lv)), Some((hi, hv))) = (&lower, &upper)
+            && (lv > hv
                 || (lv == hv
                     && (matches!(lo, BinaryOperator::MoreThan)
-                        || matches!(hi, BinaryOperator::LessThan)))
-            {
-                return Ok(Vec::new());
-            }
+                        || matches!(hi, BinaryOperator::LessThan))))
+        {
+            return Ok(Vec::new());
         }
         if self.limit == Some(0) {
             return Ok(Vec::new());

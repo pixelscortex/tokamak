@@ -99,34 +99,11 @@ export function Select(props: SelectProps): JSX.Element {
 export function createSelectState(props: SelectProps) {
   const [own, setOwn] = createSignal(untrack(() => props.defaultValue));
   const [open, setOpenSignal] = createSignal(untrack(() => props.defaultOpen ?? false));
-  const [query, setQuery] = createSignal("");
-  const [active, setActive] = createSignal<number>();
+  const { query, setQuery, active, setActive, rows, order, search } = createSelectSearch(props);
   const value = () => props.value ?? own();
   const selected = () => props.options.find((o) => o.value === value());
   let trigger: NativeNode | undefined;
   let layer: { mark(): void } | undefined;
-
-  /** Options that match the search, grouped, with their index in `options`. */
-  const rows = createMemo<Row[]>(() => {
-    const q = query().trim().toLowerCase();
-    const matches = props.options
-      .map((option, index) => ({ option, index }))
-      .filter(({ option }) => !q || `${option.label} ${option.detail ?? ""}`.toLowerCase().includes(q));
-    const groups: string[] = [];
-    for (const { option } of matches) {
-      const g = option.group ?? "";
-      if (!groups.includes(g)) groups.push(g);
-    }
-    const out: Row[] = [];
-    for (const g of groups) {
-      if (g) out.push({ kind: "group", label: g });
-      for (const m of matches) if ((m.option.group ?? "") === g) out.push({ kind: "option", ...m });
-    }
-    return out;
-  });
-  /** Enabled options in display order: what Up and Down move over. */
-  const order = () =>
-    rows().flatMap((r) => (r.kind === "option" && !r.option.disabled ? [r.index] : []));
 
   /** The row Up and Down start from: the selected option, else the first. */
   function reset() {
@@ -193,11 +170,6 @@ export function createSelectState(props: SelectProps) {
     }
   }
 
-  function search(next: string) {
-    setQuery(next);
-    setActive(order()[0]);
-  }
-
   const compact = () => props.size === "compact";
   const type = () => (props.mono ? "font-data text-[11px] leading-4" : compact() ? "text-[12px] leading-4" : "text-[13px] leading-4");
   const sub = (part: string) => (props.id ? `${props.id}-${part}` : undefined);
@@ -207,4 +179,37 @@ export function createSelectState(props: SelectProps) {
     trigger: () => trigger, setTrigger: (node: NativeNode) => { trigger = node; },
     setLayer: (next: { mark(): void }) => { layer = next; }, mark: () => layer?.mark(),
   };
+}
+
+function createSelectSearch(props: SelectProps) {
+  const [query, setQuery] = createSignal("");
+  const [active, setActive] = createSignal<number>();
+  /** Options that match the search, grouped, with their index in `options`. */
+  const rows = createMemo<Row[]>(() => {
+    const q = query().trim().toLowerCase();
+    const matches = props.options
+      .map((option, index) => ({ option, index }))
+      .filter(({ option }) => !q || `${option.label} ${option.detail ?? ""}`.toLowerCase().includes(q));
+    const groups: string[] = [];
+    for (const { option } of matches) {
+      const g = option.group ?? "";
+      if (!groups.includes(g)) groups.push(g);
+    }
+    const out: Row[] = [];
+    for (const g of groups) {
+      if (g) out.push({ kind: "group", label: g });
+      for (const m of matches) if ((m.option.group ?? "") === g) out.push({ kind: "option", ...m });
+    }
+    return out;
+  });
+  /** Enabled options in display order: what Up and Down move over. */
+  const order = () =>
+    rows().flatMap((r) => (r.kind === "option" && !r.option.disabled ? [r.index] : []));
+
+  function search(next: string) {
+    setQuery(next);
+    setActive(order()[0]);
+  }
+
+  return { query, setQuery, active, setActive, rows, order, search };
 }

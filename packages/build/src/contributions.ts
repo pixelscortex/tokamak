@@ -59,24 +59,8 @@ function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
       else for (const element of name.elements) if (ts.isBindingElement(element)) binding(element.name);
     }
     for (const statement of emitted.statements) {
-      if (ts.isExportDeclaration(statement)) {
-        if (statement.exportClause) {
-          if (ts.isNamedExports(statement.exportClause)) for (const item of statement.exportClause.elements) names.add(item.name.text);
-          else names.add(statement.exportClause.name.text);
-        } else if (statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
-          const specifier = statement.moduleSpecifier.text;
-          const original = file.statements.find((node): node is ts.ExportDeclaration => ts.isExportDeclaration(node)
-            && !!node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier);
-          const target = original?.moduleSpecifier && checker.getSymbolAtLocation(original.moduleSpecifier);
-          const source = target?.declarations?.find(ts.isSourceFile);
-          if (source) for (const name of runtimeNames(source)) if (name !== "default") names.add(name);
-        }
-      } else if (ts.isExportAssignment(statement)) names.add("default");
-      else if (ts.canHaveModifiers(statement) && ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
-        if (ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)) names.add("default");
-        else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) binding(declaration.name);
-        else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) names.add(statement.name.text);
-      }
+      if (ts.isExportDeclaration(statement)) addReexports(statement, file, names, runtimeNames, checker);
+      else addDeclaration(statement, names, binding);
     }
     return names;
   }
@@ -86,17 +70,15 @@ function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
 function contributionOptions(declaration: ts.Declaration, field: string, fail: () => never): Record<string, string> {
   let initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer
     : ts.isExportAssignment(declaration) ? declaration.expression : undefined;
-  while (initializer && (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer) || ts.isParenthesizedExpression(initializer))) initializer = initializer.expression;
+  initializer = unwrap(initializer);
   if (!initializer || !ts.isCallExpression(initializer)) fail();
   const call = initializer as ts.CallExpression;
-  let options = call.arguments[0];
-  while (options && (ts.isAsExpression(options) || ts.isSatisfiesExpression(options) || ts.isParenthesizedExpression(options))) options = options.expression;
+  let options: ts.Expression | undefined = call.arguments[0];
+  options = unwrap(options);
   if (!options || !ts.isObjectLiteralExpression(options)) fail();
   const values: Record<string, string> = {};
   for (const property of (options as ts.ObjectLiteralExpression).properties) {
-    if (!ts.isPropertyAssignment(property) || !property.name || (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))
-      || !ts.isStringLiteralLike(property.initializer)) fail();
-    const p = property as ts.PropertyAssignment;
+    const p = literalProperty(property, fail);
     const key = (p.name as ts.Identifier).text;
     if (key !== field || key in values) fail();
     values[key] = (p.initializer as ts.StringLiteral).text;
@@ -116,4 +98,38 @@ function validateRoute(route: string, fail: () => never): void {
       || (part.startsWith("*") && index !== segments.length - 1)) fail();
     names.add(name);
   }
+}
+
+function addReexports(statement: ts.ExportDeclaration, file: ts.SourceFile, names: Set<string>, runtimeNames: (file: ts.SourceFile) => Set<string>, checker: ts.TypeChecker) {
+  if (statement.exportClause) {
+    if (ts.isNamedExports(statement.exportClause)) for (const item of statement.exportClause.elements) names.add(item.name.text);
+    else names.add(statement.exportClause.name.text);
+  } else if (statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+    const specifier = statement.moduleSpecifier.text;
+    const original = file.statements.find((node): node is ts.ExportDeclaration => ts.isExportDeclaration(node)
+      && !!node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier);
+    const target = original?.moduleSpecifier && checker.getSymbolAtLocation(original.moduleSpecifier);
+    const source = target?.declarations?.find(ts.isSourceFile);
+    if (source) for (const name of runtimeNames(source)) if (name !== "default") names.add(name);
+  }
+}
+
+function addDeclaration(statement: ts.Statement, names: Set<string>, binding: (name: ts.BindingName) => void) {
+  if (ts.isExportAssignment(statement)) names.add("default");
+  else if (ts.canHaveModifiers(statement) && ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
+    if (ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)) names.add("default");
+    else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) binding(declaration.name);
+    else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) names.add(statement.name.text);
+  }
+}
+
+function unwrap(expression: ts.Expression | undefined): ts.Expression | undefined {
+  while (expression && (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isParenthesizedExpression(expression))) expression = expression.expression;
+  return expression;
+}
+
+function literalProperty(property: ts.ObjectLiteralElementLike, fail: () => never): ts.PropertyAssignment {
+  if (!ts.isPropertyAssignment(property) || !property.name || (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))
+    || !ts.isStringLiteralLike(property.initializer)) fail();
+  return property as ts.PropertyAssignment;
 }

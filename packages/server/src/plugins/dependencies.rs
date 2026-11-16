@@ -22,10 +22,10 @@ pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<S
         }
 
         for (conflict, range) in &definition.breaks {
-            if let Some(installed) = plugins.get(conflict) {
-                if matches_version(range, &installed.manifest.plugin.version)? {
-                    return Err(invalid(format!("Plugin conflict: {id} breaks {conflict}")));
-                }
+            if let Some(installed) = plugins.get(conflict)
+                && matches_version(range, &installed.manifest.plugin.version)?
+            {
+                return Err(invalid(format!("Plugin conflict: {id} breaks {conflict}")));
             }
         }
     }

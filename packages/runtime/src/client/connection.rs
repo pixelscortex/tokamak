@@ -179,7 +179,7 @@ pub async fn serve(
                         let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
                         if header(&value, true).is_none() { break; }
                         if complete(&awaiting, &value) { awaiting = None; }
-                        if value["type"] == "response" { if let Some(id) = value["id"].as_u64() { actions.remove(&id); } }
+                        if value["type"] == "response" && let Some(id) = value["id"].as_u64() { actions.remove(&id); }
                         if let Some(sender) = &output {
                             if sender.is_document_retired() {
                                 output = None;
@@ -210,12 +210,11 @@ pub async fn serve(
                     if actions.len() >= 34 {
                         // Refuse before sending rather than letting a saturated
                         // action lane hold unrelated query/mutation messages.
-                        if let Some(sender) = &output {
-                            if sender.send("connection:event", serde_json::json!({
+                        if let Some(sender) = &output
+                            && sender.send("connection:event", serde_json::json!({
                                 "type":"response", "id":id,
                                 "result":{"Err":"native action capacity exceeded; request was not admitted"}
                             })).is_err() { break; }
-                        }
                         continue;
                     }
                     actions.insert(id);
@@ -229,13 +228,13 @@ pub async fn serve(
             }
         }
     }
-    if let Some(sender) = output {
-        if !sender.is_document_retired() {
-            let _ = sender.finish(
-                "connection:close",
-                "Server connection closed; mutation outcomes may be unknown",
-            );
-        }
+    if let Some(sender) = output
+        && !sender.is_document_retired()
+    {
+        let _ = sender.finish(
+            "connection:close",
+            "Server connection closed; mutation outcomes may be unknown",
+        );
     }
     // Never retry a mutation or shut down the server when a window disappears.
     let _ = tokio::time::timeout(Duration::from_secs(1), socket.close(None)).await;

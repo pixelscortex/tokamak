@@ -83,69 +83,7 @@ impl Tree {
         }
         let mutations: Vec<Mutation> =
             serde_json::from_str(json).map_err(|e| Error(format!("UI wire: {e}")))?;
-        let mut staged = self.topology.clone();
-        let invalid = || Error("Invalid UI topology or attribute".into());
-        for mutation in &mutations {
-            let entry = |id: &u32| staged.get(id).copied().ok_or_else(invalid);
-            match mutation {
-                Mutation::Element { id, tag } | Mutation::Text { id, value: tag } => {
-                    if staged.contains_key(id) {
-                        return Err(invalid());
-                    }
-                    let kind = if matches!(mutation, Mutation::Element { .. }) {
-                        if !name_valid(tag) {
-                            return Err(invalid());
-                        }
-                        Kind::Element
-                    } else {
-                        Kind::Text
-                    };
-                    staged.insert(*id, Entry { kind, parent: None });
-                }
-                Mutation::TextValue { id, .. } => {
-                    if entry(id)?.kind != Kind::Text {
-                        return Err(invalid());
-                    }
-                }
-                Mutation::Attribute { id, name, .. } => {
-                    if entry(id)?.kind != Kind::Element
-                        || !name_valid(name)
-                        || name.starts_with("on")
-                    {
-                        return Err(invalid());
-                    }
-                }
-                Mutation::Scroll { id, top } => {
-                    if entry(id)?.kind != Kind::Element || !top.is_finite() {
-                        return Err(invalid());
-                    }
-                }
-                Mutation::Detach { id } => {
-                    if entry(id)?.kind == Kind::Root || entry(id)?.parent.is_none() {
-                        return Err(invalid());
-                    }
-                    staged.get_mut(id).unwrap().parent = None;
-                }
-                Mutation::Insert { id, parent, before } => {
-                    if entry(id)?.kind == Kind::Root || entry(parent)?.kind == Kind::Text {
-                        return Err(invalid());
-                    }
-                    if let Some(before) = before {
-                        if entry(before)?.parent != Some(*parent) {
-                            return Err(invalid());
-                        }
-                    }
-                    let mut ancestor = Some(*parent);
-                    while let Some(current) = ancestor {
-                        if current == *id {
-                            return Err(invalid());
-                        }
-                        ancestor = entry(&current)?.parent;
-                    }
-                    staged.get_mut(id).unwrap().parent = Some(*parent);
-                }
-            }
-        }
+        let staged = validate(&mutations, self.topology.clone())?;
         let mut inner = document.inner_mut();
         let mut dom = inner.mutate();
         let mut scrolls = Vec::new();
@@ -217,4 +155,70 @@ fn name_valid(name: &str) -> bool {
         && name.bytes().enumerate().all(|(i, b)| {
             b.is_ascii_lowercase() || (i > 0 && (b.is_ascii_digit() || b == b'-' || b == b':'))
         })
+}
+
+fn validate(
+    mutations: &[Mutation],
+    mut staged: HashMap<u32, Entry>,
+) -> Result<HashMap<u32, Entry>> {
+    let invalid = || Error("Invalid UI topology or attribute".into());
+    for mutation in mutations {
+        let entry = |id: &u32| staged.get(id).copied().ok_or_else(invalid);
+        match mutation {
+            Mutation::Element { id, tag } | Mutation::Text { id, value: tag } => {
+                if staged.contains_key(id) {
+                    return Err(invalid());
+                }
+                let kind = if matches!(mutation, Mutation::Element { .. }) {
+                    if !name_valid(tag) {
+                        return Err(invalid());
+                    }
+                    Kind::Element
+                } else {
+                    Kind::Text
+                };
+                staged.insert(*id, Entry { kind, parent: None });
+            }
+            Mutation::TextValue { id, .. } => {
+                if entry(id)?.kind != Kind::Text {
+                    return Err(invalid());
+                }
+            }
+            Mutation::Attribute { id, name, .. } => {
+                if entry(id)?.kind != Kind::Element || !name_valid(name) || name.starts_with("on") {
+                    return Err(invalid());
+                }
+            }
+            Mutation::Scroll { id, top } => {
+                if entry(id)?.kind != Kind::Element || !top.is_finite() {
+                    return Err(invalid());
+                }
+            }
+            Mutation::Detach { id } => {
+                if entry(id)?.kind == Kind::Root || entry(id)?.parent.is_none() {
+                    return Err(invalid());
+                }
+                staged.get_mut(id).unwrap().parent = None;
+            }
+            Mutation::Insert { id, parent, before } => {
+                if entry(id)?.kind == Kind::Root || entry(parent)?.kind == Kind::Text {
+                    return Err(invalid());
+                }
+                if let Some(before) = before
+                    && entry(before)?.parent != Some(*parent)
+                {
+                    return Err(invalid());
+                }
+                let mut ancestor = Some(*parent);
+                while let Some(current) = ancestor {
+                    if current == *id {
+                        return Err(invalid());
+                    }
+                    ancestor = entry(&current)?.parent;
+                }
+                staged.get_mut(id).unwrap().parent = Some(*parent);
+            }
+        }
+    }
+    Ok(staged)
 }

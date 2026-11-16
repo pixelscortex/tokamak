@@ -43,6 +43,20 @@ export function definePlugin(definition: PluginDefinition): Readonly<PluginDefin
   if (typeof definition.version !== "string" || !versionSyntax(definition.version)) {
     throw new Error("Plugin version must be a semantic version");
   }
+  validateRequirements(definition);
+  validateLists(definition);
+  validateMetadata(definition);
+  function freeze(value: unknown): void {
+    if (value && typeof value === "object") {
+      for (const child of Object.values(value)) freeze(child);
+      Object.freeze(value);
+    }
+  }
+  freeze(definition);
+  return definition;
+}
+
+function validateRequirements(definition: PluginDefinition) {
   for (const key of ["depends", "optional", "breaks"] as const) {
     const map = definition[key];
     if (map === undefined) continue;
@@ -52,12 +66,18 @@ export function definePlugin(definition: PluginDefinition): Readonly<PluginDefin
       throw new Error(`Invalid plugin ${key} requirements`);
     }
   }
+}
+
+function validateLists(definition: PluginDefinition) {
   for (const key of ["provides", "consumes", "permissions"] as const) {
     const list = definition[key];
     if (list !== undefined && (!Array.isArray(list)
       || list.some(value => typeof value !== "string" || !value)
       || new Set(list).size !== list.length)) throw new Error(`Invalid plugin ${key}`);
   }
+}
+
+function validateMetadata(definition: PluginDefinition) {
   if (definition.api !== undefined && (typeof definition.api !== "string"
     || !definition.api.startsWith("tokamak@"))) {
     throw new Error("Invalid host API requirement");
@@ -70,12 +90,4 @@ export function definePlugin(definition: PluginDefinition): Readonly<PluginDefin
     || Array.isArray(definition.contributes) || Object.values(definition.contributes).some(value => !Array.isArray(value)))) {
     throw new Error("Plugin contributions must be static arrays");
   }
-  function freeze(value: unknown): void {
-    if (value && typeof value === "object") {
-      for (const child of Object.values(value)) freeze(child);
-      Object.freeze(value);
-    }
-  }
-  freeze(definition);
-  return definition;
 }
