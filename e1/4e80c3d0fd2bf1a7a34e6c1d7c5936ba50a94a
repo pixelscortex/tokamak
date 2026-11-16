@@ -1,0 +1,19 @@
+.ci/check.sh
+  s_186fb549a459e6::t_0e5af64955d908 13-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e14e80c3d0fd2bf1a7a34e6c1d7c5936ba50a94a",
+  "prompts": {},
+  "sessions": {
+    "s_186fb549a459e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e542-d630-7ef0-aba8-12cca9ea3b71",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
