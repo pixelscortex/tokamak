@@ -38,7 +38,7 @@ jobs:
             const files = await github.paginate(github.rest.pulls.listFiles, {
               ...context.repo, pull_number: context.issue.number, per_page: 100,
             });
-            const native = /^(packages\/(render|engine|runtime|server|build)\/|app\/|lab\/|Cargo\.|rust-toolchain|\.moon\/|\.prototools$|moon\.yml$|\.ci\/|\.github\/workflows\/macos\.yml$|bun\.lock$|package\.json$)/;
+            const native = /^(packages\/(render|engine|runtime|server|build)\/|app\/|lab\/|Cargo\.|rust-toolchain|\.moon\/|\.cargo\/|(?:clippy|rustfmt)\.toml$|\.prototools$|moon\.yml$|\.ci\/|\.github\/workflows\/macos\.yml$|bun\.lock$|package\.json$)/;
             // GitHub caps this API at 3,000 files; conservatively check large PRs.
             core.setOutput('native', files.length >= 3000 || files.some(f => native.test(f.filename) || native.test(f.previous_filename || '')));
   macos:
