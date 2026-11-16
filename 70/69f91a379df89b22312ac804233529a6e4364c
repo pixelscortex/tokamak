@@ -1,0 +1,28 @@
+packages/runtime/src/client/connection.rs
+  s_6d23dec810fd4d::t_56bce0348d9063 35
+packages/runtime/Cargo.toml
+  s_6d23dec810fd4d::t_56bce0348d9063 10,26-27
+  s_6d23dec810fd4d::t_ef00bde8c8c522 28
+packages/runtime/src/client/remote.rs
+  s_6d23dec810fd4d::t_56bce0348d9063 20-23,37-45,85
+packages/runtime/src/client/private_file.rs
+  s_6d23dec810fd4d::t_56bce0348d9063 5-26,28-35,39-42,45-51,54-55,65-94
+Cargo.lock
+  s_6d23dec810fd4d::t_a9c0a339881f20 4855
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7069f91a379df89b22312ac804233529a6e4364c",
+  "prompts": {},
+  "sessions": {
+    "s_6d23dec810fd4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e225-4533-79d3-a1b9-99a13e524deb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

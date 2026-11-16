@@ -1,0 +1,19 @@
+packages/runtime/src/client/invite.rs
+  s_6d23dec810fd4d::t_61325a1c477dc3 33-37,45-48,83,109,111,131-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37a07ae7bef1559c25a8b1161863e60387bb8011",
+  "prompts": {},
+  "sessions": {
+    "s_6d23dec810fd4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e225-4533-79d3-a1b9-99a13e524deb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

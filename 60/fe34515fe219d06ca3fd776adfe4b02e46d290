@@ -1,0 +1,21 @@
+packages/runtime/src/client/connection.rs
+  s_6d23dec810fd4d::t_14a049aac08ca7 21-24,33,38,40
+packages/runtime/src/client/invite.rs
+  s_6d23dec810fd4d::t_b3a8f551449dee 14-27,32-33,134-138,151-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60fe34515fe219d06ca3fd776adfe4b02e46d290",
+  "prompts": {},
+  "sessions": {
+    "s_6d23dec810fd4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e225-4533-79d3-a1b9-99a13e524deb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
