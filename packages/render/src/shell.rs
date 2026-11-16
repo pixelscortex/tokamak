@@ -4,7 +4,7 @@
 use crate::macos::{anchor_layer, place_window_buttons};
 use crate::{Error, HostMailbox, HostSender, NativeDocument, Result};
 use anyrender::WindowRenderer;
-use anyrender_vello::{VelloWindowRenderer, wgpu};
+use anyrender_vello::{VelloRendererOptions, VelloWindowRenderer, wgpu};
 use blitz_dom::Document;
 use blitz_shell::{BlitzApplication, BlitzShellEvent, BlitzShellProxy, WindowConfig};
 use blitz_traits::shell::{ClipboardError, ShellProvider};
@@ -126,7 +126,11 @@ pub fn launch_window_with(
     }
     app.add_window(WindowConfig::with_attributes(
         Box::new(document),
-        VelloWindowRenderer::new(),
+        // Analytic area coverage: exact edge shading for text. The MSAA16
+        // default gives glyph edges about 17 levels and reads soft and heavy.
+        VelloWindowRenderer::with_options(
+            VelloRendererOptions::new().antialiasing_method(vello::AaConfig::Area),
+        ),
         attributes,
     ));
     connect(sender);

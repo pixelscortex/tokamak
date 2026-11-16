@@ -26,6 +26,7 @@ blitz-shell = { version = "=0.3.0-beta.4", default-features = false, features = 
 style = { package = "stylo", version = "=0.22.0" }
 anyrender = "=0.14.0"
 anyrender_vello = "=0.15.0"
+vello = "=0.11.0"
 # Vector widgets share the scene colour and geometry types.
 peniko = "=0.6.1"
 winit = "=0.31.0-beta.3"
