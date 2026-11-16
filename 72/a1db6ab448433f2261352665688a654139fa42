@@ -1,0 +1,56 @@
+plugins/acp/backend/acp-turn.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 11,17,22
+plugins/acp/backend/acp.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 25,37-38,43-46,48-57,69-70,80
+plugins/chat/backend/chat.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 20-21,23-24,35,47,53-54,57,67,70-73,75-84
+  s_dfff95ed8d2a27::t_629d250c9def41 22
+plugins/chat/backend/permission-wait.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 10,19,28-41
+plugins/chat/backend/permissions.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 2,7-9,56-58,80-83
+plugins/chat/backend/stream-buffer.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 8-11,13,36
+  s_dfff95ed8d2a27::t_29620279d40112 12
+plugins/chat/backends.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 5
+plugins/chat/backend/_functions.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 20-27
+plugins/chat/backend/runs.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 28-31,47,81-85,87
+  s_dfff95ed8d2a27::t_2f329aef714a2e 86
+plugins/chat/README.md
+  s_dfff95ed8d2a27::t_c5bc95f94d90d4 167-170
+plugins/acp/backend/backend.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 22
+plugins/chat/backend/schema.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 29-30
+plugins/chat/backend/send.ts
+  s_dfff95ed8d2a27::t_5d6a4337f35e00 6,10-11,49-50,96,104-105,123-124,131-132,139-141
+packages/server/tests/acp-driver.ts
+  s_dfff95ed8d2a27::t_5f61239c87b617 2-8,205-209,259-267,315,320,346-381
+packages/server/tests/actions.rs
+  s_dfff95ed8d2a27::t_29f6db191b1ee4 103-110,747-751
+packages/server/tests/build-actions.mjs
+  s_dfff95ed8d2a27::t_233d8a4fb778c7 105-110
+packages/server/tests/chat-driver.ts
+  s_dfff95ed8d2a27::t_b1a5b615453013 5,44,272-276,281-282,301,337,339,366,368-372,399
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_dfff95ed8d2a27::t_fbc4ab1a050c7f 48-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "72a1db6ab448433f2261352665688a654139fa42",
+  "prompts": {},
+  "sessions": {
+    "s_dfff95ed8d2a27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e3fb-620f-76a1-817c-9cf816a088f5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
