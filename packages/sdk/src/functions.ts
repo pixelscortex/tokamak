@@ -35,8 +35,31 @@ export interface MutationContext<M extends DataModel> {
   providers<T>(interfaceName: string): Promise<readonly T[]>;
 }
 
+export type AcpEvent =
+  | { type: "update"; update: JsonObject }
+  | {
+    type: "permission";
+    requestId: string;
+    toolCall: JsonObject;
+    options: {
+      optionId: string;
+      name: string;
+      kind: "allow_once" | "allow_always" | "reject_once" | "reject_always";
+    }[];
+  }
+  | { type: "done"; stopReason: string };
+
+export interface AcpContext {
+  agents(): { id: string; title: string }[];
+  open(input: { agent: string; cwd: string; sessionId?: string }): Promise<{ sessionId: string; restored: boolean }>;
+  prompt(input: { agent: string; sessionId: string; text: string }): AsyncIterable<AcpEvent>;
+  respond(input: { requestId: string; optionId: string | null }): Promise<void>;
+  cancel(input: { agent: string; sessionId: string }): Promise<void>;
+}
+
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext {
+  readonly acp: AcpContext;
   /** Requires a manifest env:<name> grant; unset values return null. */
   env(name: string): Promise<string | null>;
   runQuery<A, R>(reference: FunctionReference<"query", A, R>, args: NoInfer<A>): Promise<R>;
@@ -91,6 +114,7 @@ function builder<K extends FunctionKind, M extends DataModel>(kind: K, schema?: 
             name: reference[functionName], args: jsonSnapshot(input, "nested call args"),
           });
         const ctx = Object.freeze(kind === "action" ? {
+          acp: createAcp(host),
           env: (name: string) => callHost(host, "action.env", { name }),
           runQuery: (reference: { [functionName]: string }, args: unknown) => run("query", reference, args),
           runMutation: (reference: { [functionName]: string }, args: unknown) => run("mutation", reference, args),
@@ -112,6 +136,32 @@ function builder<K extends FunctionKind, M extends DataModel>(kind: K, schema?: 
       },
     });
   };
+}
+
+function createAcp(host: HostBridge): AcpContext {
+  // Pull one event through the invocation-bound bridge, like fetch body reads.
+  const op = (name: string, payload: JsonValue): JsonValue | Promise<JsonValue> =>
+    (host.op as (name: string, payload: JsonValue) => JsonValue | Promise<JsonValue>)(`acp.${name}`, payload);
+  return Object.freeze({
+    agents: () => op("agents", {}) as { id: string; title: string }[],
+    open: async (input: { agent: string; cwd: string; sessionId?: string }) =>
+      await op("open", jsonSnapshot(input, "ACP open")) as { sessionId: string; restored: boolean },
+    async *prompt(input: { agent: string; sessionId: string; text: string }): AsyncIterable<AcpEvent> {
+      const stream = await op("prompt", input);
+      let finished = false;
+      try {
+        while (!finished) {
+          const event = await op("next", { stream }) as AcpEvent;
+          finished = event.type === "done";
+          yield event;
+        }
+      } finally {
+        if (!finished) await op("close", { stream });
+      }
+    },
+    respond: async (input: { requestId: string; optionId: string | null }) => { await op("respond", input); },
+    cancel: async (input: { agent: string; sessionId: string }) => { await op("cancel", input); },
+  });
 }
 
 function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, FunctionKind> {

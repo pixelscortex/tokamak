@@ -27,6 +27,7 @@ pub struct Catalog {
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
     pub(crate) environment: PathBuf,
+    pub(crate) acp: Arc<crate::host::acp::Manager>,
 }
 
 /// One immutable, fully inspected generation. Function lookup selects the owner;

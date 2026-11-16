@@ -50,6 +50,7 @@ pub struct ChangeEvent {
 /// Only this handle can shut down; close rejects active transactions recoverably.
 pub struct Database {
     state: Lifecycle,
+    directory: Option<PathBuf>,
 }
 
 // Shutdown is an owned future, not a detached task. Retaining it across cancelled
@@ -76,6 +77,15 @@ impl Database {
     }
 
     async fn open_owned(storage: Storage) -> Result<Self> {
+        let directory = match &storage {
+            Storage::Memory => None,
+            Storage::Disk(path) => Some(
+                path.parent()
+                    .filter(|path| !path.as_os_str().is_empty())
+                    .unwrap_or(std::path::Path::new("."))
+                    .to_owned(),
+            ),
+        };
         let path = match storage {
             Storage::Memory => "mem://".to_owned(),
             Storage::Disk(path) => format!(
@@ -93,7 +103,12 @@ impl Database {
 
         Ok(Self {
             state: Lifecycle::Open(Arc::new(DatabaseState { storage, changes })),
+            directory,
         })
+    }
+
+    pub(crate) fn directory(&self) -> Option<&std::path::Path> {
+        self.directory.as_deref()
     }
 
     pub(crate) fn has_transactions(&self) -> bool {

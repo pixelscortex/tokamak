@@ -18,6 +18,8 @@ required-features = ["protocol-codegen"]
 protocol-codegen = ["dep:ts-rs"]
 
 [dependencies]
+agent-client-protocol = "=5.3.0"
+toml = "1.1.0"
 dotenvy = "0.15.7"
 tempfile = "3.27.0"
 futures-util = "0.3.34"
@@ -42,7 +44,10 @@ surrealdb-kvs = { version = "=4.0.0", default-features = false }
 surrealdb-kvs-any = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 engine = { path = "../engine" }
 serde_json = "1.0.154"
-tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "macros", "sync", "net", "signal", "time"] }
+tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "macros", "sync", "net", "signal", "time", "process", "io-util"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [lints]
 workspace = true

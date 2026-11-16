@@ -67,7 +67,10 @@ impl Server {
         pool: Arc<Pool>,
         root: &std::path::Path,
     ) -> Result<Self, Error> {
-        let loaded = match crate::plugins::Catalog::read(root) {
+        let directory = database
+            .directory()
+            .unwrap_or(root.parent().unwrap_or(root));
+        let loaded = match crate::plugins::Catalog::read_in_directory(root, None, directory) {
             Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
             Err(error) => Err(error),
         };

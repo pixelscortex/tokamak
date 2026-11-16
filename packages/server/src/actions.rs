@@ -26,6 +26,17 @@ pub(crate) fn operations(
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
+        crate::host::acp::register(
+            &mut ops,
+            loaded.catalog.acp.clone(),
+            owner.clone(),
+            loaded.catalog.plugins[owner]
+                .manifest
+                .plugin
+                .permissions
+                .iter()
+                .any(|p| p == "acp"),
+        )?;
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
                 .manifest
