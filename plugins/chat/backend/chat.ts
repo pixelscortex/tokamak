@@ -2,6 +2,7 @@ import type {} from "@tokamak/sdk/web";
 import { v, type Id } from "@tokamak/sdk";
 import { action } from "./_functions";
 import { api } from "./_generated/api";
+import { acpSend } from "./acp";
 import { discoverTools } from "./tools";
 import { streamBuffer } from "./stream-buffer";
 import { toolEvents } from "./tool-events";
@@ -13,7 +14,9 @@ type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "
 export const send = action({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
-    const { runId, messageId, history, model } = await ctx.runMutation(api.send.start, args);
+    const started = await ctx.runMutation(api.send.start, args);
+    if (started.backend?.kind === "acp") return acpSend(ctx, args, started, started.backend);
+    const { runId, messageId, history, model } = started;
     const controller = new AbortController();
     const buffer = streamBuffer(ctx, runId);
     const acknowledgements = toolAcknowledgements();

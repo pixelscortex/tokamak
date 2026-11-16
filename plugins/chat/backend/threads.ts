@@ -1,3 +1,4 @@
+import { backend } from "./backend";
 import { CHAT_MODELS, DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, OWNER, mutation, nonempty, query, thread } from "./_functions";
@@ -43,9 +44,27 @@ export const remove = mutation({
 export const setModel = mutation({
   args: { threadId: v.id("threads"), model: v.string() },
   handler: async ({ db }, { threadId, model }) => {
-    await thread(db, threadId);
+    const current = await thread(db, threadId);
     if (!CHAT_MODELS.some(choice => choice === model)) throw new Error("Unknown chat model");
 
-    return db.patch(threadId, { model, updatedAt: Date.now() });
+    return db.patch(threadId, { model, ...(current.backend ? { backend: { kind: "model" as const, model } } : {}), updatedAt: Date.now() });
+  },
+});
+
+export const setBackend = mutation({
+  args: { threadId: v.id("threads"), backend },
+  handler: async ({ db }, { threadId, backend }) => {
+    const current = await thread(db, threadId);
+    if (backend.kind === "model") {
+      const selected = backend.model;
+      if (!CHAT_MODELS.some(model => model === selected)) throw new Error("Unknown chat model");
+    }
+    if (backend.kind === "acp") {
+      const previous = current.backend;
+      backend = { kind: "acp", agent: nonempty(backend.agent), cwd: nonempty(backend.cwd),
+        ...(previous?.kind === "acp" && previous.agent === backend.agent && previous.cwd === backend.cwd && previous.sessionId
+          ? { sessionId: previous.sessionId } : {}) };
+    }
+    return db.patch(threadId, { backend, updatedAt: Date.now() });
   },
 });

@@ -11,6 +11,11 @@ export const toolPart = v.object({
   type: v.literal("tool"), callId: v.string(), plugin: v.string(), toolName: v.string(),
   args: v.any(), ...toolCompletion,
 });
+export const planPart = v.object({
+  type: v.literal("plan"),
+  entries: v.array(v.object({ content: v.string(), status: v.string(), priority: v.string() })),
+});
+export type Part = Infer<typeof textPart> | Infer<typeof toolPart> | Infer<typeof planPart>;
 export type ToolPart = Infer<typeof toolPart>;
 
 export const toolUpdate = v.object({
@@ -40,12 +45,12 @@ export function boundedError(error: string): string {
   return error.slice(0, 680);
 }
 
-export function interruptTools(parts: (Infer<typeof textPart> | ToolPart)[], error: string) {
+export function interruptTools(parts: Part[], error: string) {
   return parts.map(part => part.type === "tool" && part.status === "running"
     ? { ...part, status: "error" as const, error } : part);
 }
 
-export function appendText(parts: (Infer<typeof textPart> | ToolPart)[], text: string) {
+export function appendText(parts: Part[], text: string) {
   const last = parts.at(-1);
   if (last?.type === "text") last.text += text;
   else parts.push({ type: "text", text });

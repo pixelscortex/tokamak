@@ -1,17 +1,18 @@
 import { defineSchema, defineTable, v } from "@tokamak/sdk";
 
-import { textPart, toolPart } from "./parts";
+import { textPart, toolPart, planPart } from "./parts";
+import { backend } from "./backend";
 
 export default defineSchema({
   threads: defineTable({
-    model: v.optional(v.string()),
+    model: v.optional(v.string()), backend: v.optional(backend),
     ownerId: v.string(), title: v.string(), createdAt: v.number(), updatedAt: v.number(),
   }).index("by_updatedAt", ["updatedAt"]),
   messages: defineTable({
     threadId: v.id("threads"),
     authorId: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant")),
-    parts: v.array(v.union(textPart, toolPart)),
+    parts: v.array(v.union(textPart, toolPart, planPart)),
     status: v.union(v.literal("streaming"), v.literal("complete"), v.literal("error"), v.literal("cancelled")),
     error: v.optional(v.string()),
     createdAt: v.number(),

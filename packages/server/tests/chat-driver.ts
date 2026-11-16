@@ -17,6 +17,68 @@ async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
 }
 
 export async function chatScenario(client: TokamakClient, scenario: string, configure: (url: string) => Promise<void>) {
+  if (scenario === "chat-acp") {
+    assert.deepEqual(await client.action(api.agents.list, {}), [{ id: "fake", title: "fake" }, { id: "fresh", title: "fresh" }]);
+    const threadId = await client.mutation(api.threads.create, {});
+    const backend = { kind: "acp" as const, agent: "fake", cwd: "/tmp" };
+    await client.mutation(api.threads.setBackend, { threadId, backend });
+    const send = (text: string) => client.action(api.chat.send, { threadId, text });
+    const messages = () => client.query(api.messages.list, { threadId });
+    assert.equal((await send("chat:normal")).status, "done");
+    const parts = (await messages())[1]!.parts;
+    assert.deepEqual(parts.map(part => part.type), ["text", "tool", "plan", "text"]);
+    assert.deepEqual(parts[0], { type: "text", text: "Before." });
+    assert.deepEqual(parts[3], { type: "text", text: "[image]" });
+    const tool = parts[1]!;
+    assert.ok(tool.type === "tool");
+    assert.equal(tool.plugin, "acp:fake");
+    assert.equal(tool.status, "done");
+    assert.equal(tool.summary, "Reading file");
+    assert.equal(tool.model, "Result");
+    assert.deepEqual(tool.result, { truncated: true });
+    assert.deepEqual(parts[2], { type: "plan", entries: [{ content: "Read", status: "completed", priority: "high" }] });
+    assert.equal((await client.query(api.threads.list, {}))[0]!.backend?.kind, "acp");
+    const stored = (await client.query(api.threads.list, {}))[0]!.backend;
+    assert.ok(stored?.kind === "acp" && stored.sessionId === "session");
+    // The fake recognizes only exact prompts: a history prefix on a restored turn fails these checks.
+    for (const reason of ["max_tokens", "max_turn_requests", "refusal", "cancelled", "permission"]) {
+      assert.equal((await send(`chat:${reason}`)).status, reason === "refusal" ? "error" : reason === "cancelled" ? "cancelled" : "done");
+      const last = (await messages()).at(-1)!;
+      if (reason === "refusal") assert.equal(last.error, "Agent refused");
+      if (reason.startsWith("max_") || reason === "permission")
+        assert.match(last.parts.filter(part => part.type === "text").map(part => part.text).join(""), reason === "permission" ? /permission request cancelled/ : /limit/);
+    }
+    const pending = send("chat:cancel");
+    await until(async () => (await messages()).at(-1)?.parts.some(part => part.type === "tool" && part.status === "running") ?? false);
+    const run = await client.query(api.runs.active, { threadId });
+    assert.equal(run!.model, "acp:fake");
+    await client.mutation(api.runs.cancel, { runId: run!._id });
+    assert.equal((await pending).status, "cancelled");
+    const cancelledTool = (await messages()).at(-1)!.parts.find(part => part.type === "tool");
+    assert.ok(cancelledTool?.type === "tool" && cancelledTool.error === "cancelled");
+    await client.mutation(api.threads.setBackend, { threadId, backend });
+    assert.deepEqual((await client.query(api.threads.list, {}))[0]!.backend, stored);
+    await client.mutation(api.threads.setBackend, { threadId, backend: { ...backend, cwd: "/" } });
+    assert.deepEqual((await client.query(api.threads.list, {}))[0]!.backend, { ...backend, cwd: "/" });
+    await client.mutation(api.threads.setBackend, { threadId, backend: { ...backend, agent: "other" } });
+    assert.equal((await send("hello")).status, "error");
+    await client.mutation(api.threads.setBackend, { threadId, backend: { ...backend, cwd: "/var" } });
+    assert.equal((await send("auth")).status, "error");
+    assert.equal((await messages()).at(-1)!.error, "Sign in to `fake` in a terminal");
+    const fresh = await client.mutation(api.threads.create, {});
+    const seeded = await client.mutation(api.send.start, { threadId: fresh, text: "old" + "界".repeat(12000) });
+    await client.mutation(api.send.update, { runId: seeded.runId, delta: "previous answer", outcome: "done" });
+    await client.mutation(api.threads.setBackend, { threadId: fresh, backend: { ...backend, agent: "fresh" } });
+    assert.equal((await client.action(api.chat.send, { threadId: fresh, text: "new question" })).status, "done");
+    const echoed = (await client.query(api.messages.list, { threadId: fresh })).at(-1)!.parts[0]!;
+    assert.ok(echoed.type === "text");
+    assert.match(echoed.text, /Previous conversation:/);
+    assert.match(echoed.text, /assistant: previous answer/);
+    assert.match(echoed.text, /user: new question$/);
+    assert.ok(Buffer.byteLength(echoed.text) <= 32768 + 100);
+    assert.ok(!echoed.text.includes("user: old"));
+    return;
+  }
   if (scenario === "chat-real") {
     const failures: string[] = [];
     for (const model of ["liquid/lfm-3-1.7b:free"]) {

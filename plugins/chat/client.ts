@@ -6,6 +6,7 @@ export const api = createApi<{
   threads: ApiFromModule<typeof import("./backend/threads")>;
   messages: ApiFromModule<typeof import("./backend/messages")>;
   runs: ApiFromModule<typeof import("./backend/runs")>;
+  agents: { list: FunctionReference<"action", {}, { id: string; title: string }[]> };
   chat: {
     send: FunctionReference<"action", { threadId: Id<"threads">; text: string }, {
       runId: Id<"runs">;

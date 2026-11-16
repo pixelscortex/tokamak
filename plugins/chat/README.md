@@ -34,6 +34,8 @@ All functions use one argument object. Wire names and results:
 | Query | `chat/runs:active` | `{threadId}` | `Run \| null` |
 | Mutation | `chat/threads:create` | `{title?: string}` | thread ID |
 | Mutation | `chat/threads:rename` | `{threadId, title: string}` | `null` |
+| Mutation | `chat/threads:setBackend` | `{threadId, backend}` | `null` |
+| Action | `chat/agents:list` | `{}` | `{id, title}[]` |
 | Mutation | `chat/threads:setModel` | `{threadId, model: string}` | `null` |
 | Mutation | `chat/threads:remove` | `{threadId}` | `null` |
 | Mutation | `chat/runs:recover` | `{}` | `null` |
@@ -73,8 +75,8 @@ a thread cascades through messages and runs; its in-flight action also stops.
 The `send:*` transaction steps are implementation details excluded from the
 cross-plugin export surface; use `chat:send` to send messages.
 
-No scheduler, retries, auth, multi-user isolation, embedded UI, or ACP
-client is included. There is no plugin initialization hook today. Recovery is
+No scheduler, retries, auth, multi-user isolation, or embedded UI is included.
+There is no plugin initialization hook today. Recovery is
 lazy: `send.start` checks stale runs before admitting a new reply; the native
 client calls `runs:recover` on observing running runs and every 30 seconds while
 they exist (queries themselves remain read-only). Actions heartbeat every 10
@@ -145,3 +147,28 @@ running parts with `status:"error", error:"cancelled"`; stale recovery settles
 them with `error:"Interrupted"`.
 Earlier turns flatten tools to `[tool toolName: model text]`; the current run
 keeps AI SDK tool messages. Rendering these parts belongs to the desktop.
+
+## ACP backend
+
+Threads optionally store `backend: {kind:"model", model}` or
+`{kind:"acp", agent, cwd, sessionId?}`. An absent backend uses the existing
+`model` field and default model without migration. `threads:setBackend` preserves
+an existing session only when agent and cwd match; callers cannot inject sessions.
+`threads:setModel` selects the model backend. The plugin declares the `acp` grant;
+configure permitted agents in the host data directory's `agents.toml` with
+`plugins = ["chat"]`. `agents:list` is an action because ACP is action-only.
+
+ACP opens and saves a session before prompting. Restored sessions receive only
+the new user text; fresh sessions also receive the most recent flattened completed
+history, capped at 32 KB. Runs identify their backend as `acp:<agent>`.
+Text uses the same ordered persistence and 100 ms buffer as model replies.
+Non-text message content becomes `[image]` or `[resource]`. Tools use
+`plugin:"acp:<agent>"`, retain ACP call IDs and follow the existing size limits.
+Plans use `{type:"plan", entries:[{content, status, priority}]}`; each update
+replaces the message's single plan part. Other updates, including thoughts, are ignored.
+
+Normal completion and token/turn limits finish successfully (limits append a
+short note); refusals persist `Agent refused`. Cancellation stops the agent and
+settles running tools with `error:"cancelled"`. Authentication errors while
+opening suggest signing in to the agent in a terminal. Permission requests are
+answered cancelled and append a short note until the permission UI is implemented.

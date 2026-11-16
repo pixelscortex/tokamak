@@ -1,16 +1,16 @@
 import type {} from "@tokamak/sdk/web";
-import type { ActionContext, Id } from "@tokamak/sdk";
+import type { ActionContext, Id, Infer } from "@tokamak/sdk";
 import { api } from "./_generated/api";
 import { HEARTBEAT_MS } from "./recovery";
-import type { ToolPart } from "./parts";
+import type { planPart, ToolPart } from "./parts";
 
 export function streamBuffer(ctx: ActionContext, runId: Id<"runs">) {
   let pending = "";
   let flushedAt = Date.now();
 
-  const update = async (tool?: ToolPart) => {
+  const update = async (tool?: ToolPart, plan?: Infer<typeof planPart>) => {
     const delta = pending;
-    const status = await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}) });
+    const status = await ctx.runMutation(api.send.update, { runId, delta, ...(tool ? { tool } : {}), ...(plan ? { plan } : {}) });
     pending = pending.slice(delta.length);
     flushedAt = Date.now();
     return status;

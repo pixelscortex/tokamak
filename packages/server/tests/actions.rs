@@ -97,6 +97,19 @@ fn acceptance(scenario: &str) {
 
 fn acceptance_over(scenario: &str, websocket: bool) {
     let installation = Installation::with_chat(scenario.starts_with("chat-"));
+    if scenario == "chat-acp" {
+        let directory = installation.0.parent().unwrap();
+        let agent = directory.join("agent.py");
+        std::fs::write(&agent, include_str!("support/acp_agent.py")).unwrap();
+        std::fs::write(
+            directory.join(".env.local"),
+            "ACP_TEST_PASSTHROUGH=from-dotenv\nACP_TEST_NO_RESTORE=1\n",
+        )
+        .unwrap();
+        std::fs::write(directory.join("agents.toml"), format!(
+            "[agents.fake]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\"]\nplugins = [\"chat\"]\n[agents.fresh]\ncommand = \"/usr/bin/python3\"\nargs = [{}]\nenv = [\"ACP_TEST_PASSTHROUGH\", \"ACP_TEST_NO_RESTORE\"]\nplugins = [\"chat\"]\n", json!(agent), json!(agent)
+        )).unwrap();
+    }
     if scenario == "chat-grant" || scenario == "chat-real" {
         let path = installation.0.join("chat/manifest.json");
         let mut manifest: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
@@ -588,4 +601,9 @@ fn chat_tool_errors_return_to_model_and_finish_run() {
 #[test]
 fn todo_tools_allow_consumer_and_refuse_non_consumer() {
     acceptance("todo-tools");
+}
+
+#[test]
+fn chat_acp_backend() {
+    acceptance("chat-acp");
 }
