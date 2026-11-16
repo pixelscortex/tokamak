@@ -4,7 +4,7 @@ import { CHAT_MODELS, DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
 
-export { share, unshare } from "./shares";
+export { share, shares, unshare } from "./shares";
 
 export const list = query({
   guest: true,

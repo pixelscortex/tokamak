@@ -30,7 +30,7 @@ All functions use one argument object. Wire names and results:
 | --- | --- | --- | --- |
 | Query | `chat/threads:list` | `{}` | `Thread[]`, newest updated first |
 | Query | `chat/messages:list` | `{threadId}` | `Message[]`, oldest first |
-| Query | `chat/runs:running` | `{}` | `{runId, threadId, model, waiting}[]`, all running runs |
+| Query | `chat/runs:running` | `{}` | `{runId, threadId, model, waiting, startedBy, starterName}[]`, visible running runs |
 | Query | `chat/runs:active` | `{threadId}` | `Run \| null` |
 | Mutation | `chat/threads:create` | `{title?: string}` | thread ID |
 | Mutation | `chat/threads:rename` | `{threadId, title: string}` | `null` |
@@ -62,7 +62,10 @@ answers record the caller's member ID. User messages also store `authorName`;
 assistant messages retain `authorId: "assistant"`.
 
 Call `chat/members:hello {}` on connect to upsert the caller's name and last-seen
-time. The owner can query `chat/members:list {}` and share or unshare with
+time; it returns the server's `{memberId, name, role}` for the connection, which
+the desktop uses to choose owner or guest controls. The owner can query
+`chat/members:list {}` and `chat/threads:shares {}` (every `{threadId, memberId}`
+share, for Map counts and the share picker) and share or unshare with
 `chat/threads:share {threadId, memberId}` and
 `chat/threads:unshare {threadId, memberId}`. Shares are idempotent and thread
 deletion removes them. `shares` indexes membership and threads; `members` stores
@@ -76,6 +79,9 @@ at most 20 runs per rolling hour and 100 per rolling day per member, and a
 16 KB UTF-8 text limit. Model history keeps owner turns plain and always marks
 guest turns as untrusted, using their stored author identity even after unsharing.
 `members:hello` rejects guest names equal to "owner" case-insensitively.
+
+`runs:running` names each run's starter from `members` (falling back to `Owner`
+or `Guest`), so every viewer can label the busy strip.
 
 Only `threads:list`, `messages:list`, `runs:running`, `runs:active`, `chat:send`,
 `runs:cancel`, `runs:recover` and `members:hello` accept guest wire calls. Guests
@@ -120,8 +126,17 @@ Offline integration tests run in `cargo test -p server`. The ignored
 ## Native chat controls
 
 Enter sends, Shift+Enter inserts a line, and whitespace-only messages are ignored.
-During a run the composer stays typeable with muted text; Enter leaves the draft
-alone. Escape stops the run. Tab opens Map. With an empty search, R renames the
+During a run the strip shows `REPLYING · <starter>` and the composer stays typeable
+with muted text; Enter leaves the draft alone. If another member's send wins a
+race, the draft is kept and the strip shows `Busy: <name> just sent`. Escape stops
+the run only for its starter or the owner.
+
+User messages from another member show their name above the text. The owner
+opens the share picker with Cmd+Shift+S: arrows move, Enter shares or unshares
+the open thread with a member, Escape closes; with nobody joined it explains
+`tokamak member invite`. The owner's Map shows `· N` after shared threads.
+Guests see only shared threads and no rename, delete, new thread, backend or
+share controls; the server refuses those calls regardless. Tab opens Map. With an empty search, R renames the
 selected row inline (Enter saves, Escape cancels). Cmd+Backspace asks
 `Delete? Enter / Esc` on that row before removing it and its messages/runs.
 

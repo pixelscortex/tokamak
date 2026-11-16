@@ -9,7 +9,9 @@ export const hello = mutation({
     const value = { memberId: caller.memberId, name: caller.name, lastSeenAt: Date.now() };
     if (member) await db.patch(member._id, value);
     else await db.insert("members", value);
-    return null;
+
+    // The server's caller is the only trusted source of the viewer's role.
+    return { memberId: caller.memberId, name: caller.name, role: caller.role };
   },
 });
 

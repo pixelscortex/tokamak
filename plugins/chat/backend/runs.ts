@@ -11,7 +11,19 @@ export const running = query({
     const runs = await db.query("runs").withIndex("by_status", q => q.eq("status", "running")).collect();
     const visible = [];
     for (const run of runs) if (await canSee(ctx, run.threadId)) visible.push(run);
-    return visible.map(run => ({ runId: run._id, threadId: run.threadId, model: run.model, waiting: run.waiting ?? false }));
+
+    // Starter names let every viewer label the busy strip without members:list.
+    const names = new Map<string, string>();
+    for (const run of visible) {
+      if (names.has(run.startedBy)) continue;
+      const member = await db.query("members").withIndex("by_member", q => q.eq("memberId", run.startedBy)).first();
+      names.set(run.startedBy, member?.name ?? (run.startedBy === "owner" ? "Owner" : "Guest"));
+    }
+
+    return visible.map(run => ({
+      runId: run._id, threadId: run.threadId, model: run.model, waiting: run.waiting ?? false,
+      startedBy: run.startedBy, starterName: names.get(run.startedBy)!,
+    }));
   },
 });
 
