@@ -1,0 +1,21 @@
+packages/server/tests/build-actions.mjs
+  s_58c3d88cb55e88::t_5855ad1168fcb1 6,60
+plugins/chat/api.ts
+  s_58c3d88cb55e88::t_5855ad1168fcb1 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cdc5bf01940c7af155758048cc0b5238123853b1",
+  "prompts": {},
+  "sessions": {
+    "s_58c3d88cb55e88": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e1d7-1f43-7e03-93fb-79e5786ad9a4",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
