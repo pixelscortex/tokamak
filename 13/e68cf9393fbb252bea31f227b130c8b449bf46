@@ -1,0 +1,45 @@
+moon.yml
+  s_186fb549a459e6::t_cc03a80dd2fcee 8-38
+.ci/check.sh
+  s_186fb549a459e6::t_cc03a80dd2fcee 1-13
+.ci/setup/action.yml
+  s_186fb549a459e6::t_7f9ff4a0f608fb 50,61-62
+  s_186fb549a459e6::t_cc03a80dd2fcee 1-49,51-60
+.depot/workflows/ci.yml
+  s_186fb549a459e6::t_cc03a80dd2fcee 1-3,5-6,8-29,32-76
+  s_186fb549a459e6::t_74eb4d9bb7ebae 4,7,30-31
+.moon/workspace.yml
+  s_186fb549a459e6::t_1cf84b72bc9899 20
+  s_186fb549a459e6::t_7f9ff4a0f608fb 24-27
+  s_186fb549a459e6::t_cc03a80dd2fcee 19
+  s_186fb549a459e6::t_bb82e62eb0f8e4 21-23
+.github/workflows/macos.yml
+  s_186fb549a459e6::t_7f9ff4a0f608fb 53-55
+  s_2297d4366353cf::t_5ac6b0662eea66 1-52,56-70
+README.md
+  s_186fb549a459e6::t_7f9ff4a0f608fb 24-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13e68cf9393fbb252bea31f227b130c8b449bf46",
+  "prompts": {},
+  "sessions": {
+    "s_186fb549a459e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e542-d630-7ef0-aba8-12cca9ea3b71",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
