@@ -113,6 +113,7 @@ packages/sdk/src/functions.ts
 packages/server/tests/build-actions.mjs
   s_ffa3bbe80f2a31::t_1930b7fdabe618 16-20,53,56,58-62,64-76
   s_ffa3bbe80f2a31::t_bfad081b4fdc6b 25,32,52,55,81,122-123,131
+  s_ffa3bbe80f2a31::t_884597e5d86e1c 63
 packages/server/tests/acp.rs
   s_ffa3bbe80f2a31::t_8016c706c3a8f7 61,199
 plugins/chat/backend/run-messages.ts
