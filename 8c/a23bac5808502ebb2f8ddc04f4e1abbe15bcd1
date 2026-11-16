@@ -1,0 +1,29 @@
+app/README.md
+  s_a47f6807404cdc::t_21a65054aff463 69,88
+  s_a47f6807404cdc::t_aa3ce1611c5d2e 93-95
+plugins/acp/README.md
+  s_a47f6807404cdc::t_21a65054aff463 10-12,55,57-65,68-69,75
+packages/server/README.md
+  s_a47f6807404cdc::t_21a65054aff463 490,492-495
+README.md
+  s_a47f6807404cdc::t_21a65054aff463 26,56,74-98
+  s_a47f6807404cdc::t_e434d548ef38e6 99
+packages/sdk/README.md
+  s_a47f6807404cdc::t_26b0a9eca589d5 312-320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ca23bac5808502ebb2f8ddc04f4e1abbe15bcd1",
+  "prompts": {},
+  "sessions": {
+    "s_a47f6807404cdc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e4ea-2500-7a01-aaf9-b58272ca14bf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
