@@ -53,6 +53,11 @@ impl Loaded {
                     name,
                     Target {
                         owner: id.clone(),
+                        guest: descriptor["functions"]
+                            .as_array()
+                            .expect("inspected")
+                            .iter()
+                            .any(|f| f["name"] == local_name && f["guest"] == true),
                         local_name,
                         mutation: kind == crate::service::FunctionKind::Mutation,
                         kind,

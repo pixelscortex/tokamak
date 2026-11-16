@@ -8,6 +8,9 @@ import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createFunctions, defineSchema, defineTable, query as loose, schemaMetadata, v } from "../src/index.ts";
 
+const ownerCaller = { memberId: "owner", name: "Owner", role: "owner" };
+const callerHost = { op: () => ownerCaller };
+
 const sdk = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspace = resolve(sdk, "../..");
 
@@ -26,6 +29,7 @@ function recordingHost(reply = []) {
     requests,
     host: {
       op(name, payload) {
+        if (name === "host.caller") return ownerCaller;
         requests.push([name, payload]);
         return reply;
       },
@@ -214,9 +218,9 @@ test("schema-free builders forward index requests for host validation", async ()
 
 test("indexed queries keep the document reply checks of ordinary queries", async () => {
   const fn = query({ handler: ctx => ctx.db.query("todos").withIndex("by_owner_created").take(0) });
-  await expect(fn.invoke({}, { op: () => [{ _id: "todos:a", _creationTime: 1 }] })).rejects.toThrow("limit");
+  await expect(fn.invoke({}, { op: name => name === "host.caller" ? ownerCaller : [{ _id: "todos:a", _creationTime: 1 }] })).rejects.toThrow("limit");
   const wrong = query({ handler: ctx => ctx.db.query("todos").withIndex("by_owner_created").collect() });
-  await expect(wrong.invoke({}, { op: () => [{ _id: "notes:a", _creationTime: 1 }] })).rejects.toThrow("todos:key");
+  await expect(wrong.invoke({}, { op: name => name === "host.caller" ? ownerCaller : [{ _id: "notes:a", _creationTime: 1 }] })).rejects.toThrow("todos:key");
 });
 
 // Type checking is part of the API: wrong names, fields, order, value types
@@ -275,7 +279,8 @@ test("tool schemas and validated invocation", async () => {
     echo: tool({ description: "Echo", args: { title: v.string() }, view: "card",
       handler: (_ctx, { title }) => ({ result: { title }, summary: "Echoed" }) }),
   });
-  const host = { op() { throw new Error("unexpected host call"); } };
+  const host = { op(name) {
+      if (name === "host.caller") return ownerCaller; throw new Error("unexpected host call"); } };
   expect(await tools.describe.invoke({}, host)).toMatchObject([{ name: "echo", view: "card" }]);
   await expect(tools.invoke.invoke({ name: "echo", args: { title: 1 }, threadId: "thread" }, host)).rejects.toThrow("args.title: expected string");
   await expect(tools.invoke.invoke({ name: "missing", args: {}, threadId: "thread" }, host)).rejects.toThrow("Unknown tool: missing");

@@ -6,6 +6,9 @@ import { resolve, join, dirname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { query, mutation, v, TokamakClient, createApi } from "../src/index.ts";
 
+const ownerCaller = { memberId: "owner", name: "Owner", role: "owner" };
+const callerHost = { op: () => ownerCaller };
+
 const sdk = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspace = resolve(sdk, "../..");
 const feature = join(sdk, "tests/fixtures/feature");
@@ -36,7 +39,8 @@ async function temporary(fn) {
 test("argument boundary validates the complete value language before invoking handlers", async () => {
   let calls = 0;
   const host = {
-    op() {
+    op(name) {
+      if (name === "host.caller") return ownerCaller;
       throw new Error("host must not be reached");
     },
   };
@@ -102,7 +106,8 @@ test("invocation snapshots arguments and normalizes only void results", async ()
   const input = { data: { title: "before" } };
 
   const pending = fn.invoke(input, {
-    op() {
+    op(name) {
+      if (name === "host.caller") return ownerCaller;
       throw new Error("unused");
     },
   });
@@ -111,9 +116,9 @@ test("invocation snapshots arguments and normalizes only void results", async ()
   expect(await pending).toEqual({ title: "before" });
 
   for (const result of [undefined, null])
-    expect(await query({ handler: async () => result }).invoke({}, {})).toBeNull();
+    expect(await query({ handler: async () => result }).invoke({}, callerHost)).toBeNull();
   for (const result of [NaN, { value: undefined }, new Map()]) {
-    await expect(query({ handler: () => result }).invoke({}, {})).rejects.toThrow("JSON");
+    await expect(query({ handler: () => result }).invoke({}, callerHost)).rejects.toThrow("JSON");
   }
 });
 
@@ -154,6 +159,7 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
   const row = { _id: "tasks:a", _creationTime: 100, title: "SHIP", done: false, priority: 2 };
   const host = {
     op(name, payload) {
+        if (name === "host.caller") return ownerCaller;
       calls.push([name, payload]);
       if (name === "db.insert") return "tasks:a";
       if (name === "db.get") return payload.id === "tasks:a" ? row : null;
@@ -208,7 +214,7 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
   expect(
     await built.invoke(
       { name: "tasks:search", args: { done: false, priority: 2 } },
-      { op: () => [] },
+      { op: name => name === "host.caller" ? ownerCaller : [] },
     ),
   ).toEqual({ recent: [], first: null, all: [], earliest: null, empty: [] });
 
@@ -273,6 +279,7 @@ test("database boundary rejects invalid plans, reserved writes, and malformed ho
   const requests = [];
   const forbidden = {
     op(name, payload) {
+        if (name === "host.caller") return ownerCaller;
       requests.push([name, payload]);
       throw new Error("unexpected host operation");
     },
@@ -306,7 +313,7 @@ test("database boundary rejects invalid plans, reserved writes, and malformed ho
   ];
 
   for (const [handler, reply, message] of cases) {
-    await expect(mutation({ handler }).invoke({}, { op: async () => reply })).rejects.toThrow(
+    await expect(mutation({ handler }).invoke({}, { op: async name => name === "host.caller" ? ownerCaller : reply })).rejects.toThrow(
       message,
     );
   }
@@ -314,7 +321,8 @@ test("database boundary rejects invalid plans, reserved writes, and malformed ho
     query({ handler: (ctx) => ctx.db.get("tasks:a") }).invoke(
       {},
       {
-        op: async () => {
+        op: async name => {
+          if (name === "host.caller") return ownerCaller;
           throw new Error("transaction expired");
         },
       },
@@ -419,7 +427,7 @@ test("bundle and generated API consumer consistently enforce default schema impo
     succeeds(run(["moon", "run", "sdk:bundle", "--", relative(workspace, root)]));
 
     const built = await import(pathToFileURL(join(root, "dist/bundle.js")).href);
-    expect(await built.invoke({ name: "tasks:list", args: {} }, { op: () => [] })).toEqual([]);
+    expect(await built.invoke({ name: "tasks:list", args: {} }, { op: name => name === "host.caller" ? ownerCaller : [] })).toEqual([]);
 
     // This consumer is excluded from backend discovery and needs no special
     // compilerOptions or hand-maintained replacement for the generated API.
@@ -490,7 +498,7 @@ test("feature bundling preserves inherited tsconfig helper aliases alongside SDK
 
     const built = await import(pathToFileURL(join(root, "dist/bundle.js")).href);
     expect(Object.keys(built.functions)).toEqual(["tasks:display"]);
-    expect(await built.invoke({ name: "tasks:display", args: { text: "  ship  " } }, {})).toBe(
+    expect(await built.invoke({ name: "tasks:display", args: { text: "  ship  " } }, callerHost)).toBe(
       "SHIP",
     );
   });

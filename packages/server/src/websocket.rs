@@ -82,6 +82,9 @@ pub async fn serve_with_access(
     let mut app = Router::new().route("/ws", get(upgrade));
     if let Some(access) = access {
         app = app
+            .route("/members/invite", post(member_invite))
+            .route("/members", get(member_list))
+            .route("/members/{id}/revoke", post(member_revoke))
             .route("/health", get(health))
             .route("/shutdown", post(stop))
             .route("/plugins", get(plugins))
@@ -141,6 +144,36 @@ async fn authorize(
         return StatusCode::UNAUTHORIZED.into_response();
     }
     next.run(request).await
+}
+
+async fn member_invite(State(adapter): State<Adapter>, body: axum::body::Bytes) -> Response {
+    let Ok(options) = serde_json::from_slice::<crate::members::InviteOptions>(&body) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    plugin_result(
+        adapter
+            .server
+            .members(crate::members::Operation::Invite(options))
+            .await,
+    )
+}
+
+async fn member_list(State(adapter): State<Adapter>) -> Response {
+    plugin_result(
+        adapter
+            .server
+            .members(crate::members::Operation::List)
+            .await,
+    )
+}
+
+async fn member_revoke(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
+    plugin_result(
+        adapter
+            .server
+            .members(crate::members::Operation::Revoke(id))
+            .await,
+    )
 }
 
 async fn health(State(adapter): State<Adapter>) -> Response {
@@ -229,18 +262,29 @@ async fn upgrade(State(adapter): State<Adapter>, ws: WebSocketUpgrade) -> Respon
         .into_response()
 }
 
-async fn connection(mut socket: WebSocket, adapter: Adapter) {
-    let mut session = tokio::select! {
+async fn connection(socket: WebSocket, adapter: Adapter) {
+    let session = tokio::select! {
         _ = adapter.stopping.cancelled() => return,
         session = adapter.server.connect() => match session { Ok(session) => session, Err(_) => return },
     };
+    connection_session(socket, session, adapter.stopping, false).await;
+}
+
+pub(crate) async fn connection_session(
+    mut socket: WebSocket,
+    mut session: crate::Session,
+    stopping: CancellationToken,
+    guest: bool,
+) {
+    let mut requests = crate::members::limits::Requests::new();
     let mut service = session.sender();
     loop {
         tokio::select! {
-            _ = adapter.stopping.cancelled() => break,
+            _ = stopping.cancelled() => break,
             incoming = socket.recv() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
+                        if guest && (text.len() > crate::members::limits::MESSAGE_BYTES || !requests.allow()) { break; }
                         let Ok(request) = serde_json::from_str::<Request>(&text) else { break };
                         // Admission failures terminate the stream rather than
                         // race a transport-generated error ahead of prior updates.
@@ -268,9 +312,9 @@ async fn connection(mut socket: WebSocket, adapter: Adapter) {
 /// Socket cancellation is deliberately below HTTP parsing. Returning EOF/error
 /// wakes Hyper's owned tasks so Axum can join them; we never detach a partial
 /// request by dropping the outer serve future or racing a handler timeout.
-struct ShutdownListener {
-    listener: TcpListener,
-    stopping: CancellationToken,
+pub(crate) struct ShutdownListener {
+    pub(crate) listener: TcpListener,
+    pub(crate) stopping: CancellationToken,
 }
 
 impl axum::serve::Listener for ShutdownListener {
@@ -289,7 +333,7 @@ impl axum::serve::Listener for ShutdownListener {
     }
 }
 
-struct ShutdownIo {
+pub(crate) struct ShutdownIo {
     stream: TcpStream,
     stopping: Pin<Box<WaitForCancellationFutureOwned>>,
 }

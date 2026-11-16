@@ -55,6 +55,7 @@ pub(crate) async fn invoke(
     space: &DataSpace,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     determinism: Determinism,
+    caller: crate::members::Caller,
 ) -> Call {
     let (bundle, name, space, graph) = if let Some(plugins) = plugins {
         let target = plugins
@@ -108,6 +109,7 @@ pub(crate) async fn invoke(
         mutation,
         graph,
         Some(determinism),
+        caller,
     );
 
     let result = match pool.submit(bundle, "invoke", json!({"name":name,"args":args}), ops) {
@@ -170,8 +172,10 @@ fn operations(
     writable: bool,
     graph: Graph,
     determinism: Option<Determinism>,
+    identity: crate::members::Caller,
 ) -> Arc<OpRegistry> {
     let mut ops = OpRegistry::new();
+    identity.register(&mut ops);
 
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
@@ -231,6 +235,7 @@ fn operations(
                     target.mutation,
                     Some((plugins.clone(), target.owner, child_path)),
                     None,
+                    identity.clone(),
                 );
 
                 let failed = failure.clone();

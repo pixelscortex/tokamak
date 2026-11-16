@@ -312,6 +312,10 @@ fn action_random_ignores_transaction_replay_seed() {
         .block_on(async {
             let bundle = Bundle::new(artifacts()["a/bundle.js"].clone(), None).unwrap();
             let mut ops = OpRegistry::new();
+            ops.register_sync("host.caller", |_| {
+                Ok(json!({"memberId":"owner","name":"Owner","role":"owner"}))
+            })
+            .unwrap();
             ops.set_determinism(Determinism {
                 timestamp_ms: 123,
                 seed: 456,
@@ -542,6 +546,7 @@ fn web_fix_cancel_disconnects_with_worker_idle() {
             });
             let pool = Pool::new_actions(PoolConfig { workers: 1, ..PoolConfig::default() }).unwrap();
             let mut ops = OpRegistry::new();
+            ops.register_sync("host.caller", |_| Ok(json!({"memberId":"owner","name":"Owner","role":"owner"}))).unwrap();
             ops.set_network_permissions(vec!["net:127.0.0.1".into()]);
             let pending = pool.submit(bundle, "invoke", json!({"name":"web:abandoned", "args":{"url":url,"mode":"cancel"}}), Arc::new(ops)).unwrap();
             ready_rx.await.unwrap();

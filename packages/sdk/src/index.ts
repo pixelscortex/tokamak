@@ -22,6 +22,7 @@ export type {
   FunctionKind,
   FunctionBuilder,
   FunctionRegistry,
+  Caller,
   QueryContext,
   MutationContext,
   ActionContext,

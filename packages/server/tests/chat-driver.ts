@@ -280,6 +280,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
       const heartbeat = new Promise<void>(resolve => { releaseTool = resolve; });
       const result = await chatSend.invoke({ threadId: "threads:heartbeat", text: "Say hello" }, {
         async op(operation, payload): Promise<import("@tokamak/sdk").JsonValue> {
+          if (operation === "host.caller") return { memberId: "owner", name: "Owner", role: "owner" };
           const input = payload as { name?: string; args?: { delta?: string; tool?: unknown; outcome?: string } };
           if (operation === "plugin.providers") return ["b", "todo"];
           if (operation === "action.env") return input.name === "OPENROUTER_API_KEY" ? "fixture" : `http://127.0.0.1:${address.port}/v1`;

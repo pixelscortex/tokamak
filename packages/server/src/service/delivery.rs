@@ -6,6 +6,23 @@ impl Coordinator {
     }
 
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
+        if let Some(loaded) = &self.plugins {
+            match &mut event {
+                Event::Response {
+                    result: Err(error), ..
+                }
+                | Event::Subscription {
+                    result: Err(error), ..
+                } => crate::environment::redact(error, loaded),
+                Event::Response {
+                    result: Ok(value), ..
+                }
+                | Event::Subscription {
+                    result: Ok(value), ..
+                } => crate::environment::redact_messages(value, loaded),
+                _ => {}
+            }
+        }
         // Count serialized bytes without allocating an unbounded transport buffer.
         // Native routing envelopes are accounted for separately by the mailbox.
         struct Limit(usize);

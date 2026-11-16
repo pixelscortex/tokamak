@@ -1,7 +1,14 @@
 use super::*;
 
 impl Coordinator {
-    pub(super) fn start_action(&mut self, session: u64, id: u64, name: String, args: Json) {
+    pub(super) fn start_action(
+        &mut self,
+        session: u64,
+        id: u64,
+        name: String,
+        args: Json,
+        caller: Caller,
+    ) {
         if self.action_jobs.len() >= ACTIONS {
             self.respond(session, id, Err("action capacity exceeded".into()));
             return;
@@ -19,7 +26,7 @@ impl Coordinator {
         };
 
         let pending =
-            crate::actions::operations(self.commands.clone(), self.plugins.clone(), owner)
+            crate::actions::operations(self.commands.clone(), self.plugins.clone(), owner, caller)
                 .and_then(|ops| {
                     self.action_pool.submit(
                         bundle,
@@ -58,6 +65,7 @@ impl Coordinator {
                         &call.name,
                         call.args.clone(),
                         call.kind == FunctionKind::Mutation,
+                        call.caller.clone(),
                     )
                     .await;
                 self.drain_changes();

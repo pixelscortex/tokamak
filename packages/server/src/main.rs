@@ -65,6 +65,21 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
         }
         _ => return Err("Expected: tokamak plugin list | tokamak plugin reload <id>".into()),
     };
+    let body = if args[0] == "list" {
+        None
+    } else {
+        Some(serde_json::json!({}))
+    };
+    println!("{}", local_request(&path, body).await?);
+    Ok(())
+}
+
+mod member_cli;
+
+async fn local_request(
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let directory = local_directory()?;
     let identity: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("server.json"))?)?;
@@ -86,30 +101,65 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
     }
     url.set_scheme("http")
         .map_err(|_| "Invalid local URL scheme")?;
-    url.set_path(&path);
+    url.set_path(path);
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(30))
         .build()?;
-    let request = if args[0] == "list" {
-        client.get(url)
+    let request = if let Some(body) = body {
+        client
+            .post(url)
+            .header("content-type", "application/json")
+            .body(body.to_string())
     } else {
-        client.post(url)
+        client.get(url)
     };
     let response = request.bearer_auth(capability(&directory)?).send().await?;
     let status = response.status();
     let body = response.text().await?;
     if !status.is_success() {
-        return Err(format!("Plugin command refused ({status}): {body}").into());
+        return Err(format!("Local command refused ({status}): {body}").into());
     }
-    println!("{body}");
+    Ok(serde_json::from_str(&body)?)
+}
+
+fn prepare_share(directory: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if !directory.exists() {
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(directory)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    match options.open(directory.join("server.token")) {
+        Ok(mut file) => {
+            use std::io::Write;
+            let mut bytes = [0; 32];
+            getrandom::fill(&mut bytes)?;
+            let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            file.write_all(token.as_bytes())?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error.into()),
+    }
     Ok(())
 }
 
 struct Configuration {
     data: PathBuf,
     listen: SocketAddr,
+    share: Option<SocketAddr>,
     bundle: Option<PathBuf>,
     plugins: Option<PathBuf>,
     local: Option<PathBuf>,
@@ -119,12 +169,17 @@ struct Configuration {
 async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Error>> {
     let mut data = PathBuf::from("tokamak.db");
     let mut listen: SocketAddr = "127.0.0.1:3000".parse()?;
+    let mut share = None;
     let mut bundle = None;
     let mut plugins = None;
     let mut local = None;
     let mut javascript = PoolConfig::default();
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
+        if flag == "member" {
+            member_cli::run(args.collect()).await?;
+            return Ok(None);
+        }
         if flag == "plugin" {
             plugin_command(args.collect()).await?;
             return Ok(None);
@@ -135,7 +190,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--data <path>] [--listen <127.0.0.1:3000>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--data <path>] [--listen <127.0.0.1:3000>] [--share <127.0.0.1:port>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nMembers: tokamak member invite --url wss://<host>/ws [--uses N] [--ttl 24h] | list | revoke <id>\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -145,6 +200,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         match flag.as_str() {
             "--data" => data = value.into(),
             "--listen" => listen = value.parse()?,
+            "--share" => share = Some(value.parse()?),
             "--bundle" => bundle = Some(PathBuf::from(value)),
             "--plugins" => plugins = Some(PathBuf::from(value)),
             "--local-dir" => {
@@ -162,6 +218,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     Ok(Some(Configuration {
         data,
         listen,
+        share,
         bundle,
         plugins,
         local,
@@ -219,9 +276,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Some(Configuration {
         mut data,
         listen,
+        share,
         bundle,
         plugins,
-        local,
+        mut local,
         javascript,
     }) = configuration().await?
     else {
@@ -230,12 +288,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !listen.ip().is_loopback() {
         return Err("unauthenticated POC must bind loopback".into());
     }
+    if share.is_some_and(|address| !address.ip().is_loopback()) {
+        return Err("Guest listener must bind loopback".into());
+    }
+    let local_data = local.is_some();
+    // Sharing always enables authenticated local control, including standalone use.
+    if share.is_some() {
+        let directory = local.get_or_insert(local_directory()?);
+        prepare_share(directory)?;
+    }
     if bundle.is_some() == plugins.is_some() {
         return Err("Specify exactly one of --plugins or --bundle".into());
     }
     let source = bundle.map(std::fs::read_to_string).transpose()?;
     let token = if let Some(directory) = &local {
-        data = directory.join("store");
+        if local_data {
+            data = directory.join("store");
+        }
         Some(capability(directory)?)
     } else {
         None
@@ -246,6 +315,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _local_owner = local.as_deref().map(local_ownership).transpose()?;
     // Bind first: an unavailable address must not open storage or JS workers.
     let listener = tokio::net::TcpListener::bind(listen).await?;
+    let guest_listener = if let Some(address) = share {
+        Some(tokio::net::TcpListener::bind(address).await?)
+    } else {
+        None
+    };
     // Install fallible signal setup before owning any live datastore.
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
@@ -267,6 +341,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "unauthenticated local POC"
         }
     );
+    let guest_stop = tokio_util::sync::CancellationToken::new();
+    let guest = guest_listener.map(|listener| {
+        let server = backend.server().clone();
+        let stopping = guest_stop.clone();
+        tokio::spawn(server::members::guest_listener::serve(
+            listener,
+            server,
+            async move { stopping.cancelled().await },
+        ))
+    });
     let serving = websocket::serve_with_access(
         listener,
         backend.server().clone(),
@@ -284,6 +368,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         token.map(|token| websocket::LocalAccess { token, identity }),
     )
     .await;
+    guest_stop.cancel();
+    let guest_result = if let Some(guest) = guest {
+        guest
+            .await
+            .unwrap_or_else(|error| Err(std::io::Error::other(error)))
+    } else {
+        Ok(())
+    };
+    let serving = serving.and(guest_result);
     let closed = backend.close().await;
     if closed.is_ok() {
         if let Some(directory) = local {

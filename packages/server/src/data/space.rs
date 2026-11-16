@@ -39,6 +39,13 @@ impl DataSpace {
             prefix,
         })
     }
+    pub(crate) fn host() -> Self {
+        Self {
+            plugin: None,
+            prefix: "h__".into(),
+        }
+    }
+
     pub fn owner(&self) -> Option<&str> {
         self.plugin.as_deref()
     }
