@@ -3,6 +3,7 @@ import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
 import { api } from "../../../plugins/chat/client";
 
+import { useBackends } from "./use-backends";
 import { useRunRecovery } from "./use-run-recovery";
 
 export { api };
@@ -19,17 +20,16 @@ export function useChat(client: TokamakClient) {
   const [creating, setCreating] = createSignal(false);
   let initialized = false;
   let alive = true;
-  const [backends, setBackends] = createSignal<Awaited<ReturnType<typeof loadBackends>>>([]);
-  function loadBackends() {
-    return client.action(api.backends.list, {});
-  }
-  void loadBackends()
-    .then((options) => {
-      if (alive) setBackends(options);
-    })
-    .catch((cause) => {
-      if (alive) setError(String(cause));
-    });
+  const discovery = useBackends(client);
+  // A restored subscription means discovery can reach the server again.
+  let disconnected = false;
+  createEffect(() => {
+    if (threads.error()) disconnected = true;
+    else if (threads.data() && disconnected) {
+      disconnected = false;
+      void discovery.refresh();
+    }
+  });
 
   async function createThread() {
     if (creating()) return;
@@ -81,11 +81,9 @@ export function useChat(client: TokamakClient) {
 
   return {
     client,
-    backends,
-    agentAvailable: () =>
-      backends().some(
-        (option) => option.plugin === thread()?.backend?.plugin && option.id === thread()?.backend?.backendId,
-      ),
+    backends: discovery.data,
+    backendDiscovery: discovery,
+    noAgents: () => discovery.data()?.length === 0,
     threads,
     threadId,
     thread,

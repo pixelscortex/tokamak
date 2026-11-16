@@ -1028,7 +1028,9 @@ fn hundred_megabyte_ui_asset_streams_in_pages_with_matching_contents() {
 mod capture;
 
 // Default: an offline permission error. Opt in to the real provider/captures
-// with TOKAMAK_CHAT_LIVE=1 and TK_CAPTURE_DIR, using the workspace .env.local.
+// with TOKAMAK_CHAT_LIVE=1, TOKAMAK_ACP_AGENTS=/absolute/agents.toml, and
+// TK_CAPTURE_DIR. Optional credentials come from .env.local beside agents.toml.
+// The agent runs in a disposable working folder.
 #[test]
 fn chat_screen_socket_workflow() {
     use blitz_traits::events::*;
@@ -1173,10 +1175,23 @@ fn chat_screen_socket_workflow() {
             .unwrap();
         }
     }
+    std::fs::create_dir_all(scratch.0.join("server")).unwrap();
     if live {
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(root().join(".env.local"), scratch.0.join(".env.local"))
-            .unwrap();
+        let config = std::env::var_os("TOKAMAK_ACP_AGENTS").expect(
+            "TOKAMAK_CHAT_LIVE=1 requires TOKAMAK_ACP_AGENTS=/absolute/path/to/agents.toml",
+        );
+        let config = Path::new(&config);
+        assert!(
+            config.is_absolute(),
+            "TOKAMAK_ACP_AGENTS must be an absolute agents.toml path"
+        );
+        std::fs::copy(config, scratch.0.join("server/agents.toml"))
+            .expect("could not copy TOKAMAK_ACP_AGENTS into the isolated server directory");
+        let environment = config.parent().unwrap().join(".env.local");
+        if environment.is_file() {
+            std::fs::copy(environment, scratch.0.join("server/.env.local")).unwrap();
+        }
+        std::fs::create_dir_all(scratch.0.join("workspace")).unwrap();
     } else {
         let path = plugin.join("manifest.json");
         let mut manifest: Value =
@@ -1185,9 +1200,34 @@ fn chat_screen_socket_workflow() {
         std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     }
     if !live {
-        std::fs::create_dir_all(scratch.0.join("server")).unwrap();
         std::fs::write(scratch.0.join("server/agents.toml"),
             "[agents.claude]\ncommand = \"/usr/bin/false\"\nplugins = [\"acp\"]\n[agents.codex]\ncommand = \"/usr/bin/false\"\nplugins = [\"acp\"]\n").unwrap();
+    }
+    fn configure_live_thread(service: &Service, thread: &str, cwd: &Path) {
+        let options = call(service, "action", "chat/backends:list", json!({}));
+        let backend = options
+            .as_array()
+            .and_then(|options| options.first())
+            .expect(
+                "TOKAMAK_ACP_AGENTS must configure at least one agent with plugins = [\"acp\"]",
+            );
+        let settings = call(
+            service,
+            "action",
+            "chat/backends:configure",
+            json!({
+                "plugin": backend["plugin"], "backendId": backend["id"], "settings": {"cwd": cwd}
+            }),
+        );
+        call(
+            service,
+            "mutation",
+            "chat/threads:setBackend",
+            json!({
+                "threadId": thread, "backend": {"kind": "plugin", "plugin": backend["plugin"],
+                    "backendId": backend["id"], "settings": settings}
+            }),
+        );
     }
     let service = Service::start(&scratch);
     if quickstart {
@@ -1213,6 +1253,9 @@ fn chat_screen_socket_workflow() {
             ..Default::default()
         });
     window.wait(|doc| support::attr(doc, "chat-screen", "data-thread-id").is_some());
+    if live {
+        configure_live_thread(&service, &selected(&window), &scratch.0.join("workspace"));
+    }
     let body = window
         .doc()
         .inner()
@@ -1356,6 +1399,9 @@ fn chat_screen_socket_workflow() {
         window.wait(|doc| {
             support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != thread)
         });
+    }
+    if live {
+        configure_live_thread(&service, &selected(&window), &scratch.0.join("workspace"));
     }
     let first = selected(&window);
     support::pointer(window.doc.as_mut().unwrap(), "chat-input");
@@ -1769,15 +1815,21 @@ fn chat_screen_socket_workflow() {
     }
 
     key(&mut window, Key::Character("m".into()), true);
-    window.wait(|doc| support::text(doc, "chat-screen").contains("codex"));
-    key(&mut window, Key::Named(NamedKey::ArrowDown), false);
+    if live {
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
+    } else {
+        window.wait(|doc| support::text(doc, "chat-screen").contains("codex"));
+        key(&mut window, Key::Named(NamedKey::ArrowDown), false);
+    }
     key(&mut window, Key::Named(NamedKey::Enter), false);
     window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
     key(&mut window, Key::Character("a".into()), true);
-    type_text(
-        &mut window,
-        root().canonicalize().unwrap().to_str().unwrap(),
-    );
+    let cwd = if live {
+        scratch.0.join("workspace")
+    } else {
+        root().canonicalize().unwrap()
+    };
+    type_text(&mut window, cwd.to_str().unwrap());
     key(&mut window, Key::Named(NamedKey::Enter), false);
     window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
     support::pointer(window.doc.as_mut().unwrap(), "chat-input");

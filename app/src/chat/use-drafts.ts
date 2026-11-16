@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
-import { api, type ChatState } from "./use-chat";
+import { api } from "../../../plugins/chat/client";
+import type { ChatState } from "./use-chat";
 
 export function useDrafts(chat: ChatState) {
   const [drafts, setDrafts] = createSignal<Record<string, string>>({});
@@ -24,10 +25,6 @@ export function useDrafts(chat: ChatState) {
     // During a run Enter keeps the draft and shows nothing new.
     if (!threadId || !text.trim() || chat.active() || sending()[threadId]) return;
 
-    if (!chat.agentAvailable()) {
-      chat.setError("No agent configured: see agents.example.toml");
-      return;
-    }
     chat.setError(undefined);
     setRaced((previous) => ({ ...previous, [threadId]: false }));
     setSending((previous) => ({ ...previous, [threadId]: true }));
@@ -43,6 +40,7 @@ export function useDrafts(chat: ChatState) {
       if (String(cause).includes("already has an active run"))
         setRaced((previous) => ({ ...previous, [threadId]: true }));
       else chat.setError(String(cause));
+      void chat.backendDiscovery.refresh();
     } finally {
       if (alive) setSending((previous) => ({ ...previous, [threadId]: false }));
     }

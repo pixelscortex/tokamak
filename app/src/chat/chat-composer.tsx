@@ -33,7 +33,7 @@ export function ChatComposer(props: {
         placeholder={
           props.mapOpen
             ? "Search threads"
-            : !props.chat.agentAvailable()
+            : props.chat.noAgents()
               ? "No agent configured: see agents.example.toml"
               : "Ask anything, or tell Tokamak what to do"
         }

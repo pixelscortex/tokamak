@@ -15,12 +15,14 @@ function backendFolder(settings: JsonValue | undefined): string {
 
 export function backendLabel(
   thread: Thread | undefined,
-  options: { id: string; plugin: string; title: string }[] = [],
+  options?: { id: string; plugin: string; title: string }[],
 ) {
   const backend = thread?.backend;
   return backend?.kind === "plugin"
-    ? `${options.find((option) => option.id === backend.backendId && option.plugin === backend.plugin)?.title ?? backend.backendId}${backendFolder(backend.settings) ? ` · ${backendFolder(backend.settings).split("/").filter(Boolean).at(-1) ?? "/"}` : ""}`
-    : "No agent configured: see agents.example.toml";
+    ? `${options?.find((option) => option.id === backend.backendId && option.plugin === backend.plugin)?.title ?? backend.backendId}${backendFolder(backend.settings) ? ` · ${backendFolder(backend.settings).split("/").filter(Boolean).at(-1) ?? "/"}` : ""}`
+    : options?.length === 0
+      ? "No agent configured: see agents.example.toml"
+      : "Select agent";
 }
 
 // Keep the last successful folder across threads without depending on browser storage.
@@ -32,10 +34,7 @@ export function BackendPicker(props: {
   onFolderChange: (editing: boolean) => void;
   onKeyReady: (handler: (event: NativeEvent) => void) => void;
 }) {
-  const [options, setOptions] = createSignal<
-    { id: string; title: string; plugin: string; folder?: boolean }[]
-  >([]);
-  const [loading, setLoading] = createSignal(true);
+  const { data: options, loading, error: discoveryError, refresh } = props.chat.backendDiscovery;
   const [error, setError] = createSignal<string>();
   const [index, setIndex] = createSignal(0);
   const [selected, setSelected] = createSignal<{ plugin: string; backendId: string }>();
@@ -50,23 +49,13 @@ export function BackendPicker(props: {
   });
   const [saving, setSaving] = createSignal(false);
   const choices = createMemo(() => [
-    ...options().map((agent) => ({
+    ...(options() ?? []).map((agent) => ({
       title: agent.title,
       folder: agent.folder,
       backend: { kind: "plugin" as const, plugin: agent.plugin, backendId: agent.id },
     })),
   ]);
-  void props.chat.client
-    .action(api.backends.list, {})
-    .then((value) => {
-      if (alive) setOptions(value);
-    })
-    .catch((cause) => {
-      if (alive) setError(String(cause));
-    })
-    .finally(() => {
-      if (alive) setLoading(false);
-    });
+  void refresh();
 
   async function save(backend: {
     kind: "plugin";
@@ -181,16 +170,19 @@ export function BackendPicker(props: {
         <Show when={loading()}>
           <span class="text-text-3">Loading backends…</span>
         </Show>
-        <Show when={!loading() && !options().length}>
+        <Show when={!loading() && props.chat.noAgents()}>
           <span class="text-text-3">No agent configured: see agents.example.toml</span>
         </Show>
         <span class="text-text-3">↑↓ MOVE · ENTER SELECT · ESC CLOSE</span>
       </Show>
-      <Show when={options().some((option) => option.folder)}>
+      <Show when={options()?.some((option) => option.folder)}>
         <p class="m-0 text-text-3">An agent can do anything its CLI can in this folder.</p>
       </Show>
-      <Show when={error()}>
-        <span role="alert">{error()}</span>
+      <Show when={error() ?? discoveryError()}>
+        <span role="alert">{error() ?? discoveryError()}</span>
+        <Show when={discoveryError()}>
+          <button onClick={() => void refresh()}>Retry discovery</button>
+        </Show>
       </Show>
     </div>
   );

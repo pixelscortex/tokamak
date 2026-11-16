@@ -85,11 +85,17 @@ default mode stays offline and checks the persisted error state. After building
 with `moon run app:bundle`, opt in to the real provider and offscreen GPU captures:
 
 ```sh
-TOKAMAK_CHAT_LIVE=1 TK_CAPTURE_DIR=/tmp/tokamak-chat-shots \
+TOKAMAK_CHAT_LIVE=1 TOKAMAK_ACP_AGENTS=/absolute/path/to/agents.toml \
+  TK_CAPTURE_DIR=/tmp/tokamak-chat-shots \
   cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --nocapture --test-threads=1
 ```
 
-This uses the workspace `.env.local` and disposable storage, sends a long reply prompt, verifies streaming follow/pause/resume, clipboard
+Live mode requires an explicit `TOKAMAK_ACP_AGENTS` file with at least one agent
+allowed for `plugins = ["acp"]` (see `agents.example.toml`). It copies that file and
+an optional `.env.local` beside it into the isolated server directory, configures
+the selected agent with a disposable working folder before sending, and fails
+immediately if the config is missing. The agent CLI must already be authenticated.
+The test uses disposable storage, sends a long reply prompt, verifies streaming follow/pause/resume, clipboard
 contents on macOS, and stopping, and exercises Map search and thread switching.
 `markdown.png` captures a short list and a three-line Python block;
 `recovery.png` captures a recovered thread after the native app reopens and observes an
