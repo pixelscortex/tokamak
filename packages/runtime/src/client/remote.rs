@@ -17,15 +17,10 @@ pub(crate) struct Profile {
 
 pub(crate) fn load(directory: &Path) -> Result<Option<Profile>, Error> {
     let path = directory.join("remote.json");
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        result => {
-            result?;
-        }
-    }
-    private_file::check(&path)?;
-    let profile: Profile =
-        serde_json::from_slice(&fs::read(path)?).map_err(|_| "Invalid remote profile")?;
+    let Some(contents) = private_file::read(&path)? else {
+        return Ok(None);
+    };
+    let profile: Profile = serde_json::from_str(&contents).map_err(|_| "Invalid remote profile")?;
     server_url(&profile.server, true)?;
     private_file::validate_token(&profile.token)?;
     if profile.member_id.is_empty() {
@@ -39,6 +34,15 @@ pub async fn join(directory: &Path, link: &str, name: &str) -> Result<(), Error>
     let invite = parse_link(link)?;
     // Check existing credentials before spending a potentially single-use invite.
     load(directory)?;
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(directory)?;
+    private_file::check_directory(directory)?;
     let response = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(15))
@@ -67,7 +71,6 @@ pub async fn join(directory: &Path, link: &str, name: &str) -> Result<(), Error>
         member_id: joined.member_id,
         token: joined.token,
     };
-    fs::create_dir_all(directory)?;
     let path = directory.join("remote.json");
     let temporary = directory.join(format!("remote.json.{}.tmp", std::process::id()));
     let mut options = fs::OpenOptions::new();
@@ -79,7 +82,7 @@ pub async fn join(directory: &Path, link: &str, name: &str) -> Result<(), Error>
     }
     let mut file = options.open(&temporary)?;
     let result = (|| -> Result<(), Error> {
-        private_file::check(&temporary)?;
+        private_file::check(&file)?;
         file.write_all(&serde_json::to_vec(&profile)?)?;
         file.sync_all()?;
         // Rename replaces the directory entry rather than following a symlink.

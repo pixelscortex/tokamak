@@ -32,8 +32,7 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
             .ok_or("Invalid server discovery")?;
         let server = super::invite::server_url(server, false)?;
         let path = directory.join("server.token");
-        super::private_file::check(&path)?;
-        let token = std::fs::read_to_string(path)?;
+        let token = super::private_file::read(&path)?.ok_or("Missing server token")?;
         super::private_file::validate_token(&token)?;
         (server, token)
     };
