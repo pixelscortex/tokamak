@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { TokamakClient } from "@tokamak/sdk";
 import { acpScenario, turnTokenScenario } from "./acp-driver";
-import { api } from "./chat/backend/_generated/api";
+import { api } from "./chat/src/server/_generated/api";
 export async function chatScenario(client: TokamakClient, scenario: string) {
   if (scenario === "chat-turn-token") return turnTokenScenario(client);
   if (scenario === "chat-acp") return acpScenario(client);
@@ -39,7 +39,7 @@ export async function chatScenario(client: TokamakClient, scenario: string) {
     });
     const update = (
       tool:
-        | import("./chat/backend/parts").ToolPart
+        | import("./chat/src/server/messages/parts").ToolPart
         | { callId: string; status: "done" | "error"; result?: {} },
     ) => client.mutation(api.send.update, { token: "fixture-turn-token", runId: run.runId, delta: "", tool });
     const tool = {

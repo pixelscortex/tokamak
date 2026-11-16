@@ -6,7 +6,7 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { Event, Request } from "@tokamak/sdk";
-import { api } from "../dist/tests/record/backend/_legacyApi";
+import { api } from "../dist/tests/record/src/server/_legacyApi";
 
 function Fairness() {
   const [trace, setTrace] = createSignal<string[]>([]);

@@ -10,7 +10,7 @@ import { Map } from "../../plugins/chat/src/client/ui/map/map";
 import { useMap } from "../../plugins/chat/src/client/lib/state/use-map";
 import type { ChatState, Message as ChatMessage } from "../../plugins/chat/src/client/lib/state/use-chat";
 import { Markdown } from "../../plugins/chat/src/client/ui/messages/markdown";
-import { api } from "../dist/tests/record/backend/_legacyApi";
+import { api } from "../dist/tests/record/src/server/_legacyApi";
 
 function Trace() {
   const [markdown, setMarkdown] = createSignal("");

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
-import { api } from "../../../../client";
+import { api } from "../api";
 
 import { useBackends } from "./use-backends";
 import { useRunRecovery } from "./use-run-recovery";

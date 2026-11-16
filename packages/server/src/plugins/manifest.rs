@@ -13,6 +13,10 @@ fn hub() -> String {
 pub struct Definition {
     pub id: String,
     pub version: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(default = "host_api")]
     pub api: String,
     #[serde(default)]

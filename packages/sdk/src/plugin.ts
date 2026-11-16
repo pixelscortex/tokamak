@@ -4,6 +4,8 @@ import { jsonSnapshot, type JsonValue } from "./values";
 export interface PluginDefinition {
   readonly id: string;
   readonly version: string;
+  readonly name?: string;
+  readonly description?: string;
   readonly api?: string;
   readonly depends?: Readonly<Record<string, string>>;
   readonly optional?: Readonly<Record<string, string>>;
@@ -35,7 +37,26 @@ function versionSyntax(version: string): boolean {
   );
 }
 
-export function definePlugin(definition: PluginDefinition): Readonly<PluginDefinition> {
+export function definePlugin(
+  authored: Omit<PluginDefinition, "depends" | "optional"> & {
+    readonly depends?: PluginDefinition["depends"] | readonly string[];
+    readonly optional?: PluginDefinition["optional"] | readonly string[];
+  },
+): Readonly<PluginDefinition> {
+  for (const key of ["depends", "optional"] as const) {
+    const ids = authored[key];
+    if (Array.isArray(ids) && (ids.some((id) => typeof id !== "string") || new Set(ids).size !== ids.length))
+      throw new Error(`Invalid plugin ${key} requirements`);
+  }
+  let definition: PluginDefinition = {
+    ...authored,
+    ...(Array.isArray(authored.depends)
+      ? { depends: Object.fromEntries(authored.depends.map((id) => [id, "*"])) }
+      : {}),
+    ...(Array.isArray(authored.optional)
+      ? { optional: Object.fromEntries(authored.optional.map((id) => [id, "*"])) }
+      : {}),
+  } as PluginDefinition;
   definition = jsonSnapshot(definition, "plugin descriptor") as unknown as PluginDefinition;
   if (
     !definition ||
@@ -46,6 +67,8 @@ export function definePlugin(definition: PluginDefinition): Readonly<PluginDefin
   }
   const fields = [
     "id",
+    "name",
+    "description",
     "version",
     "api",
     "depends",
@@ -109,6 +132,9 @@ function validateLists(definition: PluginDefinition) {
 }
 
 function validateMetadata(definition: PluginDefinition) {
+  for (const field of ["name", "description"] as const)
+    if (definition[field] !== undefined && typeof definition[field] !== "string")
+      throw new Error(`Invalid plugin ${field}`);
   if (
     definition.api !== undefined &&
     (typeof definition.api !== "string" || !definition.api.startsWith("tokamak@"))

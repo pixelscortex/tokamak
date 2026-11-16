@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
-import { api } from "../../../../client";
+import { api } from "../api";
 import type { ChatState } from "./use-chat";
 
 export function useDrafts(chat: ChatState) {

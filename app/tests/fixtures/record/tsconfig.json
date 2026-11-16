@@ -1,1 +1,1 @@
-{ "extends": "../../../tsconfig.json", "include": ["src", "backend"], "exclude": ["backend/dist"] }
+{ "extends": "../../../tsconfig.json", "include": ["src"], "exclude": ["src/server/dist"] }

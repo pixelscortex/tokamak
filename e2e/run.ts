@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport, createApi } from "../packages/sdk/src/index";
 import type { ApiFromModule, SubscriptionEvent } from "../packages/sdk/src/index";
-import { api } from "../app/dist/tests/record/backend/_legacyApi";
+import { api } from "../app/dist/tests/record/src/server/_legacyApi";
 import { buildFeature } from "../packages/server/tests/build-feature.mjs";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));

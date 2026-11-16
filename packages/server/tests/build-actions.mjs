@@ -29,7 +29,10 @@ try {
     if (id === "chat")
       await writeFile(join(path, "tsconfig.json"), JSON.stringify({ extends: join(root, "tsconfig.json") }));
     await writeFile(
-      join(path, "backend/tsconfig.json"),
+      join(
+        path,
+        ["chat", "acp", "record"].includes(id) ? "src/server/tsconfig.json" : "backend/tsconfig.json",
+      ),
       JSON.stringify({
         extends: join(workspace, "tsconfig.json"),
         compilerOptions: {
@@ -41,47 +44,39 @@ try {
         },
       }),
     );
+    // Migrated packages use their real descriptor; only legacy transport
+    // fixtures still need an inline definition.
+    const options = ["record", "chat", "acp"].includes(id)
+      ? { ui: false }
+      : {
+          ui: false,
+          plugin: {
+            id,
+            version: "1.0.0",
+            ...(id === "a"
+              ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
+              : {
+                  exports: "./api.ts",
+                  permissions: [
+                    "net:localhost",
+                    "net:loopback.tkm.test",
+                    "net:private.tkm.test",
+                    "net:metadata.tkm.test",
+                    "net:mapped.tkm.test",
+                    "net:held.tkm.test",
+                  ],
+                }),
+          },
+        };
     await writeFile(
       join(path, "vite.config.ts"),
-      `
-import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vite.ts"))};
-export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
-        id,
-        version: "1.0.0",
-        ...(id === "record"
-          ? { exports: "./api.ts" }
-          : id === "chat"
-            ? {
-                exports: "./api.ts",
-                consumes: ["chat.backend"],
-              }
-            : id === "acp"
-              ? {
-                  exports: "./api.ts",
-                  depends: { chat: "*" },
-                  provides: ["chat.backend"],
-                  permissions: ["acp"],
-                }
-              : id === "a"
-                ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
-                : {
-                    exports: "./api.ts",
-                    permissions: [
-                      "net:localhost",
-                      "net:loopback.tkm.test",
-                      "net:private.tkm.test",
-                      "net:metadata.tkm.test",
-                      "net:mapped.tkm.test",
-                      "net:held.tkm.test",
-                    ],
-                  }),
-      })} })] };
-`,
+      `import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vite.ts"))};
+export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
     );
     if (id === "chat") {
-      const permissions = join(path, "backend/permission-wait.ts");
+      const permissions = join(path, "src/server/permissions/permission-wait.ts");
       await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
-      const buffer = join(path, "backend/stream-buffer.ts");
+      const buffer = join(path, "src/server/runs/stream-buffer.ts");
       await writeFile(
         buffer,
         (await readFile(buffer, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200"),
@@ -89,7 +84,7 @@ export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
     }
     if (id === "chat")
       await writeFile(
-        join(path, "backend/testing.ts"),
+        join(path, "src/server/testing.ts"),
         `
 import { v } from "@tokamak/sdk";
 import { mutation, query } from "./_functions";

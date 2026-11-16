@@ -1,3 +1,4 @@
+import { serverDirectory, serverModule } from "./descriptor.ts";
 /** Resolve public aliases with the compiler so re-exports never execute plugin code. */
 import ts from "typescript";
 import { relative, resolve, sep } from "node:path";
@@ -9,7 +10,7 @@ export function publicFunctions(root: string, entry: string | undefined): string
     throw new Error(`Invalid plugin exports ${entry}: ${message}`);
   };
   if (!ts.sys.fileExists(path)) fail("file does not exist");
-  const configPath = ts.findConfigFile(resolve(root, "backend"), ts.sys.fileExists);
+  const configPath = ts.findConfigFile(serverDirectory(root), ts.sys.fileExists);
   const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
   if (config.error) fail(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
   const parsed = ts.parseJsonConfigFileContent(
@@ -17,7 +18,7 @@ export function publicFunctions(root: string, entry: string | undefined): string
     ts.sys,
     configPath ? resolve(configPath, "..") : root,
   );
-  const program = ts.createProgram([path, resolve(root, "backend/_generated/api.ts")], {
+  const program = ts.createProgram([path, resolve(serverDirectory(root), "_generated/api.ts")], {
     ...parsed.options,
     noEmit: true,
   });
@@ -57,7 +58,7 @@ export function publicFunctions(root: string, entry: string | undefined): string
   for (const exported of checker.getExportsOfModule(module!)) {
     if (!runtime.has(exported.getName())) continue;
     const targets = names.get(original(exported));
-    if (!targets) fail(`${exported.getName()} does not re-export a backend function`);
+    if (!targets) continue;
     for (const target of targets!) result.add(target);
   }
   return [...result].sort();
@@ -67,6 +68,8 @@ function isBackendModule(local: string): boolean {
   return !(
     !local.endsWith(".ts") ||
     local === "schema.ts" ||
+    local === "api.ts" ||
+    local.startsWith("../") ||
     /\.(d|test|spec)\.ts$/.test(local) ||
     local
       .split("/")
@@ -85,7 +88,7 @@ function backendFunctionNames(
 ) {
   const names = new Map<ts.Symbol, string[]>();
   for (const file of program.getSourceFiles()) {
-    const local = relative(resolve(root, "backend"), file.fileName).split(sep).join("/");
+    const local = relative(serverDirectory(root), file.fileName).split(sep).join("/");
     if (!isBackendModule(local)) continue;
     const symbol = checker.getSymbolAtLocation(file);
     if (!symbol) continue;
@@ -97,7 +100,7 @@ function backendFunctionNames(
       if (!type.getProperties().some((property) => property.getName().startsWith("__@definitionBrand@")))
         continue;
       const list = names.get(target) ?? [];
-      list.push(`${local.slice(0, -3)}:${exported.getName()}`);
+      list.push(`${serverModule(root, local.slice(0, -3))}:${exported.getName()}`);
       names.set(target, list);
     }
   }

@@ -61,7 +61,7 @@ async function installChat(root) {
 export async function fixtures(root) {
   await installChat(root);
   const logic = await source(root, "logic", "", { ui: false });
-  await cp(resolve(workspace, "app/tests/fixtures/record/backend"), resolve(logic, "backend"), {
+  await cp(resolve(workspace, "app/tests/fixtures/record/src/server"), resolve(logic, "backend"), {
     recursive: true,
     filter: (path) => !/\/(dist|_generated)(\/|$)/.test(path),
   });

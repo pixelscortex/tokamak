@@ -27,8 +27,8 @@ await mkdir(output, { recursive: true });
 const scratch = await mkdtemp(join(output, "compiler-"));
 const workspace = join(scratch, "checkout with spaces");
 const fixture = join(workspace, "app");
-const frontend = join(fixture, "src/main.tsx");
-const backend = join(fixture, "backend/createRecord.ts");
+const frontend = join(fixture, "src/client/main.tsx");
+const backend = join(fixture, "src/server/createRecord.ts");
 
 function command(args: string[], cwd = fixture) {
   const result = spawnSync(process.execPath, args, {
@@ -86,12 +86,9 @@ try {
   // Keep the original end-to-end compiler regressions against the record fixture,
   // but use the actual product's zero-option build configuration.
   await cp(join(app, "dist/tests/record/src"), join(fixture, "src"), { recursive: true });
-  await mkdir(join(fixture, "backend"));
+  await mkdir(join(fixture, "src/server"), { recursive: true });
   for (const name of ["schema.ts", "record.ts", "createRecord.ts", "_legacyApi.ts", "tsconfig.json"]) {
-    await copyFile(
-      join(app, name === "tsconfig.json" ? "backend" : "dist/tests/record/backend", name),
-      join(fixture, "backend", name),
-    );
+    await copyFile(join(app, "dist/tests/record/src/server", name), join(fixture, "src/server", name));
   }
   for (const name of ["package.json", "vite.config.ts", "tsconfig.json", "tsconfig.tools.json"]) {
     await copyFile(join(app, name), join(fixture, name));
@@ -170,7 +167,7 @@ try {
   assert.match(shell, /\.panels\s*\{/);
   assert.match(shell, /\.panel\s*\{/);
   assert.doesNotMatch(shell, /@apply|@import|@vite\/client/);
-  const generated = await readFile(join(fixture, "backend/_generated/api.ts"), "utf8");
+  const generated = await readFile(join(fixture, "src/server/_generated/api.ts"), "utf8");
   assert.match(generated, /readonly "record"/);
   assert.doesNotMatch(generated, /readonly "(src|tests|pages)"/);
   succeeds(command(["check", "--no-script", "--project", "tsconfig.json"]), "app type graph");
@@ -178,7 +175,7 @@ try {
 
   // Acceptance: shared compiler composition retains ORIGINAL TSX and backend
   // mappings, including the backend map's relocation into final app/dist.
-  await assertOriginalMapping(join(fixture, "dist/ui.js"), join(fixture, "src/records.tsx"), [
+  await assertOriginalMapping(join(fixture, "dist/ui.js"), join(fixture, "src/client/records.tsx"), [
     ["First view", 'name="First view"'],
     ["New task", 'label="New task"'],
   ]);
@@ -187,7 +184,7 @@ try {
   ]);
   const backendMap = JSON.parse(await readFile(join(fixture, "dist/bundle.js.map"), "utf8"));
   assert(
-    backendMap.sources.some((source: string) => source === "../backend/createRecord.ts"),
+    backendMap.sources.some((source: string) => source === "../src/server/createRecord.ts"),
     "final backend map must resolve from app/dist back to original backend source",
   );
   await writeFile(
@@ -212,10 +209,10 @@ try {
   // Failure mode: a previous successful dist must never disguise a missing
   // frontend, missing backend root, missing CSS, TSX parse or module error.
   await missing(frontend, () => rejects(build(), /main\.tsx|entry|resolve/i, "missing frontend"));
-  await missing(join(fixture, "backend"), () =>
+  await missing(join(fixture, "src/server"), () =>
     rejects(build(), /backend|feature TypeScript modules/i, "missing backend"),
   );
-  await missing(join(fixture, "src/styles.css"), () =>
+  await missing(join(fixture, "src/client/styles.css"), () =>
     rejects(build(), /styles\.css|ENOENT/i, "missing stylesheet"),
   );
   await changed(frontend, "export const broken: = <div />;\n", () =>
@@ -303,7 +300,7 @@ try {
         'import {mount} from "@tokamak/render"; mount(() => <p>UI only</p>);',
         async () => {
           await rm(join(fixture, "dist"), { recursive: true });
-          await missing(join(fixture, "backend"), () =>
+          await missing(join(fixture, "src/server"), () =>
             succeeds(build(), "UI-only with no backend directory"),
           );
           const manifest = JSON.parse(await readFile(join(fixture, "dist/manifest.json"), "utf8"));

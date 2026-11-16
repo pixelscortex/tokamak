@@ -12,3 +12,6 @@ export {
   useComposer,
 } from "./lib/composer";
 export type { ComposerAPI, ComposerSlotProps } from "./lib/composer";
+
+export { Chat } from "./pages/screen";
+export { api } from "./lib/api";

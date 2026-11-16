@@ -1,9 +1,9 @@
+import { clientEntry } from "./descriptor.ts";
 /** Public client declarations come from the entry's symbol graph, never a
  * runtime scan. This also intercepts calls inside the declaring plugin. */
 import ts from "typescript";
 import MagicString from "magic-string";
 import type { Plugin } from "vite";
-import { resolve } from "node:path";
 
 export function clientSurface(root: () => string, pluginId: () => string): Plugin {
   let declarations: Map<string, Map<string, string[]>>;
@@ -17,7 +17,7 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
       if (!id.startsWith(root() + "/src/") || !/\.tsx?$/.test(id)) return;
       if (!declarations) {
         declarations = new Map();
-        const entry = resolve(root(), "src/main.tsx");
+        const entry = clientEntry(root());
         const configPath = ts.findConfigFile(root(), ts.sys.fileExists);
         const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
         const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root());

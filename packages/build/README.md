@@ -13,7 +13,7 @@ bun run build          # explicit size-oriented release build
 
 The builder accepts a folder (defaults to cwd) or `--config <vite.config.ts>`.
 App, lab and regression fixtures all use this publisher. If a folder has no
-Vite config, the normal `backend/`, `src/main.tsx`, `src/styles.css` conventions
+static `plugin.ts`, the normal `src/server/`, `src/client/api.ts`, `src/client/styles.css` conventions
 apply.
 
 ## Definition and output

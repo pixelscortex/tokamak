@@ -1,8 +1,8 @@
+import { clientEntry } from "./descriptor.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
  * 6.0.3 is the newest JS API release; 7.x has no JS API. Upgrading belongs to
  * a separate tooling change, not the plugin wire-format implementation. */
 import ts from "typescript";
-import { resolve } from "node:path";
 
 const fields = {
   fill: "target",
@@ -15,7 +15,7 @@ const fields = {
   entityCard: "table",
 } as const;
 export function uiContributions(root: string) {
-  const entry = resolve(root, "src/main.tsx");
+  const entry = clientEntry(root);
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
   if (configResult.error)

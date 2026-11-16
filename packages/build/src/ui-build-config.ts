@@ -1,3 +1,4 @@
+import { clientEntry } from "./descriptor.ts";
 import type { UserConfig } from "vite";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -22,7 +23,7 @@ export function uiBuildConfig(root: string, options: { ui?: false; standalone?: 
   }
   const renderer = createRequire(resolve(root, "package.json")).resolve("@tokamak/render");
   const { plugins: _plugins, ...native } = nativeConfig(resolve(dirname(renderer), ".."), {
-    entry: resolve(root, "src/main.tsx"),
+    entry: clientEntry(root),
     outDir: resolve(root, "dist"),
     fileName: "ui.js",
   });
@@ -32,7 +33,7 @@ export function uiBuildConfig(root: string, options: { ui?: false; standalone?: 
     root,
     build: {
       ...native.build,
-      lib: { entry: resolve(root, "src/main.tsx"), formats: ["cjs"], fileName: () => "ui.js" },
+      lib: { entry: clientEntry(root), formats: ["cjs"], fileName: () => "ui.js" },
       rollupOptions: {
         external: (id) => /^(solid-js(?:$|\/)|@tokamak\/|@plugins\/)/.test(id),
         output: { exports: "named", codeSplitting: false },

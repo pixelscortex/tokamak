@@ -69,3 +69,15 @@ permission requests.
 cargo test -p server --test acp acp_real_claude_smoke -- --ignored --exact --nocapture
 cargo test -p server --test acp acp_real_codex_smoke -- --ignored --exact --nocapture
 ```
+
+## Package layout
+
+`plugin.ts` declares static metadata, the `chat` dependency ID, and the existing
+`acp` permission. The loader still requires `version`; dependencies compile to
+`"*"` internally. The build infers this server-only package without a Vite config.
+
+`src/server/api.ts` exports the public backend actions. Implementation lives in
+`agents/`, `turn/`, and `events/`, with generated references in `_generated/`.
+Chat imports go through `chat/src/server/api.ts`. ACP has no client half.
+The compiler derives `chat.backend` from chat's public backend contract and ACP's
+public functions. Callable IDs and behavior are unchanged.

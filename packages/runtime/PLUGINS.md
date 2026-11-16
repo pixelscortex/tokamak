@@ -9,7 +9,25 @@ shared Solid contexts. Neither the connection nor history belongs to a plugin.
 
 ## Build contract
 
-The default `tokamak()` build compiles `src/main.tsx` into a single CommonJS
+Plugin packages use `plugin.ts` plus optional `src/server/` and `src/client/`
+halves. Build a package with `bun run plugin:build plugins/<id>`; no Vite config
+is needed. `plugin.ts` exports `definePlugin({ id, version, name, description,
+depends, permissions })` from `@tokamak/sdk`. Metadata must be literal: the
+compiler reads syntax without executing the file. `depends` lists plugin IDs;
+the build uses `"*"` internally. The loader currently requires a semantic
+`version`, retained until its beta version policy changes. No `breaks` are authored.
+
+`src/server/api.ts` and `src/client/api.ts` are the public contracts; import
+other plugins only through those entries. Keep implementation files nested by
+topic. The server's `_generated/` and intermediate `dist/` live inside
+`src/server/`. Callable IDs retain module basenames, so organizing server files
+into folders does not change existing references; basenames must be unique.
+`api.ts` is excluded from callable discovery. Public server function re-exports
+control access. Consumers come from literal `ctx.providers(...)` calls; provider
+module shapes are matched against dependency public `*Api` type contracts.
+Exports, interface lists, and UI contributions are compiler-derived.
+
+The default `tokamak()` build compiles `src/client/api.ts` into a single CommonJS
 factory wrapped in:
 
 ```js
@@ -57,7 +75,7 @@ spreads, and nonliteral values fail the build. Runtime imports of
 Type-only imports/reexports disappear before dependency and contribution
 inference; the emitted JS graph and TypeScript's emitted export syntax are the
 sources of truth. Plain exports add no contributions. `ui:false` and `backend:false` support
-logic-only and UI-only artifacts. Plugin CSS is optional; the host document
+logic-only and UI-only legacy artifacts. Descriptor packages infer the halves from their directories. Plugin CSS is optional; the host document
 uses its own shell HTML. `standalone:true` retains complete native documents
 for the desktop, lab and old raw-bundle regression harnesses.
 

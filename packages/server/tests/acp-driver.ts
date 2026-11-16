@@ -6,9 +6,9 @@ import {
   type FunctionReference,
   type TokamakClient,
 } from "@tokamak/sdk";
-import { acpSend } from "./acp/backend/acp";
-import { api as acp } from "./acp/backend/_generated/api";
-import { api } from "./chat/backend/_generated/api";
+import { acpSend } from "./acp/src/server/turn/acp";
+import { api as acp } from "./acp/src/server/_generated/api";
+import { api } from "./chat/src/server/_generated/api";
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 async function until(check: () => boolean | Promise<boolean>, attempts = 200) {
   for (let i = 0; i < attempts; i++) {

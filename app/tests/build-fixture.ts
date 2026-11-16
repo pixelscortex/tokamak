@@ -2,31 +2,33 @@
  * regressions. The installed artifact itself always uses the shared shell. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cp, copyFile, mkdir, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = resolve(root, "app/dist/tests/record");
 await mkdir(fixture, { recursive: true });
-for (const directory of ["src", "backend"])
+for (const directory of ["src"])
   await cp(resolve(root, `app/tests/fixtures/record/${directory}`), resolve(fixture, directory), {
     recursive: true,
     filter: (path) => !/\/(dist|_generated)(\/|$)/.test(path),
   });
-await copyFile(resolve(root, "app/tests/fixtures/record-main.tsx"), resolve(fixture, "src/main.tsx"));
+await rm(resolve(fixture, "src/server/api.ts"), { force: true });
+await rm(resolve(fixture, "src/client/api.ts"), { force: true });
+await copyFile(resolve(root, "app/tests/fixtures/record-main.tsx"), resolve(fixture, "src/client/main.tsx"));
 await writeFile(resolve(fixture, "package.json"), JSON.stringify({ name: "test-record", type: "module" }));
 await writeFile(
   resolve(fixture, "tsconfig.json"),
   JSON.stringify({
     extends: resolve(root, "app/tsconfig.json"),
-    include: ["src", "backend"],
-    exclude: ["backend/dist"],
+    include: ["src"],
+    exclude: ["src/server/dist"],
   }),
 );
 await writeFile(
-  resolve(fixture, "backend/tsconfig.json"),
+  resolve(fixture, "src/server/tsconfig.json"),
   JSON.stringify({
-    extends: resolve(root, "app/backend/tsconfig.json"),
+    extends: resolve(root, "tsconfig.json"),
     include: ["**/*.ts"],
     exclude: ["dist"],
   }),

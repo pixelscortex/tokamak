@@ -1,5 +1,5 @@
 /** Internal application integration, not a configurable customer framework.
- * SDK discovery is confined to backend/; Vite/Solid compile src/main.tsx and
+ * SDK discovery uses src/server/; Vite/Solid compile src/client/api.ts and
  * emit the static Blitz document, CSS, backend bundle, and original maps. */
 import type { InlineConfig, PluginOption } from "vite";
 import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
@@ -16,6 +16,13 @@ import { uiContributions } from "./contributions.ts";
 import { nativeSolid } from "./native.ts";
 import { nativePlugins } from "./native.ts";
 import { clientSurface } from "./client-surface.ts";
+import {
+  readDescriptor,
+  serverDirectory,
+  clientEntry,
+  deriveInterfaces,
+  deriveProviders,
+} from "./descriptor.ts";
 import { uiBuildConfig } from "./ui-build-config.ts";
 
 export function tokamak(
@@ -46,6 +53,10 @@ export function tokamak(
           typeof configFile === "string"
             ? dirname(resolve(configFile))
             : resolve(config.root ?? process.cwd());
+        if (existsSync(resolve(root, "plugin.ts"))) {
+          if (!existsSync(resolve(root, "src/server"))) options.backend = false;
+          if (!existsSync(resolve(root, "src/client"))) options.ui = false;
+        }
         return uiBuildConfig(root, options);
       },
       // Run on emitted JS after type erasure/Solid, so type queries never look
@@ -61,11 +72,20 @@ export function tokamak(
       async buildStart() {
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
-          options.plugin ?? {
-            id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
-            version: manifest.version ?? "0.1.0",
-          },
+          options.plugin ??
+            readDescriptor(root) ?? {
+              id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
+              version: manifest.version ?? "0.1.0",
+            },
         );
+        const server = serverDirectory(root);
+        if (existsSync(resolve(root, "plugin.ts"))) {
+          plugin = definePlugin({
+            ...plugin,
+            ...deriveInterfaces(root),
+            ...(existsSync(resolve(server, "api.ts")) ? { exports: "./src/server/api.ts" } : {}),
+          });
+        }
         if (options.ui !== false && !options.standalone) {
           const ui = uiContributions(root);
           plugin = definePlugin({ ...plugin, contributes: ui.contributes });
@@ -83,7 +103,7 @@ export function tokamak(
               "bun",
               "--",
               fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
-              resolve(root, "backend"),
+              server,
               "--plugin",
               plugin.id,
             ],
@@ -94,10 +114,10 @@ export function tokamak(
           // The bundle's describe() carries the schema/index registry evaluated
           // in QuickJS. Keep that source authoritative instead of importing user
           // schema modules into the build host or duplicating them in manifests.
-          const bundle = resolve(root, "backend/dist/bundle.js");
+          const bundle = resolve(server, "dist/bundle.js");
           const source = await readFile(bundle, "utf8");
           const map = JSON.parse(await readFile(`${bundle}.map`, "utf8"));
-          // SDK maps are relative to backend/dist. Rebase source names when the
+          // SDK maps are relative to the server half’s dist/. Rebase source names when the
           // unchanged bundle is packaged into app/dist; retain original contents.
           map.sources = map.sources.map((source: string) =>
             relative(resolve(root, "dist"), resolve(dirname(bundle), source))
@@ -108,15 +128,15 @@ export function tokamak(
           this.emitFile({ type: "asset", fileName: "bundle.js.map", source: JSON.stringify(map) });
           // References are source-aware, matching the existing SDK contract.
           // Rebase only its generated type-import specifiers, not user code.
-          const api = (await readFile(resolve(root, "backend/_generated/api.ts"), "utf8")).replaceAll(
+          const api = (await readFile(resolve(server, "_generated/api.ts"), "utf8")).replaceAll(
             'import("../',
-            'import("../backend/',
+            `import("../${relative(root, server).split(sep).join("/")}/`,
           );
           this.emitFile({ type: "asset", fileName: "api.ts", source: api });
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
         }
         if (options.ui !== false) {
-          const cssPath = resolve(root, "src/styles.css");
+          const cssPath = resolve(dirname(clientEntry(root)), "styles.css");
           const css = !options.standalone && !existsSync(cssPath) ? "" : await compileCss(cssPath);
           this.emitFile({ type: "asset", fileName: "styles.css", source: css });
           this.emitFile({
@@ -126,15 +146,14 @@ export function tokamak(
           });
           entries.ui = { code: "ui.js", map: "ui.js.map", css: "styles.css", shell: "shell.html" };
         }
+        const functions = publicFunctions(root, plugin.exports);
+        if (existsSync(resolve(root, "plugin.ts")))
+          plugin = definePlugin({ ...plugin, provides: deriveProviders(root, plugin, functions) });
         this.emitFile({
           type: "asset",
           fileName: "manifest.json",
           source:
-            JSON.stringify(
-              { formatVersion: 1, plugin, entries, publicFunctions: publicFunctions(root, plugin.exports) },
-              null,
-              2,
-            ) + "\n",
+            JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: functions }, null, 2) + "\n",
         });
       },
       generateBundle(_options, bundle, isWrite) {

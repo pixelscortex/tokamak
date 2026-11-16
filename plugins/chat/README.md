@@ -9,7 +9,7 @@ See the root [quick start](../../README.md#quick-start) and
 
 Chat discovers providers through `ctx.providers("chat.backend")`. Each provider
 exports `backend:describe`, `backend:configure`, and `backend:turn`; their shared
-TypeScript contract is in `backends.ts`. Configure validates provider-specific
+TypeScript contract is exported from `src/server/api.ts`. Configure validates provider-specific
 settings. Turn receives the thread, run, response message, text, complete prior
 conversation, settings, and optional saved session state. Chat keeps this history
 for providers that need to seed a fresh agent session.
@@ -58,8 +58,15 @@ the active run. Completion, cancellation, and recovery revoke the token.
 
 Chat owns its `/` view contribution and CSS. `src/client/pages/screen.tsx` owns
 chat state and shortcuts; `ui/` contains composer, backend, map and message
-components; `lib/` contains state hooks and the composer API. The backend remains
-in `backend/` with the existing root server API.
+components; `lib/` contains state hooks and the composer API. Server code lives
+in `src/server/{threads,messages,runs,permissions,backends}/`; `schema.ts` owns
+the tables. `src/server/api.ts` is the public server surface, including provider
+references and streaming helpers. Shared backend types live in `src/shared/`.
+
+`plugin.ts` is static metadata, discovered without a Vite config. Dependencies
+are plugin IDs; `version` remains because the loader requires it. Build with
+`bun run plugin:build plugins/chat`. Generated references live in
+`src/server/_generated/`. Callable module IDs are unchanged by the source move.
 
 The public client entry (`src/client/api.ts`, exposed as `@plugins/chat/ui`)
 exports `Composer`, `ComposerInput`, `ComposerStrip`, and `SendButton`. Each is

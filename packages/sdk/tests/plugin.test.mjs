@@ -54,7 +54,10 @@ test("plugin capability descriptors are immutable JSON snapshots", () => {
   for (const patch of [
     { api: 42 },
     { api: "node@1" },
-    { depends: [] },
+    { depends: [false] },
+    { depends: ["chat", "chat"] },
+    { name: 42 },
+    { description: [] },
     { depends: { "../bad": "*" } },
     { optional: { good: 3 } },
     { provides: [""] },
@@ -66,4 +69,18 @@ test("plugin capability descriptors are immutable JSON snapshots", () => {
   ]) {
     expect(() => definePlugin({ id: "acme.notes", version: "1.0.0", ...patch })).toThrow();
   }
+});
+
+test("authored plugin dependencies are unversioned IDs", () => {
+  const depends = ["chat"];
+  const plugin = definePlugin({
+    id: "acp",
+    version: "0.1.0",
+    name: "ACP",
+    description: "Agent backend",
+    depends,
+  });
+  depends.push("other");
+  expect(plugin.depends).toEqual({ chat: "*" });
+  expect(definePlugin({ id: "chat", version: "0.3.0", depends: [] }).depends).toEqual({});
 });
