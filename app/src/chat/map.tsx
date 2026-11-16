@@ -41,12 +41,12 @@ export function Map(props: { chat: ChatState; map: MapState }) {
       </>}</For>
       <Show when={!props.map.rows().length}><p class="text-text-3">{props.chat.threads.loading() ? "Loading threads…" : "No threads found"}</p></Show>
     </div>
-    <footer aria-label="↑↓ MOVE  ↵ OPEN  1-9 JUMP  ⌘↵ NEW THREAD  R RENAME  ⌘⌫ DELETE" class="order-3 flex shrink-0 flex-wrap items-center gap-5 border-t border-hairline pt-4 font-label text-[9px] leading-4 text-text-3">
+    <footer aria-label="↑↓ MOVE  ENTER OPEN  1-9 JUMP  CMD+ENTER NEW THREAD  R RENAME  CMD+BACKSPACE DELETE" class="order-3 flex shrink-0 flex-wrap items-center gap-5 border-t border-hairline pt-4 font-label text-[9px] leading-4 text-text-3">
       <span class="flex items-center gap-1"><Icon d="M7 20V4 M3 8l4-4 4 4 M17 4v16 M13 16l4 4 4-4" class="size-3" />MOVE</span>
       <span class="flex items-center gap-1"><Icon d="M20 4v10H4 M9 9l-5 5 5 5" class="size-3" />OPEN</span>
       <span>1-9 JUMP</span>
       <span>R RENAME</span>
-      <span>⌘⌫ DELETE</span>
+      <span>CMD+BACKSPACE DELETE</span>
       <span class="flex items-center gap-1"><Icon d="M9 7V4a2 2 0 1 0-2 2h10a2 2 0 1 0-2-2v16a2 2 0 1 0 2-2H7a2 2 0 1 0 2 2V7Z" class="size-3" /><Icon d="M20 4v10H4 M9 9l-5 5 5 5" class="size-3" />NEW THREAD</span>
     </footer>
   </>;

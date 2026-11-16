@@ -1702,11 +1702,30 @@ fn chat_screen_socket_workflow() {
     type_text(&mut window, " + click");
     let edited = support::editor(window.doc(), "chat-input");
     assert!(edited.contains("draft to keep") && edited.contains(" + click"));
+    if !live {
+        key(&mut window, Key::Character("m".into()), true);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-4").is_some());
+        window.click("id", "backend-choice-4");
+        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+    }
     key(&mut window, Key::Character("n".into()), true);
     window.wait(|doc| {
         support::attr(doc, "chat-screen", "data-thread-id")
             .is_some_and(|id| id != first && id != second)
     });
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("backend-picker")
+            .is_none()
+            && window
+                .doc()
+                .inner()
+                .get_element_by_id("chat-input")
+                .is_some(),
+        "changing threads must close the picker and restore the composer"
+    );
     // Rename persists, and Escape cancels editing without leaving Map.
     key(&mut window, Key::Named(NamedKey::Tab), false);
     let row = format!("[data-thread='{}']", selected(&window));

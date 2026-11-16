@@ -16,7 +16,7 @@ export function ComposerStrip(props: { title: string; model: string; turns: numb
     </span>
     <span id="chat-strip-model" class="flex shrink-0 items-center gap-2 whitespace-nowrap">
       <Show when={props.copied}><span role="status">COPIED</span></Show>
-      <button aria-label="Change backend (⌘M)" onClick={() => props.onModel()} class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[9px] uppercase text-text-3">{props.model}</button>
+      <button aria-label="Change backend (CMD+M)" onClick={() => props.onModel()} class="m-0 cursor-pointer border-0 bg-transparent p-0 font-label text-[9px] uppercase text-text-3">{props.model}</button>
       <span>· {props.turns} {props.turns === 1 ? "turn" : "turns"}</span>
     </span>
   </div>;

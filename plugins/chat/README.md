@@ -193,9 +193,11 @@ Copy [`agents.example.toml`](../../agents.example.toml) to `agents.toml` in the
 Tokamak data directory: `$TOKAMAK_SERVER_DIR` when set, otherwise
 `~/Library/Application Support/com.pixelscortex.Tokamak` on macOS
 (`$XDG_DATA_HOME/tokamak` or `~/.local/share/tokamak` on Linux).
+Agents are loaded once at startup; restart the app (server) after editing `agents.toml`.
 The pinned Claude and Codex adapters require Node.js/npx. Only named `env`
 variables are passed through, including `PATH` for npx and its Node interpreter.
-Set API keys in the server environment or the data directory's `.env.local`.
+Set API keys in the server environment or `.env.local` in the parent of the
+plugin installation directory (the repository root when using workspace `plugins/`).
 Prefer API keys: subscription logins in third-party apps may break provider terms.
 Agents have the same access as their CLI; the selected folder is not a sandbox.
 

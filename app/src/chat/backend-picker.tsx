@@ -78,7 +78,7 @@ export function BackendPicker(props: { chat: ChatState; onClose: () => void; onF
       <span>FOLDER · {agent()}</span>
       <Textarea id="backend-folder" aria-label="Absolute folder path" autofocus appearance="inherit" size="xs" maxRows={1}
         value={folder()} onValueChange={setFolder} onSubmit={submitFolder} disabled={saving()} placeholder="/absolute/path" />
-      <span class="text-text-3">↵ SAVE · ESC CLOSE</span>
+      <span class="text-text-3">ENTER SAVE · ESC CLOSE</span>
     </>}>
       <div role="listbox" aria-label="Chat backend" aria-activedescendant={`backend-choice-${index()}`}>
         <For each={choices()}>{(choice, i) => <button id={`backend-choice-${i()}`} role="option" aria-selected={index() === i()}
@@ -86,8 +86,8 @@ export function BackendPicker(props: { chat: ChatState; onClose: () => void; onF
           class={`m-0 block box-border w-full cursor-pointer border-0 px-2 py-1 text-left font-label text-[11px] ${index() === i() ? "bg-text text-ground" : "bg-transparent text-text-2"}`}>{choice.title}</button>}</For>
       </div>
       <Show when={loading()}><span class="text-text-3">Loading agents…</span></Show>
-      <Show when={!loading() && !agents().length}><span class="text-text-3">No agents — add them to agents.toml<br />$TOKAMAK_SERVER_DIR/agents.toml<br />Default: ~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml</span></Show>
-      <span class="text-text-3">↑↓ MOVE · ↵ SELECT · ESC CLOSE</span>
+      <Show when={!loading() && !agents().length}><span class="text-text-3">No agents — add them to agents.toml and restart the app (server)<br />$TOKAMAK_SERVER_DIR/agents.toml<br />Default: ~/Library/Application Support/com.pixelscortex.Tokamak/agents.toml</span></Show>
+      <span class="text-text-3">↑↓ MOVE · ENTER SELECT · ESC CLOSE</span>
     </Show>
     <Show when={error()}><span role="alert">{error()}</span></Show>
     <p class="m-0 text-text-3">An agent can do anything its CLI can in this folder.</p>

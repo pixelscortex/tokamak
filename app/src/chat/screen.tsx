@@ -1,5 +1,5 @@
 import type { PluginLoader } from "@tokamak/runtime/plugins";
-import { Show, createSignal, type Accessor } from "solid-js";
+import { Show, createEffect, createSignal, on, type Accessor } from "solid-js";
 import { BackendPicker } from "./backend-picker";
 import { ComposerInput } from "./composer-input";
 import type { Id } from "@tokamak/sdk";
@@ -22,6 +22,14 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
   const composer = useDrafts(props.chat);
   const busy = () => Boolean(props.chat.active() || composer.sending());
   const editorClass = () => mapOpen() ? "order-1 border-b border-hairline py-3" : "";
+
+  function closePicker() {
+    setPickerOpen(false);
+    setPickerFolder(false);
+    pickerKey = undefined;
+  }
+
+  createEffect(on(() => props.chat.threadId(), closePicker));
 
   function closeMap() {
     map.reset();
@@ -80,7 +88,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
       <Show when={mapOpen()}><MapHeader /></Show>
       <Show keyed when={props.chat.threadId()}>{(threadId: Id<"threads">) => <ThreadView loader={props.loader} chat={props.chat} threadId={threadId} hidden={mapOpen()} onBackend={() => setPickerOpen(open => !open)} onPermissionReady={pick => { pickPermission = pick; }} onCopyReady={copy => { copyReply = copy; }} />}</Show>
       <Show when={props.chat.error() ?? props.chat.threads.error()?.message}>{(error: Accessor<string>) => <p role="alert" class="m-0 text-text-2">{error()}</p>}</Show>
-      <Show when={pickerOpen() && !mapOpen()}><BackendPicker chat={props.chat} onClose={() => { setPickerOpen(false); setPickerFolder(false); }} onFolderChange={setPickerFolder} onKeyReady={handler => { pickerKey = handler; }} /></Show>
+      <Show when={pickerOpen() && !mapOpen()}><BackendPicker chat={props.chat} onClose={closePicker} onFolderChange={setPickerFolder} onKeyReady={handler => { pickerKey = handler; }} /></Show>
       {/* Retire the focused native editor only while the row editor owns focus. */}
       <Show when={map.editing() !== "rename" && !(pickerOpen() && pickerFolder())}>
         <div class={`flex shrink-0 items-start gap-3 ${editorClass()}`}>
