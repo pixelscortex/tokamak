@@ -1,0 +1,23 @@
+packages/render/Cargo.toml
+  s_2297d4366353cf::t_8af723c62d8d15 29
+packages/render/src/shell.rs
+  s_2297d4366353cf::t_8af723c62d8d15 7,129-133
+Cargo.lock
+  s_2297d4366353cf::t_a8b9708b65deaf 4600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5bee7c15883adad70dd9458babd8beb036e5cb02",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
