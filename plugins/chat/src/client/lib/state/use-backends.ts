@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from "solid-js";
 import type { ResultOf, TokamakClient } from "@tokamak/sdk";
-import { api } from "../../../plugins/chat/client";
+import { api } from "../../../../client";
 
 /** One discovery cache per chat, shared by the composer and picker. */
 export function useBackends(client: TokamakClient) {

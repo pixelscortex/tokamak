@@ -4,6 +4,7 @@ import * as solid from "solid-js";
 import * as universal from "solid-js/universal";
 import * as render from "@tokamak/render";
 import * as sdk from "@tokamak/sdk";
+import * as sdkClient from "@tokamak/sdk/client";
 import * as sdkSolid from "@tokamak/sdk/solid";
 import * as ui from "@tokamak/ui";
 import * as components from "@tokamak/ui/components";
@@ -18,6 +19,7 @@ for (const [name, exports] of Object.entries({
   "solid-js/universal": universal,
   "@tokamak/render": pluginRenderer,
   "@tokamak/sdk": sdk,
+  "@tokamak/sdk/client": sdkClient,
   "@tokamak/sdk/solid": sdkSolid,
   "@tokamak/ui": ui,
   "@tokamak/ui/elements": ui,

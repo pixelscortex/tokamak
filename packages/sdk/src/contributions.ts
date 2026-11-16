@@ -2,6 +2,9 @@
  * The compiler reads the brand and literal options without executing UI code. */
 export const contributionBrand: unique symbol = Symbol("tokamak.contribution");
 export interface ContributionOptions {
+  fill: { target: string; order?: number; fillId?: string };
+  wrap: { target: string };
+  replace: { target: string };
   view: { route: string };
   itemRenderer: { type: string };
   toolbar: { label: string };

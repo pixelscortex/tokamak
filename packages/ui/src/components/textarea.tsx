@@ -39,6 +39,7 @@ export interface TextareaProps {
   onSubmit?: (value: string) => void;
   /** Runs before the textarea's own key handling. */
   onKeyDown?: (event: NativeEvent) => void;
+  onCaretChange?: (event: NativeEvent) => void;
   onFocus?: (event: NativeEvent) => void;
   onBlur?: (event: NativeEvent) => void;
   placeholder?: string;
@@ -130,7 +131,10 @@ export function Textarea(props: TextareaProps): JSX.Element {
         readonly={props.readonly}
         value={current()}
         tk-caret={blockCaret() ? true : undefined}
-        onCaretChange={(event) => setCaret(event.caret ?? null)}
+        onCaretChange={(event) => {
+          setCaret(event.caret ?? null);
+          props.onCaretChange?.(event);
+        }}
         onInput={input}
         onKeyDown={keydown}
         onAppleKeybinding={(event) => {

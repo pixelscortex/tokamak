@@ -16,6 +16,12 @@ pub(crate) type Host = Rc<RefCell<Option<HostSender>>>;
 
 pub(crate) fn install(ctx: &Ctx<'_>, host: Host) -> Result<()> {
     let install = || -> engine::rquickjs::Result<()> {
+        ctx.globals().set(
+            "__tokamakWarn",
+            Function::new(ctx.clone(), |message: String| {
+                eprintln!("UI warning: {message}");
+            })?,
+        )?;
         let (writes, requests) = mpsc::sync_channel::<(HostSender, u32, String)>(32);
         std::thread::Builder::new()
             .name("ui-clipboard".into())

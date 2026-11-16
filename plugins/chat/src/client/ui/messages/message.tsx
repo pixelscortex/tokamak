@@ -2,7 +2,7 @@ import { For, Show, createMemo } from "solid-js";
 import { PermissionPart, type Permission } from "./permission-part";
 import { ToolPart } from "./tool-part";
 import { Markdown } from "./markdown";
-import type { Message as ChatMessage } from "./use-chat";
+import type { Message as ChatMessage } from "../../lib/state/use-chat";
 
 export function Mark(props: { user?: boolean }) {
   return (

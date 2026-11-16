@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { Message } from "./use-chat";
+import type { Message } from "../../lib/state/use-chat";
 
 export type Permission = Extract<Message["parts"][number], { type: "permission" }>;
 export const permissionOptions = (part: Permission) =>

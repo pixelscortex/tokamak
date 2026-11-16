@@ -55,7 +55,11 @@ export async function library(root, version = "before") {
   );
   built(path);
 }
+async function installChat(root) {
+  await cp(resolve(workspace, "plugins/chat/dist"), resolve(root, "chat/dist"), { recursive: true });
+}
 export async function fixtures(root) {
+  await installChat(root);
   const logic = await source(root, "logic", "", { ui: false });
   await cp(resolve(workspace, "app/tests/fixtures/record/backend"), resolve(logic, "backend"), {
     recursive: true,
@@ -536,7 +540,17 @@ if (import.meta.main) {
   `,
       ),
     );
-  else if (action === "parts-host") await partsHost(root);
+  else if (action === "composer-mod") {
+    await installChat(root);
+    const fixture = resolve(workspace, "app/tests/fixtures/composer-mod");
+    try {
+      await symlink(resolve(workspace, "app/node_modules"), resolve(fixture, "node_modules"), "dir");
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    built(fixture);
+    await cp(resolve(fixture, "dist"), resolve(root, "composer-mod/dist"), { recursive: true });
+  } else if (action === "parts-host") await partsHost(root);
   else if (action === "errors") await errors(root);
   else if (action === "lazy") await lazy(root);
   else if (action === "guards") await guards(root);

@@ -119,14 +119,15 @@ permission screen or grant prompt.
 `rail`, `navigation`, `sidebar?`, `stage`, and `thread?`. The `.shell-*` CSS in
 `app/src/styles.css` can be replaced without changing module loading.
 
-`Shell` in `app/src/shell.tsx` owns one `/chat` memory history, handles
-`/chat/:thread`, and maps view-local routes beneath `/p/<plugin>`. The docked
+`Shell` in `app/src/shell.tsx` owns one memory history (initially `/chat`) and
+maps view-local routes beneath `/p/<plugin>`. A root view also handles the
+`/<plugin>` alias and its descendants; chat renders those paths itself. The docked
 thread panel is a placeholder. Navigation buttons use real back/forward.
 
 `Contribution` in `app/src/contribution.tsx` accepts `loader`, a
 `SlotContribution`, and optional `componentProps`; it supplies loading and
 `<plugin> failed · Reload` states around one plugin part. The loader's
-`contributions(kind)` enumerates all five slot kinds without fetching modules.
+`contributions(kind)` enumerates all contribution kinds without fetching modules.
 Views mount in the stage now; future item, toolbar, entity and command surfaces
 can select descriptors and reuse the same boundary/lifecycle plumbing.
 
@@ -149,3 +150,40 @@ bounded topic/routing envelopes (at most 1560 bytes per event). The inclusive
 results become a correlated `result too large` error; an oversized subscription
 ends only that subscription. Oversized requests are rejected before admission,
 so unrelated calls and the window connection remain usable.
+
+## Open slots and public component mods
+
+Client helpers live in `@tokamak/sdk/client` (the portable backend SDK remains
+independent of Solid). Export slots and public components through the UI entry,
+usually by re-exporting `src/client/api.ts` from `src/main.tsx`:
+
+```tsx
+export const actions = defineSlot<{ threadId: string }>("composer.actions");
+// The compiler qualifies this as <declaring-plugin>.composer.actions.
+<Slot of={actions} props={{ threadId }} />;
+```
+
+Another plugin imports that public token from `@plugins/<id>/ui` and exports
+`fill(actions, { order: 10, id: "extra" }, Component)`. Options must be static
+literals; `order` and `id` are optional. The compiler extracts the target, numeric
+order, and optional fill identity into `contributes.fill`. Fills sort by order,
+then plugin id and fill identity (default: export name). Every fill owns an error
+boundary; a failed fill disappears while its siblings and host keep working.
+
+Public PascalCase callable exports are component extension points. The compiler
+instruments their declarations, so both local JSX and cross-plugin imports use
+the same component identity. Ordinary hooks/helpers and branded contributions
+are not instrumented. Export `wrap(Component, Original => props => <Original
+{...props} />)` or `replace(Component, Replacement)` from a mod's UI entry. The
+compiler extracts the public import target into `contributes.wrap/replace`;
+static imports also infer the existing plugin dependency. A replacement forms
+the base, then wrappers layer in plugin-id/export-name order. Each layer has an
+error boundary that renders its previous layer on failure. The first replacement
+wins; later replacements are ignored with a native warning.
+
+The shell provides `ExtensionProvider` with its existing plugin loader. Extension
+contributors load from the catalog even when they have no view. Generation
+changes retire contributions, fills and wrappers; removing/reinstalling a mod
+updates mounted components without retiring the target plugin's data owner.
+The five existing contribution kinds remain supported. There is no SDK list of
+slot names and no descriptor or server-hook migration.

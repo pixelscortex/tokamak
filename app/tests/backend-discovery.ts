@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createRoot } from "solid-js";
 import { TokamakClient } from "../../packages/sdk/src/client";
-import { useBackends } from "../src/chat/use-backends";
-import { useDrafts } from "../src/chat/use-drafts";
-import type { ChatState } from "../src/chat/use-chat";
+import { useBackends } from "../../plugins/chat/src/client/lib/state/use-backends";
+import { useDrafts } from "../../plugins/chat/src/client/lib/state/use-drafts";
+import type { ChatState } from "../../plugins/chat/src/client/lib/state/use-chat";
 
 let discoveries = 0;
 let sends = 0;

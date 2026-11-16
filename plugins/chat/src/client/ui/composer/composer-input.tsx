@@ -1,4 +1,5 @@
-import { onMount, splitProps } from "solid-js";
+import { ComposerContext } from "../../lib/composer";
+import { onMount, splitProps, useContext } from "solid-js";
 import { setProp, type NativeEvent, type NativeNode } from "@tokamak/render";
 import { Textarea, type TextareaProps } from "@tokamak/ui/components";
 
@@ -6,6 +7,7 @@ import { Textarea, type TextareaProps } from "@tokamak/ui/components";
 export function ComposerInput(props: TextareaProps & { mapOpen: boolean }) {
   const [local, editor] = splitProps(props, ["mapOpen"]);
   let input: NativeNode;
+  const composer = useContext(ComposerContext);
 
   onMount(() => {
     const original = input.handlers.get("applekeybinding");
@@ -21,6 +23,10 @@ export function ComposerInput(props: TextareaProps & { mapOpen: boolean }) {
   return (
     <Textarea
       {...editor}
+      onCaretChange={(event) => {
+        if (!local.mapOpen && event.caret) composer?.selection(event.caret.start, event.caret.end);
+        editor.onCaretChange?.(event);
+      }}
       ref={(node) => {
         input = node;
       }}

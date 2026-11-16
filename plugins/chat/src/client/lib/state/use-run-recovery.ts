@@ -1,7 +1,7 @@
 import { afterDelay } from "@tokamak/render";
 import { createEffect, getOwner, onCleanup, runWithOwner, type Accessor } from "solid-js";
 import type { TokamakClient } from "@tokamak/sdk";
-import { api } from "../../../plugins/chat/client";
+import { api } from "../../../../client";
 
 export function useRunRecovery(
   client: TokamakClient,

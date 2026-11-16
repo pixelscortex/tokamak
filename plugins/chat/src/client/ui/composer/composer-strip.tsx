@@ -1,3 +1,5 @@
+import { Slot } from "@tokamak/sdk/client";
+import { composerStripLeft, composerStripRight, useComposer } from "../../lib/composer";
 import { observeLayout } from "@tokamak/render";
 import { createSignal, Show } from "solid-js";
 import { BusyStatus } from "./busy-status";
@@ -11,6 +13,7 @@ export function ComposerStrip(props: {
   raced: boolean;
   onBackend?: () => void;
 }) {
+  const composer = useComposer();
   const [available, setAvailable] = createSignal(0);
   const [width, setWidth] = createSignal(0);
 
@@ -21,6 +24,7 @@ export function ComposerStrip(props: {
       id="chat-strip"
       class="flex min-w-0 items-center gap-4 border-t border-hairline pt-3 font-label text-[11px] leading-4 uppercase tracking-[0.08em] text-text-3"
     >
+      <Slot of={composerStripLeft} props={{ composer }} />
       <span
         id="chat-strip-title"
         ref={(node) => observeLayout(node, (layout) => setAvailable(layout.rect.width))}
@@ -58,6 +62,7 @@ export function ComposerStrip(props: {
           · {props.turns} {props.turns === 1 ? "turn" : "turns"}
         </span>
       </span>
+      <Slot of={composerStripRight} props={{ composer }} />
     </div>
   );
 }

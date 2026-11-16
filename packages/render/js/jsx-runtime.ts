@@ -15,7 +15,15 @@ export interface NativeEvent {
    * Null on blur or while the editor/IME hides its caret. Reports only change
    * when this geometry or atEnd changes; selection highlighting stays native.
    * This lets a page replace Blitz's fixed-width caret without measuring text. */
-  readonly caret?: { x: number; y: number; width: number; height: number; atEnd: boolean } | null;
+  readonly caret?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    atEnd: boolean;
+    start: number;
+    end: number;
+  } | null;
   readonly key?: string;
   readonly code?: string;
   /** macOS commands arrive before KeyboardInput; cancel their native editing here. */

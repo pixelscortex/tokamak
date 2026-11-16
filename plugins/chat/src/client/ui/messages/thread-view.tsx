@@ -1,12 +1,12 @@
 import { afterDelay, observeLayout, type Layout, type NativeNode } from "@tokamak/render";
-import { backendLabel } from "./backend-picker";
+import { backendLabel } from "../backend/backend-picker";
 import { For, Show, createMemo, createEffect, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
-import { api, type ChatState } from "./use-chat";
+import { api, type ChatState } from "../../lib/state/use-chat";
 import { permissionOptions, type Permission } from "./permission-part";
 import { Message } from "./message";
-import { ComposerStrip } from "./composer-strip";
+import { ComposerStrip } from "../composer/composer-strip";
 
 export function ThreadView(props: {
   chat: ChatState;

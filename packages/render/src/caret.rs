@@ -33,6 +33,8 @@ struct Report {
     width: f64,
     height: f64,
     at_end: bool,
+    start: usize,
+    end: usize,
 }
 
 fn report(
@@ -86,7 +88,12 @@ fn report(
         (f64::from(input.scroll_offset), 0.0)
     };
     let selection = input.editor.raw_selection();
+    let anchor = selection.anchor().index();
+    let focus = selection.focus().index();
+    let text = input.editor.raw_text();
     Some(Report {
+        start: text[..anchor.min(focus)].encode_utf16().count(),
+        end: text[..anchor.max(focus)].encode_utf16().count(),
         x: rect.x0 / scale - scroll_x,
         y: rect.y0 / scale + y_offset - scroll_y,
         width: (rect.x1 - rect.x0) / scale,

@@ -1,9 +1,9 @@
-import { mapGroup } from "./use-map";
+import { mapGroup } from "../../lib/state/use-map";
 import { For, Show } from "solid-js";
 import { Textarea } from "@tokamak/ui/components";
 import { Icon } from "@tokamak/ui";
-import type { ChatState } from "./use-chat";
-import type { MapState } from "./use-map";
+import type { ChatState } from "../../lib/state/use-chat";
+import type { MapState } from "../../lib/state/use-map";
 
 function relativeTime(time: number) {
   const minutes = Math.max(0, Math.floor((Date.now() - time) / 60000));

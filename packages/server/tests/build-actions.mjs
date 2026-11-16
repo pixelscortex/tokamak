@@ -24,6 +24,10 @@ try {
   });
   for (const id of ["record", "a", "b", "chat", "acp"]) {
     const path = join(root, id);
+    // Chat now has a workspace-relative client tsconfig. The isolated backend
+    // fixture must resolve SDK imports through this fixture's absolute paths.
+    if (id === "chat")
+      await writeFile(join(path, "tsconfig.json"), JSON.stringify({ extends: join(root, "tsconfig.json") }));
     await writeFile(
       join(path, "backend/tsconfig.json"),
       JSON.stringify({

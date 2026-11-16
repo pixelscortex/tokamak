@@ -184,3 +184,66 @@ test("computed dynamic imports fail the build with an actionable diagnostic", as
     expect(result.stdout + result.stderr).toContain("Dynamic plugin imports require a string literal");
   });
 }, 30_000);
+
+// Open slots/mods use the same static export graph and cross-plugin contract.
+test("builder qualifies slots, extracts extension targets and instruments local public components", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      import { defineSlot } from "@tokamak/sdk/client";
+      export const actions = defineSlot<{ text: string }>("composer.actions");
+      export function Input(props: { text: string }) { return <p>{props.text}</p>; }
+      export function Local() { return <Input text="local" />; }
+    `,
+    );
+    built(owner);
+    const ownerCode = await artifact(owner, "ui.js");
+    expect(ownerCode).toContain("owner.composer.actions");
+    expect(ownerCode).toContain("owner.Input");
+    const mod = await source(
+      root,
+      "mod",
+      `
+      import { fill, wrap, replace } from "@tokamak/sdk/client";
+      import { actions as target, Input } from "@plugins/owner/ui";
+      export const Extra = fill(target, { order: -5, id: "extra" }, p => <p>{p.text}</p>);
+      export const Frame = wrap(Input, Original => props => <div><Original {...props} /></div>);
+      export const Other = replace(Input, props => <p>{props.text}</p>);
+    `,
+    );
+    await writeFile(
+      resolve(mod, "tsconfig.json"),
+      JSON.stringify({
+        extends: resolve(workspace, "app/tsconfig.json"),
+        compilerOptions: { paths: { "@plugins/owner/ui": [resolve(owner, "src/main.tsx")] } },
+        include: ["src"],
+      }),
+    );
+    built(mod);
+    const manifest = JSON.parse(await artifact(mod, "manifest.json"));
+    expect(manifest.plugin.contributes).toEqual({
+      fill: [{ id: "Extra", target: "owner.composer.actions", order: -5, fillId: "extra" }],
+      wrap: [{ id: "Frame", target: "owner.Input" }],
+      replace: [{ id: "Other", target: "owner.Input" }],
+    });
+    expect(manifest.plugin.depends).toEqual({ owner: "*" });
+    const code = await artifact(mod, "ui.js");
+    expect(code).not.toContain("mod.Frame"); // wrapper factories are not components
+    for (const options of ["{ order: rank }", "{ ...options }", "{ id: label }"]) {
+      await writeFile(
+        resolve(mod, "src/main.tsx"),
+        `
+        import { fill } from "@tokamak/sdk/client";
+        import { actions } from "@plugins/owner/ui";
+        const rank = 1, options = {}, label = "x";
+        export const Bad = fill(actions, ${options}, () => <p />);
+      `,
+      );
+      const result = build(mod);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("Invalid UI contribution Bad");
+    }
+  });
+}, 30_000);

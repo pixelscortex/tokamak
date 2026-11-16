@@ -386,7 +386,7 @@ fn shared_runtime_lazy_components_and_logic_only_backend() {
             .lock()
             .unwrap()
             .iter()
-            .filter(|r| r["type"] == "pluginasset")
+            .filter(|r| r["type"] == "pluginasset" && r["plugin"] != "chat")
             .count(),
         0
     );
@@ -504,7 +504,7 @@ fn contribution_failure_keeps_navigation_and_route_history_working() {
     }
     let mut window = Window::open(&service.directory);
     window.wait(|doc| support::text(doc, "app").contains("Broken"));
-    assert!(at_chat(window.doc(), "/chat"));
+    window.wait(|doc| at_chat(doc, "/chat"));
     window.view("broken/Broken");
     window.wait(|doc| support::text(doc, "app").contains("broken failed"));
     assert!(support::text(window.doc(), "app").contains("Reload"));
@@ -1146,7 +1146,23 @@ fn chat_screen_socket_workflow() {
     for id in ["chat", "acp"] {
         let destination = scratch.0.join(format!("installation/{id}/dist"));
         std::fs::create_dir_all(&destination).unwrap();
-        for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        for file in [
+            "manifest.json",
+            "bundle.js",
+            "bundle.js.map",
+            "api.ts",
+            "ui.js",
+            "ui.js.map",
+            "shell.html",
+            "styles.css",
+        ] {
+            if !root()
+                .join(format!("plugins/{id}/dist"))
+                .join(file)
+                .exists()
+            {
+                continue;
+            }
             std::fs::copy(
                 root().join(format!("plugins/{id}/dist")).join(file),
                 destination.join(file),
@@ -1252,6 +1268,7 @@ fn chat_screen_socket_workflow() {
             window_size: (680, 820),
             ..Default::default()
         });
+    window.wait(|doc| doc.inner().get_element_by_id("chat-screen").is_some());
     window.wait(|doc| support::attr(doc, "chat-screen", "data-thread-id").is_some());
     if live {
         configure_live_thread(&service, &selected(&window), &scratch.0.join("workspace"));
@@ -1865,4 +1882,115 @@ fn chat_screen_socket_workflow() {
     assert_eq!(window.subscriptions_to("threads:list"), 1);
     assert_eq!(window.subscriptions_to("runs:running"), 1);
     assert_eq!(window.subscriptions_to("runs:active"), 0);
+}
+
+// The production shell discovers chat's view and all mods from manifests. A
+// failed fill cannot retire its siblings, editor, or chat's data subscriptions.
+#[test]
+fn composer_extensions_load_reload_and_unload_without_forking_chat() {
+    use blitz_traits::events::{BlitzKeyEvent, KeyState, UiEvent};
+    use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
+    let scratch = Scratch::new();
+    scratch.build("composer-mod");
+    let service = Service::start(&scratch);
+    let mut window = Window::open(&service.directory);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("mod-frame").is_some()
+            && doc.inner().get_element_by_id("mod-label").is_some()
+            && doc.inner().get_element_by_id("mod-insert").is_some()
+    });
+    assert!(
+        window.assets("chat") > 0,
+        "chat UI must load from its plugin artifact"
+    );
+    assert!(!support::text(window.doc(), "app").contains("chat failed"));
+    window.click("id", "mod-insert");
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "mod text");
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("mod-replacement")
+            .is_some()
+    );
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("mod-ignored")
+            .is_none()
+    );
+    // Insert at the beginning of distinct native text, rather than appending.
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
+            key: Key::Named(NamedKey::End),
+            code: Code::Unidentified,
+            text: None,
+            modifiers: Modifiers::empty(),
+            location: Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: KeyState::Pressed,
+        }));
+    window.doc.as_mut().unwrap().handle_ui_event(UiEvent::Ime(
+        blitz_traits::events::BlitzImeEvent::Commit(" tail".into()),
+    ));
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
+            key: Key::Named(NamedKey::Home),
+            code: Code::Unidentified,
+            text: None,
+            modifiers: Modifiers::empty(),
+            location: Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: KeyState::Pressed,
+        }));
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    window.click("id", "mod-insert");
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(
+        support::editor(window.doc(), "chat-input"),
+        "mod textmod text tail"
+    );
+    // Remove only the mod artifact; catalog reload retires its fills/wrapper live.
+    std::fs::rename(
+        scratch.0.join("installation/composer-mod"),
+        scratch.0.join("disabled-composer-mod"),
+    )
+    .unwrap();
+    service.cli(&["plugin", "reload", "composer-mod"]);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("mod-frame").is_none()
+            && doc.inner().get_element_by_id("mod-label").is_none()
+            && doc.inner().get_element_by_id("mod-insert").is_none()
+    });
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-input")
+            .is_some()
+    );
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(
+        support::editor(window.doc(), "chat-input"),
+        "mod textmod text tail"
+    );
+    std::fs::rename(
+        scratch.0.join("disabled-composer-mod"),
+        scratch.0.join("installation/composer-mod"),
+    )
+    .unwrap();
+    service.cli(&["plugin", "reload", "composer-mod"]);
+    window.wait(|doc| doc.inner().get_element_by_id("mod-frame").is_some());
+    assert_eq!(window.subscriptions_to("threads:list"), 1);
 }

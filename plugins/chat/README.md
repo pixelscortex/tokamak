@@ -53,3 +53,43 @@ Backend writes require a per-turn capability generated in chat's send action.
 The selected provider receives it; run queries never return it. Text/part updates,
 session saves, and permission request/claim/undelivered writes validate it against
 the active run. Completion, cancellation, and recovery revoke the token.
+
+## Client UI and composer mods
+
+Chat owns its `/` view contribution and CSS. `src/client/pages/screen.tsx` owns
+chat state and shortcuts; `ui/` contains composer, backend, map and message
+components; `lib/` contains state hooks and the composer API. The backend remains
+in `backend/` with the existing root server API.
+
+The public client entry (`src/client/api.ts`, exposed as `@plugins/chat/ui`)
+exports `Composer`, `ComposerInput`, `ComposerStrip`, and `SendButton`. Each is
+wrappable or replaceable. The keyboard-first default layout has no visible send
+button; mods can place the public `SendButton` in an actions fill.
+
+| Token                | Qualified slot              | Position                      |
+| -------------------- | --------------------------- | ----------------------------- |
+| `composerBefore`     | `chat.composer.before`      | Above input                   |
+| `composerActions`    | `chat.composer.actions`     | Input actions / send controls |
+| `composerStripLeft`  | `chat.composer.strip.left`  | Before title                  |
+| `composerStripRight` | `chat.composer.strip.right` | After backend/turns           |
+| `composerAfter`      | `chat.composer.after`       | Below input                   |
+
+Every fill receives `{ composer: ComposerAPI }`. `threadId()`, `draft()`,
+`setDraft(text)`, `insertText(text)` (at the native caret/selection), `submit()`
+and `busy()` share the current thread's draft and run state. Components inside
+the page can also call `useComposer()`.
+
+```tsx
+import { fill, wrap } from "@tokamak/sdk/client";
+import { ComposerInput, composerActions, composerStripRight } from "@plugins/chat/ui";
+export const Insert = fill(composerActions, { order: 10 }, ({ composer }) => (
+  <button onClick={() => composer.insertText("Run tests")}>Tests</button>
+));
+export const Status = fill(composerStripRight, {}, () => <span>Review mode</span>);
+export const Frame = wrap(ComposerInput, (Original) => (props) => (
+  <div class="min-w-0 flex-1 border border-edge">
+    <Original {...props} />
+  </div>
+));
+// Export these from your plugin's src/main.tsx; no registration step.
+```

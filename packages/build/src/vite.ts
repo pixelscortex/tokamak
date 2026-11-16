@@ -15,6 +15,7 @@ import { compileCss } from "./css.ts";
 import { uiContributions } from "./contributions.ts";
 import { nativeSolid } from "./native.ts";
 import { nativePlugins } from "./native.ts";
+import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig } from "./ui-build-config.ts";
 
 export function tokamak(
@@ -23,6 +24,14 @@ export function tokamak(
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   return [
+    ...(!options.standalone && options.ui !== false
+      ? [
+          clientSurface(
+            () => root,
+            () => plugin.id,
+          ),
+        ]
+      : []),
     ...(options.ui === false ? [] : options.standalone ? nativePlugins() : [nativeSolid()]),
     {
       name: "tokamak-application",

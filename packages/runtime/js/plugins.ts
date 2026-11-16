@@ -9,7 +9,9 @@ export interface PluginManifest {
     id: string;
     version: string;
     depends?: Readonly<Record<string, string>>;
-    contributes?: Partial<Record<ContributionKind, readonly { id: string; [key: string]: string }[]>>;
+    contributes?: Partial<
+      Record<ContributionKind, readonly { id: string; [key: string]: string | number }[]>
+    >;
   };
   entries: { ui?: { code: string; css: string } };
   hashes: Readonly<Record<string, string>>;
@@ -27,7 +29,7 @@ export interface SlotContribution {
   plugin: string;
   id: string;
   kind: ContributionKind;
-  options: Readonly<Record<string, string>>;
+  options: Readonly<Record<string, string | number>>;
 }
 const moduleName = (id: string) => `@plugins/${id}/ui`;
 function catalog(value: JsonValue): PluginCatalog {

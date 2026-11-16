@@ -396,3 +396,9 @@ Object.defineProperty(globalThis, "__tokamak", {
     },
   }),
 });
+
+/** Window diagnostics, including ignored component replacement conflicts. */
+declare const __tokamakWarn: (message: string) => void;
+export function warn(message: string): void {
+  __tokamakWarn(message);
+}

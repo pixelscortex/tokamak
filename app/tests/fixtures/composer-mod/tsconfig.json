@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@plugins/chat/ui": ["../../../../plugins/chat/src/client/api.ts"]
+    }
+  },
+  "include": ["src"]
+}

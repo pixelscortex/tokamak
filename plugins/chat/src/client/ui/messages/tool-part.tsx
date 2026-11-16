@@ -1,5 +1,5 @@
 import { Show, createSignal } from "solid-js";
-import type { Message } from "./use-chat";
+import type { Message } from "../../lib/state/use-chat";
 type Tool = Extract<Message["parts"][number], { type: "tool" }>;
 export function ToolPart(props: { part: Tool }) {
   return <ToolLine part={props.part} />;

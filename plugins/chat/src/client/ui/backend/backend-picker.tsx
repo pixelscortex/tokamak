@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { NativeEvent } from "@tokamak/render";
 import { Textarea } from "@tokamak/ui/components";
-import { api, type ChatState, type Thread } from "./use-chat";
+import { api, type ChatState, type Thread } from "../../lib/state/use-chat";
 import type { JsonValue } from "@tokamak/sdk";
 
 function backendFolder(settings: JsonValue | undefined): string {

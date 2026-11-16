@@ -4,7 +4,6 @@ import { tokamak } from "@tokamak/build/vite";
 export default defineConfig({
   plugins: [
     tokamak({
-      ui: false,
       plugin: {
         id: "chat",
         version: "0.3.0",

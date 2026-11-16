@@ -20,7 +20,6 @@
         "@tokamak/runtime": "workspace:*",
         "@tokamak/sdk": "workspace:*",
         "@tokamak/ui": "workspace:*",
-        "marked": "18.2.0",
         "solid-js": "1.9.18",
       },
       "devDependencies": {
@@ -91,6 +90,9 @@
     "packages/sdk": {
       "name": "@tokamak/sdk",
       "version": "0.1.0",
+      "dependencies": {
+        "@tokamak/render": "workspace:*",
+      },
       "peerDependencies": {
         "solid-js": "1.9.18",
       },
@@ -127,7 +129,12 @@
       "name": "chat",
       "version": "0.3.0",
       "dependencies": {
+        "@tokamak/render": "workspace:*",
+        "@tokamak/runtime": "workspace:*",
         "@tokamak/sdk": "workspace:*",
+        "@tokamak/ui": "workspace:*",
+        "marked": "18.2.0",
+        "solid-js": "1.9.18",
       },
       "devDependencies": {
         "@tokamak/build": "workspace:*",

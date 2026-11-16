@@ -91,7 +91,7 @@ function LoadedContribution(props: Parameters<typeof Contribution>[0]) {
             <CommandContribution
               handler={component as (args: Record<string, unknown>) => unknown}
               args={props.componentProps ?? {}}
-              title={props.contribution.options.title!}
+              title={String(props.contribution.options.title)}
             />
           );
         return createComponent(component as Component<Record<string, unknown>>, props.componentProps ?? {});

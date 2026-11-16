@@ -5,11 +5,11 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { ArgsOf, Event, Request } from "@tokamak/sdk";
-import { Message } from "../src/chat/message";
-import { Map } from "../src/chat/map";
-import { useMap } from "../src/chat/use-map";
-import type { ChatState, Message as ChatMessage } from "../src/chat/use-chat";
-import { Markdown } from "../src/chat/markdown";
+import { Message } from "../../plugins/chat/src/client/ui/messages/message";
+import { Map } from "../../plugins/chat/src/client/ui/map/map";
+import { useMap } from "../../plugins/chat/src/client/lib/state/use-map";
+import type { ChatState, Message as ChatMessage } from "../../plugins/chat/src/client/lib/state/use-chat";
+import { Markdown } from "../../plugins/chat/src/client/ui/messages/markdown";
 import { api } from "../dist/tests/record/backend/_legacyApi";
 
 function Trace() {

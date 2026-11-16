@@ -8,7 +8,11 @@
     "./solid": "./solid.ts",
     "./web": {
       "types": "./web.d.ts"
-    }
+    },
+    "./client": "./client.tsx"
+  },
+  "dependencies": {
+    "@tokamak/render": "workspace:*"
   },
   "peerDependencies": {
     "solid-js": "1.9.18"

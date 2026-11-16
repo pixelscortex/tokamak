@@ -5,6 +5,9 @@ import ts from "typescript";
 import { resolve } from "node:path";
 
 const fields = {
+  fill: "target",
+  wrap: "target",
+  replace: "target",
   view: "route",
   itemRenderer: "type",
   toolbar: "label",
@@ -36,7 +39,7 @@ export function uiContributions(root: string) {
   const original = (s: ts.Symbol): ts.Symbol =>
     s.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(s) : s;
   const module = checker.getSymbolAtLocation(source);
-  const contributes: Record<string, { id: string; [key: string]: string }[]> = {};
+  const contributes: Record<string, { id: string; [key: string]: string | number }[]> = {};
   for (const exported of module ? checker.getExportsOfModule(module) : []) {
     if (!runtime.has(exported.name)) continue;
     const symbol = original(exported);
@@ -53,8 +56,10 @@ export function uiContributions(root: string) {
     };
     if (!kindType.isStringLiteral() || !(kindType.value in fields)) fail();
     const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
-    const values = contributionOptions(declaration, fields[kind], fail);
-    if (kind === "view") validateRoute(values.route!, fail);
+    const values = ["fill", "wrap", "replace"].includes(kind)
+      ? extensionOptions(declaration, kind, checker, fail)
+      : contributionOptions(declaration, fields[kind], fail);
+    if (kind === "view") validateRoute(String(values.route!), fail);
     (contributes[kind] ??= []).push({ id: exported.name, ...values });
   }
   return { contributes };
@@ -197,4 +202,71 @@ function literalProperty(property: ts.ObjectLiteralElementLike, fail: () => neve
   )
     fail();
   return property as ts.PropertyAssignment;
+}
+
+function extensionOptions(
+  declaration: ts.Declaration,
+  kind: string,
+  checker: ts.TypeChecker,
+  fail: () => never,
+): Record<string, string | number> {
+  const init = unwrap(ts.isVariableDeclaration(declaration) ? declaration.initializer : undefined);
+  if (!init || !ts.isCallExpression(init)) return fail();
+  const target = init.arguments[0];
+  if (!target) return fail();
+  let symbol = checker.getSymbolAtLocation(ts.isPropertyAccessExpression(target) ? target.name : target);
+  if (!symbol) return fail();
+  // The importing module identifies the owner; follow aliases for slot names.
+  let owner: string | undefined;
+  let exported = symbol.name;
+  for (const d of symbol.declarations ?? []) {
+    let n: ts.Node | undefined = d;
+    if (ts.isImportSpecifier(d)) exported = (d.propertyName ?? d.name).text;
+    while (n && !ts.isImportDeclaration(n)) n = n.parent;
+    if (n && ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier))
+      owner = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text)?.[1];
+  }
+  if (ts.isPropertyAccessExpression(target)) {
+    const ns = checker.getSymbolAtLocation(target.expression);
+    for (const d of ns?.declarations ?? []) {
+      let n: ts.Node | undefined = d;
+      while (n && !ts.isImportDeclaration(n)) n = n.parent;
+      if (n && ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier))
+        owner = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text)?.[1];
+    }
+  }
+  if (!owner) return fail();
+  if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+  const values: Record<string, string | number> = { target: `${owner}.${exported}` };
+  if (kind === "fill") {
+    const d = symbol.valueDeclaration;
+    const slot = d && ts.isVariableDeclaration(d) && d.initializer;
+    if (
+      !slot ||
+      !ts.isCallExpression(slot) ||
+      !slot.arguments[0] ||
+      !ts.isStringLiteralLike(slot.arguments[0])
+    )
+      return fail();
+    values.target = `${owner}.${slot.arguments[0].text}`;
+    const options = unwrap(init.arguments[1]);
+    if (!options || !ts.isObjectLiteralExpression(options)) return fail();
+    for (const p of options.properties) {
+      if (!ts.isPropertyAssignment(p) || (!ts.isIdentifier(p.name) && !ts.isStringLiteral(p.name)))
+        return fail();
+      const key = p.name.text;
+      if (key === "id" && ts.isStringLiteralLike(p.initializer)) values.fillId = p.initializer.text;
+      else if (key === "order" && ts.isNumericLiteral(p.initializer))
+        values.order = Number(p.initializer.text);
+      else if (
+        key === "order" &&
+        ts.isPrefixUnaryExpression(p.initializer) &&
+        p.initializer.operator === ts.SyntaxKind.MinusToken &&
+        ts.isNumericLiteral(p.initializer.operand)
+      )
+        values.order = -Number(p.initializer.operand.text);
+      else return fail();
+    }
+  }
+  return values;
 }
