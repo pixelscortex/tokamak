@@ -17,6 +17,34 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub async fn connect(directory: &Path) -> Result<Socket, Error> {
+    connect_with_connector(directory, None).await
+}
+
+/// Integration tests only: trust one additional DER certificate for this connection.
+/// Normal certificate-chain and hostname verification remain enabled.
+#[cfg(all(feature = "test-tls", debug_assertions))]
+pub async fn connect_with_test_root(directory: &Path, certificate: &[u8]) -> Result<Socket, Error> {
+    let mut roots =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    roots.add(rustls::pki_types::CertificateDer::from(
+        certificate.to_vec(),
+    ))?;
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    connect_with_connector(
+        directory,
+        Some(tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(
+            config,
+        ))),
+    )
+    .await
+}
+
+async fn connect_with_connector(
+    directory: &Path,
+    connector: Option<tokio_tungstenite::Connector>,
+) -> Result<Socket, Error> {
     let (server, token) = if let Some(profile) = super::remote::load(directory)? {
         (
             super::invite::server_url(&profile.server, true)?,
@@ -48,7 +76,7 @@ pub async fn connect(directory: &Path) -> Result<Socket, Error> {
         .max_frame_size(Some(render::MAX_WIRE_MESSAGE_BYTES));
     let (socket, _) = tokio::time::timeout(
         Duration::from_secs(5),
-        tokio_tungstenite::connect_async_with_config(request, Some(config), true),
+        tokio_tungstenite::connect_async_tls_with_config(request, Some(config), true, connector),
     )
     .await??;
     Ok(socket)

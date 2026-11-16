@@ -30,6 +30,29 @@ pub(crate) fn load(directory: &Path) -> Result<Option<Profile>, Error> {
 }
 
 pub async fn join(directory: &Path, link: &str, name: &str) -> Result<(), Error> {
+    join_with_client(directory, link, name, reqwest::Client::builder()).await
+}
+
+/// Integration tests only: trust one additional DER certificate for this join.
+/// No process-wide state, environment override, or verification bypass.
+#[cfg(all(feature = "test-tls", debug_assertions))]
+pub async fn join_with_test_root(
+    directory: &Path,
+    link: &str,
+    name: &str,
+    certificate: &[u8],
+) -> Result<(), Error> {
+    let client = reqwest::Client::builder()
+        .add_root_certificate(reqwest::Certificate::from_der(certificate)?);
+    join_with_client(directory, link, name, client).await
+}
+
+async fn join_with_client(
+    directory: &Path,
+    link: &str,
+    name: &str,
+    client: reqwest::ClientBuilder,
+) -> Result<(), Error> {
     validate_name(name)?;
     let invite = parse_link(link)?;
     // Check existing credentials before spending a potentially single-use invite.
@@ -43,7 +66,7 @@ pub async fn join(directory: &Path, link: &str, name: &str) -> Result<(), Error>
     }
     builder.create(directory)?;
     private_file::check_directory(directory)?;
-    let response = reqwest::Client::builder()
+    let response = client
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(15))
         .build()?

@@ -7,10 +7,14 @@ publish.workspace = true
 
 [features]
 default = []
+# Explicit integration-test hooks; APIs are also compiled out without debug assertions.
+test-tls = ["client", "dep:rustls", "dep:webpki-roots"]
 client = ["dep:render", "dep:directories", "dep:tokio", "dep:serde_json", "dep:tokio-tungstenite", "dep:futures-util", "dep:reqwest", "dep:serde", "dep:libc"]
 server = ["dep:server", "dep:engine"]
 
 [dependencies]
+rustls = { version = "0.23", default-features = false, features = ["std", "aws_lc_rs"], optional = true }
+webpki-roots = { version = "1", optional = true }
 engine = { path = "../engine", optional = true }
 server = { path = "../server", optional = true }
 render = { path = "../render", optional = true }

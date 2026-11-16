@@ -182,17 +182,12 @@ impl Window {
         let connection = runtime.block_on(socket::connect(directory)).unwrap();
         Self::attach(runtime, connection, bundle)
     }
-    /// A guest desktop on the share listener. Remote profiles require wss://,
-    /// so the test hands the shell an already-authenticated loopback socket.
-    fn guest(url: &str, token: &str) -> Self {
-        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    /// Load the real remote profile, with this test's extra TLS root only.
+    #[cfg(debug_assertions)]
+    fn guest(directory: &Path, certificate: &[u8]) -> Self {
         let runtime = Self::runtime();
-        let mut request = url.into_client_request().unwrap();
-        request
-            .headers_mut()
-            .insert("authorization", format!("Bearer {token}").parse().unwrap());
-        let (connection, _) = runtime
-            .block_on(tokio_tungstenite::connect_async(request))
+        let connection = runtime
+            .block_on(socket::connect_with_test_root(directory, certificate))
             .unwrap();
         Self::attach(runtime, connection, &root().join("app/dist"))
     }
@@ -1969,26 +1964,72 @@ fn gated_model() -> (String, std::sync::mpsc::Sender<()>) {
     (url, release)
 }
 
-/// Redeems an invite on the share listener, like `tokamak-desktop join`.
-fn join_guest(share: &str, link: &str, name: &str) -> (String, String) {
-    use std::io::{Read, Write};
-    let code = link.split("code=").nth(1).unwrap().trim();
-    let body = json!({"code": code, "name": name}).to_string();
-    let mut stream = std::net::TcpStream::connect(share).unwrap();
-    write!(
-        stream,
-        "POST /join HTTP/1.1\r\nhost: {share}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-        body.len()
-    )
-    .unwrap();
-    let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
-    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
-    let joined: Value = serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
-    (
-        joined["memberId"].as_str().unwrap().into(),
-        joined["token"].as_str().unwrap().into(),
-    )
+/// A local equivalent of the owner's TLS tunnel. Dropping it cancels all relays.
+#[cfg(debug_assertions)]
+struct GuestTlsTunnel {
+    url: String,
+    certificate: Vec<u8>,
+    worker: tokio::task::JoinHandle<()>,
+    _runtime: tokio::runtime::Runtime,
+}
+#[cfg(debug_assertions)]
+impl GuestTlsTunnel {
+    fn start(share: String) -> Self {
+        use rustls::pki_types::PrivatePkcs8KeyDer;
+        use tokio_rustls::{TlsAcceptor, rustls};
+
+        let rcgen::CertifiedKey { cert, signing_key } =
+            rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let certificate = cert.der().to_vec();
+        let config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![cert.der().clone()],
+                PrivatePkcs8KeyDer::from(signing_key.serialize_der()).into(),
+            )
+            .unwrap();
+        let acceptor = TlsAcceptor::from(Arc::new(config));
+        let runtime = Window::runtime();
+        let listener = runtime
+            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
+            .unwrap();
+        let url = format!(
+            "wss://localhost:{}/ws",
+            listener.local_addr().unwrap().port()
+        );
+        let worker = runtime.spawn(async move {
+            let mut relays = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    accepted = listener.accept() => {
+                        let (stream, _) = accepted.unwrap();
+                        let acceptor = acceptor.clone();
+                        let share = share.clone();
+                        relays.spawn(async move {
+                            // Negative trust checks intentionally fail the handshake.
+                            if let Ok(mut tls) = acceptor.accept(stream).await {
+                                let mut upstream = tokio::net::TcpStream::connect(share).await.unwrap();
+                                let _ = tokio::io::copy_bidirectional(&mut tls, &mut upstream).await;
+                            }
+                        });
+                    }
+                    _ = relays.join_next(), if !relays.is_empty() => {}
+                }
+            }
+        });
+        Self {
+            url,
+            certificate,
+            worker,
+            _runtime: runtime,
+        }
+    }
+}
+#[cfg(debug_assertions)]
+impl Drop for GuestTlsTunnel {
+    fn drop(&mut self) {
+        self.worker.abort();
+    }
 }
 
 // Two desktops on one server: the owner shares a thread with Sam, both see each
@@ -1996,6 +2037,7 @@ fn join_guest(share: &str, link: &str, name: &str) -> (String, String) {
 // Escape cannot stop the owner's run, and Enter during a run keeps the draft.
 // Captures go to TK_CAPTURE_DIR when set.
 #[test]
+#[cfg(debug_assertions)]
 fn chat_sharing_owner_and_guest_desktops() {
     use blitz_traits::events::*;
     use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
@@ -2125,9 +2167,38 @@ fn chat_sharing_owner_and_guest_desktops() {
     owner.wait(|doc| text_of(doc, "#share-empty").contains("tokamak member invite"));
 
     // Sam joins; their desktop says hello and sees nothing yet.
-    let link = service.cli(&["member", "invite", "--url", &format!("ws://{share}/ws")]);
-    let (sam, token) = join_guest(&share, link.trim(), "Sam");
-    let mut guest = sized(Window::guest(&format!("ws://{share}/ws"), &token));
+    let tunnel = GuestTlsTunnel::start(share);
+    let link = service.cli(&["member", "invite", "--url", &tunnel.url]);
+    let guest_directory = scratch.0.join("guest");
+    let runtime = Window::runtime();
+    // The generated certificate is not trusted by the normal desktop path.
+    assert!(
+        runtime
+            .block_on(runtime::client::remote::join(
+                &guest_directory,
+                link.trim(),
+                "Sam"
+            ))
+            .is_err()
+    );
+    assert!(!guest_directory.join("remote.json").exists());
+    runtime
+        .block_on(runtime::client::remote::join_with_test_root(
+            &guest_directory,
+            link.trim(),
+            "Sam",
+            &tunnel.certificate,
+        ))
+        .unwrap();
+    let profile: Value =
+        serde_json::from_slice(&std::fs::read(guest_directory.join("remote.json")).unwrap())
+            .unwrap();
+    assert_eq!(profile["server"], tunnel.url);
+    assert!(profile["server"].as_str().unwrap().starts_with("wss://"));
+    assert!(!guest_directory.join("server.json").exists());
+    assert!(runtime.block_on(socket::connect(&guest_directory)).is_err());
+    let sam = profile["memberId"].as_str().unwrap();
+    let mut guest = sized(Window::guest(&guest_directory, &tunnel.certificate));
     guest.wait(|doc| exists(doc, "#chat-nothing-shared"));
     assert!(support::attr(guest.doc(), "chat-screen", "data-thread-id").is_none());
 
