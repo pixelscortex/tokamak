@@ -136,15 +136,7 @@ impl Server {
 
         let (closed_sender, closed) = watch::channel(None);
 
-        let guest_functions = descriptor["functions"]
-            .as_array()
-            .expect("inspected")
-            .iter()
-            .filter(|f| f["guest"] == true)
-            .filter_map(|f| f["name"].as_str().map(str::to_owned))
-            .collect();
         let actor = Coordinator {
-            guest_functions,
             database,
             pool,
             bundle,

@@ -16,10 +16,6 @@ type Controls = {
   setPickerOpen: Setter<boolean>;
   pickerKey: (event: NativeEvent) => void;
   closePicker: () => void;
-  shareOpen: Accessor<boolean>;
-  setShareOpen: Setter<boolean>;
-  shareKey: (event: NativeEvent) => void;
-  closeShare: () => void;
   pickPermission: (index: number) => boolean;
   copyReply: () => void;
 };
@@ -31,10 +27,6 @@ export function chatKeys(controls: Controls) {
     if (shortcut(controls, event, key)) return;
     if (controls.pickerOpen()) {
       controls.pickerKey(event);
-      return;
-    }
-    if (controls.shareOpen()) {
-      controls.shareKey(event);
       return;
     }
     if (controls.mapOpen() && controls.map.editing()) {
@@ -61,7 +53,7 @@ export function chatKeys(controls: Controls) {
 }
 
 function answerPermission(controls: Controls, event: NativeEvent, key: string) {
-  if (!controls.chat.isOwner() || controls.composer.draft() || !/^[1-4]$/.test(key)) return false;
+  if (controls.composer.draft() || !/^[1-4]$/.test(key)) return false;
   if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat) return false;
   if (!controls.pickPermission(Number(key) - 1)) return false;
   event.preventDefault();
@@ -76,7 +68,7 @@ function stopRun(chat: ChatState, event: NativeEvent) {
 
 function shortcut(controls: Controls, event: NativeEvent, key: string) {
   const letter = key.toLowerCase();
-  if (controls.chat.isOwner() && event.metaKey && (letter === "n" || key === "Enter")) {
+  if (event.metaKey && (letter === "n" || key === "Enter")) {
     event.preventDefault();
     if (!event.repeat) void controls.newThread();
     return true;
@@ -91,19 +83,9 @@ function shortcut(controls: Controls, event: NativeEvent, key: string) {
 }
 
 function pickerShortcut(controls: Controls, event: NativeEvent, letter: string) {
-  if (!controls.chat.isOwner()) return false;
-  if (event.shiftKey && letter === "s") {
-    event.preventDefault();
-    if (!event.repeat) {
-      controls.closePicker();
-      controls.setShareOpen((open) => !open);
-    }
-    return true;
-  }
   if (letter !== "m") return false;
   event.preventDefault();
   if (!event.repeat) {
-    controls.closeShare();
     controls.setPickerOpen((open) => !open);
   }
   return true;

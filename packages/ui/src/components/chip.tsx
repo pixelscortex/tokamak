@@ -2,7 +2,7 @@
  * optional remove button; `ChipMore` is the "+N more" chip of a row that
  * ran out of room.
  *
- *   <Chip label="Buy milk" detail="Todo" onRemove={() => drop(id)} />
+ *   <Chip label="Buy milk" detail="Notes" onRemove={() => drop(id)} />
  *   <ChipMore count={3} />
  *
  * `icon` is path data for a leading icon (24 px viewBox, stroked). */

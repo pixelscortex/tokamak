@@ -17,7 +17,7 @@ sources in `app/src/` and SDK backend functions in `app/backend/`.
 | `app/`              | Thin product shell, reserved for Core and plugins              |
 | `lab/`              | Independent native UI component catalog and interaction checks |
 
-Root `plugins/` contains the installed Chat and Todo plugins.
+Root `plugins/` contains the installed Chat plugin.
 Cargo/Bun manifests and lockfiles remain at the repository root. Public package
 names remain unchanged; `app` and `lab` are separate application projects.
 
@@ -41,7 +41,7 @@ Then run from the repository root:
 bun run app
 ```
 
-This installs workspace dependencies, builds Chat, Todo, the UI and Rust binaries,
+This installs workspace dependencies, builds Chat, the UI and Rust binaries,
 starts the local server, and opens chat. Type a message and press Enter.
 Closing the desktop leaves the server running; `bun run server:stop` stops it.
 After changing keys or agents, stop the server and run `bun run app` again.
@@ -61,20 +61,6 @@ overrides these paths. Install Node.js/npx; the example forwards `PATH` and
 `ANTHROPIC_API_KEY` for Claude, `PATH` and `OPENAI_API_KEY` for Codex.
 Set those keys in the root `.env.local` or server environment, restart the server,
 then select an agent with Cmd+M and enter an absolute working-folder path.
-
-To share with a friend, install/sign into Tailscale with Funnel enabled. Stop the
-local server, then run these in separate terminals from the repository root:
-
-```sh
-bun run server:stop
-target/debug/tokamak --local-dir "$(target/debug/tokamak --local-path)" --plugins "$PWD/plugins" --share 127.0.0.1:3001
-tailscale funnel 3001
-target/debug/tokamak member invite --url wss://YOUR-FUNNEL-HOST/ws
-```
-
-Reopen with `bun run app`. Send the invite link to your friend, who builds this
-checkout with `moon run app:dev-build`, runs `target/debug/tokamak-desktop join 'INVITE-LINK' --name Sam`,
-then `target/debug/tokamak-desktop`. Once they join, use Cmd+Shift+S to share a thread.
 
 Two credentialed smoke checks after building (both use the root `.env.local`):
 
@@ -125,8 +111,8 @@ reuses it; desktop exit does not stop it. `bun run server:status`,
 `bun run server:stop` and `bun run server:start` control the local service.
 
 `bun run ui:lab` opens the component catalog without starting a server or
-touching user storage. Todo lives in `plugins/todo` and supplies chat tool cards.
-An isolated standalone build at `app/dist/tests/todo` supports the native,
+touching user storage.
+An isolated standalone build at `app/dist/tests/record` supports the native,
 compiler and five E2E regressions.
 
 `.prototools` pins moon, Bun, and Rust. Moon's built-in toolchains read those
@@ -143,7 +129,7 @@ artifacts. SDK tooling uses Bun; UI and renderer use TypeScript + Vite's native
 Solid universal build, not browser DOM output. Package tests include real native
 QuickJS/Blitz fixtures. The desktop application has real build/check tasks and
 independently authored application regressions. Its zero-options Vite integration
-uses fixed internal conventions; Todo is an installed plugin.
+uses fixed internal conventions; Chat is an installed plugin.
 Linting is deferred.
 
 ### Opt-in compiler-selection regression
@@ -180,7 +166,7 @@ Validated with `CARGO_BUILD_JOBS=2 moon run :check :test :build :size` and direc
 independently authored UI regressions and production TSX/source-map builds in
 checkouts with spaces. The shipped `packages/server/demo` was bundled and run
 with two real SDK clients against the release host; live delivery, SIGTERM and
-disk reopen preserved the committed Todo row.
+disk reopen preserved the committed fixture row.
 
 On this aarch64 macOS workspace, the headless host measured **39,542,336 bytes**
 (baseline 39,542,352; **-16 bytes**) and the native demo **8,617,216 bytes**

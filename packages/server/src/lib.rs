@@ -11,7 +11,6 @@ mod backend;
 pub mod data;
 mod environment;
 mod host;
-pub mod members;
 pub mod plugins;
 pub mod protocol;
 mod schema;

@@ -1,4 +1,4 @@
-//! The same private regular-file policy for local and remote credentials.
+//! Private regular-file policy for local owner credentials.
 use super::Error;
 use std::{fs, path::Path};
 

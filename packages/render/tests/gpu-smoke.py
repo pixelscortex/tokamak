@@ -3,7 +3,7 @@
 
 Run `moon run render:gpu-smoke` on a native graphical session. This builds the
 production demo with upstream render/present-path diagnostics in a separate
-target directory. It never launches the desktop app or opens a Todo datastore.
+target directory. It never launches the desktop app or opens a Notes datastore.
 """
 import argparse
 import os

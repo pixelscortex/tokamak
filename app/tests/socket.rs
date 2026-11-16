@@ -48,7 +48,7 @@ fn start() -> Service {
         .arg("--local-dir")
         .arg(&directory)
         .arg("--bundle")
-        .arg(root.join("dist/tests/todo/dist/bundle.js"))
+        .arg(root.join("dist/tests/record/dist/bundle.js"))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -91,8 +91,8 @@ fn production_socket_drains_on_ui_close_keeps_server_alive_and_reports_server_lo
     let send = Arc::new(send);
     let bridge = send.clone();
     let doc = NativeDocument::new_connected(
-        include_str!("../dist/tests/todo/dist/shell.html"),
-        include_str!("../dist/tests/todo/dist/ui.js"),
+        include_str!("../dist/tests/record/dist/shell.html"),
+        include_str!("../dist/tests/record/dist/ui.js"),
         Some(Box::new(move |message| bridge(message))),
     )
     .unwrap();
@@ -104,7 +104,7 @@ fn production_socket_drains_on_ui_close_keeps_server_alive_and_reports_server_lo
     // Native mount queued two live subscriptions; this command must remain
     // ordered behind their initial completions and be drained during UI close.
     send(
-        json!({"type":"mutation","id":100,"name":"todo:add",
+        json!({"type":"mutation","id":100,"name":"record:add",
         "args":{"title":"accepted before native close"}})
         .to_string(),
     )
@@ -124,7 +124,7 @@ fn production_socket_drains_on_ui_close_keeps_server_alive_and_reports_server_lo
     let reply = runtime.block_on(async {
         reopened
             .send(Message::Text(
-                json!({"type":"query","id":200,"name":"todo:list","args":{}})
+                json!({"type":"query","id":200,"name":"record:list","args":{}})
                     .to_string()
                     .into(),
             ))

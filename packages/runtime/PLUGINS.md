@@ -14,7 +14,7 @@ factory wrapped in:
 
 ```js
 globalThis.__tokamakModules.register(
-  "@plugins/todo/ui",
+  "@plugins/notes/ui",
   ["@tokamak/render", "@tokamak/sdk"],
   function (require, exports, module) {
     /* plugin code */
@@ -41,10 +41,10 @@ literal options without running UI code, and uses public export names as IDs:
 ```json
 {
   "plugin": {
-    "id": "todo",
+    "id": "notes",
     "version": "0.1.0",
     "depends": {},
-    "contributes": { "view": [{ "id": "Todo", "route": "/" }] }
+    "contributes": { "view": [{ "id": "Notes", "route": "/" }] }
   },
   "entries": { "ui": { "code": "ui.js", "map": "ui.js.map", "css": "styles.css", "shell": "shell.html" } }
 }

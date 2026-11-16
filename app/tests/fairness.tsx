@@ -6,7 +6,7 @@ import { mount, onHostEvent } from "@tokamak/render";
 import { createMessageConnection } from "@tokamak/render/connection";
 import { InProcessTransport, TokamakClient } from "@tokamak/sdk";
 import type { Event, Request } from "@tokamak/sdk";
-import { api } from "../dist/tests/todo/backend/_legacyApi";
+import { api } from "../dist/tests/record/backend/_legacyApi";
 
 function Fairness() {
   const [trace, setTrace] = createSignal<string[]>([]);
@@ -22,9 +22,9 @@ function Fairness() {
   onHostEvent<null>("begin", () => {
     void (async () => {
       try {
-        await client.mutation(api.todo.add, { title: "Healthy after cheap native requests" });
+        await client.mutation(api.record.add, { title: "Healthy after cheap native requests" });
         record("mutation:accepted");
-        const rows = await client.query(api.todo.list, {});
+        const rows = await client.query(api.record.list, {});
         setTitles(rows.map((row) => row.title));
         record("query:reply");
       } catch (error) {

@@ -42,7 +42,6 @@ export interface QueryRequest {
  * Writes cannot supply system fields. No undefined/delete-field sentinel.
  */
 export interface HostOperations {
-  "host.caller": { args: Record<string, never>; result: import("./functions").Caller };
   "db.get": { args: { id: string }; result: StoredDocument | null };
   "db.insert": { args: { table: string; value: JsonObject }; result: Id };
   "db.patch": { args: { id: string; value: JsonObject }; result: null };

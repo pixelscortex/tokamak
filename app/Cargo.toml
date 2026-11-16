@@ -13,16 +13,12 @@ path = "src/main.rs"
 runtime = { path = "../packages/runtime", features = ["client"] }
 # Window options only: the page-drawn title bar and window-button placement.
 render = { path = "../packages/render" }
-tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "time"] }
 
 [build-dependencies]
 tokamak-build = { path = "../packages/build" }
 
 # Native document tests drive the same Blitz controls as the desktop shell.
 [dev-dependencies]
-runtime = { path = "../packages/runtime", features = ["test-tls"] }
-rcgen = "0.14"
-tokio-rustls = { version = "0.26", default-features = false, features = ["aws_lc_rs"] }
 server = { path = "../packages/server" }
 engine = { path = "../packages/engine" }
 render = { path = "../packages/render" }

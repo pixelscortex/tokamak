@@ -35,7 +35,7 @@ export function useDrafts(chat: ChatState) {
       if (!alive) return;
       setDrafts((previous) => ({ ...previous, [threadId]: previous[threadId] || text }));
 
-      // Another member started a run first: keep the draft and name them instead.
+      // A run started first: keep the draft.
       if (String(cause).includes("already has an active run"))
         setRaced((previous) => ({ ...previous, [threadId]: true }));
       else chat.setError(String(cause));

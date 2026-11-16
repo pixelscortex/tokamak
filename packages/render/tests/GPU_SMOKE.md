@@ -35,7 +35,7 @@ be handled. No window lookup, global event injection,
 screen capture, user settings changes, or logs/captures are written by the test.
 
 This task launches **only the demo**, never `tokamak-desktop`, so it cannot open
-the real Todo datastore. Do not substitute the desktop executable: its actual
+the real Notes datastore. Do not substitute the desktop executable: its actual
 `ProjectDirs` location must first be verified inside child-scoped storage
 settings. Desktop presentation remains a separate acceptance step.
 

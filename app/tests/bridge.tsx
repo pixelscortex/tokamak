@@ -11,7 +11,7 @@ import { Map } from "../src/chat/map";
 import { useMap } from "../src/chat/use-map";
 import type { ChatState, Message as ChatMessage } from "../src/chat/use-chat";
 import { Markdown } from "../src/chat/markdown";
-import { api } from "../dist/tests/todo/backend/_legacyApi";
+import { api } from "../dist/tests/record/backend/_legacyApi";
 
 function Trace() {
   const [markdown, setMarkdown] = createSignal("");
@@ -28,10 +28,10 @@ function Trace() {
   const client = new TokamakClient(transport);
   onCleanup(() => transport.close());
   for (const panel of ["first", "second"]) {
-    const stop = client.subscribe(api.todo.list, {}, (event) => {
+    const stop = client.subscribe(api.record.list, {}, (event) => {
       if ("value" in event) {
         const update = panel === "first" ? setFirstTitles : setSecondTitles;
-        update(event.value.map((todo) => todo.title));
+        update(event.value.map((record) => record.title));
         (panel === "first" ? setFirstRows : setSecondRows)(JSON.stringify(event.value));
       } else {
         setFailureReasons((previous) => [...previous, event.error.message]);
@@ -41,25 +41,25 @@ function Trace() {
     onCleanup(stop);
   }
   onHostEvent<null>("write", () => {
-    void client.mutation(api.todo.add, { title: "Ordered native write" }).then(
+    void client.mutation(api.record.add, { title: "Ordered native write" }).then(
       () => record("reply"),
       () => record("write:error"),
     );
   });
   onHostEvent<string>("write:title", (title) => {
-    void client.mutation(api.todo.add, { title }).then(
+    void client.mutation(api.record.add, { title }).then(
       () => record("title:accepted"),
       (error) => record(`title:rejected:${String(error)}`),
     );
   });
-  onHostEvent<ArgsOf<typeof api.todo.toggle>["id"]>("toggle:id", (id) => {
-    void client.mutation(api.todo.toggle, { id }).then(
+  onHostEvent<ArgsOf<typeof api.record.toggle>["id"]>("toggle:id", (id) => {
+    void client.mutation(api.record.toggle, { id }).then(
       () => record("toggle:accepted"),
       (error) => record(`toggle:rejected:${String(error)}`),
     );
   });
   onHostEvent<null>("read", () => {
-    void client.query(api.todo.list, {}).then(
+    void client.query(api.record.list, {}).then(
       (rows) => {
         setReadback(JSON.stringify(rows));
         record("query:reply");
@@ -90,18 +90,18 @@ function ToolMessage() {
   const part = {
     type: "tool" as const,
     callId: "call-one",
-    plugin: "todo",
-    toolName: "todos.create",
+    plugin: "record",
+    toolName: "records.create",
     args: { title: "Buy milk" },
     status: "done" as const,
-    summary: "Created a task in Todo",
-    result: { id: "todo-one" },
-    view: "todo.card",
+    summary: "Created a task in Record",
+    result: { id: "record-one" },
+    view: "record.card",
   };
   const [renderers, setRenderers] = createSignal<SlotContribution[]>([]);
   onHostEvent<string>("tool:renderer", (plugin) =>
     setRenderers(
-      plugin ? [{ plugin, id: "Card", kind: "itemRenderer", options: { type: "todo.card" } }] : [],
+      plugin ? [{ plugin, id: "Card", kind: "itemRenderer", options: { type: "record.card" } }] : [],
     ),
   );
   const loader = {
@@ -150,15 +150,12 @@ function PermissionFixture() {
       loading: () => false,
     },
     runs: () => ({ waiting: { waiting: part().status === "pending" }, running: { waiting: false } }),
-    isOwner: () => true,
-    isGuest: () => false,
-    sharing: () => undefined,
   } as unknown as ChatState;
   const map = useMap(chat, () => {});
   const tool = {
     type: "tool",
     callId: "call-one",
-    plugin: "todo",
+    plugin: "record",
     toolName: "pending.create",
     status: "running",
     args: { title: "x".repeat(250), target: "consequential\u202e\u007f\u001b target" },

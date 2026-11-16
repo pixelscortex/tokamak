@@ -18,7 +18,7 @@ target/debug/tokamak --plugins path/to/plugins --local-dir path/to/private-serve
 ```
 
 The local directory requires the same private `server.token` as the desktop
-launcher. Never pass the token in arguments. The launcher now uses the workspace `plugins/` installation, including Todo.
+launcher. Never pass the token in arguments. The launcher now uses the workspace `plugins/` installation, including Chat.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh

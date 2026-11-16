@@ -1,39 +1,19 @@
-import { canSee, owner } from "./access";
 import { backend } from "./backend";
 import { CHAT_MODELS, DEFAULT_MODEL } from "../models";
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
 
-export { share, shares, unshare } from "./shares";
-
 export const list = query({
-  guest: true,
-  handler: async (ctx) => {
-    if (ctx.caller.role === "owner")
-      return ctx.db.query("threads").withIndex("by_updatedAt").order("desc").collect();
-    const shares = await ctx.db
-      .query("shares")
-      .withIndex("by_member", (q) => q.eq("memberId", ctx.caller.memberId))
-      .collect();
-    const threads = [];
-    for (const share of shares) {
-      if (!(await canSee(ctx, share.threadId))) continue;
-      const value = await ctx.db.get(share.threadId);
-      if (value) threads.push(value);
-    }
-    return threads.sort((a, b) => b.updatedAt - a.updatedAt);
-  },
+  handler: ({ db }) => db.query("threads").withIndex("by_updatedAt").order("desc").collect(),
 });
 
 export const create = mutation({
   args: { title: v.optional(v.string()) },
   handler: (ctx, { title }) => {
-    owner(ctx);
-    const { db, caller } = ctx;
+    const { db } = ctx;
     const now = Date.now();
 
     return db.insert("threads", {
-      ownerId: caller.memberId,
       model: DEFAULT_MODEL,
       title: title === undefined ? DEFAULT_TITLE : nonempty(title),
       createdAt: now,
@@ -45,7 +25,6 @@ export const create = mutation({
 export const rename = mutation({
   args: { threadId: v.id("threads"), title: v.string() },
   handler: async (ctx, { threadId, title }) => {
-    owner(ctx);
     const { db } = ctx;
     await thread(db, threadId);
     return db.patch(threadId, { title: nonempty(title), updatedAt: Date.now() });
@@ -55,7 +34,6 @@ export const rename = mutation({
 export const remove = mutation({
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
-    owner(ctx);
     const { db } = ctx;
     for (const message of await db
       .query("messages")
@@ -69,12 +47,6 @@ export const remove = mutation({
       .collect()) {
       await db.delete(run._id);
     }
-    for (const share of await db
-      .query("shares")
-      .withIndex("by_thread", (q) => q.eq("threadId", threadId))
-      .collect()) {
-      await db.delete(share._id);
-    }
     return db.delete(threadId);
   },
 });
@@ -82,7 +54,6 @@ export const remove = mutation({
 export const setModel = mutation({
   args: { threadId: v.id("threads"), model: v.string() },
   handler: async (ctx, { threadId, model }) => {
-    owner(ctx);
     const { db } = ctx;
     const current = await thread(db, threadId);
     if (!CHAT_MODELS.some((choice) => choice === model)) throw new Error("Unknown chat model");
@@ -98,7 +69,6 @@ export const setModel = mutation({
 export const setBackend = mutation({
   args: { threadId: v.id("threads"), backend },
   handler: async (ctx, { threadId, backend }) => {
-    owner(ctx);
     const { db } = ctx;
     const current = await thread(db, threadId);
     if (backend.kind === "model") {

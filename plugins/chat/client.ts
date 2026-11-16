@@ -6,7 +6,6 @@ import type { Model } from "./backend/_functions";
 
 export const api = createApi<{
   threads: ApiFromModule<typeof import("./backend/threads")>;
-  members: ApiFromModule<typeof import("./backend/members")>;
   messages: ApiFromModule<typeof import("./backend/messages")>;
   permissions: Pick<ApiFromModule<typeof import("./backend/permissions")>, "answer">;
   runs: {
@@ -18,8 +17,6 @@ export const api = createApi<{
         threadId: Id<"threads">;
         model: string;
         waiting: boolean;
-        startedBy: string;
-        starterName: string;
       }[]
     >;
     active: FunctionReference<"query", { threadId: Id<"threads"> }, Doc<Model, "runs"> | null>;

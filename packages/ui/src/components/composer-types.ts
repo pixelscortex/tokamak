@@ -27,7 +27,7 @@ export interface ComposerRun {
 
 /** A command a plugin offers. */
 export interface ComposerCommand {
-  /** Without the slash: `todo`. */
+  /** Without the slash: `notes`. */
   name: string;
   description: string;
   /** The plugin that offers it. */
@@ -46,7 +46,7 @@ export interface ComposerField {
 
 /** A picked command waiting for its title and options. */
 export interface ComposerForm {
-  /** The command's tag: `/todo`. */
+  /** The command's tag: `/notes`. */
   tag: string;
   /** Placeholder of the title (the composer's text). */
   placeholder?: string;
@@ -60,7 +60,7 @@ export interface ComposerForm {
 /** A question the run asks before it goes on. */
 export interface ComposerApproval {
   question: string;
-  /** What is asked for, in the data font (`todo.write`). */
+  /** What is asked for, in the data font (`notes.write`). */
   detail?: string;
   onDeny: () => void;
   onAllowOnce: () => void;

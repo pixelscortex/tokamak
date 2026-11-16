@@ -35,8 +35,7 @@ export function useMap(chat: ChatState, close: () => void) {
     }
 
     const current = rows()[index()];
-    // Rename and delete are owner controls; the server refuses them for guests too.
-    const mode = chat.isOwner() ? editMode(event, query()) : undefined;
+    const mode = editMode(event, query());
     const direction = arrowDirection(key);
     if (current && mode) {
       event.preventDefault();

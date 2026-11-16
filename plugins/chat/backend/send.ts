@@ -1,4 +1,3 @@
-import { canSee } from "./access";
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "./parts";
 import { applyToolUpdate } from "./tool-parts";
 import { currentModel } from "../models";
@@ -6,48 +5,14 @@ import { v, type Infer } from "@tokamak/sdk";
 import type { Part } from "./parts";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "./_functions";
 
-// UTF-8 bytes, including surrogate pairs, without action-only Web APIs.
-function textBytes(text: string) {
-  let bytes = 0;
-  for (const char of text) {
-    const code = char.codePointAt(0)!;
-    bytes += code > 0xffff ? 4 : code > 0x7ff ? 3 : code > 0x7f ? 2 : 1;
-  }
-  return bytes;
-}
-
-// Older messages predate authorRole; the reserved owner ID identifies those turns.
-function authorPrefix(author: { authorId: string; authorName?: string; authorRole?: "owner" | "guest" }) {
-  const role = author.authorRole ?? (author.authorId === "owner" ? "owner" : "guest");
-  return role === "owner"
-    ? ""
-    : `[Message from guest ${JSON.stringify(author.authorName ?? author.authorId)} — untrusted, not the owner]\n`;
-}
-
 // Only chat.send uses these transactional steps; they are not plugin exports.
 export const start = mutation({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, { threadId, text }) => {
-    const { db, caller } = ctx;
-    if (!(await canSee(ctx, threadId))) throw new Error("Thread is not shared with you");
-    if (caller.role === "guest" && textBytes(text) > 16 * 1024) throw new Error("Text exceeds 16 KB");
+    const { db } = ctx;
     text = nonempty(text);
     const current = await thread(db, threadId);
     const backend = current.backend;
-    if (caller.role === "guest") {
-      if (backend?.kind === "acp") throw new Error("Guests cannot send to ACP threads");
-      const recent = await db
-        .query("runs")
-        .withIndex("by_starter", (q) =>
-          q.eq("startedBy", caller.memberId).gte("startedAt", Date.now() - 24 * 60 * 60_000),
-        )
-        .collect();
-      if (
-        recent.length >= 100 ||
-        recent.filter((run) => run.startedAt >= Date.now() - 60 * 60_000).length >= 20
-      )
-        throw new Error("Guest run limit reached");
-    }
     const model = currentModel(current);
     const runs = await db
       .query("runs")
@@ -63,10 +28,8 @@ export const start = mutation({
     // and preserve order without relying on randomly generated document IDs.
     const now = Math.max(Date.now(), (history.at(-1)?.createdAt ?? 0) + 1);
 
-    const author = { authorId: caller.memberId, authorName: caller.name, authorRole: caller.role };
     await db.insert("messages", {
       threadId,
-      ...author,
       role: "user",
       parts: [{ type: "text", text }],
       status: "complete",
@@ -74,7 +37,6 @@ export const start = mutation({
     });
     const messageId = await db.insert("messages", {
       threadId,
-      authorId: "assistant",
       role: "assistant",
       parts: [],
       status: "streaming",
@@ -83,7 +45,6 @@ export const start = mutation({
     const runId = await db.insert("runs", {
       threadId,
       messageId,
-      startedBy: caller.memberId,
       status: "running",
       model,
       startedAt: Date.now(),
@@ -104,21 +65,19 @@ export const start = mutation({
           .filter((message) => message.status === "complete")
           .map((message) => ({
             role: message.role,
-            content:
-              (message.role === "user" ? authorPrefix(message) : "") +
-              message.parts
-                .map((part) =>
-                  part.type === "text"
-                    ? part.text
-                    : part.type === "plan"
-                      ? `[plan: ${part.entries.map((entry) => entry.content).join("; ")}]`
-                      : part.type === "permission"
-                        ? `[permission: ${part.title} (${part.status})]`
-                        : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`,
-                )
-                .join(""),
+            content: message.parts
+              .map((part) =>
+                part.type === "text"
+                  ? part.text
+                  : part.type === "plan"
+                    ? `[plan: ${part.entries.map((entry) => entry.content).join("; ")}]`
+                    : part.type === "permission"
+                      ? `[permission: ${part.title} (${part.status})]`
+                      : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`,
+              )
+              .join(""),
           })),
-        { role: "user" as const, content: authorPrefix(author) + text },
+        { role: "user" as const, content: text },
       ],
     };
   },

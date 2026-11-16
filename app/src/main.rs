@@ -1,5 +1,4 @@
 //! Product configuration only; runtime owns the native client lifecycle.
-mod cli;
 
 /// The window base colour, `--color-ground` in app/src/styles.css.
 /// macOS shows it while a live resize waits for the next frame.
@@ -23,9 +22,6 @@ const FONTS: &[&[u8]] = &[
 ];
 
 fn main() -> Result<(), runtime::client::Error> {
-    if cli::run()? {
-        return Ok(());
-    }
     let config = runtime::context!();
     let options = render::WindowOptions {
         custom_titlebar: true,

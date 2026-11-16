@@ -1,0 +1,7 @@
+.panels {
+  display: flex;
+  gap: 16px;
+}
+.panel {
+  width: 300px;
+}

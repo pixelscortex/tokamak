@@ -1,18 +1,18 @@
-# Retired Todo regression acceptance
+# Retired Record regression acceptance
 
 Run `CARGO_BUILD_JOBS=2 moon run :e2e` (or `bun run e2e`).
-The task depends on `app:test`, which builds the original Todo sources from
-`plugins/todo` (with an isolated standalone build at `app/dist/tests/todo`) and retains their native/Solid/compiler regressions.
+The task depends on `app:test`, which builds the small record fixture from
+`app/tests/fixtures/record` (with an isolated standalone build at `app/dist/tests/record`) and retains their native/Solid/compiler regressions.
 
 | Scenario                | Automated evidence                                                                                                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Add/toggle/delete       | `app/tests/native.rs` drives the retired fixture's UI and real SDK/backend.                                                                                                                                |
 | Two independent clients | `run.ts` opens two WebSocket SDK connections, subscribes **both**, waits for both initial results, and requires both to receive another client's committed add.                                            |
 | Persistence             | `app/tests/e2e.rs` writes through the actual SDK/native connection, awaits shutdown, reopens the same SurrealKV folder, checks exact rows and awaits shutdown again.                                       |
-| Headless shared storage | `run.ts` starts `tokamak` with `app/dist/tests/todo/dist/bundle.js` on the released folder and compares exact rows over WebSocket.                                                                         |
+| Headless shared storage | `run.ts` starts `tokamak` with `app/dist/tests/record/dist/bundle.js` on the released folder and compares exact rows over WebSocket.                                                                       |
 | Endless-loop recovery   | A separately bundled test-only SDK feature loops on CPU. A one-worker real headless function service must report the wall-clock budget error, then complete the very next mutation on the same connection. |
 
-No raw DB writes, alternate Todo schema, auth bypass, foreground simulation,
+No raw DB writes, alternate Record schema, auth bypass, foreground simulation,
 screenshots or committed evidence. Temporary data is under ignored `target/`;
 the runner owns and cleans each process and directory, never application data.
 An unknown mutation outcome fails rather than retrying the mutation.
@@ -25,7 +25,7 @@ An unknown mutation outcome fails rather than retrying the mutation.
 - Enter composed/non-Latin text with the actual system IME; check no premature
   submission during composition and correct final text.
 - Reset/filter the examples and verify native remount and focus behavior.
-- The lab state is local; persisted Todo behavior is retained only in test fixtures.
+- The lab state is local; persisted Record behavior is retained only in test fixtures.
 - Record pass/fail outside source control. Native document tests do **not** prove
   foreground presentation, physical mouse/keyboard or system IME behavior.
 

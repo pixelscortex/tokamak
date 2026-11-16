@@ -9,15 +9,12 @@ import { ThreadView } from "./thread-view";
 import { Map, MapHeader } from "./map";
 import { useMap } from "./use-map";
 import { useDrafts } from "./use-drafts";
-import { SharePicker } from "./share-picker";
 import { chatKeys } from "./chat-keys";
 
 export function Chat(props: { loader: PluginLoader; pathname: string; chat: ChatState }) {
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [pickerFolder, setPickerFolder] = createSignal(false);
   let pickerKey: ((event: NativeEvent) => void) | undefined;
-  const [shareOpen, setShareOpen] = createSignal(false);
-  let shareKey: ((event: NativeEvent) => void) | undefined;
   const [mapOpen, setMapOpen] = createSignal(false);
   const map = useMap(props.chat, closeMap);
   let pickPermission: ((index: number) => boolean) | undefined;
@@ -30,17 +27,11 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
     pickerKey = undefined;
   }
 
-  function closeShare() {
-    setShareOpen(false);
-    shareKey = undefined;
-  }
-
   createEffect(
     on(
       () => props.chat.threadId(),
       () => {
         closePicker();
-        closeShare();
       },
     ),
   );
@@ -66,10 +57,6 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
     pickerKey: (event) => pickerKey?.(event),
     closePicker,
     setPickerOpen,
-    shareOpen,
-    shareKey: (event) => shareKey?.(event),
-    closeShare,
-    setShareOpen,
     pickPermission: (index) => pickPermission?.(index) ?? false,
     copyReply: () => {
       void copyReply?.();
@@ -97,14 +84,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
               threadId={threadId}
               hidden={mapOpen()}
               raced={composer.raced()}
-              onBackend={
-                props.chat.isOwner()
-                  ? () => {
-                      closeShare();
-                      setPickerOpen((open) => !open);
-                    }
-                  : undefined
-              }
+              onBackend={() => setPickerOpen((open) => !open)}
               onPermissionReady={(pick) => {
                 pickPermission = pick;
               }}
@@ -121,31 +101,7 @@ export function Chat(props: { loader: PluginLoader; pathname: string; chat: Chat
             </p>
           )}
         </Show>
-        <Show when={!mapOpen() && props.chat.isGuest() && props.chat.threads.data()?.length === 0}>
-          <p
-            id="chat-nothing-shared"
-            class="m-0 flex-1 font-label text-[10px] uppercase tracking-[0.08em] text-text-3"
-          >
-            Nothing has been shared with you yet
-          </p>
-        </Show>
-        <Show when={shareOpen() && !mapOpen() && props.chat.sharing()}>
-          {(sharing: Accessor<NonNullable<ReturnType<ChatState["sharing"]>>>) => (
-            <Show when={props.chat.threadId()}>
-              {(threadId: Accessor<Id<"threads">>) => (
-                <SharePicker
-                  sharing={sharing()}
-                  threadId={threadId()}
-                  onClose={closeShare}
-                  onKeyReady={(handler) => {
-                    shareKey = handler;
-                  }}
-                />
-              )}
-            </Show>
-          )}
-        </Show>
-        <Show when={pickerOpen() && !mapOpen() && props.chat.isOwner()}>
+        <Show when={pickerOpen() && !mapOpen()}>
           <BackendPicker
             chat={props.chat}
             onClose={closePicker}

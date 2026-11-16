@@ -55,9 +55,7 @@ impl Coordinator {
             };
             self.subscription(owner, id).dirty = false;
 
-            let call = if self.kinds.get(&name) == Some(&FunctionKind::Query)
-                && (!self.sessions[&owner].caller.is_guest() || self.guest_available(&name))
-            {
+            let call = if self.kinds.get(&name) == Some(&FunctionKind::Query) {
                 host::invoke(
                     &self.database,
                     &self.pool,
@@ -68,7 +66,6 @@ impl Coordinator {
                     &self.space,
                     self.plugins.clone(),
                     engine::Determinism::default(),
-                    self.sessions[&owner].caller.clone(),
                 )
                 .await
             } else {

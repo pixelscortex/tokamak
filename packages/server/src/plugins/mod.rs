@@ -45,7 +45,6 @@ pub(crate) struct Target {
     pub owner: String,
     pub local_name: String,
     pub mutation: bool,
-    pub guest: bool,
     pub kind: crate::service::FunctionKind,
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,

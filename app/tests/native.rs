@@ -53,7 +53,7 @@ struct App {
 }
 impl App {
     fn open(path: &Path) -> Self {
-        Self::with_ui(path, include_str!("../dist/tests/todo/dist/ui.js"))
+        Self::with_ui(path, include_str!("../dist/tests/record/dist/ui.js"))
     }
     fn with_ui(path: &Path, ui: &str) -> Self {
         Self::with_queued_ui(path, ui, Vec::new())
@@ -69,8 +69,8 @@ impl App {
                 storage: Storage::Disk(path.join("store")),
                 bundle: Arc::new(
                     Bundle::new(
-                        include_str!("../dist/tests/todo/dist/bundle.js"),
-                        Some(include_str!("../dist/tests/todo/dist/bundle.js.map")),
+                        include_str!("../dist/tests/record/dist/bundle.js"),
+                        Some(include_str!("../dist/tests/record/dist/bundle.js.map")),
                     )
                     .unwrap(),
                 ),
@@ -88,7 +88,7 @@ impl App {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let captured = requests.clone();
         let mut doc = NativeDocument::new_connected(
-            include_str!("../dist/tests/todo/dist/shell.html"),
+            include_str!("../dist/tests/record/dist/shell.html"),
             ui,
             Some(Box::new(move |message| {
                 captured
@@ -271,7 +271,7 @@ fn two_native_panels_sync_and_persist_on_quit_reopen() {
             .lock()
             .unwrap()
             .iter()
-            .filter(|r| r["type"] == "subscribe" && r["name"] == "todo:list")
+            .filter(|r| r["type"] == "subscribe" && r["name"] == "record:list")
             .count(),
         2
     );
@@ -340,7 +340,7 @@ fn accepted_native_mutation_survives_immediate_document_shutdown() {
             .lock()
             .unwrap()
             .iter()
-            .any(|r| r["type"] == "mutation" && r["name"] == "todo:add")
+            .any(|r| r["type"] == "mutation" && r["name"] == "record:add")
     );
     drop(app); // deliberately do not deliver the mutation response
     let mut reopened = App::open(&store.0);
@@ -443,7 +443,7 @@ fn malformed_native_requests_close_both_live_queries() {
         "{",
         "[]",
         "{}",
-        r#"{"type":"mutation","id":"bad","name":"todo:add","args":{}}"#,
+        r#"{"type":"mutation","id":"bad","name":"record:add","args":{}}"#,
     ] {
         let store = Store::new();
         let ui =
@@ -583,8 +583,8 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
             storage: Storage::Disk(store.0.join("store")),
             bundle: Arc::new(
                 Bundle::new(
-                    include_str!("../dist/tests/todo/dist/bundle.js"),
-                    Some(include_str!("../dist/tests/todo/dist/bundle.js.map")),
+                    include_str!("../dist/tests/record/dist/bundle.js"),
+                    Some(include_str!("../dist/tests/record/dist/bundle.js.map")),
                 )
                 .unwrap(),
             ),
@@ -598,7 +598,7 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
         pressure_sender
             .request(Request::Mutation {
                 id,
-                name: "todo:add".into(),
+                name: "record:add".into(),
                 args: serde_json::json!({ "title": format!("Tower queued write {id:02}") }),
             })
             .unwrap();
@@ -606,7 +606,7 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
     assert_eq!(
         pressure_sender.request(Request::Mutation {
             id: 65,
-            name: "todo:add".into(),
+            name: "record:add".into(),
             args: serde_json::json!({ "title": "Not admitted" }),
         }),
         Err(server::Error::Overloaded),
@@ -616,7 +616,7 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
     for index in 0..64 {
         admit(
             serde_json::json!({
-                "type": "mutation", "id": index + 1, "name": "todo:add",
+                "type": "mutation", "id": index + 1, "name": "record:add",
                 "args": { "title": format!("Accepted queued write {index:02}") }
             })
             .to_string(),
@@ -661,97 +661,6 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
     }
 }
 
-// Regression: valid SDK requests must not commit an aggregate list too large
-// for native delivery. Either reject explicitly before commit or keep every
-// accepted state readable in both live subscriptions and after disk reopen.
-#[test]
-fn accepted_large_sdk_titles_never_break_live_or_reopened_app() {
-    let store = Store::new();
-    let ui = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/dist/tests/bridge.js"))
-        .unwrap();
-    let mut app = App::with_ui(&store.0, &ui);
-    app.wait(|doc| trace(doc).len() == 2);
-    let mut accepted = Vec::new();
-    for (index, title) in ["a".repeat(40_000), "b".repeat(40_000)]
-        .into_iter()
-        .enumerate()
-    {
-        let generation = app.host.generation();
-        app.doc_mut()
-            .host_event(generation, "write:title", Value::String(title.clone()))
-            .unwrap();
-        app.wait(|doc| {
-            trace(doc)
-                .iter()
-                .filter(|event| event.starts_with("title:"))
-                .count()
-                == index + 1
-        });
-        assert!(
-            !trace(app.doc())
-                .iter()
-                .any(|event| event.starts_with("error:")),
-            "valid SDK title disconnected live query owners: {:?}",
-            trace(app.doc())
-        );
-        let receipt = trace(app.doc())
-            .into_iter()
-            .filter(|event| event.starts_with("title:"))
-            .last()
-            .unwrap();
-        if receipt == "title:accepted" {
-            accepted.push(title);
-        } else {
-            assert!(
-                receipt.starts_with("title:rejected:") && receipt.len() > "title:rejected:".len(),
-                "rejection must include an observable reason"
-            );
-        }
-        accepted.sort();
-        for panel in ["first", "second"] {
-            let mut actual: Vec<String> =
-                serde_json::from_str(&support::text(app.doc(), &format!("{panel}-titles")))
-                    .unwrap();
-            actual.sort();
-            assert!(
-                actual == accepted,
-                "accepted title was truncated or a rejected write changed {panel}"
-            );
-        }
-    }
-    drop(app);
-    let mut readback = App::with_ui(&store.0, &ui);
-    readback.wait(|doc| trace(doc).len() == 2);
-    for panel in ["first", "second"] {
-        let mut actual: Vec<String> =
-            serde_json::from_str(&support::text(readback.doc(), &format!("{panel}-titles")))
-                .unwrap();
-        actual.sort();
-        assert!(
-            actual == accepted,
-            "persisted state differs from accepted SDK results"
-        );
-    }
-    drop(readback);
-    let mut reopened = App::open(&store.0);
-    reopened.ready();
-    assert!(
-        !support::text(reopened.doc(), "app").contains("64 KiB"),
-        "persisted accepted state cannot be read after reopen"
-    );
-    assert!(
-        reopened
-            .requests
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|r| r["type"] == "subscribe")
-            .count()
-            == 2
-    );
-    reopened.add("first", "Still usable");
-}
-
 fn bridge(store: &Store) -> App {
     let ui = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/dist/tests/bridge.js"))
         .unwrap();
@@ -760,251 +669,6 @@ fn bridge(store: &Store) -> App {
     app
 }
 
-fn bridge_action(app: &mut App, topic: &str, payload: Value, prefix: &str) -> String {
-    let before = trace(app.doc())
-        .iter()
-        .filter(|event| event.starts_with(prefix))
-        .count();
-    let generation = app.host.generation();
-    app.doc_mut()
-        .host_event(generation, topic, payload)
-        .unwrap();
-    app.wait(|doc| {
-        trace(doc)
-            .iter()
-            .filter(|event| event.starts_with(prefix))
-            .count()
-            > before
-    });
-    let events = trace(app.doc());
-    assert!(
-        !events.iter().any(|event| event.starts_with("error:")),
-        "policy operation retired a live query: {events:?}"
-    );
-    events
-        .into_iter()
-        .filter(|event| event.starts_with(prefix))
-        .last()
-        .unwrap()
-}
-
-fn bridge_rows(app: &App, element: &str) -> Vec<Value> {
-    let mut rows: Vec<Value> = serde_json::from_str(&support::text(app.doc(), element)).unwrap();
-    rows.sort_by(|a, b| a["_id"].as_str().cmp(&b["_id"].as_str()));
-    rows
-}
-
-fn normalized_list_bytes(rows: &[Value]) -> usize {
-    let mut rows = rows.to_vec();
-    for row in &mut rows {
-        row["done"] = Value::Bool(false);
-    }
-    serde_json::to_vec(&rows).unwrap().len()
-}
-
-fn assert_bridge_rows(app: &App, expected: &[Value]) {
-    for panel in ["first-rows", "second-rows"] {
-        assert!(
-            bridge_rows(app, panel) == expected,
-            "live snapshot {panel} omitted, truncated or unexpectedly changed a row"
-        );
-    }
-    assert!(
-        normalized_list_bytes(expected) <= 48 * 1024,
-        "accepted list exceeds documented escaped UTF-8 JSON budget"
-    );
-}
-
-// App policy acceptance: length is measured AFTER trim in UTF-16 code units,
-// not Rust UTF-8 bytes or Unicode scalar count. Escaping must not truncate text;
-// a rejected write must leave both exact live snapshots and disk unchanged.
-#[test]
-fn title_policy_handles_trim_ascii_surrogates_escaping_and_unicode_exactly() {
-    let store = Store::new();
-    let mut app = bridge(&store);
-    let mut expected_titles = Vec::new();
-    let cases = [
-        ("a".repeat(200), true),
-        ("b".repeat(201), false),
-        (format!("  {} \n", "t".repeat(200)), true),
-        ("🧪".repeat(100), true),
-        ("🧪".repeat(101), false),
-        (format!("{}x", "🧪".repeat(99)), true),
-        (format!("{}x🧪", "🧪".repeat(99)), false),
-        ("é".repeat(200), true),
-        ("é".repeat(201), false),
-        ("\u{0001}".repeat(200), true),
-        ("\u{0001}".repeat(201), false),
-        ("\"\\\n\t🧪".repeat(30), true),
-        (" \t\n ".to_owned(), false),
-    ];
-    for (title, allowed) in cases {
-        let result = bridge_action(
-            &mut app,
-            "write:title",
-            Value::String(title.clone()),
-            "title:",
-        );
-        if allowed {
-            assert_eq!(result, "title:accepted");
-            expected_titles.push(title.trim().to_owned());
-        } else {
-            assert!(
-                result.starts_with("title:rejected:Error:") && result.len() > 22,
-                "over-limit/empty title did not return a clear error: {result}"
-            );
-        }
-        expected_titles.sort();
-        let rows = bridge_rows(&app, "first-rows");
-        let mut actual_titles: Vec<_> = rows
-            .iter()
-            .map(|row| row["title"].as_str().unwrap().to_owned())
-            .collect();
-        actual_titles.sort();
-        assert!(
-            actual_titles == expected_titles,
-            "length policy changed accepted content"
-        );
-        assert_bridge_rows(&app, &rows);
-    }
-    let expected = bridge_rows(&app, "first-rows");
-    assert_eq!(
-        bridge_action(&mut app, "read", Value::Null, "query:"),
-        "query:reply"
-    );
-    assert!(
-        bridge_rows(&app, "readback") == expected,
-        "rejected title changed stored rows"
-    );
-    drop(app);
-    let reopened = bridge(&store);
-    assert_bridge_rows(&reopened, &expected);
-}
-
-// Error wording is not a wire contract: "storage limit reached" is as clear as
-// "budget exceeded". Require an explicit application-limit rejection, not one
-// particular noun, while exact snapshots below prove that rejection rolled back.
-fn assert_aggregate_rejection(result: &str) {
-    let message = result.to_lowercase();
-    assert!(
-        result.starts_with("title:rejected:Error:")
-            && ["budget", "limit", "full"]
-                .iter()
-                .any(|word| message.contains(word)),
-        "unclear aggregate rejection: {result}"
-    );
-}
-
-// App policy acceptance: enforce the aggregate escaped UTF-8 JSON budget,
-// including IDs/timestamps, rather than a fixed task count. Rollback must retain
-// every accepted row exactly. Normalize done:false so toggles cannot overfill a
-// state admitted while the smaller true spelling was present.
-#[test]
-fn aggregate_budget_rejects_atomically_without_truncation_and_survives_toggle_reopen() {
-    for escaped in [false, true] {
-        let store = Store::new();
-        let mut app = bridge(&store);
-        let mut expected = Vec::new();
-        let mut rejected = false;
-        let mut largest_row = 0;
-        for index in 0..512 {
-            let title = if escaped {
-                format!("{index:04}{}", "\"\\\u{0001}🧪".repeat(39))
-            } else {
-                format!("{index:04}{}", "a".repeat(196))
-            };
-            // Both corpora are valid <=200 UTF-16-unit titles, but their actual
-            // JSON/UTF-8 costs differ substantially.
-            assert!(title.encode_utf16().count() <= 200);
-            let previous = bridge_rows(&app, "first-rows");
-            let result = bridge_action(&mut app, "write:title", Value::String(title), "title:");
-            if result == "title:accepted" {
-                expected = bridge_rows(&app, "first-rows");
-                assert_eq!(expected.len(), previous.len() + 1);
-                largest_row = largest_row.max(
-                    expected
-                        .iter()
-                        .map(|row| serde_json::to_vec(row).unwrap().len() + 1)
-                        .max()
-                        .unwrap(),
-                );
-                assert_bridge_rows(&app, &expected);
-            } else {
-                assert_aggregate_rejection(&result);
-                assert_bridge_rows(&app, &previous);
-                assert!(
-                    normalized_list_bytes(&previous) + largest_row > 48 * 1024,
-                    "rejected below the byte budget (possible arbitrary count cap)"
-                );
-                rejected = true;
-                break;
-            }
-        }
-        assert!(
-            rejected,
-            "did not enforce aggregate budget within bounded test input"
-        );
-        assert!(!expected.is_empty());
-        // Use remaining space with the smallest valid title. This reaches the
-        // actual byte edge, not merely the edge for a large candidate title.
-        let mut small_rejected = false;
-        for _ in 0..64 {
-            let result =
-                bridge_action(&mut app, "write:title", Value::String("x".into()), "title:");
-            if result != "title:accepted" {
-                assert_aggregate_rejection(&result);
-                small_rejected = true;
-                break;
-            }
-            expected = bridge_rows(&app, "first-rows");
-            assert_bridge_rows(&app, &expected);
-        }
-        assert!(
-            small_rejected,
-            "small-title fill did not reach a bounded aggregate edge"
-        );
-        for row in &expected {
-            assert_eq!(
-                bridge_action(&mut app, "toggle:id", row["_id"].clone(), "toggle:"),
-                "toggle:accepted"
-            );
-        }
-        let completed = bridge_rows(&app, "first-rows");
-        assert!(completed.iter().all(|row| row["done"] == true));
-        assert_bridge_rows(&app, &completed);
-        // Completion saves one byte per row on the wire but cannot grant more
-        // insertion budget: every accepted task must remain toggleable to false.
-        let result = bridge_action(&mut app, "write:title", Value::String("x".into()), "title:");
-        assert_aggregate_rejection(&result);
-        assert_bridge_rows(&app, &completed);
-        for row in &completed {
-            assert_eq!(
-                bridge_action(&mut app, "toggle:id", row["_id"].clone(), "toggle:"),
-                "toggle:accepted"
-            );
-        }
-        let final_rows = bridge_rows(&app, "first-rows");
-        assert_eq!(final_rows.len(), expected.len());
-        assert!(final_rows.iter().all(|row| row["done"] == false));
-        assert_bridge_rows(&app, &final_rows);
-        assert_eq!(
-            bridge_action(&mut app, "read", Value::Null, "query:"),
-            "query:reply"
-        );
-        assert!(
-            bridge_rows(&app, "readback") == final_rows,
-            "over-budget rejection committed data"
-        );
-        drop(app);
-        let reopened = bridge(&store);
-        assert_bridge_rows(&reopened, &final_rows);
-    }
-}
-
-// Regression: cheap admitted requests may all be immediately ready. Forwarding
-// them must give the same session's recv stream service before its 32 outputs
-// overflow. The native queue holds only its legal 64 entries; the UI is healthy,
-// mailbox initially empty, and no host event flood or oversized payload occurs.
 #[test]
 fn prequeued_cheap_native_requests_keep_stream_healthy_for_subsequent_feature_calls() {
     let ui = std::fs::read_to_string(concat!(
@@ -1093,7 +757,7 @@ fn accepted_close_write(app: &mut App) {
             .lock()
             .unwrap()
             .iter()
-            .any(|request| request["type"] == "mutation" && request["name"] == "todo:add"),
+            .any(|request| request["type"] == "mutation" && request["name"] == "record:add"),
         "close scenario did not admit a real UI mutation"
     );
 }
@@ -1355,7 +1019,13 @@ fn native_close_diagnostics_distinguish_retirement_from_live_failure() {
 #[test]
 fn markdown_renders_native_elements_and_unfinished_fences() {
     let store = Store::new();
-    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    let mut app = App::with_ui(
+        &store.0,
+        &std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
+        )
+        .unwrap(),
+    );
     let markdown = "# Small heading\n\nA **bold** and *italic* paragraph with `code` and [link](https://example.com).\n\n- First\n- Second\n\n3. Third\n4. Fourth\n\n> Quote\n\n---\n\n<script>literal</script>\n\n```python\nprint(1)";
     app.host.send("markdown:text", markdown).unwrap();
     app.wait(|doc| support::text(doc, "markdown").contains("print(1)"));
@@ -1442,11 +1112,19 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
 #[test]
 fn tool_renderer_missing_shows_line_and_expands() {
     let store = Store::new();
-    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
-    // A different plugin cannot claim Todo's renderer type.
+    let mut app = App::with_ui(
+        &store.0,
+        &std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
+        )
+        .unwrap(),
+    );
+    // A different plugin cannot claim Record's renderer type.
     app.host.send("tool:renderer", "other").unwrap();
-    app.wait(|doc| support::text(doc, "tool-message").contains("Created a task in Todo"));
-    assert!(support::text(app.doc(), "tool-message").contains("Before toolCreated a task in Todo"));
+    app.wait(|doc| support::text(doc, "tool-message").contains("Created a task in Record"));
+    assert!(
+        support::text(app.doc(), "tool-message").contains("Before toolCreated a task in Record")
+    );
     let button = app
         .doc()
         .inner()
@@ -1457,38 +1135,56 @@ fn tool_renderer_missing_shows_line_and_expands() {
     app.wait(|doc| support::text(doc, "tool-message").contains("Buy milk"));
     let text = support::text(app.doc(), "tool-message");
     assert!(text.contains("\n  \"args\": {"));
-    assert!(text.contains("todo-one"));
+    assert!(text.contains("record-one"));
     assert!(text.ends_with("After tool"));
 }
 
 #[test]
 fn tool_renderer_mounts_with_part_and_thread_id() {
     let store = Store::new();
-    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
-    app.host.send("tool:renderer", "todo").unwrap();
+    let mut app = App::with_ui(
+        &store.0,
+        &std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
+        )
+        .unwrap(),
+    );
+    app.host.send("tool:renderer", "record").unwrap();
     app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_some());
     let props: Value = serde_json::from_str(&support::text(app.doc(), "tool-card-props")).unwrap();
     assert_eq!(props["threadId"], "thread-one");
     assert_eq!(props["part"]["callId"], "call-one");
-    assert_eq!(props["part"]["result"]["id"], "todo-one");
-    assert!(!support::text(app.doc(), "tool-message").contains("Created a task in Todo›"));
+    assert_eq!(props["part"]["result"]["id"], "record-one");
+    assert!(!support::text(app.doc(), "tool-message").contains("Created a task in Record›"));
 }
 
 #[test]
 fn tool_plugin_uninstalled_falls_back_to_line() {
     let store = Store::new();
-    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
-    app.host.send("tool:renderer", "todo").unwrap();
+    let mut app = App::with_ui(
+        &store.0,
+        &std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
+        )
+        .unwrap(),
+    );
+    app.host.send("tool:renderer", "record").unwrap();
     app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_some());
     app.host.send("tool:renderer", "").unwrap();
     app.wait(|doc| doc.inner().get_element_by_id("tool-card-props").is_none());
-    assert!(support::text(app.doc(), "tool-message").contains("Created a task in Todo"));
+    assert!(support::text(app.doc(), "tool-message").contains("Created a task in Record"));
 }
 
 #[test]
 fn permission_row_and_needs_you_group() {
     let store = Store::new();
-    let mut app = App::with_ui(&store.0, include_str!("../dist/tests/bridge.js"));
+    let mut app = App::with_ui(
+        &store.0,
+        &std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("dist/tests/bridge.js"),
+        )
+        .unwrap(),
+    );
     app.wait(|doc| support::text(doc, "permission-fixture").contains("NEEDS YOU"));
     let text = support::text(app.doc(), "permission-fixture");
     assert!(text.contains("Run commandAllow onceReject"));

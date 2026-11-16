@@ -8,7 +8,6 @@ export const permissionPart = v.object({
   options: v.array(v.object({ optionId: v.string(), name: v.string(), kind: v.string() })),
   status: v.union(v.literal("pending"), v.literal("answered"), v.literal("expired"), v.literal("cancelled")),
   optionId: v.optional(v.string()),
-  answeredBy: v.optional(v.string()),
 });
 export type PermissionPart = Infer<typeof permissionPart>;
 
@@ -17,7 +16,6 @@ export function claimPermission(part: PermissionPart, status: "answered" | "expi
   if (part.status !== "pending") return part;
   if (status !== "answered") {
     delete part.optionId;
-    delete part.answeredBy;
   }
   part.status = status;
   return part;

@@ -1,5 +1,5 @@
 import { mapGroup } from "./use-map";
-import { For, Show, type Accessor } from "solid-js";
+import { For, Show } from "solid-js";
 import { Textarea } from "@tokamak/ui/components";
 import { Icon } from "@tokamak/ui";
 import type { ChatState } from "./use-chat";
@@ -75,35 +75,18 @@ export function Map(props: { chat: ChatState; map: MapState }) {
                     />
                   </Show>
                 </Show>
-                <Show when={props.chat.sharing()?.count(thread._id)}>
-                  {(count: Accessor<number>) => (
-                    <span data-shared-count class="shrink-0 font-label text-[10px]">
-                      · {count()}
-                    </span>
-                  )}
-                </Show>
                 <span class="shrink-0 font-label text-[10px]">{relativeTime(thread.updatedAt)}</span>
               </div>
             </>
           )}
         </For>
         <Show when={!props.map.rows().length}>
-          <p class="text-text-3">
-            {props.chat.threads.loading()
-              ? "Loading threads…"
-              : props.chat.isGuest()
-                ? "Nothing has been shared with you yet"
-                : "No threads found"}
-          </p>
+          <p class="text-text-3">{props.chat.threads.loading() ? "Loading threads…" : "No threads found"}</p>
         </Show>
       </div>
 
       <footer
-        aria-label={
-          props.chat.isOwner()
-            ? "↑↓ MOVE  ENTER OPEN  1-9 JUMP  CMD+ENTER NEW THREAD  R RENAME  CMD+BACKSPACE DELETE"
-            : "↑↓ MOVE  ENTER OPEN  1-9 JUMP"
-        }
+        aria-label="↑↓ MOVE  ENTER OPEN  1-9 JUMP  CMD+ENTER NEW THREAD  R RENAME  CMD+BACKSPACE DELETE"
         class="order-3 flex shrink-0 flex-wrap items-center gap-5 border-t border-hairline pt-4 font-label text-[9px] leading-4 text-text-3"
       >
         <span class="flex items-center gap-1">
@@ -116,8 +99,7 @@ export function Map(props: { chat: ChatState; map: MapState }) {
         </span>
         <span>1-9 JUMP</span>
 
-        {/* Guests cannot rename, delete or create threads. */}
-        <Show when={props.chat.isOwner()}>
+        <>
           <span>R RENAME</span>
           <span>CMD+BACKSPACE DELETE</span>
           <span class="flex items-center gap-1">
@@ -128,7 +110,7 @@ export function Map(props: { chat: ChatState; map: MapState }) {
             <Icon d="M20 4v10H4 M9 9l-5 5 5 5" class="size-3" />
             NEW THREAD
           </span>
-        </Show>
+        </>
       </footer>
     </>
   );

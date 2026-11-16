@@ -28,7 +28,7 @@ const scratch = await mkdtemp(join(output, "compiler-"));
 const workspace = join(scratch, "checkout with spaces");
 const fixture = join(workspace, "app");
 const frontend = join(fixture, "src/main.tsx");
-const backend = join(fixture, "backend/createTodo.ts");
+const backend = join(fixture, "backend/createRecord.ts");
 
 function command(args: string[], cwd = fixture) {
   const result = spawnSync(process.execPath, args, {
@@ -79,24 +79,17 @@ async function missing(path: string, check: () => void) {
 try {
   assert.doesNotMatch(
     await readFile(join(app, "backend/_generated/api.ts"), "utf8"),
-    /readonly "todo"/,
-    "retired Todo must not be registered by the product backend",
+    /readonly "record"/,
+    "test fixture must not be registered by the product backend",
   );
   await mkdir(fixture, { recursive: true });
-  // Keep the original end-to-end compiler regressions against retired Todo,
+  // Keep the original end-to-end compiler regressions against the record fixture,
   // but use the actual product's zero-option build configuration.
-  await cp(join(app, "dist/tests/todo/src"), join(fixture, "src"), { recursive: true });
+  await cp(join(app, "dist/tests/record/src"), join(fixture, "src"), { recursive: true });
   await mkdir(join(fixture, "backend"));
-  for (const name of [
-    "schema.ts",
-    "todo.ts",
-    "createTodo.ts",
-    "_limits.ts",
-    "_legacyApi.ts",
-    "tsconfig.json",
-  ]) {
+  for (const name of ["schema.ts", "record.ts", "createRecord.ts", "_legacyApi.ts", "tsconfig.json"]) {
     await copyFile(
-      join(app, name === "tsconfig.json" ? "backend" : "dist/tests/todo/backend", name),
+      join(app, name === "tsconfig.json" ? "backend" : "dist/tests/record/backend", name),
       join(fixture, "backend", name),
     );
   }
@@ -178,14 +171,14 @@ try {
   assert.match(shell, /\.panel\s*\{/);
   assert.doesNotMatch(shell, /@apply|@import|@vite\/client/);
   const generated = await readFile(join(fixture, "backend/_generated/api.ts"), "utf8");
-  assert.match(generated, /readonly "todo"/);
-  assert.doesNotMatch(generated, /readonly "(src|tests|pages|_limits)"/);
+  assert.match(generated, /readonly "record"/);
+  assert.doesNotMatch(generated, /readonly "(src|tests|pages)"/);
   succeeds(command(["check", "--no-script", "--project", "tsconfig.json"]), "app type graph");
   succeeds(command(["check", "--no-script", "--project", "tsconfig.tools.json"]), "Node tooling graph");
 
   // Acceptance: shared compiler composition retains ORIGINAL TSX and backend
   // mappings, including the backend map's relocation into final app/dist.
-  await assertOriginalMapping(join(fixture, "dist/ui.js"), join(fixture, "src/todos.tsx"), [
+  await assertOriginalMapping(join(fixture, "dist/ui.js"), join(fixture, "src/records.tsx"), [
     ["First view", 'name="First view"'],
     ["New task", 'label="New task"'],
   ]);
@@ -194,7 +187,7 @@ try {
   ]);
   const backendMap = JSON.parse(await readFile(join(fixture, "dist/bundle.js.map"), "utf8"));
   assert(
-    backendMap.sources.some((source: string) => source === "../backend/createTodo.ts"),
+    backendMap.sources.some((source: string) => source === "../backend/createRecord.ts"),
     "final backend map must resolve from app/dist back to original backend source",
   );
   await writeFile(
@@ -202,7 +195,7 @@ try {
     `
     import { api } from "./dist/api";
     import type { ArgsOf } from "@tokamak/sdk";
-    const args: ArgsOf<typeof api.todo.add> = { title: "Typed packaged API" };
+    const args: ArgsOf<typeof api.record.add> = { title: "Typed packaged API" };
   `,
   );
   await writeFile(

@@ -8,7 +8,7 @@ This follows the thread/message boundary in [Convex Agent](https://github.com/ge
 using ordinary message patches rather than a separate stream delta table.
 
 Build with `proto run bun -- packages/build/src/build.ts plugins/chat`.
-The app's normal bundle task builds Chat alongside Todo; the server discovers
+The app's normal bundle task builds Chat; the server discovers
 both from the workspace `plugins/` installation. This plugin has no UI.
 Generated references are in `backend/_generated/api.ts` (`api.threads.list`, etc.).
 
@@ -28,76 +28,33 @@ ambient types into the QuickJS UI type graph.
 
 All functions use one argument object. Wire names and results:
 
-| Kind     | Name                      | Args                               | Result                                                                              |
-| -------- | ------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| Query    | `chat/threads:list`       | `{}`                               | `Thread[]`, newest updated first                                                    |
-| Query    | `chat/messages:list`      | `{threadId}`                       | `Message[]`, oldest first                                                           |
-| Query    | `chat/runs:running`       | `{}`                               | `{runId, threadId, model, waiting, startedBy, starterName}[]`, visible running runs |
-| Query    | `chat/runs:active`        | `{threadId}`                       | `Run \| null`                                                                       |
-| Mutation | `chat/threads:create`     | `{title?: string}`                 | thread ID                                                                           |
-| Mutation | `chat/threads:rename`     | `{threadId, title: string}`        | `null`                                                                              |
-| Mutation | `chat/threads:setBackend` | `{threadId, backend}`              | `null`                                                                              |
-| Action   | `chat/agents:list`        | `{}`                               | `{id, title}[]`                                                                     |
-| Mutation | `chat/threads:setModel`   | `{threadId, model: string}`        | `null`                                                                              |
-| Mutation | `chat/threads:remove`     | `{threadId}`                       | `null`                                                                              |
-| Mutation | `chat/runs:observe`       | `{sweepId: string, tick: number}`  | `null`                                                                              |
-| Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null`                                                                              |
-| Mutation | `chat/runs:cancel`        | `{runId}`                          | `null`                                                                              |
-| Action   | `chat/chat:send`          | `{threadId, text: string}`         | `{runId, messageId, status: "done" \| "error" \| "cancelled"}`                      |
+| Kind     | Name                      | Args                               | Result                                                         |
+| -------- | ------------------------- | ---------------------------------- | -------------------------------------------------------------- |
+| Query    | `chat/threads:list`       | `{}`                               | `Thread[]`, newest updated first                               |
+| Query    | `chat/messages:list`      | `{threadId}`                       | `Message[]`, oldest first                                      |
+| Query    | `chat/runs:running`       | `{}`                               | `{runId, threadId, model, waiting}[]`, running runs            |
+| Query    | `chat/runs:active`        | `{threadId}`                       | `Run \| null`                                                  |
+| Mutation | `chat/threads:create`     | `{title?: string}`                 | thread ID                                                      |
+| Mutation | `chat/threads:rename`     | `{threadId, title: string}`        | `null`                                                         |
+| Mutation | `chat/threads:setBackend` | `{threadId, backend}`              | `null`                                                         |
+| Action   | `chat/agents:list`        | `{}`                               | `{id, title}[]`                                                |
+| Mutation | `chat/threads:setModel`   | `{threadId, model: string}`        | `null`                                                         |
+| Mutation | `chat/threads:remove`     | `{threadId}`                       | `null`                                                         |
+| Mutation | `chat/runs:observe`       | `{sweepId: string, tick: number}`  | `null`                                                         |
+| Mutation | `chat/permissions:answer` | `{messageId, requestId, optionId}` | `null`                                                         |
+| Mutation | `chat/runs:cancel`        | `{runId}`                          | `null`                                                         |
+| Action   | `chat/chat:send`          | `{threadId, text: string}`         | `{runId, messageId, status: "done" \| "error" \| "cancelled"}` |
 
 A text part is `{type: "text", text: string}`; tool parts are described below.
 
 Documents include `_id: string` and `_creationTime: number`, plus:
 
-- `Thread`: `ownerId: string`, `title`, `createdAt`, `updatedAt`, optional `model` (defaults to `openrouter/free`).
-- `Message`: `threadId`, `authorId: string`, optional `authorName: string` and `authorRole: "owner" | "guest"`, `role: "user" | "assistant"`, `parts`,
+- `Thread`: `title`, `createdAt`, `updatedAt`, optional `model` (defaults to `openrouter/free`).
+- `Message`: `threadId`, `role: "user" | "assistant"`, `parts`,
   `status: "streaming" | "complete" | "error" | "cancelled"`, optional `error`, `createdAt`.
 - `Run`: `threadId`, `messageId`, `status: "running" | "done" | "error" | "cancelled"`,
-  `startedBy: string`, optional `cancelledBy: string`, `model`, `startedAt`,
+  `model`, `startedAt`,
   optional `updatedAt` (heartbeat timestamp), `heartbeat` (counter), `error`, and `finishedAt` (present for terminal runs).
-
-## Sharing
-
-The host supplies `ctx.caller = {memberId, name, role}` on every call. Thread
-ownership, user message authors, run starters, cancellations and permission
-answers record the caller's member ID. User messages also store `authorName`;
-assistant messages retain `authorId: "assistant"`.
-
-Call `chat/members:hello {}` on connect to upsert the caller's name and last-seen
-time; it returns the server's `{memberId, name, role}` for the connection, which
-the desktop uses to choose owner or guest controls. The owner can query
-`chat/members:list {}` and `chat/threads:shares {}` (every `{threadId, memberId}`
-share, for Map counts and the share picker) and share or unshare with
-`chat/threads:share {threadId, memberId}` and
-`chat/threads:unshare {threadId, memberId}`. Shares are idempotent and thread
-deletion removes them. `shares` indexes membership and threads; `members` stores
-only member IDs, display names and last-seen timestamps, with no credentials.
-
-Owners see every thread. Guests see shared threads only, including their live
-messages and running runs. Unsharing removes the thread and its messages from
-live subscriptions. Guests can watch ACP threads but can send only to model
-backends. Their sends use the owner's selected model and key, with no tools,
-at most 20 runs per rolling hour and 100 per rolling day per member, and a
-16 KB UTF-8 text limit. Model history keeps owner turns plain and always marks
-guest turns as untrusted, using their stored author identity even after unsharing.
-Owner-started model runs in any thread with a guest-authored message require
-approval before every tool call, including after unsharing. Each call shows an
-inline permission with the plugin, tool and a short argument summary. Allow runs
-that call once; Deny or a 30-minute timeout returns `The owner declined this tool call`
-to the model and marks the tool as an error. Cancellation stops the run and marks
-the pending call with the same declined error. Only the owner can answer.
-Threads without guest messages run tools without prompts; ACP permissions keep
-their existing behavior.
-`members:hello` rejects guest names equal to "owner" case-insensitively.
-
-`runs:running` names each run's starter from `members` (falling back to `Owner`
-or `Guest`), so every viewer can label the busy strip.
-
-Only `threads:list`, `messages:list`, `runs:running`, `runs:active`, `chat:send`,
-`runs:cancel` and `members:hello` accept guest wire calls. Guests
-may cancel only their own runs in visible threads; the owner may cancel any run.
-Guests cannot create, rename or remove threads, change models or backends,
-list agents, share threads, list members, or answer permissions.
 
 The shell uses one `runs:running` subscription for Map grouping and active-run state,
 regardless of thread count. This query uses the runs `by_status` index.
@@ -144,18 +101,8 @@ Offline integration tests run in `cargo test -p server`. The ignored
 ## Native chat controls
 
 Enter sends, Shift+Enter inserts a line, and whitespace-only messages are ignored.
-During a run the strip shows `REPLYING · <starter>` and the composer stays typeable
-with muted text; Enter leaves the draft alone. If another member's send wins a
-race, the draft is kept and the strip shows `Busy: <name> just sent`. Escape stops
-the run only for its starter or the owner.
-
-User messages from another member show their name above the text. The owner
-opens the share picker with Cmd+Shift+S: arrows move, Enter shares or unshares
-the open thread with a member, Escape closes; with nobody joined it explains
-`tokamak member invite`. The owner's Map shows `· N` after shared threads.
-Guests see only shared threads and no rename, delete, new thread, backend or
-share controls; the server refuses those calls regardless. Tab opens Map. With an empty search, R renames the
-selected row inline (Enter saves, Escape cancels). Cmd+Backspace asks
+During a run the strip shows `REPLYING`; Escape stops the run.
+Tab opens Map. With an empty search, R renames the selected row inline (Enter saves, Escape cancels). Cmd+Backspace asks
 `Delete? Enter / Esc` on that row before removing it and its messages/runs.
 
 Click the backend above the composer or press Cmd+M to open the backend picker.
@@ -235,8 +182,8 @@ settles running tools with `error:"cancelled"`. Authentication errors while
 opening suggest signing in to the agent in a terminal. Permission requests flush text and persist an inline `permission` part with the request
 and call IDs, title, options, and `pending`, `answered`, `expired`, or `cancelled`
 status. The run sets `waiting` while polling for an answer; heartbeats continue.
-Only the run starter or thread owner may answer, and the first valid option wins.
-Answers record `optionId` and `answeredBy`. These mutations are not plugin exports.
+The first valid option wins.
+Answers record `optionId`. These mutations are not plugin exports.
 After 30 minutes the request expires and ACP receives cancelled; stopping a run
 cancels its pending permission, and stale recovery expires it.
 

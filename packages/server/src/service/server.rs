@@ -1,12 +1,6 @@
 use super::*;
 
 impl Server {
-    pub(crate) async fn members(&self, operation: members::Operation) -> Result<Json, Error> {
-        let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::Members(operation, reply))?;
-        wait.await.map_err(|_| Error::Closed)?
-    }
-
     pub fn descriptor(&self) -> &Json {
         &self.descriptor
     }
@@ -42,18 +36,10 @@ impl Server {
     }
 
     pub async fn connect(&self) -> Result<Session, Error> {
-        self.connect_as(None).await
-    }
-
-    pub(crate) async fn connect_member(&self, token: String) -> Result<Session, Error> {
-        self.connect_as(Some(token)).await
-    }
-
-    async fn connect_as(&self, token: Option<String>) -> Result<Session, Error> {
         let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::Connect(token, reply))?;
+        admit(&self.commands, Command::Connect(reply))?;
 
-        let ((id, output, slow, alive), caller) = wait.await.map_err(|_| Error::Closed)??;
+        let (id, output, slow, alive) = wait.await.map_err(|_| Error::Closed)??;
 
         Ok(Session {
             sender: SessionSender {
@@ -62,7 +48,6 @@ impl Server {
                 slow,
                 alive,
                 wait_for_capacity: false,
-                caller,
             },
             output,
             cleanup: self.cleanup.clone(),

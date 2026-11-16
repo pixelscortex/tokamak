@@ -21,8 +21,8 @@ impl Coordinator {
                     // barrier, even when the caller of close has disappeared.
                     while let Some(command) = commands.recv().await {
                         match command {
-                            Command::Action(session, caller, action) => self.action(session, caller, action).await,
-                            Command::Connect(_, reply) => {
+                            Command::Action(session, action) => self.action(session, action).await,
+                            Command::Connect(reply) => {
                                 let _ = reply.send(Err(Error::Closed));
                             }
                             command => self.control(command).await,
@@ -53,13 +53,7 @@ impl Coordinator {
                     self.refresh().await;
                 }
                 command = commands.recv() => match command {
-                    Some(Command::Connect(token, reply)) => {
-                        let caller = if let Some(token) = token {
-                            match members::authenticate(&self.database, &token).await {
-                                Ok(caller) => caller,
-                                Err(error) => { let _ = reply.send(Err(Error::Invalid(error))); continue; }
-                            }
-                        } else { Caller::owner() };
+                    Some(Command::Connect(reply)) => {
                         if self.sessions.len() >= SESSIONS || self.next_session == u64::MAX {
                             let _ = reply.send(Err(Error::Overloaded));
                             continue;
@@ -74,17 +68,16 @@ impl Coordinator {
 
                         let alive = output.downgrade();
                         self.sessions.insert(id, Client {
-                            caller: caller.clone(),
                             output,
                             slow: slow.clone(),
                             subscriptions: BTreeMap::new(),
                         });
 
-                        if reply.send(Ok(((id, receiver, slow, alive), caller))).is_err() {
+                        if reply.send(Ok((id, receiver, slow, alive))).is_err() {
                             self.sessions.remove(&id);
                         }
                     }
-                    Some(Command::Action(session, caller, action)) => self.action(session, caller, action).await,
+                    Some(Command::Action(session, action)) => self.action(session, action).await,
                     Some(command) => self.control(command).await,
                     None => break,
                 }

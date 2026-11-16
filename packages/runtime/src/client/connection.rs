@@ -17,53 +17,32 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub async fn connect(directory: &Path) -> Result<Socket, Error> {
-    connect_with_connector(directory, None).await
-}
-
-/// Integration tests only: trust one additional DER certificate for this connection.
-/// Normal certificate-chain and hostname verification remain enabled.
-#[cfg(all(feature = "test-tls", debug_assertions))]
-pub async fn connect_with_test_root(directory: &Path, certificate: &[u8]) -> Result<Socket, Error> {
-    let mut roots =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    roots.add(rustls::pki_types::CertificateDer::from(
-        certificate.to_vec(),
-    ))?;
-    let config = rustls::ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    connect_with_connector(
-        directory,
-        Some(tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(
-            config,
-        ))),
-    )
-    .await
-}
-
-async fn connect_with_connector(
-    directory: &Path,
-    connector: Option<tokio_tungstenite::Connector>,
-) -> Result<Socket, Error> {
-    let (server, token) = if let Some(profile) = super::remote::load(directory)? {
-        (
-            super::invite::server_url(&profile.server, true)?,
-            profile.token,
-        )
-    } else {
-        let descriptor: Value = serde_json::from_str(
-            &std::fs::read_to_string(directory.join("server.json"))
-                .map_err(|_| "Local server is not running; use `bun run app`")?,
-        )?;
-        let server = descriptor["url"]
-            .as_str()
-            .ok_or("Invalid server discovery")?;
-        let server = super::invite::server_url(server, false)?;
-        let path = directory.join("server.token");
-        let token = super::private_file::read(&path)?.ok_or("Missing server token")?;
-        super::private_file::validate_token(&token)?;
-        (server, token)
-    };
+    let descriptor: Value = serde_json::from_str(
+        &std::fs::read_to_string(directory.join("server.json"))
+            .map_err(|_| "Local server is not running; use `bun run app`")?,
+    )?;
+    let server = descriptor["url"]
+        .as_str()
+        .ok_or("Invalid server discovery")?;
+    let server = url::Url::parse(server)?;
+    if server.scheme() != "ws"
+        || server.path() != "/ws"
+        || server.query().is_some()
+        || server.fragment().is_some()
+        || !server.username().is_empty()
+        || server.password().is_some()
+        || !server
+            .host_str()
+            .ok_or("Missing server host")?
+            .trim_matches(['[', ']'])
+            .parse::<std::net::IpAddr>()?
+            .is_loopback()
+    {
+        return Err("Only discovered loopback ws:// endpoints are supported".into());
+    }
+    let path = directory.join("server.token");
+    let token = super::private_file::read(&path)?.ok_or("Missing server token")?;
+    super::private_file::validate_token(&token)?;
     let mut request = server.as_str().into_client_request()?;
     let mut authorization =
         format!("Bearer {token}").parse::<tokio_tungstenite::tungstenite::http::HeaderValue>()?;
@@ -76,7 +55,7 @@ async fn connect_with_connector(
         .max_frame_size(Some(render::MAX_WIRE_MESSAGE_BYTES));
     let (socket, _) = tokio::time::timeout(
         Duration::from_secs(5),
-        tokio_tungstenite::connect_async_tls_with_config(request, Some(config), true, connector),
+        tokio_tungstenite::connect_async_with_config(request, Some(config), true),
     )
     .await??;
     Ok(socket)

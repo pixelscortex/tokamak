@@ -7,13 +7,13 @@ import { fileURLToPath } from "node:url";
 import { ensure, status, stop } from "../../packages/runtime/tools/local-server";
 import { WebSocketTransport } from "../../packages/sdk/src/transport";
 import { TokamakClient } from "../../packages/sdk/src/client";
-import { api } from "../dist/tests/todo/backend/_legacyApi";
+import { api } from "../dist/tests/record/backend/_legacyApi";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 await mkdir(resolve(root, "app/dist/tests"), { recursive: true });
 const directory = await mkdtemp(resolve(root, "app/dist/tests/local-"));
 const binary = resolve(root, `target/debug/tokamak${process.platform === "win32" ? ".exe" : ""}`);
-const bundle = resolve(root, "app/dist/tests/todo/dist/bundle.js");
+const bundle = resolve(root, "app/dist/tests/record/dist/bundle.js");
 const sockets: WebSocket[] = [];
 const transports: WebSocketTransport[] = [];
 async function client(url: string, capability: string) {
@@ -74,12 +74,12 @@ try {
   assert.deepEqual(await status(directory), first);
   const one = await client(first.url, capability);
   const two = await client(first.url, capability);
-  const id = await one.mutation(api.todo.add, { title: "standalone survives desktop close" });
-  assert((await two.query(api.todo.list, {})).some((row) => row._id === id));
+  const id = await one.mutation(api.record.add, { title: "standalone survives desktop close" });
+  assert((await two.query(api.record.list, {})).some((row) => row._id === id));
   transports.splice(0).forEach((transport) => transport.close());
   assert.deepEqual(await status(directory), first, "client close must not stop the service");
   const reopened = await client(first.url, capability);
-  assert((await reopened.query(api.todo.list, {})).some((row) => row._id === id));
+  assert((await reopened.query(api.record.list, {})).some((row) => row._id === id));
   const changed = resolve(directory, "changed.mjs");
   await writeFile(changed, `${await readFile(bundle, "utf8")}\n// changed bundle`);
   await assert.rejects(ensure(binary, changed, directory), /different backend bundle/);
@@ -89,7 +89,7 @@ try {
   const restarted = await ensure(binary, bundle, directory);
   assert.notEqual(restarted.pid, first.pid);
   const persisted = await client(restarted.url, capability);
-  assert((await persisted.query(api.todo.list, {})).some((row) => row._id === id));
+  assert((await persisted.query(api.record.list, {})).some((row) => row._id === id));
   console.log(
     "PASS local service: concurrent reuse, capability/Origin gates, client close/reopen, revision guard, shutdown and persistence",
   );

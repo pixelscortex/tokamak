@@ -4,7 +4,6 @@ import { action } from "./_functions";
 import { api } from "./_generated/api";
 import { acpSend } from "./acp";
 import { discoverTools } from "./tools";
-import { toolApproval } from "./tool-approval";
 import { streamBuffer } from "./stream-buffer";
 import { toolEvents } from "./tool-events";
 import { toolAcknowledgements } from "./acknowledgements";
@@ -13,7 +12,6 @@ import { modelStream, safeErrorMessage } from "./model";
 type Result = { runId: Id<"runs">; messageId: Id<"messages">; status: "done" | "error" | "cancelled" };
 
 export const send = action({
-  guest: true,
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
     const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
@@ -37,7 +35,7 @@ export const send = action({
     });
 
     try {
-      const { tools, targets } = await modelTools(ctx, args.threadId, runId, acknowledgements, buffer);
+      const { tools, targets } = await modelTools(ctx, args.threadId, runId, acknowledgements);
       const events = toolEvents(ctx, targets, buffer, acknowledgements);
       const source = await buffer.waitFor(modelStream(ctx, history, controller.signal, model, tools));
       const iterator = source.stream[Symbol.asyncIterator]();
@@ -76,14 +74,11 @@ async function modelTools(
   threadId: Id<"threads">,
   runId: Id<"runs">,
   acknowledgements: ReturnType<typeof toolAcknowledgements>,
-  buffer: ReturnType<typeof streamBuffer>,
 ) {
-  if (ctx.caller.role === "guest") return { tools: {}, targets: new Map() };
   return discoverTools(
     ctx,
     threadId,
     () => ctx.runQuery(api.send.running, { runId }),
     (callId) => acknowledgements.get(callId).promise,
-    await toolApproval(ctx, threadId, runId, buffer),
   );
 }

@@ -12,7 +12,7 @@ One system: Tailwind v4 utilities written in the component, as complete static
 class names, with tokens in `src/theme.css` (colours, radii, fonts). Backgrounds, radii and interaction states use ordinary Tailwind utilities.
 Still on the older class pattern: the elements `Button` and `Input`
 (`.tk-button`, `.tk-input`, `.tk-field` and their state rules in
-`src/styles.css`); the todo plugin uses them. Do not add to that pattern: new
+`src/styles.css`); legacy test fixtures use them. Do not add to that pattern: new
 controls are in `@tokamak/ui/components`.
 
 ## Shell
@@ -31,7 +31,7 @@ file starts with its usage and the details; the short version:
 <Button variant="primary" size="md" onClick={run}>Run</Button>   // primary | neutral | outline | destructive | ghost; sm | md | icon
 <Button variant="ghost" size="icon" label="Attach" pressed={on()}>…</Button>
 <Kbd keys={["cmd", "K"]} />
-<Chip label="Buy milk" detail="Todo" onRemove={drop} />  <ChipMore count={3} />
+<Chip label="Buy milk" detail="Notes" onRemove={drop} />  <ChipMore count={3} />
 <Textarea value={text()} onValueChange={setText} onSubmit={send} maxRows={8} placeholder="Reply…" />
 <Select options={opts} value={v()} onValueChange={setV} size="compact" side="top" search mono />
 <Shell.BottomBar>
@@ -60,7 +60,7 @@ import { createSignal } from "solid-js";
 import { Button, Input } from "@tokamak/ui/elements";
 
 const [title, setTitle] = createSignal("");
-<Input label="Todo" description="One task" value={title()} onValueChange={setTitle} />;
+<Input label="Notes" description="One task" value={title()} onValueChange={setTitle} />;
 <Button defaultPressed={false} onPressedChange={(done) => save(done)}>
   Done
 </Button>;

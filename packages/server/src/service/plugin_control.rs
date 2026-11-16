@@ -43,22 +43,6 @@ impl Coordinator {
 
     pub(super) async fn control(&mut self, command: Command) {
         match command {
-            Command::Members(operation, reply) => {
-                let revoked = match &operation {
-                    members::Operation::Revoke(id) => Some(id.clone()),
-                    _ => None,
-                };
-                let result = members::execute(&self.database, operation)
-                    .await
-                    .map_err(Error::Invalid);
-                if result.is_ok()
-                    && let Some(id) = revoked
-                {
-                    self.sessions
-                        .retain(|_, client| client.caller.member_id != id);
-                }
-                let _ = reply.send(result);
-            }
             Command::RunFunction(call) => self.run_function(call).await,
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
@@ -154,9 +138,6 @@ impl Coordinator {
         // Use the same bounded ordered stream as data updates. A stale asset
         // request carries its catalog revision and cannot mix generations.
         for session in self.sessions.keys().copied().collect::<Vec<_>>() {
-            if self.sessions[&session].caller.is_guest() {
-                continue;
-            }
             self.emit(
                 session,
                 Event::PluginChanged {

@@ -24,23 +24,23 @@ export const dns = action({
     ),
 });
 
-const todo = createApi<{
-  tools: ApiFromModule<typeof import("../../todo/backend/tools")>;
-  todo: ApiFromModule<typeof import("../../todo/backend/todo")>;
-}>("todo");
-export const todoTools = action({
+const record = createApi<{
+  tools: ApiFromModule<typeof import("../../record/backend/tools")>;
+  record: ApiFromModule<typeof import("../../record/backend/record")>;
+}>("record");
+export const recordTools = action({
   handler: async (ctx) => {
-    const descriptions = await ctx.runQuery(todo.tools.describe, {});
-    const out = await ctx.runMutation(todo.tools.invoke, {
-      name: "todos.create",
+    const descriptions = await ctx.runQuery(record.tools.describe, {});
+    const out = await ctx.runMutation(record.tools.invoke, {
+      name: "records.create",
       args: { title: "Buy milk tomorrow" },
       threadId: "test-thread",
     });
     return {
       descriptions,
       out,
-      todo: await ctx.runQuery(todo.todo.get, {
-        id: (out.result as { id: import("@tokamak/sdk").Id<"todos"> }).id,
+      record: await ctx.runQuery(record.record.get, {
+        id: (out.result as { id: import("@tokamak/sdk").Id<"records"> }).id,
       }),
     };
   },

@@ -15,8 +15,6 @@ import {
   v,
 } from "../src/index.ts";
 
-const ownerCaller = { memberId: "owner", name: "Owner", role: "owner" };
-
 const sdk = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspace = resolve(sdk, "../..");
 
@@ -35,7 +33,6 @@ function recordingHost(reply = []) {
     requests,
     host: {
       op(name, payload) {
-        if (name === "host.caller") return ownerCaller;
         requests.push([name, payload]);
         return reply;
       },
@@ -304,19 +301,11 @@ test("schema-free builders forward index requests for host validation", async ()
 
 test("indexed queries keep the document reply checks of ordinary queries", async () => {
   const fn = query({ handler: (ctx) => ctx.db.query("todos").withIndex("by_owner_created").take(0) });
-  await expect(
-    fn.invoke(
-      {},
-      { op: (name) => (name === "host.caller" ? ownerCaller : [{ _id: "todos:a", _creationTime: 1 }]) },
-    ),
-  ).rejects.toThrow("limit");
+  await expect(fn.invoke({}, { op: () => [{ _id: "todos:a", _creationTime: 1 }] })).rejects.toThrow("limit");
   const wrong = query({ handler: (ctx) => ctx.db.query("todos").withIndex("by_owner_created").collect() });
-  await expect(
-    wrong.invoke(
-      {},
-      { op: (name) => (name === "host.caller" ? ownerCaller : [{ _id: "notes:a", _creationTime: 1 }]) },
-    ),
-  ).rejects.toThrow("todos:key");
+  await expect(wrong.invoke({}, { op: () => [{ _id: "notes:a", _creationTime: 1 }] })).rejects.toThrow(
+    "todos:key",
+  );
 });
 
 // Type checking is part of the API: wrong names, fields, order, value types
@@ -410,8 +399,7 @@ test("tool schemas and validated invocation", async () => {
     },
   );
   const host = {
-    op(name) {
-      if (name === "host.caller") return ownerCaller;
+    op() {
       throw new Error("unexpected host call");
     },
   };

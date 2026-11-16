@@ -1,25 +1,20 @@
-/** Exercise the maintained Todo source in standalone mode for raw-bundle/native
+/** Build the small record fixture in standalone mode for raw-bundle/native
  * regressions. The installed artifact itself always uses the shared shell. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cp, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const fixture = resolve(root, "app/dist/tests/todo");
+const fixture = resolve(root, "app/dist/tests/record");
 await mkdir(fixture, { recursive: true });
 for (const directory of ["src", "backend"])
-  await cp(resolve(root, `plugins/todo/${directory}`), resolve(fixture, directory), {
+  await cp(resolve(root, `app/tests/fixtures/record/${directory}`), resolve(fixture, directory), {
     recursive: true,
     filter: (path) => !/\/(dist|_generated)(\/|$)/.test(path),
   });
-await copyFile(resolve(root, "app/tests/fixtures/todo-main.tsx"), resolve(fixture, "src/main.tsx"));
-const todos = resolve(fixture, "src/todos.tsx");
-await writeFile(
-  todos,
-  (await readFile(todos, "utf8")).replace("backend/_generated/api", "backend/_legacyApi"),
-);
-await writeFile(resolve(fixture, "package.json"), JSON.stringify({ name: "test-todo", type: "module" }));
+await copyFile(resolve(root, "app/tests/fixtures/record-main.tsx"), resolve(fixture, "src/main.tsx"));
+await writeFile(resolve(fixture, "package.json"), JSON.stringify({ name: "test-record", type: "module" }));
 await writeFile(
   resolve(fixture, "tsconfig.json"),
   JSON.stringify({
@@ -45,4 +40,11 @@ const result = spawnSync(process.execPath, [resolve(root, "packages/build/src/bu
   timeout: 30_000,
 });
 assert.ifError(result.error);
-assert.equal(result.status, 0, "standalone Todo compatibility build");
+assert.equal(result.status, 0, "standalone Record compatibility build");
+
+const installed = spawnSync(
+  process.execPath,
+  [resolve(root, "packages/build/src/build.ts"), resolve(root, "app/tests/fixtures/record")],
+  { stdio: "inherit" },
+);
+assert.equal(installed.status, 0);

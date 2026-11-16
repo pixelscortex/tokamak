@@ -57,7 +57,7 @@ export async function library(root, version = "before") {
 }
 export async function fixtures(root) {
   const logic = await source(root, "logic", "", { ui: false });
-  await cp(resolve(workspace, "plugins/todo/backend"), resolve(logic, "backend"), {
+  await cp(resolve(workspace, "app/tests/fixtures/record/backend"), resolve(logic, "backend"), {
     recursive: true,
     filter: (path) => !/\/(dist|_generated)(\/|$)/.test(path),
   });
@@ -94,13 +94,13 @@ export async function fixtures(root) {
       const [local, setLocal] = createSignal(10);
       const router = useRouter();
       const client = useClient();
-      const rows = useQuery(client, api.todo.list, () => ({}));
+      const rows = useQuery(client, api.record.list, () => ({}));
       return <div>
         <input id="local-input" value="" />
         <Counter /><p id="shared-observer">observed: {shared()}</p>
         <button id="local-increment" onClick={() => setLocal(n => n + 1)}>local: {local()}</button>
         <p id="live-data">{JSON.stringify(rows.data())}</p>
-        <button id="add-row" onClick={() => client.mutation(api.todo.add, { title: "live-row" })}>Add row</button>
+        <button id="add-row" onClick={() => client.mutation(api.record.add, { title: "live-row" })}>Add row</button>
         <button id="thread-route" onClick={() => router.navigate("/chat/thread-one")}>Thread</button>
         <button id="nested-route" onClick={() => router.navigate("/p/consumer/detail/one")}>Nested</button>
       </div>;

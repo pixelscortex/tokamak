@@ -72,13 +72,6 @@ struct Service {
 }
 impl Service {
     fn start(scratch: &Scratch) -> Self {
-        Self::launch(scratch, None)
-    }
-    /// Also serves guests on a loopback share listener.
-    fn start_shared(scratch: &Scratch, share: &str) -> Self {
-        Self::launch(scratch, Some(share))
-    }
-    fn launch(scratch: &Scratch, share: Option<&str>) -> Self {
         let directory = scratch.0.join("server");
         std::fs::create_dir_all(&directory).unwrap();
         let token = directory.join("server.token");
@@ -95,9 +88,6 @@ impl Service {
             .arg(&directory)
             .arg("--plugins")
             .arg(scratch.0.join("installation"));
-        if let Some(address) = share {
-            command.arg("--share").arg(address);
-        }
         let child = command
             .stdout(Stdio::from(log.try_clone().unwrap()))
             .stderr(Stdio::from(log))
@@ -181,15 +171,6 @@ impl Window {
         let runtime = Self::runtime();
         let connection = runtime.block_on(socket::connect(directory)).unwrap();
         Self::attach(runtime, connection, bundle)
-    }
-    /// Load the real remote profile, with this test's extra TLS root only.
-    #[cfg(debug_assertions)]
-    fn guest(directory: &Path, certificate: &[u8]) -> Self {
-        let runtime = Self::runtime();
-        let connection = runtime
-            .block_on(socket::connect_with_test_root(directory, certificate))
-            .unwrap();
-        Self::attach(runtime, connection, &root().join("app/dist"))
     }
     fn runtime() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_multi_thread()
@@ -455,7 +436,7 @@ fn cli_reload_updates_open_importers_and_preserves_live_subscription() {
             .is_some_and(|_| support::text(doc, "live-data") == "[]")
     });
     let subscriptions = window.subscriptions();
-    assert_eq!(window.subscriptions_to("todo:list"), 1);
+    assert_eq!(window.subscriptions_to("record:list"), 1);
     let consumer_assets = window.assets("consumer");
     scratch.build("reload");
     service.cli(&["plugin", "reload", "library"]);
@@ -569,10 +550,10 @@ fn contribution_failure_keeps_navigation_and_route_history_working() {
 }
 
 // Behaviour 9 (launcher). Prevents the actual launcher regressing to --bundle or
-// a compatibility Todo fixture. Discovery and rendering must use plugins/todo in
+// a compatibility fixture. Discovery and rendering must use plugins/chat in
 // the real shell.
 #[test]
-fn launcher_starts_plugin_mode_and_real_todo_renders() {
+fn launcher_starts_plugin_mode_and_chat_renders() {
     let scratch = Scratch::new();
     let service = Service {
         child: None,
@@ -608,14 +589,10 @@ fn launcher_starts_plugin_mode_and_real_todo_renders() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|p| p["plugin"]["id"] == "todo")
+            .any(|p| p["plugin"]["id"] == "chat")
     );
     let mut window = Window::open(&service.directory);
-    window.wait(|doc| support::text(doc, "app").contains("Todo"));
-    window.view("todo/Todo");
-    window.wait(|doc| doc.inner().get_element_by_id("first-add").is_some());
-    window.wait(|doc| !support::text(doc, "app").contains("Loading tasks"));
-    assert!(support::text(window.doc(), "app").contains("Tokamak · Todo"));
+    window.wait(|doc| doc.inner().get_element_by_id("chat-input").is_some());
 }
 
 // 10A / no product caps: 500 installed plugins must install, page through the
@@ -1174,8 +1151,8 @@ fn chat_screen_socket_workflow() {
     let tools_live = live && std::env::var("TOKAMAK_CHAT_TOOLS").as_deref() == Ok("1");
     let quickstart = live && std::env::var("TOKAMAK_CHAT_QUICKSTART").as_deref() == Ok("1");
     if tools_live || quickstart {
-        let todo = scratch.0.join("installation/todo/dist");
-        std::fs::create_dir_all(&todo).unwrap();
+        let record = scratch.0.join("installation/record/dist");
+        std::fs::create_dir_all(&record).unwrap();
         for file in [
             "manifest.json",
             "bundle.js",
@@ -1186,7 +1163,11 @@ fn chat_screen_socket_workflow() {
             "shell.html",
             "styles.css",
         ] {
-            std::fs::copy(root().join("plugins/todo/dist").join(file), todo.join(file)).unwrap();
+            std::fs::copy(
+                root().join("app/tests/fixtures/record/dist").join(file),
+                record.join(file),
+            )
+            .unwrap();
         }
     }
     if live {
@@ -1208,7 +1189,7 @@ fn chat_screen_socket_workflow() {
     let service = Service::start(&scratch);
     if quickstart {
         let catalog: Value = serde_json::from_str(&service.cli(&["plugin", "list"])).unwrap();
-        for id in ["chat", "todo"] {
+        for id in ["chat", "record"] {
             assert!(
                 catalog["plugins"]
                     .as_array()
@@ -1280,7 +1261,7 @@ fn chat_screen_socket_workflow() {
             );
         }
         println!(
-            "Quick start: Chat and Todo loaded; native composer sent a message and rendered a live reply."
+            "Quick start: Chat and Record loaded; native composer sent a message and rendered a live reply."
         );
         return;
     }
@@ -1293,18 +1274,18 @@ fn chat_screen_socket_workflow() {
             json!({"threadId": thread, "model": "liquid/lfm-3-1.7b:free"}),
         );
         support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        type_text(&mut window, "Add a todo to buy milk tomorrow");
+        type_text(&mut window, "Add a record to buy milk tomorrow");
         key(&mut window, Key::Named(NamedKey::Enter), false);
         window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
             doc.inner()
-                .query_selector("[data-todo-card] [role=checkbox]")
+                .query_selector("[data-record-card] [role=checkbox]")
                 .unwrap()
                 .is_some()
         });
         window.click("role", "checkbox");
         window.wait(|doc| {
             doc.inner()
-                .query_selector("[data-todo-card] [aria-checked=true]")
+                .query_selector("[data-record-card] [aria-checked=true]")
                 .unwrap()
                 .is_some()
         });
@@ -1323,19 +1304,19 @@ fn chat_screen_socket_workflow() {
             ),
             Value::Null
         );
-        let todos = call(&service, "query", "todo/todo:list", json!({}));
+        let records = call(&service, "query", "record/record:list", json!({}));
         assert!(
-            todos
+            records
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|todo| todo["done"] == true
-                    && todo["title"]
+                .any(|record| record["done"] == true
+                    && record["title"]
                         .as_str()
                         .unwrap()
                         .to_lowercase()
                         .contains("milk")),
-            "{todos}"
+            "{records}"
         );
         if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
             capture::save(
@@ -1344,7 +1325,7 @@ fn chat_screen_socket_workflow() {
             );
         }
         println!(
-            "Live liquid/lfm-3-1.7b:free created a milk todo; card toggle persisted done=true."
+            "Live liquid/lfm-3-1.7b:free created a milk record; card toggle persisted done=true."
         );
         return;
     }
@@ -1903,399 +1884,4 @@ fn chat_screen_socket_workflow() {
     assert_eq!(window.subscriptions_to("threads:list"), 1);
     assert_eq!(window.subscriptions_to("runs:running"), 1);
     assert_eq!(window.subscriptions_to("runs:active"), 0);
-}
-
-/// Offline OpenAI-compatible stream that finishes only when the test releases it.
-fn gated_model() -> (String, std::sync::mpsc::Sender<()>) {
-    use std::io::{BufRead, BufReader, Read, Write};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    let (release, completion) = std::sync::mpsc::channel();
-    let completion = Arc::new(Mutex::new(completion));
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else {
-                return;
-            };
-            let completion = completion.clone();
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(stream.try_clone().unwrap());
-                let mut length = 0;
-                loop {
-                    let mut line = String::new();
-                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
-                        break;
-                    }
-                    if let Some((name, value)) = line.split_once(':')
-                        && name.eq_ignore_ascii_case("content-length")
-                    {
-                        length = value.trim().parse().unwrap_or(0);
-                    }
-                }
-                let mut body = vec![0; length];
-                let _ = reader.read_exact(&mut body);
-
-                let _ = write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n"
-                );
-                let mut chunk = |data: String| {
-                    let event = format!("data: {data}\n\n");
-                    write!(stream, "{:x}\r\n{event}\r\n", event.len()).is_ok()
-                        && stream.flush().is_ok()
-                };
-                for text in ["Sure. ", "Here is ", "a short ", "reply."] {
-                    let data = json!({"id":"mock","object":"chat.completion.chunk","created":1,"model":"mock","choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]});
-                    if !chunk(data.to_string()) {
-                        return;
-                    }
-                }
-                if completion.lock().unwrap().recv().is_err() {
-                    return;
-                }
-                let done = json!({"id":"mock","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
-                chunk(done.to_string());
-                chunk("[DONE]".into());
-                drop(chunk);
-                let _ = write!(stream, "0\r\n\r\n");
-            });
-        }
-    });
-    (url, release)
-}
-
-/// A local equivalent of the owner's TLS tunnel. Dropping it cancels all relays.
-#[cfg(debug_assertions)]
-struct GuestTlsTunnel {
-    url: String,
-    certificate: Vec<u8>,
-    worker: tokio::task::JoinHandle<()>,
-    _runtime: tokio::runtime::Runtime,
-}
-#[cfg(debug_assertions)]
-impl GuestTlsTunnel {
-    fn start(share: String) -> Self {
-        use rustls::pki_types::PrivatePkcs8KeyDer;
-        use tokio_rustls::{TlsAcceptor, rustls};
-
-        let rcgen::CertifiedKey { cert, signing_key } =
-            rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-        let certificate = cert.der().to_vec();
-        let config = rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![cert.der().clone()],
-                PrivatePkcs8KeyDer::from(signing_key.serialize_der()).into(),
-            )
-            .unwrap();
-        let acceptor = TlsAcceptor::from(Arc::new(config));
-        let runtime = Window::runtime();
-        let listener = runtime
-            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
-            .unwrap();
-        let url = format!(
-            "wss://localhost:{}/ws",
-            listener.local_addr().unwrap().port()
-        );
-        let worker = runtime.spawn(async move {
-            let mut relays = tokio::task::JoinSet::new();
-            loop {
-                tokio::select! {
-                    accepted = listener.accept() => {
-                        let (stream, _) = accepted.unwrap();
-                        let acceptor = acceptor.clone();
-                        let share = share.clone();
-                        relays.spawn(async move {
-                            // Negative trust checks intentionally fail the handshake.
-                            if let Ok(mut tls) = acceptor.accept(stream).await {
-                                let mut upstream = tokio::net::TcpStream::connect(share).await.unwrap();
-                                let _ = tokio::io::copy_bidirectional(&mut tls, &mut upstream).await;
-                            }
-                        });
-                    }
-                    _ = relays.join_next(), if !relays.is_empty() => {}
-                }
-            }
-        });
-        Self {
-            url,
-            certificate,
-            worker,
-            _runtime: runtime,
-        }
-    }
-}
-#[cfg(debug_assertions)]
-impl Drop for GuestTlsTunnel {
-    fn drop(&mut self) {
-        self.worker.abort();
-    }
-}
-
-// Two desktops on one server: the owner shares a thread with Sam, both see each
-// other's turns with author names, the busy strip names the starter, a guest's
-// Escape cannot stop the owner's run, and Enter during a run keeps the draft.
-// Captures go to TK_CAPTURE_DIR when set.
-#[test]
-#[cfg(debug_assertions)]
-fn chat_sharing_owner_and_guest_desktops() {
-    use blitz_traits::events::*;
-    use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
-
-    fn press(window: &mut Window, key: Key, modifiers: Modifiers) {
-        let doc = window.doc.as_mut().unwrap();
-        doc.resolve_layout(0.0);
-        doc.handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
-            key,
-            code: Code::Unidentified,
-            text: None,
-            modifiers,
-            location: Location::Standard,
-            is_auto_repeating: false,
-            is_composing: false,
-            state: KeyState::Pressed,
-        }));
-        doc.resolve_layout(0.0);
-    }
-    fn named(window: &mut Window, key: NamedKey) {
-        press(window, Key::Named(key), Modifiers::empty());
-    }
-    fn type_text(window: &mut Window, text: &str) {
-        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
-    }
-    fn exists(doc: &NativeDocument, selector: &str) -> bool {
-        doc.inner().query_selector(selector).unwrap().is_some()
-    }
-    fn text_of(doc: &NativeDocument, selector: &str) -> String {
-        let inner = doc.inner();
-        inner
-            .query_selector(selector)
-            .unwrap()
-            .map(|id| inner.get_node(id).unwrap().text_content())
-            .unwrap_or_default()
-    }
-    fn completed(doc: &NativeDocument) -> usize {
-        doc.inner()
-            .query_selector_all("[data-role=assistant][data-status=complete]")
-            .unwrap()
-            .len()
-    }
-    fn wait_both(
-        owner: &mut Window,
-        guest: &mut Window,
-        check: impl Fn(&NativeDocument, &NativeDocument) -> bool,
-    ) {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            owner.wait(|_| true);
-            guest.wait(|_| true);
-            if check(owner.doc(), guest.doc()) {
-                return;
-            }
-            assert!(Instant::now() < deadline, "two-desktop workflow timeout");
-            std::thread::sleep(Duration::from_millis(2));
-        }
-    }
-    fn sized(mut window: Window) -> Window {
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .inner_mut()
-            .set_viewport(Viewport {
-                window_size: (680, 820),
-                ..Default::default()
-            });
-        window
-    }
-    let shortcut = Modifiers::META | Modifiers::SHIFT;
-    let capture = |window: &mut Window, name: &str| {
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join(name),
-            );
-        }
-    };
-
-    // Chat only, with an offline model reachable through a loopback grant.
-    let scratch = Scratch::new();
-    let plugin = scratch.0.join("installation/chat/dist");
-    std::fs::create_dir_all(&plugin).unwrap();
-    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
-        std::fs::copy(
-            root().join("plugins/chat/dist").join(file),
-            plugin.join(file),
-        )
-        .unwrap();
-    }
-    let path = plugin.join("manifest.json");
-    let mut manifest: Value =
-        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    manifest["plugin"]["permissions"] = json!([
-        "net:127.0.0.1",
-        "env:OPENROUTER_API_KEY",
-        "env:OPENROUTER_BASE_URL"
-    ]);
-    std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-    let (model_url, release) = gated_model();
-    std::fs::write(
-        scratch.0.join(".env.local"),
-        format!("OPENROUTER_API_KEY=offline-test\nOPENROUTER_BASE_URL={model_url}\n"),
-    )
-    .unwrap();
-
-    let share = {
-        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        probe.local_addr().unwrap().to_string()
-    };
-    let service = Service::start_shared(&scratch, &share);
-
-    // Owner: controls are present, and the picker explains how to invite.
-    let mut owner = sized(Window::open(&service.directory));
-    owner.wait(|doc| {
-        support::attr(doc, "chat-screen", "data-thread-id").is_some()
-            && exists(doc, "#chat-strip button")
-    });
-    let thread = support::attr(owner.doc(), "chat-screen", "data-thread-id").unwrap();
-    press(&mut owner, Key::Character("S".into()), shortcut);
-    owner.wait(|doc| text_of(doc, "#share-empty").contains("tokamak member invite"));
-
-    // Sam joins; their desktop says hello and sees nothing yet.
-    let tunnel = GuestTlsTunnel::start(share);
-    let link = service.cli(&["member", "invite", "--url", &tunnel.url]);
-    let guest_directory = scratch.0.join("guest");
-    let runtime = Window::runtime();
-    // The generated certificate is not trusted by the normal desktop path.
-    assert!(
-        runtime
-            .block_on(runtime::client::remote::join(
-                &guest_directory,
-                link.trim(),
-                "Sam"
-            ))
-            .is_err()
-    );
-    assert!(!guest_directory.join("remote.json").exists());
-    runtime
-        .block_on(runtime::client::remote::join_with_test_root(
-            &guest_directory,
-            link.trim(),
-            "Sam",
-            &tunnel.certificate,
-        ))
-        .unwrap();
-    let profile: Value =
-        serde_json::from_slice(&std::fs::read(guest_directory.join("remote.json")).unwrap())
-            .unwrap();
-    assert_eq!(profile["server"], tunnel.url);
-    assert!(profile["server"].as_str().unwrap().starts_with("wss://"));
-    assert!(!guest_directory.join("server.json").exists());
-    assert!(runtime.block_on(socket::connect(&guest_directory)).is_err());
-    let sam = profile["memberId"].as_str().unwrap();
-    let mut guest = sized(Window::guest(&guest_directory, &tunnel.certificate));
-    guest.wait(|doc| exists(doc, "#chat-nothing-shared"));
-    assert!(support::attr(guest.doc(), "chat-screen", "data-thread-id").is_none());
-
-    // The owner's open picker lists Sam live; Enter shares and marks them.
-    let row = format!("[data-member=\"{sam}\"]");
-    owner.wait(|doc| exists(doc, &row));
-    named(&mut owner, NamedKey::Enter);
-    let shared = format!("{row}[aria-checked=true]");
-    owner.wait(|doc| exists(doc, &shared));
-    capture(&mut owner, "mp-owner-share.png");
-    named(&mut owner, NamedKey::Escape);
-    owner.wait(|doc| !exists(doc, "#share-picker"));
-
-    named(&mut owner, NamedKey::Tab);
-    owner.wait(|doc| text_of(doc, "[data-shared-count]") == "· 1");
-    named(&mut owner, NamedKey::Escape);
-
-    // Guest: the shared thread arrives without owner controls.
-    guest.wait(|doc| {
-        support::attr(doc, "chat-screen", "data-thread-id").as_deref() == Some(thread.as_str())
-    });
-    guest.wait(|doc| exists(doc, "#chat-strip-backend"));
-    assert!(!exists(guest.doc(), "#chat-strip button"));
-    press(&mut guest, Key::Character("S".into()), shortcut);
-    press(&mut guest, Key::Character("m".into()), Modifiers::META);
-    guest.wait(|doc| !exists(doc, "#share-picker") && !exists(doc, "#backend-picker"));
-    named(&mut guest, NamedKey::Tab);
-    guest.wait(|doc| exists(doc, "#chat-map"));
-    let footer = text_of(guest.doc(), "footer");
-    assert!(
-        !footer.contains("RENAME") && !footer.contains("DELETE") && !footer.contains("NEW THREAD"),
-        "{footer}"
-    );
-    assert!(!exists(guest.doc(), "[data-shared-count]"));
-    press(&mut guest, Key::Character("r".into()), Modifiers::empty());
-    assert!(!exists(guest.doc(), "#chat-rename"));
-    named(&mut guest, NamedKey::Escape);
-    guest.wait(|doc| !exists(doc, "#chat-map"));
-
-    // The owner's run: Sam sees the starter and the owner's name, cannot stop it,
-    // and Enter keeps their draft.
-    type_text(&mut owner, "Plan the launch with Sam");
-    named(&mut owner, NamedKey::Enter);
-    wait_both(&mut owner, &mut guest, |owner, guest| {
-        text_of(owner, "#chat-busy") == "REPLYING · Owner"
-            && exists(owner, "[data-role=user]")
-            && text_of(guest, "#chat-busy") == "REPLYING · Owner"
-            && text_of(guest, "[data-role=user] [data-author]") == "Owner"
-    });
-    assert!(
-        !exists(owner.doc(), "[data-author]"),
-        "the owner's own turn is unlabelled"
-    );
-    type_text(&mut guest, "Can we ship Friday?");
-    named(&mut guest, NamedKey::Enter);
-    named(&mut guest, NamedKey::Escape);
-    wait_both(&mut owner, &mut guest, |_, guest| {
-        text_of(guest, "#chat-busy") == "REPLYING · Owner"
-            && support::editor(guest, "chat-input") == "Can we ship Friday?"
-    });
-    release.send(()).unwrap();
-    wait_both(&mut owner, &mut guest, |owner, guest| {
-        completed(owner) == 1 && completed(guest) == 1 && !exists(guest, "#chat-busy")
-    });
-    assert!(!exists(guest.doc(), "[data-status=cancelled]"));
-    assert_eq!(
-        guest
-            .doc()
-            .inner()
-            .query_selector_all("[data-role=user]")
-            .unwrap()
-            .len(),
-        1,
-        "Enter during the run must not send"
-    );
-
-    // The kept draft sends now; the owner sees Sam's name and Sam as starter.
-    named(&mut guest, NamedKey::Enter);
-    wait_both(&mut owner, &mut guest, |owner, guest| {
-        let inner = owner.inner();
-        text_of(owner, "#chat-busy") == "REPLYING · Sam"
-            && inner
-                .query_selector_all("[data-author]")
-                .unwrap()
-                .iter()
-                .any(|id| inner.get_node(*id).unwrap().text_content() == "Sam")
-            && text_of(guest, "#chat-busy") == "REPLYING · Sam"
-            && guest
-                .inner()
-                .query_selector_all("[data-role=user]")
-                .unwrap()
-                .len()
-                == 2
-    });
-    capture(&mut guest, "mp-guest.png");
-    release.send(()).unwrap();
-    wait_both(&mut owner, &mut guest, |owner, guest| {
-        completed(owner) == 2 && completed(guest) == 2 && !exists(guest, "#chat-busy")
-    });
 }

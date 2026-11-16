@@ -4,7 +4,7 @@
 
 For multi-plugin loading, typed cross-plugin calls and reload, see
 [the M1.2 plugin contract](PLUGINS.md). The desktop builds and loads the Chat
-and Todo plugin installation with `--plugins`; `--bundle` remains available
+plugin installation with `--plugins`; `--bundle` remains available
 for legacy applications and test fixtures.
 
 The desktop now uses this standalone server over authenticated loopback
@@ -118,7 +118,7 @@ The outer serve future is still awaited, never abandoned to detach HTTP tasks. `
 to completion before closing the backend; dropping its future is not that
 barrier. A lost stream can hide an already-committed mutation: never blindly
 retry. This legacy listener has no authentication or TLS and refuses non-loopback
-addresses. The authenticated desktop and separate guest listener are described
+addresses. The authenticated desktop is described
 below; neither provides automatic reconnect.
 
 ### Package decisions
@@ -503,23 +503,3 @@ The launcher clears the environment and passes through only names listed in
 `env`, resolving values from the host environment and local dotenv files.
 **npx-based agents must list `PATH` in `env`** so npx can find Node and any
 adapter helpers. Other agents may also need it to locate subprocess commands.
-
-## Members and sharing
-
-Plugin-mode desktop servers can add `--share 127.0.0.1:PORT` for a separate guest
-listener. It exposes only `/join` and `/ws`, refuses Origins and binds loopback;
-a TLS reverse proxy supplies the public `wss://<host>/ws` endpoint. Legacy
-`--bundle` servers cannot enable sharing. Owner-only `/members/invite`,
-`/members` and `/members/:id/revoke` controls remain on the local authenticated listener.
-
-`tokamak member invite --url wss://<host>/ws` creates a single-use invite valid
-for one day by default; `--uses` accepts 1–10 and `--ttl` accepts up to seven days.
-`tokamak member list` and `tokamak member revoke <id>` use the local owner
-capability. Revoking a member closes their current sessions. The desktop joins
-with `tokamak-desktop join <link> --name <name>` and stores its credentials in a private
-`remote.json`; `tokamak-desktop leave` removes that profile.
-
-Host tables retain only invite and credential hashes. Guest calls require
-explicit function opt-in, cannot access owner controls or ACP, and receive
-sanitized errors. Chat applies per-thread visibility, send quotas and starter
-permissions; see [the Chat contract](../../plugins/chat/README.md#sharing).

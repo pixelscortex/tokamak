@@ -11,7 +11,6 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 pub(crate) struct NestedCall {
-    pub caller: crate::members::Caller,
     pub generation: Option<Arc<Loaded>>,
     pub owner: Option<String>,
     pub name: String,
@@ -24,25 +23,21 @@ pub(crate) fn operations(
     commands: mpsc::WeakSender<Command>,
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
-    identity: crate::members::Caller,
     environment: Arc<crate::environment::Snapshot>,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
-    identity.register(&mut ops);
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
-        if !identity.is_guest() {
-            crate::host::acp::register(
-                &mut ops,
-                loaded.catalog.acp.clone(),
-                owner.clone(),
-                loaded.catalog.plugins[owner]
-                    .manifest
-                    .plugin
-                    .permissions
-                    .iter()
-                    .any(|p| p == "acp"),
-            )?;
-        }
+        crate::host::acp::register(
+            &mut ops,
+            loaded.catalog.acp.clone(),
+            owner.clone(),
+            loaded.catalog.plugins[owner]
+                .manifest
+                .plugin
+                .permissions
+                .iter()
+                .any(|p| p == "acp"),
+        )?;
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
                 .manifest
@@ -62,14 +57,12 @@ pub(crate) fn operations(
         ("action.runQuery", FunctionKind::Query),
         ("action.runMutation", FunctionKind::Mutation),
     ] {
-        let identity = identity.clone();
         let commands = commands.clone();
         let generation = generation.clone();
         let owner = owner.clone();
         let environment = environment.clone();
         ops.register_async(operation, move |payload| {
             let environment = environment.clone();
-            let identity = identity.clone();
             let commands = commands.clone();
             let generation = generation.clone();
             let owner = owner.clone();
@@ -87,7 +80,6 @@ pub(crate) fn operations(
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
-                        caller: identity,
                         generation,
                         owner,
                         name,

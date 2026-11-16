@@ -6,21 +6,6 @@ impl Coordinator {
     }
 
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
-        if self
-            .sessions
-            .get(&session)
-            .is_some_and(|client| client.caller.is_guest())
-        {
-            match &mut event {
-                Event::Response {
-                    result: Err(error), ..
-                }
-                | Event::Subscription {
-                    result: Err(error), ..
-                } => *error = public_error(error),
-                _ => {}
-            }
-        }
         // Count serialized bytes without allocating an unbounded transport buffer.
         // Native routing envelopes are accounted for separately by the mailbox.
         struct Limit(usize);
@@ -83,25 +68,4 @@ impl Coordinator {
             self.sessions.remove(&session);
         }
     }
-}
-
-// Engine errors start with the thrown message, followed by remapped stack lines.
-fn public_error(error: &str) -> String {
-    error
-        .lines()
-        .next()
-        .unwrap_or("Request failed")
-        .split_whitespace()
-        .map(|word| {
-            if word.contains(['/', '\\']) {
-                "[path]"
-            } else {
-                word
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(256)
-        .collect()
 }

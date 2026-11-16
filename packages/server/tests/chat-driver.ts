@@ -11,7 +11,7 @@ import { discoverTools } from "./chat/backend/tools";
 import { acpSend } from "./chat/backend/acp";
 import { send as chatSend } from "./chat/backend/chat";
 import { api } from "./chat/backend/_generated/api";
-import { api as todo } from "./todo/backend/_generated/api";
+import { api as record } from "./record/backend/_generated/api";
 import { CHAT_MODELS, DEFAULT_MODEL, currentModel } from "./chat/models";
 import { completionChunk, completionEnd } from "./completions";
 
@@ -117,17 +117,6 @@ export async function chatScenario(
           client.mutation(api.permissions.answer, { ...args, optionId: "invalid" }),
           /Unknown permission option/,
         );
-        await client.mutation(api.testing.identities, {
-          runId: run._id,
-          starter: "someone",
-          owner: "someone",
-        });
-        await assert.rejects(
-          client.mutation(api.permissions.answer, args),
-          /Only the run starter or thread owner/,
-        );
-        // Owner can answer even when another member started the run.
-        await client.mutation(api.testing.identities, { runId: run._id, starter: "someone", owner: "owner" });
         const answers = await Promise.allSettled([
           client.mutation(api.permissions.answer, args),
           client.mutation(api.permissions.answer, args),
@@ -157,7 +146,7 @@ export async function chatScenario(
         mode === "allow" ? "answered" : mode === "cancel" ? "cancelled" : "expired",
       );
       if (mode === "allow") {
-        assert.deepEqual([permission.optionId, permission.answeredBy], ["yes", "owner"]);
+        assert.equal(permission.optionId, "yes");
         assert.match(JSON.stringify(settled.parts), /selected/);
       }
       if (mode === "timeout") assert.match(JSON.stringify(settled.parts), /cancelled/);
@@ -326,24 +315,24 @@ export async function chatScenario(
       await client.mutation(api.threads.setModel, { threadId, model });
       const result = await client.action(api.chat.send, {
         threadId,
-        text: "Add a todo to buy milk tomorrow",
+        text: "Add a record to buy milk tomorrow",
       });
       const messages = await client.query(api.messages.list, { threadId });
       const part = messages[1]?.parts.find(
-        (part) => part.type === "tool" && part.plugin === "todo" && part.status === "done",
+        (part) => part.type === "tool" && part.plugin === "record" && part.status === "done",
       );
       if (result.status === "done" && part?.type === "tool") {
-        const row = await client.query(todo.todo.get, {
-          id: (part.result as { id: import("@tokamak/sdk").Id<"todos"> }).id,
+        const row = await client.query(record.record.get, {
+          id: (part.result as { id: import("@tokamak/sdk").Id<"records"> }).id,
         });
         assert.ok(row);
         assert.match(row.title, /milk/i);
         console.error(
-          `OpenRouter tool smoke passed: ${model}; tool part done; todo exists: ${JSON.stringify(row.title)}`,
+          `OpenRouter tool smoke passed: ${model}; tool part done; record exists: ${JSON.stringify(row.title)}`,
         );
         return;
       }
-      const reason = messages[1]?.error ?? "no completed Todo tool call";
+      const reason = messages[1]?.error ?? "no completed Record tool call";
       failures.push(`${model}: ${reason}`);
       console.error(`OpenRouter tool smoke failed: ${model}: ${reason}`);
     }
@@ -375,7 +364,7 @@ export async function chatScenario(
       const request = JSON.parse(body);
       assert.deepEqual(
         request.tools.map((tool: { function: { name: string } }) => tool.function.name).sort(),
-        ["todo__todos_create", "b__fixture_create"].sort(),
+        ["record__records_create", "b__fixture_create"].sort(),
       );
       res.writeHead(200, { "content-type": "text/event-stream" });
       if (requests++ === 0 || toolOnly) {
@@ -471,12 +460,11 @@ export async function chatScenario(
         { threadId: "threads:heartbeat", text: "Say hello" },
         {
           async op(operation, payload): Promise<import("@tokamak/sdk").JsonValue> {
-            if (operation === "host.caller") return { memberId: "owner", name: "Owner", role: "owner" };
             const input = payload as {
               name?: string;
               args?: { delta?: string; tool?: unknown; outcome?: string };
             };
-            if (operation === "plugin.providers") return ["b", "todo"];
+            if (operation === "plugin.providers") return ["b", "record"];
             if (operation === "action.env")
               return input.name === "OPENROUTER_API_KEY" ? "fixture" : `http://127.0.0.1:${address.port}/v1`;
             if (input.name === "chat/runs:active") return null;
@@ -496,7 +484,7 @@ export async function chatScenario(
             if (input.name?.endsWith("/tools:describe"))
               return [
                 {
-                  name: input.name.startsWith("todo/") ? "todos.create" : "fixture.create",
+                  name: input.name.startsWith("record/") ? "records.create" : "fixture.create",
                   description: "Create",
                   parameters: { type: "object" },
                 },

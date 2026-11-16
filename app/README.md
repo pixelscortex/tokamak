@@ -2,7 +2,7 @@
 
 This native client hosts one shared Solid/renderer/SDK runtime and a memory
 router. It discovers installed plugin manifests and loads UI modules on demand.
-Todo lives at `../plugins/todo`; the component catalog remains root `lab/`.
+The component catalog remains root `lab/`.
 The app's own backend registry is empty; installed plugins own feature schemas.
 
 ## Commands (repository root)
@@ -48,8 +48,8 @@ or reconnect is provided.
 
 ## Validation
 
-`moon run app:test` builds a standalone compatibility host from Todo, exercises compiler/Solid lifecycle
-regressions, the original real native controls and data policy, the production
+`moon run app:test` builds a standalone compatibility host from the record fixture, exercises compiler/Solid lifecycle
+regressions, the real native controls, the production
 socket bridge and actual standalone server ownership/auth/persistence.
 `tests/support/embedded.rs` exists only for in-process regressions.
 `moon run :e2e` retains the original five POC scenarios on isolated fixture data.
@@ -58,7 +58,7 @@ No tests open the real user store.
 `moon run lab:test` separately checks the actual UI catalog. Physical native
 close/IME/VoiceOver and visual presentation remain separate manual acceptance.
 
-The application is a shared-runtime plugin shell. `bun run app` builds Chat and Todo and
+The application is a shared-runtime plugin shell. `bun run app` builds Chat and
 starts/reuses the independent server with `--plugins <workspace>/plugins`.
 [The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,
 module loading and the separate presentation frame for the current zen screen.
@@ -66,11 +66,10 @@ module loading and the separate presentation frame for the current zen screen.
 ## Chat
 
 The default screen uses the Chat plugin's persisted threads and live message
-queries through the shared SDK client. The normal bundle task builds both Chat
-and Todo. Set `OPENROUTER_API_KEY` in the ignored workspace `.env.local` before
+queries through the shared SDK client. The normal bundle task builds Chat. Set `OPENROUTER_API_KEY` in the ignored workspace `.env.local` before
 starting the server; restart an existing server after changing its environment.
 
-Enter sends; Shift+Enter adds a line; Escape stops the current run (its starter or the owner only). Cmd+Shift+S opens the owner's share picker. Tab opens
+Enter sends; Shift+Enter adds a line; Escape stops the current run. Tab opens
 Map and Tab/Escape closes it. Type to filter thread titles, use arrows and Enter
 or 1–9 to open a thread, and use Cmd+Enter in Map or Cmd+N to create one.
 Cmd+Shift+C copies the last assistant reply and briefly shows COPIED in the strip.
@@ -97,32 +96,8 @@ contents on macOS, and stopping, and exercises Map search and thread switching.
 abandoned run for three sweep ticks. `ux-autoscroll.png` captures the completed
 long reply at the bottom. Captures use the production Blitz painter with the bundled fonts.
 
-Add `TOKAMAK_CHAT_QUICKSTART=1` for a single-message check with Chat and Todo
-installed; it saves `quickstart.png` and skips the longer UX checks.
+Add `TOKAMAK_CHAT_QUICKSTART=1` for a single-message check with Chat installed; it saves `quickstart.png` and skips the longer UX checks.
 
-Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the Todo card flow
-instead: `liquid/lfm-3-1.7b:free` creates a milk todo, the harness toggles the
+Add `TOKAMAK_CHAT_TOOLS=1` to that live command to run the record fixture card flow
+instead: `liquid/lfm-3-1.7b:free` creates a milk record, the harness toggles the
 card, checks the saved task is done, and captures `tool-card-2.png`.
-
-`chat_sharing_owner_and_guest_desktops` runs an owner and a guest desktop on one
-server with `--share` and an offline streaming model. Add `TK_CAPTURE_DIR` to save
-`mp-owner-share.png` (share picker) and `mp-guest.png` (guest view mid-run).
-
-## Remote profile
-
-Redeem an invite without opening a window:
-
-```sh
-target/debug/tokamak-desktop join "tokamak://join?server=wss://host/ws&code=…" --name Sam
-target/debug/tokamak-desktop     # connect using the saved remote profile
-target/debug/tokamak-desktop leave
-```
-
-The same application data directory (or `TOKAMAK_SERVER_DIR`) holds `remote.json`
-with the server URL, member ID and bearer token. This private regular file is
-created with mode 0600 and takes precedence over local `server.json` discovery.
-Remote profiles allow `wss://` hosts; unencrypted `ws://` requires a loopback IP.
-Invite endpoints must use `/ws` without credentials, query or fragment. Join uses
-`/join` on the same origin over HTTPS (HTTP for loopback), without redirects.
-Names must have 1–32 characters and no control characters. `leave` removes the
-saved profile; restart an open desktop window to use the changed profile.

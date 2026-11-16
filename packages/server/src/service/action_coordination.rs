@@ -1,14 +1,7 @@
 use super::*;
 
 impl Coordinator {
-    pub(super) fn start_action(
-        &mut self,
-        session: u64,
-        id: u64,
-        name: String,
-        args: Json,
-        caller: Caller,
-    ) {
+    pub(super) fn start_action(&mut self, session: u64, id: u64, name: String, args: Json) {
         if self.action_jobs.len() >= ACTIONS {
             self.respond(session, id, Err("action capacity exceeded".into()));
             return;
@@ -33,7 +26,6 @@ impl Coordinator {
             self.commands.clone(),
             self.plugins.clone(),
             owner,
-            caller,
             environment.clone(),
         )
         .and_then(|ops| {
@@ -79,7 +71,6 @@ impl Coordinator {
                         &call.name,
                         call.args.clone(),
                         call.kind == FunctionKind::Mutation,
-                        call.caller.clone(),
                     )
                     .await;
                 self.drain_changes();

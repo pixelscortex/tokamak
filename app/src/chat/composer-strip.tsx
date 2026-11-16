@@ -7,7 +7,7 @@ export function ComposerStrip(props: {
   model: string;
   turns: number;
   copied: boolean;
-  starter?: string;
+  busy: boolean;
   raced: boolean;
   onModel?: () => void;
 }) {
@@ -43,9 +43,8 @@ export function ComposerStrip(props: {
         <Show when={props.copied}>
           <span role="status">COPIED</span>
         </Show>
-        <BusyStatus starter={props.starter} raced={props.raced} />
+        <BusyStatus busy={props.busy} raced={props.raced} />
 
-        {/* Guests see the backend but cannot change it. */}
         <Show when={props.onModel} fallback={<span id="chat-strip-backend">{props.model}</span>}>
           <button
             aria-label="Change backend (CMD+M)"

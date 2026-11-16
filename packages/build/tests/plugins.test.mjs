@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { source, build, built, workspace } from "../../../app/tests/plugin-fixtures.mjs";
 
@@ -184,26 +184,3 @@ test("computed dynamic imports fail the build with an actionable diagnostic", as
     expect(result.stdout + result.stderr).toContain("Dynamic plugin imports require a string literal");
   });
 }, 30_000);
-
-// 1 (acceptance): the REAL Todo plugin, not a fixture, must ship only its own
-// code. A bundled second Solid or renderer would split reactive state and the
-// renderer's node-id counter across two copies inside one window.
-test("the real Todo UI bundle carries no copy of Solid or the renderer", async () => {
-  const todo = resolve(workspace, "plugins/todo");
-  // `app:plugin-bundle` normally built this already; build only when absent.
-  if (!(await stat(resolve(todo, "dist/manifest.json")).catch(() => undefined))) built(todo);
-  const code = await artifact(todo, "ui.js");
-  expect(code).toContain('require("solid-js")');
-  expect(code).toContain('require("@tokamak/render")');
-  expect(code).not.toMatch(
-    /function createSignal\(|function createRenderer\(|function createRoot\(|document\.createElement/,
-  );
-  // Only Todo itself: a bundled runtime is hundreds of KB, Todo is a few KB.
-  expect(code.length).toBeLessThan(64 * 1024);
-  const map = JSON.parse(await artifact(todo, "ui.js.map"));
-  expect(map.sources.every((name) => !/node_modules|solid-js|render\/js/.test(name))).toBe(true);
-  const manifest = JSON.parse(await artifact(todo, "manifest.json"));
-  expect(manifest.plugin.id).toBe("todo");
-  expect(manifest.plugin.contributes.view).toEqual([{ id: "Todo", route: "/" }]);
-  expect(manifest.entries.ui.code).toBe("ui.js");
-}, 60_000);

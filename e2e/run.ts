@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport, createApi } from "../packages/sdk/src/index";
 import type { ApiFromModule, SubscriptionEvent } from "../packages/sdk/src/index";
-import { api } from "../app/dist/tests/todo/backend/_legacyApi";
+import { api } from "../app/dist/tests/record/backend/_legacyApi";
 import { buildFeature } from "../packages/server/tests/build-feature.mjs";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
@@ -131,8 +131,8 @@ async function connect(address: string) {
   }
 }
 
-type Rows = Awaited<ReturnType<TodoRead>>;
-type TodoRead = () => Promise<Array<{ _id: string; _creationTime: number; title: string; done: boolean }>>;
+type Rows = Awaited<ReturnType<RecordRead>>;
+type RecordRead = () => Promise<Array<{ _id: string; _creationTime: number; title: string; done: boolean }>>;
 
 function observer(client: TokamakClient) {
   let latest: Rows | undefined;
@@ -142,7 +142,7 @@ function observer(client: TokamakClient) {
     resolve: (rows: Rows) => void;
     reject: (error: Error) => void;
   }>();
-  const stop = client.subscribe(api.todo.list, {}, (event: SubscriptionEvent<Rows>) => {
+  const stop = client.subscribe(api.record.list, {}, (event: SubscriptionEvent<Rows>) => {
     if ("error" in event) failure = event.error;
     else latest = event.value;
     for (const waiter of pending) {
@@ -198,18 +198,18 @@ try {
   const expected: Rows = JSON.parse(await readFile(join(root, "native-rows.json"), "utf8"));
   // Scenarios 2/4: two separate SDKs, sockets and server sessions; BOTH actually
   // subscribe before either writes. Full equality proves the native data path.
-  await headless(resolve("app/dist/tests/todo/dist/bundle.js"), join(root, "store"), async (address) => {
+  await headless(resolve("app/dist/tests/record/dist/bundle.js"), join(root, "store"), async (address) => {
     const first = await connect(address);
     try {
       const second = await connect(address);
       try {
-        assert.deepEqual(await first.client.query(api.todo.list, {}), expected);
+        assert.deepEqual(await first.client.query(api.record.list, {}), expected);
         const a = observer(first.client);
         const b = observer(second.client);
         try {
           assert.deepEqual(await a.until(() => true), expected);
           assert.deepEqual(await b.until(() => true), expected);
-          const id = await first.client.mutation(api.todo.add, { title: "independent client live sync" });
+          const id = await first.client.mutation(api.record.add, { title: "independent client live sync" });
           const received = await b.until((rows) => rows.some((row) => row._id === id));
           assert.deepEqual(await a.until((rows) => rows.some((row) => row._id === id)), received);
           assert.equal(received.find((row) => row._id === id)?.title, "independent client live sync");

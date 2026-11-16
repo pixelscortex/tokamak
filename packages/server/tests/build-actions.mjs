@@ -17,11 +17,11 @@ try {
     recursive: true,
     filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
   });
-  await cp(join(workspace, "plugins/todo"), join(root, "todo"), {
+  await cp(join(workspace, "app/tests/fixtures/record"), join(root, "record"), {
     recursive: true,
     filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
   });
-  for (const id of ["todo", "a", "b", "chat"]) {
+  for (const id of ["record", "a", "b", "chat"]) {
     const path = join(root, id);
     await writeFile(
       join(path, "backend/tsconfig.json"),
@@ -43,7 +43,7 @@ import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vit
 export default { plugins: [tokamak({ ui: false, plugin: ${JSON.stringify({
         id,
         version: "1.0.0",
-        ...(id === "todo"
+        ...(id === "record"
           ? { exports: "./api.ts", provides: ["chat.tools"] }
           : id === "chat"
             ? {
@@ -95,28 +95,6 @@ export const abandon = mutation({
 export const run = query({
   args: { runId: v.id("runs") },
   handler: ({ db }, { runId }) => db.get(runId),
-});
-export const identities = mutation({
-  args: { runId: v.id("runs"), starter: v.string(), owner: v.string() },
-  handler: async ({ db }, { runId, starter, owner }) => {
-    const run = await db.get(runId);
-    await db.patch(runId, { startedBy: starter });
-    await db.patch(run!.threadId, { ownerId: owner });
-    return null;
-  },
-});
-// Seed completed history to exercise rolling guest quotas without 100 HTTP calls.
-export const quota = mutation({
-  args: { memberId: v.string(), messageId: v.id("messages"), count: v.number(), age: v.number() },
-  handler: async ({ db }, { memberId, messageId, count, age }) => {
-    for (const run of await db.query("runs").withIndex("by_starter", q => q.eq("startedBy", memberId)).collect()) await db.delete(run._id);
-    const message = await db.get(messageId);
-    for (let i = 0; i < count; i++) await db.insert("runs", {
-      threadId: message!.threadId, messageId, startedBy: memberId, status: "done",
-      model: "openrouter/free", startedAt: Date.now() - age,
-    });
-    return null;
-  },
 });
 export const age = mutation({
   args: { runId: v.id("runs"), offset: v.number() },

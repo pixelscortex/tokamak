@@ -51,27 +51,27 @@ Queries and mutations are **deterministic**. Inside one call the clock is frozen
 ## Flow 1: a live query (`useQuery`)
 
 ```
-UI:  const todos = useQuery(api.todo.list)
+UI:  const notes = useQuery(api.notes.list)
 
-1  desktop → server   "subscribe to todo/list"
-2  Coordinator        runs todo.list in QuickJS
+1  desktop → server   "subscribe to notes/list"
+2  Coordinator        runs notes.list in QuickJS
 3  data/              while it runs, records WHAT it read:
-                        e.g. (todo/items, all rows)  or  (todo/items, id = 5)
+                        e.g. (notes/items, all rows)  or  (notes/items, id = 5)
 4  server → desktop   the result
 5  UI                 Solid re-renders with it
 ```
 
-The subscription stays open. The server remembers "this screen depends on (todo/items, …)".
+The subscription stays open. The server remembers "this screen depends on (notes/items, …)".
 
 ## Flow 2: a write (`useMutation`)
 
 ```
 UI:  setDone({ id: 5, done: true })
 
-1  desktop → server   "run todo/setDone"
+1  desktop → server   "run notes/setDone"
 2  Coordinator        opens a transaction, runs setDone in QuickJS
 3  data/              commits; produces a FOOTPRINT: what changed
-                        e.g. (todo/items, id = 5)
+                        e.g. (notes/items, id = 5)
 4  Coordinator        finds every open subscription whose recorded reads
                       overlap that footprint, and re-runs ONLY those
 5  server → desktop   new results for those subscriptions (every window,
@@ -94,7 +94,7 @@ action: summarize
   └─ ctx.runMutation(...)     save the result (separate short transaction)
 ```
 
-Actions run on their **own lane**, so a 2-minute AI call never blocks your todos. They never hold a database transaction open.
+Actions run on their **own lane**, so a 2-minute AI call never blocks your notes. They never hold a database transaction open.
 
 ## Plugins calling plugins
 

@@ -47,7 +47,7 @@ export function ThreadView(props: {
       .at(-1);
 
   async function answer(messageId: Id<"messages">, part: Permission, optionId: string) {
-    if (!props.chat.isOwner() || answering()) return;
+    if (answering()) return;
     setAnswering(true);
     try {
       await props.chat.client.mutation(api.permissions.answer, {
@@ -63,7 +63,6 @@ export function ThreadView(props: {
   }
   createEffect(() =>
     props.onPermissionReady?.((index) => {
-      if (!props.chat.isOwner()) return false;
       const latest = latestPermission();
       const option = latest && permissionOptions(latest.part)[index];
       if (!latest || !option) return false;
@@ -138,12 +137,7 @@ export function ThreadView(props: {
               loader={props.loader}
               threadId={props.threadId}
               message={byId().get(id)!}
-              viewerId={props.chat.identity()?.memberId}
-              onAnswer={
-                props.chat.isOwner()
-                  ? (part, optionId) => void answer(byId().get(id)!._id, part, optionId)
-                  : undefined
-              }
+              onAnswer={(part, optionId) => void answer(byId().get(id)!._id, part, optionId)}
               liveCards={props.hidden ? new Set<string>() : liveCards()}
             />
           )}
@@ -160,7 +154,7 @@ export function ThreadView(props: {
           model={backendLabel(props.chat.thread())}
           turns={turns()}
           copied={copied()}
-          starter={props.chat.active()?.starterName}
+          busy={Boolean(props.chat.active())}
           raced={props.raced}
           onModel={props.onBackend}
         />

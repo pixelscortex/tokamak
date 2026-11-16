@@ -1,8 +1,6 @@
 //! Native UI host and bounded client drain; never owns server/storage lifetime.
 pub mod connection;
-pub mod invite;
 mod private_file;
-pub mod remote;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -76,7 +74,7 @@ pub fn run_with(config: ClientConfig<'_>, options: render::WindowOptions) -> Res
     Ok(())
 }
 
-/// Shared by desktop commands and connection discovery.
+/// Directory for local server connection discovery.
 pub fn data_directory() -> Result<std::path::PathBuf, Error> {
     std::env::var_os("TOKAMAK_SERVER_DIR")
         .map(std::path::PathBuf::from)

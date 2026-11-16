@@ -1,9 +1,9 @@
 #!/bin/sh
 # TKM-10 final independent tests. The bundle dependency supplies the production
-# feature and UI; no raw DB shortcuts or substitute Todo fixtures are built.
+# feature and UI; a small record fixture exercises the legacy raw-bundle host.
 set -eu
 export NODE_ENV=production CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
-proto run bun -- tests/build-todo.ts
+proto run bun -- tests/build-fixture.ts
 proto run bun -- check --no-script --project tests/tsconfig.json
 proto run bun -- tests/build-graph.ts
 proto run bun -- tests/compiler.ts

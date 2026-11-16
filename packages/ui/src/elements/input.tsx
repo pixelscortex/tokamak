@@ -22,7 +22,7 @@ export interface InputProps extends Omit<JSX.InputAttributes, "children"> {
 /** Parts: field, label, input, description (data-part). The input exposes
  * data-disabled, data-invalid, data-focused only when true. class styles the
  * control; label/description IDs are joined with supplied ARIA relationships.
- * @example <Input label="Todo" description="One task" value={title()} onValueChange={setTitle} />
+ * @example <Input label="Notes" description="One task" value={title()} onValueChange={setTitle} />
  * @example <Input defaultValue="Buy milk" render={(props) => <input {...props} />} />
  * `value !== undefined` means controlled; defaultValue is read only on mount.
  */

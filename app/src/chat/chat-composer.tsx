@@ -2,7 +2,6 @@ import { Show } from "solid-js";
 import type { NativeEvent } from "@tokamak/render";
 import { ComposerInput } from "./composer-input";
 import { Mark } from "./message";
-import { authorInitial } from "./use-identity";
 import type { ChatState } from "./use-chat";
 import type { useDrafts } from "./use-drafts";
 import type { useMap } from "./use-map";
@@ -19,7 +18,7 @@ export function ChatComposer(props: {
       class={`flex shrink-0 items-start gap-3 ${props.mapOpen ? "order-1 border-b border-hairline py-3" : ""}`}
     >
       <Show when={!props.mapOpen}>
-        <Mark user initial={authorInitial(props.chat.identity() ?? {})} />
+        <Mark user />
       </Show>
       <ComposerInput
         mapOpen={props.mapOpen}

@@ -3,7 +3,6 @@
 //! rejoin that coordinator only for nested query/mutation calls.
 //! A session has ONE ordered output stream; transports must preserve its order.
 
-use crate::members::{self, Caller};
 pub use crate::protocol::Event;
 use crate::protocol::Request;
 use crate::{
@@ -87,7 +86,6 @@ pub struct SessionSender {
     slow: Arc<AtomicBool>,
     alive: mpsc::WeakSender<Event>,
     wait_for_capacity: bool,
-    caller: Caller,
 }
 
 fn admit(sender: &mpsc::Sender<Command>, command: Command) -> Result<(), Error> {
@@ -105,12 +103,8 @@ type Connection = (
 );
 
 pub(crate) enum Command {
-    Connect(
-        Option<String>,
-        oneshot::Sender<Result<(Connection, Caller), Error>>,
-    ),
-    Members(members::Operation, oneshot::Sender<Result<Json, Error>>),
-    Action(u64, Caller, Action),
+    Connect(oneshot::Sender<Result<Connection, Error>>),
+    Action(u64, Action),
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
@@ -161,7 +155,6 @@ struct Subscription {
 }
 
 struct Client {
-    caller: Caller,
     output: mpsc::Sender<Event>,
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,
@@ -172,7 +165,6 @@ struct Coordinator {
     pool: Arc<Pool>,
     bundle: Option<Arc<Bundle>>,
     kinds: BTreeMap<String, FunctionKind>,
-    guest_functions: std::collections::BTreeSet<String>,
     space: DataSpace,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,

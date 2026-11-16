@@ -14,23 +14,23 @@ schema for table, document and filter types:
 // schema.ts
 import { defineSchema, defineTable, v } from "@tokamak/sdk";
 export default defineSchema({
-  todos: defineTable({ text: v.string(), done: v.boolean() }),
+  notes: defineTable({ text: v.string(), done: v.boolean() }),
 });
 ```
 
 ```ts
-// todos.ts
+// notes.ts
 import { createFunctions, v } from "@tokamak/sdk";
 import schema from "./schema";
 const { query, mutation } = createFunctions(schema);
 
 export const list = query({
   args: { done: v.boolean() },
-  handler: (ctx, { done }) => ctx.db.query("todos").where("done", "=", done).order("desc").collect(),
+  handler: (ctx, { done }) => ctx.db.query("notes").where("done", "=", done).order("desc").collect(),
 });
 export const add = mutation({
   args: { text: v.string() },
-  handler: (ctx, { text }) => ctx.db.insert("todos", { text, done: false }),
+  handler: (ctx, { text }) => ctx.db.insert("notes", { text, done: false }),
 });
 ```
 
@@ -52,7 +52,7 @@ Declare indexes on tables before loading the plugin:
 
 ```ts
 const schema = defineSchema({
-  todos: defineTable({ owner: v.string(), text: v.string(), created: v.number() })
+  notes: defineTable({ owner: v.string(), text: v.string(), created: v.number() })
     .index("by_owner_created", ["owner", "created"])
     .unique("by_owner_text", ["owner", "text"]),
 });
@@ -61,7 +61,7 @@ const recent = query({
   args: { owner: v.string(), since: v.number() },
   handler: (ctx, { owner, since }) =>
     ctx.db
-      .query("todos")
+      .query("notes")
       .withIndex("by_owner_created", (q) => q.eq("owner", owner).gt("created", since))
       .order("desc")
       .take(20),
@@ -175,9 +175,9 @@ because checking the references also checks the backend source types.
 import { TokamakClient } from "@tokamak/sdk";
 import { api } from "./_generated/api";
 const client = new TokamakClient(transport); // see concrete transports below
-const rows = await client.query(api.todos.list, { done: false });
-const id = await client.mutation(api.todos.add, { text: "Read this" });
-const stop = client.subscribe(api.todos.list, { done: false }, (event) => {
+const rows = await client.query(api.notes.list, { done: false });
+const id = await client.mutation(api.notes.add, { text: "Read this" });
+const stop = client.subscribe(api.notes.list, { done: false }, (event) => {
   // event is { value: typeof rows } | { error: Error }
 });
 stop();

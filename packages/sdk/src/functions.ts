@@ -25,21 +25,13 @@ export type PluginCalls<T, K extends FunctionKind> =
       : never
     : { readonly [P in keyof T]: PluginCalls<T[P], K> };
 
-export interface Caller {
-  readonly memberId: string;
-  readonly name: string;
-  readonly role: "owner" | "guest";
-}
-
 export interface QueryContext<M extends DataModel> {
-  readonly caller: Caller;
   readonly db: DatabaseReader<M>;
   use<T>(api: T): PluginCalls<T, "query">;
   providers<T>(interfaceName: string): Promise<readonly T[]>;
 }
 
 export interface MutationContext<M extends DataModel> {
-  readonly caller: Caller;
   readonly db: DatabaseWriter<M>;
   use<T>(api: T): PluginCalls<T, "query" | "mutation">;
   providers<T>(interfaceName: string): Promise<readonly T[]>;
@@ -74,7 +66,6 @@ export interface AcpContext {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext {
-  readonly caller: Caller;
   readonly acp: AcpContext;
   /** Requires a manifest env:<name> grant; unset values return null. */
   env(name: string): Promise<string | null>;
@@ -88,7 +79,6 @@ const definitionBrand = Symbol("tokamak.function");
 export interface FunctionDefinition<K extends FunctionKind = FunctionKind, A = unknown, R = unknown> {
   readonly [definitionBrand]: true;
   readonly kind: K;
-  readonly guest: boolean;
   readonly args: ValidatorDescription;
   readonly _types?: { args: A; result: R };
   invoke(args: unknown, host: HostBridge): Promise<JsonValue>;
@@ -99,7 +89,6 @@ export type FunctionBuilder<K extends FunctionKind, M extends DataModel> = <
   R = unknown,
 >(definition: {
   args?: F;
-  guest?: boolean;
   handler: (
     ctx: K extends "query" ? QueryContext<M> : K extends "mutation" ? MutationContext<M> : ActionContext,
     args: ObjectValue<F>,
@@ -116,7 +105,6 @@ function builder<K extends FunctionKind, M extends DataModel>(
     return Object.freeze({
       [definitionBrand]: true as const,
       kind,
-      guest: definition.guest === true,
       args: description,
       async invoke(input: unknown, host: HostBridge) {
         // A snapshot both rejects lossy JSON and prevents a caller mutating args
@@ -137,11 +125,9 @@ function builder<K extends FunctionKind, M extends DataModel>(
             name: reference[functionName],
             args: jsonSnapshot(input, "nested call args"),
           });
-        const caller = Object.freeze(await callHost(host, "host.caller", {}));
         const ctx = Object.freeze(
           kind === "action"
             ? {
-                caller,
                 acp: createAcp(host),
                 env: (name: string) => callHost(host, "action.env", { name }),
                 runQuery: (reference: { [functionName]: string }, args: unknown) =>
@@ -151,7 +137,6 @@ function builder<K extends FunctionKind, M extends DataModel>(
                 providers,
               }
             : {
-                caller,
                 db:
                   kind === "query"
                     ? createDatabase<M>(host, false, schema)
@@ -264,11 +249,10 @@ export function createRegistry(modules: Record<string, object>): FunctionRegistr
 /** Host inspection does not execute handlers or require a bridge. */
 export function functionMetadata(
   registry: FunctionRegistry,
-): { name: string; kind: FunctionKind; guest: boolean; args: ValidatorDescription }[] {
+): { name: string; kind: FunctionKind; args: ValidatorDescription }[] {
   return Object.entries(registry).map(([name, definition]) => ({
     name,
     kind: definition.kind,
-    guest: definition.guest,
     args: definition.args,
   }));
 }
