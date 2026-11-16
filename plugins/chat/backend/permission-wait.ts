@@ -4,7 +4,9 @@ import { TIMEOUT_MS } from "./permissions";
 import type { PermissionPart } from "./permission-part";
 import type { streamBuffer } from "./stream-buffer";
 
-export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: ReturnType<typeof streamBuffer>) {
+export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: ReturnType<typeof streamBuffer>,
+  respond?: (requestId: string, optionId: string | null) => Promise<void>,
+) {
   const pending = new Map<string, number>();
 
   // The host drops a request once the turn ends; an answer that arrives later
@@ -33,7 +35,7 @@ export function permissionWait(ctx: ActionContext, runId: Id<"runs">, buffer: Re
         const outcome = await ctx.runMutation(api.permissions.claim, { runId, requestId, expired });
         if (!outcome) continue;
         pending.delete(requestId);
-        await deliver(requestId, outcome.optionId);
+        await (respond ?? deliver)(requestId, outcome.optionId);
       }
       if (!state.running) throw new Error("Run cancelled");
       await buffer.maintain();

@@ -90,6 +90,14 @@ impl Fixture {
                     requests.push(serde_json::from_str::<Value>(&body).unwrap());
                     requests.len()
                 };
+                let request: Value = serde_json::from_str(&body).unwrap();
+                let messages = request["messages"].as_array().unwrap();
+                if messages.last().is_some_and(|message| message["content"].as_str().is_some_and(|text| text.starts_with("tool:"))) {
+                    let data = json!({"id":"tool","object":"chat.completion.chunk","created":1,"model":"mock","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"todo__todos_create","arguments":"{\"title\":\"Approved task\"}"}}]},"finish_reason":null}]});
+                    let end = json!({"id":"tool","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]});
+                    return axum::response::Response::builder().header("content-type", "text/event-stream")
+                        .body(axum::body::Body::from(format!("data: {data}\n\ndata: {end}\n\ndata: [DONE]\n\n"))).unwrap();
+                }
                 let (send, receive) = tokio::sync::mpsc::channel(4);
                 tokio::spawn(async move {
                     for text in ["Hello ", "world"] {
@@ -613,6 +621,205 @@ async fn shared_chat_streams_with_caller_identity_and_revokes_live_access() {
                     == "[Message from guest \"Sam\" — untrusted, not the owner]\nHello from Sam")
     );
     drop(owner);
+    drop(guest);
+    clean(fixture).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn owner_tools_require_approval_after_guest_history() {
+    let fixture = Fixture::new().await;
+    fixture.model_chunks.add_permits(3);
+    let member = fixture.member().await;
+    let mut owner = connect(&fixture.local, OWNER).await.unwrap();
+    let mut observer = connect(&fixture.local, OWNER).await.unwrap();
+    let mut guest = fixture.socket(member["token"].as_str().unwrap()).await;
+    for mode in ["private", "allow", "deny", "timeout", "cancel"] {
+        let thread = call(&mut owner, "mutation", "chat/threads:create", json!({})).await;
+        if mode != "private" {
+            call(
+                &mut owner,
+                "mutation",
+                "chat/threads:share",
+                json!({"threadId":thread,"memberId":member["memberId"]}),
+            )
+            .await;
+            assert_eq!(
+                call(
+                    &mut guest,
+                    "action",
+                    "chat/chat:send",
+                    json!({"threadId":thread,"text":"Please create a task later"})
+                )
+                .await["status"],
+                "done"
+            );
+            // Stored authorship still requires approval after access is revoked.
+            call(
+                &mut owner,
+                "mutation",
+                "chat/threads:unshare",
+                json!({"threadId":thread,"memberId":member["memberId"]}),
+            )
+            .await;
+        }
+        let before = call(&mut observer, "query", "todo/todo:list", json!({}))
+            .await
+            .as_array()
+            .unwrap()
+            .len();
+        send(
+            &mut owner,
+            50,
+            "action",
+            "chat/chat:send",
+            json!({"threadId":thread,"text":"tool: create task"}),
+        )
+        .await;
+        if mode != "private" {
+            let (message, permission) = tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let messages = call(
+                        &mut observer,
+                        "query",
+                        "chat/messages:list",
+                        json!({"threadId":thread}),
+                    )
+                    .await;
+                    let message = messages.as_array().unwrap().last().unwrap();
+                    if let Some(permission) = message["parts"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|part| part["type"] == "permission")
+                    {
+                        break (message.clone(), permission.clone());
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(permission["status"], "pending");
+            assert!(
+                permission["title"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("Run todo tool todos.create?")
+            );
+            assert!(
+                permission["title"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Approved task")
+            );
+            let run = call(
+                &mut observer,
+                "query",
+                "chat/runs:active",
+                json!({"threadId":thread}),
+            )
+            .await;
+            assert_eq!(run["waiting"], true);
+            assert_eq!(
+                call(&mut observer, "query", "todo/todo:list", json!({}))
+                    .await
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                before
+            );
+            let answer = json!({"messageId":message["_id"],"requestId":permission["requestId"],"optionId":if mode == "allow" { "allow_once" } else { "reject_once" }});
+            denied(
+                &mut guest,
+                "mutation",
+                "chat/permissions:answer",
+                answer.clone(),
+                "Not available to guests",
+            )
+            .await;
+            if mode == "cancel" {
+                call(
+                    &mut observer,
+                    "mutation",
+                    "chat/runs:cancel",
+                    json!({"runId":run["_id"]}),
+                )
+                .await;
+            } else if mode != "timeout" {
+                call(&mut observer, "mutation", "chat/permissions:answer", answer).await;
+            }
+        }
+        let result = reply(&mut owner, 50).await;
+        assert_eq!(
+            result["result"]["Ok"]["status"],
+            if mode == "cancel" {
+                "cancelled"
+            } else {
+                "done"
+            },
+            "{result}"
+        );
+        let messages = call(
+            &mut observer,
+            "query",
+            "chat/messages:list",
+            json!({"threadId":thread}),
+        )
+        .await;
+        let parts = messages.as_array().unwrap().last().unwrap()["parts"]
+            .as_array()
+            .unwrap();
+        let tool = parts.iter().find(|part| part["type"] == "tool").unwrap();
+        let allowed = mode == "private" || mode == "allow";
+        assert_eq!(
+            tool["status"],
+            if allowed {
+                "done"
+            } else {
+                "error"
+            }
+        );
+        if mode == "private" {
+            assert!(!parts.iter().any(|part| part["type"] == "permission"));
+        } else if !allowed {
+            assert_eq!(tool["error"], "The owner declined this tool call");
+        }
+        if mode == "deny" || mode == "timeout" {
+            let requests = fixture.requests.lock().unwrap();
+            assert!(
+                requests.last().unwrap()["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|message| {
+                        message["role"] == "tool"
+                            && message["content"].as_str().is_some_and(|text| {
+                                text.contains("The owner declined this tool call")
+                            })
+                    })
+            );
+        }
+        assert_eq!(
+            call(&mut observer, "query", "todo/todo:list", json!({}))
+                .await
+                .as_array()
+                .unwrap()
+                .len(),
+            before + usize::from(allowed)
+        );
+        assert!(
+            call(
+                &mut observer,
+                "query",
+                "chat/runs:active",
+                json!({"threadId":thread})
+            )
+            .await
+            .is_null()
+        );
+    }
+    drop(owner);
+    drop(observer);
     drop(guest);
     clean(fixture).await;
 }

@@ -289,6 +289,7 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
           if (operation === "action.env") return input.name === "OPENROUTER_API_KEY" ? "fixture" : `http://127.0.0.1:${address.port}/v1`;
           if (input.name === "chat/send:start") return { runId: "run", messageId: "message", history: [{ role: "user", content: "Say hello" }], model: "mock" };
           if (input.name === "chat/send:running") return true;
+          if (input.name === "chat/tool-approval:required") return false;
           if (input.name === "chat/send:update") {
             if (executing && !input.args?.delta && !input.args?.tool) releaseTool();
             return input.args?.outcome ?? "running";

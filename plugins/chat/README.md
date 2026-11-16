@@ -80,6 +80,14 @@ backends. Their sends use the owner's selected model and key, with no tools,
 at most 20 runs per rolling hour and 100 per rolling day per member, and a
 16 KB UTF-8 text limit. Model history keeps owner turns plain and always marks
 guest turns as untrusted, using their stored author identity even after unsharing.
+Owner-started model runs in any thread with a guest-authored message require
+approval before every tool call, including after unsharing. Each call shows an
+inline permission with the plugin, tool and a short argument summary. Allow runs
+that call once; Deny or a 30-minute timeout returns `The owner declined this tool call`
+to the model and marks the tool as an error. Cancellation stops the run and marks
+the pending call with the same declined error. Only the owner can answer.
+Threads without guest messages run tools without prompts; ACP permissions keep
+their existing behavior.
 `members:hello` rejects guest names equal to "owner" case-insensitively.
 
 `runs:running` names each run's starter from `members` (falling back to `Owner`
@@ -89,7 +97,7 @@ Only `threads:list`, `messages:list`, `runs:running`, `runs:active`, `chat:send`
 `runs:cancel`, `runs:recover` and `members:hello` accept guest wire calls. Guests
 may cancel only their own runs in visible threads; the owner may cancel any run.
 Guests cannot create, rename or remove threads, change models or backends,
-list agents, share threads, list members, or answer ACP permissions.
+list agents, share threads, list members, or answer permissions.
 
 The shell uses one `runs:running` subscription for Map grouping and active-run state,
 regardless of thread count. This query uses the runs `by_status` index.

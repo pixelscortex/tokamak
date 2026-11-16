@@ -11,6 +11,7 @@ export type ToolTarget = { plugin: string; toolName: string };
 export async function discoverTools(
   ctx: ActionContext, threadId: string, running: () => Promise<boolean>,
   acknowledged: (callId: string) => Promise<unknown>,
+  approve?: (callId: string, target: ToolTarget, args: JsonValue) => Promise<void>,
 ) {
   const tools: ToolSet = {};
   const targets = new Map<string, ToolTarget>();
@@ -36,6 +37,8 @@ export async function discoverTools(
             checkToolArgs(args);
             if (!await running()) throw new Error("cancelled");
             if (await acknowledged(toolCallId) !== "running") throw new Error("cancelled");
+            await approve?.(toolCallId, target, args as JsonValue);
+            if (!await running()) throw new Error("cancelled");
             const out = await ctx.runMutation(provider.tools.invoke, { name: description.name, args: args as JsonValue, threadId });
             return out;
           };

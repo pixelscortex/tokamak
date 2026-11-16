@@ -4,6 +4,7 @@ import { action } from "./_functions";
 import { api } from "./_generated/api";
 import { acpSend } from "./acp";
 import { discoverTools } from "./tools";
+import { toolApproval } from "./tool-approval";
 import { streamBuffer } from "./stream-buffer";
 import { toolEvents } from "./tool-events";
 import { toolAcknowledgements } from "./acknowledgements";
@@ -28,7 +29,7 @@ export const send = action({
     });
 
     try {
-      const { tools, targets } = await modelTools(ctx, args.threadId, runId, acknowledgements);
+      const { tools, targets } = await modelTools(ctx, args.threadId, runId, acknowledgements, buffer);
       const events = toolEvents(ctx, targets, buffer, acknowledgements);
       const source = await buffer.waitFor(modelStream(ctx, history, controller.signal, model, tools));
       const iterator = source.stream[Symbol.asyncIterator]();
@@ -61,8 +62,8 @@ export const send = action({
   },
 });
 
-function modelTools(ctx: ActionContext, threadId: Id<"threads">, runId: Id<"runs">, acknowledgements: ReturnType<typeof toolAcknowledgements>) {
+async function modelTools(ctx: ActionContext, threadId: Id<"threads">, runId: Id<"runs">, acknowledgements: ReturnType<typeof toolAcknowledgements>, buffer: ReturnType<typeof streamBuffer>) {
   if (ctx.caller.role === "guest") return { tools: {}, targets: new Map() };
   return discoverTools(ctx, threadId,
-    () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgements.get(callId).promise);
+    () => ctx.runQuery(api.send.running, { runId }), callId => acknowledgements.get(callId).promise, await toolApproval(ctx, threadId, runId, buffer));
 }

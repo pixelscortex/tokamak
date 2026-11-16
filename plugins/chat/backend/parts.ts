@@ -46,6 +46,15 @@ export function boundedError(error: string): string {
   return error.slice(0, 680);
 }
 
+export const DECLINED = "The owner declined this tool call";
+
+// Cancellation settles parts immediately, before the action observes it.
+export function declinePendingTools(parts: Part[]) {
+  const pending = new Set(parts.flatMap(part => part.type === "permission" && part.status === "pending" ? [part.callId] : []));
+  return parts.map(part => part.type === "tool" && part.status === "running" && pending.has(part.callId)
+    ? { ...part, status: "error" as const, error: DECLINED } : part);
+}
+
 export function interruptTools(parts: Part[], error: string) {
   return parts.map(part => part.type === "permission" && part.status === "pending"
     ? claimPermission({ ...part }, error === "cancelled" ? "cancelled" : "expired")
