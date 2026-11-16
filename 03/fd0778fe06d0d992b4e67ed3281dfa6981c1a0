@@ -1,0 +1,21 @@
+moon.yml
+  s_186fb549a459e6::t_a4b7c941521481 23-24,64-80
+app/moon.yml
+  s_186fb549a459e6::t_a4b7c941521481 48-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "03fd0778fe06d0d992b4e67ed3281dfa6981c1a0",
+  "prompts": {},
+  "sessions": {
+    "s_186fb549a459e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e542-d630-7ef0-aba8-12cca9ea3b71",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
