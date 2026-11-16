@@ -52,7 +52,10 @@ for line in sys.stdin:
                 pending = request
                 cancelled = True
                 continue
-            update(sessionUpdate='tool_call_update', toolCallId='chat-tool', status='completed', content=[dict(type='content', content=dict(type='text', text='Result'))], rawOutput='x' * 9000)
+            if mode == 'crash':
+                sys.exit(9)
+            if mode not in ['refusal', 'cancelled']:
+                update(sessionUpdate='tool_call_update', toolCallId='chat-tool', status='completed', content=[dict(type='content', content=dict(type='text', text='Result'))], rawOutput='x' * 9000)
             update(sessionUpdate='agent_message_chunk', content=dict(type='image', data='ignored'))
             if mode == 'permission':
                 pending = request

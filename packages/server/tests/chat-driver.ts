@@ -41,10 +41,14 @@ export async function chatScenario(client: TokamakClient, scenario: string, conf
     const stored = (await client.query(api.threads.list, {}))[0]!.backend;
     assert.ok(stored?.kind === "acp" && stored.sessionId === "session");
     // The fake recognizes only exact prompts: a history prefix on a restored turn fails these checks.
-    for (const reason of ["max_tokens", "max_turn_requests", "refusal", "cancelled", "permission"]) {
-      assert.equal((await send(`chat:${reason}`)).status, reason === "refusal" ? "error" : reason === "cancelled" ? "cancelled" : "done");
+    for (const reason of ["max_tokens", "max_turn_requests", "refusal", "cancelled", "permission", "crash"]) {
+      assert.equal((await send(`chat:${reason}`)).status, reason === "refusal" || reason === "crash" ? "error" : reason === "cancelled" ? "cancelled" : "done");
       const last = (await messages()).at(-1)!;
       if (reason === "refusal") assert.equal(last.error, "Agent refused");
+      if (["refusal", "cancelled", "crash"].includes(reason)) {
+        const tool = last.parts.find(part => part.type === "tool");
+        assert.deepEqual(tool && { status: tool.status, error: tool.error }, { status: "error", error: reason === "cancelled" ? "cancelled" : last.error });
+      }
       if (reason.startsWith("max_") || reason === "permission")
         assert.match(last.parts.filter(part => part.type === "text").map(part => part.text).join(""), reason === "permission" ? /permission request cancelled/ : /limit/);
     }

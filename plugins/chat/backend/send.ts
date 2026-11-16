@@ -73,7 +73,8 @@ export const update = mutation({
       if (index < 0) parts.push(plan);
       else parts[index] = plan;
     }
-    if (outcome === "cancelled") parts = interruptTools(parts, "cancelled");
+    if (outcome) parts = interruptTools(parts, outcome === "error"
+      ? boundedError(error ?? "Agent failed") : outcome === "cancelled" ? "cancelled" : "Tool did not complete");
 
     await db.patch(run.messageId, {
       parts,
