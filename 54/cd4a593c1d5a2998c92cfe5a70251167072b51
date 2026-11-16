@@ -1,0 +1,162 @@
+packages/render/src/capabilities.rs
+  s_d79506cce62b9f::t_9f6dc935c04d01 19-24
+packages/render/js/jsx-runtime.ts
+  s_d79506cce62b9f::t_427e79b09e5de7 18-26
+plugins/chat/src/client/lib/state/chat-keys.ts
+  s_d79506cce62b9f::t_63056170016a81 1-96
+plugins/chat/src/client/pages/screen.tsx
+  s_d79506cce62b9f::t_427e79b09e5de7 8,128
+  s_d79506cce62b9f::t_f79ea9f0985e3a 1-5,17-23,25,77,79,141,143
+  s_d79506cce62b9f::t_63056170016a81 6-7,9-16,26-76,78,80-94,107-116,118,123-127,129-140,142
+  s_d79506cce62b9f::t_f7701dcedbc4a4 24,95-106,117,119-122
+packages/sdk/package.json
+  s_d79506cce62b9f::t_8274e998f9cf72 11-12
+  s_d79506cce62b9f::t_7b04f1efacc5e4 13-15
+packages/render/src/caret.rs
+  s_d79506cce62b9f::t_427e79b09e5de7 36-37,91-93,95-96
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_d79506cce62b9f::t_63056170016a81 1-57
+plugins/chat/src/client/ui/messages/thread-view.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-147
+app/src/styles.css
+  s_d79506cce62b9f::t_f79ea9f0985e3a 108-112
+app/tests/bridge.tsx
+  s_d79506cce62b9f::t_63056170016a81 8-12
+plugins/chat/src/styles.css
+  s_d79506cce62b9f::t_63056170016a81 2,15-88
+  s_d79506cce62b9f::t_f7701dcedbc4a4 1,3-14
+plugins/chat/tsconfig.json
+  s_d79506cce62b9f::t_63056170016a81 1
+plugins/chat/src/client/ui/composer/composer-input.tsx
+  s_d79506cce62b9f::t_63056170016a81 3-9,11-25,30-35
+  s_d79506cce62b9f::t_427e79b09e5de7 1-2,10,26-29
+plugins/chat/src/client/ui/messages/markdown.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-154
+app/tests/fixtures/composer-mod/tsconfig.json
+  s_d79506cce62b9f::t_24080fc7965a65 1-9
+plugins/chat/src/client/ui/composer/busy-status.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-11
+app/tests/plugins.rs
+  s_d79506cce62b9f::t_2fdadd5b0229ba 1986
+  s_d79506cce62b9f::t_f4061395fd47f1 1910-1923
+  s_d79506cce62b9f::t_3ce1da165ba1ea 1924,1926-1940,1942-1956,1960-1963
+  s_d79506cce62b9f::t_50d46447d54bc4 1149-1165
+  s_d79506cce62b9f::t_f7701dcedbc4a4 1886-1909,1925,1957-1959,1964-1985,1987-1996
+  s_d79506cce62b9f::t_6f134942a97ec7 389,507,1271,1941
+app/tests/fixtures/composer-mod/package.json
+  s_d79506cce62b9f::t_50d46447d54bc4 1-6
+plugins/chat/src/client/ui/composer/composer-strip.tsx
+  s_d79506cce62b9f::t_427e79b09e5de7 1-2,16,27,65
+  s_d79506cce62b9f::t_63056170016a81 3-15,17-26,28-64,66-68
+plugins/chat/src/client/ui/map/map.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-117
+packages/runtime/PLUGINS.md
+  s_d79506cce62b9f::t_f4061395fd47f1 122-124,130
+  s_d79506cce62b9f::t_5d71f7537e657d 153-189
+plugins/chat/src/client/lib/state/use-chat.ts
+  s_d79506cce62b9f::t_63056170016a81 1-100
+packages/build/src/client-surface.ts
+  s_d79506cce62b9f::t_de69d80b86e3ba 1-34,37-39,41-48,50-58,62-65,67-101,103-106
+  s_d79506cce62b9f::t_50d46447d54bc4 35,59-61
+  s_d79506cce62b9f::t_f7701dcedbc4a4 36,40,49,66,102
+plugins/chat/src/client/lib/state/use-run-recovery.ts
+  s_d79506cce62b9f::t_63056170016a81 1-73
+app/src/shell.tsx
+  s_d79506cce62b9f::t_f79ea9f0985e3a 11,53-99
+  s_d79506cce62b9f::t_427e79b09e5de7 34-39
+plugins/chat/src/client/ui/composer/chat-composer.tsx
+  s_d79506cce62b9f::t_427e79b09e5de7 1-2,11,18,20-21,58,60-61
+  s_d79506cce62b9f::t_63056170016a81 3-10,12-17,19,22-50,52-57,59,62-63
+  s_d79506cce62b9f::t_f7701dcedbc4a4 51
+app/src/main.tsx
+  s_d79506cce62b9f::t_8274e998f9cf72 7,22
+plugins/chat/src/client/lib/state/use-backends.ts
+  s_d79506cce62b9f::t_63056170016a81 1-40
+plugins/chat/src/main.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-2
+plugins/chat/src/client/ui/composer/send-button.tsx
+  s_d79506cce62b9f::t_427e79b09e5de7 1-5,7-13,15
+  s_d79506cce62b9f::t_f7701dcedbc4a4 6,14
+app/tests/backend-discovery.ts
+  s_d79506cce62b9f::t_63056170016a81 4-6
+plugins/chat/src/client/lib/state/use-map.ts
+  s_d79506cce62b9f::t_63056170016a81 1-104
+plugins/chat/src/client/ui/messages/message.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-99
+plugins/chat/package.json
+  s_d79506cce62b9f::t_f7701dcedbc4a4 7-12
+packages/runtime/js/plugins.ts
+  s_d79506cce62b9f::t_8274e998f9cf72 12-14,32
+plugins/chat/src/client/api.ts
+  s_d79506cce62b9f::t_427e79b09e5de7 1-11,13-14
+  s_d79506cce62b9f::t_f7701dcedbc4a4 12
+packages/build/src/contributions.ts
+  s_d79506cce62b9f::t_f7701dcedbc4a4 211,272
+  s_d79506cce62b9f::t_de69d80b86e3ba 8-10,42,59-62,206-210,212-271
+packages/sdk/src/contributions.ts
+  s_d79506cce62b9f::t_8274e998f9cf72 5-7
+packages/ui/src/components/textarea.tsx
+  s_d79506cce62b9f::t_427e79b09e5de7 42,134-137
+packages/sdk/client.tsx
+  s_d79506cce62b9f::t_3ce1da165ba1ea 67,70,72,74,77,92
+  s_d79506cce62b9f::t_f7701dcedbc4a4 12,14,18,20,28,34,62-63,81,85,90-91,101,106-107,109,111,113,115,121,127-128,133,143,149,153,157
+  s_d79506cce62b9f::t_50d46447d54bc4 120,126,129-132,134,154-156
+  s_d79506cce62b9f::t_8274e998f9cf72 1-11,13,15-17,19,21,30-31,36-37,39-61,64-66,75-76,78-80,82-84,93-96,98-100,102-105,108,110,112,114,116-119,122-125,135-142,144-148,150-152,158-159
+  s_d79506cce62b9f::t_9f6dc935c04d01 22-27,29,32-33,35,38,86-89,97
+  s_d79506cce62b9f::t_48eaf7e7e03cab 68-69,71,73
+app/tests/fixtures/composer-mod/.gitignore
+  s_d79506cce62b9f::t_507cb410dfac1f 1
+plugins/chat/src/client/ui/messages/tool-part.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-52
+plugins/chat/src/client/ui/messages/permission-part.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-46
+packages/render/js/index.ts
+  s_d79506cce62b9f::t_9f6dc935c04d01 399-404
+app/tests/fixtures/composer-mod/vite.config.ts
+  s_d79506cce62b9f::t_50d46447d54bc4 1-2
+packages/build/src/vite.ts
+  s_d79506cce62b9f::t_de69d80b86e3ba 18,27-34
+plugins/chat/src/client/lib/composer.ts
+  s_d79506cce62b9f::t_f7701dcedbc4a4 16
+  s_d79506cce62b9f::t_427e79b09e5de7 1-15,17-50
+app/src/contribution.tsx
+  s_d79506cce62b9f::t_f7701dcedbc4a4 94
+plugins/chat/src/client/ui/backend/backend-picker.tsx
+  s_d79506cce62b9f::t_63056170016a81 1-191
+plugins/chat/src/client/lib/state/use-thread-editor.ts
+  s_d79506cce62b9f::t_63056170016a81 1-52
+app/tests/fixtures/composer-mod/src/main.tsx
+  s_d79506cce62b9f::t_51c0355ee9f795 1,27-30
+  s_d79506cce62b9f::t_50d46447d54bc4 10-12,14,16-18,20-22
+  s_d79506cce62b9f::t_3ce1da165ba1ea 23,25-26
+  s_d79506cce62b9f::t_f7701dcedbc4a4 9,13,15,19
+  s_d79506cce62b9f::t_f4061395fd47f1 2-8
+  s_d79506cce62b9f::t_cdca6b929333a4 24
+app/tests/plugin-fixtures.mjs
+  s_d79506cce62b9f::t_50d46447d54bc4 58-60,62,543-553
+plugins/chat/README.md
+  s_d79506cce62b9f::t_5d71f7537e657d 56-69,71-88,90-95
+  s_d79506cce62b9f::t_53115f975a0ff5 70,89
+bun.lock
+  s_d79506cce62b9f::t_63b9c7fc4b2385 93-95,132-133,135-137
+packages/build/tests/plugins.test.mjs
+  s_d79506cce62b9f::t_89f9f4da55ffb7 187-249
+packages/server/tests/build-actions.mjs
+  s_d79506cce62b9f::t_01cc41b83cba29 27-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "54cd4a593c1d5a2998c92cfe5a70251167072b51",
+  "prompts": {},
+  "sessions": {
+    "s_d79506cce62b9f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e420-66c0-7c03-9bd3-e88f3d0a8e10",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
