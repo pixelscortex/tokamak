@@ -1,0 +1,105 @@
+packages/ui/src/kit/frame.tsx
+  s_1022f30e07028d::t_0325d023b9bc62 3
+packages/ui/lint/fixtures/arbitrary-value.tsx
+  s_1022f30e07028d::t_a97faf745a3d6b 1
+packages/ui/lint/fixtures/off-scale.tsx
+  s_1022f30e07028d::t_a97faf745a3d6b 1
+packages/ui/src/primitives.css
+  s_1022f30e07028d::t_578807ac0c292c 75-79,153-154,231-235
+  s_1022f30e07028d::t_67a99b6c660be4 155
+  s_1022f30e07028d::t_457a41250dbebf 50-55,63-64,82,84-86,94,107,111,115,121-122,124,126-127,138,140-141,152,381
+  s_1022f30e07028d::t_18f52d8f440685 59-60,119-120,143
+  s_1022f30e07028d::t_f8b6aadf91f67a 123
+  s_1022f30e07028d::t_672cec1e7f4a12 61-62,630-638,640
+  s_1022f30e07028d::t_2cff612f3994b2 145,150,156,208,236,260,296,317,382,550,639
+packages/ui/src/theme.css
+  s_1022f30e07028d::t_457a41250dbebf 36-40,87,128-131
+packages/ui/src/row-list.tsx
+  s_1022f30e07028d::t_578807ac0c292c 40-43
+packages/ui/tests/setup.ts
+  s_1022f30e07028d::t_cb1402bcb213fb 1-5
+  s_1022f30e07028d::t_70955193bd39a3 6-29
+packages/ui/lint/fixtures/raw-color.tsx
+  s_1022f30e07028d::t_a97faf745a3d6b 1
+packages/ui/lint/fixtures/restyle.tsx
+  s_1022f30e07028d::t_a97faf745a3d6b 1-7
+packages/ui/tests/primitives.test.tsx
+  s_1022f30e07028d::t_18f52d8f440685 212,221
+  s_1022f30e07028d::t_272ece3ec09e70 117-118
+  s_1022f30e07028d::t_578807ac0c292c 207-209
+  s_1022f30e07028d::t_70b546fe47aaa8 1-116,119-206,210-211,213-220,222-230
+packages/ui/lint/oxlint.json
+  s_1022f30e07028d::t_287f261fc795ca 8,12,16,22
+  s_1022f30e07028d::t_0acc736942bfd3 1-2,4-6,9-11,13-15,17-21,23-29,31-33,35-45
+  s_1022f30e07028d::t_578807ac0c292c 3,7,30,34
+packages/ui/vitest.config.ts
+  s_1022f30e07028d::t_cb1402bcb213fb 1-26
+packages/ui/src/kit/contrast.ts
+  s_1022f30e07028d::t_8b1189d8562d16 24-26,32-43
+  s_1022f30e07028d::t_578807ac0c292c 27-31
+packages/ui/tests/lint.test.ts
+  s_1022f30e07028d::t_cb1402bcb213fb 2,4-5,7-29,33-39
+  s_1022f30e07028d::t_15188ff252da46 1,3,6
+  s_1022f30e07028d::t_578807ac0c292c 30-32
+.ci/check.sh
+  s_1022f30e07028d::t_578807ac0c292c 6
+packages/ui/lint/index.js
+  s_1022f30e07028d::t_0acc736942bfd3 1-22
+packages/ui/lint/plugin.js
+  s_1022f30e07028d::t_287f261fc795ca 3-4,79,106-108
+  s_1022f30e07028d::t_488ea2ef446b78 1-2,5-78,80-105,109-116,121-144
+  s_1022f30e07028d::t_578807ac0c292c 117-120
+packages/ui/src/icons.ts
+  s_1022f30e07028d::t_578807ac0c292c 11-12,15-16,19-20
+packages/ui/src/kit/overlays.tsx
+  s_1022f30e07028d::t_0325d023b9bc62 2,12,21
+  s_1022f30e07028d::t_578807ac0c292c 3-11,13-20,37-43
+packages/ui/src/kit/kit.tsx
+  s_1022f30e07028d::t_578807ac0c292c 65-68
+  s_1022f30e07028d::t_8b1189d8562d16 12,49
+  s_1022f30e07028d::t_0325d023b9bc62 10-11
+packages/ui/src/button.tsx
+  s_1022f30e07028d::t_18f52d8f440685 7-8,22,37
+.oxlintrc.json
+  s_1022f30e07028d::t_c2df7fab842a25 20-21
+  s_1022f30e07028d::t_578807ac0c292c 3,7
+  s_1022f30e07028d::t_201071134f16ff 4-6,8-10
+packages/ui/src/kit/rows.tsx
+  s_1022f30e07028d::t_578807ac0c292c 27-32,78-82,85-89,92-97
+  s_1022f30e07028d::t_0325d023b9bc62 3-8
+packages/ui/src/kit/controls.tsx
+  s_1022f30e07028d::t_8b1189d8562d16 1,13-14,172-179,183-210,212-213
+  s_1022f30e07028d::t_578807ac0c292c 135-137,180-182
+  s_1022f30e07028d::t_60bc503189f32f 155-156,158-159,161-162,164-165
+  s_1022f30e07028d::t_0325d023b9bc62 3-11
+  s_1022f30e07028d::t_18f52d8f440685 16
+  s_1022f30e07028d::t_fae82a05b22d6d 211
+packages/ui/lint/fixtures/corner.tsx
+  s_1022f30e07028d::t_cb1402bcb213fb 7
+  s_1022f30e07028d::t_a97faf745a3d6b 1-6,8-11
+packages/ui/lint/fixtures/corrected.tsx
+  s_1022f30e07028d::t_a97faf745a3d6b 1-17
+packages/ui/src/kit/tokens.tsx
+  s_1022f30e07028d::t_578807ac0c292c 53-55,57-59,90-93,101-103,118-120,179-181
+packages/ui/package.json
+  s_1022f30e07028d::t_db21666effab50 12
+  s_1022f30e07028d::t_578807ac0c292c 16,27
+bun.lock
+  s_1022f30e07028d::t_3d4bf7415ebe26 91,102,313,1421,1423
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "92691731335e57686e167af1cab037f417414008",
+  "prompts": {},
+  "sessions": {
+    "s_1022f30e07028d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e8d6a29-be87-49dd-936e-facf7cb48a85",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
