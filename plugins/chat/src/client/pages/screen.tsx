@@ -223,31 +223,31 @@ function ThreadPane(props: {
                       busy={answering()}
                       onAnswer={(optionId) => void answer(optionId)}
                     />
+                  )}
+                </Show>
+              }
+              strip={
+                <ComposerStrip
+                  running={running()}
+                  note={props.note ?? (drafts.raced() ? "A reply is already running" : undefined)}
+                  picker={
+                    <Show when={!chat.noAgents()}>
+                      <AgentPicker chat={chat} open={props.pickerOpen} onOpenChange={props.onPickerOpen} />
+                    </Show>
+                  }
+                />
+              }
+              placeholder={placeholder()}
+              disabled={Boolean(chat.noAgents())}
+              queued={drafts.queued()}
+              onUnqueue={() => drafts.unqueue()}
+              onEdit={(text) => {
+                drafts.edit(text);
+                drafts.clearRace();
+              }}
+              onStop={() => void chat.cancel()}
+            />
           </Show>
-                )}
-              </Show>
-            }
-            strip={
-              <ComposerStrip
-                running={running()}
-                note={props.note ?? (drafts.raced() ? "A reply is already running" : undefined)}
-                picker={
-                  <Show when={!chat.noAgents()}>
-                    <AgentPicker chat={chat} open={props.pickerOpen} onOpenChange={props.onPickerOpen} />
-                  </Show>
-                }
-              />
-            }
-            placeholder={placeholder()}
-            disabled={Boolean(chat.noAgents())}
-            queued={drafts.queued()}
-            onUnqueue={() => drafts.unqueue()}
-            onEdit={(text) => {
-              drafts.edit(text);
-              drafts.clearRace();
-            }}
-            onStop={() => void chat.cancel()}
-          />
         </div>
       </div>
     </div>
