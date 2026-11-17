@@ -23,7 +23,7 @@ function hostSpecifiers() {
       const { exports } = JSON.parse(readFileSync(path, "utf8"));
       if (name === "@solidjs/web") return [name];
       return Object.keys(exports)
-        .filter((key) => key !== "./web" && !/\.json$|\.css$/.test(key))
+        .filter((key) => key !== "./web" && !/\.json$|\.css$|\*|^\.\/(lint|kit)$/.test(key))
         .map((key) => name + (key === "." ? "" : key.slice(1)));
     }),
     "@tokamak/runtime/router",
