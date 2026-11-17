@@ -14,13 +14,13 @@ export function TopStrip(): JSX.Element {
   const shell = useShell();
   const nav = shell.navigation;
   return (
-    <div data-tauri-drag-region class="flex shrink-0 items-center pt-2 pe-2 pb-1 ps-2">
+    <div data-tauri-drag-region class="flex shrink-0 items-center pt-2 pe-2 pb-1">
       <div
         data-tauri-drag-region
         class={
           shell.sidebar.shown()
-            ? "flex w-nav shrink-0 items-center gap-1 pe-2"
-            : "flex shrink-0 items-center gap-1 pe-2"
+            ? "flex w-nav shrink-0 items-center gap-1 px-2"
+            : "flex shrink-0 items-center gap-1 px-2"
         }
       >
         <Show when={tauri}>
