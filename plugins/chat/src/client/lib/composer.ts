@@ -44,7 +44,11 @@ export function createComposerAPI(chat: Chat, drafts: Drafts): EditorAPI {
   let input: HTMLTextAreaElement | undefined;
   // Signal writes land on the next flush, so back-to-back inserts read this copy.
   let pending: { thread: string | undefined; text: string } | undefined;
-  const current = () => (pending && pending.thread === chat.threadId() ? pending.text : drafts.draft());
+  const current = () => {
+    // Read the signal every time, so a reactive reader keeps its subscription.
+    const draft = drafts.draft();
+    return pending && pending.thread === chat.threadId() ? pending.text : draft;
+  };
 
   function setDraft(text: string) {
     pending = { thread: chat.threadId(), text };

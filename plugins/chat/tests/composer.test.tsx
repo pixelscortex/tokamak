@@ -106,6 +106,7 @@ function host(
 function mountComposer(options: { busy?: boolean; onStop?: () => void } = {}) {
   const { chat, action, start } = fakeChat(`composer-${Math.random()}`);
   let drafts!: ReturnType<typeof useDrafts>;
+  let editor!: ReturnType<typeof createComposerAPI>;
   const fill = (name: string) => () => <span data-testid="fill">{name}</span>;
   const extensions = host(
     {
@@ -128,7 +129,7 @@ function mountComposer(options: { busy?: boolean; onStop?: () => void } = {}) {
   render(
     () => {
       drafts = useDrafts(chat);
-      const editor = createComposerAPI(chat, drafts);
+      editor = createComposerAPI(chat, drafts);
       return (
         <ExtensionProvider host={extensions}>
           <ComposerContext value={editor}>
@@ -148,7 +149,7 @@ function mountComposer(options: { busy?: boolean; onStop?: () => void } = {}) {
     document.body.appendChild(document.createElement("div")),
   );
   if (options.busy) start();
-  return { action, drafts: () => drafts };
+  return { action, drafts: () => drafts, editor: () => editor };
 }
 
 test("the five slots render in their places, in fill order", async () => {
@@ -206,4 +207,15 @@ test("insertText writes at the caret and keeps the caret after the insert", asyn
     expect(drafts.draft()).toBe("run the auth tests");
     dispose();
   });
+});
+
+test("a draft set from code, as a starter does, clears from the box once sent", async () => {
+  const user = userEvent.setup();
+  const { action, editor } = mountComposer();
+  const input = screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+  editor().setDraft("Explain how this project is laid out");
+  await waitFor(() => expect(input.value).toBe("Explain how this project is laid out"));
+  await user.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(input.value).toBe(""));
 });
