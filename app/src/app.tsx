@@ -27,7 +27,7 @@ export function App() {
     setStatus("Connecting…");
     const url = await websocketEndpoint();
     if (current !== attempt) return;
-    const socket = (pending = new WebSocket(url));
+    const socket = (pending = new window.WebSocket(url));
     const timeout = setTimeout(() => socket.close(), 10_000);
     try {
       await new Promise<void>((resolve, reject) => {
