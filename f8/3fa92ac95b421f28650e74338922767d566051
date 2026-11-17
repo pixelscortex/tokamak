@@ -1,0 +1,41 @@
+packages/sdk/vitest.config.ts
+  s_516160a8178bca::t_14567b106d3934 1-19
+packages/sdk/tests/web/extensions.test.tsx
+  s_516160a8178bca::t_14567b106d3934 1-147
+packages/sdk/solid.ts
+  s_516160a8178bca::t_e32bd3c99bbf06 4,20-22,24-25,31,35,38-41,43
+packages/sdk/package.json
+  s_516160a8178bca::t_30084e181e6342 28-29
+  s_516160a8178bca::t_14567b106d3934 15-19,22-23
+  s_516160a8178bca::t_d70705824397c0 30
+packages/sdk/README.md
+  s_516160a8178bca::t_14567b106d3934 321-333
+packages/sdk/tsconfig.solid.json
+  s_516160a8178bca::t_e32bd3c99bbf06 3-6,10
+  s_516160a8178bca::t_819a7372e64fe0 7-9,11
+packages/sdk/client.tsx
+  s_516160a8178bca::t_14567b106d3934 71-77,79-83,85-88,90-120
+  s_516160a8178bca::t_e32bd3c99bbf06 3,12,15,17,20,64,70,78,121,138,142,145,177,184,188
+packages/sdk/tests/web/solid.test.tsx
+  s_516160a8178bca::t_14567b106d3934 1-94
+packages/sdk/moon.yml
+  s_516160a8178bca::t_da4f4f2d5d01d8 27-31
+packages/sdk/tsconfig.json
+  s_516160a8178bca::t_c6d56bd2a1669b 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f83fa92ac95b421f28650e74338922767d566051",
+  "prompts": {},
+  "sessions": {
+    "s_516160a8178bca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9be-0dc9-7361-b597-20cc164a4413",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
