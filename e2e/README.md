@@ -24,7 +24,7 @@ proto run bun -- run e2e:browser --repeat-each=3
 ```
 
 On Linux use `playwright install --with-deps --no-shell chromium webkit` through the same
-pinned Bun command. Ports 1420, 1421 and 43123 must be free; the runner refuses to
+pinned Bun command. Ports 1420, 1421 and 43123 must be free (set `TOKAMAK_E2E_PORT` to override 1420); the runner refuses to
 reuse a running app. It builds the server, Chat and the integration fixture,
 builds Vite in production mode and serves it with Vite preview. Every run owns a
 fresh store, private capability and plugin installation. Fixture source edits happen in a disposable

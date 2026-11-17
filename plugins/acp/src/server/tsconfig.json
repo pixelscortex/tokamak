@@ -1,5 +1,13 @@
 {
   "extends": "../../../../tsconfig.json",
-  "compilerOptions": { "types": ["node"], "lib": ["ES2022", "DOM"], "skipLibCheck": true },
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "paths": {
+      "plugin:*/server": ["../../.tokamak/types/*/server.d.ts"],
+      "plugin:*": ["../../.tokamak/types/*/server.d.ts"]
+    }
+  },
   "include": ["**/*.ts"]
 }

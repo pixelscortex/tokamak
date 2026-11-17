@@ -7,6 +7,13 @@ import { join, resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { workerSources } from "./worker.mjs";
+import {
+  bunPluginBoundary,
+  checkPluginImports,
+  featurePluginRoot,
+  pluginCompilerOptions,
+} from "./plugin-boundary.mjs";
+import ts from "typescript";
 
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 
@@ -50,6 +57,8 @@ function apiType(modules, files) {
 export async function bundleFeature(folder, namespace, worker = false) {
   const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
+  const pluginRoot = featurePluginRoot(root);
+  checkPluginImports(pluginRoot);
   const files = await scanFiles(root);
   // An explicit empty product backend is valid; a missing root still fails.
   const organized = isServerRoot(root);
@@ -75,7 +84,7 @@ export async function bundleFeature(folder, namespace, worker = false) {
     let source = featureSource(root, files, modules, hasSchema);
     let workerPlugins = [];
     if (worker) {
-      const result = await workerSources({ root, files, modules, hasSchema, sdkRoot, header });
+      const result = await workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot });
       source = result.source;
       workerPlugins = result.plugins;
     }
@@ -94,6 +103,7 @@ export async function bundleFeature(folder, namespace, worker = false) {
       env: "disable",
       allowUnresolved: [],
       plugins: [
+        bunPluginBoundary(pluginRoot),
         ...workerPlugins,
         {
           name: "stable-feature-entry",
@@ -181,6 +191,12 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
   const parentConfig = (await Bun.file(join(root, "tsconfig.json")).exists())
     ? join(root, "tsconfig.json")
     : join(sdkRoot, "../..", "tsconfig.json");
+  const inherited = ts.getParsedCommandLineOfConfigFile(
+    parentConfig,
+    {},
+    { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
+  );
+  const paths = pluginCompilerOptions(featurePluginRoot(root), inherited?.options ?? {}).paths;
   await Bun.write(
     config,
     JSON.stringify({
@@ -188,6 +204,7 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
       compilerOptions: {
         lib: worker ? ["ES2022", "DOM"] : ["ES2022"],
         types: worker ? ["node"] : [],
+        paths,
         noEmit: true,
         strict: true,
       },

@@ -4,10 +4,12 @@
   "type": "module",
   "exports": {
     "./plugins": "./js/plugins.ts",
-    "./subscriptions": "./js/subscriptions.ts"
+    "./subscriptions": "./js/subscriptions.ts",
+    "./router": "./js/router.ts"
   },
   "dependencies": {
     "@solidjs/web": "2.0.0",
+    "@tanstack/solid-router": "2.0.0-rc.10",
     "@tokamak/sdk": "workspace:*",
     "solid-js": "2.0.0"
   },

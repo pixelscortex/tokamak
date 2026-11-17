@@ -1,5 +1,5 @@
 import { query, v } from "@tokamak/sdk";
-import { sample } from "../../a/backend/_sample";
+import { sample } from "./_sample";
 export const snapshot = query({
   args: { burn: v.optional(v.number()) },
   handler: async (ctx, { burn }) => {

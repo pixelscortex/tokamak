@@ -1,0 +1,360 @@
+// One import policy for the SDK's Bun bundles and the public Vite builder.
+// Provider source is read by TypeScript for types/metadata, never evaluated or bundled.
+import ts from "typescript";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { isBuiltin } from "node:module";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { isServerModule, isServerRoot } from "./server-files.mjs";
+
+const specifier = /^plugin:([^/]+)(?:\/(server|client))?$/;
+const inside = (root, file) => file === root || file.startsWith(root + sep);
+const canonical = (file) => (existsSync(file) ? realpathSync(file) : resolve(file));
+const server = (root) => resolve(root, existsSync(resolve(root, "src/server")) ? "src/server" : "backend");
+const generated = (root) => resolve(root, ".tokamak/types");
+// The SDK is the host contract every plugin builds against. A workspace may
+// resolve it by a tsconfig alias to its source instead of through node_modules.
+const sdkRoot = canonical(resolve(import.meta.dirname, ".."));
+const excluded =
+  /(?:^|\/)(?:node_modules|dist|tests|__tests__|\.tokamak)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/;
+
+export function featurePluginRoot(folder) {
+  return isServerRoot(folder)
+    ? resolve(folder, "../..")
+    : basename(folder) === "backend"
+      ? dirname(folder)
+      : folder;
+}
+
+function configuration(file) {
+  const path = ts.findConfigFile(dirname(file), ts.sys.fileExists);
+  if (!path) return { options: {} };
+  const config = ts.readConfigFile(path, ts.sys.readFile);
+  return ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path));
+}
+
+export function pluginCompilerOptions(root, options) {
+  // Resolve inherited paths at their declaring config, before adding our own.
+  const base = options.baseUrl ?? options.pathsBasePath ?? root;
+  const paths = Object.fromEntries(
+    Object.entries(options.paths ?? {}).map(([key, values]) => [
+      key,
+      values.map((value) => resolve(base, value)),
+    ]),
+  );
+  return {
+    ...options,
+    paths: {
+      ...paths,
+      "plugin:*/server": [resolve(generated(root), "*/server.d.ts")],
+      "plugin:*/client": [resolve(generated(root), "*/client.d.ts")],
+      "plugin:*": [resolve(generated(root), "*/server.d.ts")],
+    },
+  };
+}
+
+function diagnostic(importer, id, target) {
+  return new Error(
+    `Plugin import boundary: ${importer} imports ${JSON.stringify(id)}${target ? ` (${target})` : ""} outside its plugin folder. ` +
+      'Keep helpers inside this plugin or install a package through node_modules. Use "plugin:<id>/server" for public types and host-call references, or "plugin:<id>/client" for the client registry.',
+  );
+}
+
+function pluginOwner(file) {
+  for (let dir = dirname(file); dirname(dir) !== dir; dir = dirname(dir)) {
+    if (existsSync(resolve(dir, "plugin.ts")) && existsSync(resolve(dir, "package.json"))) return dir;
+  }
+}
+
+export function assertPluginResolution(root, importer, id, target, packageImport = false) {
+  root = canonical(root);
+  target = canonical(target);
+  const owner = pluginOwner(target);
+  if (owner && canonical(owner) !== root) throw diagnostic(importer, id, target);
+  if (!inside(root, canonical(importer))) return; // ordinary package-internal dependency
+  if (/^@tokamak\/sdk(?:\/|$)/.test(id) && inside(sdkRoot, target)) return;
+  if (inside(root, target)) return;
+  if (packageImport) return;
+  throw diagnostic(importer, id, target);
+}
+
+function provider(root, id) {
+  const match = specifier.exec(id);
+  if (!match || match[1] === "." || match[1] === "..") throw new Error(`Invalid plugin specifier ${id}`);
+  const folder = resolve(root, "..", match[1]);
+  const side = match[2] ?? "server";
+  const backendEntry = resolve(server(folder), "api.ts");
+  const entry =
+    side === "server"
+      ? existsSync(backendEntry)
+        ? backendEntry
+        : resolve(folder, "api.ts")
+      : resolve(
+          folder,
+          existsSync(resolve(folder, "src/client/api.ts")) ? "src/client/api.ts" : "src/client/api.tsx",
+        );
+  if (!existsSync(entry)) throw new Error(`Plugin import ${id}: missing public API ${entry}`);
+  return { folder, entry, side, id: match[1] };
+}
+
+/** Runtime exports only: erased named/star re-exports must never grant references. */
+export function runtimeExportNames(checker, module, seen = new Set()) {
+  if (seen.has(module)) return new Set();
+  seen.add(module);
+  const file = module.declarations?.find(ts.isSourceFile);
+  if (!file) return new Set();
+  const names = new Set(
+    checker
+      .getExportsOfModule(module)
+      .filter(
+        (symbol) =>
+          symbol.flags & ts.SymbolFlags.Value && symbol.declarations?.some((d) => d.getSourceFile() === file),
+      )
+      .map((symbol) => symbol.name),
+  );
+  for (const statement of file.statements) {
+    if (!ts.isExportDeclaration(statement) || statement.isTypeOnly) continue;
+    if (!statement.exportClause) {
+      if (!statement.moduleSpecifier) continue;
+      const target = checker.getSymbolAtLocation(statement.moduleSpecifier);
+      if (target)
+        for (const name of runtimeExportNames(checker, target, new Set(seen))) {
+          if (name !== "default") names.add(name);
+        }
+    } else if (ts.isNamedExports(statement.exportClause)) {
+      for (const item of statement.exportClause.elements) if (!item.isTypeOnly) names.add(item.name.text);
+    } else names.add(statement.exportClause.name.text);
+  }
+  return names;
+}
+
+function publicReferences(folder, entry) {
+  const options = pluginCompilerOptions(folder, configuration(entry).options);
+  const program = ts.createProgram([entry], options);
+  const checker = program.getTypeChecker();
+  const file = program.getSourceFile(entry);
+  const module = checker.getSymbolAtLocation(file);
+  const original = (symbol) =>
+    symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+  const targets = new Map();
+  const backend = server(folder);
+  for (const source of program.getSourceFiles()) {
+    const local = relative(backend, source.fileName).split(sep).join("/");
+    if (!isServerModule(backend, local)) continue;
+    const symbol = checker.getSymbolAtLocation(source);
+    for (const exported of symbol ? checker.getExportsOfModule(symbol) : []) {
+      const target = original(exported);
+      if (
+        !checker
+          .getTypeOfSymbolAtLocation(target, source)
+          .getProperties()
+          .some((p) => p.name.startsWith("__@definitionBrand@"))
+      )
+        continue;
+      const moduleName = isServerRoot(backend) ? basename(local, ".ts") : local.slice(0, -3);
+      if (!targets.has(target) || target.valueDeclaration?.getSourceFile() === source)
+        targets.set(target, [moduleName, exported.name]);
+    }
+  }
+  const runtime = module ? runtimeExportNames(checker, module) : new Set();
+  const refs = (module ? checker.getExportsOfModule(module) : []).flatMap((exported) => {
+    if (!runtime.has(exported.name)) return [];
+    const target = targets.get(original(exported));
+    return target ? [[exported.name, target]] : [];
+  });
+  const imports = new Set();
+  for (const source of program.getSourceFiles()) {
+    if (!inside(folder, source.fileName) || inside(generated(folder), source.fileName)) continue;
+    for (const imported of ts.preProcessFile(source.text, true, true).importedFiles)
+      if (imported.fileName.startsWith("plugin:")) imports.add(imported.fileName);
+  }
+  return { refs, imports };
+}
+
+export function pluginReferenceSource(root, id) {
+  const target = provider(root, id);
+  if (target.side === "client") throw new Error(`Use ${id} in a client bundle through the client registry`);
+  const { refs } = publicReferences(target.folder, target.entry);
+  return (
+    'import { createApi } from "@tokamak/sdk";\n' +
+    `const references = createApi(${JSON.stringify(target.id)});\n` +
+    refs
+      .map(
+        ([name, [module, method]]) =>
+          `export const ${name} = references[${JSON.stringify(module)}][${JSON.stringify(method)}];`,
+      )
+      .join("\n") +
+    `\nexport const api = {${refs.map(([name]) => name).join(",")}};\n`
+  );
+}
+
+function declarePlugin(root, id, declared) {
+  if (declared.has(id)) return;
+  declared.add(id);
+  const target = provider(root, id);
+  const path = resolve(generated(root), target.id, `${target.side}.d.ts`);
+  mkdirSync(dirname(path), { recursive: true });
+  const entry = JSON.stringify(target.entry);
+  const { refs, imports } = publicReferences(target.folder, target.entry);
+  writeFileSync(
+    path,
+    `// Generated public plugin types. Runtime imports use references or the client registry.\n` +
+      (target.side === "client"
+        ? `export * from ${entry};\n`
+        : `export type * from ${entry};\n` +
+          `type PublicApi = import("@tokamak/sdk").ApiFromModule<typeof import(${entry})>;\n` +
+          `export declare const api: PublicApi;\n` +
+          refs
+            .map(([name]) => `export declare const ${name}: PublicApi[${JSON.stringify(name)}];\n`)
+            .join("")),
+  );
+  // Public API types can themselves depend on other sanctioned public types.
+  // Materialize that type graph in the consumer; no provider code is emitted.
+  for (const dependency of imports) declarePlugin(root, dependency, declared);
+}
+
+/** Check even erased type imports and unused source modules; tests are separate. */
+export function checkPluginImports(root) {
+  root = resolve(root);
+  const declared = new Set();
+  function checkFile(path) {
+    const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
+    const options = configuration(path).options;
+    function check(id) {
+      if (id.startsWith("plugin:")) {
+        try {
+          declarePlugin(root, id, declared);
+        } catch (error) {
+          throw new Error(`${diagnostic(path, id).message} ${error.message}`);
+        }
+        return;
+      }
+      if (id.startsWith("@plugins/")) throw diagnostic(path, id);
+      if (isBuiltin(id)) return;
+      const resolved = ts.resolveModuleName(id, path, options, ts.sys).resolvedModule;
+      if (resolved) {
+        const bare = !id.startsWith(".") && !isAbsolute(id);
+        assertPluginResolution(
+          root,
+          path,
+          id,
+          resolved.resolvedFileName,
+          bare && resolved.isExternalLibraryImport,
+        );
+      } else if (id.startsWith(".") || isAbsolute(id)) {
+        // Assets (including CSS) are outside TypeScript's module resolver.
+        const target = resolve(dirname(path), id.split("?")[0]);
+        assertPluginResolution(root, path, id, target);
+      }
+    }
+    function visit(node) {
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteralLike(node.moduleSpecifier)
+      )
+        check(node.moduleSpecifier.text);
+      if (
+        ts.isImportTypeNode(node) &&
+        ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteralLike(node.argument.literal)
+      )
+        check(node.argument.literal.text);
+      if (
+        ts.isImportEqualsDeclaration(node) &&
+        ts.isExternalModuleReference(node.moduleReference) &&
+        node.moduleReference.expression &&
+        ts.isStringLiteralLike(node.moduleReference.expression)
+      )
+        check(node.moduleReference.expression.text);
+      if (
+        ts.isCallExpression(node) &&
+        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+          (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+      ) {
+        const arg = node.arguments[0];
+        if (arg && ts.isStringLiteralLike(arg)) check(arg.text);
+        else
+          throw new Error(
+            `Dynamic plugin imports require a string literal: ${path}. Computed imports cannot be checked against the plugin boundary.`,
+          );
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+    for (const ref of source.referencedFiles) check(ref.fileName);
+  }
+  const visited = new Set();
+  function walk(dir) {
+    if (!existsSync(dir)) return;
+    const real = canonical(dir);
+    if (visited.has(real)) return;
+    visited.add(real);
+    // Check ordinary importing files before following directory links, so an
+    // escape reports the authored import whenever there is one.
+    const items = readdirSync(dir, { withFileTypes: true }).sort(
+      (a, b) => Number(a.isSymbolicLink()) - Number(b.isSymbolicLink()),
+    );
+    for (const item of items) {
+      const path = resolve(dir, item.name);
+      if (excluded.test(relative(root, path).split(sep).join("/")) || /^vite\.config\./.test(item.name))
+        continue;
+      if (item.isSymbolicLink() && !inside(canonical(root), canonical(path)))
+        throw diagnostic(path, item.name, canonical(path));
+      if (item.isDirectory() || (item.isSymbolicLink() && statSync(path).isDirectory())) walk(path);
+      else if (/\.[cm]?[jt]sx?$/.test(item.name)) checkFile(path);
+    }
+  }
+  walk(root);
+}
+
+export function bunPluginReferences(root) {
+  return {
+    name: "plugin-references",
+    setup(build) {
+      build.onResolve({ filter: /^@tokamak\/sdk$/ }, ({ importer }) => {
+        if (importer.startsWith("plugin:")) return { path: Bun.resolveSync("@tokamak/sdk", root) };
+      });
+      build.onResolve({ filter: /^plugin:/ }, ({ path }) => ({ path, namespace: "plugin-reference" }));
+      build.onLoad({ filter: /.*/, namespace: "plugin-reference" }, ({ path }) => ({
+        contents: pluginReferenceSource(root, path),
+        loader: "js",
+        resolveDir: root,
+      }));
+    },
+  };
+}
+
+export function bunPluginBoundary(root) {
+  return {
+    name: "plugin-import-boundary",
+    setup(build) {
+      bunPluginReferences(root).setup(build);
+      build.onResolve({ filter: /.*/, namespace: "file" }, ({ path, importer }) => {
+        if (!importer || !isAbsolute(importer) || isBuiltin(path)) return;
+        const target = Bun.resolveSync(path, dirname(importer));
+        const bare = !path.startsWith(".") && !isAbsolute(path);
+        // Bun resolves workspace symlinks to their real location. A bare import
+        // must also resolve via node_modules, not a tsconfig source alias.
+        assertPluginResolution(
+          root,
+          importer,
+          path,
+          target,
+          bare &&
+            Boolean(
+              ts.resolveModuleName(path, importer, configuration(importer).options, ts.sys).resolvedModule
+                ?.isExternalLibraryImport,
+            ),
+        );
+      });
+    },
+  };
+}

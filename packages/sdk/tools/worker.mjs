@@ -2,14 +2,15 @@
 // authored modules on the build machine (aliases and reexports work too).
 import ts from "typescript";
 import { dirname, join } from "node:path";
+import { bunPluginBoundary, pluginCompilerOptions } from "./plugin-boundary.mjs";
 
-export async function workerSources({ root, files, modules, hasSchema, sdkRoot, header }) {
+export async function workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot }) {
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
   const program = ts.createProgram(
     files.map((file) => join(root, file)),
-    parsed.options,
+    pluginCompilerOptions(pluginRoot, parsed.options),
   );
   const checker = program.getTypeChecker();
   const imports = [];
@@ -72,6 +73,7 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
       outdir: join(root, "dist"),
       naming: name,
       plugins: [
+        bunPluginBoundary(pluginRoot),
         {
           name: "worker-source",
           setup(build) {

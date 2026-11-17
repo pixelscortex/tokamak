@@ -241,21 +241,7 @@ fn dropped_native_and_closed_websocket_do_not_rerun_subscriptions() {
     run(async {
         let lists = Arc::new(AtomicUsize::new(0));
         let counts = lists.clone();
-        let pool = Arc::new(
-            Pool::with_engine(
-                PoolConfig {
-                    workers: 2,
-                    ..PoolConfig::default()
-                },
-                move || {
-                    Ok(CountQueries {
-                        engine: QuickJsEngine::new(Default::default())?,
-                        lists: counts.clone(),
-                    })
-                },
-            )
-            .unwrap(),
-        );
+        let pool = counting_query_pool(counts);
         let server = Arc::new(
             Server::load(
                 Database::open(Storage::Memory).await.unwrap(),
@@ -355,14 +341,7 @@ fn shutdown_driver(scenario: &str) {
 // but BEFORE service commit. The gate never supplies a result or storage op.
 struct PauseFirstInsert {
     engine: QuickJsEngine,
-    gate: Arc<
-        std::sync::Mutex<
-            Option<(
-                tokio::sync::oneshot::Sender<()>,
-                tokio::sync::oneshot::Receiver<()>,
-            )>,
-        >,
-    >,
+    gate: PauseGate,
 }
 impl Engine for PauseFirstInsert {
     async fn invoke(
@@ -463,40 +442,7 @@ fn shutdown_drains_admitted_queued_mutations_after_session_owner_drops() {
             resume.send(()).unwrap();
             closing.await.unwrap();
             drop(session);
-            // Verify durable state only after close's awaited barrier. Replies
-            // are deliberately not required once their receiver has disappeared.
-            let reopened = Backend::start(config(storage)).await.unwrap();
-            let mut check = reopened.connect().await.unwrap();
-            check
-                .call(20, "probe:list", json!({"table":"items"}))
-                .unwrap();
-            let rows = match check.recv().await.unwrap().unwrap() {
-                server::Event::Response {
-                    result: Ok(rows), ..
-                } => rows,
-                event => panic!("reopened list failed: {event:?}"),
-            };
-            reopened.close().await.unwrap();
-            std::fs::remove_dir_all(directory).unwrap();
-            assert_eq!(
-                rows.as_array().unwrap().len(),
-                9,
-                "graceful shutdown lost an admitted queued mutation; retain_session={retain_session}; rows={rows}"
-            );
-            let mut values = rows
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|row| row["value"].as_str().unwrap())
-                .collect::<Vec<_>>();
-            values.sort();
-            assert_eq!(
-                values,
-                vec![
-                    "active", "queued-2", "queued-3", "queued-4", "queued-5", "queued-6",
-                    "queued-7", "queued-8", "queued-9"
-                ]
-            );
+            assert_queued_mutations_persist(storage, directory, retain_session).await;
         }
     });
 }
@@ -508,3 +454,71 @@ fn shutdown_drains_admitted_queued_mutations_after_session_owner_drops() {
 fn headless_shutdown_drains_under_capacity_admitted_queued_mutations() {
     shutdown_driver("queued-mutations");
 }
+
+fn counting_query_pool(counts: Arc<AtomicUsize>) -> Arc<Pool> {
+    Arc::new(
+        Pool::with_engine(
+            PoolConfig {
+                workers: 2,
+                ..PoolConfig::default()
+            },
+            move || {
+                Ok(CountQueries {
+                    engine: QuickJsEngine::new(Default::default())?,
+                    lists: counts.clone(),
+                })
+            },
+        )
+        .unwrap(),
+    )
+}
+
+async fn assert_queued_mutations_persist(
+    storage: Storage,
+    directory: std::path::PathBuf,
+    retain_session: bool,
+) {
+    // Verify durable state only after close's awaited barrier. Replies
+    // are deliberately not required once their receiver has disappeared.
+    let reopened = Backend::start(config(storage)).await.unwrap();
+    let mut check = reopened.connect().await.unwrap();
+    check
+        .call(20, "probe:list", json!({"table":"items"}))
+        .unwrap();
+    let rows = match check.recv().await.unwrap().unwrap() {
+        server::Event::Response {
+            result: Ok(rows), ..
+        } => rows,
+        event => panic!("reopened list failed: {event:?}"),
+    };
+    reopened.close().await.unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
+    assert_eq!(
+        rows.as_array().unwrap().len(),
+        9,
+        "graceful shutdown lost an admitted queued mutation; retain_session={retain_session}; rows={rows}"
+    );
+    let mut values = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["value"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    values.sort();
+    assert_eq!(
+        values,
+        vec![
+            "active", "queued-2", "queued-3", "queued-4", "queued-5", "queued-6", "queued-7",
+            "queued-8", "queued-9"
+        ]
+    );
+}
+
+type PauseGate = Arc<
+    std::sync::Mutex<
+        Option<(
+            tokio::sync::oneshot::Sender<()>,
+            tokio::sync::oneshot::Receiver<()>,
+        )>,
+    >,
+>;

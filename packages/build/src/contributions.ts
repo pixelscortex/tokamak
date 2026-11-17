@@ -1,3 +1,4 @@
+import { pluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { clientEntry } from "./descriptor.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
  * 6.0.3 is the newest JS API release; 7.x has no JS API. Upgrading belongs to
@@ -25,7 +26,7 @@ export function uiContributions(root: string) {
   const config = configResult.config;
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
   const program = ts.createProgram([entry], {
-    ...parsed.options,
+    ...pluginCompilerOptions(root, parsed.options),
     noEmit: false,
     noEmitOnError: false,
     declaration: false,
@@ -245,7 +246,10 @@ function extensionOptions(
     if (ts.isImportSpecifier(d)) exported = (d.propertyName ?? d.name).text;
     while (n && !ts.isImportDeclaration(n)) n = n.parent;
     if (n && ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier))
-      owner = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text)?.[1];
+      owner = (
+        /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text) ??
+        /^plugin:([^/]+)\/client$/.exec(n.moduleSpecifier.text)
+      )?.[1];
   }
   if (ts.isPropertyAccessExpression(target)) {
     const ns = checker.getSymbolAtLocation(target.expression);
@@ -253,7 +257,10 @@ function extensionOptions(
       let n: ts.Node | undefined = d;
       while (n && !ts.isImportDeclaration(n)) n = n.parent;
       if (n && ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier))
-        owner = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text)?.[1];
+        owner = (
+          /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text) ??
+          /^plugin:([^/]+)\/client$/.exec(n.moduleSpecifier.text)
+        )?.[1];
     }
   }
   if (!owner) return fail();

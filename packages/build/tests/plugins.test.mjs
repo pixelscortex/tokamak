@@ -94,12 +94,12 @@ test("compiler-derived slot and component identities survive the DOM port", asyn
       "mod",
       `
       import { fill, wrap, replace } from "@tokamak/sdk/client";
-      import { actions, Input } from "@plugins/owner/ui";
+      import { actions, Input } from "plugin:owner/client";
       export const Extra = fill(actions, { order: -5, id: "extra" }, p => <p>{p.text}</p>);
       export const Frame = wrap(Input, Original => props => <div><Original {...props} /></div>);
       export const Other = replace(Input, props => <p>{props.text}</p>);
     `,
-      { "@plugins/owner/ui": [resolve(owner, "src/client/api.tsx")] },
+      { "plugin:owner/client": [resolve(owner, "src/client/api.tsx")] },
     );
     expect(uiContributions(mod).contributes).toEqual({
       fill: [{ id: "Extra", target: "owner.composer.actions", order: -5, fillId: "extra" }],

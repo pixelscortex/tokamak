@@ -6,7 +6,9 @@
 mod support;
 use support::{Fixture, fields, table, text};
 
-use server::data::{ChangeEvent, Database, Error, Id, Object, Order, Storage, Table, Value};
+use server::data::{
+    ChangeEvent, Database, Document, Error, Id, Object, Order, Storage, Table, Value,
+};
 use tokio::sync::broadcast::{Receiver, error::TryRecvError};
 
 fn empty(events: &mut Receiver<ChangeEvent>) {
@@ -169,17 +171,9 @@ fn owned_transaction_survives_static_host_calls() {
 }
 
 async fn owned_host_calls() {
-    use server::data::{Document, Transaction};
-    use std::{future::Future, sync::Arc};
+    use server::data::Transaction;
+    use std::sync::Arc;
     use tokio::sync::Mutex;
-
-    fn host_op<F, Fut>(op: F) -> F
-    where
-        F: Fn() -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = server::data::Result<Option<Document>>> + Send + 'static,
-    {
-        op
-    }
 
     let mut db = Database::open(Storage::Memory).await.unwrap();
     let mut events = db.subscribe();
@@ -189,7 +183,7 @@ async fn owned_host_calls() {
         .await
         .unwrap();
     let shared: Arc<Mutex<Option<Transaction>>> = Arc::new(Mutex::new(Some(tx)));
-    let op = host_op({
+    let op = host_operation({
         let shared = Arc::clone(&shared);
         let id = id.clone();
         move || {
@@ -364,101 +358,8 @@ async fn queries(disk: bool) {
     // clock. Compare both keys even if this run has no same-millisecond pair.
     inserted.sort_by_key(|row| (row.creation_time, row.id.to_string()));
     let mut tx = db.read_only().await.unwrap();
-    assert_eq!(tx.query(&todos).collect().await.unwrap(), inserted);
-    let mut descending = inserted.clone();
-    descending.reverse();
-    assert_eq!(
-        tx.query(&todos).order(Order::Desc).collect().await.unwrap(),
-        descending
-    );
-    assert_eq!(
-        tx.query(&todos).limit(2).collect().await.unwrap(),
-        inserted[..2]
-    );
-    assert_eq!(
-        tx.query(&todos).order(Order::Desc).take(2).await.unwrap(),
-        descending[..2]
-    );
-    assert_eq!(
-        tx.query(&todos).first().await.unwrap(),
-        Some(inserted[0].clone())
-    );
-    assert_eq!(
-        tx.query(&todos).order(Order::Desc).first().await.unwrap(),
-        Some(descending[0].clone())
-    );
-    assert_eq!(tx.query(&todos).limit(0).first().await.unwrap(), None);
-    assert!(tx.query(&todos).take(0).await.unwrap().is_empty());
-    assert_eq!(tx.query(&todos).take(100).await.unwrap(), inserted);
-    let expected: Vec<_> = inserted
-        .iter()
-        .filter(|row| {
-            row.fields.get("group") == Some(&text("a"))
-                && row.fields.get("done") == Some(&Value::Bool(false))
-        })
-        .cloned()
-        .collect();
-    assert_eq!(
-        tx.query(&todos)
-            .eq("group", "a")
-            .eq("done", false)
-            .collect()
-            .await
-            .unwrap(),
-        expected
-    );
-    assert_eq!(
-        tx.query(&todos)
-            .eq("id", payload)
-            .eq("data", "ordinary")
-            .collect()
-            .await
-            .unwrap(),
-        inserted
-    );
-    assert!(
-        tx.query(&todos)
-            .eq("id", "' OR true; DELETE select; --")
-            .collect()
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    let chosen = &inserted[1];
-    assert_eq!(
-        tx.query(&todos)
-            .eq("_id", chosen.id.to_string())
-            .collect()
-            .await
-            .unwrap(),
-        vec![chosen.clone()]
-    );
-    assert_eq!(
-        tx.query(&todos)
-            .eq("_creationTime", chosen.creation_time)
-            .collect()
-            .await
-            .unwrap(),
-        inserted
-            .iter()
-            .filter(|row| row.creation_time == chosen.creation_time)
-            .cloned()
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(
-        tx.query(&todos)
-            .eq("group", "missing")
-            .first()
-            .await
-            .unwrap(),
-        None
-    );
-    assert!(
-        tx.get(&"select:000123".parse().unwrap())
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert_scan_order_and_limits(&mut tx, &todos, &inserted).await;
+    assert_query_filters(&mut tx, &todos, &inserted, payload).await;
     tx.commit().await.unwrap();
     db.close().await.unwrap();
 }
@@ -816,4 +717,122 @@ async fn disk_reopen() {
     assert_eq!(tx.query(&todos).collect().await.unwrap(), vec![expected]);
     tx.commit().await.unwrap();
     db.close().await.unwrap();
+}
+
+fn host_operation<F, Fut>(op: F) -> F
+where
+    F: Fn() -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = server::data::Result<Option<Document>>> + Send + 'static,
+{
+    op
+}
+
+async fn assert_scan_order_and_limits(
+    tx: &mut server::data::Transaction,
+    todos: &Table,
+    inserted: &[Document],
+) {
+    assert_eq!(tx.query(todos).collect().await.unwrap(), inserted);
+    let mut descending = inserted.to_vec();
+    descending.reverse();
+    assert_eq!(
+        tx.query(todos).order(Order::Desc).collect().await.unwrap(),
+        descending
+    );
+    assert_eq!(
+        tx.query(todos).limit(2).collect().await.unwrap(),
+        inserted[..2]
+    );
+    assert_eq!(
+        tx.query(todos).order(Order::Desc).take(2).await.unwrap(),
+        descending[..2]
+    );
+    assert_eq!(
+        tx.query(todos).first().await.unwrap(),
+        Some(inserted[0].clone())
+    );
+    assert_eq!(
+        tx.query(todos).order(Order::Desc).first().await.unwrap(),
+        Some(descending[0].clone())
+    );
+    assert_eq!(tx.query(todos).limit(0).first().await.unwrap(), None);
+    assert!(tx.query(todos).take(0).await.unwrap().is_empty());
+    assert_eq!(tx.query(todos).take(100).await.unwrap(), inserted);
+}
+
+async fn assert_query_filters(
+    tx: &mut server::data::Transaction,
+    todos: &Table,
+    inserted: &[Document],
+    payload: &str,
+) {
+    let expected: Vec<_> = inserted
+        .iter()
+        .filter(|row| {
+            row.fields.get("group") == Some(&text("a"))
+                && row.fields.get("done") == Some(&Value::Bool(false))
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        tx.query(todos)
+            .eq("group", "a")
+            .eq("done", false)
+            .collect()
+            .await
+            .unwrap(),
+        expected
+    );
+    assert_eq!(
+        tx.query(todos)
+            .eq("id", payload)
+            .eq("data", "ordinary")
+            .collect()
+            .await
+            .unwrap(),
+        inserted
+    );
+    assert!(
+        tx.query(todos)
+            .eq("id", "' OR true; DELETE select; --")
+            .collect()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let chosen = &inserted[1];
+    assert_eq!(
+        tx.query(todos)
+            .eq("_id", chosen.id.to_string())
+            .collect()
+            .await
+            .unwrap(),
+        vec![chosen.clone()]
+    );
+    assert_eq!(
+        tx.query(todos)
+            .eq("_creationTime", chosen.creation_time)
+            .collect()
+            .await
+            .unwrap(),
+        inserted
+            .iter()
+            .filter(|row| row.creation_time == chosen.creation_time)
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        tx.query(todos)
+            .eq("group", "missing")
+            .first()
+            .await
+            .unwrap(),
+        None
+    );
+    assert!(
+        tx.get(&"select:000123".parse().unwrap())
+            .await
+            .unwrap()
+            .is_none()
+    );
 }

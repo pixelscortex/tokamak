@@ -62,13 +62,12 @@ fn no_ops() -> Arc<OpRegistry> {
 #[test]
 fn esm_json_exports_through_engine_boundary() {
     run(async {
-        async fn call(engine: &mut impl Engine, export: &str, args: Json) -> Result<Json, Error> {
-            engine.invoke(&Bundle::new("const tag = 'bundled'; export function sync(x) { return {tag, x}; } export async function asynchronous(x) { await Promise.resolve(); return x; }", None).unwrap(), export, args, no_ops()).await
-        }
         let mut engine = QuickJsEngine::new(Limits::default()).unwrap();
         let input = json!({"text":"こんにちは 🧪", "nested":[null,true,false,3.25, {"empty":[]} ]});
         assert_eq!(
-            call(&mut engine, "sync", input.clone()).await.unwrap(),
+            invoke_export(&mut engine, "sync", input.clone())
+                .await
+                .unwrap(),
             json!({"tag":"bundled", "x":input})
         );
         for value in [
@@ -80,7 +79,7 @@ fn esm_json_exports_through_engine_boundary() {
             input,
         ] {
             assert_eq!(
-                call(&mut engine, "asynchronous", value.clone())
+                invoke_export(&mut engine, "asynchronous", value.clone())
                     .await
                     .unwrap(),
                 value
@@ -177,20 +176,7 @@ fn host_registry_sync_async_errors_and_json() {
             .unwrap();
         let result = invoke(
             &pool(1, 1, Limits::default()),
-            r#"
-            export async function invoke(input, host) {
-                const sync = host.op('echo', input);
-                const pending = host.op('asyncEcho', input);
-                const errors = [];
-                for (const name of ['absent', 'syncFail', 'asyncFail']) {
-                    try { await host.op(name, null); } catch (e) { errors.push(e.message); }
-                }
-                let invalidArgument = false;
-                try { host.op('echo', 1n); } catch (_) { invalidArgument = true; }
-                return {sync, async: await pending, syncIsPromise: sync instanceof Promise,
-                    asyncIsPromise: pending instanceof Promise, errors, invalidArgument};
-            }
-        "#,
+            HOST_REGISTRY_SYNC_ASYNC_ERRORS_AND_JSON_SOURCE,
             "invoke",
             json!({"a":[1,null,"🦀"]}),
             Arc::new(ops),
@@ -330,21 +316,9 @@ fn stale_async_continuation_is_refused_before_repolling_host() {
         let observed = polls.clone();
         registry
             .register_async("wait", move |_| {
-                let (mut wait, entered) = wait.lock().unwrap().take().unwrap();
+                let (wait, entered) = wait.lock().unwrap().take().unwrap();
                 let observed = observed.clone();
-                async move {
-                    let mut entered = Some(entered);
-                    std::future::poll_fn(|cx| {
-                        observed.fetch_add(1, Ordering::SeqCst);
-                        if let Some(entered) = entered.take() {
-                            entered.send(()).unwrap();
-                        }
-                        std::pin::Pin::new(&mut wait).poll(cx)
-                    })
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    Ok(json!("must not resolve"))
-                }
+                async move { wait_for_host_release(wait, entered, observed).await }
             })
             .unwrap();
         world
@@ -791,4 +765,41 @@ fn unresolved_host_future_is_dropped_before_timeout_reply() {
             json!("recovered")
         );
     });
+}
+
+const HOST_REGISTRY_SYNC_ASYNC_ERRORS_AND_JSON_SOURCE: &str = r#"
+            export async function invoke(input, host) {
+                const sync = host.op('echo', input);
+                const pending = host.op('asyncEcho', input);
+                const errors = [];
+                for (const name of ['absent', 'syncFail', 'asyncFail']) {
+                    try { await host.op(name, null); } catch (e) { errors.push(e.message); }
+                }
+                let invalidArgument = false;
+                try { host.op('echo', 1n); } catch (_) { invalidArgument = true; }
+                return {sync, async: await pending, syncIsPromise: sync instanceof Promise,
+                    asyncIsPromise: pending instanceof Promise, errors, invalidArgument};
+            }
+        "#;
+
+async fn invoke_export(engine: &mut impl Engine, export: &str, args: Json) -> Result<Json, Error> {
+    engine.invoke(&Bundle::new("const tag = 'bundled'; export function sync(x) { return {tag, x}; } export async function asynchronous(x) { await Promise.resolve(); return x; }", None).unwrap(), export, args, no_ops()).await
+}
+
+async fn wait_for_host_release(
+    mut wait: tokio::sync::oneshot::Receiver<()>,
+    entered: tokio::sync::oneshot::Sender<()>,
+    observed: Arc<AtomicUsize>,
+) -> Result<Json, String> {
+    let mut entered = Some(entered);
+    std::future::poll_fn(|cx| {
+        observed.fetch_add(1, Ordering::SeqCst);
+        if let Some(entered) = entered.take() {
+            entered.send(()).unwrap();
+        }
+        std::pin::Pin::new(&mut wait).poll(cx)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(json!("must not resolve"))
 }
