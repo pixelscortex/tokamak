@@ -208,3 +208,5 @@ export function useShortcuts(): Shortcuts {
   if (!shortcuts) throw new Error("Plugin UI requires shell shortcuts");
   return shortcuts;
 }
+
+export { Region, RegionOutlet, RegionProvider, useRegionFilled, type RegionName } from "./regions";

@@ -38,3 +38,14 @@ reactive view list, navigation and stage rendering, and register namespaced
 TanStack routes. Router and shortcut facades use host contexts. See
 [the app instructions](../../app/README.md) for desktop/browser startup and the
 compiler-built disposable fixture used to check live queries and revision swaps.
+
+## View regions
+
+Inside a view, render `Region.Sidebar`, `Region.Header`, or `Region.Panel` from
+`@tokamak/sdk/client` with children to place content in the shell's sidebar, page
+header, or side panel. The shell supplies `RegionProvider` and `RegionOutlet`
+with names `"sidebar"`, `"header"`, and `"panel"`; `useRegionFilled(name)` returns
+an accessor for hiding empty regions. Content waits for its outlet, retains the
+view's context and reactive owner, and disappears when the view unmounts. Multiple
+mounted regions targeting the same outlet render in mount order. Without a
+provider, region components render nothing.
