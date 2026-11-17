@@ -1,6 +1,6 @@
 import { For } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Surface } from "../surface.tsx";
+import { Surface } from "@tokamak/ui/surface";
 
 export type Theme = "dark" | "light";
 

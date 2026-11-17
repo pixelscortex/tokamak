@@ -33,6 +33,11 @@
   --color-brand: #b787f0;
   --color-brand-ink: #0e021c;
   --color-brand-tint: #231433;
+  /* Translucent, so they sit right on any surface: never a fixed grey. */
+  --color-edge: rgb(230 230 230 / 0.12);
+  --color-edge-strong: rgb(230 230 230 / 0.4);
+  --color-lip: rgb(9 9 11 / 0.5);
+  --color-highlight: rgb(255 255 255 / 0.1);
   /* Set by the surface an element sits on; see [data-surface] below. */
   --color-hover: #161616;
   --color-selected: #1c1c1c;
@@ -79,7 +84,7 @@
   --tracking-*: initial;
 
   --shadow-*: initial;
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 4px 6px -1px rgb(9 9 11 / 0.2), 0 2px 4px -2px rgb(9 9 11 / 0.2);
   --inset-shadow-*: initial;
   --drop-shadow-*: initial;
   --text-shadow-*: initial;
@@ -120,7 +125,10 @@
     --color-brand: #7b3fd1;
     --color-brand-ink: #ffffff;
     --color-brand-tint: #f3eaff;
-    --shadow-raised: 0 1px 3px rgb(0 0 0 / 0.14);
+    --color-edge: rgb(23 23 23 / 0.12);
+    --color-edge-strong: rgb(23 23 23 / 0.5);
+    --color-lip: rgb(9 9 11 / 0.4);
+    --color-highlight: rgb(255 255 255 / 0.25);
   }
 
   /*

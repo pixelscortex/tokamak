@@ -47,19 +47,21 @@
   }
 
   /*
-    Buttons, and the triggers that share their look. A key: a fill that
-    fades to 85% toward the top, a light top edge, and a darker 2 px lip
-    inside the bottom edge that compresses to 1 px when pressed. Buttons are
-    the only thing with depth.
+    Buttons, and the triggers that share their look: a key. The fill fades
+    from the colour at the bottom to 85% at the top; a 1 px edge with a 2 px
+    lip at the bottom, in translucent near-black; a translucent white inner
+    ring and top highlight; a soft drop shadow. In dark the side and top
+    edges go away. Hover brightens, active darkens. Each variant only sets
+    its colours.
   */
   [data-button],
   [data-slot="select-trigger"] {
-    --btn-fill: var(--tk-secondary);
-    --btn-text: var(--color-ink);
-    --btn-edge: rgb(255 255 255 / 0.08);
-    --btn-ring: transparent;
-    --btn-lip: rgb(0 0 0 / 0.3);
-    --btn-lip-size: 2px;
+    --btn-fill: var(--color-ink);
+    --btn-text: var(--color-stage);
+    --btn-ring: var(--tk-key-ring);
+    --btn-edge: var(--tk-key-edge);
+    --btn-lip: var(--color-lip);
+    --btn-shadow: var(--shadow-raised);
     appearance: none;
     position: relative;
     display: inline-flex;
@@ -70,13 +72,18 @@
     padding: 0 12px;
     border: 0;
     border-radius: var(--radius-sm);
-    background: linear-gradient(to top, var(--btn-fill), color-mix(in oklab, var(--btn-fill) 85%, transparent));
+    background: linear-gradient(
+      to top,
+      var(--btn-fill),
+      color-mix(in oklab, var(--btn-fill) 85%, transparent)
+    );
     color: var(--btn-text);
     box-shadow:
-      inset 0 1px 0 var(--btn-edge),
+      inset 0 1px 0 var(--color-highlight),
       inset 0 0 0 1px var(--btn-ring),
-      inset 0 calc(var(--btn-lip-size) * -1) 0 var(--btn-lip),
-      var(--shadow-raised);
+      inset 0 0 0 1px var(--btn-edge),
+      inset 0 -2px 0 var(--btn-lip),
+      var(--btn-shadow);
     font: 500 var(--text-row) / var(--text-row--line-height) var(--font-sans);
     white-space: nowrap;
     cursor: pointer;
@@ -84,9 +91,7 @@
     flex-shrink: 0;
     text-decoration: none;
     min-height: 0;
-    transition:
-      filter 150ms,
-      background-color 150ms;
+    transition: filter 200ms;
   }
   [data-button][data-size="lg"] {
     height: 40px;
@@ -99,32 +104,27 @@
   [data-button][data-icon-only][data-size="lg"] {
     width: 40px;
   }
-  [data-button="brand"] {
+  [data-button][data-button="brand"] {
     --btn-fill: var(--color-brand);
     --btn-text: var(--color-brand-ink);
-    --btn-edge: rgb(255 255 255 / 0.3);
   }
-  [data-button="primary"] {
+  [data-button][data-button="primary"] {
     --btn-fill: var(--color-ink);
     --btn-text: var(--color-stage);
-    --btn-edge: rgb(255 255 255 / 0.4);
-    --btn-lip: rgb(0 0 0 / 0.22);
   }
-  [data-theme="light"] [data-button="primary"],
-  [data-theme="light"][data-button="primary"] {
-    --btn-edge: rgb(255 255 255 / 0.16);
-    --btn-lip: rgb(0 0 0 / 0.5);
-  }
-  [data-button="destructive"] {
+  [data-button][data-button="destructive"] {
     --btn-fill: var(--color-removed);
     --btn-text: var(--color-stage);
-    --btn-edge: rgb(255 255 255 / 0.25);
   }
-  [data-button="outline"] {
-    --btn-fill: var(--color-stage);
+  /* The neutral key: no fill and translucent edges, so it sits on any surface. */
+  [data-button][data-button="outline"],
+  [data-slot="select-trigger"] {
+    --btn-fill: transparent;
+    --btn-text: var(--color-ink);
+    --btn-ring: var(--color-edge-strong);
     --btn-edge: transparent;
-    --btn-ring: var(--tk-edge);
-    --btn-lip: var(--tk-edge);
+    --btn-lip: var(--color-edge-strong);
+    --btn-shadow: 0 1px 3px 0 rgb(9 9 11 / 0.15), 0 1px 2px -1px rgb(9 9 11 / 0.15);
   }
   [data-button="ghost"] {
     background: transparent;
@@ -135,34 +135,30 @@
     color: var(--color-ink-3);
   }
   :is([data-button], [data-slot="select-trigger"]):is(:hover, [data-preview="hover"]) {
-    filter: brightness(1.08);
+    filter: brightness(1.1);
   }
-  [data-theme="light"] :is([data-button="primary"], [data-button="outline"]):is(:hover, [data-preview="hover"]) {
-    filter: brightness(1.25);
+  [data-theme="light"] [data-button="primary"]:is(:hover, [data-preview="hover"]) {
+    filter: brightness(1.6);
   }
-  [data-button="outline"]:is(:hover, [data-preview="hover"]) {
-    --btn-fill: var(--color-hover);
-    filter: none;
-  }
+  :is([data-button="outline"], [data-slot="select-trigger"]):is(:hover, [data-preview="hover"]),
   [data-button="ghost"]:is(:hover, [data-preview="hover"], [data-open]) {
-    background: var(--color-hover);
+    background: var(--color-edge);
     color: var(--color-ink);
     filter: none;
   }
   :is([data-button], [data-slot="select-trigger"]):is(:active, [data-preview="pressed"]) {
-    --btn-lip-size: 1px;
-    filter: brightness(0.94);
-    transform: translateY(1px);
+    filter: brightness(0.9);
   }
-  [data-button="ghost"]:is(:active, [data-preview="pressed"]) {
-    background: var(--color-selected);
-    transform: none;
+  :is([data-button="outline"], [data-button="ghost"], [data-slot="select-trigger"]):is(
+    :active,
+    [data-preview="pressed"]
+  ) {
+    background: color-mix(in srgb, var(--color-edge-strong) 45%, transparent);
     filter: none;
   }
   :is([data-button], [data-slot="select-trigger"]):is([data-disabled], [aria-disabled="true"], :disabled) {
     opacity: 0.5;
     filter: none;
-    transform: none;
     cursor: default;
   }
   [data-button][data-pending] {
@@ -209,7 +205,7 @@
     border-radius: var(--radius-md);
     background: var(--color-card);
     color: var(--color-ink);
-    box-shadow: 0 0 0 1px var(--tk-hairline);
+    box-shadow: 0 0 0 1px var(--color-edge);
     outline: none;
     --color-hover: var(--color-band);
   }
@@ -232,7 +228,12 @@
     outline: none;
     user-select: none;
   }
-  :is([data-slot="menu-item"], [data-slot="menu-checkbox-item"], [data-slot="menu-sub-trigger"], [data-slot="select-item"])[data-highlighted] {
+  :is(
+    [data-slot="menu-item"],
+    [data-slot="menu-checkbox-item"],
+    [data-slot="menu-sub-trigger"],
+    [data-slot="select-item"]
+  )[data-highlighted] {
     background: var(--color-band);
   }
   :is([data-slot="menu-item"], [data-slot="select-item"])[data-disabled] {
@@ -256,7 +257,7 @@
     height: 1px;
     margin: 4px -4px;
     border: 0;
-    background: var(--tk-hairline);
+    background: var(--color-edge);
   }
   [data-slot="menu-group-label"],
   [data-slot="select-group-label"] {
@@ -292,7 +293,7 @@
     background: var(--color-band);
     color: var(--color-ink);
     font: 500 var(--text-label) / var(--text-label--line-height) var(--font-sans);
-    box-shadow: 0 0 0 1px var(--tk-hairline);
+    box-shadow: 0 0 0 1px var(--color-edge);
   }
 
   /* Dialog. */
@@ -313,7 +314,7 @@
     border-radius: var(--radius-lg);
     background: var(--color-stage);
     color: var(--color-ink);
-    box-shadow: 0 0 0 1px var(--tk-hairline);
+    box-shadow: 0 0 0 1px var(--color-edge);
     overflow: auto;
   }
   [data-slot="dialog-content"]::backdrop {
@@ -377,7 +378,8 @@
     padding: 6px 12px;
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--color-card);
+    background: color-mix(in srgb, var(--color-edge) 50%, transparent);
+    box-shadow: inset 0 0 0 1px var(--color-edge);
     color: var(--color-ink);
     font: 400 var(--text-row) / var(--text-row--line-height) var(--font-sans);
     resize: none;
@@ -545,7 +547,7 @@
     height: 32px;
     padding: 0 8px;
     border-radius: var(--radius-sm);
-    background: var(--color-card);
+    background: var(--color-edge);
     color: var(--color-ink);
     font: 400 var(--text-row) / var(--text-row--line-height) var(--font-sans);
     white-space: nowrap;
@@ -621,13 +623,18 @@
   }
 }
 
-:root,
-[data-theme] {
-  --tk-hairline: color-mix(in srgb, var(--color-ink) 12%, transparent);
-  --tk-edge: color-mix(in srgb, var(--color-ink) 14%, transparent);
-  --tk-secondary: color-mix(in oklab, var(--color-ink) 10%, var(--color-stage));
-}
 :root {
   --tk-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M11.9999 13.1714L16.9497 8.22168L18.3639 9.63589L11.9999 15.9999L5.63599 9.63589L7.0502 8.22168L11.9999 13.1714Z'/%3E%3C/svg%3E");
   --tk-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z'/%3E%3C/svg%3E");
+}
+
+/* The key's white ring and its side edges differ by theme; set where tones resolve. */
+:root,
+[data-theme="dark"] {
+  --tk-key-ring: rgb(255 255 255 / 0.05);
+  --tk-key-edge: transparent;
+}
+[data-theme="light"] {
+  --tk-key-ring: rgb(255 255 255 / 0.25);
+  --tk-key-edge: var(--color-lip);
 }

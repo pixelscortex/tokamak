@@ -7,9 +7,9 @@
 */
 import { Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button } from "../button.tsx";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "../tabs.tsx";
-import { Buttons, Facts, Fields } from "./controls.tsx";
+import { Button } from "@tokamak/ui/button";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@tokamak/ui/tabs";
+import { Buttons, Facts, Fields, OnSurfaces } from "./controls.tsx";
 import { Themes } from "./frame.tsx";
 import { Overlays } from "./overlays.tsx";
 import { Rows } from "./rows.tsx";
@@ -46,6 +46,7 @@ export function Kit(): JSX.Element {
             {(theme) => (
               <>
                 <Buttons />
+                <OnSurfaces />
                 <Facts />
                 <Fields theme={theme} />
               </>
@@ -61,7 +62,10 @@ export function Kit(): JSX.Element {
               {open() ? "Close the popups" : "Show the popups open"}
             </Button>
           </div>
-          <Show when={open()} fallback={<Themes>{(theme) => <Overlays theme={theme} open={false} />}</Themes>}>
+          <Show
+            when={open()}
+            fallback={<Themes>{(theme) => <Overlays theme={theme} open={false} />}</Themes>}
+          >
             <Themes>{(theme) => <Overlays theme={theme} open />}</Themes>
           </Show>
         </TabsPanel>

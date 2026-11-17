@@ -1,11 +1,11 @@
 import { For, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Avatar } from "../avatar.tsx";
-import { Density, type DensityValue } from "../density.tsx";
-import { Icon } from "../icon.tsx";
-import { Row } from "../row.tsx";
-import { RowGroup, RowList, RowOption } from "../row-list.tsx";
-import { StatusIcon } from "../status-icon.tsx";
+import { Avatar } from "@tokamak/ui/avatar";
+import { Density, type DensityValue } from "@tokamak/ui/density";
+import { Icon } from "@tokamak/ui/icon";
+import { Row } from "@tokamak/ui/row";
+import { RowGroup, RowList, RowOption } from "@tokamak/ui/row-list";
+import { StatusIcon } from "@tokamak/ui/status-icon";
 import { Caption, Section } from "./frame.tsx";
 
 // LobeHub marks for Claude and OpenAI, as on the boards. Sample data only.
@@ -24,7 +24,12 @@ function Model(props: { mark: string; name: string; project?: string }): JSX.Ele
   );
 }
 
-function Agent(props: { mark: string; name: string; activity: string; status: "running" | "done" }): JSX.Element {
+function Agent(props: {
+  mark: string;
+  name: string;
+  activity: string;
+  status: "running" | "done";
+}): JSX.Element {
   return (
     <Row
       kind="half"
@@ -70,13 +75,26 @@ export function Threads(props: { theme: string }): JSX.Element {
           Fix total rounding
         </RowOption>
         <RowGroup>
-          <RowOption value="paginate" lead={<StatusIcon status="done" label="Paginate customer list" />} trail="12m">
+          <RowOption
+            value="paginate"
+            lead={<StatusIcon status="done" label="Paginate customer list" />}
+            trail="12m"
+          >
             Paginate customer list
           </RowOption>
-          <RowOption value="stripe" lead={<StatusIcon status="failed" label="Upgrade Stripe SDK" />} trail="3h">
+          <RowOption
+            value="stripe"
+            lead={<StatusIcon status="failed" label="Upgrade Stripe SDK" />}
+            trail="3h"
+          >
             Upgrade Stripe SDK
           </RowOption>
-          <RowOption value="pdf" lead={<StatusIcon status="done" label="PDF dark mode" />} trail="1d" disabled>
+          <RowOption
+            value="pdf"
+            lead={<StatusIcon status="done" label="PDF dark mode" />}
+            trail="1d"
+            disabled
+          >
             PDF dark mode
           </RowOption>
           <RowOption

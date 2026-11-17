@@ -4,8 +4,8 @@
   <Button variant="ghost" icon={icons.more} label="Thread actions" />
 
   Variants: brand (purple) or primary (ink), at most one of the two per
-  region; secondary (default, a neutral key); outline (surface fill, thin
-  edge); destructive (red, only on the button that deletes); ghost (no fill,
+  region; outline (default, the neutral key: no fill, translucent edge and
+  lip, so it sits on any surface); destructive (red, only on the button that deletes); ghost (no fill,
   no depth, for icon buttons and quiet actions). Sizes: md 32, lg 40.
   Radius is 8 (rounded-sm); in a padded container the container's radius
   is 8 + its padding.
@@ -19,7 +19,7 @@ import { omit } from "solid-js";
 import type { ComponentProps, JSX } from "@solidjs/web";
 import { Icon } from "./icon.tsx";
 
-export type ButtonVariant = "brand" | "primary" | "secondary" | "outline" | "destructive" | "ghost";
+export type ButtonVariant = "brand" | "primary" | "outline" | "destructive" | "ghost";
 export type ButtonSize = "md" | "lg";
 
 export type ButtonLook = {
@@ -34,7 +34,7 @@ export const lookKeys = ["variant", "size", "icon", "label", "children"] as cons
 
 export function lookAttributes(props: ButtonLook) {
   return {
-    "data-button": props.variant ?? "secondary",
+    "data-button": props.variant ?? "outline",
     "data-size": props.size ?? "md",
     "data-icon-only": props.label === undefined ? undefined : "",
     "aria-label": props.label,

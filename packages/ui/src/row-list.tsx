@@ -37,7 +37,10 @@ export function RowGroup(props: ComponentProps<typeof ListboxGroup>): JSX.Elemen
   return <ListboxGroup {...props} />;
 }
 
-export type RowOptionProps = RowParts & { sub?: JSX.Element } & Omit<ComponentProps<typeof ListboxItem>, "children">;
+export type RowOptionProps = RowParts & { sub?: JSX.Element } & Omit<
+    ComponentProps<typeof ListboxItem>,
+    "children"
+  >;
 
 export function RowOption(props: RowOptionProps): JSX.Element {
   const rest = omit(props, "kind", "lead", "trail", "detail", "children", "sub");

@@ -3,7 +3,7 @@ set -euo pipefail
 case "$1" in
   ts)
     moon run workspace:format-check workspace:lint-ts sdk:check build:check ui:check runtime:ts-check app:check workspace:plugins-check workspace:e2e-check
-    moon run sdk:test build:test runtime:test app:test app:web-build
+    moon run sdk:test build:test runtime:test ui:test app:test app:web-build
     proto run bun -- test ./.ci/release.test.ts
     ;;
   native)

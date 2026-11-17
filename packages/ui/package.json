@@ -9,9 +9,11 @@
     "./kit": "./src/kit/kit.tsx",
     "./lint": "./lint/index.js",
     "./lint/oxlint.json": "./lint/oxlint.json",
+    "./icons": "./src/icons.ts",
     "./*": "./src/*.tsx"
   },
   "dependencies": {
+    "@shadcn/lint": "0.2.5",
     "@solidjs/web": "2.0.0",
     "@ui-sdk/core": "0.1.0-beta.6",
     "@ui-sdk/solid": "0.1.0-beta.6",
@@ -22,6 +24,7 @@
     "@testing-library/dom": "10.4.2",
     "@testing-library/user-event": "14.6.12",
     "jsdom": "31.0.1",
+    "tailwindcss": "4.3.5",
     "typescript": "5.9.3",
     "vitest": "5.1.0"
   }

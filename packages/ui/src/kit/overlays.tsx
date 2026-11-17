@@ -1,9 +1,24 @@
 import type { JSX } from "@solidjs/web";
-import { icons } from "../icons.ts";
-import { Dialog, DialogBackdrop, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../dialog.tsx";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "../menu.tsx";
-import { Select, SelectContent, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../select.tsx";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../tooltip.tsx";
+import { icons } from "@tokamak/ui/icons";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@tokamak/ui/dialog";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@tokamak/ui/menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@tokamak/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@tokamak/ui/tooltip";
 import { Caption, Section } from "./frame.tsx";
 
 const densities = [
@@ -19,13 +34,13 @@ export function Overlays(props: { theme: string; open: boolean }): JSX.Element {
       <div>
         <Dialog>
           <DialogTrigger variant="outline">Rename thread</DialogTrigger>
-        <DialogBackdrop />
-        <DialogContent>
-          <DialogTitle>Rename thread</DialogTitle>
-          <DialogDescription>Only you see the new name.</DialogDescription>
-          <div class="flex justify-end gap-2">
-            <DialogClose>Cancel</DialogClose>
-            <DialogClose variant="brand">Save</DialogClose>
+          <DialogBackdrop />
+          <DialogContent>
+            <DialogTitle>Rename thread</DialogTitle>
+            <DialogDescription>Only you see the new name.</DialogDescription>
+            <div class="flex justify-end gap-2">
+              <DialogClose>Cancel</DialogClose>
+              <DialogClose variant="brand">Save</DialogClose>
             </div>
           </DialogContent>
         </Dialog>

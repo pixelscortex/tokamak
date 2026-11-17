@@ -50,9 +50,13 @@ export function Tones(): JSX.Element {
         </For>
       </div>
       <div class="flex items-center gap-3">
-        <span class="rounded-sm bg-brand px-3 py-1 text-row font-medium text-brand-ink">brand / brand-ink</span>
+        <span class="rounded-sm bg-brand px-3 py-1 text-row font-medium text-brand-ink">
+          brand / brand-ink
+        </span>
         <span class="rounded-sm bg-brand-tint px-3 py-1 text-row text-brand">brand on brand-tint</span>
-        <a href="#kit" class="text-row text-brand underline">A link is brand, underlined</a>
+        <a href="#kit" class="text-row text-brand underline">
+          A link is brand, underlined
+        </a>
       </div>
       <Measured />
     </Section>
@@ -83,7 +87,10 @@ function Measured(): JSX.Element {
       class="flex flex-col gap-2"
       ref={(element) => requestAnimationFrame(() => setPairs(measure(element)))}
     >
-      <Caption>Measured in this page. Text needs 4.5. The focus ring is brand, so the brand rows also cover it (it needs 3).</Caption>
+      <Caption>
+        Measured in this page. Text needs 4.5. The focus ring is brand, so the brand rows also cover it (it
+        needs 3).
+      </Caption>
       <div class="grid grid-cols-3 gap-x-4">
         <For each={pairs()}>
           {(pair) => (
@@ -91,7 +98,9 @@ function Measured(): JSX.Element {
               <span class="text-ink-2">
                 {pair.fg} / {pair.bg}
               </span>
-              <span class={pair.ratio >= pair.need ? "text-ink" : "text-removed"}>{pair.ratio.toFixed(2)}</span>
+              <span class={pair.ratio >= pair.need ? "text-ink" : "text-removed"}>
+                {pair.ratio.toFixed(2)}
+              </span>
             </div>
           )}
         </For>
@@ -106,7 +115,9 @@ export function Type(): JSX.Element {
       <div class="flex flex-col gap-3">
         <div class="flex items-baseline gap-4">
           <span class="w-16 shrink-0 text-data text-ink-3">read</span>
-          <p class="max-w-read text-read text-ink">The cache outlived the token, so the export kept old columns.</p>
+          <p class="max-w-read text-read text-ink">
+            The cache outlived the token, so the export kept old columns.
+          </p>
         </div>
         <div class="flex items-baseline gap-4">
           <span class="w-16 shrink-0 text-data text-ink-3">row</span>
@@ -165,7 +176,9 @@ export function Space(): JSX.Element {
           </div>
           <div class="flex items-center gap-3">
             <span class="rounded-sm bg-card px-3 py-1 text-row text-ink-2">card · flat</span>
-            <span class="rounded-sm bg-ink px-3 py-1 text-row font-medium text-stage shadow-raised">raised</span>
+            <span class="rounded-sm bg-ink px-3 py-1 text-row font-medium text-stage shadow-raised">
+              raised
+            </span>
           </div>
           <Caption>shadow-raised means pressable. Nothing else casts one.</Caption>
         </div>

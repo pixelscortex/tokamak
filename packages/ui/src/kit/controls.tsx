@@ -1,17 +1,19 @@
-import { For } from "solid-js";
+import { For, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Avatar } from "../avatar.tsx";
-import { Button, type ButtonVariant } from "../button.tsx";
-import { Chip } from "../chip.tsx";
-import { Icon } from "../icon.tsx";
-import { icons } from "../icons.ts";
-import { Kbd } from "../kbd.tsx";
-import { StatusIcon, type Status } from "../status-icon.tsx";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "../tabs.tsx";
-import { Textarea } from "../textarea.tsx";
+import { Avatar } from "@tokamak/ui/avatar";
+import { Button, type ButtonVariant } from "@tokamak/ui/button";
+import { Chip } from "@tokamak/ui/chip";
+import { Icon } from "@tokamak/ui/icon";
+import { icons } from "@tokamak/ui/icons";
+import { Kbd } from "@tokamak/ui/kbd";
+import { StatusIcon, type Status } from "@tokamak/ui/status-icon";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@tokamak/ui/tabs";
+import { Textarea } from "@tokamak/ui/textarea";
 import { Caption, Section } from "./frame.tsx";
+import { overContrast } from "./contrast.ts";
+import { Surface, type SurfaceTone } from "@tokamak/ui/surface";
 
-const variants: ButtonVariant[] = ["brand", "primary", "secondary", "outline", "destructive", "ghost"];
+const variants: ButtonVariant[] = ["brand", "primary", "outline", "destructive", "ghost"];
 const states = ["rest", "hover", "focus", "pressed", "disabled"] as const;
 const preview = { rest: undefined, hover: "hover", focus: "focus", pressed: "pressed", disabled: undefined };
 
@@ -130,7 +132,9 @@ export function Fields(props: { theme: string }): JSX.Element {
         <Textarea aria-label={`Empty note, ${props.theme}`} placeholder="Ask Mira" />
         <Textarea
           aria-label={`Filled note, ${props.theme}`}
-          value={"Move the dentist to next week,\nadd groceries to my todos,\nand draft a note to the landlord."}
+          value={
+            "Move the dentist to next week,\nadd groceries to my todos,\nand draft a note to the landlord."
+          }
         />
         <Textarea aria-label={`Focused note, ${props.theme}`} data-preview="focus" placeholder="Focused" />
         <Textarea aria-label={`Disabled note, ${props.theme}`} disabled placeholder="Disabled" />
@@ -148,20 +152,62 @@ export function Fields(props: { theme: string }): JSX.Element {
             Review
           </TabsTab>
         </TabsList>
-        <TabsPanel value="files" class="pt-3 text-row text-ink-2">
-          Four files changed.
+        <TabsPanel value="files">
+          <p class="pt-3 text-row text-ink-2">Four files changed.</p>
         </TabsPanel>
-        <TabsPanel value="changes" class="pt-3 text-row text-ink-2">
-          +86 −21 across four files.
+        <TabsPanel value="changes">
+          <p class="pt-3 text-row text-ink-2">+86 −21 across four files.</p>
         </TabsPanel>
-        <TabsPanel value="checks" class="pt-3 text-row text-ink-2">
-          Three checks passed.
+        <TabsPanel value="checks">
+          <p class="pt-3 text-row text-ink-2">Three checks passed.</p>
         </TabsPanel>
-        <TabsPanel value="review" class="pt-3 text-row text-ink-2">
-          No review yet.
+        <TabsPanel value="review">
+          <p class="pt-3 text-row text-ink-2">No review yet.</p>
         </TabsPanel>
       </Tabs>
       <Caption>Tabs: selected, rest, hover (Checks), disabled (Review).</Caption>
+    </Section>
+  );
+}
+
+const tones: SurfaceTone[] = ["window", "stage", "tray", "card", "band"];
+
+function EdgeRatio(props: { tone: SurfaceTone }): JSX.Element {
+  const [ratio, setRatio] = createSignal(0);
+  return (
+    <span
+      class="text-data text-ink-3"
+      ref={(element) =>
+        requestAnimationFrame(() => setRatio(overContrast(element, "edge-strong", props.tone)))
+      }
+    >
+      edge {ratio().toFixed(2)}
+    </span>
+  );
+}
+
+export function OnSurfaces(): JSX.Element {
+  return (
+    <Section label="Primitives · Button on every surface" title="Translucent edges adapt">
+      <div class="flex flex-col">
+        <For each={tones}>
+          {(tone) => (
+            <Surface tone={tone} class="flex items-center gap-2 px-3 py-2">
+              <span class="w-12 text-data text-ink-3">{tone}</span>
+              <For each={variants}>
+                {(variant) => (
+                  <Button variant={variant} tabindex={-1}>
+                    {variant === "destructive" ? "Delete" : "Save"}
+                  </Button>
+                )}
+              </For>
+              <Button variant="outline" icon={icons.add} label={`Add on ${tone}`} tabindex={-1} />
+              <EdgeRatio tone={tone} />
+            </Surface>
+          )}
+        </For>
+      </div>
+      <Caption>edge = the outline's ring (edge-strong) measured over each surface; it needs 3.</Caption>
     </Section>
   );
 }
