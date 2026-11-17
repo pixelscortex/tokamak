@@ -1,0 +1,116 @@
+plugins/chat/src/client/ui/composer/composer-input.tsx
+  s_452c1eccf4600a::t_e6ddc79cf4b528 1-3,6,8-19,22-30
+plugins/chat/src/client/lib/api.ts
+  s_452c1eccf4600a::t_a735a3ada01d36 1-2
+packages/build/README.md
+  s_452c1eccf4600a::t_628444d182a2d5 17
+plugins/chat/src/client/ui/composer/chat-composer.tsx
+  s_452c1eccf4600a::t_e2ffefa64b24c3 3-5,7,9-12,14-22,25-56
+  s_452c1eccf4600a::t_4841d9a37e7d0e 59
+plugins/chat/src/client/lib/state/use-backends.ts
+  s_452c1eccf4600a::t_6b94a4fe0c8501 5,8
+  s_452c1eccf4600a::t_a3efa77edca639 7,9
+  s_452c1eccf4600a::t_0028e2beb186a5 10-11
+moon.yml
+  s_452c1eccf4600a::t_628444d182a2d5 44
+plugins/chat/src/client/lib/agents.ts
+  s_452c1eccf4600a::t_b373cc40eff79c 1-40
+  s_452c1eccf4600a::t_fd6b4909dfe8ce 41-43
+plugins/chat/src/client/ui/composer/send-button.tsx
+  s_452c1eccf4600a::t_6e005e09bf7aad 1-3,5-11,13,15-42
+plugins/chat/src/client/ui/thread/plan-list.tsx
+  s_452c1eccf4600a::t_1d1ef4d618205a 1-44
+plugins/chat/src/client/lib/composer.ts
+  s_452c1eccf4600a::t_c66f32d1ceed2d 21-26,33-42,52,60,64-72,74,80
+  s_452c1eccf4600a::t_992690f573c5c0 44-49,53
+  s_452c1eccf4600a::t_149f568861630c 50-51,54,57-58,79,81-84
+plugins/chat/tsconfig.json
+  s_452c1eccf4600a::t_ad64e36e73f0d1 2
+plugins/chat/src/client/lib/state/use-run-recovery.ts
+  s_452c1eccf4600a::t_6b94a4fe0c8501 1,5,10,12,15-16,21,25,27,33,39,42
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_452c1eccf4600a::t_0416919b43de88 1,5-9,11-14,20-29,31,36,39-40,50-72,74-87
+plugins/chat/src/client/ui/thread/turn.tsx
+  s_452c1eccf4600a::t_64b02715e2c038 1-42,44-99
+  s_452c1eccf4600a::t_f0565898f30098 43
+  s_452c1eccf4600a::t_08b1470500cee1 100-102
+plugins/chat/src/client/ui/composer/needs-you.tsx
+  s_452c1eccf4600a::t_2f01bb6700d400 1-22,24-53
+  s_452c1eccf4600a::t_83b185a7b33f11 23
+plugins/chat/src/client/tsconfig.json
+  s_452c1eccf4600a::t_628444d182a2d5 1-10
+plugins/chat/src/client/lib/icons.ts
+  s_452c1eccf4600a::t_86e7dbd5415edf 1-30
+  s_452c1eccf4600a::t_cb37df3cd905b1 31-44
+plugins/chat/src/client/ui/composer/composer-strip.tsx
+  s_452c1eccf4600a::t_7171da56f25d8a 2-4,7-8,11,13-18,20-24,26
+plugins/chat/src/client/lib/turns.ts
+  s_452c1eccf4600a::t_a05c55411adaf5 1-134
+  s_452c1eccf4600a::t_0fc9ff5ac211ee 135-138
+plugins/chat/src/client/ui/thread/work-row.tsx
+  s_452c1eccf4600a::t_4a68699ec77b2f 24,41
+  s_452c1eccf4600a::t_26c79fcf0048f6 1-23,25-40,42-86
+  s_452c1eccf4600a::t_e08f8cb3167672 87-89
+plugins/chat/src/client/ui/sidebar/thread-list.tsx
+  s_452c1eccf4600a::t_f0565898f30098 19,48
+  s_452c1eccf4600a::t_e35354751502fa 1-18,20-47,49-74
+plugins/chat/src/client/ui/thread/thread-view.tsx
+  s_452c1eccf4600a::t_a792709ed4aa66 1-62
+  s_452c1eccf4600a::t_eb4e606ec5c276 63-65
+plugins/chat/src/client/lib/state/chat-keys.ts
+  s_452c1eccf4600a::t_37065db194c64c 1-6,9-11,13-15,17,20-21
+plugins/chat/src/client/ui/composer/agent-picker.tsx
+  s_452c1eccf4600a::t_c73eee33208016 28,42,44-46,61-62,73
+  s_452c1eccf4600a::t_a3efa77edca639 22
+  s_452c1eccf4600a::t_cb6a5d52bb94ad 1-21,23-27,29-41,43,47-60,63-72,74-153
+  s_452c1eccf4600a::t_f4ecf5b8eeb90f 154-159
+plugins/chat/src/client/styles.css
+  s_452c1eccf4600a::t_bb7b2d6f5b19b3 3
+  s_452c1eccf4600a::t_78c0116cfc8c9d 1-2,4
+plugins/chat/src/client/lib/state/use-thread-editor.ts
+  s_452c1eccf4600a::t_569f383038ccdc 1,4-5,7-12,14-17,20-22,24,27,33-36
+  s_452c1eccf4600a::t_a3efa77edca639 6
+  s_452c1eccf4600a::t_1a3d73b757c7ff 37-39
+plugins/chat/src/client/lib/follow.ts
+  s_452c1eccf4600a::t_a3d96d6621aec3 1-60
+plugins/chat/src/client/ui/header/thread-header.tsx
+  s_452c1eccf4600a::t_0c89c9b9e3d3db 1-104
+plugins/chat/src/client/lib/state/use-chat.ts
+  s_452c1eccf4600a::t_d8af50cc50db35 5,13-15,19,21,23,27-28,31-47,49,54,63,67,70-71,78,98-99,102
+  s_452c1eccf4600a::t_a3efa77edca639 20
+plugins/chat/src/client/ui/thread/empty.tsx
+  s_452c1eccf4600a::t_83b185a7b33f11 36
+  s_452c1eccf4600a::t_5f65194392f3ab 1-35,37-79
+  s_452c1eccf4600a::t_b601bdedb58cad 80-88
+plugins/chat/src/client/pages/screen.tsx
+  s_452c1eccf4600a::t_ede84d3b2bb89e 2-4,6-8,10-20,23,25-29,31-39,41-51,54-90,92,94-102,104-117,120-138,141-150,154-162,164-189,191-203,205-229,231-240
+  s_452c1eccf4600a::t_78c0116cfc8c9d 1,118-119
+  s_452c1eccf4600a::t_a3efa77edca639 30
+  s_452c1eccf4600a::t_253feeef1561be 241-243,245
+plugins/chat/package.json
+  s_452c1eccf4600a::t_f0565898f30098 14-15,20-24,26
+  s_452c1eccf4600a::t_ad64e36e73f0d1 25
+  s_452c1eccf4600a::t_d5e3e2af01c141 6-8
+plugins/chat/src/client/ui/thread/markdown.tsx
+  s_452c1eccf4600a::t_a5e52b0f94a06e 1-64,66-202
+  s_452c1eccf4600a::t_f0565898f30098 65
+  s_452c1eccf4600a::t_07c13e0551d222 206
+bun.lock
+  s_452c1eccf4600a::t_f2f1b9f4d65667 130-131,136-138,140-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a12e585495677350323732d11c70f3c39f12e4ad",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
