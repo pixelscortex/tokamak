@@ -109,6 +109,10 @@ test("the frame: keyboard sidebar, rail, tabs, panel, search and theme", async (
   const search = page.getByRole("combobox", { name: "Search views and commands" });
   await search.fill("Panel");
   await page.getByRole("option", { name: "PanelView" }).click();
+  // Settings opens straight away: the closing search must not swallow the press or take focus back.
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Dark" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page).toHaveURL(/\/panel$/);
   await page.keyboard.press("ControlOrMeta+[");
