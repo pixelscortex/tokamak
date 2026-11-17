@@ -1,0 +1,21 @@
+wiki/content/docs/design/compatibility.mdx
+  s_4ccc9a2575a981::t_7f94a650e4a1be 1-114
+wiki/content/docs/design/meta.json
+  s_4ccc9a2575a981::t_2bc52fcfa748f7 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ca9c8e6568dc2afda9f99f83e0f38abb1a22f29",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
