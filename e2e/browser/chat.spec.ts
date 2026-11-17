@@ -4,6 +4,14 @@ import { test, expect, type Page } from "@playwright/test";
 // e2e/fixtures/scripted-agent.py, so replies, tool steps and permissions are real
 // protocol traffic with no model behind them.
 
+test.beforeEach(async ({ page, browserName }) => {
+  const rate = Number(process.env.TOKAMAK_E2E_CPU_RATE ?? 1);
+  if (browserName === "chromium" && rate > 1) {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Emulation.setCPUThrottlingRate", { rate });
+  }
+});
+
 async function openChat(page: Page) {
   // Chat is the first view in the catalog, so opening the app lands on it.
   await page.goto("/");
@@ -103,4 +111,53 @@ test("a reply can be stopped, and a follow-up typed meanwhile is queued", async 
   // The queued follow-up goes out once the stopped run settles.
   await expect(log.getByText("Then explain the fix", { exact: true })).toBeVisible();
   await expect(log.getByText(/Tokamak workspace/)).toBeVisible();
+});
+
+test("creating a thread disables the old composer until the new thread is selected", async ({ page }) => {
+  let hold = false;
+  let createId: number | undefined;
+  let release: (() => void) | undefined;
+  await page.routeWebSocket("**", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (hold && request.type === "action" && request.name === "chat/threads:create") createId = request.id;
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const event = JSON.parse(String(message));
+      if (event.type === "response" && event.id === createId) {
+        release = () => socket.send(message);
+      } else socket.send(message);
+    });
+  });
+  await openChat(page);
+  await newThread(page);
+  const input = page.getByRole("textbox", { name: "Message" });
+  await input.fill("Keep this draft in the previous thread");
+  const threads = page.getByRole("listbox", { name: "Threads" }).getByRole("option");
+  const before = await threads.count();
+  const current = page.getByRole("region", { name: "Chat", exact: true });
+  const previousId = await current.getAttribute("data-thread-id");
+  hold = true;
+  await page.getByRole("button", { name: /New chat/ }).click();
+  await expect(threads).toHaveCount(before + 1);
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await expect(input).toBeDisabled();
+  release!();
+  await expect(input).toBeEnabled();
+  await expect(current).not.toHaveAttribute("data-thread-id", previousId!);
+  await expect(input).toHaveValue("");
+  await send(page, "Send to the newly selected thread");
+});
+
+test("the composer agent menu opens and changes the thread agent", async ({ page }) => {
+  await openChat(page);
+  await newThread(page);
+  const picker = page.getByRole("button", { name: /^Claude(?:\s|$)/ });
+  await picker.click();
+  await page.getByRole("menuitem", { name: "Codex", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^Codex(?:\s|$)/ })).toBeVisible();
+  await send(page, "Reply with the selected agent");
+  await expect(page.getByRole("log", { name: "Conversation" }).getByText(/Tokamak workspace/)).toBeVisible();
 });

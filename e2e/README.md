@@ -21,6 +21,7 @@ Install the real browsers once, then run the production build harness:
 proto run bun -- x playwright install --no-shell chromium webkit
 proto run bun -- run e2e:browser
 proto run bun -- run e2e:browser --repeat-each=3
+TOKAMAK_E2E_CPU_RATE=6 proto run bun -- run e2e:browser --project=chromium --repeat-each=10
 ```
 
 On Linux use `playwright install --with-deps --no-shell chromium webkit` through the same
@@ -40,6 +41,11 @@ The host accessibility contract includes `Connection status`, `Sidebar`, `Page h
 Keep those names when restyling the host.
 Use `--project=chromium` or `--project=webkit` to narrow a run. Failure traces and
 HTML reports live under `.ci-results/playwright*` and are uploaded by native CI.
+
+Chat also holds a thread-creation response while delivering live updates to check
+that the previous composer cannot send during the switch, and opens the agent
+picker to select and use another agent. `TOKAMAK_E2E_CPU_RATE` applies Chromium
+CPU throttling to the chat checks.
 
 Coverage: connection, two-page live thread creation, compiler-built plugin
 catalog/navigation and live query, explicit rebuild/reload without replacing the

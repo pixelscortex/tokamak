@@ -67,7 +67,10 @@ jobs:
         if: failure()
         with:
           name: browser-failure
-          path: .ci-results/playwright*
+          include-hidden-files: true
+          path: |
+            .ci-results/playwright/
+            .ci-results/playwright-report/
           if-no-files-found: ignore
       - if: always()
         run: sccache --show-stats
