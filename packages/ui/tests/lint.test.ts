@@ -54,6 +54,6 @@ test("the shapes the corner rule assumes are the primitives' own classes", async
   expect(chipVariants()).toContain("rounded-sm");
   expect(rowVariants().root()).toContain("rounded-sm");
   expect(primitiveShapes["Menu.Content"]).toEqual([12, 4]);
-  expect(popupClass).toContain("rounded-md");
-  expect(popupClass).toContain("p-1");
+  expect(popupClass.join(" ")).toContain("rounded-md");
+  expect(popupClass.join(" ")).toContain("p-1");
 });

@@ -49,7 +49,13 @@ export function Close(
 
 export function Backdrop(props: Classed<typeof Base.DialogBackdrop>) {
   return (
-    <Base.DialogBackdrop {...omit(props, "class")} class={cn("fixed inset-0 bg-window/70", props.class)} />
+    <Base.DialogBackdrop
+      {...omit(props, "class")}
+      class={cn(
+        "fixed inset-0 bg-window/70 transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0",
+        props.class,
+      )}
+    />
   );
 }
 
@@ -60,6 +66,7 @@ export function Content(props: Classed<typeof Base.DialogContent>) {
       class={cn(
         "m-auto flex max-h-dvh w-full max-w-dialog flex-col gap-2 overflow-auto rounded-lg border-0",
         "surface-stage p-6 inset-ring inset-ring-edge backdrop:bg-window/70",
+        "transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0",
         props.class,
       )}
     />

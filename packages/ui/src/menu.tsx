@@ -19,8 +19,10 @@ import { cn } from "./cn.ts";
 
 type Classed<T extends (props: any) => JSX.Element> = Omit<ComponentProps<T>, "class"> & { class?: string };
 
-export const popupClass =
-  "m-0 flex min-w-menu flex-col rounded-md border-0 surface-card p-1 inset-ring inset-ring-edge outline-none";
+export const popupClass = [
+  "m-0 flex min-w-menu flex-col rounded-md border-0 surface-card p-1 inset-ring inset-ring-edge outline-none",
+  "transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0",
+];
 export const itemClass = [
   "flex h-8 cursor-default items-center gap-2 rounded-sm px-2 text-row text-ink outline-none select-none",
   "data-highlighted:bg-hover data-disabled:text-ink-3",
