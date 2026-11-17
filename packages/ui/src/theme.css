@@ -1,2 +1,173 @@
+/*
+  Tokamak tokens. Import after Tailwind:
+
+    @layer ui-sdk;
+    @import "tailwindcss";
+    @import "@tokamak/ui/theme.css";
+
+  Dark is the default. data-theme="light" on the root (or any element) swaps
+  every colour below. Scales are cleared first, so off-scale classes such as
+  p-5, rounded-xl or bg-zinc-800 do not exist.
+*/
+@import "./fonts.css";
+@import "./primitives.css";
+
 @theme {
+  --color-*: initial;
+  --color-window: #080808;
+  --color-stage: #101010;
+  --color-tray: #161616;
+  --color-card: #1c1c1c;
+  --color-band: #222222;
+  --color-ink: #e6e6e6;
+  --color-ink-2: #adadad;
+  --color-ink-3: #8a8a8a;
+  --color-added: #4ade80;
+  --color-removed: #f87171;
+  --color-warn: #fbbf24;
+  --color-info: #60a5fa;
+  --color-added-tint: #11251a;
+  --color-removed-tint: #2b1515;
+  --color-warn-tint: #2a2110;
+  --color-info-tint: #111f36;
+  --color-brand: #b787f0;
+  --color-brand-ink: #0e021c;
+  --color-brand-tint: #231433;
+  /* Set by the surface an element sits on; see [data-surface] below. */
+  --color-hover: #161616;
+  --color-selected: #1c1c1c;
+
+  --spacing: initial;
+  --spacing-*: initial;
+  --spacing-0: 0px;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --font-*: initial;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  --font-weight-*: initial;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --text-*: initial;
+  --text-read: 16px;
+  --text-read--line-height: 26px;
+  --text-row: 14px;
+  --text-row--line-height: 20px;
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+  --text-label--font-weight: 500;
+  --text-data: 12px;
+  --text-data--line-height: 16px;
+
+  --leading-*: initial;
+  --tracking-*: initial;
+
+  --shadow-*: initial;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4);
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+
+  --container-*: initial;
+  --container-read: 560px;
+}
+
+/* Data is mono: it is the role for things a person could copy. */
+@utility text-data {
+  font-family: var(--font-mono);
+}
+
+@layer base {
+  :root,
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+  [data-theme="light"] {
+    color-scheme: light;
+    --color-window: #ebebeb;
+    --color-stage: #ffffff;
+    --color-tray: #f5f5f5;
+    --color-card: #ededed;
+    --color-band: #e5e5e5;
+    --color-ink: #171717;
+    --color-ink-2: #4a4a4a;
+    --color-ink-3: #666666;
+    --color-added: #15703a;
+    --color-removed: #b91c1c;
+    --color-warn: #8a5300;
+    --color-info: #1d4ed8;
+    --color-added-tint: #e9f6ee;
+    --color-removed-tint: #fdecec;
+    --color-warn-tint: #fef4de;
+    --color-info-tint: #eaf1fe;
+    --color-brand: #7b3fd1;
+    --color-brand-ink: #ffffff;
+    --color-brand-tint: #f3eaff;
+    --shadow-raised: 0 1px 3px rgb(0 0 0 / 0.14);
+  }
+
+  /*
+    Hover and selected fills depend on the surface underneath, so they are
+    declared where the tones resolve. On window and stage: hover tray,
+    selected card, except light window, where card is invisible (1.02:1)
+    and the selected fill is the stage white, as on the boards.
+  */
+  :root,
+  [data-theme],
+  [data-surface="window"],
+  [data-surface="stage"] {
+    --color-hover: var(--color-tray);
+    --color-selected: var(--color-card);
+  }
+  [data-theme="light"][data-surface="window"],
+  [data-theme="light"] [data-surface="window"] {
+    --color-selected: var(--color-stage);
+  }
+  [data-surface="tray"],
+  [data-surface="card"],
+  [data-surface="band"] {
+    --color-hover: var(--color-card);
+    --color-selected: var(--color-band);
+  }
+  [data-surface="card"],
+  [data-surface="band"] {
+    --color-hover: var(--color-band);
+  }
+
+  :root,
+  [data-theme] {
+    font-family: var(--font-sans);
+    font-size: var(--text-row);
+    line-height: var(--text-row--line-height);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-synthesis: none;
+  }
+
+  :focus-visible,
+  [data-preview="focus"] {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
 }
