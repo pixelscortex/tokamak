@@ -61,14 +61,17 @@ export function useDrafts(chat: ChatState) {
   }
 
   // A queued follow-up goes out when its thread's run ends, even if another thread is open.
-  createEffect(chat.runs, (runs) => {
-    setRaced((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => runs[id])));
-    for (const [threadId, text] of Object.entries(untrack(queued))) {
-      if (runs[threadId] || untrack(sending)[threadId]) continue;
-      queue(threadId, undefined);
-      void sendTo(threadId, text);
-    }
-  });
+  createEffect(
+    () => [chat.runs(), sending(), queued()] as const,
+    ([runs, busy, waiting]) => {
+      setRaced((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => runs[id])));
+      for (const [threadId, text] of Object.entries(waiting)) {
+        if (runs[threadId] || busy[threadId]) continue;
+        queue(threadId, undefined);
+        void sendTo(threadId, text);
+      }
+    },
+  );
 
   return {
     draft: () => drafts()[key()] ?? "",

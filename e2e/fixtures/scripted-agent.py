@@ -106,7 +106,8 @@ def run(request):
     turn = Turn(request["params"]["sessionId"])
     finish = lambda: send(dict(id=request["id"], result=dict(stopReason="cancelled" if turn.cancelled.is_set() else "end_turn")))
     text = request["params"]["prompt"][0].get("text", "")
-    lowered = text.lower()
+    # Only the newest line picks the script; earlier lines can carry conversation history.
+    lowered = (text.strip().splitlines() or [""])[-1].lower()
     if "fail" in lowered:
         tool(turn, "read", "Read package.json", "read", 0.4)
         send(dict(id=request["id"], error=dict(code=-32000, message="The model is overloaded. Try again in a minute.")))

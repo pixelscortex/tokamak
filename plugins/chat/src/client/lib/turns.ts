@@ -66,7 +66,8 @@ export function foldTurn(message: Message): {
           actions: steps.filter((step) => step.kind === "tool").length,
           running: streaming,
           waiting,
-          failed: steps.some((step) => step.status === "error"),
+          // Stopping settles running tools as errors; that is not a failure to show.
+          failed: message.status !== "cancelled" && steps.some((step) => step.status === "error"),
           latest: waiting
             ? "Waiting for you"
             : (running.at(-1)?.label ?? (steps.length ? steps.at(-1)!.label : "Working")),

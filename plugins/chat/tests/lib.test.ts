@@ -63,6 +63,8 @@ test("a turn folds its tools into one work summary and keeps its text in order",
   );
   expect(waiting.work).toMatchObject({ waiting: true, latest: "Waiting for you", actions: 1 });
 
+  expect(foldTurn(message("assistant", [tool("a", "error")], "cancelled")).work?.failed).toBe(false);
+  expect(foldTurn(message("assistant", [tool("a", "error")], "error")).work?.failed).toBe(true);
   expect(foldTurn(message("assistant", [], "streaming")).work).toMatchObject({
     latest: "Working",
     actions: 0,

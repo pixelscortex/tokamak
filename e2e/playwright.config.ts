@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: [
     {
       cwd: resolve(import.meta.dirname, ".."),
-      command: "proto run bun -- app/scripts/server.ts",
+      command: "proto run bun -- e2e/serve.ts",
       url: `http://127.0.0.1:43123/plugins?token=${process.env.VITE_TOKAMAK_TOKEN}`,
       timeout: 30_000,
       gracefulShutdown: { signal: "SIGTERM", timeout: 30_000 },
