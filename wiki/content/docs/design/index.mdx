@@ -349,6 +349,21 @@ words.
   one-row summary there and the detail in its own panel.
 - A small list of what changed, such as todos, may sit in the thread.
 
+## The shell
+
+The frame every plugin view sits in. Plugins do not draw it; they fill it.
+
+- **Regions.** A view puts content in the sidebar, the page header and the right
+  panel with `Region.Sidebar`, `Region.Header` and `Region.Panel` from
+  `@tokamak/sdk/client`. An empty region is hidden; an empty header shows the
+  view's title. The sidebar is dense (32 px rows).
+- **Rail.** One entry per view, named by the view's title in its tooltip. The
+  current view is ink on the selected fill, the others tertiary.
+- **Keys.** Register through `useShortcuts()`. The shell holds ⌘B, ⌘K, ⌘[, ⌘],
+  ⌃Tab and ⌃⇧Tab; show a key next to its control with `<Kbd>` in the tooltip.
+- **Unavailable controls** use `aria-disabled`, not `disabled`, so their tooltip
+  still says what they do. They show at half opacity.
+
 ## Checking a screen
 
 Before a screen is called done, run the lint config, then check it against the

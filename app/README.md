@@ -1,8 +1,7 @@
 # Tokamak app
 
 The client is Solid 2 and TanStack Router in a Tauri 2 window, with no SSR.
-The plain host lists Chat threads and compiler-built plugin views. Chat's old
-`src/client` remains excluded; the host calls Chat's server API directly.
+The shell is the frame; everything inside it comes from plugin views.
 
 Install proto, Rust and the platform Tauri prerequisites, then from the root:
 
@@ -35,17 +34,24 @@ the adapter adds the token to server module, stylesheet and catalog requests,
 and the app adds it to the WebSocket URL. The server allows the Tauri origins
 and port 1420 by default; other origins require `TOKAMAK_ALLOWED_ORIGINS`.
 
-## Shell integration
+## Shell
 
-`src/plugins/views.tsx` exports `createPluginShell(client, endpoint, source,
-routing)` and `PluginViews({ shell, view })`. The shell exposes `views()` with
-`{ id, plugin, route, title, generation }` for a sidebar and `navigation.navigate`
-for selecting one. `PluginViews` draws a stage with a plugin error boundary.
-Routes under `/p/<plugin>` are also installed in TanStack's root automatically.
-The current `App` owns connection, plugin shell and disposal; `router.tsx` owns
-the router and outlet. Keep one shell per connection. Shared host module exports,
-SDK contexts, router and shortcuts are provided through the static import map.
-See [src/plugins/README.md](src/plugins/README.md) for loader lifetime details.
+`src/shell/` is the frame: a top strip (sidebar toggle, search, back and forward,
+one tab per open route), the rail of plugin views with settings at its foot, the
+sidebar, the stage with its page header and footer, and an optional right panel.
+`shell.tsx` owns the connection (`session.ts`), the theme, the tabs
+(`navigation.ts`) and the window's keys; `frame.tsx` lays them out. A plugin view
+fills the sidebar, header and panel with `Region.Sidebar`, `Region.Header` and
+`Region.Panel` from `@tokamak/sdk/client`; empty regions are hidden, and an empty
+header shows the view's title. The rail can be turned off in `shell/config.ts`.
+
+Keys go through the SDK `Shortcuts` facade (`ShortcutContext`): ⌘B sidebar, ⌘K
+search, ⌘[ and ⌘] back and forward, ⌃Tab and ⌃⇧Tab next and previous tab (Ctrl
+instead of ⌘ off macOS). `/kit` opens full-bleed from the settings menu.
+
+`src/plugins/views.tsx` still exports `createPluginShell` and `PluginViews`; the
+frame reads `views()` for the rail, tabs and search. See
+[src/plugins/README.md](src/plugins/README.md) for loader lifetime details.
 
 ## Checks and builds
 
