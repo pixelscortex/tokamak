@@ -1,0 +1,114 @@
+---
+title: DOM compatibility
+description: What the client needs before DOM-dependent UI libraries such as ui-sdk can run on it.
+---
+
+The goal is to run ui-sdk's behaviours on our renderer without moving to a
+webview. This page is the working list: each row is a browser API a library
+expects, where we stand, and what kind of work closes it. Update a row when its
+status changes.
+
+The "uses" column counts how often `@ui-sdk/core` 0.1.0-beta.6 refers to the
+API in its 388 built files. It is a rough measure of how much depends on a row,
+taken with a text search, not a guarantee that every use matters.
+
+## Status words
+
+- **Have:** works today.
+- **Wiring:** JavaScript only. Our renderer already owns the tree, so the
+  answer can be computed in QuickJS.
+- **Bridge:** needs a call into Rust and back. Blitz may already hold the
+  answer.
+- **Engine:** needs Blitz itself to do something it may not do today.
+- **Unchecked:** nobody has looked yet.
+
+## The tree
+
+| API                                     | Uses | Status    | Notes                                         |
+| --------------------------------------- | ---- | --------- | --------------------------------------------- |
+| `ownerDocument`, `getRootNode`          | 192  | Wiring    | One document per window.                      |
+| `contains`, `closest`, `matches`        | 272  | Wiring    | `matches` needs a small selector matcher.     |
+| `getAttribute`, `setAttribute`          | 195  | Wiring    | Attributes already go to Rust as mutations.   |
+| `querySelector`                         | 51   | Wiring    | Same selector matcher.                        |
+| `document.createElement`                | 4    | Wiring    | The universal renderer already creates nodes. |
+| `MutationObserver`                      | 51   | Wiring    | Every mutation passes through our own queue.  |
+| `TreeWalker`, `compareDocumentPosition` | 4    | Wiring    |                                               |
+| Shadow roots                            | 16   | Unchecked | Likely only for the web components adapter.   |
+
+## Events
+
+| API                                       | Uses | Status    | Notes                                                         |
+| ----------------------------------------- | ---- | --------- | ------------------------------------------------------------- |
+| `addEventListener`, `removeEventListener` | 203  | Wiring    | We have one handler per event name per node today.            |
+| `dispatchEvent`                           | 24   | Wiring    | Needs capture and bubble phases to match the browser.         |
+| Keyboard events                           | 542  | Bridge    | Delivered today; the event object needs the browser's fields. |
+| Pointer events                            | 296  | Bridge    | Same. Check which pointer events Blitz reports.               |
+| `setPointerCapture`                       | 6    | Unchecked | Needed for sliders and dragging.                              |
+| Composition events, `isComposing`         | 59   | Bridge    | We already track IME state in Rust.                           |
+| Drag and drop                             | 12   | Unchecked |                                                               |
+
+## Focus
+
+| API                               | Uses | Status    | Notes                                                          |
+| --------------------------------- | ---- | --------- | -------------------------------------------------------------- |
+| `element.focus()`, `blur()`       | 180  | Engine    | Scripts cannot move focus today. This blocks most behaviours.  |
+| `document.activeElement`          | 25   | Bridge    | Rust knows the focused node.                                   |
+| `focus`, `blur`, `focusin` events | —    | Unchecked |                                                                |
+| `inert`                           | 134  | Unchecked | Used to trap focus in dialogs. Could be done in our own layer. |
+| `:focus-visible`                  | —    | Engine    | Not supported; styles use `:focus`.                            |
+
+## Layout and measurement
+
+| API                               | Uses | Status | Notes                                                                |
+| --------------------------------- | ---- | ------ | -------------------------------------------------------------------- |
+| `getBoundingClientRect`           | 90   | Bridge | We report layout after the fact. Libraries expect an answer at once. |
+| `getComputedStyle`                | 48   | Bridge | Blitz resolves styles in Rust.                                       |
+| `ResizeObserver`                  | 34   | Wiring | Can sit on `observeLayout`.                                          |
+| `IntersectionObserver`            | 3    | Wiring | Can sit on `observeLayout`.                                          |
+| Scroll position, `scrollIntoView` | 198  | Bridge | `scrollTo` exists and is queued, not immediate.                      |
+| `visualViewport`, `matchMedia`    | 22   | Bridge |                                                                      |
+
+## Popups
+
+| API                           | Uses | Status | Notes                                                                                                                             |
+| ----------------------------- | ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Popover API and the top layer | 345  | Engine | The search term also matches the word in names, so the count is high. Check whether ui-sdk can fall back to a positioned element. |
+| Positioning beside an anchor  | —    | Bridge | Depends on measurement above.                                                                                                     |
+
+## Text
+
+| API                            | Uses | Status    | Notes                                           |
+| ------------------------------ | ---- | --------- | ----------------------------------------------- |
+| Selection, `setSelectionRange` | 23   | Bridge    | We report the caret; setting it is not exposed. |
+| `aria-live` announcements      | 12   | Unchecked | There is no accessibility host yet.             |
+
+## Timing and the language
+
+| API                          | Uses | Status    | Notes                                                           |
+| ---------------------------- | ---- | --------- | --------------------------------------------------------------- |
+| `queueMicrotask`             | 114  | Unchecked |                                                                 |
+| `setTimeout`                 | 70   | Bridge    | `afterDelay` exists, limited to 60 s and 32 waits per document. |
+| `requestAnimationFrame`      | 42   | Bridge    | Must run before paint.                                          |
+| `Intl`                       | 66   | Unchecked | Used for numbers, dates and sorting. Check QuickJS.             |
+| `AbortController`, `WeakRef` | 9    | Unchecked |                                                                 |
+| `history`, `location`        | 34   | Unchecked | May only matter for server rendering and routing.               |
+
+## Solid
+
+`@ui-sdk/solid` requires Solid 2 and `@solidjs/web`. The client is on Solid
+1.9 with the universal renderer. Two ways through, neither chosen:
+
+- Move the client to Solid 2 and make the adapter render through our renderer.
+- Write a small adapter of our own from `@ui-sdk/core` primitives to our Solid
+  1.9 renderer. The core is written to be rendered by any framework.
+
+## Order of work
+
+1. Prove the idea on one behaviour: a menu with roving focus, opened beside a
+   button. It touches the tree, events, focus, measurement and a popup, so it
+   shows which rows are real.
+2. Close the **Wiring** rows; they need no Rust change.
+3. Close focus by script. Most other behaviours wait on it.
+4. Close measurement, then popups.
+5. Re-run the count against the installed version and fill in the
+   **Unchecked** rows.
