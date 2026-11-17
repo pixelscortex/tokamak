@@ -4,6 +4,7 @@ import { createMemo, createSignal } from "solid-js";
 import type { ContributionKind, JsonValue } from "@tokamak/sdk";
 export type ModuleExports = Readonly<Record<string, unknown>>;
 export interface PluginModuleHost {
+  importModule?(name: string, manifest: PluginManifest, revision: string): Promise<ModuleExports>;
   affected(names: readonly string[]): Set<string>;
   remove(names: Iterable<string>): void;
   evaluate(name: string, code: string): void;
@@ -111,6 +112,7 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
         throw new Error(`Retired plugin generation: ${id}`);
     };
     const task = (async () => {
+      if (registry.importModule) return registry.importModule(moduleName(id), p, revision);
       const entry = p.entries.ui!;
       // Manifest depends also includes backend requirements. Register this
       // inert factory first, then resolve only its actual UI imports; otherwise
