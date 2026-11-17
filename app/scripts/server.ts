@@ -11,6 +11,8 @@ try {
   const child = spawn(
     `${root}target/debug/tokamak`,
     [
+      // --local-dir resets the listener, so the explicit port must follow it.
+      ...(process.env.TOKAMAK_SERVER_DIR ? ["--local-dir", process.env.TOKAMAK_SERVER_DIR] : []),
       "--data",
       `${directory}/store`,
       "--listen",

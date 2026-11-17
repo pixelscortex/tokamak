@@ -12,3 +12,38 @@ The former native window driver and its capture/interaction fixtures are gone.
 The reusable record server fixture lives in `packages/server/tests/fixtures/record`.
 `tests/compiler-selection.py` separately checks pinned Rust selection when its
 two-toolchain prerequisite is met.
+
+## Browser checks
+
+Install the real browsers once, then run the production build harness:
+
+```sh
+proto run bun -- x playwright install --no-shell chromium webkit
+proto run bun -- run e2e:browser
+proto run bun -- run e2e:browser --repeat-each=3
+```
+
+On Linux use `playwright install --with-deps --no-shell chromium webkit` through the same
+pinned Bun command. Ports 1420, 1421 and 43123 must be free; the runner refuses to
+reuse a running app. It builds the server, Chat and the integration fixture,
+builds Vite in production mode and serves it with Vite preview. Every run owns a
+fresh store, private capability and plugin installation. Fixture source edits happen in a disposable
+copy under `app/.dev`, never in the checkout's source fixture. Processes and
+stores are removed on exit. No credentials or external agents are needed.
+
+Add tests in `e2e/browser/*.spec.ts`. Select by role and accessible name; keep
+layout and styling out of assertions. Wait for live state with Playwright's
+assertions, without sleeps. Use the observed thread count as a baseline, since
+browser projects share one disposable server. Keep fixture rebuilds serial.
+The host accessibility contract includes `Connection status`, `Live thread count`,
+`New thread title`, `New thread`, `Plugin views`, `Threads` and `Plugin view error`.
+Keep those names when restyling the host.
+Use `--project=chromium` or `--project=webkit` to narrow a run. Failure traces and
+HTML reports live under `.ci-results/playwright*` and are uploaded by native CI.
+
+Coverage: connection, two-page live thread creation, compiler-built plugin
+catalog/navigation and live query, explicit rebuild/reload without replacing the
+document, plugin view error containment and recovery, and HTTP/WebSocket origin
+rejection. The existing server suite still covers persistence and CPU budgets.
+Desktop window automation, OS integration, signing and external agents are outside
+this browser suite.

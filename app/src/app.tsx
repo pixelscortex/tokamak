@@ -136,7 +136,7 @@ function Chat(props: { session: Session; disconnect(): void }) {
       </p>
       <Show when={threads.error()}>{(cause) => <p role="alert">{cause().message}</p>}</Show>
       <div class="chat-grid">
-        <ul class="thread-list">
+        <ul class="thread-list" aria-label="Threads">
           <For each={threads.data() ?? []}>{(thread) => <li>{thread.title}</li>}</For>
         </ul>
       </div>
