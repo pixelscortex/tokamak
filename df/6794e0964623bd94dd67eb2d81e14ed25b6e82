@@ -1,0 +1,64 @@
+app/tests/fixtures/integration/tsconfig.json
+  s_30d3d59aa37b40::t_52131e67aaccc6 1
+app/src-tauri/Cargo.toml
+  s_30d3d59aa37b40::t_6838c8b2c896d3 9
+app/tests/fixtures/integration/plugin.ts
+  s_30d3d59aa37b40::t_2e24c91463022b 1-2
+app/src-tauri/src/server.rs
+  s_30d3d59aa37b40::t_2e24c91463022b 157-159
+app/src/plugins/README.md
+  s_30d3d59aa37b40::t_b911a3ca572bc4 6-7,21-22,102-104
+app/tests/fixtures/integration/package.json
+  s_30d3d59aa37b40::t_52131e67aaccc6 3,5
+  s_30d3d59aa37b40::t_2e24c91463022b 1-2,4,6
+app/src-tauri/build.rs
+  s_30d3d59aa37b40::t_52131e67aaccc6 7-9
+  s_30d3d59aa37b40::t_6838c8b2c896d3 2-6,10-13
+app/scripts/server.ts
+  s_30d3d59aa37b40::t_2e24c91463022b 13-18,20
+  s_30d3d59aa37b40::t_dc33a72c480276 19
+app/tests/screen.test.tsx
+  s_30d3d59aa37b40::t_52131e67aaccc6 49,53,55-57,99
+app/tests/fixtures/integration/src/client/api.tsx
+  s_30d3d59aa37b40::t_52131e67aaccc6 13-15
+  s_30d3d59aa37b40::t_2e24c91463022b 1-12,16-19
+app/README.md
+  s_30d3d59aa37b40::t_b911a3ca572bc4 3-5,7,11,14-23,26-27,30,33-36,38-52,55-62,65-72,74,76,79-89,92-94
+  s_30d3d59aa37b40::t_065c005b0d842c 31-32,95-96,98-100,102-104
+app/src/plugins/adapter.ts
+  s_30d3d59aa37b40::t_52131e67aaccc6 32-33,40-42
+README.md
+  s_30d3d59aa37b40::t_b911a3ca572bc4 5,16,22-24,37-39
+packages/runtime/PLUGINS.md
+  s_30d3d59aa37b40::t_b911a3ca572bc4 16-19,21-40
+app/index.html
+  s_30d3d59aa37b40::t_ffe04ab4c613eb 8
+app/scripts/integration-browser.ts
+  s_30d3d59aa37b40::t_d667dbebfdb893 1-21
+app/scripts/integration-fixture.ts
+  s_30d3d59aa37b40::t_ea257b8d074f43 1-25
+app/src-tauri/tauri.conf.json
+  s_30d3d59aa37b40::t_b39acc275c8f2b 25
+app/src/host/endpoint.ts
+  s_30d3d59aa37b40::t_dd326111ff2283 10-14
+app/tests/plugins.test.tsx
+  s_30d3d59aa37b40::t_07085be0e52419 56-70
+moon.yml
+  s_30d3d59aa37b40::t_fc687110f563a0 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df6794e0964623bd94dd67eb2d81e14ed25b6e82",
+  "prompts": {},
+  "sessions": {
+    "s_30d3d59aa37b40": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9e5-73bf-72d3-bd74-3a73cab49076",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
