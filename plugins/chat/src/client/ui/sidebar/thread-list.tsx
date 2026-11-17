@@ -51,7 +51,7 @@ export function ThreadList(props: { chat: ChatState; onNew: () => void }): JSX.E
                   <RowList.Option
                     value={thread()._id}
                     kind={state(thread()) ? "double" : "single"}
-                    lead={<Icon path={agent()?.mark ?? glyphs.todo} />}
+                    lead={<Icon path={agent()?.mark ?? glyphs.chat} />}
                     trail={
                       <Show when={state(thread())} fallback={age(thread().updatedAt, now())}>
                         {(status) => <StatusIcon status={status()} size={12} label={thread().title} />}

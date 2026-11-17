@@ -1,8 +1,8 @@
 # Tokamak app
 
 The client is Solid 2 and TanStack Router in a Tauri 2 window, with no SSR.
-The plain host lists Chat threads and compiler-built plugin views. Chat's old
-`src/client` remains excluded; the host calls Chat's server API directly.
+The plain host lists Chat threads and compiler-built plugin views, including
+Chat's own view at `/p/chat`.
 
 Install proto, Rust and the platform Tauri prerequisites, then from the root:
 

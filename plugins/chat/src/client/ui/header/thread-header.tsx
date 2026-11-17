@@ -20,7 +20,7 @@ export function ThreadHeader(props: { chat: ChatState; onCopy: () => void }): JS
     <Show when={props.chat.thread()}>
       {(thread) => (
         <div class="flex min-w-0 flex-1 items-center gap-2">
-          <Icon path={props.chat.agent()?.mark ?? glyphs.todo} class="text-ink-3" />
+          <Icon path={props.chat.agent()?.mark ?? glyphs.chat} class="text-ink-3" />
           <h1 class="min-w-0 truncate text-row text-ink">{thread().title}</h1>
           <Show when={props.chat.agent()?.folder}>
             {(path) => (

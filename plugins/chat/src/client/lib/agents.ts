@@ -33,7 +33,7 @@ export function agentOf(backend: Backend | undefined, options?: BackendOption[])
   return {
     id: backend.backendId,
     name: brand?.name ?? title.charAt(0).toUpperCase() + title.slice(1),
-    mark: brand?.mark ?? glyphs.todo,
+    mark: brand?.mark ?? glyphs.chat,
     folder: folderOf(backend.settings),
   };
 }

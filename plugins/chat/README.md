@@ -56,47 +56,66 @@ the active run. Completion, cancellation, and recovery revoke the token.
 
 ## Client UI and composer mods
 
-Chat owns its `/` view contribution and CSS. `src/client/pages/screen.tsx` owns
-chat state and shortcuts; `ui/` contains composer, backend, map and message
-components; `lib/` contains state hooks and the composer API. Server code lives
-in `src/server/{threads,messages,runs,permissions,backends}/`; `schema.ts` owns
-the tables. `src/server/api.ts` is the public server surface, including provider
-references and streaming helpers. Shared backend types live in `src/shared/`.
+Chat owns its `/` view contribution (`/p/chat` in the shell). The view fills
+the shell's regions: the thread list goes in `Region.Sidebar`, the thread's
+title, folder and actions in `Region.Header`, and the thread with its composer
+is the stage body. Everything is Tailwind classes on `@tokamak/ui` tokens and
+primitives; `styles.css` only compiles those utilities, and markdown needs no
+stylesheet because each rendered element carries its own classes.
 
-`plugin.ts` is static metadata, discovered without a Vite config. Dependencies
-are plugin IDs; `version` remains because the loader requires it. Build with
-`bun run plugin:build plugins/chat`. Generated references live in
-`src/server/_generated/`. Callable module IDs are unchanged by the source move.
+- `src/client/pages/screen.tsx`: the view, shortcuts and the thread pane.
+- `src/client/ui/`: `sidebar/` (recent threads), `header/` (rename, copy,
+  delete), `thread/` (turns, markdown, the folded work row, the plan list,
+  empty and no-agent states) and `composer/`.
+- `src/client/lib/`: state (`use-chat`, `use-drafts` with the follow-up queue,
+  `use-backends`, `use-run-recovery`, `use-thread-editor`, `chat-keys`),
+  `turns.ts` (folding a turn's tools into one summary), `follow.ts` (scroll
+  following) and `composer.ts` (the composer API and slots).
+
+Keys: Enter sends and Shift+Enter adds a line; while a reply runs Enter queues
+the text as the next turn, Esc stops, and 1–4 answer a permission while the
+draft is empty. ⌘N opens a new thread, ⌘M the agent menu, ⌘⇧C copies the last
+reply.
 
 The public client entry (`src/client/api.ts`, exposed as `@plugins/chat/ui`)
-exports `Composer`, `ComposerInput`, `ComposerStrip`, and `SendButton`. Each is
-wrappable or replaceable. The keyboard-first default layout has no visible send
-button; mods can place the public `SendButton` in an actions fill.
+exports `Composer`, `ComposerInput`, `ComposerStrip` and `SendButton`. Each is
+wrappable or replaceable. The default composer shows `SendButton`, which turns
+into Stop while a reply runs.
 
-| Token                | Qualified slot              | Position                      |
-| -------------------- | --------------------------- | ----------------------------- |
-| `composerBefore`     | `chat.composer.before`      | Above input                   |
-| `composerActions`    | `chat.composer.actions`     | Input actions / send controls |
-| `composerStripLeft`  | `chat.composer.strip.left`  | Before title                  |
-| `composerStripRight` | `chat.composer.strip.right` | After backend/turns           |
-| `composerAfter`      | `chat.composer.after`       | Below input                   |
+| Token                | Qualified slot              | Position                                 |
+| -------------------- | --------------------------- | ---------------------------------------- |
+| `composerBefore`     | `chat.composer.before`      | Top of the composer card (context chips) |
+| `composerActions`    | `chat.composer.actions`     | Action row, left of send                 |
+| `composerStripLeft`  | `chat.composer.strip.left`  | Strip, before the agent picker           |
+| `composerStripRight` | `chat.composer.strip.right` | Strip, after the hint                    |
+| `composerAfter`      | `chat.composer.after`       | Below the composer                       |
 
-Every fill receives `{ composer: ComposerAPI }`. `threadId()`, `draft()`,
-`setDraft(text)`, `insertText(text)` (at the native caret/selection), `submit()`
+Every fill receives `{ composer: ComposerAPI }`. `threadId()`, `getDraft()`,
+`setDraft(text)`, `insertText(text)` (at the caret or selection), `submit()`
 and `busy()` share the current thread's draft and run state. Components inside
-the page can also call `useComposer()`.
+the view can also call `useComposer()`.
 
 ```tsx
 import { fill, wrap } from "@tokamak/sdk/client";
+import { Button } from "@tokamak/ui";
 import { ComposerInput, composerActions, composerStripRight } from "@plugins/chat/ui";
 export const Insert = fill(composerActions, { order: 10 }, ({ composer }) => (
-  <button onClick={() => composer.insertText("Run tests")}>Tests</button>
+  <Button variant="ghost" onClick={() => composer.insertText("Run tests")}>
+    Tests
+  </Button>
 ));
-export const Status = fill(composerStripRight, {}, () => <span>Review mode</span>);
-export const Frame = wrap(ComposerInput, (Original) => (props) => (
-  <div class="min-w-0 flex-1 border border-edge">
-    <Original {...props} />
-  </div>
+export const Status = fill(composerStripRight, {}, () => (
+  <span class="text-label text-ink-3">Review mode</span>
 ));
-// Export these from your plugin's src/main.tsx; no registration step.
+export const Frame = wrap(ComposerInput, (Original) => (props) => <Original {...props} />);
+// Export these from your plugin's src/client/api.ts; no registration step.
 ```
+
+## Client checks
+
+`proto run bun -- run moon run chat:test` runs the unit tests in `tests/`.
+`src/client/tsconfig.json` typechecks the client (part of `workspace:plugins-check`).
+`proto run bun -- run e2e:browser` drives the real chat flow in a browser
+(`e2e/browser/chat.spec.ts`). For a hands-on look, `proto run bun -- e2e/chat-sandbox.ts`
+serves a disposable store with ACP and a scripted agent (`e2e/fixtures/scripted-agent.py`);
+HOME and PATH are replaced so no real, billing agent CLI can be launched.

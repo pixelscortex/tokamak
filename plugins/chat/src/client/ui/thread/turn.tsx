@@ -67,7 +67,7 @@ export function AgentTurn(props: {
     >
       <div class="flex flex-col gap-2">
         <Header
-          lead={<Icon path={props.agent?.mark ?? glyphs.todo} class="text-ink" />}
+          lead={<Icon path={props.agent?.mark ?? glyphs.chat} class="text-ink" />}
           name={name()}
           fact={timeOfDay(props.message.createdAt)}
         />
