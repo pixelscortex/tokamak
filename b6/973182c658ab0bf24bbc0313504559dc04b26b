@@ -1,0 +1,127 @@
+packages/ui/package.json
+  s_1022f30e07028d::t_f4a4d6352f9fe7 18-19
+  s_1022f30e07028d::t_63264604846963 11
+packages/ui/tests/lint.test.ts
+  s_1022f30e07028d::t_e5bc68c5807426 37-39
+  s_1022f30e07028d::t_5eb34c374301c1 22,36
+  s_1022f30e07028d::t_9cc197adcfacf6 47-58
+  s_1022f30e07028d::t_3aaad90158978a 40-41,59
+.oxlintrc.json
+  s_1022f30e07028d::t_9b44caa3f39445 71-76
+packages/ui/src/file-name.tsx
+  s_1022f30e07028d::t_3add20e753c8ce 29
+  s_1022f30e07028d::t_631161388a4059 1-28,30-41
+packages/ui/lint/plugin.d.ts
+  s_1022f30e07028d::t_c1f7a370f8e7c4 1-3
+packages/ui/src/row.tsx
+  s_1022f30e07028d::t_2d0082d509b717 2-4,7-10,14-18,22-23,26-32,38-43,56,59-72,74-78,84-85,91,97-99
+  s_1022f30e07028d::t_d8b4f57b1a08c3 19-21,24-25,34,36
+  s_1022f30e07028d::t_dbd45a6d25954f 33,35,37
+packages/ui/src/cn.ts
+  s_1022f30e07028d::t_631161388a4059 52
+  s_1022f30e07028d::t_f4a4d6352f9fe7 8-9,35-46,48-51,53-70
+  s_1022f30e07028d::t_d8b4f57b1a08c3 47
+  s_1022f30e07028d::t_e5bc68c5807426 1-7,10-34
+packages/ui/tests/primitives.test.tsx
+  s_1022f30e07028d::t_e5bc68c5807426 16
+  s_1022f30e07028d::t_a1c53d481adf95 29-35,38,57-67,82-90,99,107-114,131-132,134-135,137-138,140-141,155,166-170,181-182
+packages/ui/lint/fixtures/density.tsx
+  s_1022f30e07028d::t_5eb34c374301c1 1-7
+packages/ui/src/kit/tokens.tsx
+  s_1022f30e07028d::t_22df6608288699 4
+  s_1022f30e07028d::t_e5bc68c5807426 71
+packages/ui/src/index.ts
+  s_1022f30e07028d::t_88989362f1cd7b 1-2,4-6,9,12-17
+app/src/styles.css
+  s_1022f30e07028d::t_95c51be8fee14f 3,7-8
+packages/ui/src/tabs.tsx
+  s_1022f30e07028d::t_88989362f1cd7b 2-11,13-44
+packages/ui/src/dialog.tsx
+  s_1022f30e07028d::t_88989362f1cd7b 2-7,9-10,12-16,18,21-22,24,26,33-35,44-50,54-69,76-78
+  s_1022f30e07028d::t_e5bc68c5807426 28-30,39-41,51-53,70-75,79-83
+packages/ui/src/kit/controls.tsx
+  s_1022f30e07028d::t_e821ccfc779077 145-148,150-151,153-154,156-158,160-161,163-164,166-167,169-170,176-183,185,205,216
+  s_1022f30e07028d::t_e5bc68c5807426 2-14
+  s_1022f30e07028d::t_22df6608288699 17,64,70,191
+packages/ui/src/kit/contrast.ts
+  s_1022f30e07028d::t_22df6608288699 1-3,6,11-12,14-25,28-30
+packages/ui/src/tailwind.css
+  s_1022f30e07028d::t_d687fa80ad6fd1 1-4
+packages/ui/lint/oxlint.json
+  s_1022f30e07028d::t_5eb34c374301c1 43-44
+  s_1022f30e07028d::t_e5bc68c5807426 34
+  s_1022f30e07028d::t_56d9c161024d73 33
+packages/ui/src/menu.tsx
+  s_1022f30e07028d::t_e5bc68c5807426 31-33,61-65
+  s_1022f30e07028d::t_88989362f1cd7b 2-12,14,17-22,24-30,36-60,68-78
+  s_1022f30e07028d::t_d8b4f57b1a08c3 23
+packages/ui/src/tooltip.tsx
+  s_1022f30e07028d::t_88989362f1cd7b 2-5,7,9,11-13,15,22-27,32-33,38
+  s_1022f30e07028d::t_e5bc68c5807426 17-19,28-30,34-37
+  s_1022f30e07028d::t_dac0b87e3f9e0b 31
+packages/ui/src/kit/overlays.tsx
+  s_1022f30e07028d::t_e821ccfc779077 2,16-21,23-24,26-27,31-35,37-38,40-42,44-46,49-59,62-65
+packages/ui/src/row-list.tsx
+  s_1022f30e07028d::t_e5bc68c5807426 23-29,37,51-54
+  s_1022f30e07028d::t_2d0082d509b717 2-3,5-9,11-13,18-19,21-22,32-34,42-43,45-50,55,58-62
+packages/ui/src/kit/kit.tsx
+  s_1022f30e07028d::t_e821ccfc779077 5,9,19-20,23-28,30,40-41,52-53,55-56,68-69
+packages/ui/src/chip.tsx
+  s_1022f30e07028d::t_b3a5f687f545e3 5-6,9-25,42,44
+packages/ui/src/kbd.tsx
+  s_1022f30e07028d::t_b3a5f687f545e3 4,7,29
+packages/ui/src/status-icon.tsx
+  s_1022f30e07028d::t_b3a5f687f545e3 2,4-5,8,21-31,41
+  s_1022f30e07028d::t_e5bc68c5807426 33-38
+  s_1022f30e07028d::t_e51f4e39fbe015 32
+packages/ui/src/icon.tsx
+  s_1022f30e07028d::t_6983a494120036 5-6,9,11,18
+packages/ui/src/avatar.tsx
+  s_1022f30e07028d::t_b3a5f687f545e3 5-6,8,10,16-24,28
+packages/ui/src/select.tsx
+  s_1022f30e07028d::t_e5bc68c5807426 27-29,36-40,49-51
+  s_1022f30e07028d::t_88989362f1cd7b 2-11,13-26,30-35,41-48,52-67
+packages/ui/src/kit/rows.tsx
+  s_1022f30e07028d::t_e821ccfc779077 3,42-43,48,62-63,71-73,79-80,86-87,94-95,101-104,108-109,126,136,146,153
+packages/ui/lint/fixtures/corrected.tsx
+  s_1022f30e07028d::t_5eb34c374301c1 10-15
+packages/ui/lint/plugin.js
+  s_1022f30e07028d::t_5eb34c374301c1 2-7,15,18-22,25,27-30,54-57,73,80-84,116,151-185,188
+packages/ui/src/textarea.tsx
+  s_1022f30e07028d::t_b3a5f687f545e3 5,7-8,10,12,15-22,24-29
+  s_1022f30e07028d::t_631161388a4059 4,23
+packages/ui/src/button.tsx
+  s_1022f30e07028d::t_6983a494120036 6-8,10,13,16-31,34-45,49,54,56-60,63,67,72,77-79
+  s_1022f30e07028d::t_e5bc68c5807426 32-33
+packages/ui/src/kit/frame.tsx
+  s_1022f30e07028d::t_e5bc68c5807426 12
+packages/ui/src/theme.css
+  s_1022f30e07028d::t_3a054dc4b1f5ff 126-133
+  s_1022f30e07028d::t_a66d0644c21282 2,8-9,12,16-38,95-100,103,105-111,113-116,118-119,121-125,134-193,195-207,219-231,234-241,247-275
+  s_1022f30e07028d::t_88989362f1cd7b 91
+  s_1022f30e07028d::t_e5bc68c5807426 81-84
+  s_1022f30e07028d::t_d8b4f57b1a08c3 92
+  s_1022f30e07028d::t_fa68203747acc1 209-213
+  s_1022f30e07028d::t_631161388a4059 214-218
+packages/ui/lint/fixtures/corner.tsx
+  s_1022f30e07028d::t_5eb34c374301c1 1,10-11
+  s_1022f30e07028d::t_d4345d2709a110 12
+bun.lock
+  s_1022f30e07028d::t_0e100e7e986d03 98,1268-1269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6973182c658ab0bf24bbc0313504559dc04b26b",
+  "prompts": {},
+  "sessions": {
+    "s_1022f30e07028d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e8d6a29-be87-49dd-936e-facf7cb48a85",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
