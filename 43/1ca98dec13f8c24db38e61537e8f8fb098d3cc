@@ -1,0 +1,28 @@
+app/src/router.tsx
+  s_3ffeed9b9403f9::t_4efb40fb5533d1 9
+  s_3ffeed9b9403f9::t_5604aec332b08a 14-27
+e2e/browser/app.spec.ts
+  s_3ffeed9b9403f9::t_cffa72e7688a8b 31-34,79-80
+app/src/app.tsx
+  s_3ffeed9b9403f9::t_4efb40fb5533d1 1-2,15-40
+  s_3ffeed9b9403f9::t_7e968071eb3a90 41
+app/tests/fixtures/integration/src/client/api.tsx
+  s_3ffeed9b9403f9::t_cffa72e7688a8b 2
+  s_3ffeed9b9403f9::t_e50271b01952ca 12-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "431ca98dec13f8c24db38e61537e8f8fb098d3cc",
+  "prompts": {},
+  "sessions": {
+    "s_3ffeed9b9403f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ea23-a1a6-7ef3-bc3f-5872b856db78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
