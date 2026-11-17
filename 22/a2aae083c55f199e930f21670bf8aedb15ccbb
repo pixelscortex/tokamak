@@ -1,0 +1,32 @@
+packages/runtime/PLUGINS.md
+  s_3ffeed9b9403f9::t_cffa72e7688a8b 41-51
+packages/sdk/client.tsx
+  s_3ffeed9b9403f9::t_cffa72e7688a8b 211-212
+packages/sdk/regions.tsx
+  s_3ffeed9b9403f9::t_afc41e4a43b75d 6-10,12-16
+  s_3ffeed9b9403f9::t_9096df4463df8b 18
+  s_3ffeed9b9403f9::t_cffa72e7688a8b 1-5,11,17,19-31,44-56,60-67
+  s_3ffeed9b9403f9::t_e50271b01952ca 32-37,39-43,57-59
+  s_3ffeed9b9403f9::t_1e0f2142413aa9 38
+packages/sdk/tests/web/regions.test.tsx
+  s_3ffeed9b9403f9::t_3f2fe4842fd486 1-10,16-18,34,43-45,47-55,59-65,76,85-96,100-106,112-117,121-124,141-143,147
+  s_3ffeed9b9403f9::t_86fc853423bd5e 21,46
+  s_3ffeed9b9403f9::t_9096df4463df8b 27-29
+  s_3ffeed9b9403f9::t_e50271b01952ca 11-15,19-20,22-26,30-33,35-42,56-58,66-75,77-84,97-99,107-111,118-120,125-140,144-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "22a2aae083c55f199e930f21670bf8aedb15ccbb",
+  "prompts": {},
+  "sessions": {
+    "s_3ffeed9b9403f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ea23-a1a6-7ef3-bc3f-5872b856db78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}
