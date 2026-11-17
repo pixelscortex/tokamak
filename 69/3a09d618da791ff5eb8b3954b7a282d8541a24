@@ -1,0 +1,19 @@
+spikes/ui-sdk-dom/REPORT.md
+  s_505285a2971b5d::t_bfb675d40ae123 1-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "693a09d618da791ff5eb8b3954b7a282d8541a24",
+  "prompts": {},
+  "sessions": {
+    "s_505285a2971b5d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e96b-b00a-7753-ba87-e96ed7f17649",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
