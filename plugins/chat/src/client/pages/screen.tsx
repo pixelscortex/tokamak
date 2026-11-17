@@ -212,16 +212,18 @@ function ThreadPane(props: {
               </div>
             )}
           </Show>
-          <Composer
-            band={
-              <Show when={pending()}>
-                {(current) => (
-                  <NeedsYou
-                    part={current().part}
-                    agentName={agentName()}
-                    busy={answering()}
-                    onAnswer={(optionId) => void answer(optionId)}
-                  />
+          <Show when={!chat.noAgents()}>
+            <Composer
+              band={
+                <Show when={pending()}>
+                  {(current) => (
+                    <NeedsYou
+                      part={current().part}
+                      agentName={agentName()}
+                      busy={answering()}
+                      onAnswer={(optionId) => void answer(optionId)}
+                    />
+          </Show>
                 )}
               </Show>
             }
