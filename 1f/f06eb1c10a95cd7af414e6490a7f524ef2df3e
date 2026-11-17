@@ -1,0 +1,23 @@
+plugins/chat/src/client/lib/composer.ts
+  s_452c1eccf4600a::t_93ff49ac28954d 47-51
+plugins/chat/tests/composer.test.tsx
+  s_452c1eccf4600a::t_e9e4192e2eb562 109,152,211-220
+  s_452c1eccf4600a::t_8c3fb03a136adf 132
+  s_452c1eccf4600a::t_779f26b0b54bb3 221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ff06eb1c10a95cd7af414e6490a7f524ef2df3e",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
