@@ -1,0 +1,19 @@
+packages/build/src/contributions.ts
+  s_452c1eccf4600a::t_72d1e294d8e5ac 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "652def03dad7dd299a563c06054afd388a223b02",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
