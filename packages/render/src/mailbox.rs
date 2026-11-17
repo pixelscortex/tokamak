@@ -161,6 +161,13 @@ impl HostMailbox {
         self.0.queue.lock().unwrap().events.len()
     }
 
+    fn pop_event(&self) -> Option<String> {
+        let mut queue = self.0.queue.lock().unwrap();
+        let (json, payload_bytes) = queue.events.pop_front()?;
+        queue.bytes -= payload_bytes;
+        Some(json)
+    }
+
     pub fn drain(&mut self, document: &mut NativeDocument) -> Result<usize> {
         if document.generation() != self.0.generation || !self.0.alive.load(Ordering::Acquire) {
             self.0.close();
@@ -171,13 +178,8 @@ impl HostMailbox {
         let result = (|| {
             while delivered < EVENTS_PER_WAKE && (delivered == 0 || start.elapsed() < TIME_PER_WAKE)
             {
-                let json = {
-                    let mut queue = self.0.queue.lock().unwrap();
-                    let Some((json, payload_bytes)) = queue.events.pop_front() else {
-                        break;
-                    };
-                    queue.bytes -= payload_bytes;
-                    json
+                let Some(json) = self.pop_event() else {
+                    break;
                 };
                 document.host_json(self.0.generation, &json)?;
                 delivered += 1;

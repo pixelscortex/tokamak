@@ -15,13 +15,15 @@ impl Coordinator {
             let call = host::invoke(
                 &self.database,
                 &self.pool,
-                self.bundle.clone(),
-                name,
-                args.clone(),
-                mutation,
-                &self.space,
-                self.plugins.clone(),
-                determinism,
+                host::Invocation {
+                    bundle: self.bundle.clone(),
+                    name,
+                    args: args.clone(),
+                    mutation,
+                    space: &self.space,
+                    plugins: self.plugins.clone(),
+                    determinism,
+                },
             )
             .await;
 

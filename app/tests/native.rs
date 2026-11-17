@@ -578,19 +578,7 @@ fn all_native_admitted_mutations_persist_when_tower_lane_is_saturated_at_shutdow
         .enable_all()
         .build()
         .unwrap();
-    let backend = rt
-        .block_on(Backend::start(BackendConfig {
-            storage: Storage::Disk(store.0.join("store")),
-            bundle: Arc::new(
-                Bundle::new(
-                    include_str!("../dist/tests/record/dist/bundle.js"),
-                    Some(include_str!("../dist/tests/record/dist/bundle.js.map")),
-                )
-                .unwrap(),
-            ),
-            javascript: PoolConfig::default(),
-        }))
-        .unwrap();
+    let backend = start_queued_native_backend(&rt, &store);
     let session = rt.block_on(backend.connect()).unwrap();
     let pressure = rt.block_on(backend.connect()).unwrap();
     let pressure_sender = pressure.sender();
@@ -797,40 +785,7 @@ const PRIVATE_REQUEST_SENTINEL: &str = "PRIVATE_TOKEN_DO_NOT_LOG_π_🧪";
 fn close_diagnostic_child(case: &str, path: &Path) {
     std::fs::create_dir_all(path).unwrap();
     if matches!(case, "stop-live" | "null-live" | "drop-before-stop") {
-        let mut app = App::open(path);
-        app.ready();
-        accepted_close_write(&mut app);
-        match case {
-            "stop-live" => {
-                app.join();
-                assert!(!app.host.is_document_retired());
-            }
-            "null-live" => {
-                (app.admit)("null".into()).unwrap();
-                // Do not send stop until the actual null sentinel has finished
-                // the connection: otherwise stop could mask a broken null path.
-                wait_for_connection_exit(&app);
-                assert!(!app.host.is_document_retired());
-                app.join();
-            }
-            "drop-before-stop" => {
-                app.retire();
-                assert!(app.host.is_document_retired());
-                // Document cleanup's queued null must finish without a manual
-                // stop masking the retired-generation delivery race.
-                wait_for_connection_exit(&app);
-                app.join();
-            }
-            _ => unreachable!(),
-        }
-        drop(app);
-        let mut reopened = App::open(path);
-        reopened.ready();
-        assert!(
-            both(reopened.doc(), "Accepted at diagnostic close"),
-            "diagnostic suppression lost an admitted write"
-        );
-        drop(reopened);
+        assert_retired_close_diagnostic(case, path);
     } else {
         let ui =
             std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/dist/tests/bridge.js"))
@@ -955,64 +910,7 @@ fn native_close_diagnostics_distinguish_retirement_from_live_failure() {
             );
             std::thread::sleep(Duration::from_millis(5));
         };
-        for path in [&stdout_path, &stderr_path] {
-            assert!(
-                std::fs::metadata(path).unwrap().len() <= 128 * 1024,
-                "unexpected unbounded diagnostic output for {case}"
-            );
-        }
-        let stdout = std::fs::read_to_string(stdout_path).unwrap();
-        let stderr = std::fs::read_to_string(stderr_path).unwrap();
-        assert!(
-            status.success(),
-            "close child {case} failed\n{stdout}\n{stderr}"
-        );
-        assert!(
-            stdout.contains(&format!("PASS executed close diagnostic case: {case}")),
-            "child test filter skipped its scenario: {stdout}"
-        );
-        if matches!(case, "stop-live" | "null-live" | "drop-before-stop") {
-            assert!(
-                !stderr.contains("Native terminal delivery failed")
-                    && !stderr.contains("Native connection failed"),
-                "expected close reported as a backend/terminal failure ({case}): {stderr}"
-            );
-        } else {
-            assert!(
-                stderr.contains("Native connection failed:"),
-                "live protocol/backend failure was silenced ({case}): {stderr}"
-            );
-            if case == "live-malformed" {
-                assert!(
-                    !stderr.contains("PRIVATE_TOKEN_DO_NOT_LOG")
-                        && !stderr.contains('π')
-                        && !stderr.contains('🧪'),
-                    "persistent diagnostic leaked a private request value: {stderr}"
-                );
-                let diagnostic = stderr
-                    .lines()
-                    .find(|line| line.starts_with("Native connection failed:"))
-                    .expect("protocol failure category");
-                let column = diagnostic
-                    .strip_prefix("Native connection failed: protocol (Data, line 1, column ")
-                    .and_then(|value| value.strip_suffix(')'))
-                    .and_then(|value| value.parse::<usize>().ok());
-                assert!(
-                    column.is_some_and(|column| column > 0),
-                    "malformed request lost safe parser category/position: {stderr}"
-                );
-            } else {
-                assert!(
-                    stderr.contains("Native connection failed: event delivery"),
-                    "live delivery failure lost its payload-free category ({case}): {stderr}"
-                );
-            }
-            assert_eq!(
-                stderr.contains("Native terminal delivery failed"),
-                case == "live-mailbox-closed",
-                "delivery diagnostic did not distinguish a live unavailable mailbox from retirement: {stderr}"
-            );
-        }
+        assert_close_child_output(case, status, stdout_path, stderr_path);
     }
 }
 
@@ -1029,34 +927,7 @@ fn markdown_renders_native_elements_and_unfinished_fences() {
     let markdown = "# Small heading\n\nA **bold** and *italic* paragraph with `code` and [link](https://example.com).\n\n- First\n- Second\n\n3. Third\n4. Fourth\n\n> Quote\n\n---\n\n<script>literal</script>\n\n```python\nprint(1)";
     app.host.send("markdown:text", markdown).unwrap();
     app.wait(|doc| support::text(doc, "markdown").contains("print(1)"));
-    for selector in [
-        "h3",
-        "strong",
-        "em",
-        "p code",
-        "ul li",
-        "ol li",
-        "blockquote",
-        "hr",
-        "pre code",
-        ".underline",
-    ] {
-        assert!(
-            app.doc()
-                .inner()
-                .query_selector(selector)
-                .unwrap()
-                .is_some(),
-            "{selector}"
-        );
-    }
-    assert!(
-        app.doc()
-            .inner()
-            .query_selector("script")
-            .unwrap()
-            .is_none()
-    );
+    assert_native_markdown_elements(&app);
     let code = |doc: &NativeDocument| {
         let inner = doc.inner();
         let id = inner.query_selector("pre code").unwrap().unwrap();
@@ -1175,6 +1046,155 @@ fn permission_row_and_needs_you_group() {
         app.doc()
             .inner()
             .query_selector("#permission-fixture [data-permission] button")
+            .unwrap()
+            .is_none()
+    );
+}
+
+fn start_queued_native_backend(rt: &tokio::runtime::Runtime, store: &Store) -> Backend {
+    rt.block_on(Backend::start(BackendConfig {
+        storage: Storage::Disk(store.0.join("store")),
+        bundle: Arc::new(
+            Bundle::new(
+                include_str!("../dist/tests/record/dist/bundle.js"),
+                Some(include_str!("../dist/tests/record/dist/bundle.js.map")),
+            )
+            .unwrap(),
+        ),
+        javascript: PoolConfig::default(),
+    }))
+    .unwrap()
+}
+
+fn assert_retired_close_diagnostic(case: &str, path: &Path) {
+    let mut app = App::open(path);
+    app.ready();
+    accepted_close_write(&mut app);
+    match case {
+        "stop-live" => {
+            app.join();
+            assert!(!app.host.is_document_retired());
+        }
+        "null-live" => {
+            (app.admit)("null".into()).unwrap();
+            // Do not send stop until the actual null sentinel has finished
+            // the connection: otherwise stop could mask a broken null path.
+            wait_for_connection_exit(&app);
+            assert!(!app.host.is_document_retired());
+            app.join();
+        }
+        "drop-before-stop" => {
+            app.retire();
+            assert!(app.host.is_document_retired());
+            // Document cleanup's queued null must finish without a manual
+            // stop masking the retired-generation delivery race.
+            wait_for_connection_exit(&app);
+            app.join();
+        }
+        _ => unreachable!(),
+    }
+    drop(app);
+    let mut reopened = App::open(path);
+    reopened.ready();
+    assert!(
+        both(reopened.doc(), "Accepted at diagnostic close"),
+        "diagnostic suppression lost an admitted write"
+    );
+    drop(reopened);
+}
+
+fn assert_close_child_output(
+    case: &str,
+    status: std::process::ExitStatus,
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
+) {
+    for path in [&stdout_path, &stderr_path] {
+        assert!(
+            std::fs::metadata(path).unwrap().len() <= 128 * 1024,
+            "unexpected unbounded diagnostic output for {case}"
+        );
+    }
+    let stdout = std::fs::read_to_string(stdout_path).unwrap();
+    let stderr = std::fs::read_to_string(stderr_path).unwrap();
+    assert!(
+        status.success(),
+        "close child {case} failed\n{stdout}\n{stderr}"
+    );
+    assert!(
+        stdout.contains(&format!("PASS executed close diagnostic case: {case}")),
+        "child test filter skipped its scenario: {stdout}"
+    );
+    if matches!(case, "stop-live" | "null-live" | "drop-before-stop") {
+        assert!(
+            !stderr.contains("Native terminal delivery failed")
+                && !stderr.contains("Native connection failed"),
+            "expected close reported as a backend/terminal failure ({case}): {stderr}"
+        );
+    } else {
+        assert!(
+            stderr.contains("Native connection failed:"),
+            "live protocol/backend failure was silenced ({case}): {stderr}"
+        );
+        if case == "live-malformed" {
+            assert!(
+                !stderr.contains("PRIVATE_TOKEN_DO_NOT_LOG")
+                    && !stderr.contains('π')
+                    && !stderr.contains('🧪'),
+                "persistent diagnostic leaked a private request value: {stderr}"
+            );
+            let diagnostic = stderr
+                .lines()
+                .find(|line| line.starts_with("Native connection failed:"))
+                .expect("protocol failure category");
+            let column = diagnostic
+                .strip_prefix("Native connection failed: protocol (Data, line 1, column ")
+                .and_then(|value| value.strip_suffix(')'))
+                .and_then(|value| value.parse::<usize>().ok());
+            assert!(
+                column.is_some_and(|column| column > 0),
+                "malformed request lost safe parser category/position: {stderr}"
+            );
+        } else {
+            assert!(
+                stderr.contains("Native connection failed: event delivery"),
+                "live delivery failure lost its payload-free category ({case}): {stderr}"
+            );
+        }
+        assert_eq!(
+            stderr.contains("Native terminal delivery failed"),
+            case == "live-mailbox-closed",
+            "delivery diagnostic did not distinguish a live unavailable mailbox from retirement: {stderr}"
+        );
+    }
+}
+
+fn assert_native_markdown_elements(app: &App) {
+    for selector in [
+        "h3",
+        "strong",
+        "em",
+        "p code",
+        "ul li",
+        "ol li",
+        "blockquote",
+        "hr",
+        "pre code",
+        ".underline",
+    ] {
+        assert!(
+            app.doc()
+                .inner()
+                .query_selector(selector)
+                .unwrap()
+                .is_some(),
+            "{selector}"
+        );
+    }
+    assert!(
+        app.doc()
+            .inner()
+            .query_selector("script")
             .unwrap()
             .is_none()
     );

@@ -1,9 +1,7 @@
 name: Linux CI
 on:
   pull_request:
-    paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   push:
-    paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   merge_group:
   workflow_dispatch:
 concurrency:
@@ -24,11 +22,30 @@ jobs:
         with:
           native: "false"
       - run: moon run workspace:ci-ts --summary detailed
+  rust-lint:
+    # Compile-only validation runs beside TS, sharing native's Depot/sccache caches.
+    runs-on: depot-ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "2"
+      RAYON_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Native compile dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libwayland-dev
+      - uses: ./.ci/setup
+      - run: moon run workspace:ci-rust --summary detailed
+      - if: always()
+        run: sccache --show-stats
   native:
     # Warm native validation still took almost 14 minutes; keep it off PRs.
     # A manual release dispatch re-runs it so nothing ships unchecked.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: typescript
+    needs: [typescript, rust-lint]
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 60
     env:

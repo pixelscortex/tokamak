@@ -79,9 +79,9 @@ pub(super) fn spawn(
     let group = Group(child.id().ok_or("Worker has no pid")?);
     let mut guardian = guardian(group.0)?;
     let guardian_input = guardian.as_mut().and_then(|child| child.stdin.take());
-    let mut input = child.stdin.take().ok_or("Worker stdin missing")?;
+    let input = child.stdin.take().ok_or("Worker stdin missing")?;
     let output = child.stdout.take().ok_or("Worker stdout missing")?;
-    let mut stderr = child.stderr.take().ok_or("Worker stderr missing")?;
+    let stderr = child.stderr.take().ok_or("Worker stderr missing")?;
     let (commands, receive) = mpsc::channel(128);
     let process = Arc::new(Process {
         commands,
@@ -98,35 +98,12 @@ pub(super) fn spawn(
         let _guardian_input = guardian_input;
         let label = id.clone();
         let _stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
-            let mut chunk = [0u8; 4096];
-            while let Ok(n) = stderr.read(&mut chunk).await {
-                if n == 0 {
-                    break;
-                }
-                logs::send(format!(
-                    "Plugin {label}: {}",
-                    String::from_utf8_lossy(&chunk[..n])
-                ));
-            }
+            forward_stderr(label, stderr).await;
         }));
-        let (writes, mut outgoing) = mpsc::channel::<Value>(128);
+        let (writes, outgoing) = mpsc::channel::<Value>(128);
         let (failed, mut failure) = oneshot::channel();
         let _writer = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
-            let result: Result<(), String> = async {
-                while let Some(message) = outgoing.recv().await {
-                    let mut bytes = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
-                    bytes.push(b'\n');
-                    if bytes.len() > FRAME {
-                        return Err("Worker message exceeds 1 MiB limit".into());
-                    }
-                    tokio::time::timeout(Duration::from_secs(5), input.write_all(&bytes))
-                        .await
-                        .map_err(|_| "Worker stdin stalled")?
-                        .map_err(|e| e.to_string())?;
-                }
-                Ok(())
-            }
-            .await;
+            let result = write_messages(input, outgoing).await;
             let _ = failed.send(result.err().unwrap_or_else(|| "Worker stdin closed".into()));
         }));
         let mut calls = BTreeMap::new();
@@ -135,9 +112,11 @@ pub(super) fn spawn(
             &mut child,
             output,
             receive,
-            &writes,
-            &mut failure,
-            &running.kill,
+            Control {
+                input: &writes,
+                failure: &mut failure,
+                kill: &running.kill,
+            },
             &mut calls,
         );
         let error = tokio::select! {
@@ -158,12 +137,7 @@ pub(super) fn spawn(
         if let Some(mut guardian) = guardian {
             let _ = guardian.wait().await;
         }
-        for (_, call) in calls {
-            call.active.cancel();
-            let _ = call
-                .reply
-                .send(Err(format!("Plugin {id} worker exited: {error}")));
-        }
+        fail_pending_calls(&id, &error, calls);
         running.stopped.cancel();
     });
     Ok(process)
@@ -179,16 +153,24 @@ fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
 fn oversized(value: &Value) -> Result<bool, String> {
     Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= FRAME)
 }
+struct Control<'a> {
+    input: &'a mpsc::Sender<Value>,
+    failure: &'a mut oneshot::Receiver<String>,
+    kill: &'a CancellationToken,
+}
 async fn run(
     id: &str,
     child: &mut Child,
     output: tokio::process::ChildStdout,
     mut commands: mpsc::Receiver<Command>,
-    input: &mpsc::Sender<Value>,
-    failure: &mut oneshot::Receiver<String>,
-    kill: &CancellationToken,
+    control: Control<'_>,
     calls: &mut BTreeMap<u64, Call>,
 ) -> Result<(), String> {
+    let Control {
+        input,
+        failure,
+        kill,
+    } = control;
     let mut output = BufReader::new(output);
     let mut frame = Vec::new();
     let mut ops = JoinSet::new();
@@ -206,15 +188,7 @@ async fn run(
             status = child.wait() => return Err(format!("process exited ({status:?})")),
             error = &mut *failure => return Err(error.unwrap_or_else(|_| "stdin writer closed".into())),
             Some(result) = ops.join_next() => {
-                if let Ok((call, op, result)) = result {
-                    if calls.get(&call).is_some_and(|c| !c.active.is_cancelled()) {
-                        let mut message = match result { Ok(value) => json!({"type":"opResult","id":op,"value":value}), Err(error) => json!({"type":"opResult","id":op,"error":error}) };
-                        if oversized(&message)? {
-                            message = json!({"type":"opResult","id":op,"error":"Host operation result exceeds 1 MiB worker limit"});
-                        }
-                        write(input, message)?;
-                    }
-                }
+                forward_operation_result(result, calls, input)?;
             },
             command = commands.recv() => match command {
                 Some(Command::Invoke {id, name, args, ops, reply}) => {
@@ -295,4 +269,65 @@ async fn read_frame(
             return Ok(Some(std::mem::take(frame)));
         }
     }
+}
+
+async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) {
+    let mut chunk = [0u8; 4096];
+    while let Ok(n) = stderr.read(&mut chunk).await {
+        if n == 0 {
+            break;
+        }
+        logs::send(format!(
+            "Plugin {label}: {}",
+            String::from_utf8_lossy(&chunk[..n])
+        ));
+    }
+}
+
+async fn write_messages(
+    mut input: tokio::process::ChildStdin,
+    mut outgoing: mpsc::Receiver<Value>,
+) -> Result<(), String> {
+    while let Some(message) = outgoing.recv().await {
+        let mut bytes = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        if bytes.len() > FRAME {
+            return Err("Worker message exceeds 1 MiB limit".into());
+        }
+        tokio::time::timeout(Duration::from_secs(5), input.write_all(&bytes))
+            .await
+            .map_err(|_| "Worker stdin stalled")?
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn fail_pending_calls(id: &str, error: &str, calls: BTreeMap<u64, Call>) {
+    for (_, call) in calls {
+        call.active.cancel();
+        let _ = call
+            .reply
+            .send(Err(format!("Plugin {id} worker exited: {error}")));
+    }
+}
+
+fn forward_operation_result(
+    result: Result<(u64, u64, Result<Value, String>), tokio::task::JoinError>,
+    calls: &BTreeMap<u64, Call>,
+    input: &mpsc::Sender<Value>,
+) -> Result<(), String> {
+    if let Ok((call, op, result)) = result
+        && calls.get(&call).is_some_and(|c| !c.active.is_cancelled())
+    {
+        let mut message = match result {
+            Ok(value) => json!({"type":"opResult","id":op,"value":value}),
+            Err(error) => json!({"type":"opResult","id":op,"error":error}),
+        };
+        if oversized(&message)? {
+            message = json!({"type":"opResult","id":op,"error":"Host operation result exceeds 1 MiB worker limit"});
+        }
+        write(input, message)?;
+    }
+
+    Ok(())
 }

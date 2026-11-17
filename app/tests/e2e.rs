@@ -72,66 +72,7 @@ fn native_roundtrip(root: &Path, write: bool) -> Value {
     ));
     // No panic before the worker has been joined: failure must still release
     // the disk lock. Poll delays are pacing only; actual SDK replies are proof.
-    let result = (|| -> Result<Value, String> {
-        let mut wait = |predicate: &dyn Fn(&NativeDocument) -> bool| -> Result<(), String> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            loop {
-                mailbox.drain(&mut doc).map_err(|e| e.to_string())?;
-                if let Some(error) = doc.take_error() {
-                    return Err(error.to_string());
-                }
-                if predicate(&doc) {
-                    return Ok(());
-                }
-                if Instant::now() >= deadline {
-                    return Err(format!(
-                        "native SDK timeout: {}",
-                        support::text(&doc, "trace")
-                    ));
-                }
-                std::thread::sleep(Duration::from_millis(2));
-            }
-        };
-        wait(&|doc| support::text(doc, "trace").contains("second"))?;
-        drop(wait);
-        if write {
-            doc.host_event(
-                doc.generation(),
-                "write:title",
-                json!("TKM-11 native persisted ✓"),
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        let deadline = Instant::now() + Duration::from_secs(20);
-        loop {
-            mailbox.drain(&mut doc).map_err(|e| e.to_string())?;
-            let trace = support::text(&doc, "trace");
-            if trace.contains("rejected") || trace.contains("error:") {
-                return Err(format!("native SDK failed: {trace}"));
-            }
-            if !write || trace.contains("title:accepted") {
-                break;
-            }
-            if Instant::now() >= deadline {
-                return Err(format!("write outcome unknown: {trace}"));
-            }
-            std::thread::sleep(Duration::from_millis(2));
-        }
-        doc.host_event(doc.generation(), "read", Value::Null)
-            .map_err(|e| e.to_string())?;
-        loop {
-            mailbox.drain(&mut doc).map_err(|e| e.to_string())?;
-            let trace = support::text(&doc, "trace");
-            if trace.contains("query:reply") {
-                return serde_json::from_str(&support::text(&doc, "readback"))
-                    .map_err(|e| e.to_string());
-            }
-            if Instant::now() >= deadline {
-                return Err(format!("read timeout: {trace}"));
-            }
-            std::thread::sleep(Duration::from_millis(2));
-        }
-    })();
+    let result = exercise_native_roundtrip(&mut doc, &mut mailbox, write);
     drop(doc);
     drop(mailbox);
     let _ = stop.send(());
@@ -178,4 +119,70 @@ fn native_sdk_persists_and_exports_exact_rows_after_reopen() {
         serde_json::to_vec(&written).unwrap(),
     )
     .unwrap();
+}
+
+fn exercise_native_roundtrip(
+    doc: &mut NativeDocument,
+    mailbox: &mut HostMailbox,
+    write: bool,
+) -> Result<Value, String> {
+    {
+        let mut wait = |predicate: &dyn Fn(&NativeDocument) -> bool| -> Result<(), String> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            loop {
+                mailbox.drain(doc).map_err(|e| e.to_string())?;
+                if let Some(error) = doc.take_error() {
+                    return Err(error.to_string());
+                }
+                if predicate(doc) {
+                    return Ok(());
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "native SDK timeout: {}",
+                        support::text(doc, "trace")
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        };
+        wait(&|doc| support::text(doc, "trace").contains("second"))?;
+    }
+    if write {
+        doc.host_event(
+            doc.generation(),
+            "write:title",
+            json!("TKM-11 native persisted ✓"),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        mailbox.drain(doc).map_err(|e| e.to_string())?;
+        let trace = support::text(doc, "trace");
+        if trace.contains("rejected") || trace.contains("error:") {
+            return Err(format!("native SDK failed: {trace}"));
+        }
+        if !write || trace.contains("title:accepted") {
+            break;
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("write outcome unknown: {trace}"));
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    doc.host_event(doc.generation(), "read", Value::Null)
+        .map_err(|e| e.to_string())?;
+    loop {
+        mailbox.drain(doc).map_err(|e| e.to_string())?;
+        let trace = support::text(doc, "trace");
+        if trace.contains("query:reply") {
+            return serde_json::from_str(&support::text(doc, "readback"))
+                .map_err(|e| e.to_string());
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("read timeout: {trace}"));
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
 }

@@ -166,7 +166,7 @@ fn the_textarea_grows_line_by_line_and_stops_at_its_limit() {
     click(&mut doc, "lab-idle-input");
     commit(&mut doc, &"wrapping words ".repeat(30));
     let wrapped = rect(&doc, "lab-idle-input").height as f32;
-    assert!(wrapped >= LINE * 3.0 && wrapped <= LINE * 8.0, "{wrapped}");
+    assert!((LINE * 3.0..=LINE * 8.0).contains(&wrapped), "{wrapped}");
     assert_eq!(wrapped % LINE, 0.0, "whole lines: {wrapped}");
     assert!(doc.take_error().is_none());
 }
@@ -589,7 +589,7 @@ fn the_composer_stays_within_60_percent_of_the_stage() {
             assert_eq!(text, LINE * 8.0, "{height}: all eight lines");
         } else {
             assert!(
-                text < LINE * 8.0 && text >= LINE,
+                (LINE..LINE * 8.0).contains(&text),
                 "{height}: the text gave up lines ({text})"
             );
             let chip = rect(&doc, "lab-chat-composer-chip-0");

@@ -45,38 +45,27 @@ pub(crate) struct Call {
     pub conflict: bool,
 }
 
-pub(crate) async fn invoke(
-    db: &data::Database,
-    pool: &Pool,
-    bundle: Option<Arc<Bundle>>,
-    name: &str,
-    args: Json,
-    mutation: bool,
-    space: &DataSpace,
-    plugins: Option<Arc<crate::plugins::Loaded>>,
-    determinism: Determinism,
-) -> Call {
-    let (bundle, name, space, graph) = if let Some(plugins) = plugins {
-        let target = plugins
-            .targets
-            .get(name)
-            .expect("coordinator validated target")
-            .clone();
-        (
-            target.bundle,
-            target.local_name,
-            target.space,
-            Some((plugins, target.owner, vec![name.to_owned()])),
-        )
-    } else {
-        (
-            bundle.expect("legacy bundle"),
-            name.to_owned(),
-            space.clone(),
-            None,
-        )
-    };
+pub(crate) struct Invocation<'a> {
+    pub bundle: Option<Arc<Bundle>>,
+    pub name: &'a str,
+    pub args: Json,
+    pub mutation: bool,
+    pub space: &'a DataSpace,
+    pub plugins: Option<Arc<crate::plugins::Loaded>>,
+    pub determinism: Determinism,
+}
 
+pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocation<'_>) -> Call {
+    let Invocation {
+        bundle,
+        name,
+        args,
+        mutation,
+        space,
+        plugins,
+        determinism,
+    } = invocation;
+    let (bundle, name, space, graph) = resolve_invocation(bundle, name, space, plugins);
     let tx = if mutation {
         Box::pin(db.begin()).await
     } else {
@@ -132,27 +121,7 @@ pub(crate) async fn invoke(
         }
     });
 
-    let result = match result {
-        Ok(value) => match Box::pin(tx.commit()).await {
-            Ok(()) => Ok(value),
-            Err(error) => {
-                observed.conflict |= error.is_retryable_conflict();
-
-                Err(format!(
-                    "transaction commit failed (outcome may be unknown): {error}"
-                ))
-            }
-        },
-        Err(error) => match Box::pin(tx.rollback()).await {
-            Ok(()) => Err(error),
-            Err(rollback) => {
-                // A failed rollback is not evidence that replay is safe.
-                observed.conflict = false;
-
-                Err(format!("{error}; rollback failed: {rollback}"))
-            }
-        },
-    };
+    let result = finish_transaction(tx, result, &mut observed).await;
     Call {
         result,
         reads: std::mem::take(&mut observed.reads),
@@ -262,3 +231,61 @@ use database_operations::{field, text};
 mod database_queries;
 
 pub(crate) mod worker;
+
+async fn finish_transaction(
+    tx: Transaction,
+    result: Result<Json, String>,
+    observed: &mut Observations,
+) -> Result<Json, String> {
+    match result {
+        Ok(value) => match Box::pin(tx.commit()).await {
+            Ok(()) => Ok(value),
+            Err(error) => {
+                observed.conflict |= error.is_retryable_conflict();
+
+                Err(format!(
+                    "transaction commit failed (outcome may be unknown): {error}"
+                ))
+            }
+        },
+        Err(error) => match Box::pin(tx.rollback()).await {
+            Ok(()) => Err(error),
+            Err(rollback) => {
+                // A failed rollback is not evidence that replay is safe.
+                observed.conflict = false;
+
+                Err(format!("{error}; rollback failed: {rollback}"))
+            }
+        },
+    }
+}
+
+fn resolve_invocation(
+    bundle: Option<Arc<Bundle>>,
+    name: &str,
+    space: &DataSpace,
+    plugins: Option<Arc<crate::plugins::Loaded>>,
+) -> (Arc<Bundle>, String, DataSpace, Graph) {
+    let (bundle, name, space, graph) = if let Some(plugins) = plugins {
+        let target = plugins
+            .targets
+            .get(name)
+            .expect("coordinator validated target")
+            .clone();
+        (
+            target.bundle,
+            target.local_name,
+            target.space,
+            Some((plugins, target.owner, vec![name.to_owned()])),
+        )
+    } else {
+        (
+            bundle.expect("legacy bundle"),
+            name.to_owned(),
+            space.clone(),
+            None,
+        )
+    };
+
+    (bundle, name, space, graph)
+}

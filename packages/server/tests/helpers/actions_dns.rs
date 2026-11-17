@@ -205,47 +205,12 @@ fn plugin_reload_and_transactions_do_not_wait_for_dns() {
                 })
                 .unwrap();
             resolver.wait_for(1).await;
-            async fn transactions(session: &mut server::Session, first: u64) {
-                session
-                    .sender()
-                    .request(server::protocol::Request::Query {
-                        id: first,
-                        name: "b/ops:publicRead".into(),
-                        args: json!({}),
-                    })
-                    .unwrap();
-                session
-                    .sender()
-                    .request(server::protocol::Request::Mutation {
-                        id: first + 1,
-                        name: "b/ops:privateWrite".into(),
-                        args: json!({}),
-                    })
-                    .unwrap();
-                let mut seen = [false; 2];
-                tokio::time::timeout(Duration::from_millis(200), async {
-                    while !seen.iter().all(|seen| *seen) {
-                        if let Event::Response { id, result } =
-                            session.recv().await.unwrap().unwrap()
-                        {
-                            if id == first {
-                                assert_eq!(result.unwrap(), json!("public"));
-                                seen[0] = true;
-                            } else if id == first + 1 {
-                                assert!(result.unwrap().is_string());
-                                seen[1] = true;
-                            }
-                        }
-                    }
-                })
-                .await
-                .expect("transactions stalled behind DNS/reload");
-            }
-            transactions(&mut session, 2).await;
+
+            assert_transactions_during_dns(&mut session, 2).await;
             let start = Instant::now();
             let (reload, ()) = tokio::join!(
                 server.reload_plugin("b".into()),
-                transactions(&mut session, 4)
+                assert_transactions_during_dns(&mut session, 4)
             );
             reload.unwrap();
             assert!(
@@ -253,7 +218,7 @@ fn plugin_reload_and_transactions_do_not_wait_for_dns() {
                 "reload waited for DNS: {:?}",
                 start.elapsed()
             );
-            transactions(&mut session, 6).await;
+            assert_transactions_during_dns(&mut session, 6).await;
             assert!(!resolver.directory.join("release").exists());
             drop(session);
             server.close().await.unwrap();
@@ -343,4 +308,39 @@ fn dns_private_answer_still_refused() {
             "private answer reached the connector"
         );
     });
+}
+
+async fn assert_transactions_during_dns(session: &mut server::Session, first: u64) {
+    session
+        .sender()
+        .request(server::protocol::Request::Query {
+            id: first,
+            name: "b/ops:publicRead".into(),
+            args: json!({}),
+        })
+        .unwrap();
+    session
+        .sender()
+        .request(server::protocol::Request::Mutation {
+            id: first + 1,
+            name: "b/ops:privateWrite".into(),
+            args: json!({}),
+        })
+        .unwrap();
+    let mut seen = [false; 2];
+    tokio::time::timeout(Duration::from_millis(200), async {
+        while !seen.iter().all(|seen| *seen) {
+            if let Event::Response { id, result } = session.recv().await.unwrap().unwrap() {
+                if id == first {
+                    assert_eq!(result.unwrap(), json!("public"));
+                    seen[0] = true;
+                } else if id == first + 1 {
+                    assert!(result.unwrap().is_string());
+                    seen[1] = true;
+                }
+            }
+        }
+    })
+    .await
+    .expect("transactions stalled behind DNS/reload");
 }

@@ -155,51 +155,7 @@ fn nested_plugins_share_transactions_read_dependencies_and_a_single_worker() {
                     .unwrap(),
                 2
             );
-            // Child writes then throws; the parent deliberately catches it.
-            assert!(
-                call(&mut writer, 2, "a/ops:both", json!({"fail":true}))
-                    .await
-                    .unwrap_err()
-                    .contains("child failure")
-            );
-            for (id, name) in [(3, "a/ops:list"), (4, "b/ops:list")] {
-                assert_eq!(
-                    call(&mut writer, id, name, json!({})).await.unwrap(),
-                    json!([])
-                );
-            }
-            call(&mut writer, 5, "a/ops:both", json!({"fail":false}))
-                .await
-                .unwrap();
-            let result = call(&mut writer, 6, "a/ops:combined", json!({}))
-                .await
-                .unwrap();
-            assert_eq!(result["a"][0]["source"], "a");
-            assert_eq!(result["b"][0]["source"], "b");
-            assert!(
-                result["a"][0]["_id"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("a/items:")
-            );
-            assert!(
-                result["b"][0]["_id"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("b/items:")
-            );
-            assert!(
-                call(&mut writer, 7, "a/ops:illegal", json!({}))
-                    .await
-                    .unwrap_err()
-                    .contains("Queries cannot call mutations")
-            );
-            assert!(
-                call(&mut writer, 8, "a/ops:cycle", json!({}))
-                    .await
-                    .unwrap_err()
-                    .contains("cycle")
-            );
+            assert_nested_plugin_transactions(&mut writer).await;
             reader.subscribe(100, "a/ops:combined", json!({})).unwrap();
             assert!(matches!(
                 next(&mut reader).await,
@@ -330,77 +286,7 @@ fn standalone_binary_exposes_only_authenticated_plugin_controls_and_cli() {
         .replace("ws://", "http://")
         .trim_end_matches("/ws")
         .to_owned();
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            let client = reqwest::Client::builder()
-                .no_proxy()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap();
-            assert_eq!(
-                client
-                    .get(format!("{base}/plugins"))
-                    .send()
-                    .await
-                    .unwrap()
-                    .status(),
-                401
-            );
-            assert_eq!(
-                client
-                    .post(format!("{base}/plugins/b/reload"))
-                    .send()
-                    .await
-                    .unwrap()
-                    .status(),
-                401
-            );
-            assert_eq!(
-                client
-                    .get(format!("{base}/plugins"))
-                    .bearer_auth("a".repeat(64))
-                    .header("origin", "http://example.com")
-                    .send()
-                    .await
-                    .unwrap()
-                    .status(),
-                403
-            );
-            let response = client
-                .get(format!("{base}/plugins/b/assets/bundle.js"))
-                .bearer_auth("a".repeat(64))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(
-                response.status(),
-                404,
-                "backend source must never be a client asset"
-            );
-            for command in [vec!["plugin", "list"], vec!["plugin", "reload", "b"]] {
-                let output = std::process::Command::new(binary)
-                    .args(command)
-                    .env("TOKAMAK_SERVER_DIR", &local)
-                    .output()
-                    .unwrap();
-                assert!(
-                    output.status.success(),
-                    "{}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
-                assert_eq!(metadata["plugins"].as_array().unwrap().len(), 2);
-            }
-            // Shutdown may close the HTTP acknowledgement while stopping sockets.
-            let _ = client
-                .post(format!("{base}/shutdown"))
-                .bearer_auth("a".repeat(64))
-                .send()
-                .await;
-        });
+    assert_authenticated_plugin_controls(&base, binary, &local);
     let started = std::time::Instant::now();
     while process.0.try_wait().unwrap().is_none() {
         assert!(
@@ -808,20 +694,141 @@ async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_wri
         "test did not force a whole-handler retry"
     );
     assert_eq!(replayed, first, "retry changed time or random sequences");
-    let row = call(
-        &mut session,
-        4,
-        "a/determinism:get",
-        json!({"id":presented_id}),
-    )
-    .await
-    .unwrap();
+    assert_replayed_plugin_writes(&mut session, &presented_id, &first).await;
+    server.close().await.unwrap();
+}
+
+async fn assert_nested_plugin_transactions(writer: &mut server::Session) {
+    // Child writes then throws; the parent deliberately catches it.
+    assert!(
+        call(writer, 2, "a/ops:both", json!({"fail":true}))
+            .await
+            .unwrap_err()
+            .contains("child failure")
+    );
+    for (id, name) in [(3, "a/ops:list"), (4, "b/ops:list")] {
+        assert_eq!(call(writer, id, name, json!({})).await.unwrap(), json!([]));
+    }
+    call(writer, 5, "a/ops:both", json!({"fail":false}))
+        .await
+        .unwrap();
+    let result = call(writer, 6, "a/ops:combined", json!({})).await.unwrap();
+    assert_eq!(result["a"][0]["source"], "a");
+    assert_eq!(result["b"][0]["source"], "b");
+    assert!(
+        result["a"][0]["_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("a/items:")
+    );
+    assert!(
+        result["b"][0]["_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("b/items:")
+    );
+    assert!(
+        call(writer, 7, "a/ops:illegal", json!({}))
+            .await
+            .unwrap_err()
+            .contains("Queries cannot call mutations")
+    );
+    assert!(
+        call(writer, 8, "a/ops:cycle", json!({}))
+            .await
+            .unwrap_err()
+            .contains("cycle")
+    );
+}
+
+fn assert_authenticated_plugin_controls(base: &str, binary: &str, local: &std::path::Path) {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .unwrap();
+            assert_eq!(
+                client
+                    .get(format!("{base}/plugins"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                401
+            );
+            assert_eq!(
+                client
+                    .post(format!("{base}/plugins/b/reload"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                401
+            );
+            assert_eq!(
+                client
+                    .get(format!("{base}/plugins"))
+                    .bearer_auth("a".repeat(64))
+                    .header("origin", "http://example.com")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                403
+            );
+            let response = client
+                .get(format!("{base}/plugins/b/assets/bundle.js"))
+                .bearer_auth("a".repeat(64))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                404,
+                "backend source must never be a client asset"
+            );
+            for command in [vec!["plugin", "list"], vec!["plugin", "reload", "b"]] {
+                let output = std::process::Command::new(binary)
+                    .args(command)
+                    .env("TOKAMAK_SERVER_DIR", local)
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
+                assert_eq!(metadata["plugins"].as_array().unwrap().len(), 2);
+            }
+            // Shutdown may close the HTTP acknowledgement while stopping sockets.
+            let _ = client
+                .post(format!("{base}/shutdown"))
+                .bearer_auth("a".repeat(64))
+                .send()
+                .await;
+        });
+}
+
+async fn assert_replayed_plugin_writes(
+    session: &mut server::Session,
+    presented_id: &str,
+    first: &Value,
+) {
+    let row = call(session, 4, "a/determinism:get", json!({"id":presented_id}))
+        .await
+        .unwrap();
     assert_eq!(
         row["value"], 11,
         "retry did not read the winner's committed snapshot"
     );
-    assert_eq!(row["replay"], first);
-    let audit = call(&mut session, 5, "a/determinism:audit", json!({}))
+    assert_eq!(&row["replay"], first);
+    let audit = call(session, 5, "a/determinism:audit", json!({}))
         .await
         .unwrap();
     assert_eq!(
@@ -829,9 +836,9 @@ async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_wri
         1,
         "losing attempt leaked a write"
     );
-    assert_eq!(audit[0]["replay"], first);
+    assert_eq!(&audit[0]["replay"], first);
     let second_mutation = call(
-        &mut session,
+        session,
         6,
         "a/determinism:write",
         json!({"id":presented_id}),
@@ -843,5 +850,4 @@ async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_wri
         first["before"]["random"], second_mutation["before"]["random"],
         "separate mutations reused a seed"
     );
-    server.close().await.unwrap();
 }

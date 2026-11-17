@@ -172,6 +172,10 @@ impl Manifest {
         {
             return Err(invalid("Invalid plugin worker runtime/entry"));
         }
+        self.validate_entries()
+    }
+
+    fn validate_entries(&self) -> Result<BTreeSet<&String>, Error> {
         let mut names = BTreeSet::new();
 
         let backend_paths = self

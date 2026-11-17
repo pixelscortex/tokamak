@@ -118,34 +118,7 @@ fn production_socket_drains_on_ui_close_keeps_server_alive_and_reports_server_lo
             .unwrap();
     });
     assert!(service.child.try_wait().unwrap().is_none());
-    let mut reopened = runtime
-        .block_on(socket::connect(&service.directory))
-        .unwrap();
-    let reply = runtime.block_on(async {
-        reopened
-            .send(Message::Text(
-                json!({"type":"query","id":200,"name":"record:list","args":{}})
-                    .to_string()
-                    .into(),
-            ))
-            .await
-            .unwrap();
-        let frame = tokio::time::timeout(Duration::from_secs(5), reopened.next())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        serde_json::from_str::<Value>(frame.to_text().unwrap()).unwrap()
-    });
-    assert!(
-        reply["result"]["Ok"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|row| row["title"] == "accepted before native close")
-    );
-    runtime.block_on(reopened.close(None)).unwrap();
-
+    assert_socket_write_persisted(&runtime, &service);
     let connection = runtime
         .block_on(socket::connect(&service.directory))
         .unwrap();
@@ -178,4 +151,34 @@ fn production_socket_drains_on_ui_close_keeps_server_alive_and_reports_server_lo
         mailbox.drain(&mut doc).is_err(),
         "live UI must receive terminal server loss"
     );
+}
+
+fn assert_socket_write_persisted(runtime: &tokio::runtime::Runtime, service: &Service) {
+    let mut reopened = runtime
+        .block_on(socket::connect(&service.directory))
+        .unwrap();
+    let reply = runtime.block_on(async {
+        reopened
+            .send(Message::Text(
+                json!({"type":"query","id":200,"name":"record:list","args":{}})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+        let frame = tokio::time::timeout(Duration::from_secs(5), reopened.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        serde_json::from_str::<Value>(frame.to_text().unwrap()).unwrap()
+    });
+    assert!(
+        reply["result"]["Ok"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["title"] == "accepted before native close")
+    );
+    runtime.block_on(reopened.close(None)).unwrap();
 }

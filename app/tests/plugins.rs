@@ -5,7 +5,8 @@
 mod support;
 
 use blitz_dom::{Document, Namespace, QualName};
-use blitz_traits::shell::Viewport;
+use blitz_traits::{events::*, shell::Viewport};
+use keyboard_types::{Key, Modifiers, NamedKey};
 use render::{HostMailbox, NativeDocument};
 use runtime::client::connection as socket;
 use serde_json::{Value, json};
@@ -1032,221 +1033,9 @@ mod capture;
 // The agent runs in a disposable working folder.
 #[test]
 fn chat_screen_socket_workflow() {
-    use blitz_traits::events::*;
-    use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
-
-    fn key(window: &mut Window, key: Key, meta: bool) {
-        modified_key(
-            window,
-            key,
-            if meta {
-                Modifiers::META
-            } else {
-                Modifiers::empty()
-            },
-        );
-    }
-    fn modified_key(window: &mut Window, key: Key, modifiers: Modifiers) {
-        window.doc.as_mut().unwrap().resolve_layout(0.0);
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
-                key,
-                code: Code::Unidentified,
-                text: None,
-                modifiers,
-                location: Location::Standard,
-                is_auto_repeating: false,
-                is_composing: false,
-                state: KeyState::Pressed,
-            }));
-        window.doc.as_mut().unwrap().resolve_layout(0.0);
-    }
-    fn type_text(window: &mut Window, text: &str) {
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
-    }
-    fn call(service: &Service, kind: &str, name: &str, args: Value) -> Value {
-        use futures_util::{SinkExt, StreamExt};
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                let mut socket = socket::connect(&service.directory).await.unwrap();
-                socket
-                    .send(tokio_tungstenite::tungstenite::Message::Text(
-                        json!({"type": kind, "id": 1, "name": name, "args": args})
-                            .to_string()
-                            .into(),
-                    ))
-                    .await
-                    .unwrap();
-                loop {
-                    let message = socket.next().await.unwrap().unwrap();
-                    let event: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
-                    if event["type"] == "response" && event["id"] == 1 {
-                        assert!(event["result"].get("Err").is_none(), "{event}");
-                        return event["result"]["Ok"].clone();
-                    }
-                }
-            })
-    }
-    fn selected(window: &Window) -> String {
-        support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap()
-    }
-
-    fn scroll(window: &mut Window, delta: f64) {
-        support::pointer(window.doc.as_mut().unwrap(), "chat-messages");
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .handle_ui_event(UiEvent::Wheel(BlitzWheelEvent {
-                delta: BlitzWheelDelta::Pixels(0.0, delta),
-                coords: PointerCoords {
-                    page_x: 300.0,
-                    page_y: 300.0,
-                    screen_x: 300.0,
-                    screen_y: 300.0,
-                    client_x: 300.0,
-                    client_y: 300.0,
-                },
-                buttons: MouseEventButtons::None,
-                mods: Modifiers::empty(),
-                element: Default::default(),
-            }));
-        window.doc.as_mut().unwrap().resolve_layout(0.0);
-    }
-    fn position(doc: &NativeDocument) -> (f64, f64) {
-        let inner = doc.inner();
-        let node = inner
-            .get_node(inner.get_element_by_id("chat-messages").unwrap())
-            .unwrap();
-        (
-            node.scroll_offset().y,
-            node.final_layout().scroll_height() as f64,
-        )
-    }
-    fn at_bottom(doc: &NativeDocument) -> bool {
-        let (top, bottom) = position(doc);
-        (top - bottom).abs() <= 2.0
-    }
-
     let live = std::env::var("TOKAMAK_CHAT_LIVE").as_deref() == Ok("1");
-    let scratch = Scratch::new();
-    let plugin = scratch.0.join("installation/chat/dist");
-    std::fs::create_dir_all(&plugin).unwrap();
-    for id in ["chat", "acp"] {
-        let destination = scratch.0.join(format!("installation/{id}/dist"));
-        std::fs::create_dir_all(&destination).unwrap();
-        for file in [
-            "manifest.json",
-            "bundle.js",
-            "bundle.js.map",
-            "worker.js",
-            "worker.js.map",
-            "worker-entry.js",
-            "api.ts",
-            "ui.js",
-            "ui.js.map",
-            "shell.html",
-            "styles.css",
-        ] {
-            if !root()
-                .join(format!("plugins/{id}/dist"))
-                .join(file)
-                .exists()
-            {
-                continue;
-            }
-            std::fs::copy(
-                root().join(format!("plugins/{id}/dist")).join(file),
-                destination.join(file),
-            )
-            .unwrap();
-        }
-    }
-    let quickstart = live && std::env::var("TOKAMAK_CHAT_QUICKSTART").as_deref() == Ok("1");
-    if quickstart {
-        let record = scratch.0.join("installation/record/dist");
-        std::fs::create_dir_all(&record).unwrap();
-        for file in [
-            "manifest.json",
-            "bundle.js",
-            "bundle.js.map",
-            "api.ts",
-            "ui.js",
-            "ui.js.map",
-            "shell.html",
-            "styles.css",
-        ] {
-            std::fs::copy(
-                root().join("app/tests/fixtures/record/dist").join(file),
-                record.join(file),
-            )
-            .unwrap();
-        }
-    }
-    std::fs::create_dir_all(scratch.0.join("server")).unwrap();
-    if live {
-        std::fs::create_dir_all(scratch.0.join("workspace")).unwrap();
-    } else {
-        // Keep the native offline fixture independent of installed adapters.
-        // It exercises the same backend contract through ordinary SDK actions.
-        success(
-            Command::new("bun")
-                .arg("-e")
-                .arg(
-                    r#"
-import {readFileSync, writeFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
-const root = process.argv[1];
-const manifest = JSON.parse(readFileSync(root + '/manifest.json', 'utf8'));
-let source = readFileSync(root + '/worker.js', 'utf8');
-for (const command of ['claude-agent-acp', 'codex-acp']) {
-  const pattern = `command: "${command}"`;
-  if (!source.includes(pattern)) throw new Error('Offline adapter command missing: ' + command);
-  source = source.replaceAll(pattern, 'command: "/usr/bin/false"');
-}
-source = source.replaceAll('command: "gemini"', 'command: "/missing-tokamak-agent"');
-writeFileSync(root + '/worker.js', source);
-manifest.hashes['worker.js'] = createHash('sha256').update(source).digest('hex');
-writeFileSync(root + '/manifest.json', JSON.stringify(manifest));
-"#,
-                )
-                .arg(scratch.0.join("installation/acp/dist")),
-        );
-    }
-    fn configure_live_thread(service: &Service, thread: &str, cwd: &Path) {
-        let options = call(service, "action", "chat/backends:list", json!({}));
-        let backend = options
-            .as_array()
-            .and_then(|options| options.first())
-            .expect("Install claude-agent-acp or codex-acp for live chat tests");
-        let settings = call(
-            service,
-            "action",
-            "chat/backends:configure",
-            json!({
-                "plugin": backend["plugin"], "backendId": backend["id"], "settings": {"cwd": cwd}
-            }),
-        );
-        call(
-            service,
-            "mutation",
-            "chat/threads:setBackend",
-            json!({
-                "threadId": thread, "backend": {"kind": "plugin", "plugin": backend["plugin"],
-                    "backendId": backend["id"], "settings": settings}
-            }),
-        );
-    }
+    let (scratch, quickstart) = prepare_chat_installation(live);
+
     let service = Service::start(&scratch);
     if quickstart {
         let catalog: Value = serde_json::from_str(&service.cli(&["plugin", "list"])).unwrap();
@@ -1260,628 +1049,25 @@ writeFileSync(root + '/manifest.json', JSON.stringify(manifest));
             );
         }
     }
-    let mut window = Window::open(&service.directory);
-    window
-        .doc
-        .as_mut()
-        .unwrap()
-        .inner_mut()
-        .set_viewport(Viewport {
-            window_size: (680, 820),
-            ..Default::default()
-        });
-    window.wait(|doc| doc.inner().get_element_by_id("chat-screen").is_some());
-    window.wait(|doc| support::attr(doc, "chat-screen", "data-thread-id").is_some());
-    if live {
-        configure_live_thread(&service, &selected(&window), &scratch.0.join("workspace"));
-    }
-    let body = window
-        .doc()
-        .inner()
-        .query_selector("body")
-        .unwrap()
-        .unwrap();
-    window
-        .doc
-        .as_mut()
-        .unwrap()
-        .inner_mut()
-        .mutate()
-        .clear_attribute(
-            body,
-            QualName::new(None, Namespace::from(""), "data-dev-nav".into()),
-        );
-    window.doc.as_mut().unwrap().resolve_layout(0.0);
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
-    key(&mut window, Key::Named(NamedKey::Escape), false);
+    let mut window = open_chat_window(&service, &scratch, live);
     if quickstart {
-        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        type_text(&mut window, "Say hello in one short sentence.");
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
-            doc.inner()
-                .query_selector("[data-role=assistant][data-status=complete]")
-                .unwrap()
-                .is_some()
-        });
-        let messages = call(
-            &service,
-            "query",
-            "chat/messages:list",
-            json!({"threadId": selected(&window)}),
-        );
-        let reply = messages.as_array().unwrap().last().unwrap();
-        assert_eq!(reply["role"], "assistant");
-        assert!(reply["parts"].as_array().unwrap().iter().any(|part| {
-            part["type"] == "text"
-                && part["text"]
-                    .as_str()
-                    .is_some_and(|text| !text.trim().is_empty())
-        }));
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("quickstart.png"),
-            );
-        }
-        println!(
-            "Quick start: Chat and Record loaded; native composer sent a message and rendered a live reply."
-        );
+        assert_chat_quickstart(&mut window, &service);
         return;
     }
-    if live {
-        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        type_text(
-            &mut window,
-            "Give me a short markdown list and a 3-line Python code block",
-        );
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
-            doc.inner()
-                .query_selector("[data-role=assistant][data-status=complete] pre code")
-                .unwrap()
-                .is_some()
-        });
-        assert!(
-            window
-                .doc()
-                .inner()
-                .query_selector("[data-role=assistant] li")
-                .unwrap()
-                .is_some()
-        );
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("markdown.png"),
-            );
-        }
+    window = assert_live_chat_recovery(window, &service, live);
+    let first = submit_chat_composer(&mut window, &service, &scratch, live);
 
-        let thread = selected(&window);
-        call(
-            &service,
-            "mutation",
-            "chat/send:start",
-            json!({"threadId": thread, "text": "Simulated interrupted reply", "token": "fixture-turn-token"}),
-        );
-        drop(window);
-        // No action owns this persisted run. A fresh launch starts observing it.
-        window = Window::open(&service.directory);
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .inner_mut()
-            .set_viewport(Viewport {
-                window_size: (680, 820),
-                ..Default::default()
-            });
-        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
-            doc.inner().get_element_by_id("chat-messages").is_some()
-                && support::text(doc, "chat-messages").contains("Interrupted")
-        });
-        assert!(
-            call(&service, "query", "chat/runs:running", json!({}))
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
-        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        type_text(&mut window, "Reply with one word: Recovered");
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |_| {
-            let messages = call(
-                &service,
-                "query",
-                "chat/messages:list",
-                json!({"threadId": thread}),
-            );
-            messages.as_array().unwrap().last().is_some_and(|message| {
-                message["role"] == "assistant" && message["status"] == "complete"
-            })
-        });
-        window.wait(|doc| {
-            doc.inner()
-                .query_selector("[data-status=streaming]")
-                .unwrap()
-                .is_none()
-        });
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("recovery.png"),
-            );
-        }
-        println!("Interrupted run cleared after reopening; same thread completed another reply.");
-        key(&mut window, Key::Character("n".into()), true);
-        window.wait(|doc| {
-            support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != thread)
-        });
-    }
-    if live {
-        configure_live_thread(&service, &selected(&window), &scratch.0.join("workspace"));
-    }
-    let first = selected(&window);
-    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-    let prompt = if live {
-        "Print exactly 60 numbered lines, each saying: A quiet line of text. No introduction."
-    } else {
-        "Say hello in five words"
-    };
-    type_text(&mut window, "   ");
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    assert_eq!(support::editor(window.doc(), "chat-input"), "   ");
-    key(&mut window, Key::Character("a".into()), true);
-    type_text(&mut window, prompt);
-    modified_key(&mut window, Key::Named(NamedKey::Enter), Modifiers::SHIFT);
-    type_text(&mut window, "Please.");
-    assert!(support::editor(window.doc(), "chat-input").contains("\nPlease."));
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    window.wait(|doc| support::text(doc, "chat-messages").contains(prompt));
+    assert_chat_stream_and_cancel(&mut window, &service, &first, live);
 
-    if live {
-        let mut previous = String::new();
-        let mut grew = false;
-        let mut paused: Option<(f64, f64)> = None;
-        let mut resumed = false;
-        let deadline = Instant::now() + Duration::from_secs(90);
-        while Instant::now() < deadline {
-            window.mailbox.drain(window.doc.as_mut().unwrap()).unwrap();
-            window.doc.as_mut().unwrap().resolve_layout(0.0);
-            let doc = window.doc();
-            assert!(
-                doc.inner()
-                    .query_selector("[data-status=error]")
-                    .unwrap()
-                    .is_none(),
-                "{}",
-                support::text(doc, "chat-messages")
-            );
-            let streaming = doc
-                .inner()
-                .query_selector("[data-status=streaming]")
-                .unwrap();
-            if let Some(id) = streaming {
-                let text = doc.inner().get_node(id).unwrap().text_content();
-                if text != previous && !text.trim_start().starts_with('·') {
-                    grew = true;
-                    let (top, bottom) = position(window.doc());
-                    if let Some((held_top, held_bottom)) = paused {
-                        assert!(
-                            (top - held_top).abs() <= 2.0,
-                            "streaming moved a paused conversation"
-                        );
-                        if bottom > held_bottom + 40.0 {
-                            scroll(&mut window, -10000.0);
-                            assert!(
-                                at_bottom(window.doc()),
-                                "scrolling to the bottom must resume following"
-                            );
-                            paused = None;
-                            resumed = true;
-                        }
-                    } else {
-                        assert!(
-                            at_bottom(window.doc()),
-                            "streaming must follow the newest content"
-                        );
-                        if bottom > 180.0 && !resumed {
-                            for _ in 0..240 {
-                                scroll(&mut window, 0.5);
-                            }
-                            let (held_top, held_bottom) = position(window.doc());
-                            assert!(
-                                held_top < top - 40.0,
-                                "wheel must scroll up: {top} -> {held_top}, bottom {held_bottom}"
-                            );
-                            paused = Some((held_top, held_bottom));
-                        }
-                    }
-                    previous = text;
-                }
-            } else if grew {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(grew, "no assistant text arrived while streaming");
-        assert!(resumed, "reply must grow after scrolling up and resuming");
-        window.wait(|doc| {
-            doc.inner()
-                .query_selector("[data-status=streaming]")
-                .unwrap()
-                .is_none()
-        });
-        window.doc.as_mut().unwrap().resolve_layout(0.0);
-        let scroller = window
-            .doc()
-            .inner()
-            .get_element_by_id("chat-messages")
-            .unwrap();
-        let inner = window.doc().inner();
-        let node = inner.get_node(scroller).unwrap();
-        assert!(
-            node.final_layout().scroll_height() > 500.0,
-            "long reply must overflow"
-        );
-        drop(inner);
-        assert!(
-            at_bottom(window.doc()),
-            "completed long reply must end at the bottom: {:?}",
-            position(window.doc())
-        );
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("ux-autoscroll.png"),
-            );
-        }
-        let messages = call(
-            &service,
-            "query",
-            "chat/messages:list",
-            json!({"threadId": first}),
-        );
-        let reply = messages.as_array().unwrap().last().unwrap()["parts"][0]["text"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        modified_key(
-            &mut window,
-            Key::Character("c".into()),
-            Modifiers::META | Modifiers::SHIFT,
-        );
-        window.wait(|doc| support::text(doc, "chat-strip").contains("COPIED"));
-        #[cfg(target_os = "macos")]
-        {
-            let output = std::process::Command::new("/usr/bin/pbpaste")
-                .output()
-                .unwrap();
-            assert!(output.status.success());
-            assert_eq!(String::from_utf8(output.stdout).unwrap(), reply);
-        }
-        window.wait(|doc| !support::text(doc, "chat-strip").contains("COPIED"));
-        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-        type_text(
-            &mut window,
-            "Count from one to one hundred, one number per line.",
-        );
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait(|doc| {
-            doc.inner()
-                .query_selector("[data-status=streaming]")
-                .unwrap()
-                .is_some()
-        });
-        let sends = || {
-            window
-                .requests
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|request| request.to_string().contains("chat:send"))
-                .count()
-        };
-        let before = sends();
-        type_text(&mut window, "draft during run");
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        assert_eq!(
-            support::editor(window.doc(), "chat-input"),
-            "draft during run"
-        );
-        assert_eq!(
-            window
-                .requests
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|request| request.to_string().contains("chat:send"))
-                .count(),
-            before
-        );
-        key(&mut window, Key::Character("a".into()), true);
-        window
-            .doc
-            .as_mut()
-            .unwrap()
-            .handle_ui_event(UiEvent::AppleStandardKeybinding("deleteBackward:".into()));
-        assert_eq!(support::editor(window.doc(), "chat-input"), "");
-        key(&mut window, Key::Named(NamedKey::Tab), false);
-        window.wait(|doc| support::text(doc, "chat-map").contains("RUNNING"));
-        key(&mut window, Key::Named(NamedKey::Escape), false);
-        key(&mut window, Key::Named(NamedKey::Escape), false);
-        window.wait(|doc| {
-            doc.inner()
-                .query_selector("[data-status=cancelled]")
-                .unwrap()
-                .is_some()
-        });
-        assert!(support::text(window.doc(), "chat-messages").contains("Stopped"));
-    } else {
-        window.wait(|doc| {
-            doc.inner()
-                .query_selector("[data-status=error]")
-                .unwrap()
-                .is_some()
-        });
-    }
+    assert_offline_backend_picker(&mut window, live);
 
-    if !live {
-        let history = support::text(window.doc(), "chat-messages");
-        key(&mut window, Key::Character("m".into()), true);
-        window.wait(|doc| support::text(doc, "backend-picker").contains("codex"));
-        let picker = support::text(window.doc(), "backend-picker");
-        assert!(picker.contains("claude"));
-        assert_eq!(
-            picker
-                .matches("An agent can do anything its CLI can in this folder.")
-                .count(),
-            1
-        );
-        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-            capture::save(
-                window.doc.as_mut().unwrap(),
-                &Path::new(&directory).join("backend-picker.png"),
-            );
-        }
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
-        type_text(&mut window, "relative");
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait(|doc| support::text(doc, "backend-picker").contains("absolute path"));
-        for path in ["/tmp/tokamak-missing-folder/child", "/dev/null"] {
-            key(&mut window, Key::Character("a".into()), true);
-            type_text(&mut window, path);
-            key(&mut window, Key::Named(NamedKey::Enter), false);
-            window.wait(|doc| support::text(doc, "backend-picker").contains("does not exist"));
-            assert!(
-                !window
-                    .requests
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|request| request["name"] == "chat/threads:setBackend")
-            );
-            assert_eq!(support::text(window.doc(), "chat-messages"), history);
-        }
-        key(&mut window, Key::Character("a".into()), true);
-        let cwd = root().canonicalize().unwrap().to_str().unwrap().to_owned();
-        type_text(&mut window, &cwd);
-        key(&mut window, Key::Named(NamedKey::Enter), false);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
-        window.wait(|doc| support::text(doc, "chat-strip").contains("claude"));
-        assert!(
-            window
-                .requests
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|request| request["name"] == "chat/threads:setBackend"
-                    && request["args"]["backend"]
-                        == json!({"kind":"plugin", "plugin":"acp", "backendId":"claude", "settings":{"cwd":cwd}}))
-        );
-        assert_eq!(support::text(window.doc(), "chat-messages"), history);
-        key(&mut window, Key::Character("m".into()), true);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
-        window.click("id", "backend-choice-0");
-        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
-        window.doc.as_mut().unwrap().resolve_layout(0.0);
-        assert_eq!(support::editor(window.doc(), "backend-folder"), cwd);
-        key(&mut window, Key::Named(NamedKey::Escape), false);
-        assert_eq!(support::text(window.doc(), "chat-messages"), history);
-    }
+    create_second_chat_thread(&mut window, &first);
+    assert_chat_thread_navigation(&mut window, &first, live);
+    assert_chat_rename(&mut window);
 
-    type_text(&mut window, "draft to keep");
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
-    type_text(&mut window, "Plan ");
-    key(&mut window, Key::Character("2".into()), false);
-    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
-    assert_eq!(support::editor(window.doc(), "chat-input"), "Plan 2");
-    type_text(&mut window, "026");
-    assert!(support::text(window.doc(), "chat-map").contains("No threads found"));
-    key(&mut window, Key::Named(NamedKey::Escape), false);
-    assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    key(&mut window, Key::Character("r".into()), false);
-    assert!(
-        window
-            .doc()
-            .inner()
-            .get_element_by_id("chat-rename")
-            .is_some()
-    );
-    key(&mut window, Key::Named(NamedKey::Enter), true);
-    window.wait(|doc| {
-        support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != first)
-    });
-    let second = selected(&window);
-    window.wait(|doc| doc.inner().get_element_by_id("chat-map").is_none());
-    assert!(
-        window
-            .doc()
-            .inner()
-            .get_element_by_id("chat-rename")
-            .is_none()
-    );
-    assert!(
-        window
-            .doc()
-            .inner()
-            .get_element_by_id("chat-input")
-            .is_some()
-    );
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    window.wait(|doc| support::text(doc, "chat-map").contains("New thread"));
-    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-        capture::save(
-            window.doc.as_mut().unwrap(),
-            &Path::new(&directory).join("map-open.png"),
-        );
-    }
-    key(&mut window, Key::Named(NamedKey::ArrowDown), false);
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    assert_eq!(selected(&window), first);
-    window.doc.as_mut().unwrap().resolve_layout(0.0);
-    if live {
-        window.wait(|doc| support::text(doc, "chat-messages").contains("Stopped"));
-        window.doc.as_mut().unwrap().resolve_layout(0.0);
-        assert!(position(window.doc()).1 > 500.0);
-        assert!(
-            at_bottom(window.doc()),
-            "reopening an older thread must show its end"
-        );
-    }
-    assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    key(&mut window, Key::Character("1".into()), false);
-    assert_eq!(selected(&window), second);
-    assert_eq!(support::editor(window.doc(), "chat-input"), "");
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    window.click("data-thread", &first);
-    window.doc.as_mut().unwrap().resolve_layout(0.0);
-    type_text(&mut window, " + click");
-    let edited = support::editor(window.doc(), "chat-input");
-    assert!(edited.contains("draft to keep") && edited.contains(" + click"));
-    if !live {
-        key(&mut window, Key::Character("m".into()), true);
-        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
-        window.click("id", "backend-choice-0");
-        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
-    }
-    key(&mut window, Key::Character("n".into()), true);
-    window.wait(|doc| {
-        support::attr(doc, "chat-screen", "data-thread-id")
-            .is_some_and(|id| id != first && id != second)
-    });
-    assert!(
-        window
-            .doc()
-            .inner()
-            .get_element_by_id("backend-picker")
-            .is_none()
-            && window
-                .doc()
-                .inner()
-                .get_element_by_id("chat-input")
-                .is_some(),
-        "changing threads must close the picker and restore the composer"
-    );
-    // Rename persists, and Escape cancels editing without leaving Map.
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    let row = format!("[data-thread='{}']", selected(&window));
-    window.wait(|doc| doc.inner().query_selector(&row).unwrap().is_some());
-    key(&mut window, Key::Character("r".into()), false);
-    window.doc.as_mut().unwrap().resolve_layout(0.0);
-    key(&mut window, Key::Character("a".into()), true);
-    type_text(
-        &mut window,
-        "Daily notes with a deliberately long title that must leave room for the agent and turn count in the composer strip",
-    );
-    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
-        capture::save(
-            window.doc.as_mut().unwrap(),
-            &Path::new(&directory).join("ux-map-rename.png"),
-        );
-    }
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    window.wait(|doc| {
-        doc.inner().get_element_by_id("chat-rename").is_none()
-            && support::text(doc, "chat-map").contains("Daily notes")
-    });
-    key(&mut window, Key::Character("r".into()), false);
-    key(&mut window, Key::Named(NamedKey::Escape), false);
-    assert!(support::text(window.doc(), "chat-map").contains("Daily notes"));
-    key(&mut window, Key::Named(NamedKey::Escape), false);
-    window.doc.as_mut().unwrap().resolve_layout(0.0);
-    assert!(
-        support::text(window.doc(), "chat-strip").contains('…'),
-        "long title needs a visible ellipsis"
-    );
-    {
-        let inner = window.doc().inner();
-        let title = inner.get_element_by_id("chat-strip-title").unwrap();
-        let agent = inner.get_element_by_id("chat-strip-agent").unwrap();
-        let title = inner.get_client_bounding_rect(title).unwrap();
-        let agent = inner.get_client_bounding_rect(agent).unwrap();
-        assert!(
-            title.x + title.width <= agent.x,
-            "title must leave room for agent and turns"
-        );
-    }
+    assert_chat_backend_send(&mut window, &scratch, live);
 
-    key(&mut window, Key::Character("m".into()), true);
-    if live {
-        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
-    } else {
-        window.wait(|doc| support::text(doc, "chat-screen").contains("codex"));
-        key(&mut window, Key::Named(NamedKey::ArrowDown), false);
-    }
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
-    key(&mut window, Key::Character("a".into()), true);
-    let cwd = if live {
-        scratch.0.join("workspace")
-    } else {
-        root().canonicalize().unwrap()
-    };
-    type_text(&mut window, cwd.to_str().unwrap());
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
-    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
-    type_text(&mut window, "Say hello in five words");
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
-        let status = if live {
-            "[data-status=complete][data-role=assistant]"
-        } else {
-            "[data-status=error]"
-        };
-        doc.inner().query_selector(status).unwrap().is_some()
-    });
-
-    key(&mut window, Key::Named(NamedKey::Tab), false);
-    type_text(&mut window, "Daily");
-    window
-        .doc
-        .as_mut()
-        .unwrap()
-        .handle_ui_event(UiEvent::AppleStandardKeybinding(
-            "deleteToBeginningOfLine:".into(),
-        ));
-    assert_eq!(support::editor(window.doc(), "chat-input"), "Daily");
-    key(&mut window, Key::Named(NamedKey::Backspace), true);
-    assert!(support::text(window.doc(), "chat-map").contains("Delete? Enter / Esc"));
-    key(&mut window, Key::Named(NamedKey::Escape), false);
-    assert!(support::text(window.doc(), "chat-map").contains("Daily notes"));
-    key(&mut window, Key::Named(NamedKey::Backspace), true);
-    key(&mut window, Key::Named(NamedKey::Enter), false);
-    window.wait(|doc| !support::text(doc, "chat-map").contains("Daily notes"));
-
-    assert_eq!(window.subscriptions_to("threads:list"), 1);
-    assert_eq!(window.subscriptions_to("runs:running"), 1);
-    assert_eq!(window.subscriptions_to("runs:active"), 0);
+    assert_chat_delete_and_subscriptions(&mut window);
 }
 
 // Plugin-owned chat state outlives its view, and its shortcut works from a sibling view.
@@ -1952,8 +1138,6 @@ fn chat_session_and_global_shortcut_survive_navigation() {
 // failed fill cannot retire its siblings, editor, or chat's data subscriptions.
 #[test]
 fn composer_extensions_load_reload_and_unload_without_forking_chat() {
-    use blitz_traits::events::{BlitzKeyEvent, KeyState, UiEvent};
-    use keyboard_types::{Code, Key, Location, Modifiers, NamedKey};
     let scratch = Scratch::new();
     scratch.build("composer-mod");
     let service = Service::start(&scratch);
@@ -1985,6 +1169,962 @@ fn composer_extensions_load_reload_and_unload_without_forking_chat() {
             .get_element_by_id("mod-ignored")
             .is_none()
     );
+    assert_composer_insert_position(&mut window);
+    // Remove only the mod artifact; catalog reload retires its fills/wrapper live.
+    std::fs::rename(
+        scratch.0.join("installation/composer-mod"),
+        scratch.0.join("disabled-composer-mod"),
+    )
+    .unwrap();
+    service.cli(&["plugin", "reload", "composer-mod"]);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("mod-frame").is_none()
+            && doc.inner().get_element_by_id("mod-label").is_none()
+            && doc.inner().get_element_by_id("mod-insert").is_none()
+    });
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-input")
+            .is_some()
+    );
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert_eq!(
+        support::editor(window.doc(), "chat-input"),
+        "mod textmod text tail"
+    );
+    std::fs::rename(
+        scratch.0.join("disabled-composer-mod"),
+        scratch.0.join("installation/composer-mod"),
+    )
+    .unwrap();
+    service.cli(&["plugin", "reload", "composer-mod"]);
+    window.wait(|doc| doc.inner().get_element_by_id("mod-frame").is_some());
+    assert_eq!(window.subscriptions_to("threads:list"), 1);
+}
+
+const CHAT_SCREEN_SOCKET_WORKFLOW_SOURCE: &str = r#"
+import {readFileSync, writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const root = process.argv[1];
+const manifest = JSON.parse(readFileSync(root + '/manifest.json', 'utf8'));
+let source = readFileSync(root + '/worker.js', 'utf8');
+for (const command of ['claude-agent-acp', 'codex-acp']) {
+  const pattern = `command: "${command}"`;
+  if (!source.includes(pattern)) throw new Error('Offline adapter command missing: ' + command);
+  source = source.replaceAll(pattern, 'command: "/usr/bin/false"');
+}
+source = source.replaceAll('command: "gemini"', 'command: "/missing-tokamak-agent"');
+writeFileSync(root + '/worker.js', source);
+manifest.hashes['worker.js'] = createHash('sha256').update(source).digest('hex');
+writeFileSync(root + '/manifest.json', JSON.stringify(manifest));
+"#;
+
+fn chat_key(window: &mut Window, key: Key, meta: bool) {
+    use keyboard_types::Modifiers;
+    chat_modified_key(
+        window,
+        key,
+        if meta {
+            Modifiers::META
+        } else {
+            Modifiers::empty()
+        },
+    );
+}
+
+fn chat_modified_key(window: &mut Window, key: Key, modifiers: Modifiers) {
+    use blitz_traits::events::*;
+    use keyboard_types::{Code, Location};
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::KeyDown(BlitzKeyEvent {
+            key,
+            code: Code::Unidentified,
+            text: None,
+            modifiers,
+            location: Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: KeyState::Pressed,
+        }));
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+}
+
+fn chat_type_text(window: &mut Window, text: &str) {
+    use blitz_traits::events::*;
+
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::Ime(BlitzImeEvent::Commit(text.into())));
+}
+
+fn chat_call(service: &Service, kind: &str, name: &str, args: Value) -> Value {
+    use futures_util::{SinkExt, StreamExt};
+
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let mut socket = socket::connect(&service.directory).await.unwrap();
+            socket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    json!({"type": kind, "id": 1, "name": name, "args": args})
+                        .to_string()
+                        .into(),
+                ))
+                .await
+                .unwrap();
+            loop {
+                let message = socket.next().await.unwrap().unwrap();
+                let event: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                if event["type"] == "response" && event["id"] == 1 {
+                    assert!(event["result"].get("Err").is_none(), "{event}");
+                    return event["result"]["Ok"].clone();
+                }
+            }
+        })
+}
+
+fn chat_selected(window: &Window) -> String {
+    support::attr(window.doc(), "chat-screen", "data-thread-id").unwrap()
+}
+
+fn chat_scroll(window: &mut Window, delta: f64) {
+    use blitz_traits::events::*;
+    use keyboard_types::Modifiers;
+    support::pointer(window.doc.as_mut().unwrap(), "chat-messages");
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::Wheel(BlitzWheelEvent {
+            delta: BlitzWheelDelta::Pixels(0.0, delta),
+            coords: PointerCoords {
+                page_x: 300.0,
+                page_y: 300.0,
+                screen_x: 300.0,
+                screen_y: 300.0,
+                client_x: 300.0,
+                client_y: 300.0,
+            },
+            buttons: MouseEventButtons::None,
+            mods: Modifiers::empty(),
+            element: Default::default(),
+        }));
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+}
+
+fn chat_position(doc: &NativeDocument) -> (f64, f64) {
+    let inner = doc.inner();
+    let node = inner
+        .get_node(inner.get_element_by_id("chat-messages").unwrap())
+        .unwrap();
+    (
+        node.scroll_offset().y,
+        node.final_layout().scroll_height() as f64,
+    )
+}
+
+fn chat_at_bottom(doc: &NativeDocument) -> bool {
+    let (top, bottom) = chat_position(doc);
+    (top - bottom).abs() <= 2.0
+}
+
+fn chat_configure_live_thread(service: &Service, thread: &str, cwd: &Path) {
+    let options = chat_call(service, "action", "chat/backends:list", json!({}));
+    let backend = options
+        .as_array()
+        .and_then(|options| options.first())
+        .expect("Install claude-agent-acp or codex-acp for live chat tests");
+    let settings = chat_call(
+        service,
+        "action",
+        "chat/backends:configure",
+        json!({
+            "plugin": backend["plugin"], "backendId": backend["id"], "settings": {"cwd": cwd}
+        }),
+    );
+    chat_call(
+        service,
+        "mutation",
+        "chat/threads:setBackend",
+        json!({
+            "threadId": thread, "backend": {"kind": "plugin", "plugin": backend["plugin"],
+                "backendId": backend["id"], "settings": settings}
+        }),
+    );
+}
+
+fn prepare_chat_installation(live: bool) -> (Scratch, bool) {
+    let scratch = Scratch::new();
+    let plugin = scratch.0.join("installation/chat/dist");
+    std::fs::create_dir_all(&plugin).unwrap();
+    for id in ["chat", "acp"] {
+        let destination = scratch.0.join(format!("installation/{id}/dist"));
+        std::fs::create_dir_all(&destination).unwrap();
+        for file in [
+            "manifest.json",
+            "bundle.js",
+            "bundle.js.map",
+            "worker.js",
+            "worker.js.map",
+            "worker-entry.js",
+            "api.ts",
+            "ui.js",
+            "ui.js.map",
+            "shell.html",
+            "styles.css",
+        ] {
+            if !root()
+                .join(format!("plugins/{id}/dist"))
+                .join(file)
+                .exists()
+            {
+                continue;
+            }
+            std::fs::copy(
+                root().join(format!("plugins/{id}/dist")).join(file),
+                destination.join(file),
+            )
+            .unwrap();
+        }
+    }
+    let quickstart = live && std::env::var("TOKAMAK_CHAT_QUICKSTART").as_deref() == Ok("1");
+    if quickstart {
+        let record = scratch.0.join("installation/record/dist");
+        std::fs::create_dir_all(&record).unwrap();
+        for file in [
+            "manifest.json",
+            "bundle.js",
+            "bundle.js.map",
+            "api.ts",
+            "ui.js",
+            "ui.js.map",
+            "shell.html",
+            "styles.css",
+        ] {
+            std::fs::copy(
+                root().join("app/tests/fixtures/record/dist").join(file),
+                record.join(file),
+            )
+            .unwrap();
+        }
+    }
+    std::fs::create_dir_all(scratch.0.join("server")).unwrap();
+    if live {
+        std::fs::create_dir_all(scratch.0.join("workspace")).unwrap();
+    } else {
+        // Keep the native offline fixture independent of installed adapters.
+        // It exercises the same backend contract through ordinary SDK actions.
+        success(
+            Command::new("bun")
+                .arg("-e")
+                .arg(CHAT_SCREEN_SOCKET_WORKFLOW_SOURCE)
+                .arg(scratch.0.join("installation/acp/dist")),
+        );
+    }
+    (scratch, quickstart)
+}
+
+fn open_chat_window(service: &Service, scratch: &Scratch, live: bool) -> Window {
+    let mut window = Window::open(&service.directory);
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .inner_mut()
+        .set_viewport(Viewport {
+            window_size: (680, 820),
+            ..Default::default()
+        });
+    window.wait(|doc| doc.inner().get_element_by_id("chat-screen").is_some());
+    window.wait(|doc| support::attr(doc, "chat-screen", "data-thread-id").is_some());
+    if live {
+        chat_configure_live_thread(
+            service,
+            &chat_selected(&window),
+            &scratch.0.join("workspace"),
+        );
+    }
+    let body = window
+        .doc()
+        .inner()
+        .query_selector("body")
+        .unwrap()
+        .unwrap();
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .inner_mut()
+        .mutate()
+        .clear_attribute(
+            body,
+            QualName::new(None, Namespace::from(""), "data-dev-nav".into()),
+        );
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    chat_key(&mut window, Key::Named(NamedKey::Tab), false);
+    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
+    chat_key(&mut window, Key::Named(NamedKey::Escape), false);
+    window
+}
+
+fn assert_chat_quickstart(window: &mut Window, service: &Service) {
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    chat_type_text(window, "Say hello in one short sentence.");
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+        doc.inner()
+            .query_selector("[data-role=assistant][data-status=complete]")
+            .unwrap()
+            .is_some()
+    });
+    let messages = chat_call(
+        service,
+        "query",
+        "chat/messages:list",
+        json!({"threadId": chat_selected(window)}),
+    );
+    let reply = messages.as_array().unwrap().last().unwrap();
+    assert_eq!(reply["role"], "assistant");
+    assert!(reply["parts"].as_array().unwrap().iter().any(|part| {
+        part["type"] == "text"
+            && part["text"]
+                .as_str()
+                .is_some_and(|text| !text.trim().is_empty())
+    }));
+    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+        capture::save(
+            window.doc.as_mut().unwrap(),
+            &Path::new(&directory).join("quickstart.png"),
+        );
+    }
+    println!(
+        "Quick start: Chat and Record loaded; native composer sent a message and rendered a live reply."
+    );
+}
+
+fn assert_live_chat_recovery(mut window: Window, service: &Service, live: bool) -> Window {
+    if live {
+        assert_live_markdown_reply(&mut window);
+        let thread = chat_selected(&window);
+        chat_call(
+            service,
+            "mutation",
+            "chat/send:start",
+            json!({"threadId": thread, "text": "Simulated interrupted reply", "token": "fixture-turn-token"}),
+        );
+        drop(window);
+        // No action owns this persisted run. A fresh launch starts observing it.
+        window = Window::open(&service.directory);
+        window
+            .doc
+            .as_mut()
+            .unwrap()
+            .inner_mut()
+            .set_viewport(Viewport {
+                window_size: (680, 820),
+                ..Default::default()
+            });
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+            doc.inner().get_element_by_id("chat-messages").is_some()
+                && support::text(doc, "chat-messages").contains("Interrupted")
+        });
+        assert!(
+            chat_call(service, "query", "chat/runs:running", json!({}))
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+        chat_type_text(&mut window, "Reply with one word: Recovered");
+        chat_key(&mut window, Key::Named(NamedKey::Enter), false);
+        window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |_| {
+            let messages = chat_call(
+                service,
+                "query",
+                "chat/messages:list",
+                json!({"threadId": thread}),
+            );
+            messages.as_array().unwrap().last().is_some_and(|message| {
+                message["role"] == "assistant" && message["status"] == "complete"
+            })
+        });
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=streaming]")
+                .unwrap()
+                .is_none()
+        });
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("recovery.png"),
+            );
+        }
+        println!("Interrupted run cleared after reopening; same thread completed another reply.");
+        chat_key(&mut window, Key::Character("n".into()), true);
+        window.wait(|doc| {
+            support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != thread)
+        });
+    }
+    window
+}
+
+fn submit_chat_composer(
+    window: &mut Window,
+    service: &Service,
+    scratch: &Scratch,
+    live: bool,
+) -> String {
+    if live {
+        chat_configure_live_thread(
+            service,
+            &chat_selected(window),
+            &scratch.0.join("workspace"),
+        );
+    }
+    let first = chat_selected(window);
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    let prompt = if live {
+        "Print exactly 60 numbered lines, each saying: A quiet line of text. No introduction."
+    } else {
+        "Say hello in five words"
+    };
+    chat_type_text(window, "   ");
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "   ");
+    chat_key(window, Key::Character("a".into()), true);
+    chat_type_text(window, prompt);
+    chat_modified_key(window, Key::Named(NamedKey::Enter), Modifiers::SHIFT);
+    chat_type_text(window, "Please.");
+    assert!(support::editor(window.doc(), "chat-input").contains("\nPlease."));
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| support::text(doc, "chat-messages").contains(prompt));
+    first
+}
+
+fn assert_chat_stream_and_cancel(window: &mut Window, service: &Service, first: &str, live: bool) {
+    if live {
+        assert_chat_autoscroll(window);
+        assert_completed_chat_scroll(window);
+        assert_chat_copy(window, service, first);
+        assert_chat_cancellation(window);
+    } else {
+        window.wait(|doc| {
+            doc.inner()
+                .query_selector("[data-status=error]")
+                .unwrap()
+                .is_some()
+        });
+    }
+}
+
+fn assert_offline_backend_picker(window: &mut Window, live: bool) {
+    if !live {
+        let history = support::text(window.doc(), "chat-messages");
+        chat_key(window, Key::Character("m".into()), true);
+        window.wait(|doc| support::text(doc, "backend-picker").contains("codex"));
+        let picker = support::text(window.doc(), "backend-picker");
+        assert!(picker.contains("claude"));
+        assert_eq!(
+            picker
+                .matches("An agent can do anything its CLI can in this folder.")
+                .count(),
+            1
+        );
+        if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+            capture::save(
+                window.doc.as_mut().unwrap(),
+                &Path::new(&directory).join("backend-picker.png"),
+            );
+        }
+        chat_key(window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+        chat_type_text(window, "relative");
+        chat_key(window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| support::text(doc, "backend-picker").contains("absolute path"));
+        for path in ["/tmp/tokamak-missing-folder/child", "/dev/null"] {
+            chat_key(window, Key::Character("a".into()), true);
+            chat_type_text(window, path);
+            chat_key(window, Key::Named(NamedKey::Enter), false);
+            window.wait(|doc| support::text(doc, "backend-picker").contains("does not exist"));
+            assert!(
+                !window
+                    .requests
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|request| request["name"] == "chat/threads:setBackend")
+            );
+            assert_eq!(support::text(window.doc(), "chat-messages"), history);
+        }
+        chat_key(window, Key::Character("a".into()), true);
+        let cwd = root().canonicalize().unwrap().to_str().unwrap().to_owned();
+        chat_type_text(window, &cwd);
+        chat_key(window, Key::Named(NamedKey::Enter), false);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
+        window.wait(|doc| support::text(doc, "chat-strip").contains("claude"));
+        assert!(
+            window
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|request| request["name"] == "chat/threads:setBackend"
+                    && request["args"]["backend"]
+                        == json!({"kind":"plugin", "plugin":"acp", "backendId":"claude", "settings":{"cwd":cwd}}))
+        );
+        assert_eq!(support::text(window.doc(), "chat-messages"), history);
+        chat_key(window, Key::Character("m".into()), true);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
+        window.click("id", "backend-choice-0");
+        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+        window.doc.as_mut().unwrap().resolve_layout(0.0);
+        assert_eq!(support::editor(window.doc(), "backend-folder"), cwd);
+        chat_key(window, Key::Named(NamedKey::Escape), false);
+        assert_eq!(support::text(window.doc(), "chat-messages"), history);
+    }
+}
+
+fn create_second_chat_thread(window: &mut Window, first: &str) {
+    chat_type_text(window, "draft to keep");
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
+    chat_type_text(window, "Plan ");
+    chat_key(window, Key::Character("2".into()), false);
+    assert!(window.doc().inner().get_element_by_id("chat-map").is_some());
+    assert_eq!(support::editor(window.doc(), "chat-input"), "Plan 2");
+    chat_type_text(window, "026");
+    assert!(support::text(window.doc(), "chat-map").contains("No threads found"));
+    chat_key(window, Key::Named(NamedKey::Escape), false);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    chat_key(window, Key::Character("r".into()), false);
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-rename")
+            .is_some()
+    );
+    chat_key(window, Key::Named(NamedKey::Enter), true);
+    window.wait(|doc| {
+        support::attr(doc, "chat-screen", "data-thread-id").is_some_and(|id| id != first)
+    });
+}
+
+fn assert_chat_thread_navigation(window: &mut Window, first: &str, live: bool) {
+    let second = chat_selected(window);
+    window.wait(|doc| doc.inner().get_element_by_id("chat-map").is_none());
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-rename")
+            .is_none()
+    );
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("chat-input")
+            .is_some()
+    );
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    window.wait(|doc| support::text(doc, "chat-map").contains("New thread"));
+    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+        capture::save(
+            window.doc.as_mut().unwrap(),
+            &Path::new(&directory).join("map-open.png"),
+        );
+    }
+    chat_key(window, Key::Named(NamedKey::ArrowDown), false);
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    assert_eq!(chat_selected(window), first);
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    if live {
+        window.wait(|doc| support::text(doc, "chat-messages").contains("Stopped"));
+        window.doc.as_mut().unwrap().resolve_layout(0.0);
+        assert!(chat_position(window.doc()).1 > 500.0);
+        assert!(
+            chat_at_bottom(window.doc()),
+            "reopening an older thread must show its end"
+        );
+    }
+    assert_eq!(support::editor(window.doc(), "chat-input"), "draft to keep");
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    chat_key(window, Key::Character("1".into()), false);
+    assert_eq!(chat_selected(window), second);
+    assert_eq!(support::editor(window.doc(), "chat-input"), "");
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    window.click("data-thread", first);
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    chat_type_text(window, " + click");
+    let edited = support::editor(window.doc(), "chat-input");
+    assert!(edited.contains("draft to keep") && edited.contains(" + click"));
+    if !live {
+        chat_key(window, Key::Character("m".into()), true);
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
+        window.click("id", "backend-choice-0");
+        window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+    }
+    chat_key(window, Key::Character("n".into()), true);
+    window.wait(|doc| {
+        support::attr(doc, "chat-screen", "data-thread-id")
+            .is_some_and(|id| id != first && id != second)
+    });
+    assert!(
+        window
+            .doc()
+            .inner()
+            .get_element_by_id("backend-picker")
+            .is_none()
+            && window
+                .doc()
+                .inner()
+                .get_element_by_id("chat-input")
+                .is_some(),
+        "changing threads must close the picker and restore the composer"
+    );
+}
+
+fn assert_chat_rename(window: &mut Window) {
+    // Rename persists, and Escape cancels editing without leaving Map.
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    let row = format!("[data-thread='{}']", chat_selected(window));
+    window.wait(|doc| doc.inner().query_selector(&row).unwrap().is_some());
+    chat_key(window, Key::Character("r".into()), false);
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    chat_key(window, Key::Character("a".into()), true);
+    chat_type_text(
+        window,
+        "Daily notes with a deliberately long title that must leave room for the agent and turn count in the composer strip",
+    );
+    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+        capture::save(
+            window.doc.as_mut().unwrap(),
+            &Path::new(&directory).join("ux-map-rename.png"),
+        );
+    }
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| {
+        doc.inner().get_element_by_id("chat-rename").is_none()
+            && support::text(doc, "chat-map").contains("Daily notes")
+    });
+    chat_key(window, Key::Character("r".into()), false);
+    chat_key(window, Key::Named(NamedKey::Escape), false);
+    assert!(support::text(window.doc(), "chat-map").contains("Daily notes"));
+    chat_key(window, Key::Named(NamedKey::Escape), false);
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    assert!(
+        support::text(window.doc(), "chat-strip").contains('…'),
+        "long title needs a visible ellipsis"
+    );
+    {
+        let inner = window.doc().inner();
+        let title = inner.get_element_by_id("chat-strip-title").unwrap();
+        let agent = inner.get_element_by_id("chat-strip-agent").unwrap();
+        let title = inner.get_client_bounding_rect(title).unwrap();
+        let agent = inner.get_client_bounding_rect(agent).unwrap();
+        assert!(
+            title.x + title.width <= agent.x,
+            "title must leave room for agent and turns"
+        );
+    }
+}
+
+fn assert_chat_backend_send(window: &mut Window, scratch: &Scratch, live: bool) {
+    chat_key(window, Key::Character("m".into()), true);
+    if live {
+        window.wait(|doc| doc.inner().get_element_by_id("backend-choice-0").is_some());
+    } else {
+        window.wait(|doc| support::text(doc, "chat-screen").contains("codex"));
+        chat_key(window, Key::Named(NamedKey::ArrowDown), false);
+    }
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| doc.inner().get_element_by_id("backend-folder").is_some());
+    chat_key(window, Key::Character("a".into()), true);
+    let cwd = if live {
+        scratch.0.join("workspace")
+    } else {
+        root().canonicalize().unwrap()
+    };
+    chat_type_text(window, cwd.to_str().unwrap());
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| doc.inner().get_element_by_id("backend-picker").is_none());
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    chat_type_text(window, "Say hello in five words");
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+        let status = if live {
+            "[data-status=complete][data-role=assistant]"
+        } else {
+            "[data-status=error]"
+        };
+        doc.inner().query_selector(status).unwrap().is_some()
+    });
+}
+
+fn assert_chat_delete_and_subscriptions(window: &mut Window) {
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    chat_type_text(window, "Daily");
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::AppleStandardKeybinding(
+            "deleteToBeginningOfLine:".into(),
+        ));
+    assert_eq!(support::editor(window.doc(), "chat-input"), "Daily");
+    chat_key(window, Key::Named(NamedKey::Backspace), true);
+    assert!(support::text(window.doc(), "chat-map").contains("Delete? Enter / Esc"));
+    chat_key(window, Key::Named(NamedKey::Escape), false);
+    assert!(support::text(window.doc(), "chat-map").contains("Daily notes"));
+    chat_key(window, Key::Named(NamedKey::Backspace), true);
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| !support::text(doc, "chat-map").contains("Daily notes"));
+
+    assert_eq!(window.subscriptions_to("threads:list"), 1);
+    assert_eq!(window.subscriptions_to("runs:running"), 1);
+    assert_eq!(window.subscriptions_to("runs:active"), 0);
+}
+
+fn assert_live_markdown_reply(window: &mut Window) {
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    chat_type_text(
+        window,
+        "Give me a short markdown list and a 3-line Python code block",
+    );
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait_with(Duration::from_secs(90), Duration::from_millis(10), |doc| {
+        doc.inner()
+            .query_selector("[data-role=assistant][data-status=complete] pre code")
+            .unwrap()
+            .is_some()
+    });
+    assert!(
+        window
+            .doc()
+            .inner()
+            .query_selector("[data-role=assistant] li")
+            .unwrap()
+            .is_some()
+    );
+    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+        capture::save(
+            window.doc.as_mut().unwrap(),
+            &Path::new(&directory).join("markdown.png"),
+        );
+    }
+}
+
+fn assert_chat_autoscroll(window: &mut Window) {
+    let mut previous = String::new();
+    let mut grew = false;
+    let mut paused: Option<(f64, f64)> = None;
+    let mut resumed = false;
+    let deadline = Instant::now() + Duration::from_secs(90);
+    while Instant::now() < deadline {
+        window.mailbox.drain(window.doc.as_mut().unwrap()).unwrap();
+        window.doc.as_mut().unwrap().resolve_layout(0.0);
+        let doc = window.doc();
+        assert!(
+            doc.inner()
+                .query_selector("[data-status=error]")
+                .unwrap()
+                .is_none(),
+            "{}",
+            support::text(doc, "chat-messages")
+        );
+        let streaming = doc
+            .inner()
+            .query_selector("[data-status=streaming]")
+            .unwrap();
+        if let Some(id) = streaming {
+            let text = doc.inner().get_node(id).unwrap().text_content();
+            if text != previous && !text.trim_start().starts_with('·') {
+                grew = true;
+                assert_scroll_following(window, &mut paused, &mut resumed);
+                previous = text;
+            }
+        } else if grew {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(grew, "no assistant text arrived while streaming");
+    assert!(resumed, "reply must grow after scrolling up and resuming");
+}
+
+fn assert_completed_chat_scroll(window: &mut Window) {
+    window.wait(|doc| {
+        doc.inner()
+            .query_selector("[data-status=streaming]")
+            .unwrap()
+            .is_none()
+    });
+    window.doc.as_mut().unwrap().resolve_layout(0.0);
+    let scroller = window
+        .doc()
+        .inner()
+        .get_element_by_id("chat-messages")
+        .unwrap();
+    let inner = window.doc().inner();
+    let node = inner.get_node(scroller).unwrap();
+    assert!(
+        node.final_layout().scroll_height() > 500.0,
+        "long reply must overflow"
+    );
+    drop(inner);
+    assert!(
+        chat_at_bottom(window.doc()),
+        "completed long reply must end at the bottom: {:?}",
+        chat_position(window.doc())
+    );
+    if let Ok(directory) = std::env::var("TK_CAPTURE_DIR") {
+        capture::save(
+            window.doc.as_mut().unwrap(),
+            &Path::new(&directory).join("ux-autoscroll.png"),
+        );
+    }
+}
+
+fn assert_chat_copy(window: &mut Window, service: &Service, first: &str) {
+    let messages = chat_call(
+        service,
+        "query",
+        "chat/messages:list",
+        json!({"threadId": first}),
+    );
+    let reply = messages.as_array().unwrap().last().unwrap()["parts"][0]["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    chat_modified_key(
+        window,
+        Key::Character("c".into()),
+        Modifiers::META | Modifiers::SHIFT,
+    );
+    window.wait(|doc| support::text(doc, "chat-strip").contains("COPIED"));
+    if cfg!(target_os = "macos") {
+        let output = std::process::Command::new("/usr/bin/pbpaste")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), reply);
+    }
+    window.wait(|doc| !support::text(doc, "chat-strip").contains("COPIED"));
+}
+
+fn assert_chat_cancellation(window: &mut Window) {
+    support::pointer(window.doc.as_mut().unwrap(), "chat-input");
+    chat_type_text(
+        window,
+        "Count from one to one hundred, one number per line.",
+    );
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    window.wait(|doc| {
+        doc.inner()
+            .query_selector("[data-status=streaming]")
+            .unwrap()
+            .is_some()
+    });
+    let sends = || {
+        window
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|request| request.to_string().contains("chat:send"))
+            .count()
+    };
+    let before = sends();
+    chat_type_text(window, "draft during run");
+    chat_key(window, Key::Named(NamedKey::Enter), false);
+    assert_eq!(
+        support::editor(window.doc(), "chat-input"),
+        "draft during run"
+    );
+    assert_eq!(
+        window
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|request| request.to_string().contains("chat:send"))
+            .count(),
+        before
+    );
+    chat_key(window, Key::Character("a".into()), true);
+    window
+        .doc
+        .as_mut()
+        .unwrap()
+        .handle_ui_event(UiEvent::AppleStandardKeybinding("deleteBackward:".into()));
+    assert_eq!(support::editor(window.doc(), "chat-input"), "");
+    chat_key(window, Key::Named(NamedKey::Tab), false);
+    window.wait(|doc| support::text(doc, "chat-map").contains("RUNNING"));
+    chat_key(window, Key::Named(NamedKey::Escape), false);
+    chat_key(window, Key::Named(NamedKey::Escape), false);
+    window.wait(|doc| {
+        doc.inner()
+            .query_selector("[data-status=cancelled]")
+            .unwrap()
+            .is_some()
+    });
+    assert!(support::text(window.doc(), "chat-messages").contains("Stopped"));
+}
+
+fn assert_scroll_following(
+    window: &mut Window,
+    paused: &mut Option<(f64, f64)>,
+    resumed: &mut bool,
+) {
+    let (top, bottom) = chat_position(window.doc());
+    if let Some((held_top, held_bottom)) = *paused {
+        assert!(
+            (top - held_top).abs() <= 2.0,
+            "streaming moved a paused conversation"
+        );
+        if bottom > held_bottom + 40.0 {
+            chat_scroll(window, -10000.0);
+            assert!(
+                chat_at_bottom(window.doc()),
+                "scrolling to the bottom must resume following"
+            );
+            *paused = None;
+            *resumed = true;
+        }
+    } else {
+        assert!(
+            chat_at_bottom(window.doc()),
+            "streaming must follow the newest content"
+        );
+        if bottom > 180.0 && !*resumed {
+            for _ in 0..240 {
+                chat_scroll(window, 0.5);
+            }
+            let (held_top, held_bottom) = chat_position(window.doc());
+            assert!(
+                held_top < top - 40.0,
+                "wheel must scroll up: {top} -> {held_top}, bottom {held_bottom}"
+            );
+            *paused = Some((held_top, held_bottom));
+        }
+    }
+}
+
+fn assert_composer_insert_position(window: &mut Window) {
+    use keyboard_types::{Code, Location};
     // Insert at the beginning of distinct native text, rather than appending.
     support::pointer(window.doc.as_mut().unwrap(), "chat-input");
     window
@@ -2025,36 +2165,4 @@ fn composer_extensions_load_reload_and_unload_without_forking_chat() {
         support::editor(window.doc(), "chat-input"),
         "mod textmod text tail"
     );
-    // Remove only the mod artifact; catalog reload retires its fills/wrapper live.
-    std::fs::rename(
-        scratch.0.join("installation/composer-mod"),
-        scratch.0.join("disabled-composer-mod"),
-    )
-    .unwrap();
-    service.cli(&["plugin", "reload", "composer-mod"]);
-    window.wait(|doc| {
-        doc.inner().get_element_by_id("mod-frame").is_none()
-            && doc.inner().get_element_by_id("mod-label").is_none()
-            && doc.inner().get_element_by_id("mod-insert").is_none()
-    });
-    assert!(
-        window
-            .doc()
-            .inner()
-            .get_element_by_id("chat-input")
-            .is_some()
-    );
-    window.doc.as_mut().unwrap().resolve_layout(0.0);
-    assert_eq!(
-        support::editor(window.doc(), "chat-input"),
-        "mod textmod text tail"
-    );
-    std::fs::rename(
-        scratch.0.join("disabled-composer-mod"),
-        scratch.0.join("installation/composer-mod"),
-    )
-    .unwrap();
-    service.cli(&["plugin", "reload", "composer-mod"]);
-    window.wait(|doc| doc.inner().get_element_by_id("mod-frame").is_some());
-    assert_eq!(window.subscriptions_to("threads:list"), 1);
 }

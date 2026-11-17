@@ -517,17 +517,7 @@ fn readonly_preserves_selection_copy_and_navigation_without_allowing_edits() {
     }
     policy(&mut doc, false, true, false, false);
     doc.handle_ui_event(UiEvent::AppleStandardKeybinding("selectAll:".into()));
-    let selected = doc
-        .inner()
-        .get_node(id(&doc, "editor"))
-        .unwrap()
-        .element_data()
-        .unwrap()
-        .text_input_data()
-        .unwrap()
-        .editor
-        .selected_text()
-        .map(str::to_owned);
+    let selected = selected_editor_text(&doc);
     assert_eq!(
         selected.as_deref(),
         Some("abc"),
@@ -545,17 +535,7 @@ fn readonly_preserves_selection_copy_and_navigation_without_allowing_edits() {
         "readonly must allow copy"
     );
     key(&mut doc, Key::Named(NamedKey::ArrowRight), false, false);
-    let selected = doc
-        .inner()
-        .get_node(id(&doc, "editor"))
-        .unwrap()
-        .element_data()
-        .unwrap()
-        .text_input_data()
-        .unwrap()
-        .editor
-        .selected_text()
-        .map(str::to_owned);
+    let selected = selected_editor_text(&doc);
     assert_eq!(
         selected, None,
         "readonly must allow navigation to collapse selection"
@@ -563,17 +543,7 @@ fn readonly_preserves_selection_copy_and_navigation_without_allowing_edits() {
     doc.handle_ui_event(UiEvent::AppleStandardKeybinding(
         "moveLeftAndModifySelection:".into(),
     ));
-    let selected = doc
-        .inner()
-        .get_node(id(&doc, "editor"))
-        .unwrap()
-        .element_data()
-        .unwrap()
-        .text_input_data()
-        .unwrap()
-        .editor
-        .selected_text()
-        .map(str::to_owned);
+    let selected = selected_editor_text(&doc);
     assert_eq!(
         selected.as_deref(),
         Some("c"),
@@ -839,4 +809,17 @@ fn observed_layout_reaches_js_after_layout_and_only_when_it_changes() {
     doc.resolve_layout(0.0);
     assert_eq!(reports(&doc), 4);
     assert!(doc.take_error().is_none());
+}
+
+fn selected_editor_text(doc: &NativeDocument) -> Option<String> {
+    doc.inner()
+        .get_node(id(doc, "editor"))
+        .unwrap()
+        .element_data()
+        .unwrap()
+        .text_input_data()
+        .unwrap()
+        .editor
+        .selected_text()
+        .map(str::to_owned)
 }

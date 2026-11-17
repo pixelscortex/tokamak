@@ -160,17 +160,7 @@ pub async fn serve(
                         if awaiting.as_ref().is_some_and(|expected| expected.matches(&event)) {
                             acknowledged = true;
                         }
-                        let delivered = output.as_ref().map(|output|
-                            output.send("connection:event", event));
-                        if output.as_ref().is_some_and(HostSender::is_document_retired) {
-                            output = None;
-                            closing = true;
-                            requests.close();
-                            None
-                        } else {
-                            delivered.and_then(Result::err)
-                                .map(|e| (Failure::Delivery, e.to_string()))
-                        }
+                        forward_native_event(&mut output, &mut closing, &mut requests, event)
                     },
                     Ok(None) => {
                         receiving = false;
@@ -201,32 +191,72 @@ pub async fn serve(
             },
             message = requests.recv(), if admission.is_none() && awaiting.is_none() => {
                 let Some(message) = message else { break };
-                match serde_json::from_str::<Option<Request>>(&message) {
-                    Ok(Some(request)) => {
-                        awaiting = Some(Completion::for_request(&request));
-                        // Retain the permit future AND completion obligation
-                        // through stop. Never cancel/retry possibly admitted work.
-                        admission = Some(Service::call(&mut sender, request));
-                    },
-                    Ok(None) => {
-                        output = None;
-                        closing = true;
-                        requests.close();
-                    },
-                    Err(error) => {
-                        let failure = Failure::Protocol {
-                            category: error.classify(),
-                            line: error.line(),
-                            column: error.column(),
-                        };
-                        fail(output.take(), failure, &error.to_string());
-                        closing = true;
-                        requests.close();
-                    },
+                if let Some(request) = parse_native_request(&message, &mut output, &mut closing, &mut requests) {
+                    awaiting = Some(Completion::for_request(&request));
+                    // Retain the permit future AND completion obligation through stop.
+                    // Never cancel/retry possibly admitted work.
+                    admission = Some(Service::call(&mut sender, request));
                 }
             }
         }
     }
+    finish_native_connection(backend, session, output).await
+}
+
+fn forward_native_event(
+    output: &mut Option<HostSender>,
+    closing: &mut bool,
+    requests: &mut mpsc::Receiver<String>,
+    event: server::Event,
+) -> Option<(Failure, String)> {
+    let delivered = output
+        .as_ref()
+        .map(|output| output.send("connection:event", event));
+    if output.as_ref().is_some_and(HostSender::is_document_retired) {
+        *output = None;
+        *closing = true;
+        requests.close();
+        None
+    } else {
+        delivered
+            .and_then(Result::err)
+            .map(|e| (Failure::Delivery, e.to_string()))
+    }
+}
+
+fn parse_native_request(
+    message: &str,
+    output: &mut Option<HostSender>,
+    closing: &mut bool,
+    requests: &mut mpsc::Receiver<String>,
+) -> Option<Request> {
+    match serde_json::from_str::<Option<Request>>(message) {
+        Ok(Some(request)) => Some(request),
+        Ok(None) => {
+            *output = None;
+            *closing = true;
+            requests.close();
+            None
+        }
+        Err(error) => {
+            let failure = Failure::Protocol {
+                category: error.classify(),
+                line: error.line(),
+                column: error.column(),
+            };
+            fail(output.take(), failure, &error.to_string());
+            *closing = true;
+            requests.close();
+            None
+        }
+    }
+}
+
+async fn finish_native_connection(
+    backend: Backend,
+    session: Session,
+    output: Option<HostSender>,
+) -> Result<(), server::Error> {
     if let Some(output) = output {
         finish(output, terminal_reason("Native connection closed"));
     }

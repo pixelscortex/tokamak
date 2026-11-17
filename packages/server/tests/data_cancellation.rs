@@ -198,26 +198,7 @@ async fn cancelled_definition_commit(disk: bool) {
             Some(tx) => tx,
             None => db.begin().await.unwrap(),
         };
-        let second = {
-            let mut attempt = 0;
-            let mut tx = writer;
-            loop {
-                match tx.insert(&rows, k(1)).await {
-                    Ok(id) => match tx.commit().await {
-                        Ok(()) => break id,
-                        Err(error) => assert!(error.is_retryable_conflict(), "{error:?}"),
-                    },
-                    Err(error) => {
-                        assert!(error.is_retryable_conflict(), "{error:?}");
-                        tx.rollback().await.unwrap();
-                    }
-                }
-                retries += 1;
-                backoff(attempt).await;
-                attempt += 1;
-                tx = db.begin().await.unwrap();
-            }
-        };
+        let second = insert_after_cancelled_definition(&db, &rows, writer, &mut retries).await;
         // The writer's success implies the definer's task released the
         // catalog gate, so its outcome (and event) is final by now.
         let mut read = db.read_only().await.unwrap();
@@ -280,11 +261,7 @@ async fn cancelled_row_commit(disk: bool) {
     for n in 0..ITERATIONS {
         let rows = table(&format!("rows{n}"));
         if n % 2 == 0 {
-            let mut seed = db.begin().await.unwrap();
-            let id = seed.insert(&rows, Object::new()).await.unwrap();
-            seed.delete(&id).await.unwrap();
-            seed.commit().await.unwrap();
-            assert_eq!(drain(&mut events).len(), 1);
+            seed_empty_cancel_table(&db, &rows, &mut events).await;
         }
         let mut writer = db.begin().await.unwrap();
         let row = writer.insert(&rows, k(1)).await.unwrap();
@@ -409,92 +386,20 @@ async fn cancelled_mutations_poison(disk: bool) {
         Op::Delete,
         Op::DefineIndex,
     ] {
-        let mut pending = 0;
-        for (attempt, budget) in BUDGETS.into_iter().enumerate() {
-            let fresh = table(&format!("fresh_{op:?}_{attempt}").to_lowercase());
-            let mut tx = db.begin().await.unwrap();
-            let early = tx.insert(&side, k(9)).await.unwrap();
-            spend_budget(budget).await;
-            let first = {
-                let mut future: Pin<Box<dyn Future<Output = Result<()>> + '_>> = match op {
-                    Op::Insert => Box::pin(async { tx.insert(&rows, k(2)).await.map(drop) }),
-                    Op::Patch => Box::pin(tx.patch(&seed, k(2))),
-                    Op::Replace => Box::pin(tx.replace(&seed, k(2))),
-                    Op::Delete => Box::pin(tx.delete(&seed)),
-                    Op::DefineIndex => Box::pin(tx.define_index(&fresh, "by_k", &["k"], false)),
-                };
-                poll_once(future.as_mut())
-                    .await
-                    .map(|result| result.unwrap())
-                // `future` is dropped here; if Pending, mid-flight.
-            };
-            if first.is_ready() {
-                // Completed without yielding at this budget: not a cancellation.
-                tx.rollback().await.unwrap();
-                continue;
-            }
-            pending += 1;
-            assert!(
-                matches!(tx.get(&seed).await, Err(Error::FailedTransaction)),
-                "{op:?} budget {budget}: later operation was allowed"
-            );
-            assert!(
-                matches!(tx.commit().await, Err(Error::FailedTransaction)),
-                "{op:?} budget {budget}: commit was allowed"
-            );
-            let mut read = db.read_only().await.unwrap();
-            assert_eq!(
-                read.get(&early).await.unwrap(),
-                None,
-                "{op:?}: earlier write saved"
-            );
-            assert!(read.query(&side).collect().await.unwrap().is_empty());
-            assert_eq!(
-                read.query(&rows).collect().await.unwrap(),
-                vec![original.clone()],
-                "{op:?} budget {budget}: table changed"
-            );
-            for name in &names {
-                assert_eq!(
-                    keys(&read.query(&rows).with_index(name).collect().await.unwrap()),
-                    vec![seed.to_string()],
-                    "{op:?} budget {budget}: index {name} changed"
-                );
-                assert!(
-                    read.query(&rows)
-                        .with_index(name)
-                        .eq("k", 2i64)
-                        .collect()
-                        .await
-                        .unwrap()
-                        .is_empty()
-                );
-            }
-            read.commit().await.unwrap();
-            if matches!(op, Op::DefineIndex) {
-                let mut read = db.read_only().await.unwrap();
-                assert!(
-                    read.query(&fresh)
-                        .with_index("by_k")
-                        .collect()
-                        .await
-                        .is_err(),
-                    "cancelled definition persisted"
-                );
-            }
-            assert!(
-                drain(&mut events).is_empty(),
-                "{op:?}: poisoned call published"
-            );
-        }
-        eprintln!(
-            "{op:?} disk={disk}: {pending}/{} first polls pending",
-            BUDGETS.len()
-        );
-        assert!(
-            pending > 0,
-            "{op:?} never yielded mid-flight; the cancellation case was not exercised"
-        );
+        assert_cancellation_budgets(
+            &MutationState {
+                db: &db,
+                rows: &rows,
+                side: &side,
+                seed: &seed,
+                original: &original,
+                names: &names,
+            },
+            &mut events,
+            op,
+            disk,
+        )
+        .await;
     }
 
     // A later, ordinary transaction still works and publishes once.
@@ -582,4 +487,165 @@ async fn cancelled_reads_keep_transaction(disk: bool) {
         );
     }
     db.close().await.unwrap();
+}
+
+async fn insert_after_cancelled_definition(
+    db: &Database,
+    rows: &Table,
+    writer: server::data::Transaction,
+    retries: &mut usize,
+) -> server::data::Id {
+    {
+        let mut attempt = 0;
+        let mut tx = writer;
+        loop {
+            match tx.insert(rows, k(1)).await {
+                Ok(id) => match tx.commit().await {
+                    Ok(()) => break id,
+                    Err(error) => assert!(error.is_retryable_conflict(), "{error:?}"),
+                },
+                Err(error) => {
+                    assert!(error.is_retryable_conflict(), "{error:?}");
+                    tx.rollback().await.unwrap();
+                }
+            }
+            *retries += 1;
+            backoff(attempt).await;
+            attempt += 1;
+            tx = db.begin().await.unwrap();
+        }
+    }
+}
+
+async fn seed_empty_cancel_table(db: &Database, rows: &Table, events: &mut Receiver<ChangeEvent>) {
+    let mut seed = db.begin().await.unwrap();
+    let id = seed.insert(rows, Object::new()).await.unwrap();
+    seed.delete(&id).await.unwrap();
+    seed.commit().await.unwrap();
+    assert_eq!(drain(events).len(), 1);
+}
+
+async fn assert_cancellation_budgets(
+    state: &MutationState<'_>,
+    events: &mut Receiver<ChangeEvent>,
+    op: Op,
+    disk: bool,
+) {
+    let MutationState {
+        db,
+        rows,
+        side,
+        seed,
+        original: _,
+        names: _,
+    } = *state;
+    let mut pending = 0;
+    for (attempt, budget) in BUDGETS.into_iter().enumerate() {
+        let fresh = table(&format!("fresh_{op:?}_{attempt}").to_lowercase());
+        let mut tx = db.begin().await.unwrap();
+        let early = tx.insert(side, k(9)).await.unwrap();
+        spend_budget(budget).await;
+        let first = {
+            let mut future: Pin<Box<dyn Future<Output = Result<()>> + '_>> = match op {
+                Op::Insert => Box::pin(async { tx.insert(rows, k(2)).await.map(drop) }),
+                Op::Patch => Box::pin(tx.patch(seed, k(2))),
+                Op::Replace => Box::pin(tx.replace(seed, k(2))),
+                Op::Delete => Box::pin(tx.delete(seed)),
+                Op::DefineIndex => Box::pin(tx.define_index(&fresh, "by_k", &["k"], false)),
+            };
+            poll_once(future.as_mut())
+                .await
+                .map(|result| result.unwrap())
+            // `future` is dropped here; if Pending, mid-flight.
+        };
+        if first.is_ready() {
+            // Completed without yielding at this budget: not a cancellation.
+            tx.rollback().await.unwrap();
+            continue;
+        }
+        pending += 1;
+        assert!(
+            matches!(tx.get(seed).await, Err(Error::FailedTransaction)),
+            "{op:?} budget {budget}: later operation was allowed"
+        );
+        assert!(
+            matches!(tx.commit().await, Err(Error::FailedTransaction)),
+            "{op:?} budget {budget}: commit was allowed"
+        );
+        assert_cancelled_rows_unchanged(state, &early, op, budget).await;
+        if matches!(op, Op::DefineIndex) {
+            let mut read = db.read_only().await.unwrap();
+            assert!(
+                read.query(&fresh)
+                    .with_index("by_k")
+                    .collect()
+                    .await
+                    .is_err(),
+                "cancelled definition persisted"
+            );
+        }
+        assert!(drain(events).is_empty(), "{op:?}: poisoned call published");
+    }
+    eprintln!(
+        "{op:?} disk={disk}: {pending}/{} first polls pending",
+        BUDGETS.len()
+    );
+    assert!(
+        pending > 0,
+        "{op:?} never yielded mid-flight; the cancellation case was not exercised"
+    );
+}
+
+struct MutationState<'a> {
+    db: &'a Database,
+    rows: &'a Table,
+    side: &'a Table,
+    seed: &'a server::data::Id,
+    original: &'a server::data::Document,
+    names: &'a [String],
+}
+
+async fn assert_cancelled_rows_unchanged(
+    state: &MutationState<'_>,
+    early: &server::data::Id,
+    op: Op,
+    budget: usize,
+) {
+    let MutationState {
+        db,
+        rows,
+        side,
+        seed,
+        original,
+        names,
+    } = *state;
+    let mut read = db.read_only().await.unwrap();
+    assert_eq!(
+        read.get(early).await.unwrap(),
+        None,
+        "{op:?}: earlier write saved"
+    );
+    assert!(read.query(side).collect().await.unwrap().is_empty());
+    assert_eq!(
+        read.query(rows).collect().await.unwrap(),
+        vec![original.clone()],
+        "{op:?} budget {budget}: table changed"
+    );
+    for name in names {
+        assert_eq!(
+            keys(&read.query(rows).with_index(name).collect().await.unwrap()),
+            vec![seed.to_string()],
+            "{op:?} budget {budget}: index {name} changed"
+        );
+        assert!(
+            read.query(rows)
+                .with_index(name)
+                .eq("k", 2i64)
+                .collect()
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+    read.commit().await.unwrap();
 }

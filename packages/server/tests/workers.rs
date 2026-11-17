@@ -315,27 +315,7 @@ fn busy_worker_and_children_die_with_server() {
 async fn real_turn(agent: &str) {
     let directory = tempfile::tempdir().unwrap();
     let plugins = directory.path().join("plugins");
-    for id in ["chat", "acp"] {
-        let output = Command::new("bun")
-            .args(["run", "plugin:build", &format!("plugins/{id}")])
-            .current_dir(root())
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let destination = plugins.join(id);
-        std::fs::create_dir_all(&destination).unwrap();
-        for entry in std::fs::read_dir(root().join(format!("plugins/{id}/dist"))).unwrap() {
-            let entry = entry.unwrap();
-            if entry.path().is_file() {
-                std::fs::copy(entry.path(), destination.join(entry.file_name())).unwrap();
-            }
-        }
-    }
+    build_chat_workers(&plugins);
     let cwd = directory.path().join("workspace");
     std::fs::create_dir(&cwd).unwrap();
     let server = Server::load_plugins(
@@ -347,32 +327,8 @@ async fn real_turn(agent: &str) {
     .unwrap();
     let mut session = server.connect().await.unwrap();
     let mut id = 0;
-    async fn call(
-        session: &mut server::Session,
-        id: &mut u64,
-        kind: &str,
-        name: &str,
-        args: Value,
-    ) -> Value {
-        *id += 1;
-        session
-            .sender()
-            .request(
-                serde_json::from_value(json!({"type":kind,"id":*id,"name":name,"args":args}))
-                    .unwrap(),
-            )
-            .unwrap();
-        let event = tokio::time::timeout(Duration::from_secs(120), session.recv())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        let Event::Response { result, .. } = event else {
-            panic!("{event:?}")
-        };
-        result.unwrap()
-    }
-    let thread = call(
+
+    let thread = call_turn_function(
         &mut session,
         &mut id,
         "action",
@@ -380,7 +336,7 @@ async fn real_turn(agent: &str) {
         json!({}),
     )
     .await;
-    call(&mut session, &mut id, "mutation", "chat/threads:setBackend", json!({"threadId":thread,"backend":{"kind":"plugin","plugin":"acp","backendId":agent,"settings":{"cwd":cwd}}})).await;
+    call_turn_function(&mut session, &mut id, "mutation", "chat/threads:setBackend", json!({"threadId":thread,"backend":{"kind":"plugin","plugin":"acp","backendId":agent,"settings":{"cwd":cwd}}})).await;
     session.sender().request(Request::Action {id:1000, name:"chat/chat:send".into(), args:json!({"threadId":thread,"text":"Reply with the single word: ready. Do not use tools."})}).unwrap();
     // A second session polls the public permission API without consuming the
     // action's response or lending its invocation any extra host capabilities.
@@ -394,13 +350,13 @@ async fn real_turn(agent: &str) {
                     break result.unwrap();
                 }
                 _ = poll.tick() => {
-                    let messages = call(&mut observer, &mut id, "query", "chat/messages:list", json!({"threadId":thread})).await;
+                    let messages = call_turn_function(&mut observer, &mut id, "query", "chat/messages:list", json!({"threadId":thread})).await;
                     if let Some(message) = messages.as_array().and_then(|messages| messages.last()) {
                         for part in message["parts"].as_array().unwrap() {
                             if part["type"] != "permission" || part["status"] != "pending" { continue; }
                             let option = part["options"].as_array().unwrap().iter().find(|option| option["kind"].as_str().unwrap_or("").starts_with("reject"));
                             if let Some(option) = option {
-                                call(&mut observer, &mut id, "mutation", "chat/permissions:answer", json!({"messageId":message["_id"],"requestId":part["requestId"],"optionId":option["optionId"]})).await;
+                                call_turn_function(&mut observer, &mut id, "mutation", "chat/permissions:answer", json!({"messageId":message["_id"],"requestId":part["requestId"],"optionId":option["optionId"]})).await;
                             }
                         }
                     }
@@ -408,7 +364,7 @@ async fn real_turn(agent: &str) {
             }
         }
     }).await.unwrap();
-    let messages = call(
+    let messages = call_turn_function(
         &mut session,
         &mut id,
         "query",
@@ -438,4 +394,53 @@ async fn real_claude() {
 #[ignore = "requires installed adapter and owner CLI login"]
 async fn real_codex() {
     real_turn("codex").await;
+}
+
+async fn call_turn_function(
+    session: &mut server::Session,
+    id: &mut u64,
+    kind: &str,
+    name: &str,
+    args: Value,
+) -> Value {
+    *id += 1;
+    session
+        .sender()
+        .request(
+            serde_json::from_value(json!({"type":kind,"id":*id,"name":name,"args":args})).unwrap(),
+        )
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(120), session.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let Event::Response { result, .. } = event else {
+        panic!("{event:?}")
+    };
+    result.unwrap()
+}
+
+fn build_chat_workers(plugins: &std::path::Path) {
+    for id in ["chat", "acp"] {
+        let output = Command::new("bun")
+            .args(["run", "plugin:build", &format!("plugins/{id}")])
+            .current_dir(root())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let destination = plugins.join(id);
+        std::fs::create_dir_all(&destination).unwrap();
+        for entry in std::fs::read_dir(root().join(format!("plugins/{id}/dist"))).unwrap() {
+            let entry = entry.unwrap();
+            if entry.path().is_file() {
+                std::fs::copy(entry.path(), destination.join(entry.file_name())).unwrap();
+            }
+        }
+    }
 }

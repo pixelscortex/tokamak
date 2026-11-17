@@ -1,5 +1,14 @@
 use super::*;
 
+struct Startup {
+    bundle: Option<Arc<Bundle>>,
+    space: DataSpace,
+    descriptor: Json,
+    kinds: BTreeMap<String, FunctionKind>,
+    plugins: Option<Arc<crate::plugins::Loaded>>,
+    plugin_root: Option<std::path::PathBuf>,
+}
+
 impl Server {
     pub async fn load(
         database: Database,
@@ -51,12 +60,14 @@ impl Server {
         Self::start(
             database,
             pool,
-            Some(bundle),
-            space,
-            descriptor,
-            kinds,
-            None,
-            None,
+            Startup {
+                bundle: Some(bundle),
+                space,
+                descriptor,
+                kinds,
+                plugins: None,
+                plugin_root: None,
+            },
         )
         .await
     }
@@ -97,12 +108,14 @@ impl Server {
         Self::start(
             database,
             pool,
-            None,
-            DataSpace::default(),
-            loaded.descriptor.clone(),
-            kinds,
-            Some(loaded),
-            Some(root.to_owned()),
+            Startup {
+                bundle: None,
+                space: DataSpace::default(),
+                descriptor: loaded.descriptor.clone(),
+                kinds,
+                plugins: Some(loaded),
+                plugin_root: Some(root.to_owned()),
+            },
         )
         .await
     }
@@ -110,13 +123,16 @@ impl Server {
     async fn start(
         mut database: Database,
         pool: Arc<Pool>,
-        bundle: Option<Arc<Bundle>>,
-        space: DataSpace,
-        descriptor: Json,
-        kinds: BTreeMap<String, FunctionKind>,
-        plugins: Option<Arc<crate::plugins::Loaded>>,
-        plugin_root: Option<std::path::PathBuf>,
+        startup: Startup,
     ) -> Result<Self, Error> {
+        let Startup {
+            bundle,
+            space,
+            descriptor,
+            kinds,
+            plugins,
+            plugin_root,
+        } = startup;
         let action_pool = match Pool::new_actions(PoolConfig {
             limits: pool.limits().clone(),
             ..PoolConfig::default()
