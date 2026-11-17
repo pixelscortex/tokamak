@@ -1,0 +1,32 @@
+.ci/check.sh
+  s_e7b9ff6bf26a52::t_569cba03b4c903 17
+  s_e7b9ff6bf26a52::t_3473c46d9bde0e 5-6,11,20
+.depot/workflows/ci.yml
+  s_e7b9ff6bf26a52::t_72d97d5d2ce4eb 41-45,47-52,61
+moon.yml
+  s_e7b9ff6bf26a52::t_569cba03b4c903 23
+.github/workflows/macos.yml
+  s_e7b9ff6bf26a52::t_72d97d5d2ce4eb 8,13,22
+.github/actionlint.yaml
+  s_e7b9ff6bf26a52::t_745dcedc2ddcbc 1-5
+README.md
+  s_e7b9ff6bf26a52::t_fecf7496de9cd6 54-63
+wiki/content/docs/index.mdx
+  s_e7b9ff6bf26a52::t_a16592b5b5f6ed 31-36,38,45-47,51-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c96692ba81a260df4cc091a436a90d163af9a7c",
+  "prompts": {},
+  "sessions": {
+    "s_e7b9ff6bf26a52": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9f7-32a3-7820-8068-2cbace84fb78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
