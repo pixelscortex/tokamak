@@ -1,17 +1,20 @@
 import { For, createSignal } from "solid-js";
+import {
+  Avatar,
+  Button,
+  Chip,
+  Icon,
+  Kbd,
+  StatusIcon,
+  Tabs,
+  Textarea,
+  icons,
+  type ButtonVariant,
+  type Status,
+} from "@tokamak/ui";
 import type { JSX } from "@solidjs/web";
-import { Avatar } from "@tokamak/ui/avatar";
-import { Button, type ButtonVariant } from "@tokamak/ui/button";
-import { Chip } from "@tokamak/ui/chip";
-import { Icon } from "@tokamak/ui/icon";
-import { icons } from "@tokamak/ui/icons";
-import { Kbd } from "@tokamak/ui/kbd";
-import { StatusIcon, type Status } from "@tokamak/ui/status-icon";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@tokamak/ui/tabs";
-import { Textarea } from "@tokamak/ui/textarea";
 import { Caption, Section } from "./frame.tsx";
-import { overContrast } from "./contrast.ts";
-import { Surface, type SurfaceTone } from "@tokamak/ui/surface";
+import { tokenContrast } from "./contrast.ts";
 
 const variants: ButtonVariant[] = ["brand", "primary", "outline", "destructive", "ghost"];
 const states = ["rest", "hover", "focus", "pressed", "disabled"] as const;
@@ -58,13 +61,13 @@ export function Buttons(): JSX.Element {
       </div>
       <div class="flex items-center gap-3">
         <Button variant="primary" size="lg">
-          Large · 40
+          Large · 48
         </Button>
         <Button size="lg" icon={icons.add}>
           New thread
         </Button>
         <Button variant="outline" icon={icons.add} label="Add" size="lg" />
-        <Caption>lg is for roomy regions only.</Caption>
+        <Caption>lg (48) matches a roomy row; use it only there.</Caption>
       </div>
     </Section>
   );
@@ -139,46 +142,53 @@ export function Fields(props: { theme: string }): JSX.Element {
         <Textarea aria-label={`Focused note, ${props.theme}`} data-preview="focus" placeholder="Focused" />
         <Textarea aria-label={`Disabled note, ${props.theme}`} disabled placeholder="Disabled" />
       </div>
-      <Tabs defaultValue="changes">
-        <TabsList aria-label={`Review panel, ${props.theme}`}>
-          <TabsTab value="files">Files</TabsTab>
-          <TabsTab value="changes">
+      <Tabs.Root defaultValue="changes">
+        <Tabs.List aria-label={`Review panel, ${props.theme}`}>
+          <Tabs.Tab value="files">Files</Tabs.Tab>
+          <Tabs.Tab value="changes">
             Changes <span class="text-data text-ink-3">4</span>
-          </TabsTab>
-          <TabsTab value="checks" data-preview="hover">
+          </Tabs.Tab>
+          <Tabs.Tab value="checks" data-preview="hover">
             Checks <span class="text-data text-ink-3">3</span>
-          </TabsTab>
-          <TabsTab value="review" disabled>
+          </Tabs.Tab>
+          <Tabs.Tab value="review" disabled>
             Review
-          </TabsTab>
-        </TabsList>
-        <TabsPanel value="files">
+          </Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="files">
           <p class="pt-3 text-row text-ink-2">Four files changed.</p>
-        </TabsPanel>
-        <TabsPanel value="changes">
+        </Tabs.Panel>
+        <Tabs.Panel value="changes">
           <p class="pt-3 text-row text-ink-2">+86 −21 across four files.</p>
-        </TabsPanel>
-        <TabsPanel value="checks">
+        </Tabs.Panel>
+        <Tabs.Panel value="checks">
           <p class="pt-3 text-row text-ink-2">Three checks passed.</p>
-        </TabsPanel>
-        <TabsPanel value="review">
+        </Tabs.Panel>
+        <Tabs.Panel value="review">
           <p class="pt-3 text-row text-ink-2">No review yet.</p>
-        </TabsPanel>
-      </Tabs>
+        </Tabs.Panel>
+      </Tabs.Root>
       <Caption>Tabs: selected, rest, hover (Checks), disabled (Review).</Caption>
     </Section>
   );
 }
 
-const tones: SurfaceTone[] = ["window", "stage", "tray", "card", "band"];
+const tones = ["window", "stage", "tray", "card", "band"] as const;
+const surfaceClass = {
+  window: "surface-window",
+  stage: "surface-stage",
+  tray: "surface-tray",
+  card: "surface-card",
+  band: "surface-band",
+} as const;
 
-function EdgeRatio(props: { tone: SurfaceTone }): JSX.Element {
+function EdgeRatio(props: { tone: (typeof tones)[number] }): JSX.Element {
   const [ratio, setRatio] = createSignal(0);
   return (
     <span
       class="text-data text-ink-3"
       ref={(element) =>
-        requestAnimationFrame(() => setRatio(overContrast(element, "edge-strong", props.tone)))
+        requestAnimationFrame(() => setRatio(tokenContrast(element, "edge-strong", props.tone)))
       }
     >
       edge {ratio().toFixed(2)}
@@ -192,7 +202,7 @@ export function OnSurfaces(): JSX.Element {
       <div class="flex flex-col">
         <For each={tones}>
           {(tone) => (
-            <Surface tone={tone} class="flex items-center gap-2 px-3 py-2">
+            <div class={`flex items-center gap-2 px-3 py-2 ${surfaceClass[tone]}`}>
               <span class="w-12 text-data text-ink-3">{tone}</span>
               <For each={variants}>
                 {(variant) => (
@@ -203,7 +213,7 @@ export function OnSurfaces(): JSX.Element {
               </For>
               <Button variant="outline" icon={icons.add} label={`Add on ${tone}`} tabindex={-1} />
               <EdgeRatio tone={tone} />
-            </Surface>
+            </div>
           )}
         </For>
       </div>

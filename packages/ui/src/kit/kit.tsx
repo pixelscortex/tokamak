@@ -2,35 +2,32 @@
   <Kit />
 
   Every token and primitive in dark and light side by side, in each state.
-  Mounted by the app at /kit. Imports its own stylesheet, so it renders
-  right whatever the host page loads.
+  Mounted by the app at /kit.
 */
 import { Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button } from "@tokamak/ui/button";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@tokamak/ui/tabs";
+import { Button, Tabs } from "@tokamak/ui";
 import { Buttons, Facts, Fields, OnSurfaces } from "./controls.tsx";
 import { Themes } from "./frame.tsx";
 import { Overlays } from "./overlays.tsx";
 import { Rows } from "./rows.tsx";
 import { Space, Tones, Type } from "./tokens.tsx";
-import "./kit.css";
 
 export function Kit(): JSX.Element {
   const [open, setOpen] = createSignal(false);
   return (
-    <div data-kit="" id="kit" data-theme="dark">
-      <Tabs defaultValue="tokens">
+    <div id="kit" data-theme="dark" class="surface-window">
+      <Tabs.Root defaultValue="tokens">
         <div class="flex items-center gap-4 bg-window px-8 pt-6 pb-4">
           <h2 class="text-read font-semibold text-ink">Tokamak UI kit</h2>
-          <TabsList aria-label="Kit sections">
-            <TabsTab value="tokens">Tokens</TabsTab>
-            <TabsTab value="controls">Controls</TabsTab>
-            <TabsTab value="rows">Rows</TabsTab>
-            <TabsTab value="overlays">Popups</TabsTab>
-          </TabsList>
+          <Tabs.List aria-label="Kit sections">
+            <Tabs.Tab value="tokens">Tokens</Tabs.Tab>
+            <Tabs.Tab value="controls">Controls</Tabs.Tab>
+            <Tabs.Tab value="rows">Rows</Tabs.Tab>
+            <Tabs.Tab value="overlays">Popups</Tabs.Tab>
+          </Tabs.List>
         </div>
-        <TabsPanel value="tokens">
+        <Tabs.Panel value="tokens">
           <Themes>
             {() => (
               <>
@@ -40,8 +37,8 @@ export function Kit(): JSX.Element {
               </>
             )}
           </Themes>
-        </TabsPanel>
-        <TabsPanel value="controls">
+        </Tabs.Panel>
+        <Tabs.Panel value="controls">
           <Themes>
             {(theme) => (
               <>
@@ -52,11 +49,11 @@ export function Kit(): JSX.Element {
               </>
             )}
           </Themes>
-        </TabsPanel>
-        <TabsPanel value="rows">
+        </Tabs.Panel>
+        <Tabs.Panel value="rows">
           <Themes>{(theme) => <Rows theme={theme} />}</Themes>
-        </TabsPanel>
-        <TabsPanel value="overlays">
+        </Tabs.Panel>
+        <Tabs.Panel value="overlays">
           <div class="flex items-center gap-4 bg-window px-8 pb-4">
             <Button variant="outline" onClick={() => setOpen(!open())}>
               {open() ? "Close the popups" : "Show the popups open"}
@@ -68,8 +65,8 @@ export function Kit(): JSX.Element {
           >
             <Themes>{(theme) => <Overlays theme={theme} open />}</Themes>
           </Show>
-        </TabsPanel>
-      </Tabs>
+        </Tabs.Panel>
+      </Tabs.Root>
     </div>
   );
 }

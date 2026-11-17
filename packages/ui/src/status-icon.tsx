@@ -1,15 +1,11 @@
 /*
-  <StatusIcon status="needs-you" />
-  <StatusIcon status="running" label="Add CSV export" />  → "Add CSV export, running"
+  <StatusIcon status="needs-you" label="Fix total rounding" />  → "Fix total rounding, needs you"
 
-  Status is an icon with one shape per state: a spinner for running, a lock
-  for needs you, a check for done, a cross for failed. Only needs you
-  (amber) and failed (red) are coloured; running and done take the tone of
-  the row (tertiary idle, ink when current). The word lives in the
-  accessible name, never on screen.
-  Slots: none. data-slot="status-icon", data-status.
+  One shape per state. Only needs you (amber) and failed (red) are coloured;
+  running and done take the row's tone. The word is in the name, not on screen.
 */
 import type { JSX } from "@solidjs/web";
+import { cn, tv } from "./cn.ts";
 import { Icon } from "./icon.tsx";
 import { icons } from "./icons.ts";
 
@@ -22,10 +18,27 @@ const shapes: Record<Status, { path: string; word: string }> = {
   failed: { path: icons.failed, word: "failed" },
 };
 
-export function StatusIcon(props: { status: Status; label?: string; size?: 12 | 16 }): JSX.Element {
+const statusVariants = tv({
+  base: "inline-flex shrink-0",
+  variants: {
+    status: {
+      running: "motion-safe:*:animate-spin",
+      "needs-you": "text-warn",
+      done: "",
+      failed: "text-removed",
+    },
+  },
+});
+
+export function StatusIcon(props: {
+  status: Status;
+  label?: string;
+  size?: 12 | 16;
+  class?: string;
+}): JSX.Element {
   const shape = () => shapes[props.status];
   return (
-    <span data-slot="status-icon" data-status={props.status}>
+    <span data-slot="status-icon" class={cn(statusVariants({ status: props.status }), props.class)}>
       <Icon
         path={shape().path}
         size={props.size}

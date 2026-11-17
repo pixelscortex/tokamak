@@ -1,7 +1,10 @@
 // Tokamak's own lint rules, in the ESLint plugin format (Oxlint loads it as a
-// JS plugin). concentric-radius: inside a rounded parent, a rounded child's
-// radius equals the parent's radius minus the parent's padding. It applies
-// when the child sits inside the corner's curve (padding < outer radius).
+// JS plugin).
+// concentric-radius: inside a rounded parent, a rounded child's radius equals
+// max(0, parent radius − parent padding). It applies when the child sits
+// inside the corner's curve (padding < outer radius). nest-*/rounded-inner
+// are concentric by construction.
+// density-inward: a density-* region inside a tighter one is an error.
 
 const radii = { none: 0, xs: 4, sm: 8, md: 12, lg: 16 };
 const nameOf = Object.fromEntries(Object.entries(radii).map(([name, px]) => [px, name]));
@@ -9,21 +12,22 @@ const spacing = { 0: 0, 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32, 12: 48, 16: 64 }
 const stepOf = Object.fromEntries(Object.entries(spacing).map(([step, px]) => [px, step]));
 
 // Primitives that draw their own surface: [radius, padding to their children].
+// tests/lint.test.ts checks these against the primitives' own classes.
 export const primitiveShapes = {
   Button: [8, null],
-  MenuTrigger: [8, null],
-  DialogTrigger: [8, null],
-  DialogClose: [8, null],
-  TooltipTrigger: [8, null],
-  SelectTrigger: [8, null],
+  "Menu.Trigger": [8, null],
+  "Dialog.Trigger": [8, null],
+  "Dialog.Close": [8, null],
+  "Tooltip.Trigger": [8, null],
+  "Select.Trigger": [8, null],
   Chip: [8, null],
   Row: [8, null],
-  RowOption: [8, null],
+  "RowList.Option": [8, null],
   Textarea: [8, null],
-  TabsTab: [8, null],
-  MenuContent: [12, 4],
-  SelectContent: [12, 4],
-  DialogContent: [16, 24],
+  "Tabs.Tab": [8, null],
+  "Menu.Content": [12, 4],
+  "Select.Content": [12, 4],
+  "Dialog.Content": [16, 24],
 };
 
 function staticClass(element) {
@@ -47,7 +51,10 @@ function staticClass(element) {
 
 function elementName(element) {
   const name = element.openingElement.name;
-  return name.type === "JSXIdentifier" ? name.name : undefined;
+  if (name.type === "JSXIdentifier") return name.name;
+  if (name.type === "JSXMemberExpression" && name.object.type === "JSXIdentifier")
+    return `${name.object.name}.${name.property.name}`;
+  return undefined;
 }
 
 // Reads the base classes (no variants such as hover: or md:) that matter here.
@@ -63,13 +70,18 @@ function shape(element) {
     paints: Boolean(primitive),
     clips: false,
     primitive: Boolean(primitive) && name,
+    inner: false,
   };
   let px;
   let py;
   for (const token of classes.split(/\s+/)) {
     if (!token || token.includes(":")) continue;
     let match;
-    if ((match = /^rounded(?:-(none|xs|sm|md|lg|full))?$/.exec(token))) {
+    if (token === "rounded-inner") result.inner = true;
+    else if ((match = /^nest-(xs|sm|md|lg)(?:\/(\d+))?$/.exec(token))) {
+      result.radius = radii[match[1]];
+      result.padding = spacing[match[2] ?? 0] ?? null;
+    } else if ((match = /^rounded(?:-(none|xs|sm|md|lg|full))?$/.exec(token))) {
       const key = match[1] ?? "sm";
       result.radius = key === "full" ? Infinity : radii[key];
       result.radiusClass = token;
@@ -101,7 +113,7 @@ const concentricRadius = {
         for (const child of parent.children) {
           if (child.type !== "JSXElement") continue;
           const inner = shape(child);
-          if (!inner || !inner.paints || inner.radius === Infinity) continue;
+          if (!inner || inner.inner || !inner.paints || inner.radius === Infinity) continue;
           if (outer.padding === 0 && outer.clips) continue;
           // A child further from the edge than the corner is deep sits clear of
           // the curve, like a button in a dialog's body: nothing to align.
@@ -136,9 +148,44 @@ const concentricRadius = {
   },
 };
 
+const tightness = { roomy: 0, normal: 1, dense: 2 };
+
+function densityOf(element) {
+  const classes = staticClass(element);
+  const match = classes && /(?:^|\s)density-(roomy|normal|dense)(?:\s|$)/.exec(classes);
+  return match ? match[1] : undefined;
+}
+
+const densityInward = {
+  meta: {
+    type: "problem",
+    docs: { description: "Density only gets tighter inward." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      JSXElement(element) {
+        const own = densityOf(element);
+        if (!own) return;
+        for (let node = element.parent; node; node = node.parent) {
+          if (node.type !== "JSXElement") continue;
+          const outer = densityOf(node);
+          if (!outer) continue;
+          if (tightness[own] < tightness[outer])
+            context.report({
+              node: element.openingElement,
+              message: `density-${own} sits inside density-${outer}; density only gets tighter inward. Use density-${outer} or remove it here.`,
+            });
+          return;
+        }
+      },
+    };
+  },
+};
+
 export const plugin = {
   meta: { name: "tokamak" },
-  rules: { "concentric-radius": concentricRadius },
+  rules: { "concentric-radius": concentricRadius, "density-inward": densityInward },
 };
 
 export default plugin;

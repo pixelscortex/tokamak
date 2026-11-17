@@ -1,24 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { icons } from "@tokamak/ui/icons";
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
-} from "@tokamak/ui/dialog";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@tokamak/ui/menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@tokamak/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@tokamak/ui/tooltip";
+import { Dialog, Menu, Select, Tooltip, icons } from "@tokamak/ui";
 import { Caption, Section } from "./frame.tsx";
 
 const densities = [
@@ -32,56 +13,56 @@ export function Overlays(props: { theme: string; open: boolean }): JSX.Element {
     <Section label="Primitives · Menu, Select, Tooltip, Dialog" title="Popups">
       <Caption>{props.open ? "Shown open. Escape closes; focus returns to the trigger." : "Closed."}</Caption>
       <div>
-        <Dialog>
-          <DialogTrigger variant="outline">Rename thread</DialogTrigger>
-          <DialogBackdrop />
-          <DialogContent>
-            <DialogTitle>Rename thread</DialogTitle>
-            <DialogDescription>Only you see the new name.</DialogDescription>
+        <Dialog.Root>
+          <Dialog.Trigger variant="outline">Rename thread</Dialog.Trigger>
+          <Dialog.Backdrop />
+          <Dialog.Content>
+            <Dialog.Title>Rename thread</Dialog.Title>
+            <Dialog.Description>Only you see the new name.</Dialog.Description>
             <div class="flex justify-end gap-2">
-              <DialogClose>Cancel</DialogClose>
-              <DialogClose variant="brand">Save</DialogClose>
+              <Dialog.Close>Cancel</Dialog.Close>
+              <Dialog.Close variant="brand">Save</Dialog.Close>
             </div>
-          </DialogContent>
-        </Dialog>
+          </Dialog.Content>
+        </Dialog.Root>
       </div>
       <div class="grid grid-cols-3 items-start gap-8">
         <div>
-          <Menu defaultOpen={props.open} modal={false}>
-            <MenuTrigger variant="ghost" icon={icons.more} label={`Thread actions, ${props.theme}`} />
-            <MenuContent align="start">
-              <MenuItem value="rename">Rename</MenuItem>
-              <MenuItem value="archive" shortcut="mod+e">
+          <Menu.Root defaultOpen={props.open} modal={false}>
+            <Menu.Trigger variant="ghost" icon={icons.more} label={`Thread actions, ${props.theme}`} />
+            <Menu.Content align="start">
+              <Menu.Item value="rename">Rename</Menu.Item>
+              <Menu.Item value="archive" shortcut="mod+e">
                 Archive
-              </MenuItem>
-              <MenuItem value="share" disabled>
+              </Menu.Item>
+              <Menu.Item value="share" disabled>
                 Share
-              </MenuItem>
-              <MenuSeparator />
-              <MenuItem value="delete" destructive>
+              </Menu.Item>
+              <Menu.Separator />
+              <Menu.Item value="delete" destructive>
                 Delete
-              </MenuItem>
-            </MenuContent>
-          </Menu>
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Root>
         </div>
         <div>
-          <Select defaultValue="normal" items={densities} defaultOpen={props.open} modal={false}>
-            <SelectLabel>Density, {props.theme}</SelectLabel>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="roomy">Roomy</SelectItem>
-              <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="dense">Dense</SelectItem>
-            </SelectContent>
-          </Select>
+          <Select.Root defaultValue="normal" items={densities} defaultOpen={props.open} modal={false}>
+            <Select.Label>Density, {props.theme}</Select.Label>
+            <Select.Trigger>
+              <Select.Value />
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="roomy">Roomy</Select.Item>
+              <Select.Item value="normal">Normal</Select.Item>
+              <Select.Item value="dense">Dense</Select.Item>
+            </Select.Content>
+          </Select.Root>
         </div>
         <div>
-          <Tooltip defaultOpen={props.open}>
-            <TooltipTrigger variant="ghost" icon={icons.search} label={`Search, ${props.theme}`} />
-            <TooltipContent>Search threads</TooltipContent>
-          </Tooltip>
+          <Tooltip.Root defaultOpen={props.open}>
+            <Tooltip.Trigger variant="ghost" icon={icons.search} label={`Search, ${props.theme}`} />
+            <Tooltip.Content>Search threads</Tooltip.Content>
+          </Tooltip.Root>
         </div>
       </div>
       <div aria-hidden="true" class="h-16" />

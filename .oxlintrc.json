@@ -68,6 +68,12 @@
       "rules": {
         "no-console": "off"
       }
+    },
+    {
+      "files": ["app/src/app.tsx", "app/src/controls.tsx"],
+      "rules": {
+        "shadcn/no-unknown-classes": "off"
+      }
     }
   ]
 }

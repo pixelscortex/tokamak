@@ -30,8 +30,8 @@
         "allow": ["layout"],
         "contracts": [
           {
-            "pattern": "^Surface$",
-            "allow": ["layout", "spacing", "rounded"]
+            "pattern": "^Icon$",
+            "allow": ["layout", "color"]
           }
         ],
         "message": {
@@ -40,6 +40,7 @@
         }
       }
     ],
-    "tokamak/concentric-radius": "error"
+    "tokamak/concentric-radius": "error",
+    "tokamak/density-inward": "error"
   }
 }

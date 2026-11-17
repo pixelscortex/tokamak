@@ -34,10 +34,34 @@ Everything else is built by each plugin from the tokens and the rules.
    @import "@tokamak/ui/theme.css";
    ```
 
-2. Use the primitives from `@tokamak/ui` (or one entry each, such as
-   `@tokamak/ui/button`). You may add layout classes to them (margin, width,
-   flex and grid placement); their look is theirs.
-3. Turn on the lint config. With Oxlint, extend it and repeat its `settings`
+2. Use the primitives from `@tokamak/ui`. Compound ones are namespaces:
+
+   ```tsx
+   import { Button, Dialog, icons } from "@tokamak/ui";
+
+   <Dialog.Root>
+     <Dialog.Trigger>Rename</Dialog.Trigger>
+     <Dialog.Backdrop />
+     <Dialog.Content>
+       <Dialog.Title>Rename thread</Dialog.Title>
+       <div class="flex justify-end gap-2">
+         <Dialog.Close>Cancel</Dialog.Close>
+         <Dialog.Close variant="brand">Save</Dialog.Close>
+       </div>
+     </Dialog.Content>
+   </Dialog.Root>;
+   ```
+
+   Namespaces: `Dialog`, `Menu`, `Select`, `Tooltip`, `Tabs`, `RowList`.
+   Single elements: `Button`, `Icon`, `Kbd`, `Chip`, `Avatar`, `StatusIcon`,
+   `Textarea`, `FileName`, `Row`. You may add layout classes to any part
+   (margin, width, flex and grid placement); its look is its own.
+
+3. Build everything else from tokens and helpers, the way the primitives
+   are built: the look of a primitive is its class list, in its own file,
+   with `tv` for variants and `cn` for merging (both from `@tokamak/ui`).
+   CSS files hold tokens and helpers only.
+4. Turn on the lint config. With Oxlint, extend it and repeat its `settings`
    block, because Oxlint's `extends` does not carry settings:
 
    ```json
@@ -58,26 +82,50 @@ Everything else is built by each plugin from the tokens and the rules.
    ```
 
 The lint config reports raw colours, arbitrary values, classes that do not
-exist in the theme (such as `p-5`), inline styles, restyled primitives and
-corners that are not concentric. Each message names what to use instead.
+exist in the theme (such as `p-5`), inline styles, restyled primitives,
+corners that are not concentric and a density looser than its container.
+Each message names what to use instead. It runs over `@tokamak/ui` itself
+with no exemptions.
+
+## Helpers
+
+Tailwind utilities defined with the tokens. Use them as classes.
+
+| Helper                                 | What it does                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| `surface-window` … `surface-band`      | Paints a region in one tone and sets `bg-hover` and `bg-selected` inside it.   |
+| `density-roomy`, `-normal`, `-dense`   | Sets row height and padding for rows inside; only tighter inward (linted).     |
+| `h-row`, `px-row`                      | A row's height and inline padding, read from the nearest density.              |
+| `nest-lg/1`                            | Radius and padding on a container; children take `rounded-inner`.              |
+| `rounded-inner`                        | `max(0, container radius − its padding)`: concentric by construction.          |
+| `text-read`, `-row`, `-label`, `-data` | The four type roles; `text-data` is mono.                                      |
+| `focus-ring`                           | The 2 px brand ring with a 2 px gap, on keyboard focus.                        |
+| `key`                                  | A pressable key: fading fill, `lip`, `highlight`, raised shadow, hover, press. |
+| `lip`, `highlight`                     | The key's parts: the dark bottom edge, the light top edge and inner ring.      |
+| `py-line`                              | Block padding that centres one row line in a 32 px control.                    |
+| `text-trim`                            | Centres text on its cap height where the webview supports it.                  |
+| `link`                                 | Brand, underlined, offset 0.2 em.                                              |
+| `light:`                               | A variant for light-theme-only adjustments.                                    |
 
 ## Tokens
 
-| Kind    | Names                                                                        |
-| ------- | ---------------------------------------------------------------------------- |
-| Tones   | `window`, `stage`, `tray`, `card`, `band`                                    |
-| Text    | `ink`, `ink-2`, `ink-3`                                                      |
-| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                        |
-| Brand   | `brand`, `brand-ink`, `brand-tint`                                           |
-| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                    |
-| State   | `hover`, `selected` (set by the surface underneath)                          |
-| Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono` |
-| Spacing | `1 2 3 4 6 8 12 16` (4, 8, 12, 16, 24, 32, 48, 64 px)                        |
-| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16             |
-| Other   | `shadow-raised` (buttons only), `max-w-read` (560 px)                        |
+| Kind    | Names                                                                                                    |
+| ------- | -------------------------------------------------------------------------------------------------------- |
+| Tones   | `window`, `stage`, `tray`, `card`, `band`                                                                |
+| Text    | `ink`, `ink-2`, `ink-3`                                                                                  |
+| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                                                    |
+| Brand   | `brand`, `brand-ink`, `brand-tint`                                                                       |
+| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                                                |
+| State   | `hover`, `selected` (set by the surface underneath)                                                      |
+| Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono`                             |
+| Spacing | `1 2 3 4 6 8 12 16` (4, 8, 12, 16, 24, 32, 48, 64 px)                                                    |
+| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16                                         |
+| Other   | `shadow-raised` (keys), `shadow-quiet` (outline), `max-w-read` 560, `max-w-dialog` 440, `min-w-menu` 192 |
 
 Colours are utilities: `bg-stage`, `text-ink-3`, `bg-added-tint`. Every other
 scale is cleared, so `p-5`, `rounded-xl` and `bg-zinc-800` do not exist.
+Colours are written in OKLCH; each value round-trips to the hex shown below,
+so the measured contrast is unchanged.
 
 ## Tones
 
@@ -104,8 +152,8 @@ band, at 4.61:1 in dark and 4.56:1 in light.
 
 Hover and selected fills depend on the surface underneath. On window and
 stage, hover is `tray` and selected is `card`, except on the light window,
-where card is invisible (1.02:1) and the selected fill is white. Wrap a region
-in `<Surface tone>` and use `bg-hover` and `bg-selected`; they follow it.
+where card is invisible (1.02:1) and the selected fill is white. Paint a
+region with `surface-*` and use `bg-hover` and `bg-selected`; they follow it.
 
 ## Colour
 
@@ -127,7 +175,7 @@ shades that have a job:
 | `brand-ink`  | Text on the brand fill     | `#0E021C` | `#FFFFFF` | 7.41 dark, 6.05 light                          |
 | `brand-tint` | A quiet brand wash         | `#231433` | `#F3EAFF` | brand on it: 6.35 dark, 5.19 light             |
 
-- Brand marks four things: the brand button, links (with an underline), the
+- Brand marks four things: the brand button, links (`link`: underlined, 0.2 em below the text), the
   keyboard focus ring and nothing else. Selected rows stay a neutral fill with
   ink and weight 500: they are many per screen, and colour there is noise.
 - Semantic colour appears only on status and on diff content. Chrome, prose and
@@ -156,15 +204,20 @@ sizes:
 - A container uses at most two sizes.
 - Numbers are right-aligned.
 - Prose stops at 560 px wide (`max-w-read`), about 75 characters per line.
+  In narrow prose columns add `hyphens-auto`; the page's `lang` must be
+  right.
+- File names truncate in the base name and keep the extension
+  (`<FileName>`); the full path stays in the accessible name.
 
 ## Spacing and radii
 
 One spacing scale: 4, 8, 12, 16, 24, 32, 48, 64. One radius scale: 4, 8, 12, 16.
 No other values.
 
-- **Nested corners:** inner radius = outer radius − the gap between them. The
-  lint rule `tokamak/concentric-radius` enforces it and names the radius to
-  use. It applies when the child sits inside the corner's curve (the gap is
+- **Nested corners:** inner radius = `max(0, outer radius − the gap)`. Use
+  `nest-*` on the container and `rounded-inner` on the child, and it holds by
+  construction. Otherwise the lint rule `tokamak/concentric-radius` checks it
+  and names the radius to use. It applies when the child sits inside the corner's curve (the gap is
   smaller than the outer radius) and paints a surface. A square child that
   paints inside a rounded parent is also wrong, unless the parent clips.
 - **Primitives that draw a surface** have a fixed radius: Button, Chip, Row,
@@ -195,10 +248,12 @@ padding that differs between axes.
 
 ## Buttons
 
-Every filled button is a key: the fill fades from the colour at the bottom to
-85% at the top; a 2 px `lip` inside the bottom edge (in light also a 1 px edge
-all round), a translucent white ring and a top `highlight`, and
-`shadow-raised`. Hover brightens it, pressing darkens it.
+Every filled button is a `key`: the fill fades from the colour at the bottom
+to 85% at the top, interpolated in OKLCH; a 2 px `lip` inside the bottom edge
+(in light also a 1 px edge all round), a translucent white ring and a top
+`highlight`, and `shadow-raised`. Hover brightens it, pressing darkens it.
+A variant is only its colours, for example `key from-brand to-brand/85
+text-brand-ink`.
 
 | Variant       | Fill               | Text        | Use                                          |
 | ------------- | ------------------ | ----------- | -------------------------------------------- |
@@ -209,7 +264,8 @@ all round), a translucent white ring and a top `highlight`, and
 | `ghost`       | none, `edge` hover | `ink-2`     | Icon buttons and quiet actions; no lip       |
 
 - At most one brand or primary button per region.
-- Sizes: `md` 32 (all of the app) and `lg` 40 (roomy regions only).
+- Sizes: `md` 32 (all of the app) and `lg` 48 (a roomy row; roomy regions
+  only).
 - An icon-only button needs a `label`; it becomes its name.
 - Disabled is half opacity.
 
@@ -223,9 +279,10 @@ Three densities over the same parts:
 | Normal  | 40         | 12             |
 | Dense   | 32         | 8              |
 
-A container sets its density with `<Density>`. Inside it, density can only get
-tighter. With no `<Density>`, normal applies. Density changes height and
-padding only; the text stays at the row role.
+A container sets its density with a `density-*` class. Inside it, density can
+only get tighter; the lint rule `tokamak/density-inward` reports a looser one.
+With none, normal applies. Density changes height and padding only; the text
+stays at the row role.
 
 ## Rows
 
@@ -274,6 +331,9 @@ words.
 - Prefer an icon to a word where the meaning is unambiguous.
 
 ## Controls
+
+- Icons are Remix "line" glyphs, whose stroke suits text at 400 to 500. Use
+  the "fill" glyph beside a 600 label.
 
 - Every click target is at least 32 × 32, even when the icon inside is 16.
 - Keyboard focus is a 2 px `brand` ring with a 2 px gap in the surface colour.
