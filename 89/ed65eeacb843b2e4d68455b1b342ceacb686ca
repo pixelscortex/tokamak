@@ -1,0 +1,34 @@
+app/tests/fixtures/integration/src/client/api.tsx
+  s_ea2d172c49b8f2::t_d345a994d770ee 5,22
+e2e/README.md
+  s_ea2d172c49b8f2::t_d345a994d770ee 38-39
+packages/ui/src/kit/command.tsx
+  s_ea2d172c49b8f2::t_717ee1628314d0 1-45
+packages/ui/src/kit/overlays.tsx
+  s_ea2d172c49b8f2::t_717ee1628314d0 3,14-18,20-31,33-70,72-77
+packages/ui/tests/lint.test.ts
+  s_ea2d172c49b8f2::t_717ee1628314d0 51,59-61
+e2e/browser/app.spec.ts
+  s_ea2d172c49b8f2::t_d345a994d770ee 73-76,94,96-99,103,108
+  s_ea2d172c49b8f2::t_efca9528f97611 1,5-9,11,17-22,25-27,30-32,35-38,64,66-72,77-93,95,100-102,104-107,109-125,153-155
+packages/ui/lint/plugin.js
+  s_ea2d172c49b8f2::t_717ee1628314d0 28-29
+packages/ui/tests/command.test.tsx
+  s_ea2d172c49b8f2::t_6c72a8e22cfbdf 1-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89ed65eeacb843b2e4d68455b1b342ceacb686ca",
+  "prompts": {},
+  "sessions": {
+    "s_ea2d172c49b8f2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf9fb17b-cf21-41ad-bed4-192900e9cec3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
