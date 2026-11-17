@@ -1,7 +1,7 @@
 import { For } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { TooltipTrigger } from "@ui-sdk/solid/tooltip";
-import { Tooltip } from "@tokamak/ui";
+import { Icon, Tooltip } from "@tokamak/ui";
 import type { PluginView } from "../plugins/views";
 import { useShell } from "./context";
 import { TipText } from "./control";
@@ -50,9 +50,13 @@ function RailItem(props: { view: PluginView }): JSX.Element {
           />
         )}
       >
-        <span aria-hidden="true" class="flex size-4 items-center justify-center">
-          {props.view.title.charAt(0).toUpperCase()}
-        </span>
+        {props.view.icon ? (
+          <Icon path={props.view.icon} />
+        ) : (
+          <span aria-hidden="true" class="flex size-4 items-center justify-center">
+            {props.view.title.charAt(0).toUpperCase()}
+          </span>
+        )}
       </TooltipTrigger>
       <Tooltip.Content side="right" sideOffset={4}>
         <TipText label={props.view.title} />

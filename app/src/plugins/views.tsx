@@ -30,6 +30,8 @@ export interface PluginView {
   plugin: string;
   route: string;
   title: string;
+  /** A single-colour 24 × 24 SVG path from the view's options, if it named one. */
+  icon?: string;
   generation: number;
 }
 export interface PluginRouting {
@@ -64,6 +66,7 @@ export function createPluginShell(
         plugin: c.plugin,
         route: `/p/${c.plugin}${c.options.route === "/" ? "" : c.options.route}`,
         title: String(c.options.title ?? c.options.label ?? c.id),
+        ...(typeof c.options.icon === "string" ? { icon: c.options.icon } : {}),
         generation: loader.version(c.plugin),
       })),
     );

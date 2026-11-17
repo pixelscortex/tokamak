@@ -77,6 +77,7 @@ function Tabs(): JSX.Element {
       <For each={nav.tabs()}>
         {(tab) => {
           const current = () => nav.active() === tab.href;
+          const title = () => shell.tabTitle(tab.href, tab.view.title);
           return (
             <div
               data-current={current() || undefined}
@@ -85,15 +86,16 @@ function Tabs(): JSX.Element {
               <button
                 type="button"
                 aria-current={current() ? "page" : undefined}
-                class="flex h-full min-w-0 flex-1 cursor-pointer items-center rounded-sm ps-3 text-start text-row focus-ring"
+                class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-sm ps-3 text-start text-row focus-ring"
                 onClick={() => nav.go(tab.href)}
               >
-                <span class="truncate">{tab.view.title}</span>
+                {tab.view.icon && <Icon path={tab.view.icon} class="text-ink-3" />}
+                <span class="truncate">{title()}</span>
               </button>
               <Show when={nav.tabs().length > 1}>
                 <button
                   type="button"
-                  aria-label={`Close ${tab.view.title}`}
+                  aria-label={`Close ${title()}`}
                   class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm text-ink-3 opacity-0 group-hover:opacity-100 group-data-current:opacity-100 hover:text-ink focus-visible:opacity-100 focus-ring"
                   onClick={() => nav.close(tab.href)}
                 >

@@ -1,7 +1,7 @@
 import { Match, Show, Switch } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Outlet } from "@tanstack/solid-router";
-import { RegionOutlet, useRegionFilled } from "@tokamak/sdk/client";
+import { RegionOutlet, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
 import { Icon, StatusIcon, icons } from "@tokamak/ui";
 import { showRail } from "./config";
 import { useShell } from "./context";
@@ -57,13 +57,14 @@ export function Frame(): JSX.Element {
 function Stage(): JSX.Element {
   const shell = useShell();
   const headerFilled = useRegionFilled("header");
+  const pageTitle = usePageTitleValue();
   const connection = shell.session.connection;
   return (
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md surface-stage">
       <header aria-label="Page header" class="flex h-12 shrink-0 items-center gap-2 ps-4 pe-2">
         <RegionOutlet name="header" />
         <Show when={!headerFilled() && shell.navigation.current()}>
-          {(view) => <h1 class="truncate text-row font-medium text-ink">{view().title}</h1>}
+          {(view) => <h1 class="truncate text-row font-medium text-ink">{pageTitle() ?? view().title}</h1>}
         </Show>
       </header>
       <main class="flex min-h-0 flex-1 flex-col overflow-auto">

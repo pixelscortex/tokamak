@@ -75,3 +75,48 @@ test("static plugin imports infer dependencies and styles remain optional", asyn
     await rm(root, { recursive: true, force: true });
   }
 }, 30000);
+
+test("a view may name an icon as a literal or a const path; anything else fails the build", async () => {
+  const { cp, mkdtemp, readFile, rm, writeFile } = await import("node:fs/promises");
+  const root = await mkdtemp(resolve(import.meta.dir, "fixtures/browser-icon-"));
+  const path = "M4 4H20V20H4Z";
+  const contributes = async () => {
+    const result = await build({
+      root,
+      configFile: false,
+      plugins: [tokamak()],
+      build: { write: false },
+      logLevel: "silent",
+    });
+    const output = Array.isArray(result) ? result[0]! : result;
+    if (!("output" in output)) throw new Error("Expected one build");
+    const manifest = output.output.find((file) => file.fileName === "manifest.json");
+    if (!manifest || manifest.type !== "asset") throw new Error("Missing manifest");
+    return JSON.parse(String(manifest.source)).plugin.contributes.view;
+  };
+  try {
+    await cp(resolve(import.meta.dir, "fixtures/browser"), root, {
+      recursive: true,
+      filter: (file) => !file.split("/").includes("dist"),
+    });
+    const view = resolve(root, "src/client/view.tsx");
+    const original = await readFile(view, "utf8");
+    const withOptions = (options: string, prefix = "") =>
+      writeFile(view, prefix + original.replace('view({ route: "/fixture" }', `view(${options}`));
+
+    await withOptions(`{ route: "/fixture", icon: "${path}" }`);
+    expect(await contributes()).toEqual([{ id: "FixtureView", route: "/fixture", icon: path }]);
+    await withOptions(`{ route: "/fixture", icon: mark }`, `const mark = "${path}";\n`);
+    expect(await contributes()).toEqual([{ id: "FixtureView", route: "/fixture", icon: path }]);
+    for (const [options, prefix] of [
+      [`{ route: "/fixture", icon: "<svg/>" }`, ""],
+      [`{ route: "/fixture", icon: mark }`, `let mark = String(Date.now());\n`],
+      [`{ route: "/fixture", title: "Fixture" }`, ""],
+    ]) {
+      await withOptions(options!, prefix);
+      await expect(contributes()).rejects.toThrow("static literal options");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60000);

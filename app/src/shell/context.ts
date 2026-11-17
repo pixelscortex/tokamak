@@ -26,6 +26,8 @@ export interface ShellState {
     toggle(): void;
   };
   panelFilled: Accessor<boolean>;
+  /** What a tab is called: the name its view gave the page when last open, else the view's title. */
+  tabTitle(href: string, fallback: string): string;
   paletteOpen: Accessor<boolean>;
   setPaletteOpen: Setter<boolean>;
 }

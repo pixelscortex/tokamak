@@ -1,4 +1,4 @@
-import { createContext, createSignal, onCleanup, Show, useContext } from "solid-js";
+import { createContext, createSignal, onCleanup, Show, useContext, type Accessor } from "solid-js";
 import { Portal, type JSX } from "@solidjs/web";
 
 export type RegionName = "sidebar" | "header" | "panel";
@@ -9,10 +9,13 @@ function createRegionState() {
   return { outlet, setOutlet, count, setCount };
 }
 function createRegions() {
+  const [titles, setTitles] = createSignal<readonly Accessor<string | undefined>[]>([], { ownedWrite: true });
   return {
     sidebar: createRegionState(),
     header: createRegionState(),
     panel: createRegionState(),
+    titles,
+    setTitles,
   };
 }
 const Regions = createContext<ReturnType<typeof createRegions> | null>(null);
@@ -65,3 +68,27 @@ export const Region = {
   Header: regionComponent("header"),
   Panel: regionComponent("panel"),
 };
+
+/**
+ * Names the page while the calling view is mounted: the shell shows it in the
+ * tab and the window title. Undefined falls back to the view's title.
+ */
+export function usePageTitle(title: Accessor<string | undefined>): void {
+  const regions = useContext(Regions);
+  if (!regions) return;
+  regions.setTitles((list) => [...list, title]);
+  onCleanup(() => regions.setTitles((list) => list.filter((item) => item !== title)));
+}
+
+/** The title the most recently mounted view gave its page, for the shell. */
+export function usePageTitleValue(): Accessor<string | undefined> {
+  const regions = useContext(Regions);
+  return () => {
+    const list = regions?.titles() ?? [];
+    for (let index = list.length - 1; index >= 0; index--) {
+      const value = list[index]!()?.trim();
+      if (value) return value;
+    }
+    return undefined;
+  };
+}

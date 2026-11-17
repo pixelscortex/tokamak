@@ -10,7 +10,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/solid-router";
-import { Region, RegionProvider } from "@tokamak/sdk/client";
+import { Region, RegionProvider, usePageTitle } from "@tokamak/sdk/client";
 import type { PluginShell, PluginView } from "../src/plugins/views";
 import { ShellContext } from "../src/shell/context";
 import { Frame } from "../src/shell/frame";
@@ -31,6 +31,7 @@ const view = (id: string, route: string, title = id): PluginView => ({
 const notes = view("Notes", "/", "Notes");
 const thread = view("Thread", "/t/:id", "Thread");
 const board = view("Board", "/board", "Board");
+const admin = { ...view("Admin", "/admin", "Admin"), icon: "M4 4H20V20H4Z" };
 
 function connected(views: () => readonly PluginView[]): Session {
   const connection: Connection = {
@@ -42,6 +43,11 @@ function connected(views: () => readonly PluginView[]): Session {
   return { connection: () => connection, retry() {} };
 }
 
+function Titled(props: { title: string }) {
+  usePageTitle(() => props.title);
+  return null;
+}
+
 /** The real frame and keys over a memory router, a fake session and fixture routes. */
 function mount(views: readonly PluginView[] = [notes, board], start = "/p/fixture") {
   const root = createRootRoute({
@@ -51,12 +57,13 @@ function mount(views: readonly PluginView[] = [notes, board], start = "/p/fixtur
       </RegionProvider>
     ),
   });
-  const page = (path: string, text: string, sidebar = false) =>
+  const page = (path: string, text: string, sidebar = false, title?: string) =>
     createRoute({
       getParentRoute: () => root,
       path,
       component: () => (
         <>
+          {title && <Titled title={title} />}
           {sidebar && (
             <Region.Sidebar>
               <p>Sidebar rows</p>
@@ -71,6 +78,7 @@ function mount(views: readonly PluginView[] = [notes, board], start = "/p/fixtur
       page("/", "Home"),
       page("/p/fixture", "Notes page", true),
       page("/p/fixture/board", "Board page"),
+      page("/p/fixture/admin", "Admin page", false, "Weekly admin"),
       page("/p/fixture/t/$id", "Thread page", true),
       createRoute({ getParentRoute: () => root, path: "/empty", component: NoPlugins }),
     ]),
@@ -247,4 +255,29 @@ test("a chosen theme survives a restart and System clears it", () => {
     expect(localStorage.getItem("tokamak.theme")).toBeNull();
     stop();
   });
+});
+
+test("a view's icon marks its rail entry and tab, and its page title names the tab and window", async () => {
+  const user = userEvent.setup();
+  mount([notes, board, admin]);
+  const rail = await screen.findByRole("navigation", { name: "Views" });
+  const adminLink = within(rail).getByRole("link", { name: "Admin" });
+  expect(adminLink.querySelector("svg path")?.getAttribute("d")).toBe("M4 4H20V20H4Z");
+  expect(within(rail).getByRole("link", { name: "Notes" }).textContent).toBe("N");
+
+  await user.click(adminLink);
+  const tabs = screen.getByRole("navigation", { name: "Open pages" });
+  await waitFor(() => expect(within(tabs).getByRole("button", { name: "Weekly admin" })).toBeTruthy());
+  expect(within(screen.getByRole("banner", { name: "Page header" })).getByRole("heading").textContent).toBe(
+    "Weekly admin",
+  );
+  expect(document.title).toBe("Weekly admin · Tokamak");
+
+  await user.click(within(rail).getByRole("link", { name: "Notes" }));
+  await waitFor(() => expect(document.title).toBe("Notes · Tokamak"));
+  expect(
+    within(tabs)
+      .getAllByRole("button", { name: /^(Notes|Weekly admin)$/ })
+      .map((tab) => tab.textContent),
+  ).toEqual(["Notes", "Weekly admin"]);
 });

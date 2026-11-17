@@ -5,7 +5,8 @@ export interface ContributionOptions {
   fill: { target: string; order?: number; fillId?: string };
   wrap: { target: string };
   replace: { target: string };
-  view: { route: string };
+  /** icon: one single-colour SVG path in a 24 × 24 box, shown in the rail, tabs and search. */
+  view: { route: string; icon?: string };
   itemRenderer: { type: string };
   toolbar: { label: string };
   command: { title: string };

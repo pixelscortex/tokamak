@@ -1,7 +1,7 @@
 import { For } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/solid/dialog";
-import { Command, Dialog, Kbd } from "@tokamak/ui";
+import { Command, Dialog, Icon, Kbd } from "@tokamak/ui";
 import { keys, useShell } from "./context";
 import type { ThemeChoice } from "./theme";
 
@@ -41,7 +41,12 @@ export function Palette(): JSX.Element {
             <Command.Group>
               <Command.GroupLabel>Views</Command.GroupLabel>
               <For each={views()}>
-                {(view) => <Command.Item value={`view:${view.plugin}/${view.id}`}>{view.title}</Command.Item>}
+                {(view) => (
+                  <Command.Item value={`view:${view.plugin}/${view.id}`}>
+                    {view.icon && <Icon path={view.icon} class="text-ink-3" />}
+                    {view.title}
+                  </Command.Item>
+                )}
               </For>
             </Command.Group>
             <Command.Separator />

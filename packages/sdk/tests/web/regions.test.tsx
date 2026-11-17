@@ -1,7 +1,14 @@
 import { expect, test } from "vitest";
 import { createContext, createSignal, Errored, flush, Show, useContext } from "solid-js";
 import { render } from "@solidjs/web";
-import { Region, RegionOutlet, RegionProvider, useRegionFilled } from "../../client";
+import {
+  Region,
+  RegionOutlet,
+  RegionProvider,
+  usePageTitle,
+  usePageTitleValue,
+  useRegionFilled,
+} from "../../client";
 
 test("regions retain view context, append in mount order, and retire with the view", () => {
   const Context = createContext("missing");
@@ -141,6 +148,50 @@ test("region failures reach the view error boundary", () => {
   try {
     flush();
     expect(root.textContent).toBe("view fallback");
+  } finally {
+    dispose();
+  }
+});
+
+test("a view names its page while mounted; the newest named view wins and blank falls back", () => {
+  const [inner, setInner] = createSignal(true);
+  const [name, setName] = createSignal("Fix the cache");
+  let title!: () => string | undefined;
+  const Shell = () => {
+    title = usePageTitleValue();
+    return (
+      <Show when={true}>
+        <Named title={() => "Chat"} />
+        <Show when={inner()}>
+          <Named title={name} />
+        </Show>
+      </Show>
+    );
+  };
+  const Named = (props: { title: () => string | undefined }) => {
+    usePageTitle(props.title);
+    return null;
+  };
+  const dispose = render(
+    () => (
+      <RegionProvider>
+        <Shell />
+      </RegionProvider>
+    ),
+    document.createElement("div"),
+  );
+  try {
+    flush();
+    expect(title()).toBe("Fix the cache");
+    setName("Rename the thread");
+    flush();
+    expect(title()).toBe("Rename the thread");
+    setName("  ");
+    flush();
+    expect(title()).toBe("Chat");
+    setInner(false);
+    flush();
+    expect(title()).toBe("Chat");
   } finally {
     dispose();
   }

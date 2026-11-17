@@ -209,4 +209,12 @@ export function useShortcuts(): Shortcuts {
   return shortcuts;
 }
 
-export { Region, RegionOutlet, RegionProvider, useRegionFilled, type RegionName } from "./regions";
+export {
+  Region,
+  RegionOutlet,
+  RegionProvider,
+  useRegionFilled,
+  usePageTitle,
+  usePageTitleValue,
+  type RegionName,
+} from "./regions";

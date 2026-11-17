@@ -1,7 +1,7 @@
-import { createSignal, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Outlet, type AnyRouter } from "@tanstack/solid-router";
-import { RegionProvider, ShortcutContext, useRegionFilled } from "@tokamak/sdk/client";
+import { RegionProvider, ShortcutContext, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
 import type { PluginRouting } from "../plugins/views";
 import type { ServerEndpoint } from "../plugins/adapter";
@@ -68,6 +68,21 @@ export function createShellState(router: AnyRouter, session: Session): ShellStat
   const [sidebarOpen, setSidebarOpen] = createSignal<boolean>();
   const sidebarShown = () => sidebarFilled() && (sidebarOpen() ?? (isWide() || !panelFilled()));
 
+  // A tab keeps the name its page had while it was open; closed views are not mounted to ask.
+  const pageTitle = usePageTitleValue();
+  const [titles, setTitles] = createSignal<Readonly<Record<string, string>>>({}, { ownedWrite: true });
+  // Record on title changes only: on a route change the old view is still mounted for a moment.
+  createEffect(pageTitle, (title) => {
+    const href = untrack(navigation.active);
+    if (href && title) setTitles((previous) => ({ ...previous, [href]: title }));
+  });
+  createEffect(
+    () => pageTitle() ?? navigation.current()?.title,
+    (name) => {
+      document.title = name ? `${name} · Tokamak` : "Tokamak";
+    },
+  );
+
   const shell: ShellState = {
     router,
     session,
@@ -80,6 +95,7 @@ export function createShellState(router: AnyRouter, session: Session): ShellStat
       toggle: () => setSidebarOpen(!sidebarShown()),
     },
     panelFilled,
+    tabTitle: (href, fallback) => titles()[href] ?? fallback,
     paletteOpen,
     setPaletteOpen,
   };
