@@ -109,18 +109,18 @@ Tailwind utilities defined with the tokens. Use them as classes.
 
 ## Tokens
 
-| Kind    | Names                                                                                                    |
-| ------- | -------------------------------------------------------------------------------------------------------- |
-| Tones   | `window`, `stage`, `tray`, `card`, `band`                                                                |
-| Text    | `ink`, `ink-2`, `ink-3`                                                                                  |
-| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                                                    |
-| Brand   | `brand`, `brand-ink`, `brand-tint`                                                                       |
-| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                                                |
-| State   | `hover`, `selected` (set by the surface underneath)                                                      |
-| Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono`                             |
-| Spacing | `1 2 3 4 6 8 12 16` (4, 8, 12, 16, 24, 32, 48, 64 px)                                                    |
-| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16                                         |
-| Other   | `shadow-raised` (keys), `shadow-quiet` (outline), `max-w-read` 560, `max-w-dialog` 440, `min-w-menu` 192 |
+| Kind    | Names                                                                                                                        |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Tones   | `window`, `stage`, `tray`, `card`, `band`                                                                                    |
+| Text    | `ink`, `ink-2`, `ink-3`                                                                                                      |
+| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                                                                        |
+| Brand   | `brand`, `brand-ink`, `brand-tint`                                                                                           |
+| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                                                                    |
+| State   | `hover`, `selected` (set by the surface underneath)                                                                          |
+| Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono`                                                 |
+| Spacing | `1 2 3 4 6 8 12 16` (4, 8, 12, 16, 24, 32, 48, 64 px)                                                                        |
+| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16                                                             |
+| Other   | `shadow-raised` (keys), `shadow-quiet` (outline), `max-w-read` 560, `max-w-thread` 760, `max-w-dialog` 440, `min-w-menu` 192 |
 
 Colours are utilities: `bg-stage`, `text-ink-3`, `bg-added-tint`. Every other
 scale is cleared, so `p-5`, `rounded-xl` and `bg-zinc-800` do not exist.
@@ -204,6 +204,11 @@ sizes:
 - A container uses at most two sizes.
 - Numbers are right-aligned.
 - Prose stops at 560 px wide (`max-w-read`), about 75 characters per line.
+- A thread's column is 760 px (`max-w-thread`), centred on the stage. Widgets
+  in it (the work row's open list, plans, code blocks, tables) and the composer
+  take the whole column; prose inside it (paragraphs, headings, lists, quotes)
+  still stops at 560. Side padding sits outside the column, so it narrows with
+  the window.
   In narrow prose columns add `hyphens-auto`; the page's `lang` must be
   right.
 - File names truncate in the base name and keep the extension
@@ -361,7 +366,14 @@ The frame every plugin view sits in. Plugins do not draw it; they fill it.
   `@tokamak/sdk/client`. An empty region is hidden; an empty header shows the
   view's title. The sidebar is dense (32 px rows).
 - **Rail.** One entry per view, named by the view's title in its tooltip. The
-  current view is ink on the selected fill, the others tertiary.
+  current view is ink on the selected fill, the others tertiary. A view names
+  its icon with `view({ route, icon }, …)`: one single-colour 24 × 24 path, a
+  literal or a `const` string, shown in the rail, its tab and search. Without
+  one the rail shows the title's first letter.
+- **Page title.** `usePageTitle(() => title)` from `@tokamak/sdk/client` names
+  the page while the view is mounted (chat passes the thread's title). The
+  shell shows it in the tab, in an empty page header and in the window title;
+  without it they show the view's title.
 - **Keys.** Register through `useShortcuts()`. The shell holds ⌘B, ⌘K, ⌘[, ⌘],
   ⌃Tab and ⌃⇧Tab; show a key next to its control with `<Kbd>` in the tooltip.
 - **Unavailable controls** use `aria-disabled`, not `disabled`, so their tooltip

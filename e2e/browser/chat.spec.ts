@@ -58,9 +58,16 @@ test("a thread is created, answered with folded tool work, and listed", async ({
 
   const row = page.getByRole("listbox", { name: "Threads" }).getByRole("option", { name: prompt });
   await expect(row).toHaveAttribute("aria-selected", "true");
+  const header = page.getByRole("banner", { name: "Page header" });
+  await expect(header.getByRole("heading")).toHaveText([prompt]);
+  // The shell names the tab and the window after the thread, and shows chat's icon in the rail.
   await expect(
-    page.getByRole("banner", { name: "Page header" }).getByRole("heading", { name: prompt }),
+    page.getByRole("navigation", { name: "Open pages" }).getByRole("button", { name: prompt, exact: true }),
   ).toBeVisible();
+  await expect(page).toHaveTitle(`${prompt} · Tokamak`);
+  await expect(
+    page.getByRole("navigation", { name: "Views" }).getByRole("link", { name: "Chat" }).locator("svg path"),
+  ).toHaveCount(1);
 });
 
 test("a permission request asks in one band and the answer reaches the agent", async ({ page }) => {

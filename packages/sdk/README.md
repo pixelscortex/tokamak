@@ -331,3 +331,12 @@ unsubscribes the current query.
 wrappers/replacements, contribution helpers and brands, and shortcut contexts.
 These entries use Solid 2.0.0 and `@solidjs/web` 2.0.0. They do not mount the app,
 open sockets, or implement plugin module loading.
+
+## Views in the shell
+
+`view({ route, icon }, Component)` declares a page. `icon` is optional: one
+single-colour SVG path in a 24 × 24 box, written as a literal or a `const`
+string so the compiler can read it; the shell shows it in the rail, tabs and
+search. Inside a view, `Region.Sidebar`, `Region.Header` and `Region.Panel`
+place content in the shell, and `usePageTitle(() => title)` names the page for
+its tab and the window title while the view is mounted.

@@ -43,7 +43,10 @@ sidebar, the stage with its page header and footer, and an optional right panel.
 (`navigation.ts`) and the window's keys; `frame.tsx` lays them out. A plugin view
 fills the sidebar, header and panel with `Region.Sidebar`, `Region.Header` and
 `Region.Panel` from `@tokamak/sdk/client`; empty regions are hidden, and an empty
-header shows the view's title. The rail can be turned off in `shell/config.ts`.
+header shows the page title a view set with `usePageTitle`, else the view's
+title. Tabs keep the page title they last had; a view's optional `icon` marks
+it in the rail, tabs and search (the first letter otherwise). The rail can be
+turned off in `shell/config.ts`.
 
 Keys go through the SDK `Shortcuts` facade (`ShortcutContext`): ⌘B sidebar, ⌘K
 search, ⌘[ and ⌘] back and forward, ⌃Tab and ⌃⇧Tab next and previous tab (Ctrl
