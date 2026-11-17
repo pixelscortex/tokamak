@@ -1,0 +1,32 @@
+spikes/tauri-client/COMMANDS.md
+  s_66c35a5a097fcd::t_7dd5f4d092d6da 77
+  s_66c35a5a097fcd::t_2d029fe12c2bec 1-76,78-79
+spikes/tauri-client/REPORT.md
+  s_66c35a5a097fcd::t_6e883642ff5225 1-191
+spikes/tauri-client/evidence/blitz-release.txt
+  s_66c35a5a097fcd::t_898e065a6a744c 1-9
+spikes/tauri-client/evidence/sdk-solid2.txt
+  s_66c35a5a097fcd::t_d3043547eabe7d 1-14
+spikes/tauri-client/evidence/sizes.json
+  s_66c35a5a097fcd::t_f2ae7967102165 1-6
+spikes/tauri-client/evidence/tauri-release.txt
+  s_66c35a5a097fcd::t_c3a5af36513ec6 1-23
+spikes/tauri-client/evidence/workspace-check.txt
+  s_66c35a5a097fcd::t_4cc11e9ac54130 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3d25890198ace2f72e308b08f7f0666e729cc77",
+  "prompts": {},
+  "sessions": {
+    "s_66c35a5a097fcd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e995-2ce7-7df3-90d6-efb32287c462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
