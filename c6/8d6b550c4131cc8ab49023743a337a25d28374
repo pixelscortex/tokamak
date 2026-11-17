@@ -1,0 +1,25 @@
+app/package.json
+  s_cf9fff5e5a8ff2::t_3a3dc5231eb6ce 15
+app/src/api.ts
+  s_cf9fff5e5a8ff2::t_a7eaf7539c3f04 1,23
+app/src/host/endpoint.ts
+  s_cf9fff5e5a8ff2::t_4385dae2d6b30f 1-2,6
+bun.lock
+  s_cf9fff5e5a8ff2::t_d1c4e06d62e78e 21,500-501
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c68d6b550c4131cc8ab49023743a337a25d28374",
+  "prompts": {},
+  "sessions": {
+    "s_cf9fff5e5a8ff2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9d3-faf8-7322-8389-c5a9e05c861a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
