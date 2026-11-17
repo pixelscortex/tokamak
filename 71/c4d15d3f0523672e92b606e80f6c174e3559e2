@@ -1,0 +1,22 @@
+packages/ui/src/kit/controls.tsx
+  s_1022f30e07028d::t_1292628e008f8f 131
+wiki/content/docs/design/index.mdx
+  s_1022f30e07028d::t_0762d64cc9848e 7-9,17-18,20-22,27-65,78-81,87-99,105-108,110,121-123,129-134,141-142,144-149,154-155,158,165-173,180-184,186,188-202,210-214,220-224,226-228,236-240,248-249,261,271,279-281,294-296
+  s_1022f30e07028d::t_f1ebc91377266f 66-77,124-128,203-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71c4d15d3f0523672e92b606e80f6c174e3559e2",
+  "prompts": {},
+  "sessions": {
+    "s_1022f30e07028d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e8d6a29-be87-49dd-936e-facf7cb48a85",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
