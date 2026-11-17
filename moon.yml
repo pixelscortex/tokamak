@@ -50,6 +50,7 @@ tasks:
       proto run bun -- packages/sdk/tools/bundle.mjs plugins/chat/src/server --plugin chat &&
       proto run bun -- check --no-script --project plugins/chat/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/chat/src/client/tsconfig.json &&
+      proto run bun -- packages/build/src/build.ts plugins/acp &&
       proto run bun -- check --no-script --project plugins/acp/src/server/tsconfig.json
     options:
       cache: false
