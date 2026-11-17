@@ -1,0 +1,34 @@
+e2e/chat-sandbox.ts
+  s_452c1eccf4600a::t_9210ee33396dd1 106
+.ci/check.sh
+  s_452c1eccf4600a::t_9210ee33396dd1 7
+plugins/chat/tests/composer.test.tsx
+  s_452c1eccf4600a::t_60dd452974cb04 1-179,183,186,188,194,196-198
+  s_452c1eccf4600a::t_9cb0c9d3ee1789 180-182,184-185,187,189-193,195,199-209
+plugins/chat/vitest.config.ts
+  s_452c1eccf4600a::t_dbcf8a0b0cda1b 1-27
+  s_452c1eccf4600a::t_38817d38ff12a3 28-30
+.moon/workspace.yml
+  s_452c1eccf4600a::t_2c9ae0107ff033 14
+plugins/chat/tests/lib.test.ts
+  s_452c1eccf4600a::t_c47f51776452b7 1-139
+  s_452c1eccf4600a::t_0c1477661b9a3f 140-148
+plugins/chat/moon.yml
+  s_452c1eccf4600a::t_dbcf8a0b0cda1b 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20ea8c95acf3049c060566757585b58d82a8cd06",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
