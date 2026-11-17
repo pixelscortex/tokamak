@@ -1,5 +1,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./packages/ui/lint/oxlint.json"],
+  "settings": {
+    "shadcn": {
+      "ui": "@tokamak/ui",
+      "themeImports": ["^@tokamak/ui/"],
+      "note": "Tokamak design rules: wiki docs/design. Tokens: @tokamak/ui/theme.css."
+    }
+  },
   "ignorePatterns": [
     "**/vendor/**",
     "**/dist/**",
@@ -9,7 +17,8 @@
     "**/_generated/**",
     "packages/engine/tests/fixtures/array-initializer.js",
     "packages/engine/tests/fixtures/startup.js",
-    "plugins/chat/src/client/**"
+    "plugins/chat/src/client/**",
+    "packages/ui/lint/fixtures/**"
   ],
   "rules": {
     "max-depth": ["warn", 4],

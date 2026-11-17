@@ -1,0 +1,45 @@
+{
+  "$schema": "../../../node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["@shadcn/lint", "./plugin.js"],
+  "settings": {
+    "shadcn": {
+      "ui": "@tokamak/ui",
+      "themeImports": ["^@tokamak/ui/"],
+      "note": "Tokamak design rules: wiki docs/design. Tokens: @tokamak/ui/theme.css."
+    }
+  },
+  "rules": {
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": [
+      "error",
+      {
+        "message": "\"{{className}}\" is an arbitrary value. Use the scale: spacing 1 2 3 4 6 8 12 16 (4 to 64 px), radius rounded-xs, sm, md, lg (4 to 16 px), text roles text-read, text-row, text-label, text-data, and the colour tokens in @tokamak/ui/theme.css."
+      }
+    ],
+    "shadcn/no-unknown-classes": [
+      "error",
+      {
+        "message": "\"{{className}}\" does not exist in the Tokamak theme. {{suggestions}} Spacing steps are 1 2 3 4 6 8 12 16, radii xs sm md lg, text roles read row label data, and shadow-raised is the only shadow."
+      }
+    ],
+    "shadcn/no-inline-styles": "error",
+    "shadcn/require-static-classes": "error",
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"],
+        "contracts": [
+          {
+            "pattern": "^Surface$",
+            "allow": ["layout", "spacing", "rounded"]
+          }
+        ],
+        "message": {
+          "spacing": "<{{component}}> owns its padding. Use a size ({{sizes|none defined}}), or {{around}}.",
+          "default": "<{{component}}> owns its look; only layout classes (margin, width, flex and grid placement) may be added. Use a variant ({{variants|none defined}}) or build your own element from tokens."
+        }
+      }
+    ],
+    "tokamak/concentric-radius": "error"
+  }
+}

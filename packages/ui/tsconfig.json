@@ -1,1 +1,12 @@
-{ "extends": "../../tsconfig.json", "include": ["src/**/*.ts"] }
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web",
+    "types": ["node", "vite/client"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src", "tests", "lint", "vitest.config.ts"]
+}
