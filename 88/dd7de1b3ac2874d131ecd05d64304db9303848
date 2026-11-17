@@ -1,0 +1,40 @@
+app/scripts/prepare-host.ts
+  s_cf9fff5e5a8ff2::t_fe4dd6bc2b939f 27-29
+  s_cf9fff5e5a8ff2::t_b4d6147e396a55 1-26,30-34
+app/src/app.tsx
+  s_cf9fff5e5a8ff2::t_fe4dd6bc2b939f 5,35-36,38-40,54,56-57,60-62,66-68,73
+  s_cf9fff5e5a8ff2::t_6af5b69dcec2e8 14,16,26,28-29,31,34
+app/src-tauri/tauri.conf.json
+  s_cf9fff5e5a8ff2::t_fe4dd6bc2b939f 7-8,25,38-42
+app/src-tauri/Cargo.toml
+  s_cf9fff5e5a8ff2::t_1d6991020dbf58 12-15
+app/src-tauri/src/main.rs
+  s_cf9fff5e5a8ff2::t_1d6991020dbf58 3-4,7-8
+app/src-tauri/src/server.rs
+  s_cf9fff5e5a8ff2::t_1d6991020dbf58 1-37,40-138,140-188,190-289
+  s_cf9fff5e5a8ff2::t_26d18da12e53a3 38-39,139,189
+Cargo.lock
+  s_cf9fff5e5a8ff2::t_91313c2c3f45c1 4575,6718-6720,6723
+app/README.md
+  s_cf9fff5e5a8ff2::t_f102cfac085f58 13,19-27,29,32-33,36-44,54-57
+app/src/api.ts
+  s_cf9fff5e5a8ff2::t_e39549060d7405 21-29
+app/src/host/endpoint.ts
+  s_cf9fff5e5a8ff2::t_854aa6f8fadcd1 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "88dd7de1b3ac2874d131ecd05d64304db9303848",
+  "prompts": {},
+  "sessions": {
+    "s_cf9fff5e5a8ff2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9d3-faf8-7322-8389-c5a9e05c861a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
