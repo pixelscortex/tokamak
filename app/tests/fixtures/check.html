@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' blob: 'HOST_MAP_HASH'; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; object-src 'none'; base-uri 'self'"
+    />
+    <script type="importmap">
+      __TOKAMAK_HOST_IMPORT_MAP__
+    </script>
+    <title>Plugin loader browser check</title>
+  </head>
+  <body>
+    <pre id="result">Running…</pre>
+    <div id="stage"></div>
+    <script type="module" src="./browser.tsx"></script>
+  </body>
+</html>

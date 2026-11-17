@@ -2,12 +2,18 @@ import { createSignal, Show, For, onSettled } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
 import { Button } from "@ui-sdk/solid/button";
 import { Input } from "@ui-sdk/solid/input";
-import { api, websocketEndpoint } from "./api";
+import { api } from "./api";
 import { useQuery } from "@tokamak/sdk/solid";
 import { Controls } from "./controls";
 
-type Session = { client: TokamakClient; close(): void };
-export function App() {
+import { endpoint } from "./host/endpoint";
+import type { ServerEndpoint } from "./plugins/adapter";
+import { createPluginShell, type PluginRouting, type PluginShell } from "./plugins/views";
+
+type Session = { client: TokamakClient; plugins?: PluginShell; close(): void };
+export function App(
+  props: { routing?: PluginRouting; getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint> } = {},
+) {
   const [session, setSession] = createSignal<Session | null>(null);
   const [status, setStatus] = createSignal("Disconnected");
   let pending: WebSocket | undefined;
@@ -25,8 +31,10 @@ export function App() {
     disconnect();
     const current = attempt;
     setStatus("Connecting…");
-    const url = await websocketEndpoint();
+    const supplied = await (props.getEndpoint ?? endpoint)();
     if (current !== attempt) return;
+    const url = new URL(supplied.ws);
+    if (supplied.token) url.searchParams.set("token", supplied.token);
     const socket = (pending = new window.WebSocket(url));
     const timeout = setTimeout(() => socket.close(), 10_000);
     try {
@@ -45,11 +53,21 @@ export function App() {
       socket.addEventListener("close", () => {
         if (pending === socket) {
           setStatus("Connection closed; mutation outcomes may be unknown");
+          session()?.plugins?.dispose();
           setSession(null);
         }
       });
-      setSession({ client, close: () => transport.close() });
-      setStatus("Connected to real Tokamak server");
+      const plugins = props.routing && createPluginShell(client, supplied, transport, props.routing);
+      setSession({
+        client,
+        plugins,
+        close: () => {
+          plugins?.dispose();
+          transport.close();
+        },
+      });
+      await plugins?.connect();
+      if (pending === socket) setStatus("Connected to real Tokamak server");
     } catch (cause) {
       if (current === attempt) setStatus(String(cause));
       socket.close();
@@ -73,6 +91,21 @@ export function App() {
       <Show when={session()} fallback={<p class="muted">Waiting for the Tokamak server.</p>}>
         {(active) => <Chat session={active()} disconnect={disconnect} />}
       </Show>
+      <nav aria-label="Plugin views">
+        <For each={session()?.plugins?.views() ?? []}>
+          {(view) => (
+            <a
+              href={view.route}
+              onClick={(event) => {
+                event.preventDefault();
+                session()?.plugins?.navigation.navigate(view.route);
+              }}
+            >
+              {view.title}
+            </a>
+          )}
+        </For>
+      </nav>
       <Show when={!session()}>
         <Controls onNew={() => setStatus("Connect before creating a thread")} onDisconnect={disconnect} />
       </Show>
