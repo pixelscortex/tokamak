@@ -62,7 +62,7 @@ export function uiContributions(root: string) {
       ? extensionOptions(declaration, kind, checker, fail)
       : contributionOptions(declaration, fields[kind], optional[kind] ?? [], checker, fail);
     if (kind === "view") validateRoute(String(values.route!), fail);
-    if (values.icon !== undefined) validateIcon(values.icon, fail);
+    if (values.icon !== undefined) validateIcon(String(values.icon), fail);
     (contributes[kind] ??= []).push({ id: exported.name, ...values });
   }
   return { contributes };
