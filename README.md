@@ -60,7 +60,10 @@ ACP emits JUnit XML for Depot's test results dashboard, including failed runs.
 Moon restores the report when the heavy verification stage is cached. Inspect it
 with `depot tests <run-id> --job native`; other suites use workflow logs.
 
-After the main gates pass, Linux server binaries (x64/arm64) and macOS server +
+Releases are manual for now. Pushes to `main` run the checks but build nothing.
+To release, start both on `main`:
+`depot ci dispatch --repo pixelscortex/tokamak --workflow ci.yml --ref main` and
+`gh workflow run "macOS CI" --ref main`. After the gates pass, Linux server binaries (x64/arm64) and macOS server +
 desktop binaries (arm64) are archived with SHA-256 checksums. Each platform stages
 assets in a draft for that commit; the Actions publisher replaces the single
 [`nightly` prerelease](https://github.com/pixelscortex/tokamak/releases/tag/nightly)
