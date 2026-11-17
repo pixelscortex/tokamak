@@ -131,7 +131,11 @@ test("server artifacts omit UI, verify final hashes and preserve unchanged bytes
       });
       expect(result.status, result.stdout + result.stderr).toBe(0);
     };
-    expect(PLUGIN_UI_BUILD_ENABLED).toBe(false);
+    expect(PLUGIN_UI_BUILD_ENABLED).toBe(true);
+    await writeFile(
+      resolve(root, "vite.config.ts"),
+      `import {tokamak} from "${workspace}/packages/build/src/vite.ts"; export default {plugins:[tokamak({ui:false})]};`,
+    );
     build();
     const manifest = JSON.parse(await readFile(resolve(root, "dist/manifest.json"), "utf8"));
     expect(manifest.entries.ui).toBeUndefined();

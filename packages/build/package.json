@@ -8,6 +8,7 @@
     "./css": "./src/css.ts"
   },
   "dependencies": {
+    "@solidjs/vite-plugin": "3.0.0",
     "@tailwindcss/node": "4.3.4",
     "@tailwindcss/oxide": "4.3.4",
     "@tokamak/sdk": "workspace:*",

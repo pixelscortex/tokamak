@@ -6,10 +6,19 @@ import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { artifactBundle } from "./artifact-bundle.ts";
+import solid from "@solidjs/vite-plugin";
+import { clientSurface } from "./client-surface.ts";
+import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
 import { publicFunctions } from "./exports.ts";
-import { readDescriptor, serverDirectory, deriveInterfaces, deriveProviders } from "./descriptor.ts";
+import {
+  readDescriptor,
+  serverDirectory,
+  deriveInterfaces,
+  deriveProviders,
+  clientEntry,
+} from "./descriptor.ts";
 
-export const PLUGIN_UI_BUILD_ENABLED = false;
+export const PLUGIN_UI_BUILD_ENABLED = true;
 
 export function tokamak(
   options: { backend?: false; ui?: false; plugin?: PluginDefinition } = {},
@@ -34,10 +43,11 @@ export function tokamak(
           if (!existsSync(resolve(root, "src/server"))) options.backend = false;
           if (!existsSync(resolve(root, "src/client"))) options.ui = false;
         }
-        if (!PLUGIN_UI_BUILD_ENABLED && options.backend === false)
-          throw new Error("Plugin has no enabled targets while plugin UI builds are disabled");
-        if (PLUGIN_UI_BUILD_ENABLED && options.ui !== false)
-          throw new Error("The web plugin UI target is not implemented");
+        if (!existsSync(clientEntry(root))) options.ui = false;
+        if (root === resolve(fileURLToPath(new URL("../../../plugins/chat", import.meta.url))))
+          options.ui = false;
+        if (options.ui !== false) return uiBuildConfig(root);
+        if (options.backend === false) throw new Error("Plugin has no enabled targets");
         return {
           root,
           build: {
@@ -141,9 +151,18 @@ export function tokamak(
             JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: functions }, null, 2) + "\n",
         });
       },
-      generateBundle(_options, bundle, isWrite) {
-        return artifactBundle().call(this, _options, bundle, isWrite);
+      generateBundle: {
+        order: "post",
+        handler(_options, bundle, isWrite) {
+          return artifactBundle(root, plugin, options).call(this, _options, bundle, isWrite);
+        },
       },
     },
+    clientAssets(() => root),
+    clientSurface(
+      () => root,
+      () => plugin.id,
+    ),
+    solid(),
   ];
 }
