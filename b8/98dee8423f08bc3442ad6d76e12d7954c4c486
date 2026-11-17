@@ -1,0 +1,19 @@
+app/src/app.tsx
+  s_cf9fff5e5a8ff2::t_70127a50c09316 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b898dee8423f08bc3442ad6d76e12d7954c4c486",
+  "prompts": {},
+  "sessions": {
+    "s_cf9fff5e5a8ff2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9d3-faf8-7322-8389-c5a9e05c861a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
