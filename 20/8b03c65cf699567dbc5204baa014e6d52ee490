@@ -1,0 +1,200 @@
+moon.yml
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 26-33,125
+packages/server/src/plugins/manifest.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 177-180
+plugins/acp/src/server/turn/acp.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 3-4,40,46,51,75
+plugins/chat/src/server/api.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 13
+packages/server/src/data/transaction.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 248-267
+  s_c1ad3fecbe3bdd::t_e3778ffd8b18f0 268-269
+packages/server/tests/fixtures/plugins/b/backend/ops.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 9,11-18
+plugins/acp/src/server/turn/permission-poller.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-50
+packages/server/tests/build-actions.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,20,25,27-33,36-37,108-109,111,180-181,195-200
+packages/build/tests/run.sh
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 3
+packages/server/tests/sdk_transport.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 244,344,445,457-524
+packages/server/tests/fixtures/plugins/b/backend/determinism.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 2
+packages/sdk/tools/bundle.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 10-16,60-61,87,106,194-199,207
+e2e/run.ts
+  s_c1ad3fecbe3bdd::t_06e54cc9571ed9 1,65,179
+packages/server/tests/fixtures/plugins/a/backend/determinism.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 11,17-18
+packages/server/tests/workers.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 318,330-331,339,353,359,367,398-446
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 2-10,13-20,154
+plugins/acp/README.md
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 80-83
+packages/server/tests/fixtures/plugins/b/backend/_sample.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-16
+packages/build/src/vite.ts
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 31,73
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 8-9
+plugins/acp/src/server/turn/acp-turn.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 2,5-6,13,19,24
+packages/server/tests/service.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 236,495,795,848-974
+plugins/acp/src/server/events/acp-events.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 2-3,18
+packages/build/src/exports.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,24,37
+packages/server/src/protocol.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 9,12-15,86,88-91
+packages/server/src/plugins/loading.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 89,155-176
+  s_c1ad3fecbe3bdd::t_b69f963e73b195 177
+e2e/chat-sandbox.ts
+  s_c1ad3fecbe3bdd::t_06e54cc9571ed9 46-50,58
+packages/server/tests/fixtures/plugins/setup.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-15
+packages/server/tests/fixtures/plugins/a/backend/ops.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-2,9,19,25,28
+packages/server/tests/data.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 9-11,174-175,186,361-362,721-838
+packages/server/tests/fixtures/plugins/a/vite.config.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1
+packages/server/tests/schema_indexes.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 160,451,464,496,499,536,827,1164-1398
+packages/server/tests/data_cancellation.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 201,264,389-402,491-651
+.ci/check.sh
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 10-11
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 20
+  s_c1ad3fecbe3bdd::t_e322bbb7fd3b3c 12
+packages/server/src/host.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 48-56,58-68,124,234-291
+packages/server/src/service/subscriptions.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 62-70
+packages/server/tests/actions.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 20,101-106,109-127,129-133,138-141,143-145,147-158,163,165,167-170,178-180,483-524,567,576,582,585,597,600,629-801
+packages/server/Cargo.toml
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 34
+packages/server/tests/fixtures/plugins/a/backend/tsconfig.json
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1
+packages/server/tests/plugins.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 139,270,424,678-806,811-812,820,822
+.depot/workflows/ci.yml
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 25-38,40-43,45
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 39
+packages/server/src/actions.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 47-91,135-136,139,143-145,147-223
+packages/server/src/service/invocations.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 18-26
+packages/server/tests/build-worker.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,10
+packages/build/tests/plugin-fixtures.mjs
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 1-26,28-43
+  s_c1ad3fecbe3bdd::t_a05aec6e8459f5 27
+plugins/acp/src/server/turn/turn-buffer.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-79
+plugins/acp/src/server/tsconfig.json
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 3-11
+packages/build/tests/boundary.test.mjs
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 4,168-169
+  s_c1ad3fecbe3bdd::t_06e54cc9571ed9 310-327
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-3,5-167,170-290,292-309
+  s_c1ad3fecbe3bdd::t_13a2a84d9b26de 291
+packages/sdk/tools/worker.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 5,7,13,76
+packages/server/tests/fixtures/plugins/b/backend/tsconfig.json
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1
+packages/sdk/tools/plugin-boundary.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1-100,102-238,241-360
+  s_c1ad3fecbe3bdd::t_be7fc5d22e4e0a 101,239-240
+packages/server/tests/fixtures/plugins/b/vite.config.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1
+packages/server/src/service/startup.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 3-11,63-70,111-118,126,128-135
+packages/build/tests/browser-assets.mjs
+  s_c1ad3fecbe3bdd::t_06e54cc9571ed9 1,12,58
+packages/build/src/contributions.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,29,249-252,260-263
+packages/build/src/plugin-boundary.ts
+  s_c1ad3fecbe3bdd::t_a3e2ea8789481a 2,5
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,3-4,6-34
+.gitignore
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 8,39-41
+packages/server/tests/build-feature.mjs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 3,16-21
+packages/build/src/client-surface.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,25
+packages/build/src/descriptor.ts
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 1,130
+packages/server/src/host/worker/process.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 82,84,101,103,106,115-119,140,156-160,166,169-173,191,273-333
+packages/server/tests/helpers/actions_dns.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 208-209,213,221,312-345
+  s_c1ad3fecbe3bdd::t_bb76e1edde2c5b 346
+packages/engine/tests/acceptance.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 68-70,82,179,319,321,769-805
+packages/server/tests/data_indexes.rs
+  s_c1ad3fecbe3bdd::t_6c63c0382e9ed2 147,168-170,227-242,273,275-276,324,327,349,465-1604,1608-1609,1611,1617,1623,1632,1643,1653,1664,1673-1684,1687-1706,1709-1711,1714-1715,1717,1722,1726,1734,1744,1747,1757,1762,1772-1779,1782-1793,1795-1815,1822,1835-1839,1845,1852,1865,1871-1879,1885,1892,1905,1914,1917,1919,1958,1960,1980,1983-1987,1989,1992,1996,2004,2020-2021,2023,2027,2037,2048,2063,2085,2087-2091,2093-2094,2096-2100,2103,2105,2114-2115,2119,2133,2147-2152,2159,2161,2186,2200,2202-2252,2256,2295,2297-2306,2310,2321,2333,2344,2354-2365,2368-2405,2407-2431,2433,2435,2446,2452,2461,2465,2467,2470,2473-2490,2492,2497
+.ci/README.md
+  s_c1ad3fecbe3bdd::t_08980957c970ef 3-6
+.github/workflows/macos.yml
+  s_c1ad3fecbe3bdd::t_7dcbfde5c3fcd0 22
+app/package.json
+  s_c1ad3fecbe3bdd::t_e5c0df7afdc872 16
+app/src-tauri/src/server.rs
+  s_c1ad3fecbe3bdd::t_d9d57e6237c489 150-185,238-239
+app/src/plugins/router.ts
+  s_c1ad3fecbe3bdd::t_8d94d5b6e40398 1
+bun.lock
+  s_c1ad3fecbe3bdd::t_23102dadd11820 23,65
+e2e/README.md
+  s_c1ad3fecbe3bdd::t_7f3d20705bc098 27
+e2e/browser.ts
+  s_c1ad3fecbe3bdd::t_37c99a01173362 15
+e2e/playwright.config.ts
+  s_c1ad3fecbe3bdd::t_6c7803c69cdf1f 4-6,15,31-32
+packages/build/README.md
+  s_c1ad3fecbe3bdd::t_8ab1d61dd040cc 31-35,61-108
+packages/build/tests/browser.test.ts
+  s_c1ad3fecbe3bdd::t_8ab4c7fb4d7f61 49,52-53,62,78
+packages/build/tests/fixtures/browser/src/client/view.tsx
+  s_c1ad3fecbe3bdd::t_984d45e538825f 5
+packages/build/tests/fixtures/other/src/client/api.ts
+  s_c1ad3fecbe3bdd::t_c6b9fdb0ec1034 1
+packages/build/tests/plugins.test.mjs
+  s_c1ad3fecbe3bdd::t_4aa16b46471cd4 97,102
+packages/runtime/PLUGINS.md
+  s_c1ad3fecbe3bdd::t_198d5611edf18c 17-24
+packages/runtime/js/router.ts
+  s_c1ad3fecbe3bdd::t_ad771aef26ad0e 1-132
+packages/runtime/package.json
+  s_c1ad3fecbe3bdd::t_6edd310ce9af5d 7-8,12
+packages/runtime/tsconfig.json
+  s_c1ad3fecbe3bdd::t_4e3201c05544f8 3-6
+packages/server/src/websocket.rs
+  s_c1ad3fecbe3bdd::t_f2b1acce1cdd82 156-157,161-163,190-196
+packages/server/tests/chat-acp-driver.ts
+  s_c1ad3fecbe3bdd::t_7725bea327ff00 13-15
+plugins/chat/src/client/tsconfig.json
+  s_c1ad3fecbe3bdd::t_9430c346e1a73d 4
+plugins/chat/vitest.config.ts
+  s_c1ad3fecbe3bdd::t_8bea4f6afe593c 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "208b03c65cf699567dbc5204baa014e6d52ee490",
+  "prompts": {},
+  "sessions": {
+    "s_c1ad3fecbe3bdd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eaa4-a8d9-78c3-80a0-54d63e2f102b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
