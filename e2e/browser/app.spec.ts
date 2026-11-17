@@ -28,6 +28,10 @@ test("live threads, compiler views, revision replacement and error containment",
   await expect(fixture.getByRole("status", { name: "Fixture thread count" })).toHaveText(
     `Fixture live threads: ${initial}`,
   );
+  const sidebar = page.getByRole("complementary", { name: "Sidebar" });
+  const header = page.getByRole("banner", { name: "Page header" });
+  await expect(sidebar).toHaveText("Fixture sidebar");
+  await expect(header).toHaveText("Fixture header");
   const title = `Browser thread ${crypto.randomUUID()}`;
   await page.getByRole("textbox", { name: "New thread title" }).fill(title);
   await page.getByRole("button", { name: "New thread", exact: true }).click();
@@ -72,6 +76,8 @@ test("live threads, compiler views, revision replacement and error containment",
   await expect(page.getByRole("alert", { name: "Plugin view error" })).toContainText(
     "Deliberate fixture failure",
   );
+  await expect(sidebar).toBeEmpty();
+  await expect(header).toBeEmpty();
   await expect(connection).toHaveText("Connected to real Tokamak server");
   await page.getByRole("button", { name: "New thread", exact: true }).click();
   await expect(second.getByRole("status", { name: "Live thread count" })).toHaveText(

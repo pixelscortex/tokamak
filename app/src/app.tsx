@@ -1,3 +1,5 @@
+import type { JSX } from "@solidjs/web";
+import { RegionOutlet, RegionProvider, useRegionFilled } from "@tokamak/sdk/client";
 import { createSignal, Show, For, onSettled } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
 import { Button } from "@ui-sdk/solid/button";
@@ -9,6 +11,33 @@ import { Controls } from "./controls";
 import { endpoint } from "./host/endpoint";
 import type { ServerEndpoint } from "./plugins/adapter";
 import { createPluginShell, type PluginRouting, type PluginShell } from "./plugins/views";
+
+export function AppShell(props: { children?: JSX.Element }) {
+  return (
+    <RegionProvider>
+      <Screen>{props.children}</Screen>
+    </RegionProvider>
+  );
+}
+function Screen(props: { children?: JSX.Element }) {
+  const panelFilled = useRegionFilled("panel");
+  return (
+    <>
+      <aside aria-label="Sidebar">
+        <RegionOutlet name="sidebar" />
+      </aside>
+      <header role="banner" aria-label="Page header">
+        <RegionOutlet name="header" />
+      </header>
+      {props.children}
+      <Show when={panelFilled()}>
+        <section aria-label="Panel">
+          <RegionOutlet name="panel" />
+        </section>
+      </Show>
+    </>
+  );
+}
 
 type Session = { client: TokamakClient; plugins?: PluginShell; close(): void };
 export function App(

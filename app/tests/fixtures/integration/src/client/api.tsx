@@ -1,5 +1,5 @@
 import { createApi, type FunctionReference } from "@tokamak/sdk";
-import { view } from "@tokamak/sdk/client";
+import { Region, view } from "@tokamak/sdk/client";
 import { useClient, useQuery } from "@tokamak/sdk/solid";
 
 const api = createApi<{
@@ -9,6 +9,12 @@ export const FixtureView = view({ route: "/" }, () => {
   const threads = useQuery(useClient(), api.threads.list, () => ({}));
   return (
     <section aria-label="Integration fixture">
+      <Region.Sidebar>
+        <p>Fixture sidebar</p>
+      </Region.Sidebar>
+      <Region.Header>
+        <p>Fixture header</p>
+      </Region.Header>
       <h1>Fixture revision one</h1>
       <p role="status" aria-label="Fixture thread count">
         {threads.loading() ? "Loading fixture query…" : `Fixture live threads: ${threads.data()?.length}`}
