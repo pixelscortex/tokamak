@@ -7,5 +7,9 @@ export async function endpoint(): Promise<Endpoint> {
   const http = new URL(import.meta.env.VITE_TOKAMAK_HTTP || "http://127.0.0.1:43123");
   const ws = new URL("/ws", http);
   ws.protocol = http.protocol === "https:" ? "wss:" : "ws:";
-  return { http: http.toString().replace(/\/$/, ""), ws: ws.toString(), token: null };
+  return {
+    http: http.toString().replace(/\/$/, ""),
+    ws: ws.toString(),
+    token: import.meta.env.VITE_TOKAMAK_TOKEN || null,
+  };
 }

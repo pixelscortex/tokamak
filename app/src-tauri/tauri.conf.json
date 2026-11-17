@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' http://127.0.0.1:* http://[::1]:*; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://[::1]:* ws://[::1]:*; img-src 'self' data:; object-src 'none'; base-uri 'self'",
+      "csp": "default-src 'self'; script-src 'self' blob: http://127.0.0.1:* http://[::1]:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:* http://[::1]:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://[::1]:* ws://[::1]:*; img-src 'self' data:; object-src 'none'; base-uri 'self'",
       "capabilities": [
         {
           "identifier": "main-window-drag",

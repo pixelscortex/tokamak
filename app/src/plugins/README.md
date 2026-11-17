@@ -3,8 +3,8 @@
 `createPluginShell(client, endpoint, source, routing): PluginShell` accepts the
 connected SDK client, `{ http, ws, token }` supplied by the host, an optional SDK
 catalog/event source (otherwise GET `/plugins`), and the shell TanStack router,
-root route, and static routes. `App` accepts a `getEndpoint` function for host
-integration; its existing loopback input remains the development fallback.
+root route, and static routes. `App` connects on start using `host/endpoint.ts`; its optional `getEndpoint`
+override also feeds the plugin shell. The browser fallback uses VITE_TOKAMAK_HTTP.
 
 The shell gets:
 
@@ -18,7 +18,8 @@ The shell gets:
 
 `adapter.ts` is the server contract boundary. It accepts the retained
 `plugin`/`entries.ui.code`/`entries.ui.css` catalog and a flat
-`id`/`revision`/`ui`/`stylesheet`/`contributes` form. Relative asset names become
+`id`/`revision`/`ui`/`stylesheet`/`contributes` form. Server `uiUrl` and
+`stylesheetUrl` take precedence over the artifact filenames. Relative asset names become
 revision paths; absolute URL paths remain intact. Tokens are added only for the
 configured server origin. The server must permit CORS from the app origin.
 
@@ -98,12 +99,9 @@ already resolved specifier on reload. No dynamic-map behavior is relied on.
 The installed WKWebView verified static maps, CSP hashes, blob modules and
 cross-origin fetching; older WKWebView versions were not tested.
 
-The host agent must update `app/src-tauri/tauri.conf.json` (outside this task's
-allowed files): its CSP still blocks blob scripts and HTTP asset fetches. Match
-the index policy's `script-src blob:`, server `connect-src` and stylesheet origin,
-and retain Tauri's inline-script hashing for the import map. No `unsafe-eval`
-is needed. The current index policy permits loopback HTTP servers; other origins
-need host CSP configuration.
+The Tauri and index CSPs permit blob scripts, loopback HTTP assets and
+WebSocket connections. The import map is hashed; no `unsafe-eval` is needed.
+Other server origins require host CSP configuration.
 
 ## Validation ledger
 

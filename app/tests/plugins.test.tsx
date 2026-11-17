@@ -53,6 +53,21 @@ test("adapter pins URL and token, preserves metadata, refuses another origin", (
   );
   expect(() => assetURL(endpoint, "http://example.com/ui.js")).toThrow("server origin");
   expect(adaptCatalog(catalog()).plugins[0]?.plugin.contributes?.view?.[0]?.title).toBe("Fixture");
+  const raw = catalog();
+  const real = {
+    ...raw,
+    plugins: raw.plugins.map((plugin) => ({
+      ...plugin,
+      revision: "server-revision",
+      uiUrl: "/plugins/fixture/server-revision/assets/module.js",
+      stylesheetUrl: "/plugins/fixture/server-revision/assets/styles.css",
+    })),
+  };
+  const entry = adaptCatalog(real).plugins[0]!.entries.ui!;
+  expect(entry.code).toBe(real.plugins[0]!.uiUrl);
+  expect(assetURL(endpoint, entry.css)).toBe(
+    "http://127.0.0.1:4000/plugins/fixture/server-revision/assets/styles.css?token=a%26b",
+  );
 });
 
 test("ESM lifecycle rejects a load retired while import is pending", async () => {

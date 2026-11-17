@@ -46,14 +46,15 @@ test("keyboard opens, navigates, selects, and Escape restores focus", async () =
   }
 });
 
-test("whole screen names controls and reports disconnected state", () => {
+test("whole screen connects on start and exposes retry", async () => {
   const root = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <App />, root);
   try {
-    expect(screen.getByRole("textbox", { name: "Server WebSocket" })).toBeTruthy();
-    for (const name of ["Connect", "Thread actions", "About Tokamak", "Connection help"])
+    for (const name of ["Retry", "Thread actions", "About Tokamak", "Connection help"])
       expect(screen.getByRole("button", { name })).toBeTruthy();
-    expect(screen.getByRole("status", { name: "Connection status" }).textContent).toBe("Disconnected");
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Connection status" }).textContent).not.toBe("Disconnected"),
+    );
   } finally {
     dispose();
   }
@@ -95,7 +96,7 @@ test("TanStack Solid routes render kit and return to threads on Solid 2", async 
     await waitFor(() => expect(screen.getByRole("tablist", { name: "Kit sections" })).toBeTruthy());
     expect(window.location.pathname).toBe("/kit");
     await router.navigate({ to: "/" });
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "Server WebSocket" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("status", { name: "Connection status" })).toBeTruthy());
     expect(window.location.pathname).toBe("/");
   } finally {
     dispose();

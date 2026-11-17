@@ -29,13 +29,17 @@ export function adaptCatalog(value: JsonValue): PluginCatalog {
       const p = item as PluginManifest & {
         id?: string;
         revision?: string;
+        uiUrl?: string | null;
+        stylesheetUrl?: string | null;
         ui?: string;
         stylesheet?: string;
         contributes?: PluginManifest["plugin"]["contributes"];
       };
       const plugin = p.plugin ?? { id: p.id!, version: p.revision!, contributes: p.contributes };
       if (typeof plugin.id !== "string") throw new Error("Invalid plugin id");
-      const entry = p.entries?.ui ?? (p.ui ? { code: p.ui, css: p.stylesheet ?? "" } : undefined);
+      const entry = p.uiUrl
+        ? { code: p.uiUrl, css: p.stylesheetUrl ?? "" }
+        : (p.entries?.ui ?? (p.ui ? { code: p.ui, css: p.stylesheet ?? "" } : undefined));
       const path = (name: string) =>
         !name || /^(\/|https?:)/.test(name)
           ? name

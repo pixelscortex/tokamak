@@ -13,14 +13,28 @@ name. Each fill has an error boundary. Replacements precede wrappers; layers
 sort by plugin ID and export name. A failed layer falls back to its inner layer.
 The first replacement wins. The shell owns the client and extension lifetimes.
 
-`@tokamak/runtime/plugins` preserves the manifest/catalog/reload logic.
-It consumes SDK asset pages pinned to a catalog revision, invalidates affected
-importers, and prevents retired loads from publishing. `PluginModuleHost` is the
-boundary for a future web implementation. No module evaluator ships here.
+The browser UI target in `packages/build` emits native DOM ES modules. Host
+libraries stay bare imports resolved by the app's static import map; cross-plugin
+imports use `@plugins/<id>/ui`. Chat's unported client alone remains excluded.
+Server-only plugin artifacts need no UI entry.
 
-The plugin UI build is disabled by `PLUGIN_UI_BUILD_ENABLED` in
-`packages/build/src/vite.ts`. Server artifacts remain valid without `entries.ui`.
-A later agent must add DOM ESM output, server asset URLs, shared host imports,
-and a web module host. The app skeleton loads no plugin UI. Plugin isolation,
-server discovery/authentication, router imports, and shortcut integration remain
-part of that work; the author API has not changed.
+The server catalog retains manifest metadata and adds `revision`, `uiUrl` and
+`stylesheetUrl`. Assets are revision-pinned at
+`/plugins/<id>/<revision>/assets/<name>`. The app's `plugins/adapter.ts` resolves
+these against the endpoint from `host/endpoint.ts` and adds its private query
+token. The same token authenticates the WebSocket. Server CORS permits only
+configured app origins (`TOKAMAK_ALLOWED_ORIGINS`).
+
+The runtime's `createPluginLoader` retains catalog paging, contribution lookup
+and reload/invalidation. The app's `WebPluginHost` fetches modules and rewrites
+cross-plugin and relative imports to revision-owned blobs. Host SDK/Solid
+contexts are shared through one import map; no eval is needed. Reload revokes
+blobs, removes stylesheets and disposes view/query owners, including affected
+importers. Publish complete builds before requesting `tokamak plugin reload <id>`;
+there is no automatic file watcher. Retired revisions reject stale assets.
+
+`createPluginShell` and `PluginViews` in `app/src/plugins/views.tsx` expose a
+reactive view list, navigation and stage rendering, and register namespaced
+TanStack routes. Router and shortcut facades use host contexts. See
+[the app instructions](../../app/README.md) for desktop/browser startup and the
+compiler-built disposable fixture used to check live queries and revision swaps.

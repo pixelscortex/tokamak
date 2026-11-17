@@ -2,7 +2,7 @@
 
 Tokamak is a Rust server with TypeScript plugins and a Solid 2 web client in
 Tauri 2. The client skeleton lists and creates Chat threads. `/kit` holds
-ui-sdk controls. Plugin UI loading and the product shell are next.
+ui-sdk controls. Compiler-built plugin views load through the server; the product shell is next.
 
 ## Run
 
@@ -13,17 +13,15 @@ pins Bun, Moon, and Rust. From this repository:
 proto run bun -- install --frozen-lockfile
 ```
 
-Use two terminals:
+Launch the desktop app:
 
 ```sh
-proto run bun -- run server:start
 proto run bun -- run app
 ```
 
-The server command builds Chat and the existing server binary, then starts a
-loopback server with a disposable store. Ctrl+C stops it and removes the store.
-Press Connect in the app, then New thread. No external agent is started.
-`moon run app:dev` runs Vite alone. See [app/README.md](app/README.md).
+The host builds Chat and the server, starts or reuses the local server and
+connects automatically. New thread creates a Chat thread. No external agent
+is started. See [app/README.md](app/README.md) for browser development and checks.
 
 ## Packages
 
@@ -36,10 +34,9 @@ for web primitives and tokens. `wiki` contains the docs and design rules.
 
 Chat's `plugins/chat/src/client` stays untouched as rewrite reference. Its root
 tsconfig includes only `plugin.ts` and `src/server`; lint ignores the client.
-`PLUGIN_UI_BUILD_ENABLED` in `packages/build/src/vite.ts` is false, so no plugin
-client is checked or bundled and manifests omit `entries.ui`. The rewrite agent
-must restore DOM client inputs and lint coverage, then enable the implemented
-web build target. No Solid 1 runtime remains in workspace dependencies.
+The compiler emits DOM ESM plugin UI and the web host loads it through
+revision-pinned server URLs. Chat's client remains excluded until ported.
+No Solid 1 runtime remains in workspace dependencies.
 
 ## Checks
 

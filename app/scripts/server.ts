@@ -10,7 +10,14 @@ try {
   await cp(`${root}plugins/chat/dist`, `${directory}/plugins/chat/dist`, { recursive: true });
   const child = spawn(
     `${root}target/debug/tokamak`,
-    ["--data", `${directory}/store`, "--listen", "127.0.0.1:43123", "--plugins", `${directory}/plugins`],
+    [
+      "--data",
+      `${directory}/store`,
+      "--listen",
+      "127.0.0.1:43123",
+      "--plugins",
+      process.env.TOKAMAK_PLUGIN_DIR ?? `${directory}/plugins`,
+    ],
     { stdio: "inherit" },
   );
   const forward = (signal: NodeJS.Signals) => child.kill(signal);

@@ -154,7 +154,9 @@ fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
         return Err("Cannot discover local server directory".into());
     }
     let directory = PathBuf::from(String::from_utf8(output.stdout)?.trim());
-    let plugins = if cfg!(debug_assertions) {
+    let plugins = if let Some(directory) = std::env::var_os("TOKAMAK_PLUGIN_DIR") {
+        PathBuf::from(directory)
+    } else if cfg!(debug_assertions) {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins")
     } else {
         app.path().resource_dir()?.join("plugins")
