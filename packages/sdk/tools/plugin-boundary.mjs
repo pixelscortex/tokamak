@@ -19,6 +19,9 @@ const inside = (root, file) => file === root || file.startsWith(root + sep);
 const canonical = (file) => (existsSync(file) ? realpathSync(file) : resolve(file));
 const server = (root) => resolve(root, existsSync(resolve(root, "src/server")) ? "src/server" : "backend");
 const generated = (root) => resolve(root, ".tokamak/types");
+// The SDK is the host contract every plugin builds against. A workspace may
+// resolve it by a tsconfig alias to its source instead of through node_modules.
+const sdkRoot = canonical(resolve(import.meta.dirname, ".."));
 const excluded =
   /(?:^|\/)(?:node_modules|dist|tests|__tests__|\.tokamak)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
@@ -76,6 +79,7 @@ export function assertPluginResolution(root, importer, id, target, packageImport
   const owner = pluginOwner(target);
   if (owner && canonical(owner) !== root) throw diagnostic(importer, id, target);
   if (!inside(root, canonical(importer))) return; // ordinary package-internal dependency
+  if (/^@tokamak\/sdk(?:\/|$)/.test(id) && inside(sdkRoot, target)) return;
   if (inside(root, target)) return;
   if (packageImport) return;
   throw diagnostic(importer, id, target);
