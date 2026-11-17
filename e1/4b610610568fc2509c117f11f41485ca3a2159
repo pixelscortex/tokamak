@@ -1,0 +1,63 @@
+.ci/README.md
+  s_4ccc9a2575a981::t_6036daa9e6456a 1-23
+.ci/check.sh
+  s_4ccc9a2575a981::t_4e063e7dcd9a81 5-6,11,17,20
+.ci/release-macos.sh
+  s_4ccc9a2575a981::t_19632be02a1315 1-26
+.depot/workflows/ci.yml
+  s_4ccc9a2575a981::t_c886328e7e2bf2 41-45,47-52,61
+.github/actionlint.yaml
+  s_4ccc9a2575a981::t_318e56ac099690 1-5
+.github/workflows/macos.yml
+  s_4ccc9a2575a981::t_5b41cee62f73ac 8,13,22
+.github/workflows/release.yml
+  s_4ccc9a2575a981::t_084097a1d7ec86 1,4-12,14,16-23,26-28,30-33
+README.md
+  s_4ccc9a2575a981::t_beecc0ee6396f9 54-63
+app/README.md
+  s_4ccc9a2575a981::t_e77d1aeaf738b5 86
+app/scripts/integration-fixture.ts
+  s_4ccc9a2575a981::t_489b215609eb03 7-10,19
+app/scripts/server.ts
+  s_4ccc9a2575a981::t_98e859acf8d699 14-15
+app/src/app.tsx
+  s_4ccc9a2575a981::t_08296c193c2b6f 139
+app/src/plugins/views.tsx
+  s_4ccc9a2575a981::t_c82d97e3f69a69 123
+app/tests/fixtures/integration/src/client/api.tsx
+  s_4ccc9a2575a981::t_6cffa0f0059875 13,20-23
+bun.lock
+  s_4ccc9a2575a981::t_c31a12e2de4ed6 8,394-395,1170-1173
+e2e/README.md
+  s_4ccc9a2575a981::t_99f1c76ec57261 15-49
+e2e/browser.ts
+  s_4ccc9a2575a981::t_ffdd00fd0777a3 1-46
+e2e/browser/app.spec.ts
+  s_4ccc9a2575a981::t_1de8a970ad75f9 1-114
+e2e/playwright.config.ts
+  s_4ccc9a2575a981::t_470f7d3eb34b0d 1-39
+e2e/tsconfig.json
+  s_4ccc9a2575a981::t_224e7337e2e423 12
+moon.yml
+  s_4ccc9a2575a981::t_4eef58182f0582 23
+package.json
+  s_4ccc9a2575a981::t_867872528e32a9 25-26,29
+wiki/content/docs/index.mdx
+  s_4ccc9a2575a981::t_4dee49dfe3262c 31-36,38,45-47,51-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e14b610610568fc2509c117f11f41485ca3a2159",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
