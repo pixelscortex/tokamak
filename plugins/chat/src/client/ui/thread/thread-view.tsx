@@ -28,7 +28,7 @@ export function ThreadView(props: {
       >
         <div
           ref={(content) => queueMicrotask(() => follow.attach(box, content))}
-          class="mx-auto flex w-full max-w-thread flex-1 flex-col justify-end gap-12 pt-12 pb-8"
+          class="mx-auto flex w-full max-w-thread flex-1 flex-col justify-end gap-8 pt-12 pb-8"
         >
           <Show when={props.messages.length} fallback={props.empty}>
             <For each={props.messages} keyed={(message) => message._id}>

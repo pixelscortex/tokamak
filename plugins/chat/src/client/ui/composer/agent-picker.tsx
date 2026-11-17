@@ -96,18 +96,20 @@ export function AgentPicker(props: {
           </span>
         </Menu.Trigger>
         <Menu.Content>
-          <Menu.GroupLabel>Agent</Menu.GroupLabel>
-          <For each={props.chat.backends() ?? []}>
-            {(option: BackendOption) => (
-              <Menu.Item value={`${option.plugin}/${option.id}`}>
-                <Icon path={optionAgent(option).mark} class="text-ink-2" />
-                {optionAgent(option).name}
-                <Show when={backend()?.backendId === option.id && backend()?.plugin === option.plugin}>
-                  <Icon path={glyphs.check} class="ms-auto text-ink-3" label="current" />
-                </Show>
-              </Menu.Item>
-            )}
-          </For>
+          <Menu.Group>
+            <Menu.GroupLabel>Agent</Menu.GroupLabel>
+            <For each={props.chat.backends() ?? []}>
+              {(option: BackendOption) => (
+                <Menu.Item value={`${option.plugin}/${option.id}`}>
+                  <Icon path={optionAgent(option).mark} class="text-ink-2" />
+                  {optionAgent(option).name}
+                  <Show when={backend()?.backendId === option.id && backend()?.plugin === option.plugin}>
+                    <Icon path={glyphs.check} class="ms-auto text-ink-3" label="current" />
+                  </Show>
+                </Menu.Item>
+              )}
+            </For>
+          </Menu.Group>
           <Show when={backend()}>
             <Menu.Separator />
             <Menu.Item value={FOLDER}>
