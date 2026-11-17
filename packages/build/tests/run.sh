@@ -1,3 +1,3 @@
 #!/bin/sh
 set -eu
-proto run bun -- test tests/browser.test.ts tests/css.test.ts tests/plugins.test.mjs tests/descriptor.test.ts
+proto run bun -- test tests/browser.test.ts tests/css.test.ts tests/plugins.test.mjs tests/descriptor.test.ts tests/boundary.test.mjs

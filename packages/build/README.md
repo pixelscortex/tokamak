@@ -28,10 +28,11 @@ Final file hashes cover JavaScript, source maps, CSS and server output.
 Shared imports remain bare: `solid-js`, `solid-js/*`, `@solidjs/web` (including
 subpaths), `@tokamak/sdk` (including subpaths), `@tokamak/ui` (including subpaths),
 `@tokamak/runtime/router`, `@ui-sdk/solid` and `@ui-sdk/core` (including subpaths),
-and `@plugins/*`. Cross-plugin imports retain their authored specifier, for
-example `import { Panel } from "@plugins/example/ui"`; the shell import map must
-map it to that plugin's catalog UI URL. Static imports infer required dependencies;
-literal dynamic imports infer optional dependencies.
+and compiler-emitted `@plugins/*` module names. Authors use
+`import { Panel } from "plugin:example/client"`. The compiler emits
+`@plugins/example/ui`; the web loader resolves it to the dependency's
+revision-pinned module, including literal dynamic imports. Static imports infer
+required dependencies; literal dynamic imports infer optional dependencies.
 
 The catalog keeps existing manifest fields and adds `revision`, `uiUrl` and
 `stylesheetUrl` per plugin. URLs are `/plugins/<id>/<catalog revision>/assets/<name>`;
@@ -57,3 +58,51 @@ module need not be installed to build or serve it.
 After building `target/debug/tokamak`, run the real curl/WebSocket checks from the
 repository root with `proto run bun -- packages/build/tests/browser-assets.mjs`.
 They cover loopback, desktop token authentication and a configured origin list.
+
+## Plugin imports
+
+Production source (server, client and worker; tests excluded) must stay inside
+its own plugin folder. Relative paths, absolute paths, source aliases and
+symlinks cannot reach another folder. Dependencies installed through
+`node_modules`, including workspace packages, are allowed; another plugin's
+implementation is never a package dependency.
+
+Use a sibling plugin's public API through sanctioned specifiers:
+
+```ts
+import { api as chat, type ToolPart } from "plugin:chat/server";
+// Inside an action: host routing and can_call still govern every operation.
+await ctx.use(chat).updateRun({ runId, token, delta: "Hello" });
+```
+
+`plugin:<id>/server` and its shorthand `plugin:<id>` expose public types from
+that plugin's `src/server/api.ts` and generated references for its exported
+queries, mutations and actions. The `api` object uses the public export names;
+named imports also carry references. No runtime helpers or handlers cross the
+boundary. Legacy packages use `backend/api.ts`. Public APIs are inspected
+statically and are never executed by the builder.
+
+`plugin:<id>/client` compiles to the internal module name `@plugins/<id>/ui`.
+Authors use only `plugin:<id>/client`; authored `@plugins/*` imports are rejected.
+Static imports declare dependencies and literal dynamic imports declare optional
+dependencies. The web loader rewrites both to revision-owned browser modules.
+Public client types come from `src/client/api.ts` or `src/client/api.tsx`.
+
+The builder generates ignored type facades in `.tokamak/types` and configures
+its checkers automatically. For editor checking outside the builder, add these
+paths to the plugin's tsconfig (relative to the plugin root):
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "plugin:*/server": [".tokamak/types/*/server.d.ts"],
+      "plugin:*/client": [".tokamak/types/*/client.d.ts"],
+      "plugin:*": [".tokamak/types/*/server.d.ts"]
+    }
+  }
+}
+```
+
+The current authoring build requires sibling public source APIs for type and
+reference metadata; installed artifacts remain independent of that source.

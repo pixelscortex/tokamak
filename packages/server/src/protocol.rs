@@ -6,8 +6,13 @@ use serde_json::Value as Json;
 
 /// IDs fit JavaScript's exact integer range. They share one session-local space;
 /// clients must not reuse them while a call or subscription is outstanding.
+// ts-rs 12 cannot parse serde's enum deny_unknown_fields; describe the wire shape explicitly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "protocol-codegen",
+    ts(tag = "type", rename_all = "lowercase")
+)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Request {
     Query {
@@ -78,7 +83,12 @@ impl Request {
 /// Responses and subscription updates MUST remain on one ordered stream. Serde's
 /// Result representation makes success (including null) distinct from an error.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+// With serde compatibility disabled, keep the generator's wire shape explicit.
 #[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "protocol-codegen",
+    ts(tag = "type", rename_all = "lowercase")
+)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Event {
     PluginChanged {

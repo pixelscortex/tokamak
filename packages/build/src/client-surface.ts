@@ -1,3 +1,4 @@
+import { pluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { clientEntry } from "./descriptor.ts";
 /** Public client declarations come from the entry's symbol graph, never a
  * runtime scan. This also intercepts calls inside the declaring plugin. */
@@ -21,7 +22,7 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
         const configPath = ts.findConfigFile(root(), ts.sys.fileExists);
         const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
         const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root());
-        program = ts.createProgram([entry], parsed.options);
+        program = ts.createProgram([entry], pluginCompilerOptions(root(), parsed.options));
         checker = program.getTypeChecker();
         for (const file of program.getSourceFiles()) {
           for (const statement of file.statements) {

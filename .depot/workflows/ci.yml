@@ -22,8 +22,27 @@ jobs:
         with:
           native: "false"
       - run: moon run workspace:ci-ts --summary detailed
+  rust-lint:
+    # Compile-only validation runs beside TS, sharing native's Depot/sccache caches.
+    runs-on: depot-ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "2"
+      RAYON_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Native compile dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: ./.ci/setup
+      - run: moon run workspace:ci-rust --summary detailed
+      - if: always()
+        run: sccache --show-stats
   native:
-    needs: typescript
+    needs: [typescript, rust-lint]
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 60
     env:

@@ -1,8 +1,9 @@
 # CI and unsigned release
 
-Depot's `.depot/workflows/ci.yml` runs the fast TypeScript stage and heavy native
-stage on every PR. Native installs the Linux Tauri libraries and Playwright's
-Chromium/WebKit dependencies. Download caches cover pinned tools, Bun, Cargo and
+Depot's `.depot/workflows/ci.yml` runs TypeScript, blocking Rust lint and the native
+stage on every PR. Rust lint checks all targets and features in every remaining
+workspace crate, including `app/src-tauri`, with warnings denied. Native installs
+the Linux Tauri libraries and Playwright's Chromium/WebKit dependencies. Download caches cover pinned tools, Bun, Cargo and
 Playwright browsers; sccache covers Rust compilation. GitHub's macOS CI builds the
 unsigned Tauri bundle on every PR. `.ci/check.sh` contains the stage commands.
 

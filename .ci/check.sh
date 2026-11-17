@@ -7,6 +7,9 @@ case "$1" in
     moon run sdk:test build:test runtime:test ui:test chat:test app:test app:web-build
     proto run bun -- test ./.ci/release.test.ts
     ;;
+  rust)
+    moon run workspace:lint-rust
+    ;;
   native)
     proto run bun -- run check
     moon run workspace:acp-test
@@ -14,7 +17,7 @@ case "$1" in
     # its normalized comparison before concurrent TS fixture/type checks.
     moon run server:check
     # Existing scripts supply bundles, generated references and type fixtures.
-    moon run engine:check
+    moon run workspace:ci-rust engine:check
     cargo check --workspace --all-targets --locked
     moon run workspace:rust-test workspace:e2e
     proto run bun -- run e2e:browser

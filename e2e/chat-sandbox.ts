@@ -43,6 +43,11 @@ export async function prepareChatSandbox(
     await mkdir(`${directory}/plugins/${id}`, { recursive: true });
     await cp(`${root}/plugins/${id}/dist`, `${directory}/plugins/${id}/dist`, { recursive: true });
   }
+  const sandbox = await prepareAgentEnvironment(directory, options.agents !== false);
+  return { ...sandbox, env: { ...sandbox.env, TOKAMAK_PLUGIN_DIR: `${directory}/plugins` } };
+}
+
+export async function prepareAgentEnvironment(directory: string, agents = false) {
   const bin = `${directory}/bin`;
   const home = `${directory}/home`;
   await mkdir(bin, { recursive: true, mode: 0o755 });
@@ -50,7 +55,7 @@ export async function prepareChatSandbox(
   await chmod(bin, 0o755);
   await symlink(pinnedBun(), `${bin}/bun`);
   const agent = resolve(import.meta.dirname, "fixtures/scripted-agent.py");
-  for (const name of options.agents === false ? [] : ["claude-agent-acp", "codex-acp"]) {
+  for (const name of !agents ? [] : ["claude-agent-acp", "codex-acp"]) {
     await writeFile(`${bin}/${name}`, `#!/bin/sh\nexec /usr/bin/python3 ${JSON.stringify(agent)} "$@"\n`, {
       mode: 0o755,
     });
@@ -61,7 +66,6 @@ export async function prepareChatSandbox(
     env: {
       HOME: home,
       PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
-      TOKAMAK_PLUGIN_DIR: `${directory}/plugins`,
     },
   };
 }

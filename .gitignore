@@ -5,7 +5,7 @@
 .proto/
 .ci-results/
 target/
-node_modules/
+node_modules
 dist/
 
 # Local investigation artifacts are not part of the product source or PR.
@@ -36,3 +36,6 @@ dist/
 /app/.dev/
 
 /app/src-tauri/gen/
+
+# Generated plugin import type facades.
+.tokamak/

@@ -144,45 +144,7 @@ async fn index_ranges(disk: bool) {
     let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let readings = table("readings");
-    let mut tx = db.begin().await.unwrap();
-    tx.define_index(&readings, "by_sensor_value", &["sensor", "value"], false)
-        .await
-        .unwrap();
-    tx.define_index(&readings, "by_value", &["value"], false)
-        .await
-        .unwrap();
-    let mut numeric: Vec<(String, f64, Id)> = Vec::new();
-    for sensor in ["a", "ab", "b"] {
-        for value in VALUES {
-            let id = tx
-                .insert(
-                    &readings,
-                    fields(&[("sensor", text(sensor)), ("value", value.value())]),
-                )
-                .await
-                .unwrap();
-            numeric.push((sensor.into(), value.num(), id));
-        }
-    }
-    // Non-numeric rows of sensor "z" that no numeric two-sided range may
-    // return under any value ordering (null < numbers < strings).
-    for extra in [Some(text("5")), Some(Value::Null), None, Some(text("10"))] {
-        let mut row = fields(&[("sensor", text("z"))]);
-        if let Some(value) = extra {
-            row.insert("value", value);
-        }
-        tx.insert(&readings, row).await.unwrap();
-    }
-    let five = tx
-        .insert(
-            &readings,
-            fields(&[("sensor", text("z")), ("value", int(5))]),
-        )
-        .await
-        .unwrap();
-    numeric.push(("z".into(), 5.0, five.clone()));
-    tx.commit().await.unwrap();
-
+    let (numeric, five) = seed_range_readings(&db, &readings).await;
     let mut tx = db.read_only().await.unwrap();
     let mut all = std::collections::HashMap::new();
     for row in tx.query(&readings).collect().await.unwrap() {
@@ -203,201 +165,9 @@ async fn index_ranges(disk: bool) {
             .collect::<Vec<_>>()
     };
 
-    let ranges = [
-        Range {
-            lower: lo(false, N::I(-1)),
-            upper: None,
-        },
-        Range {
-            lower: lo(true, N::I(-1)),
-            upper: None,
-        },
-        Range {
-            lower: None,
-            upper: lo(false, N::I(2)),
-        },
-        Range {
-            lower: None,
-            upper: lo(true, N::I(2)),
-        },
-        Range {
-            lower: lo(true, N::F(-2.5)),
-            upper: lo(false, N::I(10)),
-        },
-        Range {
-            lower: lo(false, N::F(1.5)),
-            upper: lo(true, N::I(10)),
-        },
-        Range {
-            lower: lo(true, N::I(2)),
-            upper: lo(true, N::I(100)),
-        },
-        // Float bounds against integer rows: -1.0 excludes -1, 10.0 keeps both 10s.
-        Range {
-            lower: lo(false, N::F(-1.0)),
-            upper: lo(true, N::F(10.0)),
-        },
-        Range {
-            lower: lo(true, N::I(10)),
-            upper: lo(true, N::I(10)),
-        },
-        Range {
-            lower: lo(true, N::F(-0.8)),
-            upper: lo(false, N::F(0.6)),
-        },
-        // Empty and contradictory ranges.
-        Range {
-            lower: lo(true, N::I(5)),
-            upper: lo(true, N::I(5)),
-        },
-        Range {
-            lower: lo(false, N::I(10)),
-            upper: lo(false, N::I(10)),
-        },
-        Range {
-            lower: lo(true, N::I(50)),
-            upper: lo(true, N::I(3)),
-        },
-    ];
-    for range in ranges {
-        for (order, limit) in [
-            (Order::Asc, None),
-            (Order::Desc, None),
-            (Order::Asc, Some(2)),
-            (Order::Desc, Some(3)),
-        ] {
-            let mut query = tx
-                .query(&readings)
-                .with_index("by_sensor_value")
-                .eq("sensor", "a");
-            if let Some((inclusive, bound)) = range.lower {
-                query = if inclusive {
-                    query.gte("value", bound.value())
-                } else {
-                    query.gt("value", bound.value())
-                };
-            }
-            if let Some((inclusive, bound)) = range.upper {
-                query = if inclusive {
-                    query.lte("value", bound.value())
-                } else {
-                    query.lt("value", bound.value())
-                };
-            }
-            query = query.order(order);
-            if let Some(limit) = limit {
-                query = query.limit(limit as u32);
-            }
-            assert_eq!(
-                keys(&query.collect().await.unwrap()),
-                keys(&expected(Some("a"), range, order, limit)),
-                "sensor a {range:?} {order:?} limit {limit:?}"
-            );
-        }
-    }
-
-    // Equality alone covers the whole prefix in value order (sensor "a" has
-    // only numeric values), and `first` on a descending read is the maximum.
-    let everything = Range {
-        lower: None,
-        upper: None,
-    };
-    assert_eq!(
-        keys(
-            &tx.query(&readings)
-                .with_index("by_sensor_value")
-                .eq("sensor", "a")
-                .collect()
-                .await
-                .unwrap()
-        ),
-        keys(&expected(Some("a"), everything, Order::Asc, None))
-    );
-    assert_eq!(
-        tx.query(&readings)
-            .with_index("by_sensor_value")
-            .eq("sensor", "b")
-            .order(Order::Desc)
-            .first()
-            .await
-            .unwrap()
-            .map(|row| row.fields.get("value").cloned()),
-        Some(Some(int(100)))
-    );
-    // A two-sided numeric range never returns null, missing or string values.
-    let z = Range {
-        lower: lo(true, N::I(0)),
-        upper: lo(true, N::I(10)),
-    };
-    assert_eq!(
-        keys(
-            &tx.query(&readings)
-                .with_index("by_sensor_value")
-                .eq("sensor", "z")
-                .gte("value", 0i64)
-                .lte("value", 10i64)
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![five.to_string()]
-    );
-    // An index whose first field is the range field: no equality prefix, the
-    // range spans all sensors and still excludes the non-numeric rows.
-    let span = Range {
-        lower: lo(true, N::I(0)),
-        upper: lo(false, N::I(10)),
-    };
-    for order in [Order::Asc, Order::Desc] {
-        assert_eq!(
-            keys(
-                &tx.query(&readings)
-                    .with_index("by_value")
-                    .gte("value", 0i64)
-                    .lt("value", 10i64)
-                    .order(order)
-                    .collect()
-                    .await
-                    .unwrap()
-            ),
-            keys(&expected(None, span, order, None)),
-            "{order:?}"
-        );
-    }
-    assert_eq!(
-        keys(
-            &tx.query(&readings)
-                .with_index("by_value")
-                .gte("value", 0i64)
-                .lte("value", 10i64)
-                .order(Order::Desc)
-                .take(4)
-                .await
-                .unwrap()
-        ),
-        keys(&expected(None, z, Order::Desc, Some(4)))
-    );
-    // Equality on the full compound key selects exactly the duplicates of 10.
-    assert_eq!(
-        sorted_keys(
-            &tx.query(&readings)
-                .with_index("by_sensor_value")
-                .eq("sensor", "ab")
-                .eq("value", 10i64)
-                .collect()
-                .await
-                .unwrap()
-        ),
-        sorted_keys(&expected(
-            Some("ab"),
-            Range {
-                lower: lo(true, N::I(10)),
-                upper: lo(true, N::I(10))
-            },
-            Order::Asc,
-            None
-        ))
-    );
+    assert_range_matrix(&mut tx, &readings, &expected).await;
+    assert_prefix_and_numeric_bounds(&mut tx, &readings, &five, &expected).await;
+    assert_unprefixed_ranges(&mut tx, &readings, &expected).await;
     tx.commit().await.unwrap();
     db.close().await.unwrap();
 }
@@ -454,110 +224,8 @@ async fn index_definitions(disk: bool) {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let conflicting: [(&str, &[&str], bool); 4] = [
-        ("by_author_time", &["author"], false),
-        ("by_author_time", &["time", "author"], false),
-        ("by_author_time", &["author", "time"], true),
-        ("by_author_time", &["author", "time", "extra"], false),
-    ];
-    for (name, columns, unique) in conflicting {
-        let mut tx = db.begin().await.unwrap();
-        tx.insert(&table("scratch"), Object::new()).await.unwrap();
-        let error = tx
-            .define_index(&posts, name, columns, unique)
-            .await
-            .unwrap_err();
-        assert!(
-            matches!(error, Error::Invalid(_)),
-            "{columns:?} {unique}: {error:?}"
-        );
-        assert!(!error.is_retryable_conflict());
-        // Poisoned: the earlier successful insert cannot be saved.
-        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
-    }
-
-    // A new definition on a table that already has rows is rejected with an
-    // explicit backfill error; running it would leave existing rows unindexed.
-    let mut tx = db.begin().await.unwrap();
-    let error = tx
-        .define_index(&posts, "by_time", &["time"], false)
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(&error, Error::Invalid(message) if message.contains("backfill")),
-        "{error:?}"
-    );
-    assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
-    let mut tx = db.begin().await.unwrap();
-    assert!(
-        tx.query(&posts)
-            .with_index("by_time")
-            .collect()
-            .await
-            .is_err(),
-        "a rejected definition must not exist afterwards"
-    );
-    drop(tx);
-
-    // Malformed definitions.
-    for columns in [&[][..], &["author", "author"][..], &["bad-field"][..]] {
-        let mut tx = db.begin().await.unwrap();
-        assert!(
-            matches!(
-                tx.define_index(&table("fresh"), "ix", columns, false).await,
-                Err(Error::Invalid(_))
-            ),
-            "{columns:?}"
-        );
-        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
-    }
-
-    // Invalid reads: each is an error and poisons, even with limit zero.
-    type Bad = fn(server::data::Query<'_>) -> server::data::Query<'_>;
-    let bad: [(&str, Bad); 7] = [
-        ("unknown index", |q| q.with_index("no_such_index")),
-        ("unknown index, limit 0", |q| {
-            q.with_index("no_such_index").limit(0)
-        }),
-        ("eq skips the leading field", |q| {
-            q.with_index("by_author_time").eq("time", 1i64)
-        }),
-        ("range on the leading field after eq", |q| {
-            q.with_index("by_author_time")
-                .eq("author", "ann")
-                .gt("author", "a")
-        }),
-        ("range skips a field", |q| {
-            q.with_index("by_author_time").gt("time", 0i64)
-        }),
-        ("two lower bounds", |q| {
-            q.with_index("by_author_time")
-                .eq("author", "ann")
-                .gt("time", 0i64)
-                .gte("time", 1i64)
-        }),
-        ("range without an index", |q| q.gt("time", 0i64)),
-    ];
-    for (case, build) in bad {
-        let mut tx = db.begin().await.unwrap();
-        tx.insert(&table("scratch"), Object::new()).await.unwrap();
-        assert!(build(tx.query(&posts)).collect().await.is_err(), "{case}");
-        assert!(
-            matches!(tx.commit().await, Err(Error::FailedTransaction)),
-            "{case}"
-        );
-    }
-    // An index name is scoped to its table.
-    let mut tx = db.read_only().await.unwrap();
-    assert!(
-        tx.query(&table("scratch"))
-            .with_index("by_author_time")
-            .collect()
-            .await
-            .is_err()
-    );
-    drop(tx);
-
+    assert_definition_conflicts(&db, &posts).await;
+    assert_invalid_definitions_and_reads(&db, &posts).await;
     let mut tx = db.read_only().await.unwrap();
     assert_eq!(
         keys(
@@ -602,131 +270,10 @@ async fn index_maintenance(disk: bool) {
     let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let tasks = table("tasks");
-    let mut tx = db.begin().await.unwrap();
-    tx.define_index(&tasks, "by_status", &["status"], false)
-        .await
-        .unwrap();
-    tx.define_index(&tasks, "by_list_rank", &["list", "rank"], false)
-        .await
-        .unwrap();
-    let mut ids = Vec::new();
-    for (status, list, rank) in [
-        ("open", "home", 1),
-        ("open", "home", 2),
-        ("done", "home", 3),
-        ("open", "work", 1),
-        ("done", "work", 2),
-    ] {
-        ids.push(
-            tx.insert(
-                &tasks,
-                fields(&[
-                    ("status", text(status)),
-                    ("list", text(list)),
-                    ("rank", int(rank)),
-                    ("note", text("n")),
-                ]),
-            )
-            .await
-            .unwrap(),
-        );
-    }
-    tx.commit().await.unwrap();
-
+    let ids = seed_maintenance_tasks(&db, &tasks).await;
     let before = db.read_only().await.unwrap();
-    let mut tx = db.begin().await.unwrap();
-    // Same indexed value: must not drop or duplicate its entry.
-    tx.patch(
-        &ids[0],
-        fields(&[("status", text("open")), ("note", text("same status"))]),
-    )
-    .await
-    .unwrap();
-    // Non-indexed field only.
-    tx.patch(&ids[1], fields(&[("note", text("edited"))]))
-        .await
-        .unwrap();
-    // Indexed field moves between keys.
-    tx.patch(&ids[2], fields(&[("status", text("open"))]))
-        .await
-        .unwrap();
-    // Only the second field of the compound key changes: home rank 1 -> 5.
-    tx.patch(&ids[0], fields(&[("rank", int(5))]))
-        .await
-        .unwrap();
-    // Replace drops "status" entirely and moves the compound key.
-    tx.replace(&ids[3], fields(&[("list", text("home")), ("rank", int(4))]))
-        .await
-        .unwrap();
-    // Delete, then a new row with exactly the deleted row's key values.
-    tx.delete(&ids[4]).await.unwrap();
-    let reinserted = tx
-        .insert(
-            &tasks,
-            fields(&[
-                ("status", text("done")),
-                ("list", text("work")),
-                ("rank", int(2)),
-            ]),
-        )
-        .await
-        .unwrap();
-
-    // Independent truth: an unindexed scan of the same snapshot.
-    async fn check(tx: &mut server::data::Transaction, tasks: &Table) {
-        let rows = tx.query(tasks).collect().await.unwrap();
-        for status in ["open", "done", "missing"] {
-            let expected: Vec<_> = rows
-                .iter()
-                .filter(|row| row.fields.get("status") == Some(&text(status)))
-                .cloned()
-                .collect();
-            let indexed = tx
-                .query(tasks)
-                .with_index("by_status")
-                .eq("status", status)
-                .collect()
-                .await
-                .unwrap();
-            assert_eq!(
-                sorted_keys(&indexed),
-                sorted_keys(&expected),
-                "status {status}"
-            );
-            // Rows come back with their current contents, not a stale image.
-            for row in &indexed {
-                assert!(rows.contains(row), "stale document {row:?}");
-            }
-        }
-        for list in ["home", "work"] {
-            let mut expected: Vec<_> = rows
-                .iter()
-                .filter(|row| row.fields.get("list") == Some(&text(list)))
-                .cloned()
-                .collect();
-            expected.sort_by_key(|row| match row.fields.get("rank") {
-                Some(Value::Number(Number::Int(rank))) => *rank,
-                other => panic!("rank {other:?}"),
-            });
-            let indexed = tx
-                .query(tasks)
-                .with_index("by_list_rank")
-                .eq("list", list)
-                .collect()
-                .await
-                .unwrap();
-            assert_eq!(indexed, expected, "list {list}");
-        }
-        // Every row has exactly one compound entry: no leftovers from moves.
-        let whole = tx
-            .query(tasks)
-            .with_index("by_list_rank")
-            .collect()
-            .await
-            .unwrap();
-        assert_eq!(sorted_keys(&whole), sorted_keys(&rows));
-    }
-    check(&mut tx, &tasks).await;
+    let (mut tx, reinserted) = mutate_indexed_tasks(&db, &tasks, &ids).await;
+    assert_maintenance_matches_scan(&mut tx, &tasks).await;
     // Spot-check the concrete expectations behind the generic check.
     assert_eq!(
         keys(
@@ -774,30 +321,10 @@ async fn index_maintenance(disk: bool) {
     before.commit().await.unwrap();
 
     let mut read = db.read_only().await.unwrap();
-    check(&mut read, &tasks).await;
+    assert_maintenance_matches_scan(&mut read, &tasks).await;
     read.commit().await.unwrap();
 
-    // A rolled-back transaction leaves no index trace either.
-    let mut tx = db.begin().await.unwrap();
-    tx.patch(&ids[1], fields(&[("status", text("done"))]))
-        .await
-        .unwrap();
-    tx.insert(
-        &tasks,
-        fields(&[
-            ("status", text("done")),
-            ("list", text("x")),
-            ("rank", int(0)),
-        ]),
-    )
-    .await
-    .unwrap();
-    tx.delete(&reinserted).await.unwrap();
-    tx.rollback().await.unwrap();
-    let mut read = db.read_only().await.unwrap();
-    check(&mut read, &tasks).await;
-    assert_eq!(read.query(&tasks).collect().await.unwrap().len(), 5);
-    read.commit().await.unwrap();
+    assert_rolled_back_index_edits(&db, &tasks, &ids, &reinserted).await;
     db.close().await.unwrap();
 }
 
@@ -819,36 +346,7 @@ async fn index_equality_matches_scan(disk: bool) {
     let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let items = table("items");
-    let values: Vec<Option<Value>> = vec![
-        None,
-        Some(Value::Null),
-        Some(Value::Bool(false)),
-        Some(int(0)),
-        Some(text("")),
-        Some(text("0")),
-        Some(int(2)),
-        Some(float(2.0)),
-        Some(int(-3)),
-        Some(Value::Array(vec![int(1), int(2)].into())),
-        Some(Value::Array(vec![int(1)].into())),
-        Some(Value::Array(Vec::<Value>::new().into())),
-        Some(Value::Object(fields(&[("k", int(1))]))),
-    ];
-    let mut tx = db.begin().await.unwrap();
-    tx.define_index(&items, "by_tag", &["tag"], false)
-        .await
-        .unwrap();
-    for value in &values {
-        // Two rows per value so equality must return both, not just one.
-        for _ in 0..2 {
-            let mut row = Object::new();
-            if let Some(value) = value {
-                row.insert("tag", value.clone());
-            }
-            tx.insert(&items, row).await.unwrap();
-        }
-    }
-    tx.commit().await.unwrap();
+    let values = seed_equality_values(&db, &items).await;
     let mut tx = db.read_only().await.unwrap();
     let mut probes: Vec<Value> = values
         .iter()
@@ -969,190 +467,11 @@ async fn unique_indexes(disk: bool) {
     tx.commit().await.unwrap();
     let mut events = db.subscribe();
 
-    async fn by_key(tx: &mut server::data::Transaction, org: &str, email: &str) -> Vec<String> {
-        keys(
-            &tx.query(&table("users"))
-                .with_index("by_org_email")
-                .eq("org", org.to_owned())
-                .eq("email", email.to_owned())
-                .collect()
-                .await
-                .unwrap(),
-        )
-    }
-    async fn by_handle(tx: &mut server::data::Transaction, handle: &str) -> Vec<String> {
-        keys(
-            &tx.query(&table("users"))
-                .with_index("by_handle")
-                .eq("handle", handle.to_owned())
-                .collect()
-                .await
-                .unwrap(),
-        )
-    }
-
-    // Duplicate compound key on insert: violation names the index, poisons,
-    // and the earlier write of the same call is not saved.
-    let mut tx = db.begin().await.unwrap();
-    let early = tx
-        .insert(
-            &users,
-            fields(&[("org", text("d")), ("email", text("early"))]),
-        )
-        .await
-        .unwrap();
-    let error = tx
-        .insert(&users, fields(&[("org", text("a")), ("email", text("x"))]))
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(&error, Error::UniqueViolation { index } if index == "by_org_email"),
-        "{error:?}"
-    );
-    assert!(!error.is_retryable_conflict());
-    assert!(matches!(
-        tx.query(&users).collect().await,
-        Err(Error::FailedTransaction)
-    ));
-    assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
-
-    // Patch that changes only the first compound field into a taken key, then
-    // the poisoned call is dropped without rollback. The update path removes
-    // bob's old entry before discovering the conflict; that must not leak.
-    let mut tx = db.begin().await.unwrap();
-    let leaked = tx
-        .insert(
-            &users,
-            fields(&[
-                ("org", text("e")),
-                ("email", text("y")),
-                ("handle", text("fresh")),
-            ]),
-        )
-        .await
-        .unwrap();
-    let error = tx
-        .patch(&bob, fields(&[("org", text("a"))]))
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(&error, Error::UniqueViolation { index } if index == "by_org_email"),
-        "{error:?}"
-    );
-    drop(tx);
-    // Single-field unique on patch, rolled back explicitly this time.
-    let mut tx = db.begin().await.unwrap();
-    let error = tx
-        .patch(&bob, fields(&[("handle", text("ann"))]))
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(&error, Error::UniqueViolation { index } if index == "by_handle"),
-        "{error:?}"
-    );
-    tx.rollback().await.unwrap();
-
-    let mut read = db.read_only().await.unwrap();
-    assert_eq!(by_key(&mut read, "a", "x").await, vec![ann.to_string()]);
-    assert_eq!(by_key(&mut read, "b", "x").await, vec![bob.to_string()]);
-    assert!(by_key(&mut read, "d", "early").await.is_empty());
-    assert!(by_key(&mut read, "e", "y").await.is_empty());
-    assert!(by_handle(&mut read, "fresh").await.is_empty());
-    assert_eq!(by_handle(&mut read, "ann").await, vec![ann.to_string()]);
-    assert_eq!(by_handle(&mut read, "bob").await, vec![bob.to_string()]);
-    assert_eq!(
-        read.get(&bob).await.unwrap().unwrap().fields.get("org"),
-        Some(&text("b"))
-    );
-    assert_eq!(read.get(&early).await.unwrap(), None);
-    assert_eq!(read.get(&leaked).await.unwrap(), None);
-    assert_eq!(read.query(&users).collect().await.unwrap().len(), 6);
-    read.commit().await.unwrap();
-    // None of the failed calls published anything.
-    barrier(&db, &mut events).await;
-
-    // Valid edits on rows holding unique keys, and key reuse in one call.
-    let mut tx = db.begin().await.unwrap();
-    // A non-unique field on a unique-indexed row, and a unique field patched to
-    // its own value: neither collides with the row's own entry.
-    tx.patch(&ann, fields(&[("name", text("Ann"))]))
-        .await
-        .unwrap();
-    tx.patch(
-        &ann,
-        fields(&[("handle", text("ann")), ("email", text("x"))]),
-    )
-    .await
-    .unwrap();
-    // The value "fresh" from the dropped call is free (no leaked entry).
-    let fresh = tx
-        .insert(
-            &users,
-            fields(&[
-                ("org", text("e")),
-                ("email", text("y")),
-                ("handle", text("fresh")),
-            ]),
-        )
-        .await
-        .unwrap();
-    // Reuse after delete: ann's compound key and handle.
-    tx.delete(&ann).await.unwrap();
-    let ann2 = tx
-        .insert(
-            &users,
-            fields(&[
-                ("org", text("a")),
-                ("email", text("x")),
-                ("handle", text("ann")),
-            ]),
-        )
-        .await
-        .unwrap();
-    // Reuse after change: bob moves to a new handle, a new row takes "bob".
-    tx.patch(&bob, fields(&[("handle", text("robert"))]))
-        .await
-        .unwrap();
-    let bob2 = tx
-        .insert(
-            &users,
-            fields(&[
-                ("org", text("f")),
-                ("email", text("z")),
-                ("handle", text("bob")),
-            ]),
-        )
-        .await
-        .unwrap();
-    // Reads in the writing call already see the moved keys.
-    assert_eq!(by_handle(&mut tx, "bob").await, vec![bob2.to_string()]);
-    assert_eq!(by_key(&mut tx, "a", "x").await, vec![ann2.to_string()]);
-    tx.commit().await.unwrap();
-
-    let mut read = db.read_only().await.unwrap();
-    assert_eq!(by_key(&mut read, "a", "x").await, vec![ann2.to_string()]);
-    assert_eq!(by_handle(&mut read, "ann").await, vec![ann2.to_string()]);
-    assert_eq!(by_handle(&mut read, "bob").await, vec![bob2.to_string()]);
-    assert_eq!(by_handle(&mut read, "robert").await, vec![bob.to_string()]);
-    assert_eq!(by_handle(&mut read, "fresh").await, vec![fresh.to_string()]);
-    assert_eq!(read.get(&ann).await.unwrap(), None);
-    read.commit().await.unwrap();
-
-    // Still enforced after all the moves.
-    let mut tx = db.begin().await.unwrap();
-    assert!(matches!(
-        tx.insert(
-            &users,
-            fields(&[
-                ("org", text("q")),
-                ("email", text("q")),
-                ("handle", text("robert"))
-            ])
-        )
-        .await,
-        Err(Error::UniqueViolation { .. })
-    ));
-    drop(tx);
+    let (early, leaked) = assert_unique_write_failures(&db, &users, &bob).await;
+    assert_unique_failures_left_no_writes(&db, &users, &ann, &bob, &early, &leaked, &mut events)
+        .await;
+    let (fresh, ann2, bob2) = reuse_unique_keys(&db, &users, &ann, &bob).await;
+    assert_reused_keys(&db, &users, &ann, &bob, &fresh, &ann2, &bob2).await;
     db.close().await.unwrap();
 }
 
@@ -1191,133 +510,10 @@ async fn index_concurrency(disk: bool) {
     tx.commit().await.unwrap();
     let mut events = db.subscribe();
 
-    // Same unique key from two snapshots.
-    let mut first = db.begin().await.unwrap();
-    let mut second = db.begin().await.unwrap();
-    let winner = first
-        .insert(
-            &accounts,
-            fields(&[("email", text("e")), ("team", text("t"))]),
-        )
-        .await
-        .unwrap();
-    second
-        .insert(
-            &accounts,
-            fields(&[("email", text("e")), ("team", text("t"))]),
-        )
-        .await
-        .unwrap();
-    first.commit().await.unwrap();
-    assert_eq!(events.try_recv().unwrap().tables, vec![accounts.clone()]);
-    let conflict = second.commit().await.unwrap_err();
-    assert!(conflict.is_retryable_conflict(), "{conflict:?}");
-    // The replay now sees the committed key and reports a real violation.
-    let mut replay = db.begin().await.unwrap();
-    assert!(matches!(
-        replay
-            .insert(&accounts, fields(&[("email", text("e"))]))
-            .await,
-        Err(Error::UniqueViolation { .. })
-    ));
-    drop(replay);
-
-    // Same non-unique value from two snapshots: both commit.
-    let mut first = db.begin().await.unwrap();
-    let mut second = db.begin().await.unwrap();
-    let a = first
-        .insert(
-            &accounts,
-            fields(&[("email", text("a")), ("team", text("t"))]),
-        )
-        .await
-        .unwrap();
-    let b = second
-        .insert(
-            &accounts,
-            fields(&[("email", text("b")), ("team", text("t"))]),
-        )
-        .await
-        .unwrap();
-    first.commit().await.unwrap();
-    second.commit().await.unwrap();
-    let mut read = db.read_only().await.unwrap();
-    let mut expected = vec![winner.to_string(), a.to_string(), b.to_string()];
-    expected.sort();
-    assert_eq!(
-        sorted_keys(
-            &read
-                .query(&accounts)
-                .with_index("by_team")
-                .eq("team", "t")
-                .collect()
-                .await
-                .unwrap()
-        ),
-        expected
-    );
-    assert_eq!(read.query(&accounts).collect().await.unwrap().len(), 3);
-    read.commit().await.unwrap();
-    while events.try_recv().is_ok() {}
-
-    // A writer that began before an index definition committed.
-    let logs = table("logs");
-    let mut stale = db.begin().await.unwrap();
-    let mut definer = db.begin().await.unwrap();
-    definer
-        .define_index(&logs, "by_level", &["level"], false)
-        .await
-        .unwrap();
-    definer.commit().await.unwrap();
-    let error = stale
-        .insert(&logs, fields(&[("level", text("warn"))]))
-        .await
-        .unwrap_err();
-    assert!(error.is_retryable_conflict(), "{error:?}");
-    assert!(matches!(
-        stale.commit().await,
-        Err(Error::FailedTransaction)
-    ));
-    let mut retry = db.begin().await.unwrap();
-    let warn = retry
-        .insert(&logs, fields(&[("level", text("warn"))]))
-        .await
-        .unwrap();
-    retry.commit().await.unwrap();
-    let mut read = db.read_only().await.unwrap();
-    assert_eq!(
-        keys(
-            &read
-                .query(&logs)
-                .with_index("by_level")
-                .eq("level", "warn")
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![warn.to_string()]
-    );
-    read.commit().await.unwrap();
-
-    // A definition while another call is writing the (still empty) table.
-    let jobs = table("jobs");
-    let mut writer = db.begin().await.unwrap();
-    let job = writer
-        .insert(&jobs, fields(&[("state", text("new"))]))
-        .await
-        .unwrap();
-    let mut definer = db.begin().await.unwrap();
-    let error = definer
-        .define_index(&jobs, "by_state", &["state"], false)
-        .await
-        .unwrap_err();
-    assert!(error.is_retryable_conflict(), "{error:?}");
-    assert!(matches!(
-        definer.commit().await,
-        Err(Error::FailedTransaction)
-    ));
-    writer.commit().await.unwrap();
-
+    let winner = assert_unique_snapshot_conflict(&db, &accounts, &mut events).await;
+    assert_non_unique_snapshots_commit(&db, &accounts, &winner, &mut events).await;
+    assert_writer_predating_definition(&db).await;
+    let job = assert_definition_racing_writer(&db).await;
     // A writer while another call holds an uncommitted definition.
     let queue = table("queue");
     let mut definer = db.begin().await.unwrap();
@@ -1374,39 +570,8 @@ async fn indexes_survive_reopen() {
     let fixture = Fixture::new(true, "tkm83-index-tests");
     let notes = table("notes");
     let pending = table("pending");
-    let mut db = Database::open(fixture.storage.clone()).await.unwrap();
-    let mut tx = db.begin().await.unwrap();
-    tx.define_index(&notes, "by_slug", &["slug"], true)
-        .await
-        .unwrap();
-    tx.define_index(&notes, "by_rank", &["rank"], false)
-        .await
-        .unwrap();
-    // Defined, but the table stays empty until after reopen.
-    tx.define_index(&pending, "by_a", &["a"], false)
-        .await
-        .unwrap();
-    let mut inserted = Vec::new();
-    for rank in [3i64, 1, 2] {
-        inserted.push((
-            rank,
-            tx.insert(
-                &notes,
-                fields(&[("slug", text(&format!("s{rank}"))), ("rank", int(rank))]),
-            )
-            .await
-            .unwrap(),
-        ));
-    }
-    tx.commit().await.unwrap();
-    // A rolled-back definition must not persist.
-    let mut tx = db.begin().await.unwrap();
-    tx.define_index(&table("ghost"), "by_x", &["x"], false)
-        .await
-        .unwrap();
-    tx.rollback().await.unwrap();
-    db.close().await.unwrap();
-
+    let db = Database::open(fixture.storage.clone()).await.unwrap();
+    let mut inserted = seed_persistent_indexes(db, &notes, &pending).await;
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let mut read = db.read_only().await.unwrap();
     inserted.sort_by_key(|(rank, _)| *rank);
@@ -1461,76 +626,7 @@ async fn indexes_survive_reopen() {
     ));
     drop(tx);
 
-    // New definitions after reopen: on the pre-existing empty table and on a
-    // brand-new table, then rows that populate every index at once.
-    let mut tx = db.begin().await.unwrap();
-    tx.define_index(&pending, "by_b", &["b"], false)
-        .await
-        .unwrap();
-    let fresh = table("fresh");
-    tx.define_index(&fresh, "by_a", &["a"], false)
-        .await
-        .unwrap();
-    let mut rows = Vec::new();
-    for (a, b) in [(1i64, 30i64), (2, 20), (3, 10)] {
-        rows.push(
-            tx.insert(&pending, fields(&[("a", int(a)), ("b", int(b))]))
-                .await
-                .unwrap(),
-        );
-        tx.insert(&fresh, fields(&[("a", int(a))])).await.unwrap();
-    }
-    tx.commit().await.unwrap();
-    let mut read = db.read_only().await.unwrap();
-    assert_eq!(
-        keys(
-            &read
-                .query(&pending)
-                .with_index("by_a")
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![
-            rows[0].to_string(),
-            rows[1].to_string(),
-            rows[2].to_string()
-        ]
-    );
-    assert_eq!(
-        keys(
-            &read
-                .query(&pending)
-                .with_index("by_b")
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![
-            rows[2].to_string(),
-            rows[1].to_string(),
-            rows[0].to_string()
-        ]
-    );
-    assert_eq!(
-        read.query(&fresh)
-            .with_index("by_a")
-            .collect()
-            .await
-            .unwrap()
-            .len(),
-        3
-    );
-    assert_eq!(
-        read.query(&notes)
-            .with_index("by_rank")
-            .collect()
-            .await
-            .unwrap()
-            .len(),
-        3
-    );
-    read.commit().await.unwrap();
+    assert_new_indexes_after_reopen(&db, &notes, &pending).await;
     db.close().await.unwrap();
 }
 
@@ -1572,60 +668,7 @@ async fn many_rows(disk: bool) {
         "300 changes exceed the 64-record retention bound"
     );
 
-    let ids = |range: std::ops::Range<i64>| range.map(|n| by_n[&n].to_string()).collect::<Vec<_>>();
-    let mut tx = db.read_only().await.unwrap();
-    assert_eq!(
-        tx.query(&points).collect().await.unwrap().len(),
-        COUNT as usize
-    );
-    assert_eq!(
-        tx.query(&points)
-            .eq("parity", 0i64)
-            .collect()
-            .await
-            .unwrap()
-            .len(),
-        150
-    );
-    assert_eq!(
-        keys(
-            &tx.query(&points)
-                .with_index("by_n")
-                .collect()
-                .await
-                .unwrap()
-        ),
-        ids(0..COUNT)
-    );
-    assert_eq!(
-        keys(
-            &tx.query(&points)
-                .with_index("by_n")
-                .gte("n", 37i64)
-                .lt("n", 263i64)
-                .collect()
-                .await
-                .unwrap()
-        ),
-        ids(37..263)
-    );
-    let mut top = ids(163..263);
-    top.reverse();
-    assert_eq!(
-        keys(
-            &tx.query(&points)
-                .with_index("by_n")
-                .gte("n", 37i64)
-                .lt("n", 263i64)
-                .order(Order::Desc)
-                .take(100)
-                .await
-                .unwrap()
-        ),
-        top
-    );
-    tx.commit().await.unwrap();
-
+    assert_many_row_ranges(&db, &points, &by_n).await;
     // Move every third row out of the range and delete every fifth.
     let mut tx = db.begin().await.unwrap();
     let mut expected = std::collections::BTreeMap::new();
@@ -1730,97 +773,14 @@ async fn change_records(disk: bool) {
     tx.commit().await.unwrap();
     let event = events.try_recv().unwrap();
     assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
-    assert_eq!(event.tables, vec![other.clone(), things.clone()]);
-    let records = event.records.expect("five small changes are retained");
-    assert_eq!(records.len(), 5);
-    let find = |id: &Id| {
-        let found: Vec<_> = records.iter().filter(|change| &change.id == id).collect();
-        assert_eq!(found.len(), 1, "{id}");
-        (found[0].before.clone(), found[0].after.clone())
-    };
-    assert_eq!(
-        find(&created),
-        (
-            None,
-            Some(json!({"_id": created.to_string(), "_creationTime": ct, "v": 4, "s": "雪 ✓"}))
-        )
+    assert_retained_change_images(
+        event,
+        &things,
+        &other,
+        [&created, &patched, &deleted, &replaced, &marker],
+        [ct, pt, dt, rt, mt],
     );
-    assert_eq!(
-        find(&patched),
-        (
-            Some(json!({"_id": patched.to_string(), "_creationTime": pt, "v": 1})),
-            Some(json!({"_id": patched.to_string(), "_creationTime": pt, "v": 10}))
-        )
-    );
-    assert_eq!(
-        find(&deleted),
-        (
-            Some(json!({"_id": deleted.to_string(), "_creationTime": dt, "v": 2})),
-            None
-        )
-    );
-    assert_eq!(
-        find(&replaced),
-        (
-            Some(json!({"_id": replaced.to_string(), "_creationTime": rt, "v": 3, "extra": true})),
-            Some(json!({"_id": replaced.to_string(), "_creationTime": rt, "w": "x"}))
-        )
-    );
-    assert_eq!(
-        find(&marker),
-        (
-            None,
-            Some(json!({"_id": marker.to_string(), "_creationTime": mt}))
-        )
-    );
-
-    // Count bound: 64 retained, 65 collapse, and the table list stays complete
-    // even for tables written only after the collapse.
-    // `count` is the total number of changes; the last one goes to `other`.
-    for (count, retained) in [(63usize, true), (64, true), (65, false), (200, false)] {
-        let mut tx = db.begin().await.unwrap();
-        for _ in 0..count - 1 {
-            tx.insert(&things, Object::new()).await.unwrap();
-        }
-        tx.insert(&other, Object::new()).await.unwrap();
-        tx.commit().await.unwrap();
-        let event = events.try_recv().unwrap();
-        assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
-        assert_eq!(event.tables, vec![other.clone(), things.clone()], "{count}");
-        match (retained, &event.records) {
-            (true, Some(records)) => assert_eq!(records.len(), count),
-            (false, None) => {}
-            (_, records) => panic!(
-                "{count} changes: records {:?}",
-                records.as_ref().map(Vec::len)
-            ),
-        }
-    }
-
-    // Byte bound: two ~10 KB images fit in 32 KiB, four do not; one 33 KB
-    // image alone does not either.
-    let big = "y".repeat(10_000);
-    for (rows, size, retained) in [
-        (2, big.as_str(), true),
-        (4, big.as_str(), false),
-        (1, &*"z".repeat(33_000), false),
-    ] {
-        let mut tx = db.begin().await.unwrap();
-        for _ in 0..rows {
-            tx.insert(&things, fields(&[("blob", text(size))]))
-                .await
-                .unwrap();
-        }
-        tx.commit().await.unwrap();
-        let event = events.try_recv().unwrap();
-        assert_eq!(event.tables, vec![things.clone()]);
-        assert_eq!(
-            event.records.is_some(),
-            retained,
-            "{rows} x {} bytes",
-            size.len()
-        );
-    }
+    assert_change_retention_bounds(&db, &things, &other, &mut events).await;
     // Overflow on a patch's before+after pair, after small changes were kept.
     let mut tx = db.begin().await.unwrap();
     tx.insert(&things, Object::new()).await.unwrap();
@@ -1868,45 +828,7 @@ async fn values_round_trip(disk: bool) {
     let fixture = Fixture::new(disk, "tkm83-index-tests");
     let mut db = Database::open(fixture.storage.clone()).await.unwrap();
     let docs = table("docs");
-    let nested = Value::Object(fields(&[
-        (
-            "list",
-            Value::Array(
-                vec![
-                    int(1),
-                    text("two"),
-                    Value::Null,
-                    Value::Object(fields(&[(
-                        "x",
-                        Value::Array(vec![Value::Bool(true)].into()),
-                    )])),
-                ]
-                .into(),
-            ),
-        ),
-        ("empty_list", Value::Array(Vec::<Value>::new().into())),
-        ("empty_object", Value::Object(Object::new())),
-    ]));
-    let original = fields(&[
-        (
-            "unicode",
-            text("雪 ❄️ e\u{301} \u{1F600} \"quoted\" \\ \n\t"),
-        ),
-        ("empty", text("")),
-        ("max", int(i64::MAX)),
-        ("min", int(i64::MIN)),
-        ("zero", int(0)),
-        ("negative", int(-42)),
-        ("half", float(1.5)),
-        ("negative_float", float(-0.25)),
-        ("integral_float", float(2.0)),
-        ("huge", float(1e300)),
-        ("tiny", float(f64::MIN_POSITIVE)),
-        ("yes", Value::Bool(true)),
-        ("no", Value::Bool(false)),
-        ("nothing", Value::Null),
-        ("nested", nested.clone()),
-    ]);
+    let (nested, original) = round_trip_values();
     let mut tx = db.begin().await.unwrap();
     tx.define_index(&docs, "by_nested", &["nested"], false)
         .await
@@ -1943,51 +865,7 @@ async fn values_round_trip(disk: bool) {
     }
     let mut read = db.read_only().await.unwrap();
     check(&read.get(&id).await.unwrap().unwrap().fields);
-    assert_eq!(
-        keys(
-            &read
-                .query(&docs)
-                .eq("nested", nested.clone())
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![id.to_string()]
-    );
-    assert_eq!(
-        keys(
-            &read
-                .query(&docs)
-                .with_index("by_nested")
-                .eq("nested", nested.clone())
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![id.to_string()]
-    );
-    assert_eq!(
-        keys(
-            &read
-                .query(&docs)
-                .eq("unicode", original.get("unicode").unwrap().clone())
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![id.to_string()]
-    );
-    assert_eq!(
-        keys(
-            &read
-                .query(&docs)
-                .eq("max", i64::MAX)
-                .collect()
-                .await
-                .unwrap()
-        ),
-        vec![id.to_string()]
-    );
+    assert_round_trip_queries(&mut read, &docs, &nested, &original, &id).await;
     read.commit().await.unwrap();
     // Patch and replace use the same conversion as insert.
     let mut tx = db.begin().await.unwrap();
@@ -2054,48 +932,15 @@ async fn non_json_operands_rejected(disk: bool) {
         for indexed in [false, true] {
             for op in ["eq", "gt", "gte", "lt", "lte"] {
                 for terminal in ["collect", "limit0", "first"] {
-                    let mut tx = db.begin().await.unwrap();
-                    let staged = tx
-                        .insert(&people, fields(&[("name", text("staged"))]))
-                        .await
-                        .unwrap();
-                    let mut query = tx.query(&people);
-                    if indexed {
-                        query = query.with_index("by_name");
-                    }
-                    let value = operand.clone();
-                    query = match op {
-                        "eq" => query.eq("name", value),
-                        "gt" => query.gt("name", value),
-                        "gte" => query.gte("name", value),
-                        "lt" => query.lt("name", value),
-                        _ => query.lte("name", value),
-                    };
-                    let result = match terminal {
-                        "collect" => query.collect().await.map(|rows| rows.len()),
-                        "limit0" => query.limit(0).collect().await.map(|rows| rows.len()),
-                        _ => query.first().await.map(|row| row.into_iter().count()),
-                    };
-                    let case = format!("{label} {op} indexed={indexed} {terminal}");
-                    assert!(
-                        matches!(result, Err(Error::Invalid(_))),
-                        "{case}: {result:?}"
-                    );
-                    assert!(
-                        matches!(tx.get(&alice).await, Err(Error::FailedTransaction)),
-                        "{case}: not poisoned"
-                    );
-                    assert!(
-                        matches!(tx.commit().await, Err(Error::FailedTransaction)),
-                        "{case}"
-                    );
-                    let mut read = db.read_only().await.unwrap();
-                    assert_eq!(
-                        read.get(&staged).await.unwrap(),
-                        None,
-                        "{case}: earlier write saved"
-                    );
-                    read.commit().await.unwrap();
+                    assert_non_json_operand_poisoned(
+                        &db,
+                        &people,
+                        &alice,
+                        operand,
+                        label,
+                        (indexed, op, terminal),
+                    )
+                    .await;
                     rejected += 1;
                 }
             }
@@ -2103,33 +948,7 @@ async fn non_json_operands_rejected(disk: bool) {
     }
     assert_eq!(rejected, operands.len() * 2 * 5 * 3);
 
-    // Strict equality: no pattern, prefix or case matching, and the same rows
-    // with and without the index.
-    let mut read = db.read_only().await.unwrap();
-    for (probe, expected) in [
-        ("alice", vec![alice.to_string()]),
-        ("ali", vec![]),
-        ("ALICE", vec![]),
-        ("^ali", vec![]),
-    ] {
-        let scanned = read
-            .query(&people)
-            .eq("name", probe)
-            .collect()
-            .await
-            .unwrap();
-        let indexed = read
-            .query(&people)
-            .with_index("by_name")
-            .eq("name", probe)
-            .collect()
-            .await
-            .unwrap();
-        assert_eq!(sorted_keys(&scanned), expected, "{probe}");
-        assert_eq!(sorted_keys(&indexed), expected, "{probe} indexed");
-    }
-    assert_eq!(read.query(&people).collect().await.unwrap().len(), 1);
-    read.commit().await.unwrap();
+    assert_literal_name_equality(&db, &people, &alice).await;
     barrier(&db, &mut events).await;
     db.close().await.unwrap();
 }
@@ -2226,6 +1045,1366 @@ async fn number_widths_are_one_number(disk: bool) {
     assert_eq!(above.len(), 9, "eight 2s and one 3 lie above 1.5");
     tx.commit().await.unwrap();
 
+    assert_unrepresentable_numbers_rejected(&db, &items).await;
+    db.close().await.unwrap();
+}
+
+async fn assert_maintenance_matches_scan(tx: &mut server::data::Transaction, tasks: &Table) {
+    let rows = tx.query(tasks).collect().await.unwrap();
+    for status in ["open", "done", "missing"] {
+        let expected: Vec<_> = rows
+            .iter()
+            .filter(|row| row.fields.get("status") == Some(&text(status)))
+            .cloned()
+            .collect();
+        let indexed = tx
+            .query(tasks)
+            .with_index("by_status")
+            .eq("status", status)
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(
+            sorted_keys(&indexed),
+            sorted_keys(&expected),
+            "status {status}"
+        );
+        // Rows come back with their current contents, not a stale image.
+        for row in &indexed {
+            assert!(rows.contains(row), "stale document {row:?}");
+        }
+    }
+    for list in ["home", "work"] {
+        let mut expected: Vec<_> = rows
+            .iter()
+            .filter(|row| row.fields.get("list") == Some(&text(list)))
+            .cloned()
+            .collect();
+        expected.sort_by_key(|row| match row.fields.get("rank") {
+            Some(Value::Number(Number::Int(rank))) => *rank,
+            other => panic!("rank {other:?}"),
+        });
+        let indexed = tx
+            .query(tasks)
+            .with_index("by_list_rank")
+            .eq("list", list)
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(indexed, expected, "list {list}");
+    }
+    // Every row has exactly one compound entry: no leftovers from moves.
+    let whole = tx
+        .query(tasks)
+        .with_index("by_list_rank")
+        .collect()
+        .await
+        .unwrap();
+    assert_eq!(sorted_keys(&whole), sorted_keys(&rows));
+}
+
+async fn unique_key_rows(
+    tx: &mut server::data::Transaction,
+    org: &str,
+    email: &str,
+) -> Vec<String> {
+    keys(
+        &tx.query(&table("users"))
+            .with_index("by_org_email")
+            .eq("org", org.to_owned())
+            .eq("email", email.to_owned())
+            .collect()
+            .await
+            .unwrap(),
+    )
+}
+
+async fn unique_handle_rows(tx: &mut server::data::Transaction, handle: &str) -> Vec<String> {
+    keys(
+        &tx.query(&table("users"))
+            .with_index("by_handle")
+            .eq("handle", handle.to_owned())
+            .collect()
+            .await
+            .unwrap(),
+    )
+}
+
+async fn seed_range_readings(db: &Database, readings: &Table) -> (Vec<(String, f64, Id)>, Id) {
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(readings, "by_sensor_value", &["sensor", "value"], false)
+        .await
+        .unwrap();
+    tx.define_index(readings, "by_value", &["value"], false)
+        .await
+        .unwrap();
+    let mut numeric: Vec<(String, f64, Id)> = Vec::new();
+    for sensor in ["a", "ab", "b"] {
+        for value in VALUES {
+            let id = tx
+                .insert(
+                    readings,
+                    fields(&[("sensor", text(sensor)), ("value", value.value())]),
+                )
+                .await
+                .unwrap();
+            numeric.push((sensor.into(), value.num(), id));
+        }
+    }
+    // Non-numeric rows of sensor "z" that no numeric two-sided range may
+    // return under any value ordering (null < numbers < strings).
+    for extra in [Some(text("5")), Some(Value::Null), None, Some(text("10"))] {
+        let mut row = fields(&[("sensor", text("z"))]);
+        if let Some(value) = extra {
+            row.insert("value", value);
+        }
+        tx.insert(readings, row).await.unwrap();
+    }
+    let five = tx
+        .insert(
+            readings,
+            fields(&[("sensor", text("z")), ("value", int(5))]),
+        )
+        .await
+        .unwrap();
+    numeric.push(("z".into(), 5.0, five.clone()));
+    tx.commit().await.unwrap();
+
+    (numeric, five)
+}
+
+fn range_cases() -> [Range; 13] {
+    [
+        Range {
+            lower: lo(false, N::I(-1)),
+            upper: None,
+        },
+        Range {
+            lower: lo(true, N::I(-1)),
+            upper: None,
+        },
+        Range {
+            lower: None,
+            upper: lo(false, N::I(2)),
+        },
+        Range {
+            lower: None,
+            upper: lo(true, N::I(2)),
+        },
+        Range {
+            lower: lo(true, N::F(-2.5)),
+            upper: lo(false, N::I(10)),
+        },
+        Range {
+            lower: lo(false, N::F(1.5)),
+            upper: lo(true, N::I(10)),
+        },
+        Range {
+            lower: lo(true, N::I(2)),
+            upper: lo(true, N::I(100)),
+        },
+        // Float bounds against integer rows: -1.0 excludes -1, 10.0 keeps both 10s.
+        Range {
+            lower: lo(false, N::F(-1.0)),
+            upper: lo(true, N::F(10.0)),
+        },
+        Range {
+            lower: lo(true, N::I(10)),
+            upper: lo(true, N::I(10)),
+        },
+        Range {
+            lower: lo(true, N::F(-0.8)),
+            upper: lo(false, N::F(0.6)),
+        },
+        // Empty and contradictory ranges.
+        Range {
+            lower: lo(true, N::I(5)),
+            upper: lo(true, N::I(5)),
+        },
+        Range {
+            lower: lo(false, N::I(10)),
+            upper: lo(false, N::I(10)),
+        },
+        Range {
+            lower: lo(true, N::I(50)),
+            upper: lo(true, N::I(3)),
+        },
+    ]
+}
+
+async fn assert_range_matrix(
+    tx: &mut server::data::Transaction,
+    readings: &Table,
+    expected: &impl Fn(Option<&str>, Range, Order, Option<usize>) -> Vec<Document>,
+) {
+    let ranges = range_cases();
+    for range in ranges {
+        for (order, limit) in [
+            (Order::Asc, None),
+            (Order::Desc, None),
+            (Order::Asc, Some(2)),
+            (Order::Desc, Some(3)),
+        ] {
+            let mut query = tx
+                .query(readings)
+                .with_index("by_sensor_value")
+                .eq("sensor", "a");
+            if let Some((inclusive, bound)) = range.lower {
+                query = if inclusive {
+                    query.gte("value", bound.value())
+                } else {
+                    query.gt("value", bound.value())
+                };
+            }
+            if let Some((inclusive, bound)) = range.upper {
+                query = if inclusive {
+                    query.lte("value", bound.value())
+                } else {
+                    query.lt("value", bound.value())
+                };
+            }
+            query = query.order(order);
+            if let Some(limit) = limit {
+                query = query.limit(limit as u32);
+            }
+            assert_eq!(
+                keys(&query.collect().await.unwrap()),
+                keys(&expected(Some("a"), range, order, limit)),
+                "sensor a {range:?} {order:?} limit {limit:?}"
+            );
+        }
+    }
+}
+
+async fn assert_prefix_and_numeric_bounds(
+    tx: &mut server::data::Transaction,
+    readings: &Table,
+    five: &Id,
+    expected: &impl Fn(Option<&str>, Range, Order, Option<usize>) -> Vec<Document>,
+) {
+    // Equality alone covers the whole prefix in value order (sensor "a" has
+    // only numeric values), and `first` on a descending read is the maximum.
+    let everything = Range {
+        lower: None,
+        upper: None,
+    };
+    assert_eq!(
+        keys(
+            &tx.query(readings)
+                .with_index("by_sensor_value")
+                .eq("sensor", "a")
+                .collect()
+                .await
+                .unwrap()
+        ),
+        keys(&expected(Some("a"), everything, Order::Asc, None))
+    );
+    assert_eq!(
+        tx.query(readings)
+            .with_index("by_sensor_value")
+            .eq("sensor", "b")
+            .order(Order::Desc)
+            .first()
+            .await
+            .unwrap()
+            .map(|row| row.fields.get("value").cloned()),
+        Some(Some(int(100)))
+    );
+    // A two-sided numeric range never returns null, missing or string values.
+    assert_eq!(
+        keys(
+            &tx.query(readings)
+                .with_index("by_sensor_value")
+                .eq("sensor", "z")
+                .gte("value", 0i64)
+                .lte("value", 10i64)
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![five.to_string()]
+    );
+}
+
+async fn assert_unprefixed_ranges(
+    tx: &mut server::data::Transaction,
+    readings: &Table,
+    expected: &impl Fn(Option<&str>, Range, Order, Option<usize>) -> Vec<Document>,
+) {
+    let z = Range {
+        lower: lo(true, N::I(0)),
+        upper: lo(true, N::I(10)),
+    };
+    // An index whose first field is the range field: no equality prefix, the
+    // range spans all sensors and still excludes the non-numeric rows.
+    let span = Range {
+        lower: lo(true, N::I(0)),
+        upper: lo(false, N::I(10)),
+    };
+    for order in [Order::Asc, Order::Desc] {
+        assert_eq!(
+            keys(
+                &tx.query(readings)
+                    .with_index("by_value")
+                    .gte("value", 0i64)
+                    .lt("value", 10i64)
+                    .order(order)
+                    .collect()
+                    .await
+                    .unwrap()
+            ),
+            keys(&expected(None, span, order, None)),
+            "{order:?}"
+        );
+    }
+    assert_eq!(
+        keys(
+            &tx.query(readings)
+                .with_index("by_value")
+                .gte("value", 0i64)
+                .lte("value", 10i64)
+                .order(Order::Desc)
+                .take(4)
+                .await
+                .unwrap()
+        ),
+        keys(&expected(None, z, Order::Desc, Some(4)))
+    );
+    // Equality on the full compound key selects exactly the duplicates of 10.
+    assert_eq!(
+        sorted_keys(
+            &tx.query(readings)
+                .with_index("by_sensor_value")
+                .eq("sensor", "ab")
+                .eq("value", 10i64)
+                .collect()
+                .await
+                .unwrap()
+        ),
+        sorted_keys(&expected(
+            Some("ab"),
+            Range {
+                lower: lo(true, N::I(10)),
+                upper: lo(true, N::I(10))
+            },
+            Order::Asc,
+            None
+        ))
+    );
+}
+
+async fn assert_definition_conflicts(db: &Database, posts: &Table) {
+    let conflicting: [(&str, &[&str], bool); 4] = [
+        ("by_author_time", &["author"], false),
+        ("by_author_time", &["time", "author"], false),
+        ("by_author_time", &["author", "time"], true),
+        ("by_author_time", &["author", "time", "extra"], false),
+    ];
+    for (name, columns, unique) in conflicting {
+        let mut tx = db.begin().await.unwrap();
+        tx.insert(&table("scratch"), Object::new()).await.unwrap();
+        let error = tx
+            .define_index(posts, name, columns, unique)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, Error::Invalid(_)),
+            "{columns:?} {unique}: {error:?}"
+        );
+        assert!(!error.is_retryable_conflict());
+        // Poisoned: the earlier successful insert cannot be saved.
+        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
+    }
+
+    // A new definition on a table that already has rows is rejected with an
+    // explicit backfill error; running it would leave existing rows unindexed.
+    let mut tx = db.begin().await.unwrap();
+    let error = tx
+        .define_index(posts, "by_time", &["time"], false)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, Error::Invalid(message) if message.contains("backfill")),
+        "{error:?}"
+    );
+    assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
+    let mut tx = db.begin().await.unwrap();
+    assert!(
+        tx.query(posts)
+            .with_index("by_time")
+            .collect()
+            .await
+            .is_err(),
+        "a rejected definition must not exist afterwards"
+    );
+    drop(tx);
+}
+
+async fn assert_invalid_definitions_and_reads(db: &Database, posts: &Table) {
+    // Malformed definitions.
+    for columns in [&[][..], &["author", "author"][..], &["bad-field"][..]] {
+        let mut tx = db.begin().await.unwrap();
+        assert!(
+            matches!(
+                tx.define_index(&table("fresh"), "ix", columns, false).await,
+                Err(Error::Invalid(_))
+            ),
+            "{columns:?}"
+        );
+        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
+    }
+
+    // Invalid reads: each is an error and poisons, even with limit zero.
+    type Bad = fn(server::data::Query<'_>) -> server::data::Query<'_>;
+    let bad: [(&str, Bad); 7] = [
+        ("unknown index", |q| q.with_index("no_such_index")),
+        ("unknown index, limit 0", |q| {
+            q.with_index("no_such_index").limit(0)
+        }),
+        ("eq skips the leading field", |q| {
+            q.with_index("by_author_time").eq("time", 1i64)
+        }),
+        ("range on the leading field after eq", |q| {
+            q.with_index("by_author_time")
+                .eq("author", "ann")
+                .gt("author", "a")
+        }),
+        ("range skips a field", |q| {
+            q.with_index("by_author_time").gt("time", 0i64)
+        }),
+        ("two lower bounds", |q| {
+            q.with_index("by_author_time")
+                .eq("author", "ann")
+                .gt("time", 0i64)
+                .gte("time", 1i64)
+        }),
+        ("range without an index", |q| q.gt("time", 0i64)),
+    ];
+    for (case, build) in bad {
+        let mut tx = db.begin().await.unwrap();
+        tx.insert(&table("scratch"), Object::new()).await.unwrap();
+        assert!(build(tx.query(posts)).collect().await.is_err(), "{case}");
+        assert!(
+            matches!(tx.commit().await, Err(Error::FailedTransaction)),
+            "{case}"
+        );
+    }
+    // An index name is scoped to its table.
+    let mut tx = db.read_only().await.unwrap();
+    assert!(
+        tx.query(&table("scratch"))
+            .with_index("by_author_time")
+            .collect()
+            .await
+            .is_err()
+    );
+    drop(tx);
+}
+
+async fn mutate_indexed_tasks(
+    db: &Database,
+    tasks: &Table,
+    ids: &[Id],
+) -> (server::data::Transaction, Id) {
+    let mut tx = db.begin().await.unwrap();
+    // Same indexed value: must not drop or duplicate its entry.
+    tx.patch(
+        &ids[0],
+        fields(&[("status", text("open")), ("note", text("same status"))]),
+    )
+    .await
+    .unwrap();
+    // Non-indexed field only.
+    tx.patch(&ids[1], fields(&[("note", text("edited"))]))
+        .await
+        .unwrap();
+    // Indexed field moves between keys.
+    tx.patch(&ids[2], fields(&[("status", text("open"))]))
+        .await
+        .unwrap();
+    // Only the second field of the compound key changes: home rank 1 -> 5.
+    tx.patch(&ids[0], fields(&[("rank", int(5))]))
+        .await
+        .unwrap();
+    // Replace drops "status" entirely and moves the compound key.
+    tx.replace(&ids[3], fields(&[("list", text("home")), ("rank", int(4))]))
+        .await
+        .unwrap();
+    // Delete, then a new row with exactly the deleted row's key values.
+    tx.delete(&ids[4]).await.unwrap();
+    let reinserted = tx
+        .insert(
+            tasks,
+            fields(&[
+                ("status", text("done")),
+                ("list", text("work")),
+                ("rank", int(2)),
+            ]),
+        )
+        .await
+        .unwrap();
+
+    // Independent truth: an unindexed scan of the same snapshot.
+
+    (tx, reinserted)
+}
+
+async fn assert_rolled_back_index_edits(db: &Database, tasks: &Table, ids: &[Id], reinserted: &Id) {
+    // A rolled-back transaction leaves no index trace either.
+    let mut tx = db.begin().await.unwrap();
+    tx.patch(&ids[1], fields(&[("status", text("done"))]))
+        .await
+        .unwrap();
+    tx.insert(
+        tasks,
+        fields(&[
+            ("status", text("done")),
+            ("list", text("x")),
+            ("rank", int(0)),
+        ]),
+    )
+    .await
+    .unwrap();
+    tx.delete(reinserted).await.unwrap();
+    tx.rollback().await.unwrap();
+    let mut read = db.read_only().await.unwrap();
+    assert_maintenance_matches_scan(&mut read, tasks).await;
+    assert_eq!(read.query(tasks).collect().await.unwrap().len(), 5);
+    read.commit().await.unwrap();
+}
+
+async fn seed_equality_values(db: &Database, items: &Table) -> Vec<Option<Value>> {
+    let values: Vec<Option<Value>> = vec![
+        None,
+        Some(Value::Null),
+        Some(Value::Bool(false)),
+        Some(int(0)),
+        Some(text("")),
+        Some(text("0")),
+        Some(int(2)),
+        Some(float(2.0)),
+        Some(int(-3)),
+        Some(Value::Array(vec![int(1), int(2)].into())),
+        Some(Value::Array(vec![int(1)].into())),
+        Some(Value::Array(Vec::<Value>::new().into())),
+        Some(Value::Object(fields(&[("k", int(1))]))),
+    ];
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(items, "by_tag", &["tag"], false)
+        .await
+        .unwrap();
+    for value in &values {
+        // Two rows per value so equality must return both, not just one.
+        for _ in 0..2 {
+            let mut row = Object::new();
+            if let Some(value) = value {
+                row.insert("tag", value.clone());
+            }
+            tx.insert(items, row).await.unwrap();
+        }
+    }
+    tx.commit().await.unwrap();
+
+    values
+}
+
+async fn assert_unique_write_failures(db: &Database, users: &Table, bob: &Id) -> (Id, Id) {
+    // Duplicate compound key on insert: violation names the index, poisons,
+    // and the earlier write of the same call is not saved.
+    let mut tx = db.begin().await.unwrap();
+    let early = tx
+        .insert(
+            users,
+            fields(&[("org", text("d")), ("email", text("early"))]),
+        )
+        .await
+        .unwrap();
+    let error = tx
+        .insert(users, fields(&[("org", text("a")), ("email", text("x"))]))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, Error::UniqueViolation { index } if index == "by_org_email"),
+        "{error:?}"
+    );
+    assert!(!error.is_retryable_conflict());
+    assert!(matches!(
+        tx.query(users).collect().await,
+        Err(Error::FailedTransaction)
+    ));
+    assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
+
+    // Patch that changes only the first compound field into a taken key, then
+    // the poisoned call is dropped without rollback. The update path removes
+    // bob's old entry before discovering the conflict; that must not leak.
+    let mut tx = db.begin().await.unwrap();
+    let leaked = tx
+        .insert(
+            users,
+            fields(&[
+                ("org", text("e")),
+                ("email", text("y")),
+                ("handle", text("fresh")),
+            ]),
+        )
+        .await
+        .unwrap();
+    let error = tx
+        .patch(bob, fields(&[("org", text("a"))]))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, Error::UniqueViolation { index } if index == "by_org_email"),
+        "{error:?}"
+    );
+    drop(tx);
+    // Single-field unique on patch, rolled back explicitly this time.
+    let mut tx = db.begin().await.unwrap();
+    let error = tx
+        .patch(bob, fields(&[("handle", text("ann"))]))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, Error::UniqueViolation { index } if index == "by_handle"),
+        "{error:?}"
+    );
+    tx.rollback().await.unwrap();
+
+    (early, leaked)
+}
+
+async fn assert_unique_failures_left_no_writes(
+    db: &Database,
+    users: &Table,
+    ann: &Id,
+    bob: &Id,
+    early: &Id,
+    leaked: &Id,
+    events: &mut Receiver<ChangeEvent>,
+) {
+    let mut read = db.read_only().await.unwrap();
+    assert_eq!(
+        unique_key_rows(&mut read, "a", "x").await,
+        vec![ann.to_string()]
+    );
+    assert_eq!(
+        unique_key_rows(&mut read, "b", "x").await,
+        vec![bob.to_string()]
+    );
+    assert!(unique_key_rows(&mut read, "d", "early").await.is_empty());
+    assert!(unique_key_rows(&mut read, "e", "y").await.is_empty());
+    assert!(unique_handle_rows(&mut read, "fresh").await.is_empty());
+    assert_eq!(
+        unique_handle_rows(&mut read, "ann").await,
+        vec![ann.to_string()]
+    );
+    assert_eq!(
+        unique_handle_rows(&mut read, "bob").await,
+        vec![bob.to_string()]
+    );
+    assert_eq!(
+        read.get(bob).await.unwrap().unwrap().fields.get("org"),
+        Some(&text("b"))
+    );
+    assert_eq!(read.get(early).await.unwrap(), None);
+    assert_eq!(read.get(leaked).await.unwrap(), None);
+    assert_eq!(read.query(users).collect().await.unwrap().len(), 6);
+    read.commit().await.unwrap();
+    // None of the failed calls published anything.
+    barrier(db, events).await;
+}
+
+async fn reuse_unique_keys(db: &Database, users: &Table, ann: &Id, bob: &Id) -> (Id, Id, Id) {
+    // Valid edits on rows holding unique keys, and key reuse in one call.
+    let mut tx = db.begin().await.unwrap();
+    // A non-unique field on a unique-indexed row, and a unique field patched to
+    // its own value: neither collides with the row's own entry.
+    tx.patch(ann, fields(&[("name", text("Ann"))]))
+        .await
+        .unwrap();
+    tx.patch(
+        ann,
+        fields(&[("handle", text("ann")), ("email", text("x"))]),
+    )
+    .await
+    .unwrap();
+    // The value "fresh" from the dropped call is free (no leaked entry).
+    let fresh = tx
+        .insert(
+            users,
+            fields(&[
+                ("org", text("e")),
+                ("email", text("y")),
+                ("handle", text("fresh")),
+            ]),
+        )
+        .await
+        .unwrap();
+    // Reuse after delete: ann's compound key and handle.
+    tx.delete(ann).await.unwrap();
+    let ann2 = tx
+        .insert(
+            users,
+            fields(&[
+                ("org", text("a")),
+                ("email", text("x")),
+                ("handle", text("ann")),
+            ]),
+        )
+        .await
+        .unwrap();
+    // Reuse after change: bob moves to a new handle, a new row takes "bob".
+    tx.patch(bob, fields(&[("handle", text("robert"))]))
+        .await
+        .unwrap();
+    let bob2 = tx
+        .insert(
+            users,
+            fields(&[
+                ("org", text("f")),
+                ("email", text("z")),
+                ("handle", text("bob")),
+            ]),
+        )
+        .await
+        .unwrap();
+    // Reads in the writing call already see the moved keys.
+    assert_eq!(
+        unique_handle_rows(&mut tx, "bob").await,
+        vec![bob2.to_string()]
+    );
+    assert_eq!(
+        unique_key_rows(&mut tx, "a", "x").await,
+        vec![ann2.to_string()]
+    );
+    tx.commit().await.unwrap();
+
+    (fresh, ann2, bob2)
+}
+
+async fn assert_reused_keys(
+    db: &Database,
+    users: &Table,
+    ann: &Id,
+    bob: &Id,
+    fresh: &Id,
+    ann2: &Id,
+    bob2: &Id,
+) {
+    let mut read = db.read_only().await.unwrap();
+    assert_eq!(
+        unique_key_rows(&mut read, "a", "x").await,
+        vec![ann2.to_string()]
+    );
+    assert_eq!(
+        unique_handle_rows(&mut read, "ann").await,
+        vec![ann2.to_string()]
+    );
+    assert_eq!(
+        unique_handle_rows(&mut read, "bob").await,
+        vec![bob2.to_string()]
+    );
+    assert_eq!(
+        unique_handle_rows(&mut read, "robert").await,
+        vec![bob.to_string()]
+    );
+    assert_eq!(
+        unique_handle_rows(&mut read, "fresh").await,
+        vec![fresh.to_string()]
+    );
+    assert_eq!(read.get(ann).await.unwrap(), None);
+    read.commit().await.unwrap();
+
+    // Still enforced after all the moves.
+    let mut tx = db.begin().await.unwrap();
+    assert!(matches!(
+        tx.insert(
+            users,
+            fields(&[
+                ("org", text("q")),
+                ("email", text("q")),
+                ("handle", text("robert"))
+            ])
+        )
+        .await,
+        Err(Error::UniqueViolation { .. })
+    ));
+    drop(tx);
+}
+
+async fn assert_unique_snapshot_conflict(
+    db: &Database,
+    accounts: &Table,
+    events: &mut Receiver<ChangeEvent>,
+) -> Id {
+    // Same unique key from two snapshots.
+    let mut first = db.begin().await.unwrap();
+    let mut second = db.begin().await.unwrap();
+    let winner = first
+        .insert(
+            accounts,
+            fields(&[("email", text("e")), ("team", text("t"))]),
+        )
+        .await
+        .unwrap();
+    second
+        .insert(
+            accounts,
+            fields(&[("email", text("e")), ("team", text("t"))]),
+        )
+        .await
+        .unwrap();
+    first.commit().await.unwrap();
+    assert_eq!(events.try_recv().unwrap().tables, vec![accounts.clone()]);
+    let conflict = second.commit().await.unwrap_err();
+    assert!(conflict.is_retryable_conflict(), "{conflict:?}");
+    // The replay now sees the committed key and reports a real violation.
+    let mut replay = db.begin().await.unwrap();
+    assert!(matches!(
+        replay
+            .insert(accounts, fields(&[("email", text("e"))]))
+            .await,
+        Err(Error::UniqueViolation { .. })
+    ));
+    drop(replay);
+
+    winner
+}
+
+async fn assert_non_unique_snapshots_commit(
+    db: &Database,
+    accounts: &Table,
+    winner: &Id,
+    events: &mut Receiver<ChangeEvent>,
+) {
+    // Same non-unique value from two snapshots: both commit.
+    let mut first = db.begin().await.unwrap();
+    let mut second = db.begin().await.unwrap();
+    let a = first
+        .insert(
+            accounts,
+            fields(&[("email", text("a")), ("team", text("t"))]),
+        )
+        .await
+        .unwrap();
+    let b = second
+        .insert(
+            accounts,
+            fields(&[("email", text("b")), ("team", text("t"))]),
+        )
+        .await
+        .unwrap();
+    first.commit().await.unwrap();
+    second.commit().await.unwrap();
+    let mut read = db.read_only().await.unwrap();
+    let mut expected = vec![winner.to_string(), a.to_string(), b.to_string()];
+    expected.sort();
+    assert_eq!(
+        sorted_keys(
+            &read
+                .query(accounts)
+                .with_index("by_team")
+                .eq("team", "t")
+                .collect()
+                .await
+                .unwrap()
+        ),
+        expected
+    );
+    assert_eq!(read.query(accounts).collect().await.unwrap().len(), 3);
+    read.commit().await.unwrap();
+    while events.try_recv().is_ok() {}
+}
+
+async fn assert_writer_predating_definition(db: &Database) {
+    // A writer that began before an index definition committed.
+    let logs = table("logs");
+    let mut stale = db.begin().await.unwrap();
+    let mut definer = db.begin().await.unwrap();
+    definer
+        .define_index(&logs, "by_level", &["level"], false)
+        .await
+        .unwrap();
+    definer.commit().await.unwrap();
+    let error = stale
+        .insert(&logs, fields(&[("level", text("warn"))]))
+        .await
+        .unwrap_err();
+    assert!(error.is_retryable_conflict(), "{error:?}");
+    assert!(matches!(
+        stale.commit().await,
+        Err(Error::FailedTransaction)
+    ));
+    let mut retry = db.begin().await.unwrap();
+    let warn = retry
+        .insert(&logs, fields(&[("level", text("warn"))]))
+        .await
+        .unwrap();
+    retry.commit().await.unwrap();
+    let mut read = db.read_only().await.unwrap();
+    assert_eq!(
+        keys(
+            &read
+                .query(&logs)
+                .with_index("by_level")
+                .eq("level", "warn")
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![warn.to_string()]
+    );
+    read.commit().await.unwrap();
+}
+
+async fn assert_definition_racing_writer(db: &Database) -> Id {
+    // A definition while another call is writing the (still empty) table.
+    let jobs = table("jobs");
+    let mut writer = db.begin().await.unwrap();
+    let job = writer
+        .insert(&jobs, fields(&[("state", text("new"))]))
+        .await
+        .unwrap();
+    let mut definer = db.begin().await.unwrap();
+    let error = definer
+        .define_index(&jobs, "by_state", &["state"], false)
+        .await
+        .unwrap_err();
+    assert!(error.is_retryable_conflict(), "{error:?}");
+    assert!(matches!(
+        definer.commit().await,
+        Err(Error::FailedTransaction)
+    ));
+    writer.commit().await.unwrap();
+
+    job
+}
+
+async fn seed_persistent_indexes(
+    mut db: Database,
+    notes: &Table,
+    pending: &Table,
+) -> Vec<(i64, Id)> {
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(notes, "by_slug", &["slug"], true)
+        .await
+        .unwrap();
+    tx.define_index(notes, "by_rank", &["rank"], false)
+        .await
+        .unwrap();
+    // Defined, but the table stays empty until after reopen.
+    tx.define_index(pending, "by_a", &["a"], false)
+        .await
+        .unwrap();
+    let mut inserted = Vec::new();
+    for rank in [3i64, 1, 2] {
+        inserted.push((
+            rank,
+            tx.insert(
+                notes,
+                fields(&[("slug", text(&format!("s{rank}"))), ("rank", int(rank))]),
+            )
+            .await
+            .unwrap(),
+        ));
+    }
+    tx.commit().await.unwrap();
+    // A rolled-back definition must not persist.
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(&table("ghost"), "by_x", &["x"], false)
+        .await
+        .unwrap();
+    tx.rollback().await.unwrap();
+    db.close().await.unwrap();
+
+    inserted
+}
+
+async fn assert_new_indexes_after_reopen(db: &Database, notes: &Table, pending: &Table) {
+    // New definitions after reopen: on the pre-existing empty table and on a
+    // brand-new table, then rows that populate every index at once.
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(pending, "by_b", &["b"], false)
+        .await
+        .unwrap();
+    let fresh = table("fresh");
+    tx.define_index(&fresh, "by_a", &["a"], false)
+        .await
+        .unwrap();
+    let mut rows = Vec::new();
+    for (a, b) in [(1i64, 30i64), (2, 20), (3, 10)] {
+        rows.push(
+            tx.insert(pending, fields(&[("a", int(a)), ("b", int(b))]))
+                .await
+                .unwrap(),
+        );
+        tx.insert(&fresh, fields(&[("a", int(a))])).await.unwrap();
+    }
+    tx.commit().await.unwrap();
+    let mut read = db.read_only().await.unwrap();
+    assert_eq!(
+        keys(
+            &read
+                .query(pending)
+                .with_index("by_a")
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![
+            rows[0].to_string(),
+            rows[1].to_string(),
+            rows[2].to_string()
+        ]
+    );
+    assert_eq!(
+        keys(
+            &read
+                .query(pending)
+                .with_index("by_b")
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![
+            rows[2].to_string(),
+            rows[1].to_string(),
+            rows[0].to_string()
+        ]
+    );
+    assert_eq!(
+        read.query(&fresh)
+            .with_index("by_a")
+            .collect()
+            .await
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(
+        read.query(notes)
+            .with_index("by_rank")
+            .collect()
+            .await
+            .unwrap()
+            .len(),
+        3
+    );
+    read.commit().await.unwrap();
+}
+
+async fn assert_many_row_ranges(
+    db: &Database,
+    points: &Table,
+    by_n: &std::collections::BTreeMap<i64, Id>,
+) {
+    let ids = |range: std::ops::Range<i64>| range.map(|n| by_n[&n].to_string()).collect::<Vec<_>>();
+    let mut tx = db.read_only().await.unwrap();
+    assert_eq!(tx.query(points).collect().await.unwrap().len(), 300usize);
+    assert_eq!(
+        tx.query(points)
+            .eq("parity", 0i64)
+            .collect()
+            .await
+            .unwrap()
+            .len(),
+        150
+    );
+    assert_eq!(
+        keys(&tx.query(points).with_index("by_n").collect().await.unwrap()),
+        ids(0..300)
+    );
+    assert_eq!(
+        keys(
+            &tx.query(points)
+                .with_index("by_n")
+                .gte("n", 37i64)
+                .lt("n", 263i64)
+                .collect()
+                .await
+                .unwrap()
+        ),
+        ids(37..263)
+    );
+    let mut top = ids(163..263);
+    top.reverse();
+    assert_eq!(
+        keys(
+            &tx.query(points)
+                .with_index("by_n")
+                .gte("n", 37i64)
+                .lt("n", 263i64)
+                .order(Order::Desc)
+                .take(100)
+                .await
+                .unwrap()
+        ),
+        top
+    );
+    tx.commit().await.unwrap();
+}
+
+async fn assert_change_retention_bounds(
+    db: &Database,
+    things: &Table,
+    other: &Table,
+    events: &mut Receiver<ChangeEvent>,
+) {
+    // Count bound: 64 retained, 65 collapse, and the table list stays complete
+    // even for tables written only after the collapse.
+    // `count` is the total number of changes; the last one goes to `other`.
+    for (count, retained) in [(63usize, true), (64, true), (65, false), (200, false)] {
+        let mut tx = db.begin().await.unwrap();
+        for _ in 0..count - 1 {
+            tx.insert(things, Object::new()).await.unwrap();
+        }
+        tx.insert(other, Object::new()).await.unwrap();
+        tx.commit().await.unwrap();
+        let event = events.try_recv().unwrap();
+        assert_eq!(events.try_recv(), Err(TryRecvError::Empty));
+        assert_eq!(event.tables, vec![other.clone(), things.clone()], "{count}");
+        match (retained, &event.records) {
+            (true, Some(records)) => assert_eq!(records.len(), count),
+            (false, None) => {}
+            (_, records) => panic!(
+                "{count} changes: records {:?}",
+                records.as_ref().map(Vec::len)
+            ),
+        }
+    }
+
+    // Byte bound: two ~10 KB images fit in 32 KiB, four do not; one 33 KB
+    // image alone does not either.
+    let big = "y".repeat(10_000);
+    for (rows, size, retained) in [
+        (2, big.as_str(), true),
+        (4, big.as_str(), false),
+        (1, &*"z".repeat(33_000), false),
+    ] {
+        let mut tx = db.begin().await.unwrap();
+        for _ in 0..rows {
+            tx.insert(things, fields(&[("blob", text(size))]))
+                .await
+                .unwrap();
+        }
+        tx.commit().await.unwrap();
+        let event = events.try_recv().unwrap();
+        assert_eq!(event.tables, vec![things.clone()]);
+        assert_eq!(
+            event.records.is_some(),
+            retained,
+            "{rows} x {} bytes",
+            size.len()
+        );
+    }
+}
+
+fn assert_retained_change_images(
+    event: ChangeEvent,
+    things: &Table,
+    other: &Table,
+    ids: [&Id; 5],
+    times: [i64; 5],
+) {
+    let [created, patched, deleted, replaced, marker] = ids;
+    let [ct, pt, dt, rt, mt] = times;
+    assert_eq!(event.tables, vec![other.clone(), things.clone()]);
+    let records = event.records.expect("five small changes are retained");
+    assert_eq!(records.len(), 5);
+    let find = |id: &Id| {
+        let found: Vec<_> = records.iter().filter(|change| &change.id == id).collect();
+        assert_eq!(found.len(), 1, "{id}");
+        (found[0].before.clone(), found[0].after.clone())
+    };
+    assert_eq!(
+        find(created),
+        (
+            None,
+            Some(json!({"_id": created.to_string(), "_creationTime": ct, "v": 4, "s": "雪 ✓"}))
+        )
+    );
+    assert_eq!(
+        find(patched),
+        (
+            Some(json!({"_id": patched.to_string(), "_creationTime": pt, "v": 1})),
+            Some(json!({"_id": patched.to_string(), "_creationTime": pt, "v": 10}))
+        )
+    );
+    assert_eq!(
+        find(deleted),
+        (
+            Some(json!({"_id": deleted.to_string(), "_creationTime": dt, "v": 2})),
+            None
+        )
+    );
+    assert_eq!(
+        find(replaced),
+        (
+            Some(json!({"_id": replaced.to_string(), "_creationTime": rt, "v": 3, "extra": true})),
+            Some(json!({"_id": replaced.to_string(), "_creationTime": rt, "w": "x"}))
+        )
+    );
+    assert_eq!(
+        find(marker),
+        (
+            None,
+            Some(json!({"_id": marker.to_string(), "_creationTime": mt}))
+        )
+    );
+}
+
+fn round_trip_values() -> (Value, Object) {
+    let nested = Value::Object(fields(&[
+        (
+            "list",
+            Value::Array(
+                vec![
+                    int(1),
+                    text("two"),
+                    Value::Null,
+                    Value::Object(fields(&[(
+                        "x",
+                        Value::Array(vec![Value::Bool(true)].into()),
+                    )])),
+                ]
+                .into(),
+            ),
+        ),
+        ("empty_list", Value::Array(Vec::<Value>::new().into())),
+        ("empty_object", Value::Object(Object::new())),
+    ]));
+    let original = fields(&[
+        (
+            "unicode",
+            text("雪 ❄️ e\u{301} \u{1F600} \"quoted\" \\ \n\t"),
+        ),
+        ("empty", text("")),
+        ("max", int(i64::MAX)),
+        ("min", int(i64::MIN)),
+        ("zero", int(0)),
+        ("negative", int(-42)),
+        ("half", float(1.5)),
+        ("negative_float", float(-0.25)),
+        ("integral_float", float(2.0)),
+        ("huge", float(1e300)),
+        ("tiny", float(f64::MIN_POSITIVE)),
+        ("yes", Value::Bool(true)),
+        ("no", Value::Bool(false)),
+        ("nothing", Value::Null),
+        ("nested", nested.clone()),
+    ]);
+
+    (nested, original)
+}
+
+async fn assert_round_trip_queries(
+    read: &mut server::data::Transaction,
+    docs: &Table,
+    nested: &Value,
+    original: &Object,
+    id: &Id,
+) {
+    assert_eq!(
+        keys(
+            &read
+                .query(docs)
+                .eq("nested", nested.clone())
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![id.to_string()]
+    );
+    assert_eq!(
+        keys(
+            &read
+                .query(docs)
+                .with_index("by_nested")
+                .eq("nested", nested.clone())
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![id.to_string()]
+    );
+    assert_eq!(
+        keys(
+            &read
+                .query(docs)
+                .eq("unicode", original.get("unicode").unwrap().clone())
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![id.to_string()]
+    );
+    assert_eq!(
+        keys(
+            &read
+                .query(docs)
+                .eq("max", i64::MAX)
+                .collect()
+                .await
+                .unwrap()
+        ),
+        vec![id.to_string()]
+    );
+}
+
+async fn assert_non_json_operand_poisoned(
+    db: &Database,
+    people: &Table,
+    alice: &Id,
+    operand: &Value,
+    label: &str,
+    access: (bool, &str, &str),
+) {
+    let (indexed, op, terminal) = access;
+    let mut tx = db.begin().await.unwrap();
+    let staged = tx
+        .insert(people, fields(&[("name", text("staged"))]))
+        .await
+        .unwrap();
+    let mut query = tx.query(people);
+    if indexed {
+        query = query.with_index("by_name");
+    }
+    let value = operand.clone();
+    query = match op {
+        "eq" => query.eq("name", value),
+        "gt" => query.gt("name", value),
+        "gte" => query.gte("name", value),
+        "lt" => query.lt("name", value),
+        _ => query.lte("name", value),
+    };
+    let result = match terminal {
+        "collect" => query.collect().await.map(|rows| rows.len()),
+        "limit0" => query.limit(0).collect().await.map(|rows| rows.len()),
+        _ => query.first().await.map(|row| row.into_iter().count()),
+    };
+    let case = format!("{label} {op} indexed={indexed} {terminal}");
+    assert!(
+        matches!(result, Err(Error::Invalid(_))),
+        "{case}: {result:?}"
+    );
+    assert!(
+        matches!(tx.get(alice).await, Err(Error::FailedTransaction)),
+        "{case}: not poisoned"
+    );
+    assert!(
+        matches!(tx.commit().await, Err(Error::FailedTransaction)),
+        "{case}"
+    );
+    let mut read = db.read_only().await.unwrap();
+    assert_eq!(
+        read.get(&staged).await.unwrap(),
+        None,
+        "{case}: earlier write saved"
+    );
+    read.commit().await.unwrap();
+}
+
+async fn assert_unrepresentable_numbers_rejected(db: &Database, items: &Table) {
     // No exact canonical form: still outside the contract, and poisoning.
     for bad in [
         Value::Number(Number::U64(u64::MAX)),
@@ -2235,7 +2414,7 @@ async fn number_widths_are_one_number(disk: bool) {
         let mut tx = db.begin().await.unwrap();
         assert!(
             matches!(
-                tx.query(&items).eq("k", bad.clone()).collect().await,
+                tx.query(items).eq("k", bad.clone()).collect().await,
                 Err(Error::Invalid(_))
             ),
             "operand {bad:?}"
@@ -2244,12 +2423,76 @@ async fn number_widths_are_one_number(disk: bool) {
         let mut tx = db.begin().await.unwrap();
         assert!(
             matches!(
-                tx.insert(&items, fields(&[("k", bad.clone())])).await,
+                tx.insert(items, fields(&[("k", bad.clone())])).await,
                 Err(Error::Invalid(_))
             ),
             "document {bad:?}"
         );
         assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
     }
-    db.close().await.unwrap();
+}
+
+async fn assert_literal_name_equality(db: &Database, people: &Table, alice: &Id) {
+    // Strict equality: no pattern, prefix or case matching, and the same rows
+    // with and without the index.
+    let mut read = db.read_only().await.unwrap();
+    for (probe, expected) in [
+        ("alice", vec![alice.to_string()]),
+        ("ali", vec![]),
+        ("ALICE", vec![]),
+        ("^ali", vec![]),
+    ] {
+        let scanned = read
+            .query(people)
+            .eq("name", probe)
+            .collect()
+            .await
+            .unwrap();
+        let indexed = read
+            .query(people)
+            .with_index("by_name")
+            .eq("name", probe)
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(sorted_keys(&scanned), expected, "{probe}");
+        assert_eq!(sorted_keys(&indexed), expected, "{probe} indexed");
+    }
+    assert_eq!(read.query(people).collect().await.unwrap().len(), 1);
+    read.commit().await.unwrap();
+}
+
+async fn seed_maintenance_tasks(db: &Database, tasks: &Table) -> Vec<Id> {
+    let mut tx = db.begin().await.unwrap();
+    tx.define_index(tasks, "by_status", &["status"], false)
+        .await
+        .unwrap();
+    tx.define_index(tasks, "by_list_rank", &["list", "rank"], false)
+        .await
+        .unwrap();
+    let mut ids = Vec::new();
+    for (status, list, rank) in [
+        ("open", "home", 1),
+        ("open", "home", 2),
+        ("done", "home", 3),
+        ("open", "work", 1),
+        ("done", "work", 2),
+    ] {
+        ids.push(
+            tx.insert(
+                tasks,
+                fields(&[
+                    ("status", text(status)),
+                    ("list", text(list)),
+                    ("rank", int(rank)),
+                    ("note", text("n")),
+                ]),
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    tx.commit().await.unwrap();
+
+    ids
 }

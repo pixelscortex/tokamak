@@ -2,7 +2,7 @@ import { view, defineSlot, useQuery, useClient } from "@tokamak/sdk/client";
 import { createApi } from "@tokamak/sdk";
 import { createSignal } from "solid-js";
 const api = createApi<{ fixture: { read: import("@tokamak/sdk").FunctionReference<"query", {}, string> } }>();
-export const dependency = () => import("@plugins/other/ui");
+export const dependency = () => import("plugin:other/client");
 export const actions = defineSlot("actions");
 export function Panel() {
   return <aside>Panel</aside>;

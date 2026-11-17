@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -7,6 +7,7 @@ await mkdir(target, { recursive: true });
 const temporary = await mkdtemp(join(target, "worker-fixture-"));
 try {
   await cp(new URL("./fixtures/worker/", import.meta.url), temporary, { recursive: true });
+  await symlink(join(root, "app/node_modules"), join(temporary, "node_modules"), "dir");
   await writeFile(
     join(temporary, "src/server/tsconfig.json"),
     JSON.stringify({
@@ -14,7 +15,6 @@ try {
       compilerOptions: {
         types: ["node"],
         lib: ["ES2022", "DOM"],
-        paths: { "@tokamak/sdk": [join(root, "packages/sdk/src/index.ts")] },
       },
     }),
   );

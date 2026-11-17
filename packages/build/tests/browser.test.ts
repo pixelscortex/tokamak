@@ -46,9 +46,11 @@ test("browser plugin emits DOM ESM with host imports, contributions and qualifie
 }, 30000);
 
 test("static plugin imports infer dependencies and styles remain optional", async () => {
-  const { cp, mkdtemp, readFile, rm, writeFile } = await import("node:fs/promises");
+  const { cp, mkdir, mkdtemp, readFile, rm, writeFile } = await import("node:fs/promises");
   const root = await mkdtemp(resolve(import.meta.dir, "fixtures/browser-test-"));
   try {
+    await mkdir(resolve(root, "../required/src/client"), { recursive: true });
+    await writeFile(resolve(root, "../required/src/client/api.ts"), 'export const Remote = "remote";');
     await cp(resolve(import.meta.dir, "fixtures/browser"), root, {
       recursive: true,
       filter: (path) => !path.split("/").includes("dist"),
@@ -57,7 +59,7 @@ test("static plugin imports infer dependencies and styles remain optional", asyn
     const entry = resolve(root, "src/client/api.ts");
     await writeFile(
       entry,
-      `${await readFile(entry, "utf8")}\nexport { Remote } from "@plugins/required/ui";`,
+      `${await readFile(entry, "utf8")}\nexport { Remote } from "plugin:required/client";`,
     );
     const result = await build({ root, configFile: false, plugins: [tokamak()], build: { write: false } });
     const output = Array.isArray(result) ? result[0]! : result;
@@ -73,6 +75,7 @@ test("static plugin imports infer dependencies and styles remain optional", asyn
     expect(metadata.hashes["styles.css"]).toBeUndefined();
   } finally {
     await rm(root, { recursive: true, force: true });
+    await rm(resolve(root, "../required"), { recursive: true, force: true });
   }
 }, 30000);
 

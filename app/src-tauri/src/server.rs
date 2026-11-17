@@ -147,6 +147,42 @@ impl Drop for LaunchLock {
     }
 }
 
+fn ensure_token(directory: &Path) -> Result<()> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    match options.open(directory.join("server.token")) {
+        Ok(mut file) => {
+            use std::io::Write;
+            write!(
+                file,
+                "{}{}",
+                uuid::Uuid::new_v4().simple(),
+                uuid::Uuid::new_v4().simple()
+            )?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error.into()),
+    }
+    token(directory)?;
+    Ok(())
+}
+
+fn server_log(directory: &Path) -> Result<fs::File> {
+    let mut log_options = OpenOptions::new();
+    log_options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        log_options.mode(0o600);
+    }
+    Ok(log_options.open(directory.join("server.log"))?)
+}
+
 fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
     let binary = binary()?;
     let output = Command::new(&binary).arg("--local-path").output()?;
@@ -199,35 +235,8 @@ fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
     if let Some(endpoint) = status(&client, &directory, &plugins)? {
         return Ok(endpoint);
     }
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    match options.open(directory.join("server.token")) {
-        Ok(mut file) => {
-            use std::io::Write;
-            write!(
-                file,
-                "{}{}",
-                uuid::Uuid::new_v4().simple(),
-                uuid::Uuid::new_v4().simple()
-            )?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-        Err(error) => return Err(error.into()),
-    }
-    token(&directory)?;
-    let mut log_options = OpenOptions::new();
-    log_options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        log_options.mode(0o600);
-    }
-    let log = log_options.open(directory.join("server.log"))?;
+    ensure_token(&directory)?;
+    let log = server_log(&directory)?;
     let mut command = Command::new(binary);
     command
         .args(["--local-dir"])

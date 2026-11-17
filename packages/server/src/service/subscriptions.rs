@@ -59,13 +59,15 @@ impl Coordinator {
                 host::invoke(
                     &self.database,
                     &self.pool,
-                    self.bundle.clone(),
-                    &name,
-                    args,
-                    false,
-                    &self.space,
-                    self.plugins.clone(),
-                    engine::Determinism::default(),
+                    host::Invocation {
+                        bundle: self.bundle.clone(),
+                        name: &name,
+                        args,
+                        mutation: false,
+                        space: &self.space,
+                        plugins: self.plugins.clone(),
+                        determinism: engine::Determinism::default(),
+                    },
                 )
                 .await
             } else {

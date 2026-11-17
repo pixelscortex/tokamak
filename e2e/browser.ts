@@ -12,7 +12,7 @@ const env = {
   TOKAMAK_PLUGIN_DIR: `${directory}/plugins`,
   TOKAMAK_FIXTURE_SOURCE: `${directory}/fixture`,
   TOKAMAK_SERVER_DIR: `${directory}/local`,
-  TOKAMAK_ALLOWED_ORIGINS: "http://127.0.0.1:1420",
+  TOKAMAK_ALLOWED_ORIGINS: `http://127.0.0.1:${process.env.TOKAMAK_E2E_PORT ?? "1420"}`,
   VITE_TOKAMAK_HTTP: "http://127.0.0.1:43123",
   VITE_TOKAMAK_TOKEN: randomBytes(32).toString("hex"),
 };

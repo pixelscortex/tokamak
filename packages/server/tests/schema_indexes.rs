@@ -157,8 +157,7 @@ fn artifact(variant: &Variant) -> PathBuf {
     std::fs::write(
         target.join("backend/tsconfig.json"),
         json!({
-            "extends": root.join("tsconfig.json"),
-            "compilerOptions": {"paths": {"@tokamak/sdk": [root.join("packages/sdk/src/index.ts")]}}
+            "extends": root.join("tsconfig.json")
         })
         .to_string(),
     )
@@ -443,65 +442,13 @@ async fn indexed_queries_return_exactly_the_matching_rows_in_index_order(disk: b
             .await;
         rows.push((id.as_str().unwrap().to_owned(), owner.to_owned(), created));
     }
-    let expected = |owner: &str,
-                    lower: Option<(&str, i64)>,
-                    upper: Option<(&str, i64)>,
-                    desc: bool,
-                    limit: Option<usize>| {
-        let mut matching: Vec<_> = rows
-            .iter()
-            .filter(|(_, o, c)| {
-                o == owner
-                    && lower.is_none_or(|(op, v)| {
-                        if op == "gt" {
-                            *c > v
-                        } else {
-                            *c >= v
-                        }
-                    })
-                    && upper.is_none_or(|(op, v)| {
-                        if op == "lt" {
-                            *c < v
-                        } else {
-                            *c <= v
-                        }
-                    })
-            })
-            .map(|(id, _, c)| (*c, id.clone()))
-            .collect();
-        matching.sort();
-        if desc {
-            matching.reverse();
-        }
-        let mut result: Vec<String> = matching.into_iter().map(|(_, id)| id).collect();
-        if let Some(limit) = limit {
-            result.truncate(limit);
-        }
-        result
-    };
-
     let lowers = [None, Some(("gt", 10)), Some(("gte", 10))];
     let uppers = [None, Some(("lt", 20)), Some(("lte", 20))];
     for lower in lowers {
         for upper in uppers {
             for desc in [false, true] {
                 for limit in [None, Some(2)] {
-                    let mut args = json!({"owner":"ann","order":if desc {"desc"} else {"asc"}});
-                    if let Some((op, value)) = lower {
-                        args["lower"] = json!({"op":op,"value":value});
-                    }
-                    if let Some((op, value)) = upper {
-                        args["upper"] = json!({"op":op,"value":value});
-                    }
-                    if let Some(limit) = limit {
-                        args["limit"] = json!(limit);
-                    }
-                    let actual = client.ok("alpha/todos:range", args.clone()).await;
-                    assert_eq!(
-                        ids(&actual),
-                        expected("ann", lower, upper, desc, limit),
-                        "range {args}"
-                    );
+                    assert_index_range_case(&mut client, &rows, (lower, upper, desc, limit)).await;
                 }
             }
         }
@@ -514,7 +461,7 @@ async fn indexed_queries_return_exactly_the_matching_rows_in_index_order(disk: b
                 json!({"owner":"ann","upper":{"op":"lt","value":10},"order":"asc"})
             )
             .await),
-        expected("ann", None, Some(("lt", 10)), false, None)
+        expected_index_rows(&rows, "ann", None, Some(("lt", 10)), false, None)
     );
     assert_eq!(
         client
@@ -546,38 +493,10 @@ async fn indexed_queries_return_exactly_the_matching_rows_in_index_order(disk: b
         ids(&client
             .ok("alpha/todos:recent", json!({"owner":"bob","since":0}))
             .await),
-        expected("bob", Some(("gt", 0)), None, true, None)
+        expected_index_rows(&rows, "bob", Some(("gt", 0)), None, true, None)
     );
 
-    // A full index scan is ordered by (owner, created, _id) in both directions.
-    let mut all: Vec<_> = rows
-        .iter()
-        .map(|(id, owner, created)| (owner.clone(), *created, id.clone()))
-        .collect();
-    all.sort();
-    let ascending: Vec<String> = all.iter().map(|(_, _, id)| id.clone()).collect();
-    assert_eq!(
-        ids(&client.ok("alpha/todos:scan", json!({"order":"asc"})).await),
-        ascending
-    );
-    let mut descending = ascending.clone();
-    descending.reverse();
-    assert_eq!(
-        ids(&client.ok("alpha/todos:scan", json!({"order":"desc"})).await),
-        descending
-    );
-
-    // Returned rows are complete documents, not index entries.
-    let first = client
-        .ok(
-            "alpha/todos:range",
-            json!({"owner":"ann","order":"asc","limit":1}),
-        )
-        .await;
-    assert_eq!(first[0]["owner"], "ann");
-    assert_eq!(first[0]["created"], 5);
-    assert_eq!(first[0]["done"], false);
-    assert!(first[0]["_creationTime"].is_number());
+    assert_full_index_scan(&mut client, &rows).await;
     drop(client);
     server.close().await.unwrap();
 }
@@ -614,88 +533,7 @@ fn server_rejects_invalid_index_query_payloads_sent_without_the_sdk() {
             .await;
         assert_eq!(valid.as_array().unwrap().len(), 1);
 
-        let cases = [
-            (
-                "unknown index",
-                json!({"name":"by_missing","eq":[],"range":[]}),
-                json!([]),
-                "does not exist",
-            ),
-            (
-                "eq out of index order",
-                json!({"name":"by_owner_created","eq":[eq("created",json!(10))],"range":[]}),
-                json!([]),
-                "leading field order",
-            ),
-            (
-                "eq skipping the leading field",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann")),eq("text",json!("a"))],"range":[]}),
-                json!([]),
-                "leading field order",
-            ),
-            (
-                "eq beyond the index fields",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann")),eq("created",json!(10)),eq("done",json!(false))],"range":[]}),
-                json!([]),
-                "leading field order",
-            ),
-            (
-                "range not on the next field",
-                json!({"name":"by_owner_created","eq":[],"range":[bound("created","gt",json!(1))]}),
-                json!([]),
-                "after the equality prefix",
-            ),
-            (
-                "range on an equality field",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("owner","gt",json!("a"))]}),
-                json!([]),
-                "after the equality prefix",
-            ),
-            (
-                // The raw form of "eq after range": the equality prefix covers
-                // the field the range constrains.
-                "eq after range",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann")),eq("created",json!(10))],"range":[bound("created","gt",json!(1))]}),
-                json!([]),
-                "after the equality prefix",
-            ),
-            (
-                "two lower bounds",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("created","gt",json!(1)),bound("created","gte",json!(2))]}),
-                json!([]),
-                "one lower and one upper",
-            ),
-            (
-                "two upper bounds",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("created","lt",json!(9)),bound("created","lte",json!(8))]}),
-                json!([]),
-                "one lower and one upper",
-            ),
-            (
-                "where combined with an index",
-                json!({"name":"by_owner_created","eq":[],"range":[]}),
-                json!([eq("owner", json!("ann"))]),
-                "empty where",
-            ),
-            (
-                "unknown range operator",
-                json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("created","ne",json!(1))]}),
-                json!([]),
-                "index must contain",
-            ),
-            (
-                "unknown index payload key",
-                json!({"name":"by_owner_created","eq":[],"range":[],"where":[]}),
-                json!([]),
-                "index must contain",
-            ),
-            (
-                "missing range array",
-                json!({"name":"by_owner_created","eq":[]}),
-                json!([]),
-                "index must contain",
-            ),
-        ];
+        let cases = invalid_index_payloads();
         for (case, index, wher, message) in cases {
             let error = client.err("alpha/todos:raw", query(index, wher)).await;
             assert!(error.contains(message), "{case}: {error}");
@@ -986,34 +824,7 @@ async fn index_changes_on_tables_with_rows_fail_the_reload_and_keep_the_old_gene
     drop(reader);
     server.close().await.unwrap();
 
-    if disk {
-        // Inspect persisted state directly: the refused 1.1.0 generation must
-        // not have recorded its grant (it is written in the same transaction).
-        let database = Database::open(installation.storage()).await.unwrap();
-        assert!(grant_exists(&database, "alpha@1.0.0").await);
-        assert!(
-            !grant_exists(&database, "alpha@1.1.0").await,
-            "refused generation left its grant"
-        );
-        let mut database = database;
-        database.close().await.unwrap();
-
-        // The same refusal applies to a startup load over existing rows ...
-        installation.install(&ALPHA_ADDED);
-        let error = installation
-            .load()
-            .await
-            .map(|_| panic!("startup with a new index over rows was accepted"))
-            .unwrap_err();
-        assert!(error.contains(BACKFILL), "{error}");
-        // ... and a failed startup leaves the database loadable by the old code.
-        installation.install(&ALPHA);
-        let server = installation.load().await.unwrap();
-        let mut client = Client::connect(&server).await;
-        assert_base_generation_intact(&mut client, &rows).await;
-        drop(client);
-        server.close().await.unwrap();
-    }
+    assert_failed_index_reload_persistence(&installation, &rows, disk).await;
 }
 backends!(
     index_changes_on_tables_with_rows_fail_the_reload_and_keep_the_old_generation_memory,
@@ -1349,4 +1160,239 @@ fn server_refuses_oversized_schema_registries() {
             panic!("schema at the caps was refused: {error}");
         }
     });
+}
+
+fn expected_index_rows(
+    rows: &[(String, String, i64)],
+    owner: &str,
+    lower: Option<(&str, i64)>,
+    upper: Option<(&str, i64)>,
+    desc: bool,
+    limit: Option<usize>,
+) -> Vec<String> {
+    let mut matching: Vec<_> = rows
+        .iter()
+        .filter(|(_, o, c)| {
+            o == owner
+                && lower.is_none_or(|(op, v)| {
+                    if op == "gt" {
+                        *c > v
+                    } else {
+                        *c >= v
+                    }
+                })
+                && upper.is_none_or(|(op, v)| {
+                    if op == "lt" {
+                        *c < v
+                    } else {
+                        *c <= v
+                    }
+                })
+        })
+        .map(|(id, _, c)| (*c, id.clone()))
+        .collect();
+    matching.sort();
+    if desc {
+        matching.reverse();
+    }
+    let mut result: Vec<String> = matching.into_iter().map(|(_, id)| id).collect();
+    if let Some(limit) = limit {
+        result.truncate(limit);
+    }
+    result
+}
+
+async fn assert_index_range_case(
+    client: &mut Client,
+    rows: &[(String, String, i64)],
+    bounds: RangeBounds<'_>,
+) {
+    let (lower, upper, desc, limit) = bounds;
+    let mut args = json!({"owner":"ann","order":if desc {"desc"} else {"asc"}});
+    if let Some((op, value)) = lower {
+        args["lower"] = json!({"op":op,"value":value});
+    }
+    if let Some((op, value)) = upper {
+        args["upper"] = json!({"op":op,"value":value});
+    }
+    if let Some(limit) = limit {
+        args["limit"] = json!(limit);
+    }
+    let actual = client.ok("alpha/todos:range", args.clone()).await;
+    assert_eq!(
+        ids(&actual),
+        expected_index_rows(rows, "ann", lower, upper, desc, limit),
+        "range {args}"
+    );
+}
+
+fn invalid_index_payloads() -> Vec<(&'static str, Value, Value, &'static str)> {
+    let eq = |field: &str, value: Value| json!({"field":field,"value":value});
+
+    let cases = [
+        (
+            "unknown index",
+            json!({"name":"by_missing","eq":[],"range":[]}),
+            json!([]),
+            "does not exist",
+        ),
+        (
+            "eq out of index order",
+            json!({"name":"by_owner_created","eq":[eq("created",json!(10))],"range":[]}),
+            json!([]),
+            "leading field order",
+        ),
+        (
+            "eq skipping the leading field",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann")),eq("text",json!("a"))],"range":[]}),
+            json!([]),
+            "leading field order",
+        ),
+        (
+            "eq beyond the index fields",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann")),eq("created",json!(10)),eq("done",json!(false))],"range":[]}),
+            json!([]),
+            "leading field order",
+        ),
+    ];
+
+    cases.into_iter().chain(invalid_range_payloads()).collect()
+}
+
+async fn assert_failed_index_reload_persistence(
+    installation: &Installation,
+    rows: &Value,
+    disk: bool,
+) {
+    if disk {
+        // Inspect persisted state directly: the refused 1.1.0 generation must
+        // not have recorded its grant (it is written in the same transaction).
+        let database = Database::open(installation.storage()).await.unwrap();
+        assert!(grant_exists(&database, "alpha@1.0.0").await);
+        assert!(
+            !grant_exists(&database, "alpha@1.1.0").await,
+            "refused generation left its grant"
+        );
+        let mut database = database;
+        database.close().await.unwrap();
+
+        // The same refusal applies to a startup load over existing rows ...
+        installation.install(&ALPHA_ADDED);
+        let error = installation
+            .load()
+            .await
+            .map(|_| panic!("startup with a new index over rows was accepted"))
+            .unwrap_err();
+        assert!(error.contains(BACKFILL), "{error}");
+        // ... and a failed startup leaves the database loadable by the old code.
+        installation.install(&ALPHA);
+        let server = installation.load().await.unwrap();
+        let mut client = Client::connect(&server).await;
+        assert_base_generation_intact(&mut client, rows).await;
+        drop(client);
+        server.close().await.unwrap();
+    }
+}
+
+async fn assert_full_index_scan(client: &mut Client, rows: &[(String, String, i64)]) {
+    // A full index scan is ordered by (owner, created, _id) in both directions.
+    let mut all: Vec<_> = rows
+        .iter()
+        .map(|(id, owner, created)| (owner.clone(), *created, id.clone()))
+        .collect();
+    all.sort();
+    let ascending: Vec<String> = all.iter().map(|(_, _, id)| id.clone()).collect();
+    assert_eq!(
+        ids(&client.ok("alpha/todos:scan", json!({"order":"asc"})).await),
+        ascending
+    );
+    let mut descending = ascending.clone();
+    descending.reverse();
+    assert_eq!(
+        ids(&client.ok("alpha/todos:scan", json!({"order":"desc"})).await),
+        descending
+    );
+
+    // Returned rows are complete documents, not index entries.
+    let first = client
+        .ok(
+            "alpha/todos:range",
+            json!({"owner":"ann","order":"asc","limit":1}),
+        )
+        .await;
+    assert_eq!(first[0]["owner"], "ann");
+    assert_eq!(first[0]["created"], 5);
+    assert_eq!(first[0]["done"], false);
+    assert!(first[0]["_creationTime"].is_number());
+}
+
+type RangeBounds<'a> = (
+    Option<(&'a str, i64)>,
+    Option<(&'a str, i64)>,
+    bool,
+    Option<usize>,
+);
+
+fn invalid_range_payloads() -> Vec<(&'static str, Value, Value, &'static str)> {
+    let eq = |field: &str, value: Value| json!({"field":field,"value":value});
+    let bound =
+        |field: &str, op: &str, value: Value| json!({"field":field,"operator":op,"value":value});
+    vec![
+        (
+            "range not on the next field",
+            json!({"name":"by_owner_created","eq":[],"range":[bound("created","gt",json!(1))]}),
+            json!([]),
+            "after the equality prefix",
+        ),
+        (
+            "range on an equality field",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("owner","gt",json!("a"))]}),
+            json!([]),
+            "after the equality prefix",
+        ),
+        (
+            // The raw form of "eq after range": the equality prefix covers
+            // the field the range constrains.
+            "eq after range",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann")),eq("created",json!(10))],"range":[bound("created","gt",json!(1))]}),
+            json!([]),
+            "after the equality prefix",
+        ),
+        (
+            "two lower bounds",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("created","gt",json!(1)),bound("created","gte",json!(2))]}),
+            json!([]),
+            "one lower and one upper",
+        ),
+        (
+            "two upper bounds",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("created","lt",json!(9)),bound("created","lte",json!(8))]}),
+            json!([]),
+            "one lower and one upper",
+        ),
+        (
+            "where combined with an index",
+            json!({"name":"by_owner_created","eq":[],"range":[]}),
+            json!([eq("owner", json!("ann"))]),
+            "empty where",
+        ),
+        (
+            "unknown range operator",
+            json!({"name":"by_owner_created","eq":[eq("owner",json!("ann"))],"range":[bound("created","ne",json!(1))]}),
+            json!([]),
+            "index must contain",
+        ),
+        (
+            "unknown index payload key",
+            json!({"name":"by_owner_created","eq":[],"range":[],"where":[]}),
+            json!([]),
+            "index must contain",
+        ),
+        (
+            "missing range array",
+            json!({"name":"by_owner_created","eq":[]}),
+            json!([]),
+            "index must contain",
+        ),
+    ]
 }

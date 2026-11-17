@@ -153,15 +153,14 @@ async fn authorize(
         || (request.uri().path().starts_with("/plugins/")
             && request.uri().path().contains("/assets/"));
     let origin = headers.get("origin");
-    if let Some(origin) = origin {
-        if !browser_route
+    if let Some(origin) = origin
+        && (!browser_route
             || !adapter
                 .origins
                 .iter()
-                .any(|allowed| origin.as_bytes() == allowed.as_bytes())
-        {
-            return StatusCode::FORBIDDEN.into_response();
-        }
+                .any(|allowed| origin.as_bytes() == allowed.as_bytes()))
+    {
+        return StatusCode::FORBIDDEN.into_response();
     }
     if let Some(access) = &adapter.access {
         let bearer = headers
@@ -188,15 +187,13 @@ async fn authorize(
         }
     }
     let mut response = next.run(request).await;
-    if browser_route {
-        if let Some(origin) = origin {
-            response
-                .headers_mut()
-                .insert("access-control-allow-origin", origin.clone());
-            response
-                .headers_mut()
-                .insert("vary", "Origin".parse().expect("header"));
-        }
+    if browser_route && let Some(origin) = origin {
+        response
+            .headers_mut()
+            .insert("access-control-allow-origin", origin.clone());
+        response
+            .headers_mut()
+            .insert("vary", "Origin".parse().expect("header"));
     }
     response
 }

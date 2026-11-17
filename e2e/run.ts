@@ -1,3 +1,4 @@
+import { prepareAgentEnvironment } from "./chat-sandbox";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -61,7 +62,7 @@ async function headless(
       "1",
       ...(budget ? ["--call-ms", "100"] : []),
     ],
-    { cwd: repository, env, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: repository, env: { ...env, ...sandbox.env }, stdio: ["ignore", "pipe", "pipe"] },
   );
   let output = "";
   let ready!: (address: string) => void;
@@ -175,6 +176,7 @@ function observer(client: TokamakClient) {
 
 await mkdir("target/e2e", { recursive: true });
 const root = await mkdtemp(resolve("target/e2e/run-"));
+const sandbox = await prepareAgentEnvironment(root);
 let feature: string | undefined;
 try {
   command([process.execPath, "check", "--no-script", "--project", "e2e/tsconfig.json"]);

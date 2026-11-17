@@ -1,3 +1,4 @@
+import { prepareAgentEnvironment } from "../../../e2e/chat-sandbox.ts";
 import { randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -8,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const workspace = resolve(import.meta.dir, "../../..");
 const directory = await mkdtemp(resolve(tmpdir(), "tokamak-browser-assets-"));
+const sandbox = await prepareAgentEnvironment(directory);
 const fixture = resolve(workspace, "packages/build/tests/fixtures/browser");
 const binary = resolve(workspace, "target/debug/tokamak");
 const built = spawnSync("proto", ["run", "bun", "--", "packages/build/src/build.ts", fixture], {
@@ -53,6 +55,7 @@ try {
       stdio: ["ignore", "ignore", "inherit"],
       env: {
         ...process.env,
+        ...sandbox.env,
         ...(mode === "configured" ? { TOKAMAK_ALLOWED_ORIGINS: "http://configured.example" } : {}),
       },
     });

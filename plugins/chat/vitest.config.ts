@@ -14,7 +14,7 @@ export default defineConfig({
       },
       {
         find: "@tokamak/runtime/router",
-        replacement: resolve(import.meta.dirname, "../../app/src/plugins/router.ts"),
+        replacement: resolve(import.meta.dirname, "../../packages/runtime/js/router.ts"),
       },
     ],
     dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals", "@ui-sdk/core"],

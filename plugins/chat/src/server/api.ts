@@ -10,7 +10,5 @@ export {
   undelivered as permissionUndelivered,
 } from "./permissions/permissions";
 
-export { chat } from "./_references";
-export { streamBuffer, permissionWait } from "./_stream";
-export type { ToolPart } from "./_stream";
+export type { ToolPart } from "./messages/parts";
 export type { BackendOption, BackendApi, TurnArgs, TurnResult } from "../shared/backends";

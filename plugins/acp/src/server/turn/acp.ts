@@ -1,7 +1,7 @@
 import { agents, type AgentClient } from "../agents/client";
 import type { ActionContext, Id } from "@tokamak/sdk";
-import { chat } from "../../../../chat/src/server/api";
-import { streamBuffer } from "../../../../chat/src/server/api";
+import { api as chat } from "plugin:chat/server";
+import { turnBuffer } from "./turn-buffer";
 import { readAcpTurn } from "./acp-turn";
 
 // Keep the most recent history within the byte budget, without splitting Unicode.
@@ -37,18 +37,18 @@ export async function acpSend(
   client: AgentClient = agents,
 ) {
   const { runId, messageId, token } = started;
-  const buffer = streamBuffer(ctx, runId, token, { upsertTools: true });
+  const buffer = turnBuffer(ctx, runId, token);
   let sessionId: string | undefined;
   let finished = false;
   let closed = false;
   let openingSession = true;
   const finish = async (outcome: "done" | "error" | "cancelled", error?: string) => {
-    if (!(await ctx.use(chat).send.running({ runId })))
+    if (!(await ctx.use(chat).runIsRunning({ runId })))
       return { runId, messageId, status: "cancelled" as const };
     return {
       runId,
       messageId,
-      status: (await ctx.use(chat).send.update({
+      status: (await ctx.use(chat).updateRun({
         runId,
         token,
         delta: buffer.pending(),
@@ -72,7 +72,7 @@ export async function acpSend(
     });
     const opened = await buffer.waitFor(opening);
     openingSession = false;
-    await ctx.use(chat).send.session({
+    await ctx.use(chat).saveBackendState({
       runId,
       token,
       threadId: args.threadId,

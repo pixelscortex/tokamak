@@ -14,8 +14,14 @@ sort by plugin ID and export name. A failed layer falls back to its inner layer.
 The first replacement wins. The shell owns the client and extension lifetimes.
 
 The browser UI target in `packages/build` emits native DOM ES modules. Host
-libraries stay bare imports resolved by the app's static import map; cross-plugin
-imports use `@plugins/<id>/ui`. Chat's unported client alone remains excluded.
+libraries stay bare imports resolved by the app's static import map. For cross-plugin imports,
+authors use `plugin:<id>/client`, for example
+`import { Panel } from "plugin:example/client"`. The compiler emits the internal
+`@plugins/<id>/ui` spelling and the web loader resolves it to revision-owned blobs.
+Server imports use `plugin:<id>/server` for public types and host-call references.
+Production source cannot escape its plugin via relative paths, aliases, absolute
+paths, symlinks or linked plugin packages. Installed packages and the SDK alias
+remain allowed; provider implementations are never bundled into consumers.
 Server-only plugin artifacts need no UI entry.
 
 The server catalog retains manifest metadata and adds `revision`, `uiUrl` and

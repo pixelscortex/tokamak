@@ -1,6 +1,6 @@
 // Build real SDK fixtures in fresh, exclusively owned directories. Standalone
 // builds retain artifacts; --load transfers their contents and always cleans up.
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleFeature } from "../../sdk/tools/bundle.mjs";
@@ -13,17 +13,16 @@ export async function buildFeature({
   const feature = await mkdtemp(join(parent, "tkm5-feature-"));
   try {
     await cp(source, feature, { recursive: true });
-    // This non-workspace fixture has no installed SDK dependency. Both the real
-    // checker and bundler must resolve the same authoring SDK.
+    // Resolve the installed workspace SDK as a package, just like plugin authors.
+    await symlink(
+      fileURLToPath(new URL("../../../app/node_modules", import.meta.url)),
+      join(feature, "node_modules"),
+      "dir",
+    );
     await Bun.write(
       join(feature, "tsconfig.json"),
       JSON.stringify({
         extends: fileURLToPath(new URL("../../../tsconfig.json", import.meta.url)),
-        compilerOptions: {
-          paths: {
-            "@tokamak/sdk": [fileURLToPath(new URL("../../sdk/src/index.ts", import.meta.url))],
-          },
-        },
       }),
     );
     await bundleFeature(feature);

@@ -1,5 +1,8 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": { "skipLibCheck": true },
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"]
+  },
   "include": ["js/**/*.ts"]
 }
