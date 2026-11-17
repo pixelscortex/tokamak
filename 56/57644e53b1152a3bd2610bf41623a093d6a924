@@ -1,0 +1,21 @@
+app/src-tauri/tauri.conf.json
+  s_4ccc9a2575a981::t_683e1efaaa26fe 22
+app/src/shell/top-strip.tsx
+  s_4ccc9a2575a981::t_bbcb78fc28d073 17,22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5657644e53b1152a3bd2610bf41623a093d6a924",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
