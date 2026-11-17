@@ -101,7 +101,14 @@ impl Catalog {
     }
 
     pub fn metadata(&self) -> Value {
-        json!({"revision":self.revision,"plugins":self.order.iter().map(|id| &self.plugins[id].manifest).collect::<Vec<_>>()})
+        json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
+            let manifest = &self.plugins[id].manifest;
+            let mut value = serde_json::to_value(manifest).expect("manifest serialization");
+            value["revision"] = json!(self.revision);
+            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{}/assets/{}", self.revision, ui.code)).into();
+            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{}/assets/{css}", self.revision)).into();
+            value
+        }).collect::<Vec<_>>()})
     }
 
     pub fn providers(&self, caller: &str, interface: &str) -> Result<Vec<String>, Error> {

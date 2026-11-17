@@ -109,6 +109,7 @@ pub(crate) enum Command {
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
     Asset(
+        Option<String>,
         String,
         String,
         oneshot::Sender<Result<Option<Arc<crate::plugins::Asset>>, Error>>,

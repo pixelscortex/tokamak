@@ -75,8 +75,10 @@ impl Artifact {
     /// server source, credentials or on-disk files can be fetched by this method.
     pub fn ui_asset(&self, name: &str) -> Option<Arc<Asset>> {
         let ui = self.manifest.entries.ui.as_ref()?;
-        [&ui.code, &ui.map, &ui.css, &ui.shell]
-            .iter()
+        [&ui.code, &ui.map]
+            .into_iter()
+            .chain(ui.css.iter())
+            .chain(ui.shell.iter())
             .any(|file| file.as_str() == name)
             .then(|| self.assets.get(name).cloned())
             .flatten()

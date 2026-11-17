@@ -5,7 +5,7 @@ use crate::{Server, protocol::Request};
 use axum::{
     Router,
     extract::{
-        Path, State, WebSocketUpgrade,
+        Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::{HeaderMap, StatusCode},
@@ -39,9 +39,10 @@ struct Adapter {
     stopping: CancellationToken,
     connections: Arc<Semaphore>,
     access: Option<LocalAccess>,
+    origins: Arc<Vec<String>>,
 }
 
-/// Local desktop capability. Never place the token in discovery, URLs or logs.
+/// Local desktop capability. Never place the token in discovery or logs.
 #[derive(Clone)]
 pub struct LocalAccess {
     pub token: String,
@@ -78,18 +79,38 @@ pub async fn serve_with_access(
         stopping: stopping.clone(),
         connections: connections.clone(),
         access: access.clone(),
+        origins: Arc::new(
+            std::env::var("TOKAMAK_ALLOWED_ORIGINS")
+                .map(|value| {
+                    value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_else(|_| {
+                    vec![
+                        "tauri://localhost".into(),
+                        "http://tauri.localhost".into(),
+                        "http://127.0.0.1:1420".into(),
+                    ]
+                }),
+        ),
     };
-    let mut app = Router::new().route("/ws", get(upgrade));
-    if let Some(access) = access {
+    let mut app = Router::new()
+        .route("/ws", get(upgrade))
+        .route("/plugins", get(plugins))
+        .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
+    if access.is_some() {
         app = app
             .route("/health", get(health))
             .route("/shutdown", post(stop))
-            .route("/plugins", get(plugins))
-            .route("/plugins/{id}/reload", post(reload_plugin))
-            .route("/plugins/{id}/assets/{*name}", get(plugin_asset))
-            .layer(middleware::from_fn_with_state(access, authorize));
+            .route("/plugins/{id}/reload", post(reload_plugin));
     }
-    let app = app.with_state(adapter);
+    let app = app
+        .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
+        .with_state(adapter);
     // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
@@ -115,32 +136,69 @@ pub async fn serve_with_access(
     result
 }
 
+#[derive(Default, serde::Deserialize)]
+struct Capability {
+    token: Option<String>,
+}
+
 async fn authorize(
-    State(access): State<LocalAccess>,
+    State(adapter): State<Adapter>,
     headers: HeaderMap,
+    Query(capability): Query<Capability>,
     request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    // Native clients send the capability explicitly; browser contexts are not
-    // allowed even if a user accidentally gives a site the local token.
-    if headers.contains_key("origin") {
-        return StatusCode::FORBIDDEN.into_response();
+    let browser_route = request.uri().path() == "/ws"
+        || request.uri().path() == "/plugins"
+        || (request.uri().path().starts_with("/plugins/")
+            && request.uri().path().contains("/assets/"));
+    let origin = headers.get("origin");
+    if let Some(origin) = origin {
+        if !browser_route
+            || !adapter
+                .origins
+                .iter()
+                .any(|allowed| origin.as_bytes() == allowed.as_bytes())
+        {
+            return StatusCode::FORBIDDEN.into_response();
+        }
     }
-    let expected = format!("Bearer {}", access.token);
-    let actual = headers
-        .get("authorization")
-        .map(|v| v.as_bytes())
-        .unwrap_or_default();
-    let mismatch = actual.len() != expected.len()
-        || actual
-            .iter()
-            .zip(expected.as_bytes())
-            .fold(0u8, |a, (x, y)| a | (x ^ y))
-            != 0;
-    if mismatch {
-        return StatusCode::UNAUTHORIZED.into_response();
+    if let Some(access) = &adapter.access {
+        let bearer = headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "));
+        let actual = bearer
+            .or_else(|| {
+                browser_route
+                    .then_some(capability.token.as_deref())
+                    .flatten()
+            })
+            .unwrap_or_default();
+        let expected = access.token.as_bytes();
+        let mismatch = actual.len() != expected.len()
+            || actual
+                .as_bytes()
+                .iter()
+                .zip(expected)
+                .fold(0u8, |a, (x, y)| a | (x ^ y))
+                != 0;
+        if mismatch {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
     }
-    next.run(request).await
+    let mut response = next.run(request).await;
+    if browser_route {
+        if let Some(origin) = origin {
+            response
+                .headers_mut()
+                .insert("access-control-allow-origin", origin.clone());
+            response
+                .headers_mut()
+                .insert("vary", "Origin".parse().expect("header"));
+        }
+    }
+    response
 }
 
 async fn health(State(adapter): State<Adapter>) -> Response {
@@ -175,9 +233,13 @@ async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -
 }
 async fn plugin_asset(
     State(adapter): State<Adapter>,
-    Path((id, name)): Path<(String, String)>,
+    Path((id, revision, name)): Path<(String, String, String)>,
 ) -> Response {
-    match adapter.server.plugin_asset(id, name.clone()).await {
+    match adapter
+        .server
+        .plugin_asset_at(id, name.clone(), Some(revision))
+        .await
+    {
         Ok(Some(bytes)) => {
             let content_type = if name.ends_with(".js") {
                 "text/javascript"
@@ -202,7 +264,7 @@ async fn plugin_asset(
             (
                 [
                     ("content-type", content_type),
-                    ("cache-control", "no-store"),
+                    ("cache-control", "private, max-age=31536000, immutable"),
                 ],
                 axum::body::Body::from_stream(stream),
             )

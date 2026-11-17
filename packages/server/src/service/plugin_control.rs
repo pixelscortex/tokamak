@@ -47,12 +47,18 @@ impl Coordinator {
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
-            Command::Asset(id, name, reply) => {
+            Command::Asset(revision, id, name, reply) => {
                 let result = self
                     .plugins
                     .as_ref()
                     .ok_or_else(|| Error::Invalid("No plugin installation".into()))
                     .map(|loaded| {
+                        if revision
+                            .as_ref()
+                            .is_some_and(|r| r != &loaded.catalog.revision)
+                        {
+                            return None;
+                        }
                         loaded
                             .catalog
                             .plugins
