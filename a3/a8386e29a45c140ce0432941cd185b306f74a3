@@ -1,0 +1,51 @@
+wiki/content/docs/architecture.mdx
+  s_516160a8178bca::t_14567b106d3934 3,6-7,10-13,16,18-21,24-26,28,30-33,35-37,39,41-43,45-49,51-52
+  s_516160a8178bca::t_10646ad83daabd 22
+wiki/src/pages/index.tsx
+  s_516160a8178bca::t_353416fe67b5de 20
+wiki/content/docs/index.mdx
+  s_516160a8178bca::t_14567b106d3934 3,6-7,9-19,21,23-25,28,31,34-35,38-41,43,46-51,54-56,58,61-62,65-66
+wiki/content/docs/design/renderer.mdx
+  s_516160a8178bca::t_14567b106d3934 6-7
+packages/runtime/README.md
+  s_516160a8178bca::t_14567b106d3934 1,3-4,6,8-10,12-19
+packages/build/README.md
+  s_516160a8178bca::t_14567b106d3934 3,6,9-29
+packages/ui/README.md
+  s_516160a8178bca::t_14567b106d3934 1,3-5
+app/README.md
+  s_516160a8178bca::t_14567b106d3934 1,3-5,7,10,13-15,17-20,22-25,27,29-32,34,37-38,41-47
+  s_516160a8178bca::t_10646ad83daabd 49-51
+wiki/content/docs/design/compatibility.mdx
+  s_516160a8178bca::t_14567b106d3934 6-7
+README.md
+  s_516160a8178bca::t_14567b106d3934 3-10,13,16,19-20,23-26,28,30-35,37-42,44-53,55-59,61-64
+packages/server/HOW_IT_WORKS.md
+  s_516160a8178bca::t_353416fe67b5de 16-19,37
+e2e/README.md
+  s_516160a8178bca::t_14567b106d3934 1,3,5-9,11-14
+packages/runtime/PLUGINS.md
+  s_516160a8178bca::t_14567b106d3934 1-26
+app/scripts/live-check.ts
+  s_516160a8178bca::t_d43b9670089278 13-16,23,27
+bun.lock
+  s_516160a8178bca::t_4be492f1d81ba0 60
+packages/runtime/package.json
+  s_516160a8178bca::t_6a289b36378d6a 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3a8386e29a45c140ce0432941cd185b306f74a3",
+  "prompts": {},
+  "sessions": {
+    "s_516160a8178bca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9be-0dc9-7361-b597-20cc164a4413",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
