@@ -2,42 +2,56 @@ import { createEffect, createMemo, createSignal, onCleanup, untrack } from "soli
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
 import { api } from "../api";
-
+import { agentOf } from "../agents";
 import { useBackends } from "./use-backends";
 import { useRunRecovery } from "./use-run-recovery";
 
 export { api };
 export type Thread = ResultOf<typeof api.threads.list>[number];
-export type Message = ResultOf<typeof api.messages.list>[number];
 export type ChatState = ReturnType<typeof useChat>;
+
+// Survives the view being closed and reopened; the server owns everything else.
+let lastThread: Id<"threads"> | undefined;
 
 export function useChat(client: TokamakClient) {
   const threads = useQuery(client, api.threads.list, () => ({}));
-  const [threadId, setThreadId] = createSignal<Id<"threads">>();
   const running = useQuery(client, api.runs.running, () => ({}));
+  const [threadId, setThreadId] = createSignal<Id<"threads"> | undefined>(lastThread, { ownedWrite: true });
+  const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
+  const [creating, setCreating] = createSignal(false, { ownedWrite: true });
   const runs = createMemo(() => Object.fromEntries((running.data() ?? []).map((run) => [run.threadId, run])));
-  const [error, setError] = createSignal<string>();
-  const [creating, setCreating] = createSignal(false);
+  const discovery = useBackends(client);
   let initialized = false;
   let alive = true;
-  const discovery = useBackends(client);
-  // A restored subscription means discovery can reach the server again.
   let disconnected = false;
-  createEffect(() => {
-    if (threads.error()) disconnected = true;
-    else if (threads.data() && disconnected) {
-      disconnected = false;
-      void discovery.refresh();
-    }
+  onCleanup(() => {
+    alive = false;
   });
 
+  // A restored subscription means discovery can reach the server again.
+  createEffect(
+    () => [threads.error(), threads.data()] as const,
+    ([failure, data]) => {
+      if (failure) disconnected = true;
+      else if (data && disconnected) {
+        disconnected = false;
+        void discovery.refresh();
+      }
+    },
+  );
+
+  function open(id: Id<"threads"> | undefined) {
+    lastThread = id;
+    setThreadId(id);
+  }
+
   async function createThread() {
-    if (creating()) return;
+    if (untrack(creating)) return;
     setCreating(true);
     setError(undefined);
     try {
       const id = await client.action(api.threads.create, {});
-      if (alive) setThreadId(id);
+      if (alive) open(id);
       return id;
     } catch (cause) {
       if (alive) setError(String(cause));
@@ -46,28 +60,22 @@ export function useChat(client: TokamakClient) {
     }
   }
 
-  createEffect(() => {
-    const list = threads.data();
+  createEffect(threads.data, (list) => {
     if (!list) return;
     if (!initialized) {
       initialized = true;
-      if (list.length) setThreadId(list[0]!._id);
-      else void createThread();
+      if (!list.length) void createThread();
     }
     const selected = untrack(threadId);
-    if ((!selected || !list.some((thread) => thread._id === selected)) && !untrack(creating)) {
-      setThreadId(list[0]?._id);
-    }
-  });
-
-  onCleanup(() => {
-    alive = false;
+    if ((!selected || !list.some((thread) => thread._id === selected)) && !untrack(creating))
+      open(list[0]?._id);
   });
 
   useRunRecovery(client, () => Boolean(running.data()?.length), setError);
 
   const thread = createMemo(() => threads.data()?.find((item) => item._id === threadId()));
   const active = () => runs()[threadId() ?? ""] ?? null;
+  const agent = createMemo(() => agentOf(thread()?.backend, discovery.data()));
 
   async function cancel() {
     const run = active();
@@ -87,10 +95,11 @@ export function useChat(client: TokamakClient) {
     threads,
     threadId,
     thread,
-    open: setThreadId,
+    agent,
+    open,
     runs,
     active,
-    error: () => error() ?? running.error()?.message,
+    error: () => error() ?? running.error()?.message ?? threads.error()?.message,
     setError,
     creating,
     createThread,

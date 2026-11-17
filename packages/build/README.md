@@ -14,7 +14,7 @@ Unchanged output preserves bytes and modification times. The manifest is
 published last; installation still needs its own complete-artifact staging.
 
 The UI target emits browser ESM in `ui.js` and `ui.js.map`, compiled with Solid 2
-DOM JSX. Chat's unported client is excluded. `ui: false` explicitly disables the
+DOM JSX. `ui: false` explicitly disables the
 UI target; the server target and `backend: false` option keep their names.
 Client `styles.css` is discovered beside the client entry and compiled with
 Tailwind. Imported CSS is also collected by Vite. No registration wrapper or

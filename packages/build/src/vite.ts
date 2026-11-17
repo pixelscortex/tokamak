@@ -44,8 +44,6 @@ export function tokamak(
           if (!existsSync(resolve(root, "src/client"))) options.ui = false;
         }
         if (!existsSync(clientEntry(root))) options.ui = false;
-        if (root === resolve(fileURLToPath(new URL("../../../plugins/chat", import.meta.url))))
-          options.ui = false;
         if (options.ui !== false) return uiBuildConfig(root);
         if (options.backend === false) throw new Error("Plugin has no enabled targets");
         return {

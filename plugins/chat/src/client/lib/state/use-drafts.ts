@@ -1,42 +1,43 @@
-import { createEffect, createSignal, on, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { api } from "../api";
 import type { ChatState } from "./use-chat";
 
+type PerThread<T> = Record<string, T>;
+
+// Drafts and queued follow-ups outlive the view, so closing chat loses nothing typed.
+const kept: { drafts: PerThread<string>; queued: PerThread<string> } = { drafts: {}, queued: {} };
+
 export function useDrafts(chat: ChatState) {
-  const [drafts, setDrafts] = createSignal<Record<string, string>>({});
-  const [sending, setSending] = createSignal<Record<string, boolean>>({});
-  const [raced, setRaced] = createSignal<Record<string, boolean>>({});
+  const [drafts, setDrafts] = createSignal<PerThread<string>>(kept.drafts, { ownedWrite: true });
+  const [queued, setQueued] = createSignal<PerThread<string>>(kept.queued, { ownedWrite: true });
+  const [sending, setSending] = createSignal<PerThread<boolean>>({}, { ownedWrite: true });
+  const [raced, setRaced] = createSignal<PerThread<boolean>>({}, { ownedWrite: true });
   let alive = true;
   onCleanup(() => {
     alive = false;
   });
 
-  // Clear finished threads even while another thread is selected.
-  createEffect(
-    on(chat.runs, (runs) => {
-      setRaced((previous) =>
-        Object.fromEntries(Object.entries(previous).filter(([threadId]) => runs[threadId])),
-      );
-    }),
-  );
+  const key = () => chat.threadId() ?? "";
+  function write(threadId: string, text: string) {
+    kept.drafts = { ...kept.drafts, [threadId]: text };
+    setDrafts(kept.drafts);
+  }
+  function queue(threadId: string, text: string | undefined) {
+    const { [threadId]: _previous, ...rest } = kept.queued;
+    kept.queued = text ? { ...rest, [threadId]: text } : rest;
+    setQueued(kept.queued);
+  }
 
-  async function send(text: string) {
-    const threadId = chat.threadId();
-    // During a run Enter keeps the draft and shows nothing new.
-    if (!threadId || !text.trim() || chat.active() || sending()[threadId]) return;
-
+  async function sendTo(threadId: string, text: string) {
     chat.setError(undefined);
     setRaced((previous) => ({ ...previous, [threadId]: false }));
     setSending((previous) => ({ ...previous, [threadId]: true }));
-    setDrafts((previous) => ({ ...previous, [threadId]: "" }));
-
     try {
-      await chat.client.action(api.chat.send, { threadId, text });
+      await chat.client.action(api.chat.send, { threadId: threadId as never, text });
     } catch (cause) {
       if (!alive) return;
-      setDrafts((previous) => ({ ...previous, [threadId]: previous[threadId] || text }));
-
-      // A run started first: keep the draft.
+      // Put the text back where it was typed, unless something new was typed since.
+      if (!untrack(drafts)[threadId]) write(threadId, text);
       if (String(cause).includes("already has an active run"))
         setRaced((previous) => ({ ...previous, [threadId]: true }));
       else chat.setError(String(cause));
@@ -46,12 +47,44 @@ export function useDrafts(chat: ChatState) {
     }
   }
 
+  /** Sends now when idle; while a reply runs, queues the text as the next turn. */
+  async function send(text: string) {
+    const threadId = key();
+    if (!threadId || !text.trim()) return;
+    write(threadId, "");
+    if (chat.active() || untrack(sending)[threadId]) {
+      const before = untrack(queued)[threadId];
+      queue(threadId, before ? `${before}\n\n${text}` : text);
+      return;
+    }
+    await sendTo(threadId, text);
+  }
+
+  // A queued follow-up goes out when its thread's run ends, even if another thread is open.
+  createEffect(chat.runs, (runs) => {
+    setRaced((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => runs[id])));
+    for (const [threadId, text] of Object.entries(untrack(queued))) {
+      if (runs[threadId] || untrack(sending)[threadId]) continue;
+      queue(threadId, undefined);
+      void sendTo(threadId, text);
+    }
+  });
+
   return {
-    draft: () => drafts()[chat.threadId() ?? ""] ?? "",
-    sending: () => sending()[chat.threadId() ?? ""],
-    raced: () => raced()[chat.threadId() ?? ""] ?? false,
-    clearRace: () => setRaced((previous) => ({ ...previous, [chat.threadId() ?? ""]: false })),
-    edit: (text: string) => setDrafts((previous) => ({ ...previous, [chat.threadId() ?? ""]: text })),
+    draft: () => drafts()[key()] ?? "",
+    queued: () => queued()[key()] ?? "",
+    sending: () => Boolean(sending()[key()]),
+    raced: () => raced()[key()] ?? false,
+    clearRace: () => setRaced((previous) => ({ ...previous, [key()]: false })),
+    edit: (text: string) => write(key(), text),
+    /** Takes the queued follow-up back into the draft. */
+    unqueue() {
+      const text = untrack(queued)[key()];
+      if (!text) return;
+      queue(key(), undefined);
+      const draft = untrack(drafts)[key()];
+      write(key(), draft ? `${text}\n\n${draft}` : text);
+    },
     send,
   };
 }

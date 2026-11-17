@@ -1,35 +1,33 @@
+import { Textarea } from "@ui-sdk/solid/textarea";
+import { omit, onCleanup, useContext } from "solid-js";
+import type { ComponentProps, JSX } from "@solidjs/web";
 import { ComposerContext } from "../../lib/composer";
-import { onMount, splitProps, useContext } from "solid-js";
-import { setProp, type NativeEvent, type NativeNode } from "@tokamak/render";
-import { Textarea, type TextareaProps } from "@tokamak/ui/components";
 
-/** Apple editing commands do not bubble, so intercept on the native editor. */
-export function ComposerInput(props: TextareaProps & { mapOpen: boolean }) {
-  const [local, editor] = splitProps(props, ["mapOpen"]);
-  let input: NativeNode;
+export type ComposerInputProps = Omit<ComponentProps<typeof Textarea>, "class">;
+
+/**
+ * The prompt: bare 16/26 text on the composer card that grows with its text.
+ * @tokamak/ui's Textarea draws a well with an edge; the composer's anatomy has
+ * none, so this is the same ui-sdk textarea with the composer's own look.
+ */
+export function ComposerInput(props: ComposerInputProps): JSX.Element {
   const composer = useContext(ComposerContext);
-
-  onMount(() => {
-    const original = input.handlers.get("applekeybinding");
-    setProp(input, "onAppleKeybinding", (event: NativeEvent) => {
-      if (local.mapOpen && event.command?.startsWith("deleteToBeginning")) {
-        event.preventDefault();
-        return;
-      }
-      original?.(event);
-    });
-  });
-
+  const report = (event: Event) => {
+    const input = event.currentTarget as HTMLTextAreaElement;
+    composer?.selection(input.selectionStart, input.selectionEnd);
+  };
+  onCleanup(() => composer?.bind(undefined));
   return (
     <Textarea
-      {...editor}
-      onCaretChange={(event) => {
-        if (!local.mapOpen && event.caret) composer?.selection(event.caret.start, event.caret.end);
-        editor.onCaretChange?.(event);
-      }}
-      ref={(node) => {
-        input = node;
-      }}
+      autoResize
+      rows={1}
+      submitShortcut="enter"
+      {...omit(props, "ref")}
+      ref={(element: HTMLTextAreaElement) => composer?.bind(element)}
+      onKeyUp={report}
+      onPointerUp={report}
+      data-slot="composer-input"
+      class="block min-h-8 w-full resize-none bg-transparent py-1 text-read text-ink outline-none placeholder:text-ink-3 disabled:text-ink-3 field-sizing-content"
     />
   );
 }

@@ -1,5 +1,5 @@
-/** UI-safe references: importing the backend action's inferred type also imports
- * its Web API declarations, which do not belong in a native QuickJS UI. */
+// Typed by hand: inferring the backend action types would pull the server's
+// worker declarations into the browser build.
 import { createApi, type ApiFromModule, type FunctionReference, type Id, type Doc } from "@tokamak/sdk";
 
 import type { Model } from "../../server/_functions";

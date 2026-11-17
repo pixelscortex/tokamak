@@ -2,11 +2,13 @@ import { createSignal, onCleanup } from "solid-js";
 import type { ResultOf, TokamakClient } from "@tokamak/sdk";
 import { api } from "../api";
 
-/** One discovery cache per chat, shared by the composer and picker. */
+/** One discovery cache per chat, shared by the composer and the agent picker. */
 export function useBackends(client: TokamakClient) {
-  const [data, setData] = createSignal<ResultOf<typeof api.backends.list>>();
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal<string>();
+  const [data, setData] = createSignal<ResultOf<typeof api.backends.list> | undefined>(undefined, {
+    ownedWrite: true,
+  });
+  const [loading, setLoading] = createSignal(false, { ownedWrite: true });
+  const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   let alive = true;
   let pending: Promise<void> | undefined;
   onCleanup(() => {
