@@ -4,7 +4,7 @@ case "$1" in
   ts)
     moon run workspace:format-check workspace:lint-ts
     proto run bun -- run typecheck
-    moon run sdk:test build:test runtime:test ui:test app:test app:web-build
+    moon run sdk:test build:test runtime:test ui:test chat:test app:test app:web-build
     proto run bun -- test ./.ci/release.test.ts
     ;;
   native)

@@ -103,7 +103,7 @@ if (import.meta.main) {
         },
       },
     );
-    console.log(`Chat sandbox: ${directory}`);
+    process.stdout.write(`Chat sandbox: ${directory}\n`);
     for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => child.kill(signal));
     process.exitCode = await new Promise<number>((done) => child.on("exit", (code) => done(code ?? 1)));
   } finally {

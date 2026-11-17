@@ -11,6 +11,7 @@ projects:
   build: "packages/build"
   app: "app"
   wiki: "wiki"
+  chat: "plugins/chat"
 vcs:
   defaultBranch: "main"
   provider: "github"
