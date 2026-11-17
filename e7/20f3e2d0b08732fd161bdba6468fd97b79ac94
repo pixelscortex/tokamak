@@ -1,0 +1,101 @@
+.depot/workflows/ci.yml
+  s_2297d4366353cf::t_c6b69fb6f07518 46-47,79-80
+.github/workflows/macos.yml
+  s_2297d4366353cf::t_e5281d2685d3ef 47-49,56,62
+.gitignore
+  s_2297d4366353cf::t_a69ab97664269e 8,37-39
+README.md
+  s_2297d4366353cf::t_a09e3de07b9b96 63-66
+app/tests/plugin-fixtures.mjs
+  s_2297d4366353cf::t_e62b4fa3c3ef34 76-81,101,107,113,281-285,299,307,310,317,323,338-339,341,343,368,371,387-388,459,473
+packages/build/README.md
+  s_2297d4366353cf::t_9a8ba5a74c0112 5,72-117
+packages/build/src/client-surface.ts
+  s_2297d4366353cf::t_276e179cac9825 1,25
+packages/build/src/contributions.ts
+  s_2297d4366353cf::t_11528b74b41f9e 1,27,228-231,239-242
+packages/build/src/descriptor.ts
+  s_2297d4366353cf::t_b66500605ae907 1,130
+packages/build/src/exports.ts
+  s_2297d4366353cf::t_7bfc2b4235c95a 1,24,37
+packages/build/src/plugin-boundary.ts
+  s_2297d4366353cf::t_4591a3e557d0b4 1-36
+packages/build/src/plugin-imports.ts
+  s_2297d4366353cf::t_dac14e96850754 19-20
+packages/build/src/vite.ts
+  s_2297d4366353cf::t_e4baa3c4ae1008 11-12,36,76
+packages/build/tests/boundary.test.mjs
+  s_2297d4366353cf::t_3ead79f8e7e745 1-308
+packages/build/tests/run.sh
+  s_2297d4366353cf::t_32cba13ec85be0 4
+packages/sdk/tools/bundle.mjs
+  s_2297d4366353cf::t_044674cec21731 10-16,60-61,87,106,194-199,207
+packages/sdk/tools/plugin-boundary.mjs
+  s_2297d4366353cf::t_a86532d48d49ab 1-352
+packages/sdk/tools/worker.mjs
+  s_2297d4366353cf::t_b0fcf8a40a5b55 5,7,13,76
+packages/server/tests/build-actions.mjs
+  s_2297d4366353cf::t_5dcf7ddf56b209 1,20,25,27-33,36-37,108-109,111,180-181,195-200
+packages/server/tests/build-feature.mjs
+  s_2297d4366353cf::t_55f3c75218b09b 3,16-21
+packages/server/tests/build-worker.mjs
+  s_2297d4366353cf::t_6e906fac001c3a 1,10
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_2297d4366353cf::t_bb902ad2faa114 2-10,13-20,154
+packages/server/tests/fixtures/plugins/a/backend/determinism.ts
+  s_2297d4366353cf::t_5cea95a6ca2435 11,17-18
+packages/server/tests/fixtures/plugins/a/backend/ops.ts
+  s_2297d4366353cf::t_9ad73a441c88b5 1-2,9,19,25,28
+packages/server/tests/fixtures/plugins/a/backend/tsconfig.json
+  s_2297d4366353cf::t_c431872e85f134 1
+packages/server/tests/fixtures/plugins/a/vite.config.ts
+  s_2297d4366353cf::t_f3da9d64c43b6e 1
+packages/server/tests/fixtures/plugins/b/backend/_sample.ts
+  s_2297d4366353cf::t_3e7235a4c64c0c 1-16
+packages/server/tests/fixtures/plugins/b/backend/determinism.ts
+  s_2297d4366353cf::t_326a1f455ab05b 2
+packages/server/tests/fixtures/plugins/b/backend/ops.ts
+  s_2297d4366353cf::t_85a82739c494d3 9,11-18
+packages/server/tests/fixtures/plugins/b/backend/tsconfig.json
+  s_2297d4366353cf::t_aa28e79720ac3d 1
+packages/server/tests/fixtures/plugins/b/vite.config.ts
+  s_2297d4366353cf::t_aa195c5cbaf958 1
+packages/server/tests/fixtures/plugins/setup.mjs
+  s_2297d4366353cf::t_85031df7d47dc8 1-15
+packages/server/tests/plugins.rs
+  s_2297d4366353cf::t_52a754aef219de 443
+packages/server/tests/schema_indexes.rs
+  s_2297d4366353cf::t_06600fa3a54f55 160
+plugins/acp/README.md
+  s_2297d4366353cf::t_54c36aecf64fc6 80-83
+plugins/acp/src/server/events/acp-events.ts
+  s_2297d4366353cf::t_12d62d7aec50f7 2-3,18
+plugins/acp/src/server/tsconfig.json
+  s_2297d4366353cf::t_99057c4debf7db 3-11
+plugins/acp/src/server/turn/acp-turn.ts
+  s_2297d4366353cf::t_31f7f7577348a9 2,5-6,13,19,24
+plugins/acp/src/server/turn/acp.ts
+  s_2297d4366353cf::t_de6eff8b7e84ec 3-4,40,46,51,75
+plugins/acp/src/server/turn/permission-poller.ts
+  s_2297d4366353cf::t_df5b954188def3 1-50
+plugins/acp/src/server/turn/turn-buffer.ts
+  s_2297d4366353cf::t_05197453f269f8 1-79
+plugins/chat/src/server/api.ts
+  s_2297d4366353cf::t_6f48a50ce8f31d 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e720f3e2d0b08732fd161bdba6468fd97b79ac94",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
