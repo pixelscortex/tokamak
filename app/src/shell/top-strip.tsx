@@ -24,7 +24,8 @@ export function TopStrip(): JSX.Element {
         }
       >
         <Show when={tauri}>
-          <div data-tauri-drag-region class="h-8 w-16 shrink-0" />
+          {/* Measured in the window: the traffic lights end 79 px in; keep 9 px clear after them. */}
+          <div data-tauri-drag-region class="me-3 h-8 w-16 shrink-0" />
         </Show>
         <Control
           icon={shellIcons.sidebar}
