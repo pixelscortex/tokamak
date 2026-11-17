@@ -19,5 +19,8 @@ rm -rf "$output/Tokamak.app"
 ditto target/release/bundle/macos/Tokamak.app "$output/Tokamak.app"
 ditto -c -k --sequesterRsrc --keepParent "$output/Tokamak.app" "$output/Tokamak-macos-arm64.zip"
 tar -czf "$output/server-macos-arm64.tar.gz" -C target/release tokamak
-shasum -a 256 "$output/Tokamak-macos-arm64.zip" "$output/server-macos-arm64.tar.gz" > "$output/SHA256SUMS.txt"
+(
+  cd "$output"
+  shasum -a 256 Tokamak-macos-arm64.zip server-macos-arm64.tar.gz > SHA256SUMS.txt
+)
 wc -c "$output/Tokamak-macos-arm64.zip" "$output/server-macos-arm64.tar.gz"
