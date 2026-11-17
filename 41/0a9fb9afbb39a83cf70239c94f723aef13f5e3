@@ -1,0 +1,19 @@
+packages/sdk/tools/plugin-boundary.mjs
+  s_2297d4366353cf::t_91b4c79090046e 22-24,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "410a9fb9afbb39a83cf70239c94f723aef13f5e3",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
