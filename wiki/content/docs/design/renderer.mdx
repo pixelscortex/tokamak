@@ -48,26 +48,22 @@ These are fixed on our side today. The code is listed in
 
 ## What a fork would need
 
-Ordered by how much each one blocks:
+A spike ran a ui-sdk menu on released Blitz with a DOM layer of our own (see
+[DOM compatibility](/docs/design/compatibility)). It showed that most of what
+looked like Blitz gaps is our own wiring or bridge work. Only these were shown
+to need Blitz itself to change:
 
-1. **A JavaScript DOM API.** Blitz has a DOM in Rust, but nothing exposes it to
-   JavaScript as `document`, `window`, element methods and events. Our renderer
-   sends an owned tree instead. Without this layer no DOM-dependent library can
-   run, including ui-sdk's components and behaviours. This is the largest item
-   and could live in our own code, not in Blitz.
-2. **Focus moved by script,** and focus events that libraries expect.
-3. **Synchronous measurement** (`getBoundingClientRect`), or a design that
-   never needs it.
-4. **A top layer** for popups, menus and dialogs.
-5. **`:focus-visible`.**
-6. **Text area sizing** by content.
-7. **Blur and richer shadows,** if the look ever needs them.
+1. **A top layer** for popups, menus and dialogs: drawing and hit testing above
+   clipped parents. A separate overlay surface of ours is the alternative.
+2. **`:focus-visible`.** Blitz sets focus and the focus ring together.
+3. **Blur and richer shadows,** if the look ever needs them.
+
+Not yet examined, so they may join this list: text area sizing by content,
+pointer capture, drag and drop, and an accessibility host.
 
 ## Not decided
 
-- **ui-sdk.** Its number, date, colour and search helpers run without a DOM and
-  could be used today. Its behaviours and its Solid adapter need a DOM, and the
-  adapter needs Solid 2; the client is on Solid 1.9.
+- **ui-sdk.** One menu runs on the renderer in a spike. The rest is tracked in [DOM compatibility](/docs/design/compatibility).
 - **Tauri.** A webview would run ui-sdk and any web content as is, including a
   WebAssembly 3D editor. It gives up control of rendering to the system
   webview, which differs per platform.
