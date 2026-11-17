@@ -35,8 +35,8 @@ Add tests in `e2e/browser/*.spec.ts`. Select by role and accessible name; keep
 layout and styling out of assertions. Wait for live state with Playwright's
 assertions, without sleeps. Use the observed thread count as a baseline, since
 browser projects share one disposable server. Keep fixture rebuilds serial.
-The host accessibility contract includes `Connection status`, `Live thread count`,
-`New thread title`, `New thread`, `Plugin views`, `Threads` and `Plugin view error`.
+The host accessibility contract includes `Connection status`, `Sidebar`, `Page header`,
+`Panel`, `Views`, `Open pages`, `Settings`, `Server unreachable` and `Plugin view error`; the fixture adds `Threads`, `New thread` and `New thread title`.
 Keep those names when restyling the host.
 Use `--project=chromium` or `--project=webkit` to narrow a run. Failure traces and
 HTML reports live under `.ci-results/playwright*` and are uploaded by native CI.

@@ -48,7 +48,7 @@ test("the corrected file passes", () => {
 test("the shapes the corner rule assumes are the primitives' own classes", async () => {
   const { primitiveShapes } = await import("../lint/plugin.js");
   const { buttonVariants, chipVariants, rowVariants } = await import("../src/index.ts");
-  const { popupClass } = await import("../src/menu.tsx");
+  const { popupClass, itemClass } = await import("../src/menu.tsx");
   expect(primitiveShapes.Button[0]).toBe(8);
   expect(buttonVariants()).toContain("rounded-sm");
   expect(chipVariants()).toContain("rounded-sm");
@@ -56,4 +56,7 @@ test("the shapes the corner rule assumes are the primitives' own classes", async
   expect(primitiveShapes["Menu.Content"]).toEqual([12, 4]);
   expect(popupClass.join(" ")).toContain("rounded-md");
   expect(popupClass.join(" ")).toContain("p-1");
+  expect(primitiveShapes["Command.Item"]).toEqual([8, null]);
+  expect(primitiveShapes["Menu.RadioItem"]).toEqual([8, null]);
+  expect(itemClass.join(" ")).toContain("rounded-sm");
 });

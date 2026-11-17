@@ -2,7 +2,7 @@ import { createSignal, For } from "solid-js";
 import { createApi, type FunctionReference } from "@tokamak/sdk";
 import { Region, view } from "@tokamak/sdk/client";
 import { useClient, useQuery } from "@tokamak/sdk/solid";
-import { Button, Row, RowList, icons } from "@tokamak/ui";
+import { Button, Icon, Row, RowList, icons } from "@tokamak/ui";
 
 const api = createApi<{
   threads: {
@@ -19,7 +19,7 @@ export const FixtureView = view({ route: "/" }, () => {
     <section aria-label="Integration fixture" class="flex flex-col gap-4 p-8">
       <Region.Sidebar>
         <Row
-          lead={<span class="text-ink-3">+</span>}
+          lead={<Icon path={icons.add} />}
           render={(attrs) => (
             <button
               {...attrs}
