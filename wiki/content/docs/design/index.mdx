@@ -4,9 +4,9 @@ description: The tokens and rules every Tokamak screen and plugin is built from.
 ---
 
 These rules come from the design mock-ups in the Paper file "Tokamak —
-Directions" (page "System v1 · rules, composer, chat"). They describe the
-target. The app does not follow them yet: `packages/ui/src/theme.css` still
-holds older tokens.
+Directions" (page "System v1 · rules, composer, chat"). The tokens, the
+primitives and a lint config that enforces this page ship in `@tokamak/ui`.
+The app's `/kit` page shows every token and primitive in both themes.
 
 The goal is a system, not a look. A plugin author or an agent that follows this
 page should get a screen that feels like the rest of the app without copying
@@ -14,39 +14,100 @@ any component.
 
 ## What the system provides
 
-- **Tokens:** tones, type, spacing and radii, as Tailwind theme values.
+- **Tokens:** tones, type, spacing and radii, as Tailwind theme values in
+  `@tokamak/ui/theme.css`.
 - **Rules:** this page.
-- **A few primitives:** only what a plugin cannot reasonably build itself, such
-  as the text area and the icon. The composer is not one of them; it belongs to
-  the chat plugin.
+- **A few primitives:** only what a plugin cannot reasonably build itself.
+  The composer is not one of them; it belongs to the chat plugin.
+- **A lint config:** it tells you, with the fix, when you leave the system.
 - **The shell:** the frame and the places where plugins appear.
 
 Everything else is built by each plugin from the tokens and the rules.
+
+## For plugin authors
+
+1. Import the tokens in your stylesheet, after Tailwind:
+
+   ```css
+   @layer ui-sdk;
+   @import "tailwindcss";
+   @import "@tokamak/ui/theme.css";
+   ```
+
+2. Use the primitives from `@tokamak/ui` (or one entry each, such as
+   `@tokamak/ui/button`). You may add layout classes to them (margin, width,
+   flex and grid placement); their look is theirs.
+3. Turn on the lint config. With Oxlint, extend it and repeat its `settings`
+   block, because Oxlint's `extends` does not carry settings:
+
+   ```json
+   {
+     "extends": ["./node_modules/@tokamak/ui/lint/oxlint.json"],
+     "settings": {
+       "shadcn": { "ui": "@tokamak/ui", "themeImports": ["^@tokamak/ui/"] }
+     }
+   }
+   ```
+
+   With ESLint:
+
+   ```js
+   import { tokamak } from "@tokamak/ui/lint";
+   import tsParser from "@typescript-eslint/parser";
+   export default [tokamak({ files: ["src/client/**/*.tsx"], parser: tsParser })];
+   ```
+
+The lint config reports raw colours, arbitrary values, classes that do not
+exist in the theme (such as `p-5`), inline styles, restyled primitives and
+corners that are not concentric. Each message names what to use instead.
+
+## Tokens
+
+| Kind    | Names                                                                        |
+| ------- | ---------------------------------------------------------------------------- |
+| Tones   | `window`, `stage`, `tray`, `card`, `band`                                    |
+| Text    | `ink`, `ink-2`, `ink-3`                                                      |
+| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                        |
+| Brand   | `brand`, `brand-ink`, `brand-tint`                                           |
+| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                    |
+| State   | `hover`, `selected` (set by the surface underneath)                          |
+| Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono` |
+| Spacing | `1 2 3 4 6 8 12 16` (4, 8, 12, 16, 24, 32, 48, 64 px)                        |
+| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16             |
+| Other   | `shadow-raised` (buttons only), `max-w-read` (560 px)                        |
+
+Colours are utilities: `bg-stage`, `text-ink-3`, `bg-added-tint`. Every other
+scale is cleared, so `p-5`, `rounded-xl` and `bg-zinc-800` do not exist.
 
 ## Tones
 
 Neutrals are pure grey, with no tint. A surface is told apart by its tone, not
 by a border.
 
-| Role                      | Dark      | Light     |
-| ------------------------- | --------- | --------- |
-| Window, sidebar           | `#080808` | `#EBEBEB` |
-| Stage, panels             | `#101010` | `#FFFFFF` |
-| Tray, widgets             | `#161616` | `#F5F5F5` |
-| Card, selected row        | `#1C1C1C` | `#EDEDED` |
-| Band that needs attention | `#222222` | `#E5E5E5` |
-| Ink (main text)           | `#E6E6E6` | `#171717` |
-| Secondary text            | `#ADADAD` | `#4A4A4A` |
-| Tertiary text, idle icons | `#8A8A8A` | `#666666` |
+| Role                      | Token    | Dark      | Light     |
+| ------------------------- | -------- | --------- | --------- |
+| Window, sidebar           | `window` | `#080808` | `#EBEBEB` |
+| Stage, panels             | `stage`  | `#101010` | `#FFFFFF` |
+| Tray, widgets             | `tray`   | `#161616` | `#F5F5F5` |
+| Card, selected row        | `card`   | `#1C1C1C` | `#EDEDED` |
+| Band that needs attention | `band`   | `#222222` | `#E5E5E5` |
+| Ink (main text)           | `ink`    | `#E6E6E6` | `#171717` |
+| Secondary text            | `ink-2`  | `#ADADAD` | `#4A4A4A` |
+| Tertiary text, idle icons | `ink-3`  | `#8A8A8A` | `#666666` |
+
+Dark is the default. `data-theme="light"` on the root, or on any element,
+swaps every colour inside it.
 
 Text uses three tones and no more. Every text tone reaches a contrast of 4.5:1
 on every surface in its theme; the lowest measured pair is tertiary on the
 band, at 4.61:1 in dark and 4.56:1 in light.
 
-## Colour
+Hover and selected fills depend on the surface underneath. On window and
+stage, hover is `tray` and selected is `card`, except on the light window,
+where card is invisible (1.02:1) and the selected fill is white. Wrap a region
+in `<Surface tone>` and use `bg-hover` and `bg-selected`; they follow it.
 
-There is no brand colour for now. The main action in a region is a solid ink
-button.
+## Colour
 
 Semantic colours each have one job:
 
@@ -57,63 +118,114 @@ Semantic colours each have one job:
 | Amber  | Warning, needs you          | `#FBBF24` | `#2A2110` | `#8A5300`  | `#FEF4DE`  |
 | Blue   | Information                 | `#60A5FA` | `#111F36` | `#1D4ED8`  | `#EAF1FE`  |
 
-- Colour appears only on status and on diff content. Chrome, prose and icons at
-  rest stay neutral.
+The brand colour is a purple taken from the Porffor site, with only the
+shades that have a job:
+
+| Token        | Job                        | Dark      | Light     | Measured                                       |
+| ------------ | -------------------------- | --------- | --------- | ---------------------------------------------- |
+| `brand`      | Brand button, links, focus | `#B787F0` | `#7B3FD1` | as text: 5.86 to 7.38 dark, 4.80 to 6.05 light |
+| `brand-ink`  | Text on the brand fill     | `#0E021C` | `#FFFFFF` | 7.41 dark, 6.05 light                          |
+| `brand-tint` | A quiet brand wash         | `#231433` | `#F3EAFF` | brand on it: 6.35 dark, 5.19 light             |
+
+- Brand marks four things: the brand button, links (with an underline), the
+  keyboard focus ring and nothing else. Selected rows stay a neutral fill with
+  ink and weight 500: they are many per screen, and colour there is noise.
+- Semantic colour appears only on status and on diff content. Chrome, prose and
+  icons at rest stay neutral.
 - Colour is never the only cue. Each state also has its own icon shape, a sign
   or a number. The tints are close to the stage tone, so they cannot carry
   meaning alone.
-- Links are ink with an underline.
 
 ## Type
 
-Geist for text, Geist Mono for data. Three sizes:
+Geist for text, Geist Mono for data, both bundled with `@tokamak/ui`. Three
+sizes:
 
-| Role  | Size / line | Weight           | Tone             | Used for                                 |
-| ----- | ----------- | ---------------- | ---------------- | ---------------------------------------- |
-| Read  | 16 / 26     | 400, 600 head    | Ink              | Prose only: messages, notes              |
-| Row   | 14 / 20     | 400, 500 current | Ink or secondary | Rows, buttons, titles in chrome          |
-| Label | 12 / 16     | 500              | Tertiary         | Section labels, tab labels, breadcrumbs  |
-| Data  | 12 / 16     | 400, mono        | Tertiary         | Counts, ages, timers, ids, path prefixes |
+| Role  | Utility      | Size / line | Weight           | Tone             | Used for                                 |
+| ----- | ------------ | ----------- | ---------------- | ---------------- | ---------------------------------------- |
+| Read  | `text-read`  | 16 / 26     | 400, 600 head    | Ink              | Prose only: messages, notes              |
+| Row   | `text-row`   | 14 / 20     | 400, 500 current | Ink or secondary | Rows, buttons, titles in chrome          |
+| Label | `text-label` | 12 / 16     | 500              | Tertiary         | Section labels, tab labels, breadcrumbs  |
+| Data  | `text-data`  | 12 / 16     | 400, mono        | Tertiary         | Counts, ages, timers, ids, path prefixes |
 
 - There is no display size. A heading is 16 at weight 600.
 - Emphasis comes from weight or tone before size.
 - Mono is only for things a person could copy: code, ids, paths, numbers.
-  Code is mono 13 in rows and 15 in prose.
+  Code takes the size of the text around it: `text-data` in rows, mono at the
+  read size in prose.
 - A container uses at most two sizes.
 - Numbers are right-aligned.
-- Prose stops at 560 px wide, about 75 characters per line.
+- Prose stops at 560 px wide (`max-w-read`), about 75 characters per line.
 
 ## Spacing and radii
 
 One spacing scale: 4, 8, 12, 16, 24, 32, 48, 64. One radius scale: 4, 8, 12, 16.
 No other values.
 
-- **Nested corners:** inner radius = outer radius − the gap between them.
+- **Nested corners:** inner radius = outer radius − the gap between them. The
+  lint rule `tokamak/concentric-radius` enforces it and names the radius to
+  use. It applies when the child sits inside the corner's curve (the gap is
+  smaller than the outer radius) and paints a surface. A square child that
+  paints inside a rounded parent is also wrong, unless the parent clips.
+- **Primitives that draw a surface** have a fixed radius: Button, Chip, Row,
+  Textarea, Tab and menu items are 8. So a container that holds one at its
+  edge has radius 8 + its padding: `rounded-md p-1` or `rounded-lg p-2`. Menu
+  and Select lists are 12 with 4 padding; a Dialog is 16 with 24 padding.
 - **Gaps group things.** The gap inside a group is smaller than the gap between
   groups. In a thread: 8 from a header to its text, 12 between paragraphs, 16
   between blocks in one turn, 48 between turns (32 in a narrow docked thread).
 - **Align content to content,** not box to box. A submenu shifts up by its own
   padding so its first row sits on the line of the row that opened it.
 
-## Surfaces, lines and shadow
+The lint rule reads static `class` strings only. It cannot see classes built at
+run time, a radius that comes from inside your own component, spreads, or
+padding that differs between axes.
 
-- Tone before lines. Use a border only where tone and space cannot separate
+## Surfaces, edges and depth
+
+- Tone before lines. Use an edge only where tone and space cannot separate
   two things. A hairline may split rows inside one container.
-- A shadow means "raised and pressable". Cards, panels and chips are flat.
-- No blur and no layered shadows; the renderer does not draw them (see
-  [Renderer limits](/docs/design/renderer)).
+- **Edges are translucent ink, never a fixed grey.** `edge` (12%) is the
+  hairline; `edge-strong` (40% dark, 50% light) marks a control's boundary
+  and reaches 3:1 on every surface (3.21 to 3.31 dark, 3.22 to 3.41 light).
+  Because they are alpha, the same control sits right on window, stage,
+  tray, card and band.
+- Buttons are the only thing with depth (`shadow-raised`). Cards, panels and
+  chips are flat. Popups and dialogs carry an `edge` hairline instead.
+
+## Buttons
+
+Every filled button is a key: the fill fades from the colour at the bottom to
+85% at the top; a 2 px `lip` inside the bottom edge (in light also a 1 px edge
+all round), a translucent white ring and a top `highlight`, and
+`shadow-raised`. Hover brightens it, pressing darkens it.
+
+| Variant       | Fill               | Text        | Use                                          |
+| ------------- | ------------------ | ----------- | -------------------------------------------- |
+| `brand`       | `brand`            | `brand-ink` | The one main action, where it is the brand's |
+| `primary`     | `ink`              | `stage`     | The one main action elsewhere                |
+| `outline`     | none               | `ink`       | The default; `edge-strong` ring and lip      |
+| `destructive` | `removed`          | `stage`     | Only the button that deletes                 |
+| `ghost`       | none, `edge` hover | `ink-2`     | Icon buttons and quiet actions; no lip       |
+
+- At most one brand or primary button per region.
+- Sizes: `md` 32 (all of the app) and `lg` 40 (roomy regions only).
+- An icon-only button needs a `label`; it becomes its name.
+- Disabled is half opacity.
 
 ## Density
 
 Three densities over the same parts:
 
-| Density | Row height | Padding | Text |
-| ------- | ---------- | ------- | ---- |
-| Roomy   | 48         | 16      | 16   |
-| Normal  | 40         | 12      | 16   |
-| Dense   | 32         | 8       | 14   |
+| Density | Single row | Inline padding |
+| ------- | ---------- | -------------- |
+| Roomy   | 48         | 16             |
+| Normal  | 40         | 12             |
+| Dense   | 32         | 8              |
 
-A container sets its density. Inside it, density can only get tighter.
+A container sets its density with `<Density>`. Inside it, density can only get
+tighter. With no `<Density>`, normal applies. Density changes height and
+padding only; the text stays at the row role.
 
 ## Rows
 
@@ -121,11 +233,11 @@ A row has three slots: a lead (one 16 px icon or mark, 8 px from the title), a
 title (one line, truncates), and a trail (one quiet item: a 12 px age or count,
 or a 16 px avatar).
 
-| Row    | Height at dense | Second line                                             |
-| ------ | --------------- | ------------------------------------------------------- |
-| Single | 32              | None. The default.                                      |
-| Double | 48              | 12 / 16 tertiary facts, starting at the title's edge.   |
-| Half   | 24              | Is itself a 12 / 16 line that belongs to the row above. |
+| Row    | Height | Second line                                             |
+| ------ | ------ | ------------------------------------------------------- |
+| Single | 32–48  | None. The default; height follows density.              |
+| Double | 48     | 12 / 16 tertiary facts, starting at the title's edge.   |
+| Half   | 24     | Is itself a 12 / 16 line that belongs to the row above. |
 
 - A double row's second line holds facts, such as the agent's model and the
   project. It never holds a status word, and it never sits under the lead icon.
@@ -133,7 +245,8 @@ or a 16 px avatar).
   next. In a thread list that means threads that are running or need attention;
   finished threads are single rows.
 - A half row is a child: a subagent or a sub-step. It sits 4 px under its
-  parent and 12 px from the next group. It is not a click target on its own.
+  parent and 12 px from the next group. It is not a click target on its own;
+  in a `RowList` it goes in its option's `sub`.
 - One list keeps one row grammar. Do not mix header rows, section rows and item
   rows that each lay out differently.
 - Each plugin says what its lead means. In chat the lead is the agent's mark;
@@ -145,7 +258,7 @@ Status is an icon, coloured only when it needs the person. Rows carry no status
 words.
 
 - Each state has its own shape: a spinner for running, a lock for needs you, a
-  check for done, a cross for failed.
+  check for done, a cross for failed (`<StatusIcon>`).
 - Only "needs you" (amber) and "failed" (red) are coloured.
 - The word goes in the tooltip and the accessible name, for example "Fix total
   rounding, needs you".
@@ -155,7 +268,7 @@ words.
 ## Icons
 
 - Remix Icon for interface icons, LobeHub icons for AI company marks, both as
-  single-colour paths.
+  single-colour paths (`<Icon path>`).
 - Idle icons are tertiary. The current one is ink.
 - An agent's mark is drawn bare, with no box around it.
 - Prefer an icon to a word where the meaning is unambiguous.
@@ -163,9 +276,9 @@ words.
 ## Controls
 
 - Every click target is at least 32 × 32, even when the icon inside is 16.
-- Keyboard focus is a 2 px ink ring with a 2 px gap in the surface colour. It
-  does not appear on hover.
-- One primary action per region.
+- Keyboard focus is a 2 px `brand` ring with a 2 px gap in the surface colour.
+  It does not appear on hover.
+- One brand or primary action per region.
 
 ## Threads
 
@@ -178,13 +291,12 @@ words.
 
 ## Checking a screen
 
-Before a screen is called done, check it against the `ui-design` skill:
-hierarchy, grouping, line length, contrast of every real text and background
-pair, target sizes, and the focus and empty states.
+Before a screen is called done, run the lint config, then check it against the
+`ui-design` skill: hierarchy, grouping, line length, contrast of every real
+text and background pair, target sizes, and the focus and empty states.
 
 ## Open
 
-- The brand colour.
 - Whether the plugin rail stays.
 - How a thread's attached plugins change the layout (chat, chat with a panel,
   plugin on the full stage with the thread docked).

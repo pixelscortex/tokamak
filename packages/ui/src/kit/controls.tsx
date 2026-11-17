@@ -128,7 +128,7 @@ export function Facts(): JSX.Element {
 export function Fields(props: { theme: string }): JSX.Element {
   return (
     <Section label="Primitives · Textarea, Tabs" title="Text and panels">
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-2 items-start gap-4">
         <Textarea aria-label={`Empty note, ${props.theme}`} placeholder="Ask Mira" />
         <Textarea
           aria-label={`Filled note, ${props.theme}`}
