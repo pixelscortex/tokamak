@@ -6,13 +6,20 @@ import { api } from "./api";
 import { useQuery } from "@tokamak/sdk/solid";
 import { Controls } from "./controls";
 
-type Session = { client: TokamakClient; close(): void };
-export function App() {
+import type { ServerEndpoint } from "./plugins/adapter";
+import { createPluginShell, type PluginRouting, type PluginShell } from "./plugins/views";
+
+type Session = { client: TokamakClient; plugins?: PluginShell; close(): void };
+export function App(
+  props: { routing?: PluginRouting; getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint> } = {},
+) {
   const [endpoint, setEndpoint] = createSignal("ws://127.0.0.1:43123/ws");
   const [session, setSession] = createSignal<Session | null>(null);
   const [status, setStatus] = createSignal("Disconnected");
   let pending: WebSocket | undefined;
+  let connectionAttempt = 0;
   const disconnect = () => {
+    connectionAttempt++;
     pending?.close();
     pending = undefined;
     session()?.close();
@@ -22,15 +29,19 @@ export function App() {
   onSettled(() => disconnect);
   async function connect() {
     disconnect();
-    const url = new URL(endpoint());
+    const attempt = connectionAttempt;
+    const supplied = await props.getEndpoint?.();
+    if (attempt !== connectionAttempt) return;
+    const url = new URL(supplied?.ws ?? endpoint());
     if (
-      url.protocol !== "ws:" ||
-      url.hostname !== "127.0.0.1" ||
-      url.pathname !== "/ws" ||
-      url.search ||
-      url.hash ||
-      url.username ||
-      url.password
+      !supplied &&
+      (url.protocol !== "ws:" ||
+        url.hostname !== "127.0.0.1" ||
+        url.pathname !== "/ws" ||
+        url.search ||
+        url.hash ||
+        url.username ||
+        url.password)
     ) {
       setStatus("Use a ws://127.0.0.1:port/ws development endpoint");
       return;
@@ -52,11 +63,31 @@ export function App() {
       socket.addEventListener("close", () => {
         if (pending === socket) {
           setStatus("Connection closed; mutation outcomes may be unknown");
+          session()?.plugins?.dispose();
           setSession(null);
         }
       });
-      setSession({ client, close: () => transport.close() });
-      setStatus("Connected to real Tokamak server");
+      const http = new URL(url);
+      http.protocol = "http:";
+      http.pathname = "/";
+      const plugins =
+        props.routing &&
+        createPluginShell(
+          client,
+          supplied ?? { http: http.href, ws: url.href, token: null },
+          transport,
+          props.routing,
+        );
+      setSession({
+        client,
+        plugins,
+        close: () => {
+          plugins?.dispose();
+          transport.close();
+        },
+      });
+      await plugins?.connect();
+      if (pending === socket) setStatus("Connected to real Tokamak server");
     } catch (cause) {
       setStatus(String(cause));
       socket.close();
@@ -78,6 +109,21 @@ export function App() {
       >
         {(active) => <Chat session={active()} disconnect={disconnect} />}
       </Show>
+      <nav aria-label="Plugin views">
+        <For each={session()?.plugins?.views() ?? []}>
+          {(view) => (
+            <a
+              href={view.route}
+              onClick={(event) => {
+                event.preventDefault();
+                session()?.plugins?.navigation.navigate(view.route);
+              }}
+            >
+              {view.title}
+            </a>
+          )}
+        </For>
+      </nav>
       <Show when={!session()}>
         <Controls onNew={() => setStatus("Connect before creating a thread")} onDisconnect={disconnect} />
       </Show>

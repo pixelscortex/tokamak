@@ -20,11 +20,12 @@ const root = createRootRoute({
         <Link to="/">Threads</Link>
         <Link to="/kit">UI kit</Link>
       </nav>
+      <App routing={{ router, root, base: [threads, kit] }} />
       <Outlet />
     </main>
   ),
 });
-const threads = createRoute({ getParentRoute: () => root, path: "/", component: App });
+const threads = createRoute({ getParentRoute: () => root, path: "/", component: () => null });
 const kit = createRoute({ getParentRoute: () => root, path: "/kit", component: Kit });
 export const router = createRouter({ routeTree: root.addChildren([threads, kit]) });
 export function ClientRouter() {
