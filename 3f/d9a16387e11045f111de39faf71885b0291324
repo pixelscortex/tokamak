@@ -1,0 +1,29 @@
+plugins/chat/src/client/ui/composer/send-button.tsx
+  s_a56d21cd474c50::t_063706cd0a3ca1 11,23,35
+plugins/chat/src/client/ui/composer/chat-composer.tsx
+  s_a56d21cd474c50::t_063706cd0a3ca1 53
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_a56d21cd474c50::t_cf7e065edee1a3 53
+plugins/chat/src/client/pages/screen.tsx
+  s_a56d21cd474c50::t_64f15752730a5b 241
+plugins/chat/tests/composer.test.tsx
+  s_a56d21cd474c50::t_ff84fbe1dda678 31
+plugins/chat/tests/thread-creation.test.ts
+  s_a56d21cd474c50::t_08f90b846ae512 1-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fd9a16387e11045f111de39faf71885b0291324",
+  "prompts": {},
+  "sessions": {
+    "s_a56d21cd474c50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eaf6-d831-7142-ae46-ca213388129a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
