@@ -1,11 +1,12 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { view, Region, useShortcuts } from "@tokamak/sdk/client";
+import { view, Region, usePageTitle, useShortcuts } from "@tokamak/sdk/client";
 import { useClient, useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
 import { useRouter } from "@tokamak/runtime/router";
 import { Button, StatusIcon, icons } from "@tokamak/ui";
 import { ComposerContext, createComposerAPI, type EditorAPI } from "../lib/composer";
+import { chatIcon } from "../lib/icons";
 import { chatKeys } from "../lib/state/chat-keys";
 import { api, useChat, type ChatState } from "../lib/state/use-chat";
 import { useDrafts } from "../lib/state/use-drafts";
@@ -19,13 +20,14 @@ import { ThreadList } from "../ui/sidebar/thread-list";
 import { EmptyThread, NoAgents } from "../ui/thread/empty";
 import { ThreadView } from "../ui/thread/thread-view";
 
-export const Chat = view({ route: "/" }, () => {
+export const Chat = view({ route: "/", icon: chatIcon }, () => {
   const client = useClient();
   const router = useRouter();
   const shortcuts = useShortcuts();
   const chat = useChat(client);
   const drafts = useDrafts(chat);
   const editor = createComposerAPI(chat, drafts);
+  usePageTitle(() => chat.thread()?.title);
   const [pickerOpen, setPickerOpen] = createSignal(false, { ownedWrite: true });
   const [note, setNote] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   let latest: readonly Message[] = [];
@@ -194,55 +196,57 @@ function ThreadPane(props: {
           </Show>
         }
       />
-      <div class="mx-auto flex w-full max-w-read flex-col gap-2 px-6 pb-4">
-        <Show when={chat.error() ?? messages.error()?.message}>
-          {(error) => (
-            <div role="alert" class="flex items-center gap-2 ps-1 text-row text-ink-2">
-              <StatusIcon status="failed" />
-              <span class="min-w-0 flex-1 break-words">{error()}</span>
-              <Button
-                variant="ghost"
-                icon={icons.close}
-                label="Dismiss"
-                onClick={() => chat.setError(undefined)}
-              />
-            </div>
-          )}
-        </Show>
-        <Composer
-          band={
-            <Show when={pending()}>
-              {(current) => (
-                <NeedsYou
-                  part={current().part}
-                  agentName={agentName()}
-                  busy={answering()}
-                  onAnswer={(optionId) => void answer(optionId)}
+      <div class="flex shrink-0 justify-center px-6 pb-4">
+        <div class="flex w-full max-w-thread flex-col gap-2">
+          <Show when={chat.error() ?? messages.error()?.message}>
+            {(error) => (
+              <div role="alert" class="flex items-center gap-2 ps-1 text-row text-ink-2">
+                <StatusIcon status="failed" />
+                <span class="min-w-0 flex-1 break-words">{error()}</span>
+                <Button
+                  variant="ghost"
+                  icon={icons.close}
+                  label="Dismiss"
+                  onClick={() => chat.setError(undefined)}
                 />
-              )}
-            </Show>
-          }
-          strip={
-            <ComposerStrip
-              running={running()}
-              note={props.note ?? (drafts.raced() ? "A reply is already running" : undefined)}
-              picker={
-                <Show when={!chat.noAgents()}>
-                  <AgentPicker chat={chat} open={props.pickerOpen} onOpenChange={props.onPickerOpen} />
-                </Show>
-              }
-            />
-          }
-          placeholder={placeholder()}
-          disabled={Boolean(chat.noAgents())}
-          queued={drafts.queued()}
-          onUnqueue={() => drafts.unqueue()}
-          onEdit={(text) => {
-            drafts.edit(text);
-            drafts.clearRace();
-          }}
-          onStop={() => void chat.cancel()}
-        />
+              </div>
+            )}
+          </Show>
+          <Composer
+            band={
+              <Show when={pending()}>
+                {(current) => (
+                  <NeedsYou
+                    part={current().part}
+                    agentName={agentName()}
+                    busy={answering()}
+                    onAnswer={(optionId) => void answer(optionId)}
+                  />
+                )}
+              </Show>
+            }
+            strip={
+              <ComposerStrip
+                running={running()}
+                note={props.note ?? (drafts.raced() ? "A reply is already running" : undefined)}
+                picker={
+                  <Show when={!chat.noAgents()}>
+                    <AgentPicker chat={chat} open={props.pickerOpen} onOpenChange={props.onPickerOpen} />
+                  </Show>
+                }
+              />
+            }
+            placeholder={placeholder()}
+            disabled={Boolean(chat.noAgents())}
+            queued={drafts.queued()}
+            onUnqueue={() => drafts.unqueue()}
+            onEdit={(text) => {
+              drafts.edit(text);
+              drafts.clearRace();
+            }}
+            onStop={() => void chat.cancel()}
+          />
+        </div>
       </div>
     </div>
   );

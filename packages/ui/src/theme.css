@@ -88,6 +88,7 @@
   --blur-*: initial;
   --container-*: initial;
   --container-read: 560px;
+  --container-thread: 760px;
   --container-dialog: 440px;
   --container-menu: 192px;
 }

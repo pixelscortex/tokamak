@@ -24,11 +24,11 @@ export function ThreadView(props: {
         ref={(element) => (box = element)}
         role="log"
         aria-label="Conversation"
-        class="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6"
       >
         <div
           ref={(content) => queueMicrotask(() => follow.attach(box, content))}
-          class="mx-auto flex w-full max-w-read flex-1 flex-col justify-end gap-12 px-6 pt-12 pb-8"
+          class="mx-auto flex w-full max-w-thread flex-1 flex-col justify-end gap-12 pt-12 pb-8"
         >
           <Show when={props.messages.length} fallback={props.empty}>
             <For each={props.messages} keyed={(message) => message._id}>

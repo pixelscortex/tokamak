@@ -44,7 +44,7 @@ export const twMergeConfig = {
       spacing: ["0", "1", "2", "3", "4", "6", "8", "12", "16"],
       shadow: ["raised", "quiet"],
       "inset-shadow": ["highlight"],
-      container: ["read", "dialog", "menu"],
+      container: ["read", "thread", "dialog", "menu"],
     },
     classGroups: {
       h: ["h-row"],

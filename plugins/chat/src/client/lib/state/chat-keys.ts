@@ -10,6 +10,9 @@ export type ChatKeyControls = {
 export function chatKeys(controls: ChatKeyControls) {
   return (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing) return;
+    // Keys inside a menu, listbox or dialog belong to it, even when it sits in the thread.
+    const target = event.target as Element | null;
+    if (target?.closest?.('[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]')) return;
     const plain = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
     if (event.key === "Escape" && controls.canStop()) {
       // A popup or dialog closes first; Esc reaches here only when nothing else used it.

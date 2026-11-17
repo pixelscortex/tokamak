@@ -148,3 +148,21 @@ test("Esc stops a running reply and digits answer a permission only with an empt
   expect(press("2")).toBe(false);
   expect(calls).toEqual(["stop", "answer 0"]);
 });
+
+test("keys pressed inside a menu or dialog in the thread are left to it", () => {
+  const calls: string[] = [];
+  const keys = chatKeys({
+    draft: () => "",
+    canStop: () => true,
+    stop: () => calls.push("stop"),
+    answer: () => true,
+  });
+  const menu = document.body.appendChild(document.createElement("div"));
+  menu.setAttribute("role", "menu");
+  const item = menu.appendChild(document.createElement("button"));
+  const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+  item.addEventListener("keydown", (inner) => keys(inner));
+  item.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(calls).toEqual([]);
+});

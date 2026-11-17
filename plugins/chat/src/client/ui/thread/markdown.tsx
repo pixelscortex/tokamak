@@ -18,7 +18,7 @@ export function lex(text: string, previous?: Token[]): Token[] | undefined {
 export function Markdown(props: { text: string }): JSX.Element {
   const tokens = createMemo<Token[] | undefined>((previous) => lex(props.text, previous));
   return (
-    <div class="flex min-w-0 max-w-read flex-col gap-3 text-read break-words text-ink">
+    <div class="flex min-w-0 flex-col gap-3 text-read break-words text-ink">
       <Errored fallback={() => <p class="whitespace-pre-wrap">{props.text}</p>}>
         <Show when={tokens()} fallback={<p class="whitespace-pre-wrap">{props.text}</p>}>
           {(list) => <Blocks tokens={list()} depth={0} />}
@@ -51,13 +51,13 @@ function block(token: Token, depth: number): JSX.Element {
       return null;
     case "paragraph":
       return (
-        <p>
+        <p class="max-w-read">
           <Inline tokens={token.tokens} depth={depth + 1} />
         </p>
       );
     case "heading":
       return (
-        <p role="heading" aria-level={Math.min(6, token.depth + 2)} class="font-semibold">
+        <p role="heading" aria-level={Math.min(6, token.depth + 2)} class="max-w-read font-semibold">
           <Inline tokens={token.tokens} depth={depth + 1} />
         </p>
       );
@@ -65,7 +65,7 @@ function block(token: Token, depth: number): JSX.Element {
       return <CodeBlock code={token.text} language={token.lang?.split(/\s/)[0] || undefined} />;
     case "blockquote":
       return (
-        <blockquote class="flex flex-col gap-3 border-s-2 border-edge-strong ps-4 text-ink-2">
+        <blockquote class="flex max-w-read flex-col gap-3 border-s-2 border-edge-strong ps-4 text-ink-2">
           <Blocks tokens={token.tokens ?? []} depth={depth + 1} />
         </blockquote>
       );
@@ -78,7 +78,7 @@ function block(token: Token, depth: number): JSX.Element {
     case "text":
       return <p>{token.tokens ? <Inline tokens={token.tokens} depth={depth + 1} /> : decode(token.text)}</p>;
     default:
-      return <p class="whitespace-pre-wrap">{token.raw}</p>;
+      return <p class="max-w-read whitespace-pre-wrap">{token.raw}</p>;
   }
 }
 
@@ -95,11 +95,11 @@ function List(props: { token: Tokens.List; depth: number }): JSX.Element {
     </For>
   );
   return props.token.ordered ? (
-    <ol start={Number(props.token.start) || 1} class="flex list-decimal flex-col gap-1 ps-6">
+    <ol start={Number(props.token.start) || 1} class="flex max-w-read list-decimal flex-col gap-1 ps-6">
       {items()}
     </ol>
   ) : (
-    <ul class="flex list-disc flex-col gap-1 ps-6">{items()}</ul>
+    <ul class="flex max-w-read list-disc flex-col gap-1 ps-6">{items()}</ul>
   );
 }
 

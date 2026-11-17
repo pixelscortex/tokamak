@@ -8,7 +8,7 @@ import type { Plan } from "../../lib/turns";
 export function PlanList(props: { plan: Plan; live: boolean }): JSX.Element {
   const done = () => props.plan.entries.filter((entry) => entry.status === "completed").length;
   return (
-    <section aria-label="Plan" class="flex max-w-read flex-col rounded-md bg-hover py-2">
+    <section aria-label="Plan" class="flex flex-col rounded-md bg-hover py-2">
       <div class="flex h-8 items-center gap-3 px-4 text-ink-3">
         <Icon path={glyphs.list} />
         <span class="text-data">

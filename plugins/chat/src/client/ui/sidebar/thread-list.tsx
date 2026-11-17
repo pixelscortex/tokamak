@@ -19,7 +19,7 @@ export function ThreadList(props: { chat: ChatState; onNew: () => void }): JSX.E
     return run ? (run.waiting ? ("needs-you" as const) : ("running" as const)) : undefined;
   };
   return (
-    <nav aria-label="Chat threads" class="flex min-h-0 flex-col gap-3 density-dense">
+    <nav aria-label="Chat threads" class="flex flex-col gap-4">
       <Row
         lead={<Icon path={glyphs.newChat} />}
         trail={<Kbd keys="mod+n" />}
@@ -41,7 +41,6 @@ export function ThreadList(props: { chat: ChatState; onNew: () => void }): JSX.E
           aria-label="Threads"
           value={props.chat.threadId()}
           onValueChange={(value: unknown) => value && props.chat.open(value as Id<"threads">)}
-          class="min-h-0 overflow-y-auto"
         >
           <RowList.Group>
             <For each={props.chat.threads.data() ?? []} keyed={(thread) => thread._id}>
