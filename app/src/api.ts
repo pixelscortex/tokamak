@@ -1,3 +1,4 @@
+import { endpoint } from "./host/endpoint";
 import { createApi, type FunctionReference, type Id } from "@tokamak/sdk";
 export interface Thread {
   _id: Id<"threads">;
@@ -18,3 +19,11 @@ export const api = createApi<{
   messages: { list: FunctionReference<"query", { threadId: Id<"threads"> }, Message[]> };
   chat: { send: FunctionReference<"action", { threadId: Id<"threads">; text: string }, unknown> };
 }>("chat");
+
+export { endpoint };
+export async function websocketEndpoint(): Promise<string> {
+  const host = await endpoint();
+  const url = new URL(host.ws);
+  if (host.token) url.searchParams.set("token", host.token);
+  return url.toString();
+}
