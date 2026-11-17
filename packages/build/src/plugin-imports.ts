@@ -16,7 +16,8 @@ export function pluginImports(options: { ui?: false; standalone?: boolean }): Pl
             throw new Error(
               `Dynamic plugin imports require a string literal: ${id}. Use import("@plugins/<id>/ui").`,
             );
-          const match = /^@plugins\/([^/]+)(?:\/ui)?$/.exec(arg.text);
+          const match =
+            /^@plugins\/([^/]+)(?:\/ui)?$/.exec(arg.text) ?? /^plugin:([^/]+)\/client$/.exec(arg.text);
           if (match)
             edits.push({
               start: node.getStart(source),

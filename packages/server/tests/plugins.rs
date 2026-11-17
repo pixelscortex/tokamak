@@ -554,8 +554,7 @@ fn build_source(installation: &Installation, plugin: Option<Value>) -> PathBuf {
     std::fs::write(
         source.join("backend/tsconfig.json"),
         json!({
-            "extends":root.join("tsconfig.json"),
-            "compilerOptions":{"paths":{"@tokamak/sdk":[root.join("packages/sdk/src/index.ts")]}}
+            "extends":root.join("tsconfig.json")
         })
         .to_string(),
     )

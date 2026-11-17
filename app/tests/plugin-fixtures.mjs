@@ -73,6 +73,12 @@ export async function fixtures(root) {
       exclude: ["dist"],
     }),
   );
+  await writeFile(resolve(logic, "backend/api.ts"), 'export { list, add } from "./record";');
+  // Public references require an explicit public API in legacy fixtures too.
+  await writeFile(
+    resolve(logic, "vite.config.ts"),
+    `import { tokamak } from "@tokamak/build/vite"; export default { plugins: [tokamak({ui:false, plugin:{id:"logic",version:"1.0.0",exports:"./backend/api.ts"}})] };`,
+  );
   built(logic);
   await library(root);
   built(
@@ -92,19 +98,19 @@ export async function fixtures(root) {
     import { useClient, useQuery } from "@tokamak/sdk/solid";
     import { useRouter } from "@tokamak/runtime/router";
     import { Counter, shared, ready } from "@plugins/library/ui";
-    import { api } from "../../logic/backend/_generated/api";
+    import { api } from "plugin:logic/server";
     if (ready !== "library-ready") throw new Error("dependency initialized out of order");
     export const Consumer = view({ route: "/" }, () => {
       const [local, setLocal] = createSignal(10);
       const router = useRouter();
       const client = useClient();
-      const rows = useQuery(client, api.record.list, () => ({}));
+      const rows = useQuery(client, api.list, () => ({}));
       return <div>
         <input id="local-input" value="" />
         <Counter /><p id="shared-observer">observed: {shared()}</p>
         <button id="local-increment" onClick={() => setLocal(n => n + 1)}>local: {local()}</button>
         <p id="live-data">{JSON.stringify(rows.data())}</p>
-        <button id="add-row" onClick={() => client.mutation(api.record.add, { title: "live-row" })}>Add row</button>
+        <button id="add-row" onClick={() => client.mutation(api.add, { title: "live-row" })}>Add row</button>
         <button id="thread-route" onClick={() => router.navigate("/chat/thread-one")}>Thread</button>
         <button id="nested-route" onClick={() => router.navigate("/p/consumer/detail/one")}>Nested</button>
       </div>;
@@ -272,6 +278,11 @@ async function payloadBackend(root) {
     export const clear = mutation({ args: {}, handler: async ({ db }) => { for (const row of await db.query("rows").collect()) await db.delete(row._id); } });
   `,
   );
+  await writeFile(resolve(backend, "backend/api.ts"), 'export { bytes, all, grow, clear } from "./ops";');
+  await writeFile(
+    resolve(backend, "vite.config.ts"),
+    `import { tokamak } from "@tokamak/build/vite"; export default { plugins: [tokamak({ui:false, plugin:{id:"payload",version:"1.0.0",exports:"./backend/api.ts"}})] };`,
+  );
   built(backend);
 }
 
@@ -285,7 +296,7 @@ async function payload(root) {
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient } from "@tokamak/sdk/solid";
-    import { api } from "../../payload/backend/_generated/api";
+    import { api } from "plugin:payload/server";
     // The test host also publishes a client on the raw transport (no query
     // cache): replaying a cached terminal error would hide leaked wire capacity.
     const wire = () => (globalThis as any).__tokamakTestWireClient;
@@ -293,23 +304,23 @@ async function payload(root) {
       const client = useClient();
       const [status, setStatus] = createSignal("idle");
       const run = async () => {
-        const medium = await client.query(api.ops.bytes, { size: 100_000 });
+        const medium = await client.query(api.bytes, { size: 100_000 });
         if (medium !== "x".repeat(100_000)) throw new Error("100KB result corrupted");
         let failure = "";
-        try { await client.query(api.ops.bytes, { size: 1_100_000 }); }
+        try { await client.query(api.bytes, { size: 1_100_000 }); }
         catch (error) { failure = String(error); }
         if (!failure.includes("result too large")) throw new Error("missing oversized query error: " + failure);
         // More than the 128-slot client limit proves terminal errors release
         // subscription capacity; each await also bounds native event pressure.
         for (let i = 0; i < 130; i++) {
           await new Promise<void>((resolve, reject) => {
-            wire().subscribe(api.ops.bytes, { size: 1_100_000 }, (event: any) => {
+            wire().subscribe(api.bytes, { size: 1_100_000 }, (event: any) => {
               if ("error" in event && event.error.message.includes("result too large")) resolve();
               else reject(new Error("missing oversized subscription error"));
             });
           });
         }
-        const later = await client.query(api.ops.bytes, { size: 7 });
+        const later = await client.query(api.bytes, { size: 7 });
         setStatus(medium.length + ":" + failure + ":130:" + later);
       };
       return <div><button id="payload-run" onClick={() => { void run().catch(e => setStatus("FAILED: " + e)); }}>Run payloads</button>
@@ -324,12 +335,12 @@ async function payload(root) {
       const client = useClient();
       const [status, setStatus] = createSignal("idle");
       const run = async () => {
-        for (let i = 0; i < 120; i++) await client.query(api.ops.bytes, { size: 1 });
-        const exact = await client.query(api.ops.bytes, { size: EXACT });
+        for (let i = 0; i < 120; i++) await client.query(api.bytes, { size: 1 });
+        const exact = await client.query(api.bytes, { size: EXACT });
         let over = "";
-        try { await client.query(api.ops.bytes, { size: EXACT + 1 }); over = "delivered"; }
+        try { await client.query(api.bytes, { size: EXACT + 1 }); over = "delivered"; }
         catch (error) { over = String(error); }
-        const later = await client.query(api.ops.bytes, { size: 7 });
+        const later = await client.query(api.bytes, { size: 7 });
         setStatus((exact as string).length + "|" + over + "|" + later);
       };
       return <div><button id="boundary-run" onClick={() => { void run().catch(e => setStatus("FAILED: " + e)); }}>Run boundary</button>
@@ -354,10 +365,10 @@ async function growth(root) {
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient, useQuery } from "@tokamak/sdk/solid";
-    import { api } from "../../payload/backend/_generated/api";
+    import { api } from "plugin:payload/server";
     export const Growth = view({ route: "/" }, () => {
       const client = useClient();
-      const rows = useQuery(client, api.ops.all, () => ({}));
+      const rows = useQuery(client, api.all, () => ({}));
       const text = () => {
         const error = rows.error();
         if (error) throw error;
@@ -373,8 +384,8 @@ async function growth(root) {
       const [log, setLog] = createSignal("");
       const mutate = async (name: string, run: () => Promise<unknown>) => { await run(); setLog(name); };
       return <div>
-        <button id="growth-grow" onClick={() => { void mutate("grown", () => client.mutation(api.ops.grow, { size: 600_000 })); }}>Grow</button>
-        <button id="growth-clear" onClick={() => { void mutate("cleared", () => client.mutation(api.ops.clear, {})); }}>Clear</button>
+        <button id="growth-grow" onClick={() => { void mutate("grown", () => client.mutation(api.grow, { size: 600_000 })); }}>Grow</button>
+        <button id="growth-clear" onClick={() => { void mutate("cleared", () => client.mutation(api.clear, {})); }}>Clear</button>
         <p id="growth-log">{log()}</p>
       </div>;
     });
@@ -445,7 +456,7 @@ async function bulk(root) {
     import { createSignal } from "solid-js";
     import { view } from "@tokamak/sdk";
     import { useClient } from "@tokamak/sdk/solid";
-    import { api } from "../../payload/backend/_generated/api";
+    import { api } from "plugin:payload/server";
     export const Bulk = view({ route: "/" }, () => {
       const [status, setStatus] = createSignal("idle");
       const client = useClient();
@@ -459,7 +470,7 @@ async function bulk(root) {
         let intact = text.length === ${repeats} * ${JSON.stringify(BULK_UNIT)}.length;
         for (let at = 0; intact && at < text.length; at += slice.length) {
           intact = text.slice(at, at + slice.length) === slice.slice(0, Math.min(slice.length, text.length - at));
-          await client.query(api.ops.bytes, { size: 1 });
+          await client.query(api.bytes, { size: 1 });
         }
         setStatus((intact ? "intact:" : "corrupt:") + text.length);
       };

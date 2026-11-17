@@ -6,8 +6,16 @@ import {
   v,
   type StoredDocument,
   type ApiFromModule,
+  type FunctionReference,
 } from "@tokamak/sdk";
-const a = createApi<{ ops: ApiFromModule<typeof import("../../a/backend/ops")> }>("a");
+// Include a forged private reference to test the host's capability checks.
+const a = createApi<{
+  ops: {
+    cycle: FunctionReference<"query", {}, null>;
+    list: FunctionReference<"query", {}, StoredDocument[]>;
+    privateWrite: FunctionReference<"mutation", {}, null>;
+  };
+}>("a");
 export const list = query({ handler: (ctx) => ctx.db.query("items").collect() });
 export const add = mutation({
   args: { fail: v.boolean() },
