@@ -1,11 +1,8 @@
 import type { JsonValue } from "@tokamak/sdk";
+import type { Endpoint as ServerEndpoint } from "../host/endpoint";
+export type { Endpoint as ServerEndpoint } from "../host/endpoint";
 import type { PluginAssets, PluginCatalog, PluginManifest } from "../../../packages/runtime/js/plugins";
 
-export interface ServerEndpoint {
-  http: string;
-  ws: string;
-  token: string | null;
-}
 export interface CatalogSource {
   plugins(): Promise<JsonValue>;
   onPluginsChanged(listener: (event: { plugins: string[]; catalog: JsonValue }) => void): () => void;

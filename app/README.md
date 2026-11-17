@@ -102,3 +102,11 @@ TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" proto run bun -- app/scri
 Open port 1420, repeat thread creation and fixture selection, then repeat the
 rebuild/reload command above. This helper reads the disposable discovery and
 token into Vite's development environment without printing the capability.
+
+Verified locally on macOS arm64 with the unsigned release app and its release
+sidecar: Chat threads loaded; FixtureView rendered; creating a thread updated
+both host and fixture queries; rebuild/install plus explicit reload swapped the
+selected revision without restarting. Vite against the same private server also
+passed, including authenticated stylesheet loading and preservation of the
+browser document across reload. Screenshot and accessibility captures are kept
+locally under `app/.dev/integration/proof`. Windows/Linux were not exercised.
