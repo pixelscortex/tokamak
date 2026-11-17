@@ -1,0 +1,26 @@
+e2e/browser/chat.spec.ts
+  s_452c1eccf4600a::t_ffe4f3d4a375a5 21-22
+  s_452c1eccf4600a::t_ddabf2adc7b9ec 8,10-16
+e2e/playwright.config.ts
+  s_452c1eccf4600a::t_ffe4f3d4a375a5 12
+app/tests/fixtures/integration/src/client/api.tsx
+  s_452c1eccf4600a::t_a3498422492117 31,33
+e2e/browser/app.spec.ts
+  s_452c1eccf4600a::t_a3498422492117 10-13,20,27,33,38,41,78,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ca5224fd1a866bf84c7e1d46298064fc6d86936",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
