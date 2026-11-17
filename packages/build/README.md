@@ -2,7 +2,7 @@
 
 One public pipeline coordinates maintained Vite/Solid, the existing SDK backend
 compiler and Tailwind v4. It does not introduce another TypeScript compiler,
-runtime loader or plugin security boundary.
+runtime loader. The build enforces source isolation; the host enforces call permissions.
 
 ```sh
 bun run plugin:build path/to/plugin
@@ -68,6 +68,52 @@ M1 still must establish shared Solid/renderer ownership, contribution
 registration and disposal before loading several UI plugins into one window.
 The current self-contained application/preview IIFE must not simply be
 evaluated repeatedly over a running shell's global renderer state.
+
+## Plugin imports
+
+Production source (server, client and worker; tests excluded) must stay inside
+its own plugin folder. Relative paths, absolute paths, source aliases and
+symlinks cannot reach another folder. Dependencies installed through
+`node_modules`, including workspace packages, are allowed; another plugin's
+implementation is never a package dependency.
+
+Use a sibling plugin's public API through sanctioned specifiers:
+
+```ts
+import { api as chat, type ToolPart } from "plugin:chat/server";
+// Inside an action: host routing and can_call still govern every operation.
+await ctx.use(chat).updateRun({ runId, token, delta: "Hello" });
+```
+
+`plugin:<id>/server` and its shorthand `plugin:<id>` expose public types from
+that plugin's `src/server/api.ts` and generated references for its exported
+queries, mutations and actions. The `api` object uses the public export names;
+named imports also carry references. No runtime helpers or handlers cross the
+boundary. Legacy packages use `backend/api.ts`. Public APIs are inspected
+statically and are never executed by the builder.
+
+`plugin:<id>/client` resolves to the client registry (`@plugins/<id>/ui`, which
+remains supported). Static imports declare dependencies and dynamic imports
+use the lazy registry loader. Public client types come from `src/client/api.ts`.
+
+The builder generates ignored type facades in `.tokamak/types` and configures
+its checkers automatically. For editor checking outside the builder, add these
+paths to the plugin's tsconfig (relative to the plugin root):
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "plugin:*/server": [".tokamak/types/*/server.d.ts"],
+      "plugin:*/client": [".tokamak/types/*/client.d.ts"],
+      "plugin:*": [".tokamak/types/*/server.d.ts"]
+    }
+  }
+}
+```
+
+The current authoring build requires sibling public source APIs for type and
+reference metadata; installed artifacts remain independent of that source.
 
 ## Generated native context
 

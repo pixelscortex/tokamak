@@ -77,6 +77,9 @@ cargo test -p server --test workers real_codex -- --ignored --exact --nocapture
 
 `src/server/api.ts` exports the public backend actions. Implementation lives in
 `agents/`, `turn/`, and `events/`, with generated references in `_generated/`.
-Chat imports go through `chat/src/server/api.ts`. ACP has no client half.
+Chat types and host-call references use `plugin:chat/server`. ACP keeps pending
+text, timers and permission deadlines in its own `turn/` helpers; chat owns all
+persisted state. Every write includes the turn token, and no chat implementation
+is bundled into ACP. ACP has no client half.
 The compiler derives `chat.backend` from chat's public backend contract and ACP's
 public functions. Callable IDs and behavior are unchanged.

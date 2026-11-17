@@ -43,7 +43,8 @@ jobs:
         run: sccache --show-stats
   native:
     # Warm native validation still took almost 14 minutes; keep it off PRs.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A manual release dispatch re-runs it so nothing ships unchecked.
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [typescript, rust-lint]
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 60
@@ -75,7 +76,8 @@ jobs:
         with:
           path: .ci-results/acp.xml
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Manual only for now: `depot ci dispatch` on main builds and stages a release.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: native
     strategy:
       fail-fast: false

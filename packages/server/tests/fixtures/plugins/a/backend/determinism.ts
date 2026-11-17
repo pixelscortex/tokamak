@@ -1,23 +1,21 @@
 import {
-  createApi,
   mutation,
   query,
   v,
-  type ApiFromModule,
   type Id,
   type JsonObject,
   type MutationContext,
   type QueryContext,
 } from "@tokamak/sdk";
 import { sample } from "./_sample";
-const b = createApi<{ determinism: ApiFromModule<typeof import("../../b/backend/determinism")> }>("b");
+import { api as b } from "plugin:b/server";
 async function snapshot(
   ctx: QueryContext<Record<string, JsonObject>> | MutationContext<Record<string, JsonObject>>,
   burn = 0,
 ) {
   const before = sample();
-  const first = await ctx.use(b).determinism.snapshot({ burn });
-  const second = await ctx.use(b).determinism.snapshot({});
+  const first = await ctx.use(b).snapshot({ burn });
+  const second = await ctx.use(b).snapshot({});
   return { before, first, second, after: sample() };
 }
 export const read = query({ handler: (ctx) => snapshot(ctx) });

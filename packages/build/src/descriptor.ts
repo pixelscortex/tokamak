@@ -1,3 +1,4 @@
+import { pluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 /** Static package conventions. Never import or evaluate an authored descriptor. */
 import { isServerModule } from "../../sdk/tools/server-files.mjs";
 import ts from "typescript";
@@ -126,7 +127,7 @@ export function deriveProviders(root: string, plugin: PluginDefinition, function
     );
     const apiPath = resolve(serverDirectory(root), "_generated/api.ts");
     if (!existsSync(apiPath)) continue;
-    const program = ts.createProgram([entry, apiPath], parsed.options);
+    const program = ts.createProgram([entry, apiPath], pluginCompilerOptions(root, parsed.options));
     const checker = program.getTypeChecker();
     const apiFile = program.getSourceFile(apiPath)!;
     const apiModule = checker.getSymbolAtLocation(apiFile);

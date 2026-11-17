@@ -1,3 +1,4 @@
+import { bunPluginReferences } from "../../sdk/tools/plugin-boundary.mjs";
 // Extend the existing isolated-fixture build pattern to public plugin artifacts
 // and a checked consumer of the actual generated action references.
 import { symlink, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -16,17 +17,24 @@ try {
   for (const id of ["chat", "acp"])
     await cp(join(workspace, `plugins/${id}`), join(root, id), {
       recursive: true,
-      filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
+      filter: (path) => !["dist", "_generated", "node_modules", ".tokamak"].includes(path.split("/").at(-1)),
     });
   await symlink(join(workspace, "plugins/acp/node_modules"), join(root, "acp/node_modules"), "dir");
   await cp(join(workspace, "app/tests/fixtures/record"), join(root, "record"), {
     recursive: true,
-    filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
+    filter: (path) => !["dist", "_generated", "node_modules", ".tokamak"].includes(path.split("/").at(-1)),
   });
+  // Install all peers before checking any public API's transitive types.
+  for (const id of ["record", "a", "b", "chat"])
+    await symlink(
+      join(workspace, id === "chat" ? "plugins/chat/node_modules" : "app/node_modules"),
+      join(root, id, "node_modules"),
+      "dir",
+    );
   for (const id of ["record", "a", "b", "chat", "acp"]) {
     const path = join(root, id);
-    // Chat now has a workspace-relative client tsconfig. The isolated backend
-    // fixture must resolve SDK imports through this fixture's absolute paths.
+    // Replace the copied workspace-relative client config; SDK dependencies
+    // resolve through the installed package symlinks above.
     if (id === "chat")
       await writeFile(join(path, "tsconfig.json"), JSON.stringify({ extends: join(root, "tsconfig.json") }));
     await writeFile(
@@ -39,10 +47,6 @@ try {
         compilerOptions: {
           ...(["chat", "acp"].includes(id) ? { skipLibCheck: true } : {}),
           ...(id === "acp" ? { types: ["node"], lib: ["ES2022", "DOM"] } : {}),
-          paths: {
-            "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")],
-            "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")],
-          },
         },
       }),
     );
@@ -101,10 +105,10 @@ export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
         ),
       );
     }
-    if (id === "chat") {
-      const permissions = join(path, "src/server/permissions/permission-wait.ts");
+    if (id === "acp") {
+      const permissions = join(path, "src/server/turn/permission-poller.ts");
       await writeFile(permissions, (await readFile(permissions, "utf8")).replace("30 * 60_000", "1_500"));
-      const buffer = join(path, "src/server/runs/stream-buffer.ts");
+      const buffer = join(path, "src/server/turn/turn-buffer.ts");
       await writeFile(
         buffer,
         (await readFile(buffer, "utf8")).replace("HEARTBEAT_MS = 10_000", "HEARTBEAT_MS = 200"),
@@ -173,6 +177,8 @@ export const age = mutation({
         types: ["node"],
         allowImportingTsExtensions: true,
         paths: {
+          "plugin:b/server": [join(root, "a/.tokamak/types/b/server.d.ts")],
+          "plugin:chat/server": [join(root, "acp/.tokamak/types/chat/server.d.ts")],
           "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")],
           "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")],
         },
@@ -186,7 +192,12 @@ export const age = mutation({
     { stdout: "inherit", stderr: "inherit" },
   );
   if ((await checked.exited) !== 0) throw new Error("Generated client action references did not type-check");
-  const built = await Bun.build({ entrypoints: [driver], target: "bun", format: "esm" });
+  const built = await Bun.build({
+    entrypoints: [driver],
+    target: "bun",
+    format: "esm",
+    plugins: [bunPluginReferences(join(root, "acp"))],
+  });
   if (!built.success) throw new AggregateError(built.logs, "Action driver build failed");
   files["driver.mjs"] = await built.outputs[0].text();
   console.log(JSON.stringify(files));
