@@ -2,90 +2,64 @@
 # A scripted ACP agent for browser tests and screenshots. It never calls a model.
 # The prompt picks the script: "permission", "fail", "slow" or "markdown";
 # anything else gets a short reply after three tool steps.
-import json, os, select, sys, time
+import itertools, json, os, sys, threading, time
 
 SPEED = float(os.environ.get("SCRIPTED_AGENT_SPEED", "1"))
-inbox = []
-cancelled = False
+out = threading.Lock()
+answered = threading.Condition()
 answers = {}
+cancels = {}
+sessions = itertools.count(1)
 
 
 def send(value):
-    print(json.dumps(dict(jsonrpc="2.0", **value)), flush=True)
+    with out:
+        print(json.dumps(dict(jsonrpc="2.0", **value)), flush=True)
 
 
 def update(session, **value):
     send(dict(method="session/update", params=dict(sessionId=session, update=value)))
 
 
-def handle(message):
-    global cancelled
-    if message.get("method") == "session/cancel":
-        cancelled = True
-    elif "result" in message or "error" in message:
-        answers[message.get("id")] = message
-    else:
-        inbox.append(message)
+class Turn:
+    """One prompt on its own thread, so sessions run side by side like a real agent."""
+
+    def __init__(self, session):
+        self.session = session
+        self.cancelled = threading.Event()
+        cancels[session] = self.cancelled
+
+    def wait(self, seconds):
+        self.cancelled.wait(seconds * SPEED)
 
 
-buffer = b""
-
-
-def read_line(timeout):
-    """One line from stdin, or None after the timeout; Python's buffered stdin hides lines from select."""
-    global buffer
-    end = None if timeout is None else time.time() + timeout
-    while b"\n" not in buffer:
-        left = None if end is None else max(0, end - time.time())
-        ready, _, _ = select.select([0], [], [], left)
-        if not ready:
-            return None
-        chunk = os.read(0, 65536)
-        if not chunk:
-            sys.exit(0)
-        buffer += chunk
-    line, buffer = buffer.split(b"\n", 1)
-    return line.decode()
-
-
-def wait(seconds):
-    """Sleeps while still reading cancel notifications and permission answers."""
-    end = time.time() + seconds * SPEED
-    while not cancelled:
-        left = end - time.time()
-        if left <= 0:
-            return
-        line = read_line(left)
-        if line and line.strip():
-            handle(json.loads(line))
-
-
-def stream(session, text, chunk=6, delay=0.03):
+def stream(turn, text, chunk=6, delay=0.03):
     words = text.split(" ")
     for start in range(0, len(words), chunk):
-        if cancelled:
+        if turn.cancelled.is_set():
             return
         piece = " ".join(words[start : start + chunk])
-        update(session, sessionUpdate="agent_message_chunk", content=dict(type="text", text=piece + (" " if start + chunk < len(words) else "")))
-        wait(delay)
+        update(turn.session, sessionUpdate="agent_message_chunk", content=dict(type="text", text=piece + (" " if start + chunk < len(words) else "")))
+        turn.wait(delay)
 
 
-def tool(session, call, title, kind, seconds, status="completed"):
-    update(session, sessionUpdate="tool_call", toolCallId=call, title=title, kind=kind, rawInput=dict(step=title))
-    update(session, sessionUpdate="tool_call_update", toolCallId=call, status="in_progress")
-    wait(seconds)
-    if cancelled:
+def tool(turn, call, title, kind, seconds, status="completed"):
+    update(turn.session, sessionUpdate="tool_call", toolCallId=call, title=title, kind=kind, rawInput=dict(step=title))
+    update(turn.session, sessionUpdate="tool_call_update", toolCallId=call, status="in_progress")
+    turn.wait(seconds)
+    if turn.cancelled.is_set():
         return
-    update(session, sessionUpdate="tool_call_update", toolCallId=call, status=status, content=[dict(type="content", content=dict(type="text", text=f"{title}: ok"))])
+    update(turn.session, sessionUpdate="tool_call_update", toolCallId=call, status=status, content=[dict(type="content", content=dict(type="text", text=f"{title}: ok"))])
 
 
-def plan(session, entries):
-    update(session, sessionUpdate="plan", entries=[dict(content=c, status=s, priority="medium") for c, s in entries])
+def plan(turn, entries):
+    update(turn.session, sessionUpdate="plan", entries=[dict(content=c, status=s, priority="medium") for c, s in entries])
 
 
-def ask(session, call, title):
-    send(dict(id=f"permission-{call}", method="session/request_permission", params=dict(
-        sessionId=session,
+def ask(turn, call, title):
+    key = f"permission-{turn.session}-{call}"
+    send(dict(id=key, method="session/request_permission", params=dict(
+        sessionId=turn.session,
         toolCall=dict(toolCallId=call, title=title),
         options=[
             dict(optionId="allow", name="Allow", kind="allow_once"),
@@ -93,10 +67,11 @@ def ask(session, call, title):
             dict(optionId="deny", name="Deny", kind="reject_once"),
         ],
     )))
-    while not cancelled and f"permission-{call}" not in answers:
-        wait(0.1)
-    answer = answers.get(f"permission-{call}", {}).get("result", {}).get("outcome", {})
-    return answer.get("optionId") if answer.get("outcome") == "selected" else None
+    with answered:
+        while key not in answers and not turn.cancelled.is_set():
+            answered.wait(0.1)
+    outcome = answers.get(key, {}).get("result", {}).get("outcome", {})
+    return outcome.get("optionId") if outcome.get("outcome") == "selected" else None
 
 
 MARKDOWN = """## What changed
@@ -128,63 +103,69 @@ See [the ACP spec](https://agentclientprotocol.com) for how tools report progres
 
 
 def run(request):
-    session = request["params"]["sessionId"]
+    turn = Turn(request["params"]["sessionId"])
+    finish = lambda: send(dict(id=request["id"], result=dict(stopReason="cancelled" if turn.cancelled.is_set() else "end_turn")))
     text = request["params"]["prompt"][0].get("text", "")
     lowered = text.lower()
     if "fail" in lowered:
-        tool(session, "read", "Read package.json", "read", 0.4)
+        tool(turn, "read", "Read package.json", "read", 0.4)
         send(dict(id=request["id"], error=dict(code=-32000, message="The model is overloaded. Try again in a minute.")))
         return
     if "slow" in lowered:
-        plan(session, [("Read the failing test", "in_progress"), ("Fix the cache", "pending"), ("Run the tests", "pending")])
-        tool(session, "slow-read", "Reading session.test.ts", "read", 2)
-        plan(session, [("Read the failing test", "completed"), ("Fix the cache", "in_progress"), ("Run the tests", "pending")])
-        tool(session, "slow-test", "Running pnpm test auth", "execute", 60)
-        stop = "cancelled" if cancelled else "end_turn"
-        send(dict(id=request["id"], result=dict(stopReason=stop)))
+        plan(turn, [("Read the failing test", "in_progress"), ("Fix the cache", "pending"), ("Run the tests", "pending")])
+        tool(turn, "slow-read", "Reading session.test.ts", "read", 2)
+        plan(turn, [("Read the failing test", "completed"), ("Fix the cache", "in_progress"), ("Run the tests", "pending")])
+        tool(turn, "slow-test", "Running pnpm test auth", "execute", 60)
+        finish()
         return
     if "permission" in lowered:
-        tool(session, "inspect", "Read src/auth/session.ts", "read", 0.5)
-        choice = ask(session, "push", "git push origin fix/session-refresh")
-        if cancelled:
-            send(dict(id=request["id"], result=dict(stopReason="cancelled")))
+        tool(turn, "inspect", "Read src/auth/session.ts", "read", 0.5)
+        choice = ask(turn, "push", "git push origin fix/session-refresh")
+        if turn.cancelled.is_set():
+            finish()
             return
         if choice in ("allow", "always"):
-            tool(session, "push", "Pushing fix/session-refresh", "execute", 0.6)
-            stream(session, "Pushed `fix/session-refresh`. The branch is ready for review.")
+            tool(turn, "push", "Pushing fix/session-refresh", "execute", 0.6)
+            stream(turn, "Pushed `fix/session-refresh`. The branch is ready for review.")
         else:
-            stream(session, "Understood, I did not push. The change is committed locally on `fix/session-refresh`.")
-        send(dict(id=request["id"], result=dict(stopReason="end_turn")))
+            stream(turn, "Understood, I did not push. The change is committed locally on `fix/session-refresh`.")
+        finish()
         return
     if "markdown" in lowered:
-        tool(session, "md-read", "Read src/auth/session.ts", "read", 0.3)
-        tool(session, "md-edit", "Edited src/auth/session.ts", "edit", 0.3)
-        tool(session, "md-test", "Ran pnpm test auth", "execute", 0.4)
-        plan(session, [("Refresh the cached token with the session", "completed"), ("Run the auth tests", "completed"), ("Open a pull request", "pending")])
-        stream(session, MARKDOWN, chunk=4, delay=0.02)
-        send(dict(id=request["id"], result=dict(stopReason="cancelled" if cancelled else "end_turn")))
+        tool(turn, "md-read", "Read src/auth/session.ts", "read", 0.3)
+        tool(turn, "md-edit", "Edited src/auth/session.ts", "edit", 0.3)
+        tool(turn, "md-test", "Ran pnpm test auth", "execute", 0.4)
+        plan(turn, [("Refresh the cached token with the session", "completed"), ("Run the auth tests", "completed"), ("Open a pull request", "pending")])
+        stream(turn, MARKDOWN, chunk=4, delay=0.02)
+        finish()
         return
-    tool(session, "look", "Listed the project files", "read", 0.4)
-    tool(session, "search", "Searched for refresh(", "search", 0.4)
-    tool(session, "open", "Read README.md", "read", 0.3)
-    stream(session, "This is a Tokamak workspace: a Rust server runs TypeScript plugins, and the desktop client renders their views. Chat is the core plugin; agents reach it through the ACP plugin.")
-    send(dict(id=request["id"], result=dict(stopReason="cancelled" if cancelled else "end_turn")))
+    tool(turn, "look", "Listed the project files", "read", 0.4)
+    tool(turn, "search", "Searched for refresh(", "search", 0.4)
+    tool(turn, "open", "Read README.md", "read", 0.3)
+    stream(turn, "This is a Tokamak workspace: a Rust server runs TypeScript plugins, and the desktop client renders their views. Chat is the core plugin; agents reach it through the ACP plugin.")
+    finish()
 
 
-while True:
-    line = read_line(None)
-    if line and line.strip():
-        handle(json.loads(line))
-    while inbox:
-        request = inbox.pop(0)
-        method = request.get("method")
-        params = request.get("params", {})
-        if method == "initialize":
-            send(dict(id=request["id"], result=dict(protocolVersion=1, authMethods=[], agentCapabilities=dict(loadSession=True))))
-        elif method in ("session/new", "session/load", "session/resume"):
-            send(dict(id=request["id"], result=dict(sessionId=params.get("sessionId", "scripted"))))
-        elif method == "session/prompt":
-            cancelled = False
-            run(request)
-        elif "id" in request:
-            send(dict(id=request["id"], error=dict(code=-32601, message="Method not found")))
+
+for line in sys.stdin:
+    if not line.strip():
+        continue
+    message = json.loads(line)
+    method = message.get("method")
+    params = message.get("params", {})
+    if "result" in message or "error" in message:
+        with answered:
+            answers[message.get("id")] = message
+            answered.notify_all()
+    elif method == "session/cancel":
+        cancels.get(params.get("sessionId"), threading.Event()).set()
+    elif method == "initialize":
+        send(dict(id=message["id"], result=dict(protocolVersion=1, authMethods=[], agentCapabilities=dict(loadSession=True))))
+    elif method == "session/new":
+        send(dict(id=message["id"], result=dict(sessionId=f"scripted-{next(sessions)}")))
+    elif method in ("session/load", "session/resume"):
+        send(dict(id=message["id"], result=dict(sessionId=params.get("sessionId"))))
+    elif method == "session/prompt":
+        threading.Thread(target=run, args=(message,), daemon=True).start()
+    elif "id" in message:
+        send(dict(id=message["id"], error=dict(code=-32601, message="Method not found")))

@@ -78,7 +78,9 @@ export function AgentTurn(props: {
         </Show>
       </div>
       <Show when={turn().work}>{(work) => <WorkRow work={work()} startedAt={props.startedAt} />}</Show>
-      <Show when={turn().plan}>{(plan) => <PlanList plan={plan()} />}</Show>
+      <Show when={turn().plan}>
+        {(plan) => <PlanList plan={plan()} live={props.message.status === "streaming"} />}
+      </Show>
       <Show when={props.message.status === "error"}>
         <div role="alert" class="flex max-w-read items-start gap-2 text-row text-ink-2">
           <span class="flex h-8 items-center">

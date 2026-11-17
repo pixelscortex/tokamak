@@ -76,7 +76,7 @@ function block(token: Token, depth: number): JSX.Element {
     case "hr":
       return <hr class="border-edge" />;
     case "text":
-      return token.tokens ? <Inline tokens={token.tokens} depth={depth + 1} /> : token.text;
+      return <p>{token.tokens ? <Inline tokens={token.tokens} depth={depth + 1} /> : decode(token.text)}</p>;
     default:
       return <p class="whitespace-pre-wrap">{token.raw}</p>;
   }

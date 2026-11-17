@@ -13,7 +13,6 @@ export function useNow(): () => number {
 }
 
 function workStatus(work: Work): Status {
-  if (work.waiting) return "needs-you";
   if (work.running) return "running";
   return work.failed ? "failed" : "done";
 }
@@ -23,7 +22,11 @@ export function WorkRow(props: { work: Work; startedAt?: number }): JSX.Element 
   return (
     <Collapsible.Root class="flex flex-col">
       <Collapsible.Trigger
-        lead={<StatusIcon status={workStatus(props.work)} />}
+        lead={
+          <Show when={props.work.waiting} fallback={<StatusIcon status={workStatus(props.work)} />}>
+            <Icon path={glyphs.lock} label="waiting for you" />
+          </Show>
+        }
         trail={
           <Show when={props.work.running && props.startedAt}>
             {(started) => <Elapsed since={started()} />}
@@ -69,8 +72,8 @@ function StepRow(props: { step: Step }): JSX.Element {
       ? (props.step.answer ?? (props.step.status === "pending" ? undefined : props.step.status))
       : props.step.error;
   return (
-    <li class="flex min-h-8 items-start gap-2 ps-2 pe-3 py-1 text-row text-ink-2">
-      <span class="flex h-6 w-4 shrink-0 items-center justify-center text-ink-3">
+    <li class="flex min-h-8 items-center gap-2 ps-2 pe-3 text-row text-ink-2">
+      <span class="flex w-4 shrink-0 justify-center text-ink-3">
         <Show
           when={stepStatus[props.step.status]}
           fallback={<Icon path={props.step.kind === "permission" ? glyphs.lock : glyphs.check} size={12} />}

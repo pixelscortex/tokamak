@@ -31,7 +31,10 @@ function pinnedBun(): string {
 }
 
 /** Installs chat and acp into `directory/plugins` and returns the sealed server environment. */
-export async function prepareChatSandbox(directory: string, options: { build?: boolean } = {}) {
+export async function prepareChatSandbox(
+  directory: string,
+  options: { build?: boolean; agents?: boolean } = {},
+) {
   if (options.build !== false) {
     run("proto", ["run", "bun", "--", "packages/build/src/build.ts", "plugins/chat"]);
     run("proto", ["run", "bun", "--", "packages/build/src/build.ts", "plugins/acp"]);
@@ -47,7 +50,7 @@ export async function prepareChatSandbox(directory: string, options: { build?: b
   await chmod(bin, 0o755);
   await symlink(pinnedBun(), `${bin}/bun`);
   const agent = resolve(import.meta.dirname, "fixtures/scripted-agent.py");
-  for (const name of ["claude-agent-acp", "codex-acp"]) {
+  for (const name of options.agents === false ? [] : ["claude-agent-acp", "codex-acp"]) {
     await writeFile(`${bin}/${name}`, `#!/bin/sh\nexec /usr/bin/python3 ${JSON.stringify(agent)} "$@"\n`, {
       mode: 0o755,
     });
@@ -69,7 +72,10 @@ if (import.meta.main) {
   await mkdir(`${root}/app/.dev`, { recursive: true });
   const directory = await mkdtemp(`${root}/app/.dev/chat-`);
   try {
-    const sandbox = await prepareChatSandbox(directory, { build: !process.argv.includes("--no-build") });
+    const sandbox = await prepareChatSandbox(directory, {
+      build: !process.argv.includes("--no-build"),
+      agents: !process.argv.includes("--no-agents"),
+    });
     // Vite reads the capability from app/.dev/chat-sandbox.env: VITE_TOKAMAK_TOKEN=… vite
     const token = randomBytes(32).toString("hex");
     await mkdir(`${directory}/local`, { mode: 0o700 });
