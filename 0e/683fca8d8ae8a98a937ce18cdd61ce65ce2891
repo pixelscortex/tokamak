@@ -1,0 +1,21 @@
+app/README.md
+  s_ea2d172c49b8f2::t_a239498d50c393 4,37,39-54
+wiki/content/docs/design/index.mdx
+  s_ea2d172c49b8f2::t_95e4fe80912a21 352-366
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e683fca8d8ae8a98a937ce18cdd61ce65ce2891",
+  "prompts": {},
+  "sessions": {
+    "s_ea2d172c49b8f2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf9fb17b-cf21-41ad-bed4-192900e9cec3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
