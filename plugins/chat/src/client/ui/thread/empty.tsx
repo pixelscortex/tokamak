@@ -23,7 +23,6 @@ export function EmptyThread(props: {
   agent: Agent | undefined;
   onStart: (text: string) => void;
 }): JSX.Element {
-  const place = () => (props.agent?.folder ? folderName(props.agent.folder) : "your home folder");
   return (
     <Centre>
       <div class="flex flex-col items-center gap-2">
@@ -32,8 +31,11 @@ export function EmptyThread(props: {
           What should {props.agent?.name ?? "the agent"} work on?
         </h2>
         <p class="max-w-read text-row text-ink-2">
-          It reads, edits and runs commands in <span class="font-mono">{place()}</span>, and asks before
-          anything risky.
+          It reads, edits and runs commands in{" "}
+          <Show when={props.agent?.folder} fallback="your home folder">
+            {(folder) => <span class="font-mono text-ink">{folderName(folder())}</span>}
+          </Show>
+          , and asks before anything risky.
         </p>
       </div>
       <ul aria-label="Ways to start" class="flex w-full max-w-dialog flex-col gap-1">

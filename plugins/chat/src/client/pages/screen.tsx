@@ -82,7 +82,9 @@ export const Chat = view({ route: "/" }, () => {
               note={note()}
               pickerOpen={pickerOpen()}
               onPickerOpen={setPickerOpen}
-              onMessages={(messages) => (latest = messages)}
+              onMessages={(messages) => {
+                latest = messages;
+              }}
             />
           )}
         </Show>
@@ -116,7 +118,9 @@ function ThreadPane(props: {
   const run = useQuery(chat.client, api.runs.active, () => ({ threadId: props.threadId }));
   const [answering, setAnswering] = createSignal(false, { ownedWrite: true });
   const list = () => messages.data() ?? [];
-  createEffect(list, (value) => props.onMessages(value));
+  createEffect(list, (value) => {
+    props.onMessages(value);
+  });
   const pending = () => pendingPermission(messages.data());
   const running = () => Boolean(chat.active());
   const agentName = () => chat.agent()?.name ?? "the agent";
