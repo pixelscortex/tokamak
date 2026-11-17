@@ -1,0 +1,26 @@
+packages/sdk/README.md
+  s_452c1eccf4600a::t_0bdb445b37250f 334-342
+wiki/content/docs/design/index.mdx
+  s_452c1eccf4600a::t_0bdb445b37250f 123,207-211,369-376
+  s_452c1eccf4600a::t_4b9c9c7b3f933e 112-122
+e2e/browser/chat.spec.ts
+  s_452c1eccf4600a::t_5b86073cd4fd0c 61-63,65,67-70
+app/README.md
+  s_452c1eccf4600a::t_0bdb445b37250f 46-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d3475fe7d2e36a8ab796965f4e2dc47f3336a4e",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
