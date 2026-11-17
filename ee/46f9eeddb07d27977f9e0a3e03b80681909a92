@@ -1,0 +1,24 @@
+.github/workflows/macos.yml
+  s_2297d4366353cf::t_257268a60eb76d 47-49,56,62
+.depot/workflows/ci.yml
+  s_2297d4366353cf::t_257268a60eb76d 29-30,62-63
+README.md
+  s_2297d4366353cf::t_1474d1c29a2715 63
+  s_2297d4366353cf::t_a1a187aa8de737 64-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee46f9eeddb07d27977f9e0a3e03b80681909a92",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
