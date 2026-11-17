@@ -1,0 +1,51 @@
+packages/sdk/client.tsx
+  s_452c1eccf4600a::t_cea77cb4c60843 212-220
+app/tests/shell.test.tsx
+  s_452c1eccf4600a::t_7ab35c4f2d8c2b 13,46-50,60,66,259-261,263,266-267,269-277
+  s_452c1eccf4600a::t_aa5c8a9c46f490 34,81,262,264-265,268,278-281
+  s_452c1eccf4600a::t_51cb5b08b68a89 282-283
+app/src/shell/palette.tsx
+  s_452c1eccf4600a::t_283b042754df96 4,44-49
+packages/sdk/src/contributions.ts
+  s_452c1eccf4600a::t_3a2deda20d6852 8-9
+app/src/shell/shell.tsx
+  s_452c1eccf4600a::t_c9aaa49cc9c21b 4,71-73,79,82-85,98
+  s_452c1eccf4600a::t_aa5c8a9c46f490 1,74-78,80-81
+app/src/shell/context.ts
+  s_452c1eccf4600a::t_c9aaa49cc9c21b 29-30
+app/src/shell/top-strip.tsx
+  s_452c1eccf4600a::t_283b042754df96 80,89,92-93,98
+app/src/shell/frame.tsx
+  s_452c1eccf4600a::t_283b042754df96 4,60,67
+packages/sdk/regions.tsx
+  s_452c1eccf4600a::t_cea77cb4c60843 1,12,17-18,71-94
+packages/build/tests/browser.test.ts
+  s_452c1eccf4600a::t_cc6af976e3f926 78-116
+  s_452c1eccf4600a::t_5f37e88891c374 117-122
+packages/build/src/contributions.ts
+  s_452c1eccf4600a::t_3a2deda20d6852 17-18,63,65,102-103,119-127,133-142
+  s_452c1eccf4600a::t_2d4b5f95c61fcc 143
+app/src/shell/rail.tsx
+  s_452c1eccf4600a::t_283b042754df96 4,53-59
+packages/sdk/tests/web/regions.test.tsx
+  s_452c1eccf4600a::t_a3de71b62588cb 4-11,155-194
+  s_452c1eccf4600a::t_5b5a6325afdb9b 195-198
+app/src/plugins/views.tsx
+  s_452c1eccf4600a::t_c9aaa49cc9c21b 33-34,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39cb72403f5019f87b3c6e09ec62d71d166a48e2",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
