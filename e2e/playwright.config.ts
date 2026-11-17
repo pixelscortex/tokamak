@@ -9,7 +9,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   outputDir: "../.ci-results/playwright",
   reporter: [["list"], ["html", { outputFolder: ".ci-results/playwright-report", open: "never" }]],
-  use: { baseURL: "http://127.0.0.1:1420", trace: "retain-on-failure" },
+  use: { baseURL: "http://127.0.0.1:1420", trace: "retain-on-failure", actionTimeout: 15_000 },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"], channel: "chromium" } },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },

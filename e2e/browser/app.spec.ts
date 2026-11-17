@@ -7,35 +7,38 @@ const connected = (page: Page) =>
 const rail = (page: Page) => page.getByRole("navigation", { name: "Views" });
 const tabs = (page: Page) => page.getByRole("navigation", { name: "Open pages" });
 
+// Chat is installed too and, being first in the catalog, owns "/". These tests open
+// the fixture by its address so chat never mounts (it creates a thread on first use).
+const fixtureHome = "/p/integration-fixture";
+
 // Each project gets the same server, so assertions use the observed baseline.
 test("live threads, compiler views, regions, revision replacement and error containment", async ({
   page,
   context,
   request,
 }) => {
-  await page.goto("/");
+  await page.goto(fixtureHome);
   await connected(page);
-  await expect(page).toHaveURL(/\/p\/integration-fixture$/);
   const fixture = page.getByRole("region", { name: "Integration fixture" });
   const count = fixture.getByRole("status", { name: "Fixture thread count" });
   await expect(count).toHaveText(/Fixture live threads: \d+/);
   const initial = Number((await count.innerText()).split(": ")[1]);
   const second = await context.newPage();
-  await second.goto("/");
+  await second.goto(fixtureHome);
   const secondCount = second.getByRole("status", { name: "Fixture thread count" });
   await expect(secondCount).toHaveText(`Fixture live threads: ${initial}`);
 
   const sidebar = page.getByRole("complementary", { name: "Sidebar" });
   const header = page.getByRole("banner", { name: "Page header" });
-  await expect(sidebar.getByRole("listbox", { name: "Threads" })).toBeAttached();
+  await expect(sidebar.getByRole("listbox", { name: "Fixture threads" })).toBeAttached();
   await expect(header.getByRole("heading", { name: "Fixture header" })).toBeVisible();
 
   const title = `Browser thread ${crypto.randomUUID()}`;
   await page.getByRole("textbox", { name: "New thread title" }).fill(title);
-  await sidebar.getByRole("button", { name: "New thread", exact: true }).click();
+  await sidebar.getByRole("button", { name: "New fixture thread", exact: true }).click();
   await expect(count).toHaveText(`Fixture live threads: ${initial + 1}`);
   await expect(secondCount).toHaveText(`Fixture live threads: ${initial + 1}`);
-  await expect(second.getByRole("listbox", { name: "Threads" })).toContainText(title);
+  await expect(second.getByRole("listbox", { name: "Fixture threads" })).toContainText(title);
 
   const sentinel = crypto.randomUUID();
   await page.evaluate((value) => {
@@ -72,7 +75,7 @@ test("live threads, compiler views, regions, revision replacement and error cont
   await connected(page);
   await second
     .getByRole("complementary", { name: "Sidebar" })
-    .getByRole("button", { name: "New thread" })
+    .getByRole("button", { name: "New fixture thread" })
     .click();
   await expect(secondCount).toHaveText(`Fixture live threads: ${initial + 2}`);
   await rail(page).getByRole("link", { name: "FixtureView", exact: true }).click();
@@ -80,7 +83,7 @@ test("live threads, compiler views, regions, revision replacement and error cont
 });
 
 test("the frame: keyboard sidebar, rail, tabs, panel, search and theme", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(fixtureHome);
   await connected(page);
   const sidebar = page.getByRole("complementary", { name: "Sidebar" });
   await expect(sidebar).toBeVisible();

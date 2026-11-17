@@ -28,9 +28,9 @@ export const FixtureView = view({ route: "/" }, () => {
             />
           )}
         >
-          New thread
+          New fixture thread
         </Row>
-        <RowList.Root aria-label="Threads">
+        <RowList.Root aria-label="Fixture threads">
           <RowList.Group>
             <For each={threads.data() ?? []}>
               {(thread) => <RowList.Option value={thread._id}>{thread.title}</RowList.Option>}

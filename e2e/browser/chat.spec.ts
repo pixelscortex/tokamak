@@ -5,16 +5,21 @@ import { test, expect, type Page } from "@playwright/test";
 // protocol traffic with no model behind them.
 
 async function openChat(page: Page) {
+  // Chat is the first view in the catalog, so opening the app lands on it.
   await page.goto("/");
-  await page
-    .getByRole("navigation", { name: "Plugin views" })
-    .getByRole("link", { name: "Chat", exact: true })
-    .click();
-  await expect(page.getByRole("navigation", { name: "Chat threads" })).toBeVisible();
+  await expect(page).toHaveURL(/\/p\/chat$/);
+  await expect(
+    page.getByRole("navigation", { name: "Views" }).getByRole("link", { name: "Chat", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("complementary", { name: "Sidebar" }).getByRole("navigation", { name: "Chat threads" }),
+  ).toBeVisible();
 }
 
 async function newThread(page: Page) {
   const threads = page.getByRole("listbox", { name: "Threads" }).getByRole("option");
+  // On an empty store chat opens its own first thread; count after it exists.
+  await expect(threads.first()).toBeVisible();
   const before = await threads.count();
   await page.getByRole("button", { name: /New chat/ }).click();
   await expect(threads).toHaveCount(before + 1);
