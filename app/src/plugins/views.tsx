@@ -120,7 +120,7 @@ export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
       {(_key) => (
         <Errored
           fallback={(cause) => (
-            <div role="alert">
+            <div role="alert" aria-label="Plugin view error">
               {props.view.plugin}: {String(cause())}{" "}
               <button onClick={() => props.shell.loader.reload(props.view.plugin)}>Reload</button>
             </div>

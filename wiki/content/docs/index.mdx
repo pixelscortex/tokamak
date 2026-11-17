@@ -28,32 +28,31 @@ build prerequisites.
 proto run bun -- install --frozen-lockfile
 ```
 
-Run these commands in separate terminals:
+Run `proto run bun -- run app` for the desktop client. It builds Chat and the
+server, starts or reuses the local server and connects automatically. For browser
+development, run `proto run bun -- run server:start` and
+`proto run bun -- run --cwd app dev` in separate terminals, then open
+`http://127.0.0.1:1420`. The browser server helper uses a disposable store.
+Compiler-built plugin views load from the server; `/kit` holds the controls page.
 
-```sh
-proto run bun -- run server:start
-proto run bun -- run app
-```
-
-The server helper builds Chat and the server, then runs on loopback with a fresh
-store. Ctrl+C stops it and removes that store. Press Connect in the app, then
-New thread to see live updates. `moon run app:dev` runs the same client in Vite.
-The skeleton loads no plugin UI. The `/kit` route replaces the standalone lab.
-
-## Check
+## Test and build
 
 ```sh
 proto run bun -- run check
 proto run bun -- run typecheck
 proto run bun -- run test
 proto run bun -- run e2e
-moon run app:web-build
+proto run bun -- x playwright install --no-shell chromium webkit
+proto run bun -- run e2e:browser
+proto run bun -- run --cwd app build
 proto run bun -- run --cwd app tauri build --no-sign
 ```
 
-Chat's old `src/client` is retained as rewrite reference and excluded from checks
-and builds. The plugin UI target is disabled until its web ESM implementation.
-Desktop release packaging is pending; release CI still builds the server.
+Every PR runs Linux checks and Chromium/WebKit tests plus a macOS desktop build.
+On macOS arm64, `bash .ci/release-macos.sh` produces an unsigned app, zip and
+standalone server archive in `.ci-results/macos-arm64`. The manual release
+workflow uploads these artifacts without signing, notarization or publishing.
+Chat's old client remains excluded while compiler-built web plugins are supported.
 
 ## Docs
 

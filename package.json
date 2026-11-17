@@ -22,9 +22,11 @@
     "server:start": "moon run app:server",
     "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop debug",
     "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug",
-    "typecheck": "moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check"
+    "typecheck": "moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check",
+    "e2e:browser": "proto run bun -- e2e/browser.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/json-schema": "7.0.15",
     "@types/node": "26.6.6",
     "jscpd": "5.4.3",

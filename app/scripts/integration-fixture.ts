@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
 const directory = resolve(process.env.TOKAMAK_PLUGIN_DIR ?? `${root}/app/.dev/integration/plugins`);
-for (const plugin of ["plugins/chat", "app/tests/fixtures/integration"]) {
+for (const plugin of [
+  "plugins/chat",
+  process.env.TOKAMAK_FIXTURE_SOURCE ?? "app/tests/fixtures/integration",
+]) {
   const result = spawnSync("proto", ["run", "bun", "--", "packages/build/src/build.ts", plugin], {
     cwd: root,
     stdio: "inherit",
@@ -13,7 +16,7 @@ for (const plugin of ["plugins/chat", "app/tests/fixtures/integration"]) {
   if (result.status !== 0) process.exit(result.status ?? 1);
   const id = plugin === "plugins/chat" ? "chat" : "fixture";
   await mkdir(`${directory}/${id}`, { recursive: true });
-  await cp(`${root}/${plugin}/dist`, `${directory}/${id}/dist`, { recursive: true });
+  await cp(resolve(root, plugin, "dist"), `${directory}/${id}/dist`, { recursive: true });
 }
 if (process.argv.includes("--reload")) {
   const result = spawnSync(`${root}/target/debug/tokamak`, ["plugin", "reload", "integration-fixture"], {

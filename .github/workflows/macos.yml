@@ -2,64 +2,23 @@ name: macOS CI
 on:
   push:
     branches: [main]
-    paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 concurrency:
-  # Unrelated label events must not cancel a running native check.
-  group: macos-${{ github.event.action == 'labeled' && github.event.label.name != 'ci:macos' && github.run_id || github.event.pull_request.number || github.ref }}
+  group: macos-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
-  pull-requests: read
 jobs:
-  macos:
-    if: >-
-      (github.ref == 'refs/heads/main' && github.event_name != 'pull_request') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:macos') &&
-       (github.event.action != 'labeled' || github.event.label.name == 'ci:macos'))
+  desktop:
     runs-on: depot-macos-latest
     timeout-minutes: 60
-    permissions:
-      contents: write # Only main steps stage release assets; PRs never publish.
-      id-token: write # Depot test reports use GitHub OIDC on Actions runners.
     env:
       CARGO_BUILD_JOBS: "2"
       RAYON_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
-        with:
-          fetch-depth: 0
       - uses: ./.ci/setup
-      - run: |
-          moon run workspace:ci-ts --summary detailed
-          moon run workspace:ci-native --summary detailed
-      - name: Report ACP tests to Depot
-        if: ${{ !cancelled() && hashFiles('.ci-results/acp.xml') != '' }}
-        uses: depot/test-report-action@2ad5779840a9c63e884fa26f11d019768a27a941 # v1
-        with:
-          path: .ci-results/acp.xml
+      - run: proto run bun -- run --cwd app tauri build --no-sign
       - if: always()
         run: sccache --show-stats
-      # Releases are manual for now: run this workflow by hand on main.
-      - name: Release server (manual, main only)
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-        run: |
-          moon run workspace:build-release
-          mkdir -p .ci-results
-          tar -czf .ci-results/server-macos-arm64.tar.gz -C target/release tokamak
-      - name: Stage this commit's release assets
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun .ci/release.mjs stage .ci-results/server-macos-arm64.tar.gz
-      # Tauri desktop release packaging is pending.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-        with:
-          name: server-macos-arm64
-          path: |
-            .ci-results/*-macos-arm64.tar.gz*
-          if-no-files-found: error
-          retention-days: 7

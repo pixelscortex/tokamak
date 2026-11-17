@@ -83,7 +83,7 @@ TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" TOKAMAK_PLUGIN_DIR="$PWD/
 In the window, check the live thread count and select `FixtureView` in Plugin
 views. Its `useQuery` uses the same Chat thread API. Create a thread and confirm
 both counts update. Change `Fixture revision one` in
-`tests/fixtures/integration/src/client/api.tsx`, then in a second terminal:
+`app/tests/fixtures/integration/src/client/api.tsx`, then in a second terminal:
 
 ```sh
 TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" proto run bun -- app/scripts/integration-fixture.ts --reload

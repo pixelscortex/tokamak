@@ -10,10 +10,14 @@ export const FixtureView = view({ route: "/" }, () => {
   return (
     <section aria-label="Integration fixture">
       <h1>Fixture revision one</h1>
-      <p role="status">
+      <p role="status" aria-label="Fixture thread count">
         {threads.loading() ? "Loading fixture query…" : `Fixture live threads: ${threads.data()?.length}`}
       </p>
       <p role="alert">{threads.error()?.message}</p>
     </section>
   );
+});
+
+export const ThrowingView = view({ route: "/throw" }, () => {
+  throw new Error("Deliberate fixture failure");
 });
