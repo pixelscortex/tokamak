@@ -113,7 +113,7 @@ function Tabs(): JSX.Element {
               label="New tab"
               onClick={() => nav.openNew(hrefOf(view()))}
             />
-            <Tooltip.Content side="bottom">
+            <Tooltip.Content side="bottom" sideOffset={4}>
               <TipText label={`New tab: ${view().title}`} />
             </Tooltip.Content>
           </Tooltip.Root>

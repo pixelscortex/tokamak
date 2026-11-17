@@ -54,7 +54,7 @@ function RailItem(props: { view: PluginView }): JSX.Element {
           {props.view.title.charAt(0).toUpperCase()}
         </span>
       </TooltipTrigger>
-      <Tooltip.Content side="right">
+      <Tooltip.Content side="right" sideOffset={4}>
         <TipText label={props.view.title} />
       </Tooltip.Content>
     </Tooltip.Root>

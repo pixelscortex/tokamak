@@ -106,7 +106,7 @@ function Footer(): JSX.Element {
             <StatusIcon status="running" size={12} label="Connecting" />
           </Match>
           <Match when={shell.session.connection().state === "failed"}>
-            <StatusIcon status="failed" size={12} label="Not connected" />
+            <Icon path={icons.failed} size={12} label="Not connected" class="text-removed" />
           </Match>
         </Switch>
       </p>

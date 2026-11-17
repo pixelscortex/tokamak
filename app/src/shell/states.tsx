@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button, Icon, StatusIcon } from "@tokamak/ui";
+import { Button, Icon, StatusIcon, icons } from "@tokamak/ui";
 import { useShell } from "./context";
 import { shellIcons } from "./icons";
 import { hrefOf } from "./views";
@@ -47,7 +47,7 @@ export function Unreachable(props: { reason: string }): JSX.Element {
     <Notice
       role="alert"
       label="Server unreachable"
-      mark={<StatusIcon status="failed" label="Not connected" />}
+      mark={<Icon path={icons.failed} label="Not connected" class="text-removed" />}
       title="Can't reach the Tokamak server"
       action={
         <div class="flex flex-col items-center gap-4">

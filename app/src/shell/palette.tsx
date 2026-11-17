@@ -32,7 +32,7 @@ export function Palette(): JSX.Element {
   return (
     <Dialog.Root open={shell.paletteOpen()} onOpenChange={(open: boolean) => shell.setPaletteOpen(open)}>
       <DialogBackdrop class="fixed inset-0 bg-window/70 transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0" />
-      <DialogContent class="mx-auto mt-16 flex max-h-3/4 w-full max-w-dialog flex-col overflow-hidden rounded-md border-0 surface-card p-1 inset-ring inset-ring-edge backdrop:bg-transparent transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0">
+      <DialogContent class="fixed inset-x-0 top-16 bottom-auto mx-auto flex max-h-3/4 w-full max-w-dialog flex-col overflow-hidden rounded-md border-0 surface-card p-1 inset-ring inset-ring-edge backdrop:bg-transparent transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0">
         <DialogTitle class="sr-only">Search</DialogTitle>
         <Command.Root onAction={run}>
           <Command.Search label="Search views and commands" placeholder="Search views and commands" />

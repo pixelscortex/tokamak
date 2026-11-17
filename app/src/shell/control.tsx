@@ -25,7 +25,7 @@ export function Control(props: {
           if (!props.disabled) props.onClick();
         }}
       />
-      <Tooltip.Content side={props.side ?? "bottom"}>
+      <Tooltip.Content side={props.side ?? "bottom"} sideOffset={4}>
         <TipText label={props.label} keys={props.keys} />
       </Tooltip.Content>
     </Tooltip.Root>

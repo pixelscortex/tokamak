@@ -4,6 +4,13 @@ declare global {
 }
 globalThis.__UI_SDK_STRICT__ = true;
 window.scrollTo = () => {};
+window.matchMedia = (query: string) =>
+  ({
+    matches: false,
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+  }) as unknown as MediaQueryList;
 HTMLElement.prototype.showPopover = function () {};
 HTMLElement.prototype.hidePopover = function () {};
 Element.prototype.getAnimations = () => [];
