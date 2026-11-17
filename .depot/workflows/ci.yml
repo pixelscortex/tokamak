@@ -34,9 +34,6 @@ jobs:
     env:
       CARGO_BUILD_JOBS: "2"
       RAYON_NUM_THREADS: "2"
-      WGPU_BACKEND: vulkan
-      TK_CAPTURE_DIR: /tmp/tokamak-captures
-      XDG_RUNTIME_DIR: /tmp/tokamak-runtime
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
         with:
@@ -44,11 +41,7 @@ jobs:
       - name: Headless native dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libwayland-dev libvulkan1 mesa-vulkan-drivers fonts-dejavu-core
-          mkdir -p "$XDG_RUNTIME_DIR"
-          chmod 700 "$XDG_RUNTIME_DIR"
-          # lavapipe's ICD filename includes the architecture on Ubuntu.
-          echo "VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name '*lvp*' -print -quit)" >> "$GITHUB_ENV"
+          sudo apt-get install -y --no-install-recommends pkg-config libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - uses: ./.ci/setup
       - run: moon run workspace:ci-native --summary detailed
       - if: always()

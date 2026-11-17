@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "jsx": "preserve",
-    "jsxImportSource": "@tokamak/render",
-    "skipLibCheck": true
-  },
-  "include": ["js/**/*.ts", "demo/**/*.tsx"]
-}

@@ -1,9 +1,5 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "skipLibCheck": true,
-    "jsx": "preserve",
-    "jsxImportSource": "@tokamak/render"
-  },
-  "include": ["js/**/*.ts", "tests/router.tsx"]
+  "compilerOptions": { "skipLibCheck": true },
+  "include": ["js/**/*.ts"]
 }

@@ -81,7 +81,7 @@ describe("main release coordination", () => {
       "PATCH /git/refs/tags/nightly",
       "PATCH /releases/2",
     ]);
-    expect(new TextDecoder().decode(writes[0].data).split("\n").filter(Boolean)).toHaveLength(4);
+    expect(new TextDecoder().decode(writes[0].data).split("\n").filter(Boolean)).toHaveLength(3);
     expect(writes[3].data).toMatchObject({
       tag_name: "nightly",
       target_commitish: sha,

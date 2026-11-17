@@ -1,284 +1,154 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile, stat, cp } from "node:fs/promises";
 import { resolve } from "node:path";
-import { source, build, built, workspace } from "../../../app/tests/plugin-fixtures.mjs";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { uiContributions } from "../src/contributions.ts";
+import { clientSurface } from "../src/client-surface.ts";
+import { PLUGIN_UI_BUILD_ENABLED } from "../src/vite.ts";
 
+const workspace = resolve(import.meta.dir, "../../..");
 async function scratch(check) {
-  await mkdir(resolve(workspace, "packages/build/dist"), { recursive: true });
-  const root = await mkdtemp(resolve(workspace, "packages/build/dist/plugin-regression-"));
+  const parent = resolve(workspace, "packages/build/dist");
+  await mkdir(parent, { recursive: true });
+  const root = await mkdtemp(resolve(parent, "plugin-regression-"));
   try {
     await check(root);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 }
-const artifact = async (path, file) => readFile(resolve(path, "dist", file), "utf8");
+async function source(root, id, code, paths = {}) {
+  const path = resolve(root, id);
+  await mkdir(resolve(path, "src/client"), { recursive: true });
+  await writeFile(
+    resolve(path, "package.json"),
+    JSON.stringify({ name: id, version: "1.0.0", type: "module" }),
+  );
+  await writeFile(
+    resolve(path, "tsconfig.json"),
+    JSON.stringify({
+      extends: resolve(workspace, "app/tsconfig.json"),
+      compilerOptions: { paths },
+      include: ["src"],
+    }),
+  );
+  await writeFile(resolve(path, "src/client/api.tsx"), code);
+  return path;
+}
 
-// Prevents runtime duplication (including hidden source-map copies), eager UI
-// execution during discovery, and IDs accidentally derived from local names.
-test("public builder extracts all contribution kinds and leaves the host runtime external", async () => {
+test("static contribution discovery preserves brands, aliases and erased exports without execution", async () => {
   await scratch(async (root) => {
     const path = await source(
       root,
       "parts",
       `
-      import { createSignal } from "solid-js";
-      import { view as screen, itemRenderer, toolbar, command, entityCard } from "@tokamak/sdk";
-      throw new Error("plugin code was executed during discovery");
-      const Local = screen({ route: "/" }, () => <p>{createSignal(1)[0]()}</p>);
+      import { view as screen, itemRenderer, toolbar, command, entityCard } from "@tokamak/sdk/client";
+      throw new Error("must never execute");
+      const Local = screen({ route: "/" }, () => <p>View</p>);
       export { Local as PublicView };
-      export const Item = itemRenderer({ type: "note" }, () => <p>Item</p>);
-      export const Tools = toolbar({ label: "Actions" }, () => <p>Tools</p>);
+      export const Item = itemRenderer({ type: "note" }, () => <p />);
+      export const Tools = toolbar({ label: "Actions" }, () => <p />);
       export const Run = command({ title: "Run" }, () => {});
-      export const Card = entityCard({ table: "notes" }, () => <p>Card</p>);
-      export const Plain = () => <p>Plain</p>;
+      export const Card = entityCard({ table: "notes" }, () => <p />);
+      export type { Local as Ghost };
     `,
     );
-    built(path);
-    const manifest = JSON.parse(await artifact(path, "manifest.json"));
-    expect(manifest.plugin.contributes).toEqual({
+    expect(uiContributions(path).contributes).toEqual({
       view: [{ id: "PublicView", route: "/" }],
       itemRenderer: [{ id: "Item", type: "note" }],
       toolbar: [{ id: "Tools", label: "Actions" }],
       command: [{ id: "Run", title: "Run" }],
       entityCard: [{ id: "Card", table: "notes" }],
     });
-    const code = await artifact(path, "ui.js");
-    expect(code).toContain('require("solid-js")');
-    expect(code).toContain('require("@tokamak/render")');
-    expect(code).not.toMatch(/function createSignal\(|function createRenderer\(|document\.createElement/);
-    const map = JSON.parse(await artifact(path, "ui.js.map"));
-    expect(map.sources.length).toBeGreaterThan(0);
-    expect(map.sources.every((name) => !/solid-js|render\/js/.test(name))).toBe(true);
-    expect(map.sourcesContent.join("\n")).not.toMatch(/function createSignal\(|function createRenderer\(/);
-  });
-}, 30_000);
-
-// Prevents silently missing dynamic contributions or running arbitrary helper
-// options as part of a build. The error must identify the offending export.
-test("public builder rejects nonliteral contribution options with an actionable error", async () => {
-  await scratch(async (root) => {
-    for (const options of ["options", "{ route: route }", "{ ...options }", '{ ["route"]: "/" }']) {
-      const path = await source(
-        root,
-        "dynamic",
-        `import { view } from "@tokamak/sdk";
-        const options = { route: "/" }; const route = "/";
-        export const Dynamic = view(${options}, () => <p>Dynamic</p>);`,
-      );
-      const result = build(path);
-      expect(result.status).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        "Invalid UI contribution Dynamic: use a contribution helper with static literal options",
-      );
-    }
-  });
-}, 30_000);
-
-// Prevents cross-plugin imports being bundled away or omitted from installation
-// dependency ordering, while preserving ordinary component-only artifacts.
-test("component-only exports infer UI dependencies without inventing contributions", async () => {
-  await scratch(async (root) => {
-    const path = await source(
-      root,
-      "components",
-      `import { Other } from "@plugins/other/ui";
-      export const Component = () => <Other />;`,
-    );
-    built(path);
-    const manifest = JSON.parse(await artifact(path, "manifest.json"));
-    expect(manifest.plugin.depends).toEqual({ other: "*" });
-    expect(manifest.plugin.contributes).toEqual({});
-    expect(manifest.entries.backend).toBeUndefined();
-    expect(await artifact(path, "ui.js")).toContain('require("@plugins/other/ui")');
-  });
-}, 30_000);
-
-// F: TypeScript erases these exports; discovering them as views creates rail
-// entries whose exports do not exist when the native loader evaluates the UI.
-test("type-only named and star re-exports never create contributions", async () => {
-  await scratch(async (root) => {
-    const path = await source(
-      root,
-      "erased-exports",
-      `
-      export type { Home as Ghost } from "./home";
-      export type * from "./home";
-      export { Home as Actual } from "./home";
-    `,
-    );
     await writeFile(
-      resolve(path, "src/home.tsx"),
+      resolve(path, "src/client/api.tsx"),
       `
-      import { view } from "@tokamak/sdk";
-      export const Home = view({ route: "/" }, () => <p>Home</p>);
+      import { view } from "@tokamak/sdk/client";
+      const route = "/";
+      export const Bad = view({ route }, () => <p />);
     `,
     );
-    built(path);
-    expect(JSON.parse(await artifact(path, "manifest.json")).plugin.contributes).toEqual({
-      view: [{ id: "Actual", route: "/" }],
-    });
+    expect(() => uiContributions(path)).toThrow("Invalid UI contribution Bad");
   });
-}, 30_000);
+});
 
-// G: An erased intermediate module must not force installation of a plugin
-// that the emitted runtime graph never imports.
-test("type-import chains do not infer runtime plugin dependencies", async () => {
+test("compiler-derived slot and component identities survive the DOM port", async () => {
   await scratch(async (root) => {
-    const path = await source(
-      root,
-      "erased-chain",
-      `
-      import type { Shape } from "./types";
-      export const label: Shape = "ok";
-    `,
-    );
-    await writeFile(
-      resolve(path, "src/types.ts"),
-      `
-      import { Other } from "@plugins/type-only/ui";
-      export type Shape = ReturnType<typeof Other>;
-    `,
-    );
-    built(path);
-    const manifest = JSON.parse(await artifact(path, "manifest.json"));
-    expect(manifest.plugin.depends ?? {}).toEqual({});
-    expect(await artifact(path, "ui.js")).not.toContain("@plugins/type-only");
-  });
-}, 30_000);
-
-// E: Optional UI imports must remain lazy and use the scoped native loader,
-// rather than leave an unsupported QuickJS import() in the emitted factory.
-test("literal dynamic plugin imports use the lazy loader and optional dependencies", async () => {
-  await scratch(async (root) => {
-    const path = await source(
-      root,
-      "lazy-import",
-      `
-      export const load = async () => (await import("@plugins/optional/ui")).Other;
-    `,
-    );
-    built(path);
-    const manifest = JSON.parse(await artifact(path, "manifest.json"));
-    expect(manifest.plugin.optional).toEqual({ optional: "*" });
-    expect(manifest.plugin.depends ?? {}).toEqual({});
-    expect(await artifact(path, "ui.js")).toMatch(
-      /__tokamakModules\.load\(["'`]@plugins\/optional\/ui["'`]\)/,
-    );
-  });
-}, 30_000);
-
-// E: A computed import cannot be checked or assigned a loader capability;
-// accepting it postpones the failure until the user opens the native view.
-test("computed dynamic imports fail the build with an actionable diagnostic", async () => {
-  await scratch(async (root) => {
-    const path = await source(
-      root,
-      "computed-import",
-      `
-      export const load = (name: string) => import(name);
-    `,
-    );
-    const result = build(path);
-    expect(result.status).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain("Dynamic plugin imports require a string literal");
-  });
-}, 30_000);
-
-// Open slots/mods use the same static export graph and cross-plugin contract.
-test("builder qualifies slots, extracts extension targets and instruments local public components", async () => {
-  await scratch(async (root) => {
-    const owner = await source(
-      root,
-      "owner",
-      `
-      import { defineSlot } from "@tokamak/sdk/client";
-      export const actions = defineSlot<{ text: string }>("composer.actions");
-      export function Input(props: { text: string }) { return <p>{props.text}</p>; }
-      export function Local() { return <Input text="local" />; }
-    `,
-    );
-    built(owner);
-    const ownerCode = await artifact(owner, "ui.js");
-    expect(ownerCode).toContain("owner.composer.actions");
-    expect(ownerCode).toContain("owner.Input");
+    const code = `
+      import { defineSlot as slot } from "@tokamak/sdk/client";
+      export const actions = slot<{ text: string }>("composer.actions");
+      function Impl(props: { text: string }) { return <p>{props.text}</p>; }
+      export { Impl as Input, Impl as Alias };
+    `;
+    const owner = await source(root, "owner", code);
+    const transform = clientSurface(
+      () => owner,
+      () => "owner",
+    ).transform;
+    const transformed = transform.call({}, code, resolve(owner, "src/client/api.tsx"));
+    for (const identity of ["owner.composer.actions", "owner.Input", "owner.Alias"])
+      expect(transformed.code).toContain(identity);
     const mod = await source(
       root,
       "mod",
       `
       import { fill, wrap, replace } from "@tokamak/sdk/client";
-      import { actions as target, Input } from "@plugins/owner/ui";
-      export const Extra = fill(target, { order: -5, id: "extra" }, p => <p>{p.text}</p>);
+      import { actions, Input } from "@plugins/owner/ui";
+      export const Extra = fill(actions, { order: -5, id: "extra" }, p => <p>{p.text}</p>);
       export const Frame = wrap(Input, Original => props => <div><Original {...props} /></div>);
       export const Other = replace(Input, props => <p>{props.text}</p>);
     `,
+      { "@plugins/owner/ui": [resolve(owner, "src/client/api.tsx")] },
     );
-    await writeFile(
-      resolve(mod, "tsconfig.json"),
-      JSON.stringify({
-        extends: resolve(workspace, "app/tsconfig.json"),
-        compilerOptions: { paths: { "@plugins/owner/ui": [resolve(owner, "src/main.tsx")] } },
-        include: ["src"],
-      }),
-    );
-    built(mod);
-    const manifest = JSON.parse(await artifact(mod, "manifest.json"));
-    expect(manifest.plugin.contributes).toEqual({
+    expect(uiContributions(mod).contributes).toEqual({
       fill: [{ id: "Extra", target: "owner.composer.actions", order: -5, fillId: "extra" }],
       wrap: [{ id: "Frame", target: "owner.Input" }],
       replace: [{ id: "Other", target: "owner.Input" }],
     });
-    expect(manifest.plugin.depends).toEqual({ owner: "*" });
-    const code = await artifact(mod, "ui.js");
-    expect(code).not.toContain("mod.Frame"); // wrapper factories are not components
-    for (const options of ["{ order: rank }", "{ ...options }", "{ id: label }"]) {
-      await writeFile(
-        resolve(mod, "src/main.tsx"),
-        `
-        import { fill } from "@tokamak/sdk/client";
-        import { actions } from "@plugins/owner/ui";
-        const rank = 1, options = {}, label = "x";
-        export const Bad = fill(actions, ${options}, () => <p />);
-      `,
-      );
-      const result = build(mod);
-      expect(result.status).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain("Invalid UI contribution Bad");
-    }
   });
-}, 30_000);
+});
 
-test("slot aliases and namespaces qualify names and reject dynamic names; all component aliases are moddable", async () => {
+test("server artifacts omit UI, verify final hashes and preserve unchanged bytes and mtimes", async () => {
   await scratch(async (root) => {
-    const path = await source(
-      root,
-      "aliases",
-      `
-      import { defineSlot as slot } from "@tokamak/sdk/client";
-      import * as client from "@tokamak/sdk/client";
-      export const actions = slot("actions");
-      export const footer = client.defineSlot("footer");
-      function Impl() { return <p>input</p>; }
-      export { Impl as Input, Impl as Alias };
-    `,
+    await cp(resolve(workspace, "packages/server/tests/fixtures/record"), root, {
+      recursive: true,
+      filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
+    });
+    await writeFile(
+      resolve(root, "src/server/tsconfig.json"),
+      JSON.stringify({
+        extends: resolve(workspace, "tsconfig.json"),
+        include: ["**/*.ts"],
+        exclude: ["dist"],
+      }),
     );
-    built(path);
-    const code = await artifact(path, "ui.js");
-    for (const identity of ["aliases.actions", "aliases.footer", "aliases.Input", "aliases.Alias"])
-      expect(code).toContain(identity);
-    for (const callee of ["slot", "client.defineSlot"]) {
-      await writeFile(
-        resolve(path, "src/main.tsx"),
-        `
-        import { defineSlot as slot } from "@tokamak/sdk/client";
-        import * as client from "@tokamak/sdk/client";
-        const name = "dynamic";
-        export const bad = ${callee}(name);
-      `,
-      );
-      const result = build(path);
-      expect(result.status).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain("defineSlot requires a literal name");
+    await mkdir(resolve(root, "src/client"), { recursive: true });
+    await writeFile(resolve(root, "src/client/api.tsx"), "this is intentionally invalid UI");
+    const build = () => {
+      const result = spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), root], {
+        encoding: "utf8",
+      });
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+    };
+    expect(PLUGIN_UI_BUILD_ENABLED).toBe(false);
+    build();
+    const manifest = JSON.parse(await readFile(resolve(root, "dist/manifest.json"), "utf8"));
+    expect(manifest.entries.ui).toBeUndefined();
+    expect(manifest.entries.backend.code).toBe("bundle.js");
+    expect(manifest.publicFunctions).toContain("record:add");
+    const before = new Map();
+    for (const [name, hash] of Object.entries(manifest.hashes)) {
+      const path = resolve(root, "dist", name);
+      const bytes = await readFile(path);
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(hash);
+      before.set(name, { bytes, mtime: (await stat(path)).mtimeMs });
+    }
+    build();
+    for (const [name, expected] of before) {
+      const path = resolve(root, "dist", name);
+      expect(await readFile(path)).toEqual(expected.bytes);
+      expect((await stat(path)).mtimeMs).toBe(expected.mtime);
     }
   });
 }, 30_000);

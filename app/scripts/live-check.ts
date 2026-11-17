@@ -1,0 +1,31 @@
+import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
+import { api } from "../src/api";
+const socket = new WebSocket("ws://127.0.0.1:43123/ws");
+await new Promise<void>((resolve, reject) => {
+  socket.onopen = () => resolve();
+  socket.onerror = () => reject(new Error("WebSocket open failed"));
+});
+const transport = new WebSocketTransport(socket);
+const client = new TokamakClient(transport);
+const title = `Live SDK check ${Date.now()}`;
+let updates = 0;
+let found!: () => void;
+const live = new Promise<void>((resolve) => {
+  found = resolve;
+});
+const stop = client.subscribe(api.threads.list, {}, (event) => {
+  if ("error" in event) throw event.error;
+  updates++;
+  if (event.value.some((thread) => thread.title === title)) found();
+});
+try {
+  const id = await client.action(api.threads.create, { title });
+  await Promise.race([
+    live,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("No live update")), 5000)),
+  ]);
+  console.log(JSON.stringify({ created: id, updates, live: true }));
+} finally {
+  stop();
+  transport.close();
+}

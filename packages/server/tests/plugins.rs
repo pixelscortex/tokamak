@@ -85,25 +85,6 @@ fn built() -> PathBuf {
     })
     .clone()
 }
-#[test]
-fn public_ui_builder_hashes_final_assets_for_the_native_catalog() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let output = std::process::Command::new("proto")
-        .args(["run", "bun", "--", "packages/build/src/build.ts", "lab"])
-        .current_dir(&root)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let artifact = server::plugins::Artifact::read(&root.join("lab/dist")).unwrap();
-    assert!(artifact.bundle.is_none());
-    assert!(artifact.ui_asset("ui.js").is_some());
-    assert!(artifact.ui_asset("ui.js.map").is_some());
-}
 
 async fn next(session: &mut Session) -> Event {
     // Existing backend assertions consume data events. UI generation notices

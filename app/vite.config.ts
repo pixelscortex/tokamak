@@ -1,8 +1,22 @@
-/** Tokamak's fixed internal native application conventions live in build. */
 import { defineConfig } from "vite";
-import { tokamak } from "@tokamak/build/vite";
-import { definePlugin } from "@tokamak/sdk";
+import solid from "@solidjs/vite-plugin";
+import tailwind from "@tailwindcss/vite";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 
-export default defineConfig({
-  plugins: [tokamak({ standalone: true, plugin: definePlugin({ id: "tokamak.app", version: "0.1.0" }) })],
-});
+const require = createRequire(import.meta.url);
+const solidRoot = dirname(require.resolve("solid-js/package.json"));
+export default defineConfig(({ mode }) => ({
+  plugins: [solid(), tailwind()],
+  resolve: {
+    alias: [
+      {
+        find: /^solid-js$/,
+        replacement: resolve(solidRoot, `dist/${mode === "production" ? "solid.js" : "solid.dev.js"}`),
+      },
+    ],
+    dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals", "@ui-sdk/core"],
+  },
+  optimizeDeps: { exclude: ["@ui-sdk/core"] },
+  build: { target: "es2022" },
+}));

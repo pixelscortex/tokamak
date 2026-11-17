@@ -19,7 +19,7 @@ try {
       filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
     });
   await symlink(join(workspace, "plugins/acp/node_modules"), join(root, "acp/node_modules"), "dir");
-  await cp(join(workspace, "app/tests/fixtures/record"), join(root, "record"), {
+  await cp(join(workspace, "packages/server/tests/fixtures/record"), join(root, "record"), {
     recursive: true,
     filter: (path) => !["dist", "_generated", "node_modules"].includes(path.split("/").at(-1)),
   });

@@ -1,82 +1,47 @@
-# Vite's internal integration prepares the sole application for Cargo and checks.
-language: "rust"
+language: "typescript"
 layer: "application"
 workspace:
   inheritedTasks:
     include: []
 tasks:
-  bundle:
-    command: "proto run bun -- ../packages/build/src/build.ts"
-    deps: ["chat-plugin-bundle", "acp-plugin-bundle"]
-    options:
-      cache: false
   check:
-    deps: ["bundle", "fixture-bundle"]
-    command: "proto run bun -- ../packages/build/src/check-app.ts"
+    command: "proto run bun -- run check"
+  test:
+    command: "proto run bun -- run test"
     options:
       cache: false
-      mutex: "cargo"
-  # Each package is discovered from plugin.ts and its optional src halves.
-  chat-plugin-bundle:
-    command: "proto run bun -- ../packages/build/src/build.ts ../plugins/chat"
-    options:
-      cache: false
-  acp-plugin-bundle:
-    command: "proto run bun -- ../packages/build/src/build.ts ../plugins/acp"
-    deps: ["chat-plugin-bundle"]
-    options:
-      cache: false
-  fixture-bundle:
-    command: "proto run bun -- tests/build-fixture.ts"
-    options:
-      cache: false
-  test-fixtures:
-    # Standalone native e2e execution also needs the SDK bridge built here.
-    deps: ["fixture-bundle"]
-    command: "proto run bun -- tests/run.ts"
-    options:
-      cache: false
+  web-build:
+    command: "proto run bun -- run build"
+    outputs: ["dist"]
   build:
-    deps: ["bundle"]
-    command: "cargo build --locked --release --package tokamak-app --package server --bins --jobs 2"
-    # Bundle tasks prepare generated inputs; source hashing covers the complete
-    # native workspace, while Rust's hash separates OS/architecture artifacts.
-    inputs:
-      - "/**/*"
-      - "!/**/node_modules/**"
-      - "!/**/dist/**"
-      - "!/**/_generated/**"
-      - "!/target/**"
-      - "!/.git/**"
-      - "!/.moon/cache/**"
-      - "!/.proto/**"
-      - "!/.ci-results/**"
-      - "$RUSTFLAGS"
-      - "$CARGO_ENCODED_RUSTFLAGS"
-    outputs: ["/target/release/tokamak", "/target/release/tokamak-desktop"]
+    deps: ["app:web-build"]
+    command: "proto run bun -- run tauri build --no-sign"
     options:
-      cache: true
+      cache: false
       mutex: "cargo"
-  run:
-    deps: ["dev-build"]
-    command: "proto run bun -- ../packages/runtime/tools/run-app.ts app debug"
+  server-build:
+    script: >-
+      proto run bun -- ../packages/build/src/build.ts ../plugins/chat &&
+      cargo build --locked -p server --bin tokamak
+    options:
+      cache: false
+      mutex: "cargo"
+  server:
+    deps: ["app:server-build"]
+    command: "proto run bun -- scripts/server.ts"
     options:
       cache: false
       persistent: true
-  server-start:
-    deps: ["dev-build"]
-    command: "proto run bun -- ../packages/runtime/tools/run-app.ts start debug"
+      runInCI: false
+  run:
+    command: "proto run bun -- run tauri dev"
     options:
       cache: false
-  dev-build:
-    deps: ["bundle"]
-    command: "cargo build --locked --package tokamak-app --package server --bins --jobs 2"
+      persistent: true
+      runInCI: false
+  dev:
+    command: "proto run bun -- run dev"
     options:
       cache: false
-      mutex: "cargo"
-  test:
-    deps: ["bundle"]
-    command: "sh tests/run.sh"
-    options:
-      cache: false
-      mutex: "cargo"
+      persistent: true
+      runInCI: false

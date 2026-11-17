@@ -2,8 +2,8 @@
 set -euo pipefail
 case "$1" in
   ts)
-    moon run workspace:format-check workspace:lint-ts sdk:check build:check ui:check
-    moon run sdk:test
+    moon run workspace:format-check workspace:lint-ts sdk:check build:check ui:check runtime:ts-check app:check workspace:plugins-check workspace:e2e-check
+    moon run sdk:test build:test runtime:test app:test app:web-build
     proto run bun -- test ./.ci/release.test.ts
     ;;
   native)
@@ -12,9 +12,9 @@ case "$1" in
     # its normalized comparison before concurrent TS fixture/type checks.
     moon run server:check
     # Existing scripts supply bundles, generated references and type fixtures.
-    moon run workspace:lint-rust app:check lab:check runtime:check render:check engine:check
-    moon run :test
-    moon run workspace:rust-test workspace:gpu-test
+    moon run workspace:lint-rust engine:check
+    cargo check --workspace --all-targets --locked
+    moon run workspace:rust-test workspace:e2e
     ;;
   *) exit 2 ;;
 esac

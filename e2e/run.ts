@@ -1,13 +1,13 @@
-/** TKM-11 process orchestration only. Native execution lives in app/tests/e2e.rs;
- * all network assertions use the actual SDK against the real headless binary. */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport, createApi } from "../packages/sdk/src/index";
 import type { ApiFromModule, SubscriptionEvent } from "../packages/sdk/src/index";
-import { api } from "../app/dist/tests/record/src/server/_legacyApi";
+const api = createApi<{
+  record: ApiFromModule<typeof import("../packages/server/tests/fixtures/record/src/server/record")>;
+}>();
 import { buildFeature } from "../packages/server/tests/build-feature.mjs";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
@@ -179,26 +179,27 @@ let feature: string | undefined;
 try {
   command([process.execPath, "check", "--no-script", "--project", "e2e/tsconfig.json"]);
   command(["cargo", "build", "--locked", "--package", "server", "--bin", "tokamak", "--jobs", "2"]);
-  command(
-    [
-      "cargo",
-      "test",
-      "--locked",
-      "--package",
-      "tokamak-app",
-      "--test",
-      "e2e",
-      "--jobs",
-      "2",
-      "--",
-      "--test-threads=1",
-    ],
-    { TKM_E2E_ROOT: root },
-  );
-  const expected: Rows = JSON.parse(await readFile(join(root, "native-rows.json"), "utf8"));
+  feature = await buildFeature({
+    source: resolve("packages/server/tests/fixtures/record/src/server"),
+    parent: root,
+  });
+  const bundle = join(feature, "dist/bundle.js");
+  const store = join(root, "store");
+  let expected: Rows = [];
+  await headless(bundle, store, async (address) => {
+    const { client, transport } = await connect(address);
+    try {
+      const id = await client.mutation(api.record.add, { title: "persist across server restart" });
+      await client.mutation(api.record.toggle, { id });
+      expected = await client.query(api.record.list, {});
+      assert.equal(expected[0]?.done, true);
+    } finally {
+      transport.close();
+    }
+  });
   // Scenarios 2/4: two separate SDKs, sockets and server sessions; BOTH actually
-  // subscribe before either writes. Full equality proves the native data path.
-  await headless(resolve("app/dist/tests/record/dist/bundle.js"), join(root, "store"), async (address) => {
+  // subscribe before either writes. Full equality proves the persisted data path.
+  await headless(bundle, store, async (address) => {
     const first = await connect(address);
     try {
       const second = await connect(address);
@@ -225,9 +226,7 @@ try {
       first.transport.close();
     }
   });
-  console.log(
-    "PASS scenarios 2/3/4: independent subscribers + native close/reopen + exact headless shared data",
-  );
+  console.log("PASS scenarios 2/3/4: independent subscribers + server close/reopen + exact persisted data");
 
   feature = await buildFeature({ source: resolve("e2e/feature"), parent: root });
   const budgetApi = createApi<{ budget: ApiFromModule<typeof import("./feature/budget")> }>();

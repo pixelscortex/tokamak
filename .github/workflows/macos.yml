@@ -27,8 +27,6 @@ jobs:
     env:
       CARGO_BUILD_JOBS: "2"
       RAYON_NUM_THREADS: "2"
-      WGPU_BACKEND: metal
-      TK_CAPTURE_DIR: /tmp/tokamak-captures
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
         with:
@@ -45,23 +43,22 @@ jobs:
       - if: always()
         run: sccache --show-stats
       # Releases are manual for now: run this workflow by hand on main.
-      - name: Release desktop and server (manual, main only)
+      - name: Release server (manual, main only)
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         run: |
-          moon run app:build
+          moon run workspace:build-release
           mkdir -p .ci-results
           tar -czf .ci-results/server-macos-arm64.tar.gz -C target/release tokamak
-          tar -czf .ci-results/desktop-macos-arm64.tar.gz -C target/release tokamak-desktop
       - name: Stage this commit's release assets
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun .ci/release.mjs stage .ci-results/server-macos-arm64.tar.gz .ci-results/desktop-macos-arm64.tar.gz
-      # Signing/notarization will be added before packaging these archives.
+        run: bun .ci/release.mjs stage .ci-results/server-macos-arm64.tar.gz
+      # Tauri desktop release packaging is pending.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         with:
-          name: desktop-server-macos-arm64
+          name: server-macos-arm64
           path: |
             .ci-results/*-macos-arm64.tar.gz*
           if-no-files-found: error

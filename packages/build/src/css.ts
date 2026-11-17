@@ -1,4 +1,4 @@
-/** Build-time Tailwind only: QuickJS receives CSS, never a compiler/scanner. */
+/** Build-time Tailwind compilation. */
 import { compile } from "@tailwindcss/node";
 import { Scanner } from "@tailwindcss/oxide";
 import { readFile } from "node:fs/promises";

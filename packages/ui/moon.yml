@@ -1,20 +1,2 @@
-# Universal JSX must never be compiled with Bun's default DOM transform.
 language: "typescript"
 layer: "library"
-tasks:
-  check:
-    command: "sh tools/check.sh"
-    options:
-      mergeArgs: "replace"
-  build:
-    command: "proto run bun -- tools/build.ts"
-    env:
-      NODE_ENV: "production"
-    options:
-      mergeArgs: "replace"
-    outputs: ["dist"]
-  test:
-    deps: ["build", "render:bundle", "render:styles"]
-    command: "sh tests/run.sh"
-    options:
-      mergeArgs: "replace"

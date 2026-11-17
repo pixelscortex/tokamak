@@ -1,5 +1,5 @@
-//! QuickJS setup is independent of backend scheduling. Render owns a context
-//! on its UI thread; the backend adapter builds a fresh context for each call.
+//! QuickJS setup is independent of backend scheduling.
+//! The backend adapter builds a fresh context for each call.
 //!
 //! Fresh worlds deliberately trade reload cost for a simple lifecycle: no
 //! leftover promise, global, or heap survives into another invocation. A limit
@@ -24,10 +24,8 @@ pub trait Engine {
     ) -> impl Future<Output = Result<Json, Error>>;
 }
 
-/// Reusable thread-affine engine primitive, also used by render. No `parallel`
-/// feature is enabled: the type system prevents moving JS onto another thread.
-/// UI callers drive `context().async_with(...)` from their local executor and
-/// can arm a deadline for each event without adopting backend pool semantics.
+/// Thread-affine engine primitive. No `parallel` feature is enabled;
+/// the type system prevents moving JS onto another thread.
 pub struct QuickJsContext {
     context: AsyncContext,
     runtime: AsyncRuntime,

@@ -2,17 +2,33 @@
   "name": "@tokamak/app",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
   "dependencies": {
-    "@tokamak/render": "workspace:*",
-    "@tokamak/runtime": "workspace:*",
+    "@solidjs/web": "2.0.0",
+    "@tanstack/solid-router": "2.0.0-rc.10",
     "@tokamak/sdk": "workspace:*",
     "@tokamak/ui": "workspace:*",
-    "solid-js": "1.9.18"
+    "@ui-sdk/core": "0.1.0-beta.6",
+    "@ui-sdk/solid": "0.1.0-beta.6",
+    "solid-js": "2.0.0"
   },
   "devDependencies": {
-    "@tokamak/build": "workspace:*",
-    "@tokamak/render": "workspace:*",
+    "@solidjs/vite-plugin": "3.0.0",
+    "@tailwindcss/vite": "4.3.5",
+    "@tauri-apps/cli": "2.12.5",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/user-event": "14.6.12",
     "@types/node": "26.6.6",
-    "vite": "8.3.6"
+    "jsdom": "31.0.1",
+    "tailwindcss": "4.3.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
   }
 }

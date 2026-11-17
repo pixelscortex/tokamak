@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@tokamak/render": "workspace:*",
+    "@solidjs/web": "2.0.0",
     "@tokamak/runtime": "workspace:*",
     "@tokamak/sdk": "workspace:*",
     "@tokamak/ui": "workspace:*",
     "marked": "18.2.0",
-    "solid-js": "1.9.18"
+    "solid-js": "2.0.0"
   },
   "devDependencies": {
     "@tokamak/build": "workspace:*"

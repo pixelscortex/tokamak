@@ -1,8 +1,19 @@
 /** Manifest-first loading and generation retirement. No UI asset is requested
  * until load() is called by a contribution or a cross-plugin import. */
-import { batch, createMemo, createSignal } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 import type { ContributionKind, JsonValue } from "@tokamak/sdk";
-import { expandImporters, ModuleRegistry, type ModuleExports } from "./modules";
+export type ModuleExports = Readonly<Record<string, unknown>>;
+export interface PluginModuleHost {
+  affected(names: readonly string[]): Set<string>;
+  remove(names: Iterable<string>): void;
+  evaluate(name: string, code: string): void;
+  dependencies(name: string): readonly string[];
+  has(name: string): boolean;
+  require(name: string): ModuleExports;
+  setLoader(load: (name: string) => Promise<ModuleExports>): void;
+  notifyError(name: string, cause: unknown): void;
+  onError(name: string, listener: (cause: unknown) => void): () => void;
+}
 
 export interface PluginManifest {
   plugin: {
@@ -44,7 +55,7 @@ function catalog(value: JsonValue): PluginCatalog {
   return candidate;
 }
 
-export function createPluginLoader(registry: ModuleRegistry, assets: PluginAssets) {
+export function createPluginLoader(registry: PluginModuleHost, assets: PluginAssets) {
   const [metadata, setMetadata] = createSignal<PluginCatalog>({ revision: "", plugins: [] });
   const [versions, setVersions] = createSignal<Readonly<Record<string, number>>>({});
   const [styles, setStyles] = createSignal<Readonly<Record<string, string>>>({});
@@ -71,21 +82,19 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
     }
     expandImporters(affected, importers);
     for (const id of pending.keys()) affected.add(moduleName(id));
-    batch(() => {
-      const updated = { ...versions() };
-      const css = { ...styles() };
-      for (const name of affected) {
-        const id = name.slice("@plugins/".length, -"/ui".length);
-        updated[id] = (updated[id] ?? 0) + 1;
-        delete css[id];
-        pending.delete(id);
-        loaded.delete(id);
-      }
-      setVersions(updated);
-      setStyles(css);
-      registry.remove(affected);
-      setMetadata(next);
-    });
+    const updated = { ...versions() };
+    const css = { ...styles() };
+    for (const name of affected) {
+      const id = name.slice("@plugins/".length, -"/ui".length);
+      updated[id] = (updated[id] ?? 0) + 1;
+      delete css[id];
+      pending.delete(id);
+      loaded.delete(id);
+    }
+    setVersions(updated);
+    setStyles(css);
+    registry.remove(affected);
+    setMetadata(next);
   }
 
   async function load(id: string, stack: readonly string[] = []): Promise<ModuleExports> {
@@ -208,3 +217,18 @@ export function createPluginLoader(registry: ModuleRegistry, assets: PluginAsset
   };
 }
 export type PluginLoader = ReturnType<typeof createPluginLoader>;
+
+export function expandImporters(
+  affected: Set<string>,
+  importers: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  const queue = [...affected];
+  for (let index = 0; index < queue.length; index++) {
+    for (const name of importers.get(queue[index]!) ?? []) {
+      if (!affected.has(name)) {
+        affected.add(name);
+        queue.push(name);
+      }
+    }
+  }
+}

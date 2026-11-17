@@ -4,7 +4,14 @@
 // the ordering with controllable promises instead of timing.
 import { test, expect } from "bun:test";
 import { createPluginLoader } from "../js/plugins.ts";
-import { ModuleRegistry } from "../js/modules.ts";
+function catalogHost() {
+  return {
+    affected: (names) => new Set(names),
+    remove() {},
+    setLoader() {},
+    notifyError() {},
+  };
+}
 import { retainSubscriptions } from "../js/subscriptions.ts";
 
 const catalogOf = (revision) => ({ revision, plugins: [], functions: [] });
@@ -37,7 +44,7 @@ function fakeAssets() {
 // fetch owns the outcome, so the old failure must not surface at all.
 test("an initial catalog failure superseded by a reload is ignored", async () => {
   const { assets, transfers, reloaded } = fakeAssets();
-  const loader = createPluginLoader(new ModuleRegistry(), assets);
+  const loader = createPluginLoader(catalogHost(), assets);
   const connected = loader.connect();
   reloaded({ plugins: [], catalog: catalogOf("r2") });
   transfers[0].reject(new Error("Plugin generation changed"));
@@ -50,7 +57,7 @@ test("an initial catalog failure superseded by a reload is ignored", async () =>
 // error: with no reload in between, the same failure must still reach the caller.
 test("an initial catalog failure with no newer generation still rejects", async () => {
   const { assets, transfers } = fakeAssets();
-  const loader = createPluginLoader(new ModuleRegistry(), assets);
+  const loader = createPluginLoader(catalogHost(), assets);
   const connected = loader.connect();
   transfers[0].reject(new Error("Plugin generation changed"));
   await expect(connected).rejects.toThrow("Plugin generation changed");
@@ -60,7 +67,7 @@ test("an initial catalog failure with no newer generation still rejects", async 
 // metadata the reload already published.
 test("a superseded initial catalog success does not overwrite the newer catalog", async () => {
   const { assets, transfers, reloaded } = fakeAssets();
-  const loader = createPluginLoader(new ModuleRegistry(), assets);
+  const loader = createPluginLoader(catalogHost(), assets);
   const connected = loader.connect();
   reloaded({ plugins: [], catalog: catalogOf("r2") });
   transfers[0].resolve(catalogOf("r1"));
