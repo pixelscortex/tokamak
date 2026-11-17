@@ -1,9 +1,7 @@
 name: Linux CI
 on:
   pull_request:
-    paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   push:
-    paths-ignore: ["**/*.md", "docs/**", ".tmp/**", "wiki/**"]
   merge_group:
   workflow_dispatch:
 concurrency:
@@ -25,9 +23,6 @@ jobs:
           native: "false"
       - run: moon run workspace:ci-ts --summary detailed
   native:
-    # Warm native validation still took almost 14 minutes; keep it off PRs.
-    # A manual release dispatch re-runs it so nothing ships unchecked.
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: typescript
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 60
@@ -43,7 +38,18 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends pkg-config libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - uses: ./.ci/setup
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+      - run: proto run bun -- x playwright install --with-deps --no-shell chromium webkit
       - run: moon run workspace:ci-native --summary detailed
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: browser-failure
+          path: .ci-results/playwright*
+          if-no-files-found: ignore
       - if: always()
         run: sccache --show-stats
       - name: Report ACP tests to Depot
@@ -52,7 +58,7 @@ jobs:
         with:
           path: .ci-results/acp.xml
   release:
-    # Manual only for now: `depot ci dispatch` on main builds and stages a release.
+    # Manual only for now: `depot ci dispatch` on main builds server release artifacts.
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: native
     strategy:
@@ -65,8 +71,6 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
-    permissions:
-      contents: write # Depot's built-in GitHub App token can stage release assets.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
       - uses: ./.ci/setup
@@ -74,10 +78,6 @@ jobs:
           moon run workspace:build-release
           mkdir -p .ci-results
           tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak
-      - name: Stage this commit's release assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun .ci/release.mjs stage .ci-results/server-linux-${{ matrix.arch }}.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: server-linux-${{ matrix.arch }}

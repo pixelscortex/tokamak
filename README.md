@@ -51,14 +51,16 @@ proto run bun -- run --cwd app tauri build --no-sign
 
 The check pipeline runs Oxfmt, rustfmt, Oxlint, and advisory Clippy.
 Type-checking covers the remaining packages, including the wiki.
-Server/engine Rust tests and the server-only E2E suite remain. SDK DOM tests
-cover subscriptions and extensions; app tests cover controls and routes.
-`tests/compiler-selection.py` remains an opt-in pinned-compiler regression.
+Server/engine tests and SDK/build/app tests cover the runtime. Run
+`proto run bun -- x playwright install --no-shell chromium webkit` once, then
+`proto run bun -- run e2e:browser` for production browser tests against a real
+disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 
-Linux CI installs Tauri system libraries. Native validation runs on main;
-macOS PR validation uses the `ci:macos` label. Manual release workflows retain
-server archives and checksum coordination. Tauri desktop release packaging is
-pending. No desktop release archive is built by CI.
+Every PR runs Linux TypeScript/native/browser checks and an unsigned macOS Tauri
+build. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
+and standalone server archive under `.ci-results/macos-arm64`. The release
+workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
+for reserved signing inputs; signing, notarization and publishing are absent.
 
 ## Plugin workers
 

@@ -20,6 +20,7 @@ tasks:
       - "!/.moon/cache/**"
       - "!/.proto/**"
       - "!/.ci-results/**"
+      - "!/app/.dev/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
     options:
