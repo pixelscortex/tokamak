@@ -50,7 +50,7 @@ export function useDrafts(chat: ChatState) {
   /** Sends now when idle; while a reply runs, queues the text as the next turn. */
   async function send(text: string) {
     const threadId = key();
-    if (!threadId || !text.trim()) return;
+    if (chat.creating() || !threadId || !text.trim()) return;
     write(threadId, "");
     if (chat.active() || untrack(sending)[threadId]) {
       const before = untrack(queued)[threadId];

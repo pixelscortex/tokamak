@@ -50,7 +50,7 @@ export function Composer(props: {
           <div class="-ms-2 flex h-8 items-center gap-1">
             <Slot of={composerActions} props={{ composer }} />
             <span class="flex-1" />
-            <SendButton onStop={props.onStop} />
+            <SendButton onStop={props.onStop} disabled={props.disabled} />
           </div>
         </div>
         {props.strip}

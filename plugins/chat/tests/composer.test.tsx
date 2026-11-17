@@ -28,6 +28,7 @@ function fakeChat(threadId: string) {
   const chat = {
     client: { action },
     threadId: () => threadId,
+    creating: () => false,
     runs,
     active: () => runs()[threadId] ?? null,
     setError,

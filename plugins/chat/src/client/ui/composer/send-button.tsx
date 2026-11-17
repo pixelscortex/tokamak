@@ -8,7 +8,7 @@ import { glyphs } from "../../lib/icons";
  * Send, or stop while a reply runs. Typing during a run turns the arrow into
  * "Queue follow-up"; stop stays beside it.
  */
-export function SendButton(props: { onStop?: () => void }): JSX.Element {
+export function SendButton(props: { onStop?: () => void; disabled?: boolean }): JSX.Element {
   const composer = useComposer();
   const draft = () => composer.getDraft().trim();
   return (
@@ -20,7 +20,7 @@ export function SendButton(props: { onStop?: () => void }): JSX.Element {
             variant={draft() ? "primary" : "ghost"}
             icon={glyphs.arrowUp}
             label="Send"
-            disabled={!draft()}
+            disabled={props.disabled || !draft()}
             onClick={() => void composer.submit()}
           />
         }
@@ -32,6 +32,7 @@ export function SendButton(props: { onStop?: () => void }): JSX.Element {
                 variant="ghost"
                 icon={glyphs.arrowUp}
                 label="Queue follow-up"
+                disabled={props.disabled}
                 onClick={() => void composer.submit()}
               />
             </Show>

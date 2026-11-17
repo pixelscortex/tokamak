@@ -238,7 +238,7 @@ function ThreadPane(props: {
                 />
               }
               placeholder={placeholder()}
-              disabled={Boolean(chat.noAgents())}
+              disabled={chat.creating() || Boolean(chat.noAgents())}
               queued={drafts.queued()}
               onUnqueue={() => drafts.unqueue()}
               onEdit={(text) => {
