@@ -1,0 +1,63 @@
+packages/build/README.md
+  s_bbd99d4f153bd1::t_917764a3f73770 57-59
+  s_bbd99d4f153bd1::t_ae7a9bea32f218 16-56
+packages/build/package.json
+  s_bbd99d4f153bd1::t_ecb59ddf514832 11
+packages/build/src/artifact-bundle.ts
+  s_bbd99d4f153bd1::t_33681f951afb95 9-13,39-49
+  s_bbd99d4f153bd1::t_ecb59ddf514832 1-3,20-38,50-51
+packages/build/tests/fixtures/browser/package.json
+  s_bbd99d4f153bd1::t_33681f951afb95 1-5
+packages/build/tests/browser.test.ts
+  s_bbd99d4f153bd1::t_5f0b06f57ef9f1 10-11
+  s_bbd99d4f153bd1::t_64926f45b48eb3 19,28
+  s_bbd99d4f153bd1::t_33681f951afb95 12,23,30-45
+  s_bbd99d4f153bd1::t_b5b028c15dda6a 46-77
+  s_bbd99d4f153bd1::t_653cd1af1e31eb 1-9,13-18,20-22,24-27,29
+packages/build/src/ui-build-config.ts
+  s_bbd99d4f153bd1::t_33681f951afb95 8-10
+  s_bbd99d4f153bd1::t_5f0b06f57ef9f1 26
+  s_bbd99d4f153bd1::t_64926f45b48eb3 2-4,20,22-23,25
+  s_bbd99d4f153bd1::t_997dca3c7b9c59 42-43
+  s_bbd99d4f153bd1::t_ecb59ddf514832 1,5-7,11-19,28-29,32,38,44-46
+  s_bbd99d4f153bd1::t_dea9ae02105e7d 21,24,27,30-31,33-37,39-41
+packages/build/tests/fixtures/browser/src/client/view.tsx
+  s_bbd99d4f153bd1::t_64926f45b48eb3 5
+  s_bbd99d4f153bd1::t_33681f951afb95 7-18
+  s_bbd99d4f153bd1::t_3aac729bb22d69 1-4,6,19
+packages/build/src/vite.ts
+  s_bbd99d4f153bd1::t_33681f951afb95 13-19,162-165
+  s_bbd99d4f153bd1::t_ecb59ddf514832 9-10,21,46-50,154-157,166
+  s_bbd99d4f153bd1::t_ae9cb48dc173c3 11,158,161
+packages/build/tests/plugins.test.mjs
+  s_bbd99d4f153bd1::t_33681f951afb95 135-138
+  s_bbd99d4f153bd1::t_2c79ce6dee5364 134
+packages/build/tests/fixtures/browser/src/client/styles.css
+  s_bbd99d4f153bd1::t_33681f951afb95 1-3
+packages/build/tests/fixtures/browser/tsconfig.json
+  s_bbd99d4f153bd1::t_33681f951afb95 1
+bun.lock
+  s_bbd99d4f153bd1::t_18ea9b2d21ed29 45
+packages/build/tests/fixtures/browser/plugin.ts
+  s_bbd99d4f153bd1::t_59f5e2f3a642f6 1-2
+packages/build/tests/fixtures/browser/src/client/api.ts
+  s_bbd99d4f153bd1::t_b78e9eb5a7de15 1
+packages/build/tests/run.sh
+  s_bbd99d4f153bd1::t_07a8c5d10f3e27 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7f9da34a26f8941c1a3954cebed73fe7a2a76bf3",
+  "prompts": {},
+  "sessions": {
+    "s_bbd99d4f153bd1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9d3-a8f5-7b02-9eac-9b1a1027549c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
