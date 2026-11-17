@@ -1,0 +1,59 @@
+spikes/tauri-client/src/router.tsx
+  s_66c35a5a097fcd::t_8a0e5a6044b24f 1-20
+  s_66c35a5a097fcd::t_fffde1544157cb 21-37
+spikes/tauri-client/src/main.tsx
+  s_66c35a5a097fcd::t_8a0e5a6044b24f 2,4
+spikes/tauri-client/tests/screen.test.tsx
+  s_66c35a5a097fcd::t_6260a7424891de 10,89-100
+  s_66c35a5a097fcd::t_b5f347e0d8a2ae 101-103
+spikes/tauri-client/src/plugin-host.tsx
+  s_66c35a5a097fcd::t_6260a7424891de 1-2
+  s_66c35a5a097fcd::t_0df1304597986b 3
+spikes/tauri-client/src/styles.css
+  s_66c35a5a097fcd::t_8a0e5a6044b24f 33-35
+  s_66c35a5a097fcd::t_44bccde1ced868 36-47
+spikes/tauri-client/src/app.tsx
+  s_66c35a5a097fcd::t_8a0e5a6044b24f 69,92
+spikes/tauri-client/src/kit.tsx
+  s_66c35a5a097fcd::t_8a0e5a6044b24f 1-21
+  s_66c35a5a097fcd::t_429fc0ba4d9739 22-38
+spikes/tauri-client/src/plugin.tsx
+  s_66c35a5a097fcd::t_6260a7424891de 15,18-19
+spikes/tauri-client/tests/setup.ts
+  s_66c35a5a097fcd::t_db2f9fe1866212 6
+spikes/tauri-client/public/plugins/probe/assets/ui.js
+  s_66c35a5a097fcd::t_6260a7424891de 1-6
+spikes/tauri-client/vite.config.ts
+  s_66c35a5a097fcd::t_6260a7424891de 8-16
+  s_66c35a5a097fcd::t_7418d38008dbf7 17-20,35-42
+spikes/tauri-client/COMMANDS.md
+  s_66c35a5a097fcd::t_107fa8c1a7803d 80-105
+spikes/tauri-client/REPORT.md
+  s_66c35a5a097fcd::t_c2e067efa3fc11 7,9,43,69,79,81,83,85,87-98,102,117-118,147-161,163,187,200,202,208,212
+spikes/tauri-client/bun.lock
+  s_66c35a5a097fcd::t_f7b42928c90d38 9,58-59,96-123,138-139,176-181,244-245,286-287
+spikes/tauri-client/evidence/sizes.json
+  s_66c35a5a097fcd::t_6abc8efea49167 3-4
+spikes/tauri-client/evidence/tauri-release.txt
+  s_66c35a5a097fcd::t_7382b0968a1f8d 8,11-17,19,21,26
+spikes/tauri-client/evidence/workspace-check.txt
+  s_66c35a5a097fcd::t_f0e4774ef837e1 1
+spikes/tauri-client/package.json
+  s_66c35a5a097fcd::t_d1dd98ed241750 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ded167ee5a71758bd5b98ab6cd462f7b36377661",
+  "prompts": {},
+  "sessions": {
+    "s_66c35a5a097fcd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e995-2ce7-7df3-90d6-efb32287c462",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
