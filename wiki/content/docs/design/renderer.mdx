@@ -1,0 +1,75 @@
+---
+title: Renderer limits
+description: What Blitz cannot do today, what we work around, and what a fork would need to fix.
+---
+
+The UI is Solid running in QuickJS, drawn by released Blitz. There is no
+browser DOM in JavaScript. This page lists what that costs, so design work
+stays inside it and so there is a list ready if we fork Blitz.
+
+Nothing goes to the Blitz project without the owner's written approval.
+
+## Design limits
+
+Design within these until they are fixed:
+
+- No blur and no layered or large soft shadows.
+- No `:focus-visible`; focus styles use `:focus`.
+- Icons are single-colour SVG paths. The full SVG parser is not enabled.
+- Colour and font features beyond hex colours and plain font families are not
+  verified.
+- Text changed in place is not measured again.
+
+## Not yet verified
+
+Check each of these in released Blitz before a design depends on it:
+
+- Small soft shadows on raised buttons.
+- Dashed outlines.
+- Text truncation with an ellipsis.
+- Underlines on links.
+- A short height animation, needed when a double row becomes a single row.
+
+## Gaps we already work around
+
+These are fixed on our side today. The code is listed in
+`packages/render/README.md` under "Blitz workarounds".
+
+- Button activation with Enter and Space.
+- Disabled and read-only text fields.
+- IME preedit and the IME cursor area.
+- Apple command keys and macOS editing bindings.
+- Wheel deltas chaining out of a scroller.
+- A scroller's own offset subtracted from its client rect.
+- Measurements arrive after layout, not synchronously.
+- `<textarea>` keeps a fixed height and reports no content height.
+- The native caret has a fixed width.
+- Scripts cannot move focus.
+
+## What a fork would need
+
+Ordered by how much each one blocks:
+
+1. **A JavaScript DOM API.** Blitz has a DOM in Rust, but nothing exposes it to
+   JavaScript as `document`, `window`, element methods and events. Our renderer
+   sends an owned tree instead. Without this layer no DOM-dependent library can
+   run, including ui-sdk's components and behaviours. This is the largest item
+   and could live in our own code, not in Blitz.
+2. **Focus moved by script,** and focus events that libraries expect.
+3. **Synchronous measurement** (`getBoundingClientRect`), or a design that
+   never needs it.
+4. **A top layer** for popups, menus and dialogs.
+5. **`:focus-visible`.**
+6. **Text area sizing** by content.
+7. **Blur and richer shadows,** if the look ever needs them.
+
+## Not decided
+
+- **ui-sdk.** Its number, date, colour and search helpers run without a DOM and
+  could be used today. Its behaviours and its Solid adapter need a DOM, and the
+  adapter needs Solid 2; the client is on Solid 1.9.
+- **Tauri.** A webview would run ui-sdk and any web content as is, including a
+  WebAssembly 3D editor. It gives up control of rendering to the system
+  webview, which differs per platform.
+- **A Blitz fork.** Earlier fork work is kept in git; see
+  `packages/render/README.md`.
