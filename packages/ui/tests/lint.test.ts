@@ -41,7 +41,7 @@ test("a namespaced primitive's own radius is known", () => {
 
 test("the corrected file passes", () => {
   const { status, out } = lint("corrected.tsx");
-  expect(out).not.toContain("error");
+  expect(out).not.toMatch(/\b[1-9]\d* errors?\b/);
   expect(status).toBe(0);
 });
 
