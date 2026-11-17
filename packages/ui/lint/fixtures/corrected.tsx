@@ -7,6 +7,12 @@ export const Corrected = () => (
     <Button variant="brand" class="mt-4 w-full">
       Merge
     </Button>
+    <div class="density-normal">
+      <div class="density-dense text-row text-ink">Weekly admin</div>
+    </div>
+    <div class="nest-lg/1 bg-tray">
+      <div class="rounded-inner bg-card p-3 text-row text-ink">Finance asked for monthly exports.</div>
+    </div>
     <div class="rounded-lg bg-tray p-1">
       <div class="rounded-md bg-card p-3 text-row text-ink">Finance asked for monthly exports.</div>
       <div class="flex rounded-md p-1">

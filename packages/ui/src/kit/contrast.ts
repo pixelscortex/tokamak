@@ -1,43 +1,31 @@
-function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+function luminance([r, g, b]: number[]): number {
+  const lin = (v: number) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r!) + 0.7152 * lin(g!) + 0.0722 * lin(b!);
 }
 
-export function contrast(a: string, b: string): number {
+function ratio(a: number[], b: number[]): number {
   const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
   return (x! + 0.05) / (y! + 0.05);
 }
 
-const probe = typeof document === "undefined" ? undefined : document.createElement("canvas").getContext("2d");
+const canvas = typeof document === "undefined" ? undefined : document.createElement("canvas");
+const paint = canvas?.getContext("2d", { willReadFrequently: true });
 
-// Reads a token as the browser resolved it, as #rrggbb.
-export function tokenHex(element: Element, name: string): string {
-  const value = getComputedStyle(element).getPropertyValue(`--color-${name}`).trim();
-  if (!probe) return value;
-  probe.fillStyle = "#000";
-  probe.fillStyle = value;
-  return String(probe.fillStyle);
-}
-
-function channels(color: string): number[] {
-  const match = /rgba?\(([^)]+)\)/.exec(color);
-  if (match)
-    return match[1]!
-      .split(/[ ,/]+/)
-      .filter(Boolean)
-      .map(Number);
-  return [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)).concat(1);
-}
-
-// Contrast of a translucent token painted over an opaque one.
-export function overContrast(element: Element, top: string, under: string): number {
+// Paints `under`, then `over` on top, and reads back the pixel the browser drew.
+function painted(element: Element, under: string, over?: string): number[] {
   const read = (name: string) => getComputedStyle(element).getPropertyValue(`--color-${name}`).trim();
-  const [r, g, b, a = 1] = channels(read(top));
-  const base = channels(tokenHex(element, under));
-  const mixed = [r!, g!, b!].map((v, i) => Math.round(v * a + base[i]! * (1 - a)));
-  const hex = (values: number[]) => "#" + values.map((v) => v.toString(16).padStart(2, "0")).join("");
-  return contrast(hex(mixed), hex(base.slice(0, 3)));
+  if (!paint) return [0, 0, 0];
+  paint.clearRect(0, 0, 1, 1);
+  paint.fillStyle = read(under);
+  paint.fillRect(0, 0, 1, 1);
+  if (over) {
+    paint.fillStyle = read(over);
+    paint.fillRect(0, 0, 1, 1);
+  }
+  return [...paint.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+}
+
+// Contrast of token `top` drawn over token `under`, as painted in this element.
+export function tokenContrast(element: Element, top: string, under: string): number {
+  return ratio(painted(element, under, top), painted(element, under));
 }

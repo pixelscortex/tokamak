@@ -1,7 +1,7 @@
 import { For, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Caption, Section } from "./frame.tsx";
-import { contrast, tokenHex } from "./contrast.ts";
+import { tokenContrast } from "./contrast.ts";
 
 const surfaces = ["window", "stage", "tray", "card", "band"] as const;
 const inks = ["ink", "ink-2", "ink-3"] as const;
@@ -66,10 +66,9 @@ export function Tones(): JSX.Element {
 type Pair = { fg: string; bg: string; ratio: number; need: number };
 
 function measure(root: Element): Pair[] {
-  const hex = (name: string) => tokenHex(root, name);
   const pairs: Pair[] = [];
   const add = (fg: string, bg: string, need: number) =>
-    pairs.push({ fg, bg, need, ratio: contrast(hex(fg), hex(bg)) });
+    pairs.push({ fg, bg, need, ratio: tokenContrast(root, fg, bg) });
   for (const ink of inks) for (const surface of surfaces) add(ink, surface, 4.5);
   for (const name of semantic) for (const bg of ["stage", "card", "band", `${name}-tint`]) add(name, bg, 4.5);
   for (const surface of surfaces) add("brand", surface, 4.5);

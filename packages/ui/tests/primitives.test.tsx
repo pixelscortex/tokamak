@@ -5,34 +5,16 @@ import userEvent from "@testing-library/user-event";
 import type { JSX } from "@solidjs/web";
 import {
   Button,
-  Density,
   Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogTitle,
-  DialogTrigger,
   Menu,
-  MenuContent,
-  MenuItem,
-  MenuTrigger,
   Row,
   RowList,
-  RowOption,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
   StatusIcon,
   Tabs,
-  TabsList,
-  TabsPanel,
-  TabsTab,
   Textarea,
+  FileName,
   icons,
-  useDensity,
 } from "../src/index.ts";
 
 function mount(view: () => JSX.Element) {
@@ -44,16 +26,16 @@ test("menu opens from the keyboard, moves, runs an item and returns focus", asyn
   const user = userEvent.setup();
   const run = vi.fn();
   mount(() => (
-    <Menu onAction={run}>
-      <MenuTrigger variant="ghost" icon={icons.more} label="Thread actions" />
-      <MenuContent>
-        <MenuItem value="rename">Rename</MenuItem>
-        <MenuItem value="archive">Archive</MenuItem>
-      </MenuContent>
-    </Menu>
+    <Menu.Root onAction={run}>
+      <Menu.Trigger variant="ghost" icon={icons.more} label="Thread actions" />
+      <Menu.Content>
+        <Menu.Item value="rename">Rename</Menu.Item>
+        <Menu.Item value="archive">Archive</Menu.Item>
+      </Menu.Content>
+    </Menu.Root>
   ));
   const trigger = screen.getByRole("button", { name: "Thread actions" });
-  expect(trigger.dataset.button).toBe("ghost");
+  expect(trigger.className).toContain("hover:bg-edge");
   trigger.focus();
   await user.keyboard("{Enter}");
   await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
@@ -72,17 +54,17 @@ test("select picks with the keyboard and Escape returns focus", async () => {
   const user = userEvent.setup();
   const change = vi.fn();
   mount(() => (
-    <Select defaultValue="normal" onValueChange={change}>
-      <SelectLabel>Density</SelectLabel>
-      <SelectTrigger>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="roomy">Roomy</SelectItem>
-        <SelectItem value="normal">Normal</SelectItem>
-        <SelectItem value="dense">Dense</SelectItem>
-      </SelectContent>
-    </Select>
+    <Select.Root defaultValue="normal" onValueChange={change}>
+      <Select.Label>Density</Select.Label>
+      <Select.Trigger>
+        <Select.Value />
+      </Select.Trigger>
+      <Select.Content>
+        <Select.Item value="roomy">Roomy</Select.Item>
+        <Select.Item value="normal">Normal</Select.Item>
+        <Select.Item value="dense">Dense</Select.Item>
+      </Select.Content>
+    </Select.Root>
   ));
   const trigger = screen.getByRole("combobox", { name: "Density" });
   trigger.focus();
@@ -97,15 +79,15 @@ test("select picks with the keyboard and Escape returns focus", async () => {
 test("dialog traps a named dialog and gives focus back on Escape and Close", async () => {
   const user = userEvent.setup();
   mount(() => (
-    <Dialog>
-      <DialogTrigger variant="outline">Rename thread</DialogTrigger>
-      <DialogBackdrop />
-      <DialogContent>
-        <DialogTitle>Rename thread</DialogTitle>
-        <DialogClose>Cancel</DialogClose>
-        <DialogClose variant="brand">Save</DialogClose>
-      </DialogContent>
-    </Dialog>
+    <Dialog.Root>
+      <Dialog.Trigger variant="outline">Rename thread</Dialog.Trigger>
+      <Dialog.Backdrop />
+      <Dialog.Content>
+        <Dialog.Title>Rename thread</Dialog.Title>
+        <Dialog.Close>Cancel</Dialog.Close>
+        <Dialog.Close variant="brand">Save</Dialog.Close>
+      </Dialog.Content>
+    </Dialog.Root>
   ));
   const trigger = screen.getByRole("button", { name: "Rename thread" });
   trigger.focus();
@@ -114,7 +96,7 @@ test("dialog traps a named dialog and gives focus back on Escape and Close", asy
   await user.keyboard("{Escape}");
   await waitFor(() => expect(document.activeElement).toBe(trigger));
   await user.keyboard("{Enter}");
-  expect((await screen.findByRole("button", { name: "Save" })).dataset.button).toBe("brand");
+  expect((await screen.findByRole("button", { name: "Save" })).className).toContain("from-brand");
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(document.activeElement).toBe(trigger));
 });
@@ -122,14 +104,14 @@ test("dialog traps a named dialog and gives focus back on Escape and Close", asy
 test("tabs move with arrows and show the matching panel", async () => {
   const user = userEvent.setup();
   mount(() => (
-    <Tabs defaultValue="files">
-      <TabsList aria-label="Review">
-        <TabsTab value="files">Files</TabsTab>
-        <TabsTab value="changes">Changes</TabsTab>
-      </TabsList>
-      <TabsPanel value="files">Four files</TabsPanel>
-      <TabsPanel value="changes">Two changes</TabsPanel>
-    </Tabs>
+    <Tabs.Root defaultValue="files">
+      <Tabs.List aria-label="Review">
+        <Tabs.Tab value="files">Files</Tabs.Tab>
+        <Tabs.Tab value="changes">Changes</Tabs.Tab>
+      </Tabs.List>
+      <Tabs.Panel value="files">Four files</Tabs.Panel>
+      <Tabs.Panel value="changes">Two changes</Tabs.Panel>
+    </Tabs.Root>
   ));
   const files = screen.getByRole("tab", { name: "Files" });
   files.focus();
@@ -146,17 +128,17 @@ test("row list has one tab stop, moves with arrows, selects with Enter and skips
   mount(() => (
     <>
       <button type="button">Before</button>
-      <RowList aria-label="Threads" defaultValue="a" onValueChange={pick}>
-        <RowOption value="a" lead={<StatusIcon status="running" label="Add CSV export" />} trail="0:12">
+      <RowList.Root aria-label="Threads" defaultValue="a" onValueChange={pick}>
+        <RowList.Option value="a" lead={<StatusIcon status="running" label="Add CSV export" />} trail="0:12">
           Add CSV export
-        </RowOption>
-        <RowOption value="b" disabled>
+        </RowList.Option>
+        <RowList.Option value="b" disabled>
           PDF dark mode
-        </RowOption>
-        <RowOption value="c" kind="double" detail="sonnet 4.5">
+        </RowList.Option>
+        <RowList.Option value="c" kind="double" detail="sonnet 4.5">
           Fix total rounding
-        </RowOption>
-      </RowList>
+        </RowList.Option>
+      </RowList.Root>
     </>
   ));
   const options = screen.getAllByRole("option");
@@ -170,7 +152,7 @@ test("row list has one tab stop, moves with arrows, selects with Enter and skips
   await user.keyboard("{Enter}");
   await waitFor(() => expect(options[2]!.getAttribute("aria-selected")).toBe("true"));
   expect(pick.mock.calls.at(-1)?.[0]).toBe("c");
-  expect(options[2]!.querySelector('[data-slot="row-box"]')?.getAttribute("data-kind")).toBe("double");
+  expect(options[2]!.querySelector('[data-slot="row-box"]')?.className).toContain("h-12");
 });
 
 test("a status icon carries its word in the name, never on screen", () => {
@@ -181,32 +163,11 @@ test("a status icon carries its word in the name, never on screen", () => {
   expect(document.body.textContent).not.toContain("needs you");
 });
 
-test("density only gets tighter inward", () => {
-  const seen: string[] = [];
-  const Probe = () => {
-    const density = useDensity();
-    seen.push(density());
-    return null;
-  };
-  mount(() => (
-    <>
-      <Probe />
-      <Density value="dense">
-        <Density value="roomy">
-          <Probe />
-        </Density>
-      </Density>
-      <Density value="roomy">
-        <Density value="normal">
-          <Probe />
-        </Density>
-      </Density>
-    </>
-  ));
-  expect(seen).toEqual(["normal", "dense", "normal"]);
-  expect(
-    [...document.querySelectorAll("[data-density]")].map((node) => node.getAttribute("data-density")),
-  ).toEqual(["dense", "dense", "roomy", "normal"]);
+test("a file name keeps its extension and is named in full", () => {
+  mount(() => <FileName path="src/invoices/InvoiceTable.tsx" />);
+  const name = document.querySelector('[data-slot="file-name"]')!;
+  expect(name.getAttribute("aria-label")).toBe("src/invoices/InvoiceTable.tsx");
+  expect(name.lastElementChild!.textContent).toBe(".tsx");
 });
 
 test("icon-only buttons are named by their label and default to outline", () => {
@@ -217,8 +178,8 @@ test("icon-only buttons are named by their label and default to outline", () => 
     </>
   ));
   const add = screen.getByRole("button", { name: "New thread" });
-  expect(add.hasAttribute("data-icon-only")).toBe(true);
-  expect(screen.getByRole("button", { name: "Cancel" }).dataset.button).toBe("outline");
+  expect(add.className).toContain("w-8");
+  expect(screen.getByRole("button", { name: "Cancel" }).className).toContain("inset-ring-edge-strong");
   expect(screen.getByRole("button", { name: "Cancel" }).hasAttribute("aria-label")).toBe(false);
 });
 

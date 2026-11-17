@@ -1,11 +1,6 @@
 import { For, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Avatar } from "@tokamak/ui/avatar";
-import { Density, type DensityValue } from "@tokamak/ui/density";
-import { Icon } from "@tokamak/ui/icon";
-import { Row } from "@tokamak/ui/row";
-import { RowGroup, RowList, RowOption } from "@tokamak/ui/row-list";
-import { StatusIcon } from "@tokamak/ui/status-icon";
+import { Avatar, Icon, Row, RowList, StatusIcon } from "@tokamak/ui";
 import { Caption, Section } from "./frame.tsx";
 
 // LobeHub marks for Claude and OpenAI, as on the boards. Sample data only.
@@ -44,13 +39,13 @@ function Agent(props: {
 export function Threads(props: { theme: string }): JSX.Element {
   const [value, setValue] = createSignal<string | null>("csv");
   return (
-    <Density value="dense">
-      <RowList
+    <div class="density-dense">
+      <RowList.Root
         aria-label={`Threads, ${props.theme}`}
         value={value()}
         onValueChange={(next: unknown) => setValue(next as string | null)}
       >
-        <RowOption
+        <RowList.Option
           value="csv"
           kind="double"
           lead={<StatusIcon status="running" label="Add CSV export" />}
@@ -64,8 +59,8 @@ export function Threads(props: { theme: string }): JSX.Element {
           }
         >
           Add CSV export
-        </RowOption>
-        <RowOption
+        </RowList.Option>
+        <RowList.Option
           value="rounding"
           kind="double"
           lead={<StatusIcon status="needs-you" label="Fix total rounding" />}
@@ -73,44 +68,45 @@ export function Threads(props: { theme: string }): JSX.Element {
           detail={<Model mark={openai} name="gpt-5 codex" project="invoices-app" />}
         >
           Fix total rounding
-        </RowOption>
-        <RowGroup>
-          <RowOption
+        </RowList.Option>
+        <RowList.Group>
+          <RowList.Option
             value="paginate"
             lead={<StatusIcon status="done" label="Paginate customer list" />}
             trail="12m"
           >
             Paginate customer list
-          </RowOption>
-          <RowOption
+          </RowList.Option>
+          <RowList.Option
             value="stripe"
             lead={<StatusIcon status="failed" label="Upgrade Stripe SDK" />}
             trail="3h"
           >
             Upgrade Stripe SDK
-          </RowOption>
-          <RowOption
+          </RowList.Option>
+          <RowList.Option
             value="pdf"
             lead={<StatusIcon status="done" label="PDF dark mode" />}
             trail="1d"
             disabled
           >
             PDF dark mode
-          </RowOption>
-          <RowOption
+          </RowList.Option>
+          <RowList.Option
             value="refund"
             lead={<StatusIcon status="running" label="Refund flow" />}
             trail={<Avatar name="Ana" size={16} />}
           >
             Refund flow
-          </RowOption>
-        </RowGroup>
-      </RowList>
-    </Density>
+          </RowList.Option>
+        </RowList.Group>
+      </RowList.Root>
+    </div>
   );
 }
 
-const densities: DensityValue[] = ["roomy", "normal", "dense"];
+const densities = ["roomy", "normal", "dense"] as const;
+const densityClass = { roomy: "density-roomy", normal: "density-normal", dense: "density-dense" } as const;
 const rowStates = [
   ["rest", undefined, false],
   ["hover", "hover", false],
@@ -127,7 +123,7 @@ export function Rows(props: { theme: string }): JSX.Element {
           <Caption>The chosen thread list (C). Arrows move, Enter picks. PDF dark mode is disabled.</Caption>
           <For each={rowStates}>
             {([state, preview, selected]) => (
-              <Density value="dense">
+              <div class="density-dense">
                 <Row
                   lead={<StatusIcon status="done" />}
                   trail="12m"
@@ -137,7 +133,7 @@ export function Rows(props: { theme: string }): JSX.Element {
                 >
                   Row · {state}
                 </Row>
-              </Density>
+              </div>
             )}
           </For>
         </div>
@@ -147,14 +143,14 @@ export function Rows(props: { theme: string }): JSX.Element {
           {(density) => (
             <div class="flex flex-col gap-1">
               <Caption>{density}</Caption>
-              <Density value={density}>
+              <div class={`flex flex-col gap-1 ${densityClass[density]}`}>
                 <Row lead={<StatusIcon status="done" />} trail="12m" selected>
                   Weekly admin
                 </Row>
                 <Row lead={<StatusIcon status="running" />} trail="1d">
                   Trip to Lisbon
                 </Row>
-              </Density>
+              </div>
             </div>
           )}
         </For>

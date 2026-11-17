@@ -1,11 +1,10 @@
 /*
   <Kbd keys="mod+n" />   → ⌘N on macOS, Ctrl+N elsewhere
-  <Kbd keys="esc" />
 
-  A keyboard shortcut in data mono, tertiary, with no box around it.
-  Slots: none. data-slot="kbd".
+  A keyboard shortcut in data mono, tertiary, with no box.
 */
 import type { JSX } from "@solidjs/web";
+import { cn } from "./cn.ts";
 
 const apple = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const glyphs: Record<string, [string, string]> = {
@@ -27,7 +26,7 @@ export function formatKeys(keys: string, mac = apple): string {
 
 export function Kbd(props: { keys: string; class?: string }): JSX.Element {
   return (
-    <kbd data-slot="kbd" class={props.class}>
+    <kbd data-slot="kbd" class={cn("text-data whitespace-nowrap text-ink-3", props.class)}>
       {formatKeys(props.keys)}
     </kbd>
   );

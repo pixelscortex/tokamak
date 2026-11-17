@@ -1,48 +1,85 @@
 /*
-  <Dialog>
-    <DialogTrigger>Rename</DialogTrigger>
-    <DialogBackdrop />
-    <DialogContent>
-      <DialogTitle>Rename thread</DialogTitle>
-      <DialogDescription>Only you see the new name.</DialogDescription>
+  <Dialog.Root>
+    <Dialog.Trigger>Rename</Dialog.Trigger>
+    <Dialog.Backdrop />
+    <Dialog.Content>
+      <Dialog.Title>Rename thread</Dialog.Title>
+      <Dialog.Description>Only you see the new name.</Dialog.Description>
       <div class="flex justify-end gap-2">
-        <DialogClose>Cancel</DialogClose>
-        <DialogClose variant="primary" onClick={save}>Save</DialogClose>
+        <Dialog.Close>Cancel</Dialog.Close>
+        <Dialog.Close variant="brand">Save</Dialog.Close>
       </div>
-    </DialogContent>
-  </Dialog>
+    </Dialog.Content>
+  </Dialog.Root>
 
-  ui-sdk Dialog with Tokamak looks: a stage panel, radius 16, padding 24, at
-  most 440 wide, over a dimmed window. Trigger and Close take the Button
-  look props.
-  Slots: dialog-trigger, dialog-backdrop, dialog-content, dialog-title
-  (16/26 600), dialog-description (14/20 secondary), dialog-close.
+  A stage panel, radius 16, padding 24, at most 440 wide, over a dimmed
+  window. Trigger and Close take the Button look props.
 */
-import { DialogClose as UiDialogClose, DialogTrigger as UiDialogTrigger } from "@ui-sdk/solid/dialog";
+import * as Base from "@ui-sdk/solid/dialog";
 import { omit } from "solid-js";
 import type { ComponentProps, JSX } from "@solidjs/web";
-import { LookContent, lookAttributes, lookKeys, type ButtonLook } from "./button.tsx";
+import { ButtonContent, buttonClass, lookKeys, type ButtonLook } from "./button.tsx";
+import { cn } from "./cn.ts";
 
-export { Dialog, DialogBackdrop, DialogContent, DialogDescription, DialogTitle } from "@ui-sdk/solid/dialog";
+type Classed<T extends (props: any) => JSX.Element> = Omit<ComponentProps<T>, "class"> & { class?: string };
 
-export type DialogTriggerProps = Omit<ComponentProps<typeof UiDialogTrigger>, "children"> & ButtonLook;
+export const Root = Base.Dialog;
 
-export function DialogTrigger(props: DialogTriggerProps): JSX.Element {
+export function Trigger(
+  props: Omit<ComponentProps<typeof Base.DialogTrigger>, "children" | "class"> & ButtonLook,
+) {
   const rest = omit(props, ...lookKeys);
   return (
-    <UiDialogTrigger {...rest} {...lookAttributes(props)}>
-      <LookContent {...props} />
-    </UiDialogTrigger>
+    <Base.DialogTrigger {...rest} class={buttonClass(props)} aria-label={props.label}>
+      <ButtonContent {...props} />
+    </Base.DialogTrigger>
   );
 }
 
-export type DialogCloseProps = Omit<ComponentProps<typeof UiDialogClose>, "children"> & ButtonLook;
-
-export function DialogClose(props: DialogCloseProps): JSX.Element {
+export function Close(
+  props: Omit<ComponentProps<typeof Base.DialogClose>, "children" | "class"> & ButtonLook,
+) {
   const rest = omit(props, ...lookKeys);
   return (
-    <UiDialogClose {...rest} {...lookAttributes(props)}>
-      <LookContent {...props} />
-    </UiDialogClose>
+    <Base.DialogClose {...rest} class={buttonClass(props)} aria-label={props.label}>
+      <ButtonContent {...props} />
+    </Base.DialogClose>
+  );
+}
+
+export function Backdrop(props: Classed<typeof Base.DialogBackdrop>) {
+  return (
+    <Base.DialogBackdrop {...omit(props, "class")} class={cn("fixed inset-0 bg-window/70", props.class)} />
+  );
+}
+
+export function Content(props: Classed<typeof Base.DialogContent>) {
+  return (
+    <Base.DialogContent
+      {...omit(props, "class")}
+      class={cn(
+        "m-auto flex max-h-dvh w-full max-w-dialog flex-col gap-2 overflow-auto rounded-lg border-0",
+        "surface-stage p-6 inset-ring inset-ring-edge backdrop:bg-window/70",
+        props.class,
+      )}
+    />
+  );
+}
+
+export function Title(props: Classed<typeof Base.DialogTitle>) {
+  return (
+    <Base.DialogTitle
+      {...omit(props, "class")}
+      class={cn("m-0 text-read font-semibold text-ink", props.class)}
+    />
+  );
+}
+
+export function Description(props: Classed<typeof Base.DialogDescription>) {
+  return (
+    <Base.DialogDescription
+      {...omit(props, "class")}
+      class={cn("m-0 mb-4 text-row text-ink-2", props.class)}
+    />
   );
 }

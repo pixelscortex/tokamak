@@ -8,16 +8,15 @@
     "./theme.css": "./src/theme.css",
     "./kit": "./src/kit/kit.tsx",
     "./lint": "./lint/index.js",
-    "./lint/oxlint.json": "./lint/oxlint.json",
-    "./icons": "./src/icons.ts",
-    "./*": "./src/*.tsx"
+    "./lint/oxlint.json": "./lint/oxlint.json"
   },
   "dependencies": {
     "@shadcn/lint": "0.2.5",
     "@solidjs/web": "2.0.0",
     "@ui-sdk/core": "0.1.0-beta.6",
     "@ui-sdk/solid": "0.1.0-beta.6",
-    "solid-js": "2.0.0"
+    "solid-js": "2.0.0",
+    "tailwind-variants": "4.0.2"
   },
   "devDependencies": {
     "@solidjs/vite-plugin": "3.0.0",

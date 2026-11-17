@@ -1,6 +1,5 @@
 import { For } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Surface } from "@tokamak/ui/surface";
 
 export type Theme = "dark" | "light";
 
@@ -10,9 +9,7 @@ export function Themes(props: { children: (theme: Theme) => JSX.Element }): JSX.
       <For each={["dark", "light"] as const}>
         {(theme) => (
           <div data-theme={theme} aria-label={`${theme} theme`} role="group">
-            <Surface tone="window" class="flex h-full flex-col gap-12 p-8">
-              {props.children(theme)}
-            </Surface>
+            <div class="flex h-full flex-col gap-12 surface-window p-8">{props.children(theme)}</div>
           </div>
         )}
       </For>

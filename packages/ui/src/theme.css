@@ -1,46 +1,41 @@
 /*
-  Tokamak tokens. Import after Tailwind:
+  Tokamak tokens and helpers. Import after Tailwind:
 
     @layer ui-sdk;
     @import "tailwindcss";
     @import "@tokamak/ui/theme.css";
 
-  Dark is the default. data-theme="light" on the root (or any element) swaps
-  every colour below. Scales are cleared first, so off-scale classes such as
-  p-5, rounded-xl or bg-zinc-800 do not exist.
+  Dark is the default; data-theme="light" on any element swaps every colour
+  inside it. Default scales are cleared, so off-scale classes do not exist.
 */
 @import "./fonts.css";
-@import "./primitives.css";
+@source "./";
 
 @theme {
   --color-*: initial;
-  --color-window: #080808;
-  --color-stage: #101010;
-  --color-tray: #161616;
-  --color-card: #1c1c1c;
-  --color-band: #222222;
-  --color-ink: #e6e6e6;
-  --color-ink-2: #adadad;
-  --color-ink-3: #8a8a8a;
-  --color-added: #4ade80;
-  --color-removed: #f87171;
-  --color-warn: #fbbf24;
-  --color-info: #60a5fa;
-  --color-added-tint: #11251a;
-  --color-removed-tint: #2b1515;
-  --color-warn-tint: #2a2110;
-  --color-info-tint: #111f36;
-  --color-brand: #b787f0;
-  --color-brand-ink: #0e021c;
-  --color-brand-tint: #231433;
-  /* Translucent, so they sit right on any surface: never a fixed grey. */
-  --color-edge: rgb(230 230 230 / 0.12);
-  --color-edge-strong: rgb(230 230 230 / 0.4);
-  --color-lip: rgb(9 9 11 / 0.5);
-  --color-highlight: rgb(255 255 255 / 0.1);
-  /* Set by the surface an element sits on; see [data-surface] below. */
-  --color-hover: #161616;
-  --color-selected: #1c1c1c;
+  --color-window: oklch(13.44% 0 0);
+  --color-stage: oklch(17.3% 0 0);
+  --color-tray: oklch(20.02% 0 0);
+  --color-card: oklch(22.64% 0 0);
+  --color-band: oklch(25.2% 0 0);
+  --color-ink: oklch(92.49% 0 0);
+  --color-ink-2: oklch(74.76% 0 0);
+  --color-ink-3: oklch(63.34% 0 0);
+  --color-added: oklch(80.03% 0.182 151.7);
+  --color-removed: oklch(71.06% 0.166 22.2);
+  --color-warn: oklch(83.686% 0.1644 84.43);
+  --color-info: oklch(71.37% 0.143 254.6);
+  --color-added-tint: oklch(24.35% 0.034 158.5);
+  --color-removed-tint: oklch(22.7% 0.036 20.3);
+  --color-warn-tint: oklch(25.35% 0.032 82.4);
+  --color-info-tint: oklch(23.98% 0.048 259.9);
+  --color-brand: oklch(71.15% 0.155 303.8);
+  --color-brand-ink: oklch(13.76% 0.06 303.3);
+  --color-brand-tint: oklch(22.86% 0.06 304.4);
+  --color-edge: oklch(92.49% 0 0 / 0.12);
+  --color-edge-strong: oklch(92.49% 0 0 / 0.4);
+  --color-lip: oklch(14.08% 0.004 285.8 / 0.5);
+  --color-highlight: oklch(100% 0 0 / 0.08);
 
   --spacing: initial;
   --spacing-*: initial;
@@ -82,16 +77,47 @@
 
   --leading-*: initial;
   --tracking-*: initial;
-
   --shadow-*: initial;
-  --shadow-raised: 0 4px 6px -1px rgb(9 9 11 / 0.2), 0 2px 4px -2px rgb(9 9 11 / 0.2);
+  --shadow-raised:
+    0 4px 6px -1px oklch(14.08% 0.004 285.8 / 0.2), 0 2px 4px -2px oklch(14.08% 0.004 285.8 / 0.2);
+  --shadow-quiet:
+    0 1px 3px 0 oklch(14.08% 0.004 285.8 / 0.15), 0 1px 2px -1px oklch(14.08% 0.004 285.8 / 0.15);
   --inset-shadow-*: initial;
   --drop-shadow-*: initial;
   --text-shadow-*: initial;
   --blur-*: initial;
-
   --container-*: initial;
   --container-read: 560px;
+  --container-dialog: 440px;
+  --container-menu: 192px;
+}
+
+/* Values that depend on the surface, density or nesting an element sits in. */
+@theme inline {
+  --color-hover: var(--tk-hover);
+  --color-selected: var(--tk-selected);
+  --radius-inner: var(--tk-inner);
+  --inset-shadow-highlight: inset 0 1px 0 var(--color-highlight);
+}
+
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
+/* data-preview pins a state for the kit page, so every state can be shown at once. */
+@custom-variant hover {
+  &:hover {
+    @slot;
+  }
+  &[data-preview~="hover"] {
+    @slot;
+  }
+}
+@custom-variant active {
+  &:active {
+    @slot;
+  }
+  &[data-preview~="pressed"] {
+    @slot;
+  }
 }
 
 /* Data is mono: it is the role for things a person could copy. */
@@ -99,79 +125,154 @@
   font-family: var(--font-mono);
 }
 
+/* A row's height and inline padding, read from the nearest density-*. */
+@utility h-row {
+  height: var(--tk-row);
+}
+@utility px-row {
+  padding-inline: var(--tk-row-x);
+}
+
+/* A container's density: rows inside read h-row and px-row. */
+@utility density-roomy {
+  --tk-row: 48px;
+  --tk-row-x: 16px;
+}
+@utility density-normal {
+  --tk-row: 40px;
+  --tk-row-x: 12px;
+}
+@utility density-dense {
+  --tk-row: 32px;
+  --tk-row-x: 8px;
+}
+
+/* A region in one tone; sets bg-hover and bg-selected for what sits on it. */
+@utility surface-window {
+  background-color: var(--color-window);
+  color: var(--color-ink);
+  --tk-hover: var(--color-tray);
+  --tk-selected: var(--tk-window-selected);
+}
+@utility surface-stage {
+  background-color: var(--color-stage);
+  color: var(--color-ink);
+  --tk-hover: var(--color-tray);
+  --tk-selected: var(--color-card);
+}
+@utility surface-tray {
+  background-color: var(--color-tray);
+  color: var(--color-ink);
+  --tk-hover: var(--color-card);
+  --tk-selected: var(--color-band);
+}
+@utility surface-card {
+  background-color: var(--color-card);
+  color: var(--color-ink);
+  --tk-hover: var(--color-band);
+  --tk-selected: var(--color-band);
+}
+@utility surface-band {
+  background-color: var(--color-band);
+  color: var(--color-ink);
+  --tk-hover: var(--color-edge);
+  --tk-selected: var(--color-edge);
+}
+
+/* A rounded, padded container whose children take rounded-inner: nest-lg/1. */
+@utility nest-* {
+  border-radius: --value(--radius-*);
+  padding: --modifier(--spacing-*);
+  --tk-inner: max(0px, --value(--radius-*) - --modifier(--spacing-*));
+}
+
+/* Keyboard focus: a 2 px brand ring with a 2 px gap. */
+@utility focus-ring {
+  &:is(:focus-visible, [data-preview~="focus"]) {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+/* A key's lip: a 2 px bottom edge (1 px all round in light) in translucent near-black. */
+@utility lip {
+  border-style: solid;
+  border-color: var(--color-lip);
+  border-width: var(--tk-key-side) var(--tk-key-side) 2px;
+}
+
+/* A key's light edge: a translucent white inner ring and top line. */
+@utility highlight {
+  @apply inset-ring inset-ring-highlight inset-shadow-highlight;
+}
+
+/* A filled key: fill fading to 85% toward the top, lip, highlight, raised shadow. */
+@utility key {
+  @apply lip highlight bg-linear-to-t/oklch shadow-raised hover:brightness-110 active:brightness-90;
+}
+
+/* Block padding that centres one row line in a 32 px control (6 px). */
+@utility py-line {
+  padding-block: calc((var(--spacing-8) - var(--text-row--line-height)) / 2);
+}
+
+/* Centres text on its cap height where the webview supports it. */
+@utility text-trim {
+  text-box: trim-both cap alphabetic;
+}
+
+@utility link {
+  color: var(--color-brand);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
 @layer base {
   :root,
-  [data-theme="dark"] {
-    color-scheme: dark;
-  }
-  [data-theme="light"] {
-    color-scheme: light;
-    --color-window: #ebebeb;
-    --color-stage: #ffffff;
-    --color-tray: #f5f5f5;
-    --color-card: #ededed;
-    --color-band: #e5e5e5;
-    --color-ink: #171717;
-    --color-ink-2: #4a4a4a;
-    --color-ink-3: #666666;
-    --color-added: #15703a;
-    --color-removed: #b91c1c;
-    --color-warn: #8a5300;
-    --color-info: #1d4ed8;
-    --color-added-tint: #e9f6ee;
-    --color-removed-tint: #fdecec;
-    --color-warn-tint: #fef4de;
-    --color-info-tint: #eaf1fe;
-    --color-brand: #7b3fd1;
-    --color-brand-ink: #ffffff;
-    --color-brand-tint: #f3eaff;
-    --color-edge: rgb(23 23 23 / 0.12);
-    --color-edge-strong: rgb(23 23 23 / 0.5);
-    --color-lip: rgb(9 9 11 / 0.4);
-    --color-highlight: rgb(255 255 255 / 0.25);
-  }
-
-  /*
-    Hover and selected fills depend on the surface underneath, so they are
-    declared where the tones resolve. On window and stage: hover tray,
-    selected card, except light window, where card is invisible (1.02:1)
-    and the selected fill is the stage white, as on the boards.
-  */
-  :root,
-  [data-theme],
-  [data-surface="window"],
-  [data-surface="stage"] {
-    --color-hover: var(--color-tray);
-    --color-selected: var(--color-card);
-  }
-  [data-theme="light"][data-surface="window"],
-  [data-theme="light"] [data-surface="window"] {
-    --color-selected: var(--color-stage);
-  }
-  [data-surface="tray"],
-  [data-surface="card"],
-  [data-surface="band"] {
-    --color-hover: var(--color-card);
-    --color-selected: var(--color-band);
-  }
-  [data-surface="card"],
-  [data-surface="band"] {
-    --color-hover: var(--color-band);
-  }
-
-  :root,
   [data-theme] {
-    font-family: var(--font-sans);
-    font-size: var(--text-row);
-    line-height: var(--text-row--line-height);
+    color-scheme: dark;
+    --tk-hover: var(--color-tray);
+    --tk-selected: var(--color-card);
+    --tk-window-selected: var(--color-card);
+    --tk-row: 40px;
+    --tk-row-x: 12px;
+    --tk-key-side: 0px;
+    font: 400 var(--text-row) / var(--text-row--line-height) var(--font-sans);
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-synthesis: none;
   }
-
-  :focus-visible,
-  [data-preview="focus"] {
+  [data-theme="light"] {
+    color-scheme: light;
+    --color-window: oklch(94.01% 0 0);
+    --color-stage: oklch(100% 0 0);
+    --color-tray: oklch(97.02% 0 0);
+    --color-card: oklch(94.61% 0 0);
+    --color-band: oklch(92.19% 0 0);
+    --color-ink: oklch(20.46% 0 0);
+    --color-ink-2: oklch(40.91% 0 0);
+    --color-ink-3: oklch(51.03% 0 0);
+    --color-added: oklch(48.09% 0.118 151.7);
+    --color-removed: oklch(50.542% 0.1905 27.52);
+    --color-warn: oklch(49.402% 0.1093 66.91);
+    --color-info: oklch(48.82% 0.217 264.4);
+    --color-added-tint: oklch(96.12% 0.017 159.1);
+    --color-removed-tint: oklch(95.66% 0.018 17.5);
+    --color-warn-tint: oklch(96.92% 0.031 86.5);
+    --color-info-tint: oklch(95.67% 0.019 263);
+    --color-brand: oklch(52.27% 0.211 297.3);
+    --color-brand-ink: oklch(100% 0 0);
+    --color-brand-tint: oklch(95.03% 0.03 305.1);
+    --color-edge: oklch(20.46% 0 0 / 0.12);
+    --color-edge-strong: oklch(20.46% 0 0 / 0.5);
+    --color-lip: oklch(14.08% 0.004 285.8 / 0.4);
+    --color-highlight: oklch(100% 0 0 / 0.25);
+    --tk-window-selected: var(--color-stage);
+    --tk-key-side: 1px;
+  }
+  :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
   }
