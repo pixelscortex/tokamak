@@ -1,0 +1,19 @@
+.ci/release-macos.sh
+  s_e7b9ff6bf26a52::t_18ab29d8e2eecf 22-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dda6fa65e9367efbba4f5b428fecf71239f772d9",
+  "prompts": {},
+  "sessions": {
+    "s_e7b9ff6bf26a52": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9f7-32a3-7820-8068-2cbace84fb78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
