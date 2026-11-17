@@ -1,0 +1,44 @@
+packages/server/src/websocket.rs
+  s_bbd99d4f153bd1::t_49ce4bd9964bc0 82-99,109,111-113,153-154,157-162,167-177,180-185,193-198,238-242
+  s_bbd99d4f153bd1::t_70306afeadb795 105
+  s_bbd99d4f153bd1::t_293246cba76662 8,42,45,101-104,139-143,145,147,151-152,155-156,163-164,166,178-179,186-192,199,201,236,267
+packages/server/src/service/server.rs
+  s_bbd99d4f153bd1::t_ecb59ddf514832 27-34,37
+  s_bbd99d4f153bd1::t_5e7c391a498862 26
+packages/server/src/service/plugin_control.rs
+  s_bbd99d4f153bd1::t_ecb59ddf514832 50,60-61
+  s_bbd99d4f153bd1::t_49ce4bd9964bc0 56-59
+packages/server/src/service/mod.rs
+  s_bbd99d4f153bd1::t_ecb59ddf514832 112
+packages/server/Cargo.toml
+  s_bbd99d4f153bd1::t_8a0aad1617e81a 28
+packages/build/tests/browser-assets.mjs
+  s_bbd99d4f153bd1::t_997dca3c7b9c59 2-140
+  s_bbd99d4f153bd1::t_6974d920fc8e39 1
+packages/server/src/plugins/catalog.rs
+  s_bbd99d4f153bd1::t_ecb59ddf514832 104-111
+packages/server/src/plugins/manifest.rs
+  s_bbd99d4f153bd1::t_49ce4bd9964bc0 186-191
+  s_bbd99d4f153bd1::t_ecb59ddf514832 57-60
+packages/server/src/plugins/artifact.rs
+  s_bbd99d4f153bd1::t_ecb59ddf514832 78
+  s_bbd99d4f153bd1::t_49ce4bd9964bc0 79-81
+Cargo.lock
+  s_bbd99d4f153bd1::t_ed34e3db43f263 294,308-309,4933-4938,5179-5189,5219-5230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26e4e272af8a543d0071d665d029244bc10d228c",
+  "prompts": {},
+  "sessions": {
+    "s_bbd99d4f153bd1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9d3-a8f5-7b02-9eac-9b1a1027549c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
