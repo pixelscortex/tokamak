@@ -34,6 +34,8 @@ export function tokamak(
           if (!existsSync(resolve(root, "src/server"))) options.backend = false;
           if (!existsSync(resolve(root, "src/client"))) options.ui = false;
         }
+        if (!PLUGIN_UI_BUILD_ENABLED && options.backend === false)
+          throw new Error("Plugin has no enabled targets while plugin UI builds are disabled");
         if (PLUGIN_UI_BUILD_ENABLED && options.ui !== false)
           throw new Error("The web plugin UI target is not implemented");
         return {
