@@ -10,15 +10,21 @@ const client = new TokamakClient(transport);
 const title = `Live SDK check ${Date.now()}`;
 let updates = 0;
 let found!: () => void;
+let ready!: () => void;
+const initial = new Promise<void>((resolve) => {
+  ready = resolve;
+});
 const live = new Promise<void>((resolve) => {
   found = resolve;
 });
 const stop = client.subscribe(api.threads.list, {}, (event) => {
   if ("error" in event) throw event.error;
   updates++;
+  ready();
   if (event.value.some((thread) => thread.title === title)) found();
 });
 try {
+  await initial;
   const id = await client.action(api.threads.create, { title });
   await Promise.race([
     live,

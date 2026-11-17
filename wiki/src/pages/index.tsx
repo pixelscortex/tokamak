@@ -17,7 +17,7 @@ export function getConfig() {
 const pillars = [
   {
     title: "Rust kernel, JS userland",
-    body: "A small Rust host owns storage, scheduling, transport and rendering. Every feature is TypeScript on QuickJS.",
+    body: "A Rust server owns storage, scheduling and transport. TypeScript plugins run on the server. A Solid web client runs in Tauri.",
   },
   {
     title: "Plugins all the way down",

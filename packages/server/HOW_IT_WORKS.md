@@ -13,10 +13,10 @@ It's the same idea as Convex: Convex is "their database + a V8 runtime + live sy
 ## The pieces and who owns what
 
 ```
-┌──────────────── desktop app (tokamak-desktop, ~12 MB) ────────────────┐
-│  Blitz          draws HTML/CSS natively (no browser, no webview)      │
-│  QuickJS (UI)   runs the shell + plugin UI (Solid components)         │
-│  SDK client     useQuery / useMutation; talks to the server           │
+┌──────────────── desktop app (Tauri web client) ────────────────┐
+│  Webview        draws the Solid 2 DOM client                         │
+│  Tauri          owns the native window                               │
+│  SDK client     useQuery / mutations; talks to the server           │
 │  NO database. Nothing is stored here.                                 │
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │ WebSocket (local, token-protected)
@@ -34,7 +34,7 @@ It's the same idea as Convex: Convex is "their database + a V8 runtime + live sy
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Plugins** are TypeScript. Their **backend functions** run in the server's QuickJS, and their **UI** runs in the desktop's QuickJS. Both halves are downloaded from the server.
+- **Plugins** are TypeScript. Their **backend functions** run in the server's QuickJS, and their **UI** will run in the web client. Server-provided web UI loading is pending.
 - **SurrealDB** is a library inside the server process, not a separate service. Its files live on disk (SurrealKV).
 - Plugins never write database queries. They call `ctx.db.get / query / insert / patch / delete`, and the server turns those into database operations. All SurrealQL stays inside `data/`.
 

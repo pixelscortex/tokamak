@@ -1,207 +1,26 @@
-# Per-window plugin UI host
+# Plugin client contracts
 
-`app/src/main.tsx` mounts exactly one document and provides module namespaces to
-`ModuleRegistry`. Host names are `solid-js`, `solid-js/universal`,
-`@tokamak/render` (without `mount`), `@tokamak/sdk`, `@tokamak/sdk/solid`,
-`@tokamak/ui`, `@tokamak/ui/elements`, `@tokamak/ui/components`, and
-`@tokamak/runtime/router`. Plugins use `useClient()` and `useRouter()` from the
-shared Solid contexts. Neither the connection nor history belongs to a plugin.
+Plugins keep `src/server/api.ts` and `src/client/api.ts` as their public contracts.
+The compiler derives contribution identities from exported SDK brands, without
+executing client code. `view`, `itemRenderer`, `toolbar`, `command`, and
+`entityCard` remain available from `@tokamak/sdk` and `@tokamak/sdk/client`.
 
-## Build contract
+`@tokamak/sdk/client` supplies `defineSlot`, `fill`, `wrap`, `replace`, `Slot`,
+`publicComponent`, `ExtensionProvider`, and shortcut context helpers for the DOM.
+The compiler qualifies slot names as `<plugin>.<slot>` and public components as
+`<plugin>.<export>`. Fills sort by order, plugin ID, then fill identity or export
+name. Each fill has an error boundary. Replacements precede wrappers; layers
+sort by plugin ID and export name. A failed layer falls back to its inner layer.
+The first replacement wins. The shell owns the client and extension lifetimes.
 
-Plugin packages use `plugin.ts` plus optional `src/server/` and `src/client/`
-halves. Build a package with `bun run plugin:build plugins/<id>`; no Vite config
-is needed. `plugin.ts` exports `definePlugin({ id, version, name, description,
-depends, permissions })` from `@tokamak/sdk`. Metadata must be literal: the
-compiler reads syntax without executing the file. `depends` lists plugin IDs;
-the build uses `"*"` internally. The loader currently requires a semantic
-`version`, retained until its beta version policy changes. No `breaks` are authored.
+`@tokamak/runtime/plugins` preserves the manifest/catalog/reload logic.
+It consumes SDK asset pages pinned to a catalog revision, invalidates affected
+importers, and prevents retired loads from publishing. `PluginModuleHost` is the
+boundary for a future web implementation. No module evaluator ships here.
 
-`src/server/api.ts` and `src/client/api.ts` are the public contracts; import
-other plugins only through those entries. Keep implementation files nested by
-topic. The server's `_generated/` and intermediate `dist/` live inside
-`src/server/`. Callable IDs retain module basenames, so organizing server files
-into folders does not change existing references; basenames must be unique.
-`api.ts` is excluded from callable discovery. Public server function re-exports
-control access. Consumers come from literal `ctx.providers(...)` calls; provider
-module shapes are matched against dependency public `*Api` type contracts.
-Exports, interface lists, and UI contributions are compiler-derived.
-
-The default `tokamak()` build compiles `src/client/api.ts` into a single CommonJS
-factory wrapped in:
-
-```js
-globalThis.__tokamakModules.register(
-  "@plugins/notes/ui",
-  ["@tokamak/render", "@tokamak/sdk"],
-  function (require, exports, module) {
-    /* plugin code */
-  },
-);
-```
-
-Host packages and `@plugins/*` stay external. A plugin can import another's
-ordinary exports with `import { Component } from "@plugins/other/ui"` (the bare
-`@plugins/other` spelling is an alias). Static dependencies load before factories run. Literal dynamic imports, such as
-`import("@plugins/other/ui")`, compile to the evaluation-scoped
-`__tokamakModules.load(...)` capability. They infer `optional[other] = "*"`
-(unless already required), keeping installation and UI loading lazy. Computed
-`import(expr)` is rejected because the compiler cannot prove its target namespace.
-Configure TypeScript paths to the other plugin's source or declarations when
-checking cross-plugin imports locally; the bundle keeps the module name external.
-The compiler rejects bundled host runtimes and browser runtime imports. Plugins
-never mount, create a native connection, or access browser globals.
-
-SDK helpers return the supplied callable with a contribution brand. The compiler
-resolves exported aliases/reexports through TypeScript's symbol graph, extracts
-literal options without running UI code, and uses public export names as IDs:
-
-```json
-{
-  "plugin": {
-    "id": "notes",
-    "version": "0.1.0",
-    "depends": {},
-    "contributes": { "view": [{ "id": "Notes", "route": "/" }] }
-  },
-  "entries": { "ui": { "code": "ui.js", "map": "ui.js.map", "css": "styles.css", "shell": "shell.html" } }
-}
-```
-
-Other kinds use `itemRenderer: [{id,type}]`, `toolbar: [{id,label}]`,
-`command: [{id,title}]`, and `entityCard: [{id,table}]`. Computed options,
-spreads, and nonliteral values fail the build. Runtime imports of
-`@plugins/<id>` infer a `depends[id]` range of `*` unless explicitly constrained.
-Type-only imports/reexports disappear before dependency and contribution
-inference; the emitted JS graph and TypeScript's emitted export syntax are the
-sources of truth. Plain exports add no contributions. `ui:false` and `backend:false` support
-logic-only and UI-only legacy artifacts. Descriptor packages infer the halves from their directories. Plugin CSS is optional; the host document
-uses its own shell HTML. `standalone:true` retains complete native documents
-for the desktop, lab and old raw-bundle regression harnesses.
-
-## Stream and lifecycle
-
-Tokamak has **no product limits**. Installed plugins, contributions, dependencies,
-capability lists and descriptor strings have no arbitrary count/length quotas.
-Identifier syntax, nonempty/unique capabilities and version compatibility remain
-validation rules. Catalog and UI asset transfers have no total-size ceilings;
-8 KiB pages keep each event below the wire budget. The SDK joins chunks once
-when complete. UI source is compiled as a whole by QuickJS after transfer, so
-compilation still needs memory proportional to the module. The desktop window
-heap has no fixed quota (the former 64 MiB ceiling is removed); system allocation
-failures remain possible. Backend code/maps have a separate 512 MiB whole-input safety exception; see
-[the server contract](../server/PLUGINS.md#loading-and-reload-contract).
-
-Catalog manifests use indexed identity lookup. Module retirement builds reverse
-edges and walks affected importers once, including static imports that have not
-yet loaded. The rail shares one memoized view list and active-route lookup;
-rendering N buttons does not repeatedly enumerate N manifests. There is no rail
-entry ceiling or eager module fetch per button.
-
-The shell sends `{type:"plugins",id}` on its connected session. The response is an 8192-byte UTF-8 JSON text page: `{revision,text,next,done}`.
-Continue with `{type:"pluginspage",id,revision,offset:next}` until `done`; the SDK
-assembles `{revision,plugins,functions}` and discards mixed revisions, including
-a mismatched revision in the assembled catalog. Stale-page errors restart the
-transfer from its first page, with at most three attempts before rejecting. No UI assets are fetched at
-connect. A contribution's first render calls the loader. Code/CSS requests are
-`{type:"pluginasset",id,plugin,name,revision,offset}`; responses are
-`{text,next,done}` in the usual `response.result.Ok` envelope. Offsets count
-UTF-8 bytes. Chunks are at most 8192 bytes before JSON encoding, keeping even
-escaped text inside the native 1 MiB event limit. The server refuses a stale
-catalog revision, undeclared files and invalid offsets.
-
-After an atomic server reload, every connected session receives
-`{type:"pluginchanged",plugins:[changedIds],catalog:{revision,paged:true}}` on the same ordered stream
-as data updates. The loader fetches the new catalog in bounded pages before
-retiring affected owners, accumulating ids if reloads race. The server compares the entire old/new catalogs, so one reload
-also reports other edited/added/removed artifacts in that installation. The
-loader also diffs the assembled old/new manifests. If the changed-id list would
-exceed one event, the notification omits that list; the paged catalog diff still
-retires every affected module. The loader retires transitive importers and in-flight
-loads. Unrelated completed modules remain live. Version checks prevent stale
-asset promises from publishing. Factories receive a frozen registration/loading capability scoped to their own
-module and generation; host `provide`, `remove` and `require` APIs are never
-published. Retired handles cannot register or load modules. Factories own disposable Solid roots;
-contribution owners reset at the same generation boundary. Future renders load
-fresh modules lazily.
-
-The window-owned query cache keeps the underlying data subscription while UI
-owners remount, replays its latest value, and closes everything at window
-retirement. It retains at most 128 distinct queries and evicts dormant entries
-when full. Permission declarations remain server-auto-granted; there is no
-permission screen or grant prompt.
-
-## Presentation handoff
-
-`ShellFrame` in `app/src/shell-frame.tsx` is presentation only. Its JSX slots are
-`rail`, `navigation`, `sidebar?`, `stage`, and `thread?`. The `.shell-*` CSS in
-`app/src/styles.css` can be replaced without changing module loading.
-
-`Shell` in `app/src/shell.tsx` owns one memory history (initially `/chat`) and
-maps view-local routes beneath `/p/<plugin>`. A root view also handles the
-`/<plugin>` alias and its descendants; chat renders those paths itself. The docked
-thread panel is a placeholder. Navigation buttons use real back/forward.
-
-`Contribution` in `app/src/contribution.tsx` accepts `loader`, a
-`SlotContribution`, and optional `componentProps`; it supplies loading and
-`<plugin> failed · Reload` states around one plugin part. The loader's
-`contributions(kind)` enumerates all contribution kinds without fetching modules.
-Views mount in the stage now; future item, toolbar, entity and command surfaces
-can select descriptors and reuse the same boundary/lifecycle plumbing.
-
-Native event and host callbacks capture their Solid owner at registration.
-QuickJS promise hooks propagate that ownership through async/await, and report
-unhandled rejections after promise jobs settle so normal catches still work.
-Factory effects have a separate module-owned error scope; the registry forwards
-those failures by module id to mounted consumers, including transitive importers.
-Retired scopes ignore late failures. No attribution depends on whichever view is
-active when an error arrives.
-
-The error card uses a flex formatting context: Blitz's inline formatting hit
-test can return the anonymous parent box at an inline button's centre. Flex gives
-the Reload button a separate box while keeping the existing card classes.
-
-Requests and individual events share the WebSocket's 1 MiB UTF-8 limit. The
-native event queue holds at most 256 events / 1 MiB of wire payloads, plus
-bounded topic/routing envelopes (at most 1560 bytes per event). The inclusive
-1 MiB boundary applies to serialized wire JSON, excluding native envelopes. Oversized
-results become a correlated `result too large` error; an oversized subscription
-ends only that subscription. Oversized requests are rejected before admission,
-so unrelated calls and the window connection remain usable.
-
-## Open slots and public component mods
-
-Client helpers live in `@tokamak/sdk/client` (the portable backend SDK remains
-independent of Solid). Export slots and public components through the UI entry,
-usually by re-exporting `src/client/api.ts` from `src/main.tsx`:
-
-```tsx
-export const actions = defineSlot<{ threadId: string }>("composer.actions");
-// The compiler qualifies this as <declaring-plugin>.composer.actions.
-<Slot of={actions} props={{ threadId }} />;
-```
-
-Another plugin imports that public token from `@plugins/<id>/ui` and exports
-`fill(actions, { order: 10, id: "extra" }, Component)`. Options must be static
-literals; `order` and `id` are optional. The compiler extracts the target, numeric
-order, and optional fill identity into `contributes.fill`. Fills sort by order,
-then plugin id and fill identity (default: export name). Every fill owns an error
-boundary; a failed fill disappears while its siblings and host keep working.
-
-Public PascalCase callable exports are component extension points. The compiler
-instruments their declarations, so both local JSX and cross-plugin imports use
-the same component identity. Ordinary hooks/helpers and branded contributions
-are not instrumented. Export `wrap(Component, Original => props => <Original
-{...props} />)` or `replace(Component, Replacement)` from a mod's UI entry. The
-compiler extracts the public import target into `contributes.wrap/replace`;
-static imports also infer the existing plugin dependency. A replacement forms
-the base, then wrappers layer in plugin-id/export-name order. Each layer has an
-error boundary that renders its previous layer on failure. The first replacement
-wins; later replacements are ignored with a native warning.
-
-The shell provides `ExtensionProvider` with its existing plugin loader. Extension
-contributors load from the catalog even when they have no view. Generation
-changes retire contributions, fills and wrappers; removing/reinstalling a mod
-updates mounted components without retiring the target plugin's data owner.
-The five existing contribution kinds remain supported. There is no SDK list of
-slot names and no descriptor or server-hook migration.
+The plugin UI build is disabled by `PLUGIN_UI_BUILD_ENABLED` in
+`packages/build/src/vite.ts`. Server artifacts remain valid without `entries.ui`.
+A later agent must add DOM ESM output, server asset URLs, shared host imports,
+and a web module host. The app skeleton loads no plugin UI. Plugin isolation,
+server discovery/authentication, router imports, and shortcut integration remain
+part of that work; the author API has not changed.

@@ -7,6 +7,7 @@
     "./subscriptions": "./js/subscriptions.ts"
   },
   "dependencies": {
+    "@solidjs/web": "2.0.0",
     "@tokamak/sdk": "workspace:*",
     "solid-js": "2.0.0"
   },

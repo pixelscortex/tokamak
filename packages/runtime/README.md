@@ -1,18 +1,19 @@
-# Runtime hosts
+# Runtime support
 
-`runtime` composes application lifecycles. `engine` owns QuickJS execution,
-budgets, source maps, host operations and the worker pool.
+The Rust crate is server-only. Its optional `server` feature re-exports the
+server backend, storage, and engine types. The engine still runs server plugins.
 
-- No default features.
-- `client`: native window, local discovery, WebSocket connection and bounded
-  client drain. It never starts/stops the server or opens storage.
-- `server`: exposes the existing Backend/config/storage and engine bundle types.
-  It does not add another backend implementation.
+The TypeScript package keeps reusable client lifecycle code:
 
-`client::run(ClientConfig)` hosts a connected app.
-`client::run_ui(ClientConfig)` hosts UI-only tools without server discovery or
-network state. Product entry points declare assets/configuration only.
+- `@tokamak/runtime/plugins`: `createPluginLoader`, catalog lookup, paged asset
+  retrieval, dependency invalidation, and generation retirement.
+- `@tokamak/runtime/subscriptions`: the retained-query transport cache.
 
-The client dependency graph has no database; the server-only graph has no GUI.
-Owned bounded messages cross threads, never QuickJS handles.
-JSON text conversion remains unchanged; TKM-17 is deferred.
+The loader accepts a `PluginModuleHost` interface. There is no evaluator or web
+module host implementation. The next loader agent must connect server-provided
+ES modules while preserving shared runtime identities and generation disposal.
+The app skeleton does not instantiate this loader.
+
+`tools/local-server.ts` and `tools/run-app.ts` retain independent local server
+start, status, and stop operations. They do not launch a desktop client.
+The app's disposable development server is separate; see `app/README.md`.

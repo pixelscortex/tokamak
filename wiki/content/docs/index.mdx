@@ -1,89 +1,66 @@
 ---
 title: Getting started
-description: What is in the Tokamak repository, and how to build, run and check it.
+description: Build, run and check Tokamak.
 ---
 
-Tokamak is a TypeScript-first application hosted by Rust. Reusable host,
-runtime, renderer, SDK and UI packages live under `packages/`. The desktop
-application is composed under `app/`, and `lab/` is a separate native
-component catalog.
+Tokamak is a Rust server with TypeScript plugins and a Solid 2 web client.
+Tauri 2 supplies the desktop window. The client is rendered in the browser DOM.
 
-## What's in the repo
+| Directory           | Purpose                                                           |
+| ------------------- | ----------------------------------------------------------------- |
+| `packages/server/`  | Server and storage; builds `tokamak`                              |
+| `packages/engine/`  | Server QuickJS engine, budgets and worker pool                    |
+| `packages/runtime/` | Server facade, local server tools, reusable plugin lifecycle code |
+| `packages/sdk/`     | Portable transport and plugin API, plus Solid 2 DOM entries       |
+| `packages/build/`   | Server artifact compiler and static contribution analysis         |
+| `packages/ui/`      | Placeholder for web primitives and tokens                         |
+| `app/`              | Vite web app and Tauri host; `/kit` holds the controls page       |
+| `plugins/`          | Chat and ACP plugins                                              |
+| `wiki/`             | This docs site                                                    |
 
-| Directory           | Purpose                                                            |
-| ------------------- | ------------------------------------------------------------------ |
-| `packages/server/`  | Native host crate; builds the `tokamak` executable                 |
-| `packages/engine/`  | Shared QuickJS engine, budgets and worker pool                     |
-| `packages/runtime/` | Feature-gated client and server hosts, and local process lifecycle |
-| `packages/render/`  | Native UI renderer crate (Solid universal renderer on Blitz)       |
-| `packages/sdk/`     | TypeScript feature API, `@tokamak/sdk`                             |
-| `packages/ui/`      | TypeScript UI library, `@tokamak/ui`                               |
-| `packages/build/`   | Private shared Vite, Solid and theme build integration             |
-| `app/`              | Thin product shell, reserved for Core and plugins                  |
-| `lab/`              | Independent native UI component catalog and interaction checks     |
-| `wiki/`             | This docs site                                                     |
+## Run
 
-Cargo and Bun manifests and lockfiles stay at the repository root. Root
-`plugins/` is reserved for future first-class plugins and is not scaffolded.
-
-## Tools
-
-`.prototools` pins moon, Bun and Rust; install [proto](https://moonrepo.dev/proto)
-and rustup, and moon's toolchains read those pins. Bun is build tooling only:
-it bundles, checks and tests TypeScript on your machine, and never runs in the
-product.
+Install proto and rustup, then use the pinned tools in `.prototools`.
+On macOS, install Xcode command-line tools. Other platforms need Tauri's native
+build prerequisites.
 
 ```sh
-bun install
+proto run bun -- install --frozen-lockfile
 ```
 
-## Run the app
+Run these commands in separate terminals:
 
 ```sh
-bun run app            # debug build, start or reuse the server, launch the desktop
-bun run ui:lab         # the native component catalog, no server or storage
+proto run bun -- run server:start
+proto run bun -- run app
 ```
 
-The desktop connects to an independent local server. `bun run app` starts or
-reuses it, and quitting the desktop does not stop it. Control it with:
+The server helper builds Chat and the server, then runs on loopback with a fresh
+store. Ctrl+C stops it and removes that store. Press Connect in the app, then
+New thread to see live updates. `moon run app:dev` runs the same client in Vite.
+The skeleton loads no plugin UI. The `/kit` route replaces the standalone lab.
+
+## Check
 
 ```sh
-bun run server:status
-bun run server:stop
-bun run server:start
+proto run bun -- run check
+proto run bun -- run typecheck
+proto run bun -- run test
+proto run bun -- run e2e
+moon run app:web-build
+proto run bun -- run --cwd app tauri build --no-sign
 ```
 
-`bun run build` makes the release server and desktop binaries.
-`bun run plugin:build <folder>` builds one plugin artifact; see
-[the build package](https://github.com/pixelscortex/tokamak/blob/dev/packages/build/README.md).
+Chat's old `src/client` is retained as rewrite reference and excluded from checks
+and builds. The plugin UI target is disabled until its web ESM implementation.
+Desktop release packaging is pending; release CI still builds the server.
 
-## Check and test
+## Docs
 
 ```sh
-moon run :check :test :e2e
+moon run wiki:dev
+moon run wiki:build
 ```
 
-`:e2e` runs the five retired Todo scenarios on isolated fixture data and
-depends on `app:test`. The repo's own runs set `CARGO_BUILD_JOBS=2`, which
-limits Cargo to two parallel jobs. `moon run :size` measures the release binaries.
-
-## The docs site
-
-```sh
-moon run wiki:dev      # landing page at /, docs at /docs
-moon run wiki:build    # static site in wiki/dist/public
-```
-
-## Next
-
-<Cards>
-  <Card title="Architecture" href="/docs/architecture">
-    The shape of the system, in one page.
-  </Card>
-  <Card title="Plugin installation" href="/docs/server/plugins">
-    How the server loads and reloads plugins.
-  </Card>
-  <Card title="SDK reference" href="/docs/api">
-    The public API of `@tokamak/sdk`.
-  </Card>
-</Cards>
+See [Architecture](/docs/architecture), [Design rules](/docs/design), and
+[Plugin installation](/docs/server/plugins).
