@@ -1,0 +1,23 @@
+.github/workflows/release.yml
+  s_e7b9ff6bf26a52::t_72d97d5d2ce4eb 1,4-12,14,16-23,26-28,30-33
+.ci/release-macos.sh
+  s_e7b9ff6bf26a52::t_72d97d5d2ce4eb 1-23
+.ci/README.md
+  s_e7b9ff6bf26a52::t_bf65ad28e93126 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a85e92d94228efa01f0bb9e3019b0e1735e13b89",
+  "prompts": {},
+  "sessions": {
+    "s_e7b9ff6bf26a52": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9f7-32a3-7820-8068-2cbace84fb78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
