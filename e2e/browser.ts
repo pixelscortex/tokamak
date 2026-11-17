@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
+import { prepareChatSandbox } from "./chat-sandbox";
 
 process.chdir(resolve(import.meta.dirname, ".."));
 await mkdir("app/.dev", { recursive: true });
@@ -29,6 +30,9 @@ try {
   });
   run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak", "--jobs", "2"]);
   run("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts"]);
+  // Adds ACP and a scripted agent; the server then never sees this machine's real agent CLIs.
+  const sandbox = await prepareChatSandbox(directory);
+  Object.assign(env, { CHAT_SANDBOX_HOME: sandbox.env.HOME, CHAT_SANDBOX_PATH: sandbox.env.PATH });
   run("proto", ["run", "bun", "--", "run", "--cwd", "app", "build"]);
   run("proto", [
     "run",

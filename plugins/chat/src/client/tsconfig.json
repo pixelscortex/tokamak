@@ -1,0 +1,10 @@
+{
+  "extends": "../../../../app/tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@tokamak/runtime/router": ["../../../../app/src/plugins/router.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../tests/**/*.ts", "../../tests/**/*.tsx", "../../vitest.config.ts"]
+}

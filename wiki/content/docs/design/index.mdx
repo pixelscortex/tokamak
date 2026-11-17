@@ -52,9 +52,9 @@ Everything else is built by each plugin from the tokens and the rules.
    </Dialog.Root>;
    ```
 
-   Namespaces: `Dialog`, `Menu`, `Select`, `Tooltip`, `Tabs`, `RowList`.
-   Single elements: `Button`, `Icon`, `Kbd`, `Chip`, `Avatar`, `StatusIcon`,
-   `Textarea`, `FileName`, `Row`. You may add layout classes to any part
+   Namespaces: `Dialog`, `Menu`, `Select`, `Tooltip`, `Tabs`, `RowList`,
+   `Collapsible`. Single elements: `Button`, `Icon`, `Kbd`, `Chip`, `Avatar`,
+   `StatusIcon`, `Textarea`, `FileName`, `Row`, `CodeBlock`. You may add layout classes to any part
    (margin, width, flex and grid placement); its look is its own.
 
 3. Build everything else from tokens and helpers, the way the primitives
@@ -343,8 +343,11 @@ words.
 ## Threads
 
 - A thread is for talking. Keep it as clean as possible.
-- Tool work folds into one collapsed row. While running it shows the latest
-  step and a timer; when done it shows a summary ("Worked · 4 actions · 12s").
+- Tool work folds into one collapsed row (`Collapsible`). While running it
+  shows the latest step and a timer; when done it shows a summary ("Worked ·
+  4 actions · 12s"). Opened, it lists the steps; nothing else expands.
+- Code in prose is a `CodeBlock`: mono at the row size, scrolling sideways,
+  with a copy key.
 - Diffs and other heavy output do not go in the thread. A plugin shows a
   one-row summary there and the detail in its own panel.
 - A small list of what changed, such as todos, may sit in the thread.

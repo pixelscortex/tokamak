@@ -8,6 +8,7 @@ import { Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Tabs } from "@tokamak/ui";
 import { Buttons, Facts, Fields, OnSurfaces } from "./controls.tsx";
+import { Disclosure } from "./disclosure.tsx";
 import { Themes } from "./frame.tsx";
 import { Overlays } from "./overlays.tsx";
 import { Rows } from "./rows.tsx";
@@ -46,6 +47,7 @@ export function Kit(): JSX.Element {
                 <OnSurfaces />
                 <Facts />
                 <Fields theme={theme} />
+                <Disclosure theme={theme} />
               </>
             )}
           </Themes>

@@ -1,0 +1,8 @@
+language: "typescript"
+layer: "application"
+tasks:
+  test:
+    command: "proto run bun -- run vitest run"
+    options:
+      cache: false
+      mergeArgs: "replace"

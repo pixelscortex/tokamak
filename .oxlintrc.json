@@ -17,7 +17,6 @@
     "**/_generated/**",
     "packages/engine/tests/fixtures/array-initializer.js",
     "packages/engine/tests/fixtures/startup.js",
-    "plugins/chat/src/client/**",
     "packages/ui/lint/fixtures/**"
   ],
   "rules": {

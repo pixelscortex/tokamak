@@ -27,6 +27,8 @@ export const primitiveShapes = {
   "Tabs.Tab": [8, null],
   "Command.Item": [8, null],
   "Menu.RadioItem": [8, null],
+  "Collapsible.Trigger": [8, null],
+  CodeBlock: [12, 4],
   "Menu.Content": [12, 4],
   "Select.Content": [12, 4],
   "Dialog.Content": [16, 24],

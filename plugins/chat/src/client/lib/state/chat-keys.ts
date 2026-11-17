@@ -1,96 +1,24 @@
-import type { Accessor, Setter } from "solid-js";
-import type { NativeEvent } from "@tokamak/render";
-import type { ChatState } from "./use-chat";
-import type { useDrafts } from "./use-drafts";
-import type { useMap } from "./use-map";
-
-type Controls = {
-  chat: ChatState;
-  composer: ReturnType<typeof useDrafts>;
-  map: ReturnType<typeof useMap>;
-  mapOpen: Accessor<boolean>;
-  setMapOpen: Setter<boolean>;
-  closeMap: () => void;
-  newThread: () => Promise<void>;
-  pickerOpen: Accessor<boolean>;
-  setPickerOpen: Setter<boolean>;
-  pickerKey: (event: NativeEvent) => void;
-  closePicker: () => void;
-  pickPermission: (index: number) => boolean;
-  copyReply: () => void;
+export type ChatKeyControls = {
+  draft: () => string;
+  canStop: () => boolean;
+  stop: () => void;
+  /** Answers the pending permission with its n-th option (allow first); false if there is none. */
+  answer: (index: number) => boolean;
 };
 
-export function chatKeys(controls: Controls) {
-  return (event: NativeEvent) => {
+/** Keys for the chat stage: Esc stops a reply, 1–4 answer a permission while the draft is empty. */
+export function chatKeys(controls: ChatKeyControls) {
+  return (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing) return;
-    const key = event.key ?? "";
-    if (shortcut(controls, event, key)) return;
-    if (controls.pickerOpen()) {
-      controls.pickerKey(event);
-      return;
-    }
-    if (controls.mapOpen() && controls.map.editing()) {
-      controls.map.keydown(event);
-      return;
-    }
-    if (togglesMap(key, controls.mapOpen())) {
+    const plain = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+    if (event.key === "Escape" && controls.canStop()) {
+      // A popup or dialog closes first; Esc reaches here only when nothing else used it.
       event.preventDefault();
-      if (event.repeat) return;
-      if (controls.mapOpen()) controls.closeMap();
-      else {
-        controls.map.reset();
-        controls.setMapOpen(true);
-      }
+      if (!event.repeat) controls.stop();
       return;
     }
-    if (controls.mapOpen()) {
-      controls.map.keydown(event);
-      return;
+    if (plain && /^[1-4]$/.test(event.key) && !controls.draft() && !event.repeat) {
+      if (controls.answer(Number(event.key) - 1)) event.preventDefault();
     }
-    if (answerPermission(controls, event, key)) return;
-    stopRun(controls.chat, event);
   };
-}
-
-function answerPermission(controls: Controls, event: NativeEvent, key: string) {
-  if (controls.composer.draft() || !/^[1-4]$/.test(key)) return false;
-  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat) return false;
-  if (!controls.pickPermission(Number(key) - 1)) return false;
-  event.preventDefault();
-  return true;
-}
-
-function stopRun(chat: ChatState, event: NativeEvent) {
-  if (event.key !== "Escape" || !chat.canStop()) return;
-  event.preventDefault();
-  if (!event.repeat) void chat.cancel();
-}
-
-function shortcut(controls: Controls, event: NativeEvent, key: string) {
-  const letter = key.toLowerCase();
-  if (event.metaKey && (letter === "n" || key === "Enter")) {
-    event.preventDefault();
-    if (!event.repeat) void controls.newThread();
-    return true;
-  }
-  if (controls.mapOpen() || !event.metaKey) return false;
-  if (event.shiftKey && letter === "c") {
-    event.preventDefault();
-    if (!event.repeat) controls.copyReply();
-    return true;
-  }
-  return pickerShortcut(controls, event, letter);
-}
-
-function pickerShortcut(controls: Controls, event: NativeEvent, letter: string) {
-  if (letter !== "m") return false;
-  event.preventDefault();
-  if (!event.repeat) {
-    controls.setPickerOpen((open) => !open);
-  }
-  return true;
-}
-
-function togglesMap(key: string, open: boolean) {
-  return key === "Tab" || (key === "Escape" && open);
 }
