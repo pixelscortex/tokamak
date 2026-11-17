@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.pixelscortex.Tokamak",
   "build": {
-    "beforeDevCommand": "proto run bun -- run dev",
-    "beforeBuildCommand": "proto run bun -- run build",
+    "beforeDevCommand": "proto run bun -- scripts/prepare-host.ts && proto run bun -- run dev",
+    "beforeBuildCommand": "proto run bun -- scripts/prepare-host.ts --release && proto run bun -- run build",
     "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../dist"
   },
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; img-src 'self' data:; object-src 'none'; base-uri 'self'",
+      "csp": "default-src 'self'; script-src 'self' http://127.0.0.1:* http://[::1]:*; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://[::1]:* ws://[::1]:*; img-src 'self' data:; object-src 'none'; base-uri 'self'",
       "capabilities": [
         {
           "identifier": "main-window-drag",
@@ -35,6 +35,10 @@
   "bundle": {
     "active": true,
     "targets": ["app"],
-    "icon": []
+    "icon": [],
+    "externalBin": ["dist/tokamak"],
+    "resources": {
+      "dist/plugins/": "plugins/"
+    }
   }
 }

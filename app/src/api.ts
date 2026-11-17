@@ -18,3 +18,12 @@ export const api = createApi<{
   messages: { list: FunctionReference<"query", { threadId: Id<"threads"> }, Message[]> };
   chat: { send: FunctionReference<"action", { threadId: Id<"threads">; text: string }, unknown> };
 }>("chat");
+
+export { endpoint } from "./host/endpoint";
+export async function websocketEndpoint(): Promise<string> {
+  const { endpoint } = await import("./host/endpoint");
+  const host = await endpoint();
+  const url = new URL(host.ws);
+  if (host.token) url.searchParams.set("token", host.token);
+  return url.toString();
+}

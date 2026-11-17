@@ -10,26 +10,37 @@ From the repository root, install the pinned tools and dependencies:
 proto run bun -- install --frozen-lockfile
 ```
 
-Use two terminals. The first command builds Chat's server artifact and the
-existing server binary, then starts a loopback server with a fresh disposable
-store. Ctrl+C stops the server and removes its store.
+Launch the desktop app with one command:
 
 ```sh
-proto run bun -- run server:start
 proto run bun -- run app
 ```
 
-The app connects to `ws://127.0.0.1:43123/ws` when Connect is pressed.
-New thread creates a thread and the subscription updates the list.
-`moon run app:dev` runs Vite alone at `http://127.0.0.1:1420`.
-The server helper installs only Chat; no external agent runs.
+Tauri builds Chat and the server, then starts or reuses an independent local
+server. The window connects automatically; Retry repeats discovery after an error.
+Closing the window leaves the server running. `server:stop` stops it explicitly.
+The server chooses a free loopback port and publishes authenticated discovery in
+its existing platform data directory (`~/Library/Application Support/com.pixelscortex.Tokamak`
+on macOS). `TOKAMAK_SERVER_DIR` overrides it. Existing `store`, `server.token`
+and discovery files are reused. Development plugins come from workspace `plugins`;
+release plugins come from the app's Resources/plugins. A running server using a
+different plugin installation must be stopped before switching installations.
 
-After building the server and Chat, the helpers can also run directly:
+For browser-only development, keep the disposable server helper in one terminal:
 
 ```sh
-proto run bun -- app/scripts/server.ts
-proto run bun -- app/scripts/live-check.ts
+proto run bun -- run server:start
+moon run app:dev
 ```
+
+Browser connections default to `http://127.0.0.1:43123`; set
+`VITE_TOKAMAK_HTTP` to override it. The browser helper installs only Chat and
+removes its disposable store on exit. No external agent runs.
+
+The Tauri command `tokamak_endpoint` returns `{ http, ws, token }`. The client
+adds the private capability as the WebSocket `token` query parameter. A browser
+endpoint has `token: null`. Server origin and query-token support is required
+for authenticated desktop connections.
 
 Checks and unsigned local builds:
 
@@ -40,8 +51,10 @@ proto run bun -- run --cwd app tauri build --no-sign
 
 The Tauri crate belongs to the root Cargo workspace and uses its lockfile.
 The host has an overlay title bar, native traffic lights, and one capability
-for dragging the main window. The CSP disallows eval. Server startup and
-packaging inside Tauri remain for the host agent. Desktop release CI is pending.
+for dragging the main window. The CSP disallows eval and permits loopback plugin modules and connections.
+The build hook packages the server as an external binary and built plugin
+installations as resources. Rust launches only that binary; no webview shell
+capability is exposed. Desktop release CI is pending.
 
 Vite selects the matching Solid development or production runtime for each mode.
 Keep that selection when changing the build: mixed runtimes render a blank window.

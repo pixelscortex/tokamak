@@ -2,17 +2,18 @@ import { createSignal, Show, For, onSettled } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
 import { Button } from "@ui-sdk/solid/button";
 import { Input } from "@ui-sdk/solid/input";
-import { api } from "./api";
+import { api, websocketEndpoint } from "./api";
 import { useQuery } from "@tokamak/sdk/solid";
 import { Controls } from "./controls";
 
 type Session = { client: TokamakClient; close(): void };
 export function App() {
-  const [endpoint, setEndpoint] = createSignal("ws://127.0.0.1:43123/ws");
   const [session, setSession] = createSignal<Session | null>(null);
   const [status, setStatus] = createSignal("Disconnected");
   let pending: WebSocket | undefined;
+  let attempt = 0;
   const disconnect = () => {
+    attempt++;
     pending?.close();
     pending = undefined;
     session()?.close();
@@ -22,29 +23,21 @@ export function App() {
   onSettled(() => disconnect);
   async function connect() {
     disconnect();
-    const url = new URL(endpoint());
-    if (
-      url.protocol !== "ws:" ||
-      url.hostname !== "127.0.0.1" ||
-      url.pathname !== "/ws" ||
-      url.search ||
-      url.hash ||
-      url.username ||
-      url.password
-    ) {
-      setStatus("Use a ws://127.0.0.1:port/ws development endpoint");
-      return;
-    }
+    const current = attempt;
     setStatus("Connecting…");
+    const url = await websocketEndpoint();
+    if (current !== attempt) return;
     const socket = (pending = new WebSocket(url));
+    const timeout = setTimeout(() => socket.close(), 10_000);
     try {
       await new Promise<void>((resolve, reject) => {
+        socket.addEventListener("close", () => reject(new Error("Connection closed before ready")), {
+          once: true,
+        });
         socket.addEventListener("open", () => resolve(), { once: true });
-        socket.addEventListener(
-          "error",
-          () => reject(new Error("Connection refused; check the disposable server")),
-          { once: true },
-        );
+        socket.addEventListener("error", () => reject(new Error("Cannot reach the Tokamak server")), {
+          once: true,
+        });
       });
       if (pending !== socket) return;
       const transport = new WebSocketTransport(socket);
@@ -58,24 +51,26 @@ export function App() {
       setSession({ client, close: () => transport.close() });
       setStatus("Connected to real Tokamak server");
     } catch (cause) {
-      setStatus(String(cause));
+      if (current === attempt) setStatus(String(cause));
       socket.close();
+    } finally {
+      clearTimeout(timeout);
     }
   }
+  onSettled(() => {
+    void connect().catch((cause) => setStatus(String(cause)));
+  });
   return (
     <div>
       <section class="connection card">
-        <label for="endpoint">Server WebSocket</label>
-        <Input id="endpoint" value={endpoint()} onValueChange={setEndpoint} />
-        <Button onClick={() => connect().catch((cause) => setStatus(String(cause)))}>Connect</Button>
+        <Show when={!session()}>
+          <Button onClick={() => connect().catch((cause) => setStatus(String(cause)))}>Retry</Button>
+        </Show>
         <p role="status" aria-label="Connection status">
           {status()}
         </p>
       </section>
-      <Show
-        when={session()}
-        fallback={<p class="muted">Start the isolated server, then connect. The UI kit works offline.</p>}
-      >
+      <Show when={session()} fallback={<p class="muted">Waiting for the Tokamak server.</p>}>
         {(active) => <Chat session={active()} disconnect={disconnect} />}
       </Show>
       <Show when={!session()}>
