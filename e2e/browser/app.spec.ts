@@ -106,6 +106,7 @@ test("the frame: keyboard sidebar, rail, tabs, panel, search and theme", async (
   const search = page.getByRole("combobox", { name: "Search views and commands" });
   await search.fill("Panel");
   await page.getByRole("option", { name: "PanelView" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page).toHaveURL(/\/panel$/);
   await page.keyboard.press("ControlOrMeta+[");
   await expect(page).toHaveURL(/\/p\/integration-fixture$/);
