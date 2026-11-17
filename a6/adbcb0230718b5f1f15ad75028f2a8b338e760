@@ -1,0 +1,50 @@
+app/tests/fixtures/integration/src/client/api.tsx
+  s_e7b9ff6bf26a52::t_f41cff89cf5e34 13
+  s_e7b9ff6bf26a52::t_60569216a8c280 20-23
+app/scripts/server.ts
+  s_e7b9ff6bf26a52::t_0d4806780e027c 14-15
+e2e/playwright.config.ts
+  s_e7b9ff6bf26a52::t_038a151448d625 2-19,24-37
+  s_e7b9ff6bf26a52::t_83fa676b18e304 21
+  s_e7b9ff6bf26a52::t_12cecafb9c3a03 23
+  s_e7b9ff6bf26a52::t_a82602d289ba95 1,20,22,38-39
+app/src/plugins/views.tsx
+  s_e7b9ff6bf26a52::t_f41cff89cf5e34 123
+e2e/browser.ts
+  s_e7b9ff6bf26a52::t_a7ea01add20ccc 2-25
+  s_e7b9ff6bf26a52::t_4a3ecd6460039d 1,26-46
+e2e/browser/app.spec.ts
+  s_e7b9ff6bf26a52::t_038a151448d625 88-92
+  s_e7b9ff6bf26a52::t_c6bf097255814e 21,28-83,109,113
+  s_e7b9ff6bf26a52::t_e57fbd4c23f278 1-20,22-27,84-87,93-108,110-112,114
+app/src/app.tsx
+  s_e7b9ff6bf26a52::t_f41cff89cf5e34 139
+app/README.md
+  s_e7b9ff6bf26a52::t_b7e1e295ec1d0a 86
+app/scripts/integration-fixture.ts
+  s_e7b9ff6bf26a52::t_3345c7a054e2a4 7-10,19
+bun.lock
+  s_e7b9ff6bf26a52::t_6e776feb36de93 8,342-343,1114-1117
+e2e/README.md
+  s_e7b9ff6bf26a52::t_a97621c00f1a8a 15-49
+e2e/tsconfig.json
+  s_e7b9ff6bf26a52::t_1f36dc1135d70e 12
+package.json
+  s_e7b9ff6bf26a52::t_ddafee8499ab97 25-26,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6adbcb0230718b5f1f15ad75028f2a8b338e760",
+  "prompts": {},
+  "sessions": {
+    "s_e7b9ff6bf26a52": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9f7-32a3-7820-8068-2cbace84fb78",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
