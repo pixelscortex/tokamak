@@ -1,36 +1,39 @@
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Link,
-  Outlet,
-  RouterProvider,
-} from "@tanstack/solid-router";
-import { App, AppShell } from "./app";
+import { createEffect } from "solid-js";
+import { createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/solid-router";
 import { Kit } from "./kit";
+import type { ServerEndpoint } from "./plugins/adapter";
+import { useShell } from "./shell/context";
+import { Shell } from "./shell/shell";
+import { NoPlugins, NotFound } from "./shell/states";
+import { hrefOf } from "./shell/views";
+
+let getEndpoint: (() => ServerEndpoint | Promise<ServerEndpoint>) | undefined;
 
 const root = createRootRoute({
-  component: () => (
-    <AppShell>
-      <main>
-        <header data-tauri-drag-region>
-          <span>Tokamak</span>
-          <small>Desktop client</small>
-        </header>
-        <nav aria-label="App pages">
-          <Link to="/">Threads</Link>
-          <Link to="/kit">UI kit</Link>
-        </nav>
-        <App routing={{ router, root, base: [threads, kit] }} />
-        <Outlet />
-      </main>
-    </AppShell>
-  ),
+  component: () => <Shell routing={{ router, root, base: [home, kit] }} getEndpoint={getEndpoint} />,
 });
-const threads = createRoute({ getParentRoute: () => root, path: "/", component: () => null });
+const home = createRoute({ getParentRoute: () => root, path: "/", component: Home });
 const kit = createRoute({ getParentRoute: () => root, path: "/kit", component: Kit });
-export const router = createRouter({ routeTree: root.addChildren([threads, kit]) });
-export function ClientRouter() {
+export const router = createRouter({
+  routeTree: root.addChildren([home, kit]),
+  defaultNotFoundComponent: NotFound,
+});
+
+/** "/" opens the first view, or says that there is none yet. */
+function Home() {
+  const shell = useShell();
+  const first = () => {
+    const connection = shell.session.connection();
+    return connection.state === "connected" ? connection.plugins.views()[0] : undefined;
+  };
+  createEffect(first, (view) => {
+    if (view) void router.navigate({ href: hrefOf(view), replace: true });
+  });
+  return <>{!first() && <NoPlugins />}</>;
+}
+
+export function ClientRouter(props: { getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint> }) {
+  getEndpoint = props.getEndpoint;
   return <RouterProvider router={router} />;
 }
 declare module "@tanstack/solid-router" {

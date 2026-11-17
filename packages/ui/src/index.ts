@@ -9,6 +9,7 @@ export { Kbd, formatKeys } from "./kbd.tsx";
 export { Row, rowVariants, type RowProps, type RowKind } from "./row.tsx";
 export { StatusIcon, type Status } from "./status-icon.tsx";
 export { Textarea, type TextareaProps } from "./textarea.tsx";
+export * as Command from "./command.tsx";
 export * as Dialog from "./dialog.tsx";
 export * as Menu from "./menu.tsx";
 export * as RowList from "./row-list.tsx";

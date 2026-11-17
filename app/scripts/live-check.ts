@@ -1,5 +1,11 @@
-import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
-import { api } from "../src/api";
+import { createApi, TokamakClient, WebSocketTransport, type FunctionReference } from "@tokamak/sdk";
+
+const api = createApi<{
+  threads: {
+    list: FunctionReference<"query", {}, { title: string }[]>;
+    create: FunctionReference<"action", { title?: string }, string>;
+  };
+}>("chat");
 const socket = new WebSocket("ws://127.0.0.1:43123/ws");
 await new Promise<void>((resolve, reject) => {
   socket.onopen = () => resolve();

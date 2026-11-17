@@ -16,6 +16,8 @@ import { omit } from "solid-js";
 import type { ComponentProps, JSX } from "@solidjs/web";
 import { ButtonContent, buttonClass, lookKeys, type ButtonLook } from "./button.tsx";
 import { cn } from "./cn.ts";
+import { Icon } from "./icon.tsx";
+import { icons } from "./icons.ts";
 
 type Classed<T extends (props: any) => JSX.Element> = Omit<ComponentProps<T>, "class"> & { class?: string };
 
@@ -78,3 +80,17 @@ export function GroupLabel(props: Classed<typeof Base.MenuGroupLabel>) {
 }
 
 export const Group = Base.MenuGroup;
+
+export const RadioGroup = Base.MenuRadioGroup;
+
+/** A choice of one in its RadioGroup; the chosen item shows a check at the end. */
+export function RadioItem(props: Classed<typeof Base.MenuRadioItem>) {
+  return (
+    <Base.MenuRadioItem {...omit(props, "class", "children")} class={cn(itemClass, props.class)}>
+      {props.children}
+      <Base.MenuItemIndicator class="ms-auto ps-4 text-ink-2">
+        <Icon path={icons.check} />
+      </Base.MenuItemIndicator>
+    </Base.MenuRadioItem>
+  );
+}

@@ -20,6 +20,7 @@ import {
   type PluginLoader,
   type ModuleExports,
 } from "../../../packages/runtime/js/plugins";
+import { Button, StatusIcon } from "@tokamak/ui";
 import { serverAssets, type CatalogSource, type ServerEndpoint } from "./adapter";
 import { WebPluginHost } from "./web-host";
 import { RouterContext, routerFacade, type MemoryRouter } from "./router";
@@ -120,10 +121,11 @@ export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
       {(_key) => (
         <Errored
           fallback={(cause) => (
-            <div role="alert" aria-label="Plugin view error">
-              {props.view.plugin}: {String(cause())}{" "}
-              <button onClick={() => props.shell.loader.reload(props.view.plugin)}>Reload</button>
-            </div>
+            <ViewFailure
+              view={props.view}
+              cause={cause()}
+              reload={() => props.shell.loader.reload(props.view.plugin)}
+            />
           )}
         >
           <LoadedView {...props} />
@@ -131,6 +133,31 @@ export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
       )}
     </Show>
   );
+}
+function ViewFailure(props: { view: PluginView; cause: unknown; reload(): void }) {
+  return (
+    <div
+      role="alert"
+      aria-label="Plugin view error"
+      class="m-auto flex max-w-read flex-col items-center gap-6 px-8 py-16 text-center"
+    >
+      <div class="flex flex-col items-center gap-2">
+        <StatusIcon class="mb-2" status="failed" label={props.view.title} />
+        <h2 class="text-read font-semibold text-ink">{props.view.title} stopped</h2>
+        <p class="text-read text-pretty text-ink-2">
+          Its plugin, <span class="font-mono">{props.view.plugin}</span>, failed. The rest of the window still
+          works.
+        </p>
+      </div>
+      <p class="max-w-full text-data break-words text-ink-3">{describe(props.cause)}</p>
+      <Button variant="primary" onClick={() => props.reload()}>
+        Reload
+      </Button>
+    </div>
+  );
+}
+function describe(cause: unknown): string {
+  return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
 }
 function LoadedView(props: { shell: PluginShell; view: PluginView }) {
   const [module, setModule] = createSignal<ModuleExports>();
@@ -153,7 +180,14 @@ function LoadedView(props: { shell: PluginShell; view: PluginView }) {
     return module();
   };
   return (
-    <Show when={loaded()} fallback={<p>Loading {props.view.plugin}…</p>}>
+    <Show
+      when={loaded()}
+      fallback={
+        <span class="m-auto text-ink-3">
+          <StatusIcon status="running" label={`Loading ${props.view.title}`} />
+        </span>
+      }
+    >
       {(exports) => {
         const component = exports()[props.view.id];
         if (

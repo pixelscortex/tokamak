@@ -18,6 +18,7 @@ export const buttonVariants = tv({
     "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-sm",
     "text-row font-medium whitespace-nowrap select-none transition duration-200 focus-ring",
     "disabled:cursor-default disabled:opacity-50 data-disabled:cursor-default data-disabled:opacity-50",
+    "aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent",
     "data-pending:cursor-progress",
   ],
   variants: {
