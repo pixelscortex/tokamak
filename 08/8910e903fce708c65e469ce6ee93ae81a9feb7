@@ -1,0 +1,23 @@
+app/src/shell/palette.tsx
+  s_452c1eccf4600a::t_097d7df3db029e 1,24-34,53-55
+  s_452c1eccf4600a::t_1ca043ca82667e 21-23,47-52,56
+  s_452c1eccf4600a::t_3adda2df71407e 57
+e2e/browser/app.spec.ts
+  s_452c1eccf4600a::t_47728cfe7aba4a 112-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "088910e903fce708c65e469ce6ee93ae81a9feb7",
+  "prompts": {},
+  "sessions": {
+    "s_452c1eccf4600a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb2f508c-f8d9-4ebf-a7d7-49b7340a3952",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
