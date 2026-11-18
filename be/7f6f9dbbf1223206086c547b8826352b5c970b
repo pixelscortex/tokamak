@@ -1,0 +1,23 @@
+packages/build/src/client-surface.ts
+  s_776a0593f37b8e::t_27478fe0e21195 19-20,60
+packages/build/src/ui-build-config.ts
+  s_776a0593f37b8e::t_27478fe0e21195 37,42-43
+packages/build/src/vite.ts
+  s_776a0593f37b8e::t_27478fe0e21195 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be7f6f9dbbf1223206086c547b8826352b5c970b",
+  "prompts": {},
+  "sessions": {
+    "s_776a0593f37b8e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eeb9-9f42-7bd0-b518-bc2bdc1dc16a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
