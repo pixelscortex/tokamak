@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_9789f6f09d1159::t_8f7ca5e7b8aee0 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8b132b6cc6d304d0d357f10b76ccfcfb0ccaf8d",
+  "prompts": {},
+  "sessions": {
+    "s_9789f6f09d1159": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ef1c-9247-7f81-b7c7-70253ce986c3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

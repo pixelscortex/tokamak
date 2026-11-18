@@ -1,0 +1,30 @@
+.ci/windows-cache-inputs.mjs
+  s_9789f6f09d1159::t_b6f5a1186d59ce 1-38
+.ci/README.md
+  s_9789f6f09d1159::t_ee346e3fdccf81 29,32,35-48,55-57,63-68
+  s_9789f6f09d1159::t_5d2154628c011c 49-54,58-62
+.github/workflows/ci.yml
+  s_9789f6f09d1159::t_b6f5a1186d59ce 130
+  s_9789f6f09d1159::t_67807f5859a261 131-134
+.ci/windows-cache-inputs.test.ts
+  s_9789f6f09d1159::t_b6f5a1186d59ce 1-31
+.ci/setup/action.yml
+  s_9789f6f09d1159::t_2f3837a13be3b8 120
+  s_9789f6f09d1159::t_5d2154628c011c 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aba1e0c7b7a71fee184c5708cdb67f9e8ecf3382",
+  "prompts": {},
+  "sessions": {
+    "s_9789f6f09d1159": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ef1c-9247-7f81-b7c7-70253ce986c3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
