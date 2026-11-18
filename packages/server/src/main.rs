@@ -187,6 +187,8 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             "--plugins" => plugins = Some(PathBuf::from(value)),
             "--local-dir" => {
                 local = Some(PathBuf::from(value));
+                // A local server picks a free loopback port unless a later --listen names one.
+                listen = Some("127.0.0.1:0".parse()?);
             }
             "--workers" => javascript.workers = value.parse()?,
             "--queue" => javascript.queue_capacity = value.parse()?,
@@ -199,9 +201,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     if local.is_some() && web.is_some() {
         return Err("--web cannot be combined with --local-dir".into());
     }
-    let listen = if local.is_some() {
-        "127.0.0.1:0".parse()?
-    } else if let Some(listen) = listen {
+    let listen = if let Some(listen) = listen {
         listen
     } else if let Ok(port) = std::env::var("PORT") {
         SocketAddr::from(([0, 0, 0, 0], port.parse::<u16>()?))
