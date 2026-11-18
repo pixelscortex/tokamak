@@ -1,0 +1,23 @@
+packages/sdk/tools/bundle.mjs
+  s_776a0593f37b8e::t_3febca4101ef2c 6,172,176
+packages/sdk/tools/plugin-boundary.mjs
+  s_776a0593f37b8e::t_12bdd6187dd3e4 18-21
+packages/sdk/tools/worker.mjs
+  s_776a0593f37b8e::t_0a82ea1e7ef6e1 4,63-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31258e72712f53c6d79db844453e8bf369d6dda6",
+  "prompts": {},
+  "sessions": {
+    "s_776a0593f37b8e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eeb9-9f42-7bd0-b518-bc2bdc1dc16a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
