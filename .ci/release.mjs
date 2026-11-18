@@ -1,4 +1,4 @@
-// Shared by Depot CI and Actions. Only a complete, verified main commit replaces
+// Shared by the CI workflows. Only a complete, verified main commit replaces
 // the published nightly; per-commit drafts prevent mixed-platform releases.
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
