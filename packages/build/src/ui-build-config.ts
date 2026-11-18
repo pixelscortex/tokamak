@@ -1,4 +1,4 @@
-import type { UserConfig } from "vite";
+import { normalizePath, type UserConfig } from "vite";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { compileCss } from "./css.ts";
@@ -34,13 +34,13 @@ export function clientAssets(root: () => string): import("vite").Plugin {
     enforce: "post",
     async load(id) {
       const css = resolve(dirname(clientEntry(root())), "styles.css");
-      if (id === css) return compileCss(css);
+      if (normalizePath(id) === normalizePath(css)) return compileCss(css);
     },
     transform(code, id) {
       const entry = clientEntry(root());
       const css = resolve(dirname(entry), "styles.css");
-      if (id === entry && existsSync(css))
-        return { code: `${code}\nimport ${JSON.stringify(css)};`, map: null };
+      if (normalizePath(id) === normalizePath(entry) && existsSync(css))
+        return { code: `${code}\nimport ${JSON.stringify(normalizePath(css))};`, map: null };
     },
   };
 }

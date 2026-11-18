@@ -91,6 +91,36 @@ jobs:
       - run: proto run bun -- run --cwd app tauri build --no-sign
       - if: always()
         run: sccache --show-stats
+  desktop-windows:
+    # Remove continue-on-error after Windows builds and installed-app smoke checks are reliable.
+    continue-on-error: true
+    # https://depot.dev/docs/github-actions/runner-types#windows-runners
+    runs-on: depot-windows-2025
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: "2"
+      RAYON_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
+        with:
+          fetch-depth: 0
+      - uses: ./.ci/setup
+      # Build only: Windows test suites are intentionally outside this job's scope.
+      - name: Build unsigned Windows installer
+        run: proto run bun -- run --cwd app tauri build --no-sign --bundles nsis
+      - name: Smoke check server build identity
+        shell: pwsh
+        run: |
+          $id = & ./target/release/tokamak.exe --build-id
+          if ($LASTEXITCODE -ne 0 -or $id -cnotmatch '^[0-9a-f]{64}$') {
+            throw 'Server did not print a 64-character build identity'
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-windows-x64
+          path: target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 7
   release:
     # Manual only for now: running this workflow by hand on main builds server release artifacts.
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'

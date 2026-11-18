@@ -17,6 +17,7 @@ runs:
           ~/.cargo/bin
         key: tools-v2-${{ inputs.native }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.prototools', 'rust-toolchain.toml') }}
     - name: Install proto
+      if: runner.os != 'Windows'
       shell: bash
       run: |
         set -euo pipefail
@@ -38,6 +39,27 @@ runs:
           tar -xJf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/proto" --strip-components=1
           cp "$RUNNER_TEMP/proto/proto" "$RUNNER_TEMP/proto/proto-shim" "$HOME/.proto/bin/"
         fi
+    - name: Install proto on Windows
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        "$HOME/.proto/bin" >> $env:GITHUB_PATH
+        "$HOME/.proto/shims" >> $env:GITHUB_PATH
+        if (!(Test-Path "$HOME/.proto/bin/proto.exe")) {
+          $asset = 'proto_cli-x86_64-pc-windows-msvc.zip'
+          $url = 'https://github.com/moonrepo/proto/releases/download/v0.62.3'
+          Invoke-WebRequest "$url/$asset" -OutFile "$env:RUNNER_TEMP/$asset"
+          Invoke-WebRequest "$url/$asset.sha256" -OutFile "$env:RUNNER_TEMP/$asset.sha256"
+          $expected = (Get-Content "$env:RUNNER_TEMP/$asset.sha256").Split()[0]
+          if ((Get-FileHash "$env:RUNNER_TEMP/$asset" -Algorithm SHA256).Hash -ne $expected) {
+            throw 'proto checksum mismatch'
+          }
+          Expand-Archive "$env:RUNNER_TEMP/$asset" "$env:RUNNER_TEMP/proto"
+          New-Item -ItemType Directory -Force "$HOME/.proto/bin" | Out-Null
+          Get-ChildItem "$env:RUNNER_TEMP/proto" -Recurse -Filter '*.exe' |
+            Copy-Item -Destination "$HOME/.proto/bin"
+        }
     - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       id: deps
       with:
@@ -48,6 +70,7 @@ runs:
         key: deps-v2-${{ inputs.native }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Cargo.lock') }}
         restore-keys: deps-v2-${{ inputs.native }}-${{ runner.os }}-${{ runner.arch }}-
     - name: Install pinned toolchains and dependencies
+      if: runner.os != 'Windows'
       shell: bash
       run: |
         set -euo pipefail
@@ -76,7 +99,27 @@ runs:
           echo 'RUSTC_WRAPPER=sccache' >> "$GITHUB_ENV"
           echo 'CARGO_INCREMENTAL=0' >> "$GITHUB_ENV"
         fi
-    - if: inputs.native == 'true'
+    - name: Install pinned Windows toolchains and dependencies
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        proto install moon
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+        proto install bun
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+        proto install rust
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+        if ('${{ inputs.native }}' -eq 'true') {
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          'CARGO_INCREMENTAL=0' >> $env:GITHUB_ENV
+        }
+        proto run bun -- install --frozen-lockfile
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    # Depot's Windows Actions cache endpoint rejects sccache writes. Keep the
+    # working tool/dependency caches there without an ineffective compiler cache.
+    - if: inputs.native == 'true' && runner.os != 'Windows'
       uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
       with:
         version: v0.19.0

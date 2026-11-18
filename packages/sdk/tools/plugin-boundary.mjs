@@ -15,7 +15,10 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 import { isServerModule, isServerRoot } from "./server-files.mjs";
 
 const specifier = /^plugin:([^/]+)(?:\/(server|client))?$/;
-const inside = (root, file) => file === root || file.startsWith(root + sep);
+const inside = (root, file) => {
+  const local = relative(root, file);
+  return local === "" || (!isAbsolute(local) && local !== ".." && !local.startsWith(".." + sep));
+};
 const canonical = (file) => (existsSync(file) ? realpathSync(file) : resolve(file));
 const server = (root) => resolve(root, existsSync(resolve(root, "src/server")) ? "src/server" : "backend");
 const generated = (root) => resolve(root, ".tokamak/types");
