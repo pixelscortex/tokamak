@@ -1,6 +1,5 @@
 import { createApi, TokamakClient, WebSocketTransport, type FunctionReference } from "@tokamak/sdk";
 import type { ChatMachine, RemoteChat } from "@tokamak/sdk/client";
-import { isTauri } from "@tauri-apps/api/core";
 import type { Endpoint } from "./endpoint";
 
 type Action<A, R> = FunctionReference<"action", A, R>;
@@ -18,7 +17,7 @@ const chat = createApi<{
 }>("chat");
 
 export function remoteChat(hub: Endpoint, local?: () => Promise<Endpoint>): RemoteChat {
-  if (!local || !hub.token || (isTauri() && /Windows/i.test(navigator.userAgent))) return { hub: hub.http };
+  if (!local || !hub.token) return { hub: hub.http };
   const token = hub.token;
   async function onMachine<T>(run: (client: TokamakClient) => Promise<T>): Promise<T> {
     let endpoint: Endpoint;
