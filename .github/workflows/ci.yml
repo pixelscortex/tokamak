@@ -12,6 +12,7 @@ permissions:
   contents: read
 jobs:
   typescript:
+    if: github.ref != 'refs/heads/ci/windows-cache'
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -23,6 +24,7 @@ jobs:
           native: "false"
       - run: moon run workspace:ci-ts --summary detailed
   rust-lint:
+    if: github.ref != 'refs/heads/ci/windows-cache'
     # Compile-only validation runs beside TS, sharing native's Depot/sccache caches.
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
@@ -42,6 +44,7 @@ jobs:
       - if: always()
         run: sccache --show-stats
   native:
+    if: github.ref != 'refs/heads/ci/windows-cache'
     needs: [typescript, rust-lint]
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 60
@@ -77,7 +80,7 @@ jobs:
   desktop:
     # The unsigned macOS Tauri bundle. Like the Windows installer, it is built
     # for main (and by hand) only, so pull requests are not held up by it.
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref != 'refs/heads/ci/windows-cache'
     runs-on: depot-macos-latest
     timeout-minutes: 60
     env:
@@ -94,22 +97,36 @@ jobs:
       - if: always()
         run: sccache --show-stats
   desktop-windows:
-    # The installer takes about 20 minutes to build, so it is built for main
-    # (and by hand) only, not for every pull request.
+    # Build the unsigned installer for main and manual runs only.
     if: github.event_name != 'pull_request'
     # Remove continue-on-error after Windows builds and installed-app smoke checks are reliable.
     continue-on-error: true
     # https://depot.dev/docs/github-actions/runner-types#windows-runners
     runs-on: depot-windows-2025
     timeout-minutes: 60
-    env:
-      CARGO_BUILD_JOBS: "2"
-      RAYON_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
         with:
           fetch-depth: 0
       - uses: ./.ci/setup
+      - name: Configure Windows build parallelism
+        shell: pwsh
+        run: |
+          $cpus = [Environment]::ProcessorCount
+          Write-Output "Windows runner logical CPUs: $cpus"
+          "CARGO_BUILD_JOBS=$cpus" >> $env:GITHUB_ENV
+          "RAYON_NUM_THREADS=$cpus" >> $env:GITHUB_ENV
+      # Reuse linking and build scripts too; sccache cannot cache Rust binaries.
+      - name: Restore Windows release build
+        id: windows-release
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            target/release
+            !target/release/bundle
+            !target/release/incremental
+          key: windows-release-v1-${{ runner.arch }}-x86_64-pc-windows-msvc-${{ hashFiles('.prototools', 'rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', '.cargo/config*') }}-${{ github.sha }}
+          restore-keys: windows-release-v1-${{ runner.arch }}-x86_64-pc-windows-msvc-${{ hashFiles('.prototools', 'rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', '.cargo/config*') }}-
       # Build only: Windows test suites are intentionally outside this job's scope.
       - name: Build unsigned Windows installer
         run: proto run bun -- run --cwd app tauri build --no-sign --bundles nsis
@@ -120,6 +137,15 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $id -cnotmatch '^[0-9a-f]{64}$') {
             throw 'Server did not print a 64-character build identity'
           }
+      - name: Save Windows release build
+        if: steps.windows-release.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            target/release
+            !target/release/bundle
+            !target/release/incremental
+          key: ${{ steps.windows-release.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-windows-x64
