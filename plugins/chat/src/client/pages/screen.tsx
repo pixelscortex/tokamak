@@ -35,6 +35,7 @@ export const Chat = view({ route: "/", icon: chatIcon }, () => {
   onCleanup(() => clearTimeout(noteTimer));
 
   async function newThread() {
+    setPickerOpen(false);
     if (!(await chat.createThread())) return;
     if (!router.location().pathname.startsWith("/p/chat")) router.navigate("/p/chat");
     requestAnimationFrame(() => editor.focus());
@@ -162,17 +163,19 @@ function ThreadPane(props: {
   });
 
   const placeholder = () =>
-    chat.remote
-      ? chat.agent()
-        ? `Ask ${agentName()}`
-        : "Write a message"
-      : chat.noAgents()
-        ? "No agents found"
-        : pending()
-          ? `Or tell ${agentName()} what to do instead`
-          : running()
-            ? "Queue a follow-up"
-            : `Ask ${agentName()}`;
+    !chat.threadReady(props.threadId)
+      ? "Opening chat…"
+      : chat.remote
+        ? chat.agent()
+          ? `Ask ${agentName()}`
+          : "Write a message"
+        : chat.noAgents()
+          ? "No agents found"
+          : pending()
+            ? `Or tell ${agentName()} what to do instead`
+            : running()
+              ? "Queue a follow-up"
+              : `Ask ${agentName()}`;
 
   return (
     <div class="flex min-h-0 flex-1 flex-col" onKeyDown={keys}>
@@ -254,13 +257,18 @@ function ThreadPane(props: {
                           : !chat.noAgents()
                       }
                     >
-                      <AgentPicker chat={chat} open={props.pickerOpen} onOpenChange={props.onPickerOpen} />
+                      <AgentPicker
+                        chat={chat}
+                        threadId={props.threadId}
+                        open={props.pickerOpen}
+                        onOpenChange={props.onPickerOpen}
+                      />
                     </Show>
                   }
                 />
               }
               placeholder={placeholder()}
-              disabled={chat.creating() || (!chat.remote && chat.noAgents())}
+              disabled={!chat.threadReady(props.threadId) || (!chat.remote && chat.noAgents())}
               queued={drafts.queued()}
               onUnqueue={() => drafts.unqueue()}
               onEdit={(text) => {

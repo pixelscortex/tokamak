@@ -98,6 +98,10 @@ export function useDrafts(chat: ChatState) {
     const threadId = key();
     if (chat.creating() || !threadId || !text.trim()) return;
     if (chat.remote) {
+      if (!chat.threadReady(threadId as Id<"threads">)) {
+        chat.setError("Wait for the chat to finish opening before sending.");
+        return;
+      }
       const attempt = kept.attempts.get(attemptKey(threadId));
       if (attempt?.pending && attempt.text === text) return;
     }

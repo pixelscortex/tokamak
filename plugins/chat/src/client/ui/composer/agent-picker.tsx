@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import type { Id } from "@tokamak/sdk";
 import { Button, Dialog, Icon, Menu, Textarea, icons } from "@tokamak/ui";
 import { folderName, folderOf, optionAgent, type Backend, type BackendOption } from "../../lib/agents";
 import { glyphs } from "../../lib/icons";
@@ -13,6 +14,7 @@ const FOLDER = "folder";
 /** The agent and its folder, in the composer strip: a menu of agents and "Change folder…". */
 export function AgentPicker(props: {
   chat: ChatState;
+  threadId: Id<"threads">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
@@ -22,10 +24,11 @@ export function AgentPicker(props: {
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const agent = () => props.chat.agent();
   const backend = () => props.chat.backend() as Backend | undefined;
+  const disabled = () => !props.chat.threadReady(props.threadId);
 
   async function save(choice: { plugin: string; backendId: string }, path: string) {
     const thread = props.chat.thread();
-    if (!thread || saving()) return "busy";
+    if (!thread || disabled() || saving()) return "busy";
     setSaving(true);
     setError(undefined);
     try {
@@ -54,6 +57,7 @@ export function AgentPicker(props: {
   }
 
   function choose(value: string) {
+    if (disabled()) return;
     if (value === FOLDER) {
       setFolder(agent()?.folder ?? (props.chat.remote ? "" : lastFolder));
       setError(undefined);
@@ -62,9 +66,10 @@ export function AgentPicker(props: {
     }
     const option = props.chat.backends()?.find((item) => `${item.plugin}/${item.id}` === value);
     if (props.chat.remote) {
-      const id = props.chat.threadId();
-      if (id && (option || value === "message"))
-        void props.chat.setMachineAgent(id, option?.id).catch((error) => props.chat.setError(String(error)));
+      if (option || value === "message")
+        void props.chat
+          .setMachineAgent(props.threadId, option?.id)
+          .catch((error) => props.chat.setError(String(error)));
       return;
     }
     if (!option) return;
@@ -89,11 +94,16 @@ export function AgentPicker(props: {
   return (
     <>
       <Menu.Root
-        open={props.open}
+        open={props.open && !disabled()}
         onOpenChange={props.onOpenChange}
         onAction={(value) => choose(String(value))}
       >
-        <Menu.Trigger variant="ghost" class="-ms-2 min-w-0" aria-label="Agent and folder">
+        <Menu.Trigger
+          variant="ghost"
+          class="-ms-2 min-w-0"
+          aria-label="Agent and folder"
+          disabled={disabled()}
+        >
           <span class="flex min-w-0 items-center gap-2">
             <Show when={agent()}>
               {(current) => <Icon path={current().mark} size={12} class="text-ink" />}

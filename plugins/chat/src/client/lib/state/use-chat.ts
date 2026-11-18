@@ -91,6 +91,8 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
   if (!remote) useRunRecovery(client, () => Boolean(running.data()?.length), setError);
 
   const thread = createMemo(() => threads.data()?.find((item) => item._id === threadId()));
+  const threadReady = (id = threadId()) =>
+    Boolean(id && !creating() && threadId() === id && thread()?._id === id && (!remote?.machine || userId()));
   const active = () => runs()[threadId() ?? ""] ?? null;
   const currentRuns = () => (running.data() ?? []).filter((run) => run.threadId === threadId());
   const key = (id: Id<"threads">) => `chat:machine:${JSON.stringify([remote?.hub, userId(), id])}`;
@@ -112,6 +114,7 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
 
   async function setMachineAgent(id: Id<"threads">, backendId?: string, path?: string) {
     if (!remote?.machine || !userId()) throw new Error("This computer has no agent connection yet.");
+    if (!threadReady(id)) throw new Error("Wait for the chat to finish opening before choosing an agent.");
     const k = key(id);
     if (!backendId) localStorage.removeItem(k);
     else {
@@ -151,6 +154,7 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
     threads,
     threadId,
     thread,
+    threadReady,
     agent,
     open,
     runs,

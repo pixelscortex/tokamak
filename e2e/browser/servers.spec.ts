@@ -6,26 +6,32 @@ const flow = (page: Page) => page.getByRole("region", { name: "Add a server" });
 
 test("retry a lost local reply on a chat-only hub without starting another turn", async ({ page }) => {
   const requestIds: string[] = [];
-  await page.routeWebSocket(
-    (url) => url.host === "127.0.0.1:43123",
-    (socket) => {
-      const server = socket.connectToServer();
-      let dropResponse: number | undefined;
-      socket.onMessage((payload) => {
-        const request = JSON.parse(String(payload));
-        if (request.type === "action" && request.name === "acp/relay:relayTurn") {
+  let holdCreate = false;
+  let releaseCreate: (() => void) | undefined;
+  await page.routeWebSocket("**", (socket) => {
+    const host = new URL(socket.url()).host;
+    const server = socket.connectToServer();
+    let dropResponse: number | undefined;
+    let holdResponse: number | undefined;
+    socket.onMessage((payload) => {
+      const request = JSON.parse(String(payload));
+      if (request.type === "action") {
+        if (host === "127.0.0.1:43123" && request.name === "acp/relay:relayTurn") {
           requestIds.push(request.args.requestId);
           if (requestIds.length === 1) dropResponse = request.id;
         }
-        server.send(payload);
-      });
-      server.onMessage((payload) => {
-        const event = JSON.parse(String(payload));
-        if (event.type === "response" && event.id === dropResponse) void socket.close();
-        else socket.send(payload);
-      });
-    },
-  );
+        if (host === "127.0.0.1:43124" && holdCreate && request.name === "chat/threads:create")
+          holdResponse = request.id;
+      }
+      server.send(payload);
+    });
+    server.onMessage((payload) => {
+      const event = JSON.parse(String(payload));
+      if (event.type === "response" && event.id === holdResponse) releaseCreate = () => socket.send(payload);
+      else if (event.type === "response" && event.id === dropResponse) void socket.close();
+      else socket.send(payload);
+    });
+  });
   await page.goto("/p/integration-fixture");
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
 
@@ -61,10 +67,24 @@ test("retry a lost local reply on a chat-only hub without starting another turn"
     .getByRole("navigation", { name: "Views" })
     .getByRole("link", { name: "Chat", exact: true })
     .click();
+  const chat = page.getByRole("region", { name: "Chat", exact: true });
+  const editor = chat.getByRole("textbox", { name: "Message" });
+  const picker = chat.getByRole("button", { name: "Message only", exact: true });
+  await expect(editor).toBeEnabled();
+  const previousThread = (await chat.getAttribute("data-thread-id"))!;
+  holdCreate = true;
   await page.getByRole("button", { name: /New chat/ }).click();
-  await page.getByRole("button", { name: "Message only", exact: true }).click();
+  await expect.poll(() => Boolean(releaseCreate)).toBe(true);
+  await expect(chat).toHaveAttribute("data-thread-id", previousThread);
+  await expect(editor).toBeDisabled();
+  await expect(picker).toBeDisabled();
+  holdCreate = false;
+  releaseCreate!();
+  await expect(chat).not.toHaveAttribute("data-thread-id", previousThread);
+  await expect(editor).toBeEnabled();
+  await picker.click();
   await page.getByRole("menuitem", { name: "Claude", exact: true }).click();
-  const editor = page.getByRole("textbox", { name: "Message" });
+  await expect(chat.getByRole("button", { name: /^Claude(?:\s|$)/ })).toBeVisible();
   await expect(editor).toHaveAttribute("placeholder", "Ask Claude");
   const prompt = "Describe the workspace from my computer";
   await editor.fill(prompt);
