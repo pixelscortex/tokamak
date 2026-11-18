@@ -1,0 +1,36 @@
+app/src-tauri/tauri.windows.conf.json
+  s_776a0593f37b8e::t_18bec3a690aff2 1-7
+packages/server/src/host/worker/mod.rs
+  s_776a0593f37b8e::t_389e5138b61773 99,223-227
+  s_776a0593f37b8e::t_f484d3f55a74b5 96-98
+.ci/README.md
+  s_776a0593f37b8e::t_9ca35c69d1849a 25-48
+.ci/setup/action.yml
+  s_776a0593f37b8e::t_9fd432a9f34d8b 20,42-62,73,102-121
+.github/workflows/ci.yml
+  s_776a0593f37b8e::t_5cf8f65fa73cda 93-124
+app/scripts/prepare-host.ts
+  s_776a0593f37b8e::t_832da55530a377 23-27
+packages/build/src/client-surface.ts
+  s_776a0593f37b8e::t_eaad57b395fb3f 6,19,58-59
+packages/build/src/ui-build-config.ts
+  s_776a0593f37b8e::t_7a6676db1c2b4e 1,37,42
+packages/build/src/vite.ts
+  s_776a0593f37b8e::t_ff17284054b31e 1,67-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ded17a874930a1b4cdafbee847dd8a1812e7d9ff",
+  "prompts": {},
+  "sessions": {
+    "s_776a0593f37b8e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eeb9-9f42-7bd0-b518-bc2bdc1dc16a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
