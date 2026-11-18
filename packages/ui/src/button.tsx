@@ -23,7 +23,13 @@ export const buttonVariants = tv({
   ],
   variants: {
     variant: {
-      brand: "key from-brand to-brand/85 text-brand-ink",
+      // The white label is 4.7:1 on the dark brand fill and brightening drops it to
+      // 4.1, so hover fills the top to full brand instead of brightening. Press keeps
+      // the key's darkening, restated so it wins over the hover reset.
+      brand: [
+        "key from-brand to-brand/85 text-brand-ink",
+        "hover:to-brand hover:brightness-100 active:brightness-90",
+      ],
       primary: "key from-ink to-ink/85 text-stage light:hover:brightness-150",
       destructive: "key from-removed to-removed/85 text-stage",
       outline: [

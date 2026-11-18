@@ -29,9 +29,12 @@
   --color-removed-tint: oklch(22.7% 0.036 20.3);
   --color-warn-tint: oklch(25.35% 0.032 82.4);
   --color-info-tint: oklch(23.98% 0.048 259.9);
-  --color-brand: oklch(71.15% 0.155 303.8);
-  --color-brand-ink: oklch(13.76% 0.06 303.3);
-  --color-brand-tint: oklch(22.86% 0.06 304.4);
+  /* brand fills the brand button; brand-text is the lighter shade for brand text,
+     links and the focus ring, since brand itself is under 4.5 on the dark tones. */
+  --color-brand: oklch(58.7% 0.243 300.9);
+  --color-brand-text: oklch(66.04% 0.201 302.3);
+  --color-brand-ink: oklch(100% 0 0);
+  --color-brand-tint: oklch(26.42% 0.052 305.3);
   --color-edge: oklch(92.49% 0 0 / 0.12);
   --color-edge-strong: oklch(92.49% 0 0 / 0.4);
   --color-lip: oklch(14.08% 0.004 285.8 / 0.5);
@@ -187,10 +190,10 @@
   --tk-inner: max(0px, --value(--radius-*) - --modifier(--spacing-*));
 }
 
-/* Keyboard focus: a 2 px brand ring with a 2 px gap. */
+/* Keyboard focus: a 2 px brand-text ring with a 2 px gap. */
 @utility focus-ring {
   &:is(:focus-visible, [data-preview~="focus"]) {
-    outline: 2px solid var(--color-brand);
+    outline: 2px solid var(--color-brand-text);
     outline-offset: 2px;
   }
 }
@@ -223,7 +226,7 @@
 }
 
 @utility link {
-  color: var(--color-brand);
+  color: var(--color-brand-text);
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
@@ -263,9 +266,10 @@
     --color-removed-tint: oklch(95.66% 0.018 17.5);
     --color-warn-tint: oklch(96.92% 0.031 86.5);
     --color-info-tint: oklch(95.67% 0.019 263);
-    --color-brand: oklch(52.27% 0.211 297.3);
+    --color-brand: oklch(49% 0.24 300.8);
+    --color-brand-text: oklch(49% 0.24 300.8);
     --color-brand-ink: oklch(100% 0 0);
-    --color-brand-tint: oklch(95.03% 0.03 305.1);
+    --color-brand-tint: oklch(95.56% 0.02 308.2);
     --color-edge: oklch(20.46% 0 0 / 0.12);
     --color-edge-strong: oklch(20.46% 0 0 / 0.5);
     --color-lip: oklch(14.08% 0.004 285.8 / 0.4);
@@ -274,7 +278,7 @@
     --tk-key-side: 1px;
   }
   :focus-visible {
-    outline: 2px solid var(--color-brand);
+    outline: 2px solid var(--color-brand-text);
     outline-offset: 2px;
   }
   :focus:not(:focus-visible) {

@@ -53,9 +53,11 @@ export function Tones(): JSX.Element {
         <span class="rounded-sm bg-brand px-3 py-1 text-row font-medium text-brand-ink">
           brand / brand-ink
         </span>
-        <span class="rounded-sm bg-brand-tint px-3 py-1 text-row text-brand">brand on brand-tint</span>
-        <a href="#kit" class="text-row text-brand underline">
-          A link is brand, underlined
+        <span class="rounded-sm bg-brand-tint px-3 py-1 text-row text-brand-text">
+          brand-text on brand-tint
+        </span>
+        <a href="#kit" class="text-row link">
+          A link is brand-text, underlined
         </a>
       </div>
       <Measured />
@@ -71,8 +73,8 @@ function measure(root: Element): Pair[] {
     pairs.push({ fg, bg, need, ratio: tokenContrast(root, fg, bg) });
   for (const ink of inks) for (const surface of surfaces) add(ink, surface, 4.5);
   for (const name of semantic) for (const bg of ["stage", "card", "band", `${name}-tint`]) add(name, bg, 4.5);
-  for (const surface of surfaces) add("brand", surface, 4.5);
-  add("brand", "brand-tint", 4.5);
+  for (const surface of surfaces) add("brand-text", surface, 4.5);
+  add("brand-text", "brand-tint", 4.5);
   add("brand-ink", "brand", 4.5);
   add("stage", "ink", 4.5);
   add("stage", "removed", 4.5);
@@ -87,8 +89,8 @@ function Measured(): JSX.Element {
       ref={(element) => requestAnimationFrame(() => setPairs(measure(element)))}
     >
       <Caption>
-        Measured in this page. Text needs 4.5. The focus ring is brand, so the brand rows also cover it (it
-        needs 3).
+        Measured in this page. Text needs 4.5. The focus ring is brand-text, so the brand-text rows also cover
+        it (it needs 3).
       </Caption>
       <div class="grid grid-cols-3 gap-x-4">
         <For each={pairs()}>
