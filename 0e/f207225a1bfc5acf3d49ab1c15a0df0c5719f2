@@ -1,0 +1,28 @@
+.github/workflows/ci.yml
+  s_0e92c3a8ca720e::t_db5a7ba6661eee 75-94
+  s_0e92c3a8ca720e::t_d2655ccb2c5fb8 60
+.ci/README.md
+  s_0e92c3a8ca720e::t_faf37554fe3333 19-20
+  s_0e92c3a8ca720e::t_adf80f124f7df4 95-102
+  s_0e92c3a8ca720e::t_524af0e211307d 90-93
+  s_0e92c3a8ca720e::t_bff9eddaf2df34 88-89
+  s_0e92c3a8ca720e::t_cf8733293dd377 46
+  s_0e92c3a8ca720e::t_28650136127514 47
+  s_0e92c3a8ca720e::t_8584974fa3c8c3 16-18,94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ef207225a1bfc5acf3d49ab1c15a0df0c5719f2",
+  "prompts": {},
+  "sessions": {
+    "s_0e92c3a8ca720e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "48887696-7c5b-4e46-94a0-6a95e2c25188",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
