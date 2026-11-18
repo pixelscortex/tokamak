@@ -4,7 +4,28 @@ import { test, expect, type Page } from "@playwright/test";
 const footer = (page: Page) => page.getByRole("status", { name: "Connection status" });
 const flow = (page: Page) => page.getByRole("region", { name: "Add a server" });
 
-test("add a chat-only hub, run a local agent there, and switch servers", async ({ page }) => {
+test("retry a lost local reply on a chat-only hub without starting another turn", async ({ page }) => {
+  const requestIds: string[] = [];
+  await page.routeWebSocket(
+    (url) => url.host === "127.0.0.1:43123",
+    (socket) => {
+      const server = socket.connectToServer();
+      let dropResponse: number | undefined;
+      socket.onMessage((payload) => {
+        const request = JSON.parse(String(payload));
+        if (request.type === "action" && request.name === "acp/relay:relayTurn") {
+          requestIds.push(request.args.requestId);
+          if (requestIds.length === 1) dropResponse = request.id;
+        }
+        server.send(payload);
+      });
+      server.onMessage((payload) => {
+        const event = JSON.parse(String(payload));
+        if (event.type === "response" && event.id === dropResponse) void socket.close();
+        else socket.send(payload);
+      });
+    },
+  );
   await page.goto("/p/integration-fixture");
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
 
@@ -45,11 +66,19 @@ test("add a chat-only hub, run a local agent there, and switch servers", async (
   await page.getByRole("menuitem", { name: "Claude", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Message" });
   await expect(editor).toHaveAttribute("placeholder", "Ask Claude");
-  await editor.fill("Describe the workspace from my computer");
+  const prompt = "Describe the workspace from my computer";
+  await editor.fill(prompt);
   await editor.press("Enter");
-  await expect(
-    page.getByRole("log", { name: "Conversation" }).getByText(/This is a Tokamak workspace/),
-  ).toBeVisible();
+  const conversation = page.getByRole("log", { name: "Conversation" });
+  await expect(conversation.getByText(/This is a Tokamak workspace/)).toBeVisible();
+  await expect(editor).toHaveValue(prompt);
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect.poll(() => requestIds).toEqual([expect.any(String), expect.any(String)]);
+  expect(requestIds[0]).toBe(requestIds[1]);
+  await expect(conversation.getByText(prompt, { exact: true })).toHaveCount(1);
+  await expect(conversation.getByText(/This is a Tokamak workspace/)).toHaveCount(1);
   await page.getByRole("button", { name: /^Server: 127\.0\.0\.1:43124/ }).click();
   await expect(page.getByRole("menuitem", { name: "This Mac, answering" })).toBeVisible();
   await page.getByRole("menuitem", { name: "Remove this server" }).click();

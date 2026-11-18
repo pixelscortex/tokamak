@@ -122,21 +122,14 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
     changed((value) => value + 1);
   }
 
-  function submit(id: Id<"threads">, text: string) {
-    const current = backend(id);
-    if (!remote) return client.action(api.chat.send, { threadId: id, text });
-    if (!current) return client.mutation(api.messages.post, { threadId: id, text });
-    if (!remote.machine) throw new Error("Agents run from the desktop app on your own computer.");
-    return remote.machine.send({
-      threadId: id,
-      text,
-      backendId: current.backendId,
-      cwd: agentOf(current)?.folder ?? "",
-      requestId: crypto.randomUUID(),
-    });
-  }
+  const stoppable = () =>
+    remote
+      ? currentRuns()
+          .filter((run) => run.ownerId === userId())
+          .sort((a, b) => b.startedAt - a.startedAt)[0]
+      : active();
 
-  async function cancel(runId = active()?.runId) {
+  async function cancel(runId = stoppable()?.runId) {
     if (!runId) return;
     try {
       await client.mutation(api.runs.cancel, { runId });
@@ -151,7 +144,6 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
     userId,
     backend,
     setMachineAgent,
-    submit,
     currentRuns,
     backends: discovery.data,
     backendDiscovery: discovery,
@@ -170,6 +162,6 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
     creating,
     createThread,
     cancel,
-    canStop: () => Boolean(active()),
+    canStop: () => Boolean(stoppable()),
   };
 }

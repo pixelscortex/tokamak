@@ -3,6 +3,7 @@ import type { TokamakClient } from "@tokamak/sdk";
 import { acpScenario, turnTokenScenario } from "./chat-acp-driver";
 import { api } from "./chat/src/server/_generated/api";
 export async function chatScenario(client: TokamakClient, scenario: string) {
+  if (scenario === "chat-review") return reviewScenario(client);
   if (scenario === "chat-turn-token") return turnTokenScenario(client);
   if (scenario === "chat-acp") return acpScenario(client);
   const threadId = await client.action(api.threads.create, {});
@@ -97,7 +98,10 @@ export async function chatScenario(client: TokamakClient, scenario: string) {
     const observe = (sweepId: string, tick: number) => client.mutation(api.runs.observe, { sweepId, tick });
     // Future timestamps model a backward clock jump; sends still refuse busy runs.
     await client.mutation(api.testing.age, { runId: stale.runId, offset: 3_600_000 });
-    await assert.rejects(client.action(api.chat.send, input), /already has an active run/);
+    await assert.rejects(
+      client.mutation(api.send.start, { ...input, token: "fixture-turn-token" }),
+      /already has an active run/,
+    );
     await observe("first", 0);
     await observe("first", 0); // Retried ticks cannot advance the observation.
     await observe("first", 1);
@@ -145,7 +149,10 @@ export async function chatScenario(client: TokamakClient, scenario: string) {
 
     const abandoned = await client.mutation(api.send.start, { ...input, token: "fixture-turn-token" });
     await client.mutation(api.testing.age, { runId: abandoned.runId, offset: -61_000 });
-    await assert.rejects(client.action(api.chat.send, input), /already has an active run/);
+    await assert.rejects(
+      client.mutation(api.send.start, { ...input, token: "fixture-turn-token" }),
+      /already has an active run/,
+    );
     for (let tick = 0; tick < 2; tick++) {
       await observe("client-a", tick);
       await observe("client-b", tick);
@@ -180,4 +187,43 @@ export async function chatScenario(client: TokamakClient, scenario: string) {
   assert.equal(await client.query(api.testing.run, { runId: run.runId }), null);
   await client.mutation(api.threads.remove, { threadId: second });
   assert.deepEqual(await client.query(api.threads.list, {}), []);
+}
+
+async function reviewScenario(client: TokamakClient) {
+  const threadId = await client.action(api.threads.create, {});
+  const thread = { threadId };
+  const list = () => client.query(api.messages.list, thread);
+  await client.mutation(api.testing.seedTranscript, { ...thread, count: 205, size: 0 });
+  const recent = await list();
+  assert.equal(recent.length, 200);
+  assert.deepEqual(recent[0]!.parts, [{ type: "text", text: "5:" }]);
+  assert.deepEqual(recent.at(-1)!.parts, [{ type: "text", text: "204:" }]);
+  await client.mutation(api.testing.seedTranscript, { ...thread, count: 27, size: 12_000 });
+  const bounded = await list();
+  assert.ok(bounded.length > 0 && bounded.length < 27);
+  assert.ok(Buffer.byteLength(JSON.stringify(bounded)) <= 768 * 1024);
+  assert.deepEqual(bounded.at(-1)!.parts, [{ type: "text", text: "26:" + "💬".repeat(12_000) }]);
+  await client.mutation(api.testing.seedTranscript, { ...thread, count: 4, size: 2_500 });
+  const token = "a".repeat(64);
+  const run = await client.mutation(api.send.start, {
+    ...thread,
+    token,
+    text: "owner's request",
+    relay: { backendId: "test", requestId: "bounded-tail" },
+  });
+  assert.ok(run.started);
+  assert.deepEqual(
+    run.history,
+    [1, 2, 3].map((index) => ({
+      role: "user",
+      content: index + ":" + "💬".repeat(2_500),
+      author: { id: "other", name: "Other" },
+    })),
+  );
+  await assert.rejects(
+    client.mutation(api.testing.lateHeartbeat, { runId: run.runId, token }),
+    /Run interrupted/,
+  );
+  assert.equal((await client.query(api.testing.run, { runId: run.runId }))?.sequence, 0);
+  await assert.rejects(client.mutation(api.runs.recover, {}), /unknown function/i);
 }

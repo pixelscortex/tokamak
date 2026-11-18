@@ -6,7 +6,10 @@ import type { Endpoint } from "./endpoint";
 type Action<A, R> = FunctionReference<"action", A, R>;
 const acp = createApi<{
   relay: {
-    relayTurn: Action<Parameters<ChatMachine["send"]>[0] & { hub: { http: string; token: string } }, unknown>;
+    relayTurn: Action<
+      Parameters<ChatMachine["send"]>[0] & { hub: { http: string; token: string } },
+      Awaited<ReturnType<ChatMachine["send"]>>
+    >;
   };
   backend: { configure: Action<{ backendId: string; settings: { cwd: string } }, { cwd: string }> };
 }>("acp");
@@ -59,10 +62,18 @@ export function remoteChat(hub: Endpoint, local?: () => Promise<Endpoint>): Remo
           async (client) =>
             (await client.action(acp.backend.configure, { backendId, settings: { cwd } })).cwd,
         ),
-      send: (args) =>
-        onMachine((client) =>
-          client.action(acp.relay.relayTurn, { ...args, hub: { http: hub.http, token } }),
-        ),
+      async send(args) {
+        let dispatched = false;
+        try {
+          return await onMachine((client) => {
+            dispatched = true;
+            return client.action(acp.relay.relayTurn, { ...args, hub: { http: hub.http, token } });
+          });
+        } catch (error) {
+          if (dispatched) throw error;
+          return { notStarted: String(error) };
+        }
+      },
     },
   };
 }

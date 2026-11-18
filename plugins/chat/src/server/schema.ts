@@ -44,6 +44,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
     heartbeat: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
     observations: v.optional(
       v.array(
         v.object({ sweepId: v.string(), tick: v.number(), heartbeat: v.number(), unchanged: v.number() }),
@@ -53,5 +54,6 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
   })
     .index("by_threadId", ["threadId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
 });

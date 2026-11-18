@@ -120,6 +120,7 @@ export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
         `
 import { v } from "@tokamak/sdk";
 import { mutation, query } from "./_functions";
+import { api } from "./_generated/api";
 // Simulate two prior observations of a now-abandoned permission run.
 export const abandon = mutation({
   args: { runId: v.id("runs") },
@@ -140,6 +141,27 @@ export const run = query({
 export const age = mutation({
   args: { runId: v.id("runs"), offset: v.number() },
   handler: ({ db }, { runId, offset }) => db.patch(runId, { startedAt: Date.now() + offset, updatedAt: Date.now() + offset }),
+});
+export const lateHeartbeat = mutation({
+  args: { runId: v.id("runs"), token: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.runId, { expiresAt: Date.now() - 1 });
+    // Expire and attempt the write in the same transaction, before the sweep can run.
+    return ctx.use(api.send).update({ ...args, sequence: 1, delta: "" });
+  },
+});
+export const seedTranscript = mutation({
+  args: { threadId: v.id("threads"), count: v.number(), size: v.number() },
+  handler: async ({ db }, { threadId, count, size }) => {
+    const latest = await db.query("messages").withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId)).order("desc").first();
+    const start = Math.max(Date.now(), (latest?.createdAt ?? 0) + 1);
+    const body = "💬".repeat(size);
+    for (let i = 0; i < count; i++) await db.insert("messages", {
+      threadId, role: "user", status: "complete", createdAt: start + i,
+      parts: [{ type: "text", text: i + ":" + body }], author: { id: "other", name: "Other" },
+    });
+    return null;
+  },
 });
 `,
       );

@@ -12,6 +12,7 @@ export const running = query({
       runId: run._id,
       threadId: run.threadId,
       waiting: run.waiting ?? false,
+      ownerId: run.owner?.id ?? "local",
       messageId: run.messageId,
       startedAt: run.startedAt,
     }));
@@ -88,14 +89,13 @@ export const observe = mutation({
 
 export const recover = mutation({
   handler: async ({ db }) => {
-    const now = Date.now();
     const runs = await db
       .query("runs")
-      .withIndex("by_status", (q) => q.eq("status", "running"))
-      .collect();
-    for (const run of runs) {
-      if (run.requestId && now - (run.updatedAt ?? run.startedAt) >= 65_000) await interrupt(db, run);
-    }
+      .withIndex("by_status_expiresAt", (q) =>
+        q.eq("status", "running").gt("expiresAt", 0).lte("expiresAt", Date.now()),
+      )
+      .take(32);
+    for (const run of runs) await interrupt(db, run);
     return null;
   },
 });

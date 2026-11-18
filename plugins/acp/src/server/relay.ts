@@ -26,15 +26,21 @@ export const relayTurn = action({
     cwd: v.optional(v.string()),
   },
   handler: async (ctx, { hub, threadId, text, backendId, requestId, cwd: folder }) => {
-    if (ctx.user.id !== "local" || process.platform === "win32")
-      throw new Error("Agents run from the desktop app on your own computer.");
-    const origin = hubOrigin(hub.http);
-    if (!hub.token || hub.token.length > 4096 || /[^\x21-\x7e]/.test(hub.token))
-      throw new Error("Invalid hub access token");
     const agents = new Agents();
-    if (!agents.agents().some((agent) => agent.id === backendId))
-      throw new Error("Agent not found on this computer");
-    const cwd = checkFolder({ path: folder ?? "" });
+    let origin: URL;
+    let cwd: string;
+    try {
+      if (ctx.user.id !== "local" || process.platform === "win32")
+        throw new Error("Agents run from the desktop app on your own computer.");
+      origin = hubOrigin(hub.http);
+      if (!hub.token || hub.token.length > 4096 || /[^\x21-\x7e]/.test(hub.token))
+        throw new Error("Invalid hub access token");
+      if (!agents.agents().some((agent) => agent.id === backendId))
+        throw new Error("Agent not found on this computer");
+      cwd = checkFolder({ path: folder ?? "" });
+    } catch (error) {
+      return { notStarted: String(error) };
+    }
     const connection = hubConnection(origin, hub.token, ctx.signal);
     const call = connection.call;
     try {
@@ -48,7 +54,11 @@ export const relayTurn = action({
             relay: { backendId, requestId },
           }),
         true,
-      );
+      ).catch((error) => {
+        if (error instanceof ActiveRunError) return { notStarted: error.message };
+        throw error;
+      });
+      if ("notStarted" in started) return started;
       if (!started.started) return started;
       const key = createHash("sha256")
         .update(JSON.stringify([origin.origin, threadId, started.owner.id, backendId, cwd]))
@@ -81,7 +91,7 @@ export const relayTurn = action({
         { agent: backendId, cwd, ...(sessionId ? { sessionId } : {}) },
         agents,
         ctx.signal,
-        threadPrompt(started.history, text.trim(), started.owner, started.members),
+        threadPrompt(started.history, text.trim(), started.owner),
       ).catch(() => ({
         runId: started.runId,
         messageId: started.messageId,
@@ -118,6 +128,8 @@ function hubOrigin(input: string) {
 
 // Bun's worker WebSocket accepts headers; the DOM type only declares subprotocols.
 type WorkerSocket = new (url: URL, options: { headers: Record<string, string> }) => WebSocket;
+
+class ActiveRunError extends Error {}
 
 function hubConnection(origin: URL, token: string, signal: ActionSignal | undefined) {
   const url = new URL("/ws", origin);
@@ -161,7 +173,7 @@ function hubConnection(origin: URL, token: string, signal: ActionSignal | undefi
       } catch (error) {
         if (error instanceof RemoteFunctionError) {
           if (error.message.includes("Thread already has an active run"))
-            throw new Error("Thread already has an active run for this agent");
+            throw new ActiveRunError("Thread already has an active run for this agent");
           throw new Error("The hub refused the turn update");
         }
         close();

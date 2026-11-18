@@ -1,13 +1,34 @@
 import { v } from "@tokamak/sdk";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread } from "../_functions";
+import { jsonBytes } from "./parts";
+import { recentMessages } from "./_tail";
+
+const TRANSCRIPT_BYTES = 768 * 1024;
 
 export const list = query({
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
-    return ctx.db
-      .query("messages")
-      .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
-      .collect();
+    const rows = [];
+    let remaining = TRANSCRIPT_BYTES;
+    for await (const message of recentMessages(ctx.db, threadId)) {
+      let row = message;
+      let size = jsonBytes(row) + 1;
+      if (size > TRANSCRIPT_BYTES) {
+        const pending = row.parts.filter((part) => part.type === "permission" && part.status === "pending");
+        row = {
+          ...row,
+          parts: [
+            { type: "text", text: "[Message too large to display]" },
+            ...(jsonBytes(pending) < TRANSCRIPT_BYTES / 2 ? pending : []),
+          ],
+        };
+        size = jsonBytes(row) + 1;
+      }
+      if (size > remaining) break;
+      remaining -= size;
+      rows.push(row);
+    }
+    return rows.reverse();
   },
 });
 

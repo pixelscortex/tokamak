@@ -128,11 +128,7 @@ impl Coordinator {
             }
         }
         self.action_pool = action_pool;
-        self.kinds = candidate
-            .targets
-            .iter()
-            .map(|(name, target)| (name.clone(), target.kind))
-            .collect();
+        self.kinds = candidate.client_kinds();
 
         let mut changed = std::collections::BTreeSet::new();
 

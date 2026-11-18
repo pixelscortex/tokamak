@@ -21,6 +21,10 @@ export function permissionPoller(
       pending.set(part.requestId, Date.now() + TIMEOUT_MS);
     },
     async poll() {
+      if (!pending.size) {
+        if (!(await chat.runIsRunning({ runId }))) throw new Error("Run cancelled");
+        return buffer.maintain();
+      }
       const state = await chat.permissionState({ runId });
       for (const [requestId, deadline] of pending) {
         const part = state.parts.find((part) => part.requestId === requestId);

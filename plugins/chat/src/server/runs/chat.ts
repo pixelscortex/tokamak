@@ -25,14 +25,6 @@ export const send = action({
     if (ctx.user.id !== "local") throw new Error("Agents run from the desktop app on your own computer.");
     const current = (await ctx.runQuery(api.threads.list, {})).find((thread) => thread._id === args.threadId);
     if (!current) throw new Error("Thread no longer exists");
-    const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
-    if (
-      active &&
-      (active.owner?.id ?? "local") === ctx.user.id &&
-      (active.backendId === undefined ||
-        (active.backendId === current.backend?.backendId && active.backendPlugin === current.backend.plugin))
-    )
-      throw new Error("Thread already has an active run");
     const options = await listBackends(ctx);
     if (
       !current.backend ||

@@ -634,6 +634,10 @@ fn chat_stale_runs_recover_without_cancelling_healthy_runs() {
     acceptance("chat-recovery");
 }
 #[test]
+fn chat_bounds_transcripts_and_rejects_late_heartbeats() {
+    acceptance("chat-review");
+}
+#[test]
 fn chat_generic_tool_parts() {
     acceptance("chat-parts");
 }

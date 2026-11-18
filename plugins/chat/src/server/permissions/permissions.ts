@@ -1,5 +1,5 @@
 import { v } from "@tokamak/sdk";
-import { mutation, query, turn } from "../_functions";
+import { expired, mutation, query, turn } from "../_functions";
 import { claimPermission, permissionPart } from "../messages/permission-part";
 
 // Generic backend permission lifecycle; answer is exposed to the desktop.
@@ -24,9 +24,10 @@ export const state = query({
   args: { runId: v.id("runs") },
   handler: async ({ db }, { runId }) => {
     const run = await db.get(runId);
-    const message = run && (await db.get(run.messageId));
+    const running = run?.status === "running" && !expired(run);
+    const message = running ? await db.get(run.messageId) : null;
     return {
-      running: run?.status === "running",
+      running,
       parts: message?.parts.filter((part) => part.type === "permission") ?? [],
     };
   },
@@ -42,7 +43,7 @@ export const answer = mutation({
       .withIndex("by_threadId", (q) => q.eq("threadId", message.threadId))
       .collect();
     const run = runs.find((run) => run.messageId === messageId && run.status === "running");
-    if (!run) throw new Error("Run is no longer active");
+    if (!run || expired(run)) throw new Error("Run is no longer active");
     if ((run.owner?.id ?? message.askedBy?.id ?? "local") !== user.id)
       throw new Error("Only the run owner can answer this permission");
     const part = message.parts.find((part) => part.type === "permission" && part.requestId === requestId);

@@ -65,7 +65,7 @@ export type { FunctionReference, ApiFromModule, ArgsOf, ResultOf } from "./api";
 export { TokamakClient } from "./client";
 export type { ClientTransport, SubscriptionEvent } from "./client";
 export { InProcessTransport, WebSocketTransport, RemoteFunctionError } from "./transport";
-export { boundedThreadHistory, threadPrompt } from "./thread-context";
+export { threadRecordBytes, threadPrompt } from "./thread-context";
 export type { MessageConnection, ClientWebSocket } from "./transport";
 export type { Request, Event } from "./protocol";
 

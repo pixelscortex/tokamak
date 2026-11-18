@@ -1,8 +1,19 @@
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "../messages/parts";
 import { applyToolUpdate } from "../messages/tool-parts";
-import { boundedThreadHistory, v, type Infer } from "@tokamak/sdk";
+import { threadRecordBytes, v, type DatabaseReader, type Infer, type Id } from "@tokamak/sdk";
 import type { Part } from "../messages/parts";
-import { DEFAULT_TITLE, mutation, nonempty, query, thread, turn } from "../_functions";
+import {
+  DEFAULT_TITLE,
+  expired,
+  mutation,
+  nonempty,
+  query,
+  RELAY_LIFETIME_MS,
+  thread,
+  turn,
+  type Model,
+} from "../_functions";
+import { recentMessages } from "../messages/_tail";
 
 export const start = mutation({
   args: {
@@ -38,6 +49,7 @@ export const start = mutation({
     const resumedStart =
       previous &&
       previous.status === "running" &&
+      !expired(previous) &&
       previous.token === token &&
       previous.backendId === backend.backendId;
     if (previous && !resumedStart)
@@ -45,7 +57,7 @@ export const start = mutation({
         started: false as const,
         runId: previous._id,
         messageId: previous.messageId,
-        status: previous.status,
+        status: expired(previous) ? ("error" as const) : previous.status,
       };
     if (
       !resumedStart &&
@@ -60,56 +72,24 @@ export const start = mutation({
       throw new Error("Thread already has an active run for this agent");
     text = nonempty(text);
 
-    const history = await db
-      .query("messages")
-      .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
-      .collect();
-    const priorReply = previous && history.find((message) => message._id === previous.messageId);
-    const before = priorReply
-      ? history.filter((message) => message.createdAt < priorReply.createdAt - 1)
-      : history;
-    const records = before
-      .filter((message) => message.status === "complete")
-      .map((message) => ({
-        role: message.role,
-        content: message.parts
-          .map((part) =>
-            part.type === "text"
-              ? part.text
-              : part.type === "plan"
-                ? `[plan: ${part.entries.map((entry) => entry.content).join("; ")}]`
-                : part.type === "permission"
-                  ? `[permission: ${part.title} (${part.status})]`
-                  : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`,
-          )
-          .join(""),
-        ...(relay ? { author: message.author ?? message.askedBy ?? { id: "unknown", name: "Unknown" } } : {}),
-      }));
-    const historyResult = relay
-      ? boundedThreadHistory(records)
-      : [...records, { role: "user", content: text }];
-    const members = relay
-      ? [
-          ...new Map(
-            before.flatMap((message) => {
-              const author = message.author ?? message.askedBy;
-              return author && author.id !== owner.id ? [[author.id, author.name] as const] : [];
-            }),
-          ).values(),
-        ].slice(0, 64)
-      : [];
+    const priorReply = previous ? await db.get(previous.messageId) : null;
+    const { records, latest } = await historyTail(
+      db,
+      threadId,
+      Boolean(relay),
+      priorReply ? priorReply.createdAt - 1 : undefined,
+    );
     const details = {
       started: true as const,
       backend,
-      history: historyResult,
+      history: relay ? records : [...records, { role: "user", content: text }],
       owner,
-      members,
     };
     if (previous) return { ...details, runId: previous._id, messageId: previous.messageId };
 
     // Milliseconds can tie across consecutive sends. Keep user before assistant
     // and preserve order without relying on randomly generated document IDs.
-    const now = Math.max(Date.now(), (history.at(-1)?.createdAt ?? 0) + 1);
+    const now = Math.max(Date.now(), (latest ?? 0) + 1);
 
     await db.insert("messages", {
       threadId,
@@ -136,12 +116,14 @@ export const start = mutation({
       backendPlugin: backend.plugin,
       backendId: backend.backendId,
       owner,
-      ...(relay ? { requestId: relay.requestId, sequence: 0 } : {}),
+      ...(relay
+        ? { requestId: relay.requestId, sequence: 0, expiresAt: Date.now() + RELAY_LIFETIME_MS }
+        : {}),
       startedAt: Date.now(),
     });
 
     const title =
-      history.length === 0 && current.title === DEFAULT_TITLE
+      latest === undefined && current.title === DEFAULT_TITLE
         ? Array.from(text).slice(0, 80).join("")
         : current.title;
     await db.patch(threadId, { title, updatedAt: Date.now() });
@@ -151,7 +133,10 @@ export const start = mutation({
 
 export const running = query({
   args: { runId: v.id("runs") },
-  handler: async ({ db }, { runId }) => (await db.get(runId))?.status === "running",
+  handler: async ({ db }, { runId }) => {
+    const run = await db.get(runId);
+    return run?.status === "running" && !expired(run);
+  },
 });
 
 export const update = mutation({
@@ -174,6 +159,7 @@ export const update = mutation({
     if (
       prior?.token === token &&
       prior.owner?.id === ctx.user.id &&
+      !expired(prior) &&
       sequence !== undefined &&
       sequence <= (prior.sequence ?? 0)
     )
@@ -183,6 +169,7 @@ export const update = mutation({
     await db.patch(runId, {
       updatedAt: Date.now(),
       heartbeat: (run.heartbeat ?? 0) + 1,
+      ...(run.expiresAt === undefined ? {} : { expiresAt: Date.now() + RELAY_LIFETIME_MS }),
       ...(sequence === undefined ? {} : { sequence }),
     });
     if (![delta, outcome, tool, plan].some(Boolean)) return "running" as const;
@@ -252,4 +239,40 @@ function replacePlan(parts: Part[], plan: Infer<typeof planPart>) {
   const index = parts.findIndex((part) => part.type === "plan");
   if (index < 0) parts.push(plan);
   else parts[index] = plan;
+}
+
+async function historyTail(
+  db: DatabaseReader<Model>,
+  threadId: Id<"threads">,
+  attributed: boolean,
+  before?: number,
+) {
+  const records = [];
+  let latest: number | undefined;
+  let remaining = 32 * 1024;
+  for await (const message of recentMessages(db, threadId, before)) {
+    latest ??= message.createdAt;
+    if (message.status !== "complete") continue;
+    const record = {
+      role: message.role,
+      content: message.parts
+        .map((part) =>
+          part.type === "text"
+            ? part.text
+            : part.type === "plan"
+              ? `[plan: ${part.entries.map((entry) => entry.content).join("; ")}]`
+              : part.type === "permission"
+                ? `[permission: ${part.title} (${part.status})]`
+                : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`,
+        )
+        .join(""),
+      ...(attributed
+        ? { author: message.author ?? message.askedBy ?? { id: "unknown", name: "Unknown" } }
+        : {}),
+    };
+    remaining -= threadRecordBytes(record);
+    if (remaining < 0) break;
+    records.push(record);
+  }
+  return { records: records.reverse(), latest };
 }

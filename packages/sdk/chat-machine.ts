@@ -10,7 +10,7 @@ export interface ChatMachine {
     backendId: string;
     requestId: string;
     cwd: string;
-  }): Promise<unknown>;
+  }): Promise<{ runId: Id<"runs"> } | { notStarted: string }>;
 }
 
 export type RemoteChat = { hub: string; machine?: ChatMachine };

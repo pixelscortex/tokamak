@@ -100,11 +100,7 @@ impl Server {
             }
         };
 
-        let kinds = loaded
-            .targets
-            .iter()
-            .map(|(name, target)| (name.clone(), target.kind))
-            .collect();
+        let kinds = loaded.client_kinds();
         Self::start(
             database,
             pool,
