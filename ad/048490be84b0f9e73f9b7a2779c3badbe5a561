@@ -1,0 +1,70 @@
+plugins/acp/src/server/agents/client.ts
+  s_0e92c3a8ca720e::t_9ceca390c859f5 3
+  s_0e92c3a8ca720e::t_0489903aa1bf44 108-127
+  s_0e92c3a8ca720e::t_6440e6087d64da 138
+  s_0e92c3a8ca720e::t_d50e14fd3d5379 313-325,327-331
+  s_0e92c3a8ca720e::t_9fbbdc5cb29162 139
+  s_0e92c3a8ca720e::t_469952c3e4feea 63-107
+packages/server/src/host/worker/mod.rs
+  s_0e92c3a8ca720e::t_c2201582be199d 85-96
+  s_0e92c3a8ca720e::t_ae2303eec14af3 5-6
+  s_0e92c3a8ca720e::t_8c1b5bbd14e2ac 81-84,97-101
+packages/server/src/host/worker/windows.rs
+  s_0e92c3a8ca720e::t_82e0e7d9ac52c3 110
+  s_0e92c3a8ca720e::t_4f86dfd73b49e5 158-172,174,176-179
+  s_0e92c3a8ca720e::t_4ae5110785d0d7 54-57,59-81,83
+  s_0e92c3a8ca720e::t_c2201582be199d 127-131,193-196,217-225,234-246
+  s_0e92c3a8ca720e::t_386f6e6a1c09e9 97-109,111-119
+  s_0e92c3a8ca720e::t_ad241bf259832c 136
+  s_0e92c3a8ca720e::t_c55342f0efd491 1-53,82,84-96,120-126,132-135,137-157,175,180-192,197-216,226-233,247-255
+  s_0e92c3a8ca720e::t_2b34c662d283e3 58
+  s_0e92c3a8ca720e::t_8c221ad173da27 173
+packages/server/src/host/worker/process.rs
+  s_0e92c3a8ca720e::t_6fa8028777a96c 33
+  s_0e92c3a8ca720e::t_a13ff2659b0e61 100-101,104-106
+  s_0e92c3a8ca720e::t_e3bd755f212131 59-60,63-64,67,71-73,84-87
+  s_0e92c3a8ca720e::t_d0ff22e5957a33 192
+  s_0e92c3a8ca720e::t_0211f94b451837 88-90,97-99
+  s_0e92c3a8ca720e::t_50d6677b837a76 326-335
+  s_0e92c3a8ca720e::t_4030a707f9b348 162-163
+  s_0e92c3a8ca720e::t_58cc1ff4119e1b 91-96
+  s_0e92c3a8ca720e::t_dff7ca7bc9a8a1 20,22
+  s_0e92c3a8ca720e::t_bcfc785354ecef 1-2,4,6-7
+  s_0e92c3a8ca720e::t_a8e3f3e90a1425 102-103,107-108
+packages/server/src/host/worker/discovery.rs
+  s_0e92c3a8ca720e::t_b166e6cc82cc0e 36-39
+  s_0e92c3a8ca720e::t_5ad6e6cd9565a4 8-9,12-13
+  s_0e92c3a8ca720e::t_caf2fd5f9e4421 21-22
+Cargo.lock
+  s_0e92c3a8ca720e::t_ed227edc286e58 5329
+packages/server/Cargo.toml
+  s_0e92c3a8ca720e::t_26c050823e77c8 64-68,70-71
+  s_0e92c3a8ca720e::t_64dff42ab4181a 69
+packages/sdk/worker/entry.ts
+  s_0e92c3a8ca720e::t_70b2ed7bf70285 95
+plugins/acp/src/server/agents/discovery.ts
+  s_0e92c3a8ca720e::t_9332a3b49d9824 72,74
+  s_0e92c3a8ca720e::t_a9a36a79c58103 73
+  s_0e92c3a8ca720e::t_a898b56e14cb77 16-21,23-24,26
+  s_0e92c3a8ca720e::t_843bb239ac1b50 49-50
+  s_0e92c3a8ca720e::t_7e1a4e13556a84 22
+  s_0e92c3a8ca720e::t_e51b02bee6bc6e 11-14
+  s_0e92c3a8ca720e::t_4dfe2f0df44534 3
+  s_0e92c3a8ca720e::t_b4d9453ed131ee 35-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad048490be84b0f9e73f9b7a2779c3badbe5a561",
+  "prompts": {},
+  "sessions": {
+    "s_0e92c3a8ca720e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "48887696-7c5b-4e46-94a0-6a95e2c25188",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
