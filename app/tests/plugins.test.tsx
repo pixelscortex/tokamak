@@ -288,3 +288,52 @@ test("concurrent cross-plugin UI cycles reject instead of waiting on each other"
     vi.unstubAllGlobals();
   }
 });
+
+test("a dynamic import of an absent plugin is left to fail when called, and a failed fetch is retried", async () => {
+  const manifests = catalog().plugins;
+  manifests.push({
+    ...manifests[0]!,
+    plugin: { ...manifests[0]!.plugin, id: "other" },
+    entries: { ui: { code: "/plugins/other/one/assets/ui.js", css: "" } },
+  });
+  const blobs = new Map<string, Blob>();
+  let otherFetches = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url.includes("/other/") && ++otherFetches === 1) throw new Error("offline");
+      return {
+        ok: true,
+        text: async () =>
+          url.includes("/other/")
+            ? "export const value = 1"
+            : `import '@plugins/other/ui'; export const lazy = () => import('@plugins/absent/ui').catch(() => null);`,
+      };
+    }),
+  );
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    const url = `blob:retry-${blobs.size}`;
+    blobs.set(url, blob as Blob);
+    return url;
+  });
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const host = new WebPluginHost(
+    { http: "http://localhost", ws: "ws://localhost", token: null },
+    () => manifests,
+  );
+  try {
+    await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.toThrow("offline");
+    // Reloading the importer fetches the dependency again instead of replaying the failure.
+    host.remove(["@plugins/fixture/ui"]);
+    await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.not.toThrow(
+      /offline|missing UI dependency/,
+    );
+    expect(otherFetches).toBe(2);
+    const fixture = await [...blobs.values()].at(-1)!.text();
+    expect(fixture).toContain("import('@plugins/absent/ui')");
+  } finally {
+    host.remove(["@plugins/fixture/ui", "@plugins/other/ui"]);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
+});

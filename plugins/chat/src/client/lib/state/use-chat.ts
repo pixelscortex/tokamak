@@ -98,6 +98,8 @@ export function useChat(client: TokamakClient) {
     agent,
     open,
     runs,
+    /** False until the server's list of running replies has arrived. */
+    runsLoaded: () => running.data() !== undefined,
     active,
     error: () => error() ?? running.error()?.message ?? threads.error()?.message,
     setError,

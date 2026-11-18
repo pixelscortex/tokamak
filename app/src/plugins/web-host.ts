@@ -87,6 +87,10 @@ export class WebPluginHost implements PluginModuleHost {
     if (cached) return cached;
     const task = this.rewrite(name, url, generation, [...stack, url]);
     generation.modules.set(url, task);
+    // A failure is not cached: the next load of an importer fetches again.
+    task.catch(() => {
+      if (generation.modules.get(url) === task) generation.modules.delete(url);
+    });
     return task;
   }
   private async rewrite(name: string, url: string, generation: Generation, stack: readonly string[]) {
@@ -109,7 +113,12 @@ export class WebPluginHost implements PluginModuleHost {
       if (target.startsWith("@plugins/")) {
         const [, id, ...rest] = target.split("/");
         const manifest = this.manifests().find((p) => p.plugin.id === id);
-        if (!manifest?.entries.ui) throw new Error(`${name}: missing UI dependency ${target}`);
+        if (!manifest?.entries.ui) {
+          // A dynamic import of an absent plugin is optional: leave it to reject
+          // when called, so the importer's own fallback runs.
+          if (entry.d >= 0) continue;
+          throw new Error(`${name}: missing UI dependency ${target}`);
+        }
         this.attachStyles(manifest, this.generation(moduleName(id!)));
         const dependency = moduleName(id!);
         const dependencies = this.imports.get(name) ?? new Set();

@@ -24,12 +24,14 @@ type Run = { runId: string; threadId: string; waiting: boolean };
 function fakeChat(threadId: string) {
   const [runs, setRuns] = createSignal<Record<string, Run>>({}, { ownedWrite: true });
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
+  const [loaded, setLoaded] = createSignal(true, { ownedWrite: true });
   const action = vi.fn(async (_reference: unknown, _args: { threadId: string; text: string }) => ({}));
   const chat = {
     client: { action },
     threadId: () => threadId,
     creating: () => false,
     runs,
+    runsLoaded: loaded,
     active: () => runs()[threadId] ?? null,
     setError,
     error,
@@ -40,6 +42,7 @@ function fakeChat(threadId: string) {
     action,
     start: () => setRuns({ [threadId]: { runId: "r", threadId, waiting: false } }),
     finish: () => setRuns({}),
+    setLoaded,
   };
 }
 
@@ -80,6 +83,54 @@ test("a failed send puts the text back and reports the reason", async () => {
     flush();
     expect(drafts.draft()).toBe("hello");
     expect((chat as unknown as { error: () => string }).error()).toContain("No agents found");
+    dispose();
+  });
+});
+
+test("a send that fails after chat closed still keeps the text for the next visit", async () => {
+  let fail = (_cause: Error) => {};
+  await createRoot(async (dispose) => {
+    const { chat, action } = fakeChat("closed-thread");
+    action.mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)));
+    const drafts = useDrafts(chat);
+    const sent = drafts.send("keep me");
+    dispose();
+    fail(new Error("connection lost"));
+    await sent;
+  });
+  await createRoot(async (dispose) => {
+    expect(useDrafts(fakeChat("closed-thread").chat).draft()).toBe("keep me");
+    dispose();
+  });
+});
+
+test("a queued follow-up waits until the running list has loaded", async () => {
+  await createRoot(async (dispose) => {
+    const first = fakeChat("reopen-thread");
+    const drafts = useDrafts(first.chat);
+    first.start();
+    flush();
+    await drafts.send("later");
+    flush();
+    expect(drafts.queued()).toBe("later");
+    dispose();
+  });
+  await createRoot(async (dispose) => {
+    // Chat reopens: the running list is empty only because it has not arrived.
+    const { chat, action, start, finish, setLoaded } = fakeChat("reopen-thread");
+    setLoaded(false);
+    const drafts = useDrafts(chat);
+    flush();
+    await Promise.resolve();
+    expect(action).not.toHaveBeenCalled();
+    expect(drafts.queued()).toBe("later");
+    start();
+    setLoaded(true);
+    flush();
+    expect(action).not.toHaveBeenCalled();
+    finish();
+    flush();
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
     dispose();
   });
 });

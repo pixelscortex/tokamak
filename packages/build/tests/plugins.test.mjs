@@ -109,6 +109,23 @@ test("compiler-derived slot and component identities survive the DOM port", asyn
   });
 });
 
+test("a public function component stays hoisted after the surface transform", async () => {
+  await scratch(async (root) => {
+    const code = `
+      export const Early = Panel;
+      export function Panel() { return null; }
+    `;
+    const owner = await source(root, "owner", code);
+    const transform = clientSurface(
+      () => owner,
+      () => "owner",
+    ).transform;
+    const transformed = transform.call({}, code, resolve(owner, "src/client/api.tsx")).code;
+    expect(transformed).toContain("export function Panel(props)");
+    expect(transformed).not.toMatch(/export const Panel\b/);
+  });
+});
+
 test("server artifacts omit UI, verify final hashes and preserve unchanged bytes and mtimes", async () => {
   await scratch(async (root) => {
     await cp(resolve(workspace, "packages/server/tests/fixtures/record"), root, {

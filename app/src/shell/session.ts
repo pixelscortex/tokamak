@@ -63,13 +63,17 @@ export function createSession(options: SessionOptions): Session {
         plugins.dispose();
         transport.close();
       };
+      let closed = false;
       socket.addEventListener("close", () => {
+        closed = true;
         if (current !== attempt) return;
         plugins.dispose();
         setConnection({ state: "failed", reason: "The server closed the connection." });
       });
       await plugins.connect();
-      if (current === attempt) setConnection({ state: "connected", client, plugins, endpoint: supplied });
+      // A socket that closed while the catalog loaded has already reported its failure.
+      if (current === attempt && !closed)
+        setConnection({ state: "connected", client, plugins, endpoint: supplied });
     } catch (cause) {
       socket.close();
       if (current === attempt) setConnection({ state: "failed", reason: message(cause) });

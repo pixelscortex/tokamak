@@ -18,14 +18,15 @@ export function useDrafts(chat: ChatState) {
   });
 
   const key = () => chat.threadId() ?? "";
+  // The kept copies are written even after the view closes; only the signals need it open.
   function write(threadId: string, text: string) {
     kept.drafts = { ...kept.drafts, [threadId]: text };
-    setDrafts(kept.drafts);
+    if (alive) setDrafts(kept.drafts);
   }
   function queue(threadId: string, text: string | undefined) {
     const { [threadId]: _previous, ...rest } = kept.queued;
     kept.queued = text ? { ...rest, [threadId]: text } : rest;
-    setQueued(kept.queued);
+    if (alive) setQueued(kept.queued);
   }
 
   async function sendTo(threadId: string, text: string) {
@@ -35,9 +36,9 @@ export function useDrafts(chat: ChatState) {
     try {
       await chat.client.action(api.chat.send, { threadId: threadId as never, text });
     } catch (cause) {
-      if (!alive) return;
       // Put the text back where it was typed, unless something new was typed since.
-      if (!untrack(drafts)[threadId]) write(threadId, text);
+      if (!kept.drafts[threadId]) write(threadId, text);
+      if (!alive) return;
       if (String(cause).includes("already has an active run"))
         setRaced((previous) => ({ ...previous, [threadId]: true }));
       else chat.setError(String(cause));
@@ -62,8 +63,10 @@ export function useDrafts(chat: ChatState) {
 
   // A queued follow-up goes out when its thread's run ends, even if another thread is open.
   createEffect(
-    () => [chat.runs(), sending(), queued()] as const,
-    ([runs, busy, waiting]) => {
+    () => [chat.runs(), sending(), queued(), chat.runsLoaded()] as const,
+    ([runs, busy, waiting, loaded]) => {
+      // Until the running list has arrived, an empty list does not mean idle.
+      if (!loaded) return;
       setRaced((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => runs[id])));
       for (const [threadId, text] of Object.entries(waiting)) {
         if (runs[threadId] || busy[threadId]) continue;

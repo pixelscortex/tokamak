@@ -9,7 +9,9 @@ function run(command: string, args: string[]) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-run("proto", ["run", "bun", "--", "packages/build/src/build.ts", "plugins/chat"]);
+// The dev server loads the whole plugins folder, so every plugin in it must be built.
+for (const plugin of ["chat", "acp"])
+  run("proto", ["run", "bun", "--", "packages/build/src/build.ts", `plugins/${plugin}`]);
 run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak", ...(release ? ["--release"] : [])]);
 {
   const info = spawnSync("rustc", ["-vV"], { encoding: "utf8" });

@@ -80,14 +80,21 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
           const target = declarations.get(id)?.get(node.name.text);
           if (target) {
             const name = node.name.text;
+            let exported = "";
             for (const modifier of node.modifiers ?? [])
-              if (modifier.kind === ts.SyntaxKind.ExportKeyword)
+              if (
+                modifier.kind === ts.SyntaxKind.ExportKeyword ||
+                modifier.kind === ts.SyntaxKind.DefaultKeyword
+              ) {
+                exported += `${modifier.getText(source)} `;
                 output.remove(modifier.getStart(source), modifier.end);
+              }
             output.overwrite(node.name.getStart(source), node.name.end, `${name}Original`);
-            // Preserve the callable signature (including props inference).
+            // The public name stays a function declaration so it is hoisted like the
+            // original; the wrapped component is made on first use.
             output.appendLeft(
               node.end,
-              `\nexport const ${name} = __publicComponent(${JSON.stringify(target)}, ${name}Original);\n`,
+              `\n${exported}function ${name}(props) { return (${name}.__public ??= __publicComponent(${JSON.stringify(target)}, ${name}Original))(props); }\n`,
             );
             changed = imports = true;
           }
