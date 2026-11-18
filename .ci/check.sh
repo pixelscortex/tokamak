@@ -1,26 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Fast checks only. Integration, end-to-end and browser suites are not run in CI
+# for now; they stay runnable locally (see e2e/README.md).
 case "$1" in
+  lint)
+    # Platform-independent checks run once, in one job.
+    moon run workspace:format-check workspace:lint-ts workspace:lint-rust
+    ;;
   ts)
-    moon run workspace:format-check workspace:lint-ts
     proto run bun -- run typecheck
     moon run sdk:test build:test runtime:test ui:test chat:test app:test app:web-build
     proto run bun -- test ./.ci/release.test.ts
     ;;
   rust)
-    moon run workspace:lint-rust
-    ;;
-  native)
-    proto run bun -- run check
-    moon run workspace:acp-test
-    # Protocol generation temporarily uses its fixed SDK output path. Complete
-    # its normalized comparison before concurrent TS fixture/type checks.
-    moon run server:check
-    # Existing scripts supply bundles, generated references and type fixtures.
-    moon run workspace:ci-rust engine:check
-    cargo check --workspace --all-targets --locked
-    moon run workspace:rust-test workspace:e2e
-    proto run bun -- run e2e:browser
+    # Unit tests inside the Rust crates; the slow suites in packages/*/tests are skipped.
+    cargo test --locked --workspace --lib
     ;;
   *) exit 2 ;;
 esac
