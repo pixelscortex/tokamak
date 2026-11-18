@@ -64,7 +64,7 @@ export function tokamak(
         };
       },
       resolveId(id) {
-        if (id === normalizePath(resolve(root, ".tokamak-backend-entry.js")))
+        if (normalizePath(id) === normalizePath(resolve(root, ".tokamak-backend-entry.js")))
           return "\0tokamak-backend-entry";
       },
       load(id) {
