@@ -1,0 +1,21 @@
+app/index.html
+  s_4ccc9a2575a981::t_82cadc9abe9375 8
+app/src-tauri/tauri.conf.json
+  s_4ccc9a2575a981::t_9255ce66fa9a75 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3abe72f2af4b63f983e8c86f62568f9d1b76c14",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
