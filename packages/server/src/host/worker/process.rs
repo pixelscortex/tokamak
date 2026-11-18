@@ -158,6 +158,19 @@ struct Control<'a> {
     failure: &'a mut oneshot::Receiver<String>,
     kill: &'a CancellationToken,
 }
+fn cancel_all(calls: &mut BTreeMap<u64, Call>, input: &mpsc::Sender<Value>) -> Result<(), String> {
+    for (id, call) in calls {
+        cancel_call(*id, call, input)?;
+    }
+    Ok(())
+}
+fn cancel_call(id: u64, call: &mut Call, input: &mpsc::Sender<Value>) -> Result<(), String> {
+    call.active.cancel();
+    call.cancel_at
+        .get_or_insert(tokio::time::Instant::now() + GRACE);
+    write(input, json!({"type":"cancel", "id":id}))
+}
+
 async fn run(
     id: &str,
     child: &mut Child,
@@ -201,10 +214,11 @@ async fn run(
                     calls.insert(id, Call {reply, ops, active: CancellationToken::new(), cancel_at: None});
                     write(input, message)?;
                 }
+                Some(Command::Shutdown) => {
+                    cancel_all(calls, input)?;
+                },
                 Some(Command::Cancel(id)) => if let Some(call) = calls.get_mut(&id) {
-                    call.active.cancel();
-                    call.cancel_at.get_or_insert(tokio::time::Instant::now() + GRACE);
-                    write(input, json!({"type":"cancel","id":id}))?;
+                    cancel_call(id, call, input)?;
                 },
                 None => return Err("worker owner closed".into()),
             },

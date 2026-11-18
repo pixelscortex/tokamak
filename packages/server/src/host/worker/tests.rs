@@ -3,6 +3,9 @@ use crate::plugins::{Catalog, Loaded};
 use std::{process::Command, sync::OnceLock};
 
 async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
+    fixture_kind(false).await
+}
+async fn fixture_kind(machine: bool) -> (tempfile::TempDir, Arc<Supervisor>) {
     static FILES: OnceLock<BTreeMap<String, String>> = OnceLock::new();
     let files = FILES.get_or_init(|| {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -40,11 +43,13 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
     )
     .await
     .unwrap();
-    let worker = Arc::get_mut(&mut loaded)
-        .unwrap()
-        .workers
-        .remove("worker-test")
-        .unwrap();
+    let loaded = Arc::get_mut(&mut loaded).unwrap();
+    let worker = if machine {
+        loaded.machines.remove("worker-test")
+    } else {
+        loaded.workers.remove("worker-test")
+    }
+    .unwrap();
     (directory, worker)
 }
 async fn state(worker: &Supervisor) -> Value {
@@ -120,5 +125,50 @@ async fn cooperative_cancel_keeps_worker_and_missing_bun_is_readable() {
             .await
             .unwrap_err(),
         "Plugin worker-test needs Bun: install from https://bun.sh"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn machine_service_starts_restarts_and_cleans_up() {
+    let (_directory, machine) = fixture_kind(true).await;
+    let mut ops = OpRegistry::new();
+    ops.register_sync("machine.configuration", |_| {
+        Ok(json!({"machineId":"test-machine", "name":"Test", "hubs":[]}))
+    })
+    .unwrap();
+    machine.start_service(Arc::new(ops));
+    let starts = machine.directory.join("starts");
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if std::fs::read_to_string(&starts)
+                .unwrap_or_default()
+                .lines()
+                .count()
+                >= 2
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let lines = std::fs::read_to_string(starts).unwrap();
+    let lines: Vec<_> = lines.lines().collect();
+    assert_eq!(lines.len(), 2);
+    assert_ne!(lines[0], lines[1]);
+    assert!(lines.iter().all(|line| line.ends_with(":test-machine")));
+    machine.stop().await;
+    assert!(machine.directory.join("stopped").is_file());
+    assert!(
+        machine
+            .state
+            .lock()
+            .await
+            .process
+            .as_ref()
+            .unwrap()
+            .stopped
+            .is_cancelled()
     );
 }

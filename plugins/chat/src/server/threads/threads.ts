@@ -1,11 +1,29 @@
+import { liveMachines } from "../machines/machines";
 import { backend } from "../backends/backend";
 import { listBackends } from "../backends/backends";
 import { api } from "../_generated/api";
 import { v } from "@tokamak/sdk";
-import { DEFAULT_TITLE, action, mutation, nonempty, query, thread } from "../_functions";
+import { DEFAULT_TITLE, action, mutation, nonempty, query, thread, usesMachineLink } from "../_functions";
 
 export const list = query({
-  handler: ({ db }) => db.query("threads").withIndex("by_updatedAt").order("desc").collect(),
+  handler: async (ctx) => {
+    const { db, user } = ctx;
+    const threads = await db.query("threads").withIndex("by_updatedAt").order("desc").collect();
+    const selections = await db
+      .query("selections")
+      .withIndex("by_owner_thread", (q) => q.eq("owner", user.id))
+      .collect();
+    const remote = await usesMachineLink(ctx);
+    const first = remote ? (await liveMachines(db, user.id)).flatMap((m) => m.agents)[0] : undefined;
+    return threads.map((t) => {
+      if (!remote) return t;
+      const { backend: _backend, ...visible } = t;
+      const selected =
+        selections.find((s) => s.threadId === t._id)?.backend ??
+        (first ? { kind: "plugin" as const, plugin: "acp", backendId: first.id } : undefined);
+      return { ...visible, ...(selected ? { backend: selected } : {}) };
+    });
+  },
 });
 
 export const create = action({
@@ -57,8 +75,15 @@ export const remove = mutation({
       .query("runs")
       .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
       .collect()) {
+      for (const work of await db
+        .query("work")
+        .withIndex("by_runId", (q) => q.eq("runId", run._id))
+        .collect())
+        await db.delete(work._id);
       await db.delete(run._id);
     }
+    for (const selection of await db.query("selections").collect())
+      if (selection.threadId === threadId) await db.delete(selection._id);
     return db.delete(threadId);
   },
 });
@@ -83,6 +108,18 @@ export const setBackend = mutation({
           ? { state: previous.state }
           : {}),
       };
+    }
+    if (await usesMachineLink(ctx)) {
+      const selected = { kind: "plugin" as const, plugin: backend.plugin, backendId: backend.backendId };
+      const previous = (
+        await db
+          .query("selections")
+          .withIndex("by_owner_thread", (q) => q.eq("owner", ctx.user.id).eq("threadId", threadId))
+          .collect()
+      )[0];
+      if (previous) await db.patch(previous._id, { backend: selected });
+      else await db.insert("selections", { threadId, owner: ctx.user.id, backend: selected });
+      return null;
     }
     return db.patch(threadId, {
       backend,

@@ -34,7 +34,11 @@ export function useDrafts(chat: ChatState) {
     setRaced((previous) => ({ ...previous, [threadId]: false }));
     setSending((previous) => ({ ...previous, [threadId]: true }));
     try {
-      await chat.client.action(api.chat.send, { threadId: threadId as never, text });
+      await chat.client.action(api.chat.send, {
+        threadId: threadId as never,
+        text,
+        ...(chat.client.machineId ? { machineId: chat.client.machineId } : {}),
+      });
     } catch (cause) {
       // Put the text back where it was typed, unless something new was typed since.
       if (!kept.drafts[threadId]) write(threadId, text);

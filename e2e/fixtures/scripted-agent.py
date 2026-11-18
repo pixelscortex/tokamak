@@ -108,6 +108,10 @@ def run(request):
     text = request["params"]["prompt"][0].get("text", "")
     # Only the newest line picks the script; earlier lines can carry conversation history.
     lowered = (text.strip().splitlines() or [""])[-1].lower()
+    if "machine identity" in lowered:
+        stream(turn, text, chunk=20, delay=0.01)
+        finish()
+        return
     if "fail" in lowered:
         tool(turn, "read", "Read package.json", "read", 0.4)
         send(dict(id=request["id"], error=dict(code=-32000, message="The model is overloaded. Try again in a minute.")))

@@ -111,6 +111,7 @@ pub(crate) enum Command {
     RenameUser(crate::identity::User, oneshot::Sender<()>),
     Action(u64, crate::identity::User, Action),
     Plugins(oneshot::Sender<Result<Json, Error>>),
+    Machine(Json, oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
     Asset(
@@ -189,6 +190,7 @@ mod action_coordination;
 mod command_loop;
 mod delivery;
 mod invocations;
+mod machine;
 mod plugin_control;
 mod requests;
 mod server;

@@ -1,23 +1,57 @@
+import { liveMachines, offline } from "../machines/machines";
 import { appendText, boundedError, toolUpdate, planPart, interruptTools } from "../messages/parts";
 import { applyToolUpdate } from "../messages/tool-parts";
 import { v, type Infer } from "@tokamak/sdk";
 import type { Part } from "../messages/parts";
-import { DEFAULT_TITLE, mutation, nonempty, query, thread, turn } from "../_functions";
+import { DEFAULT_TITLE, mutation, nonempty, query, thread, turn, usesMachineLink } from "../_functions";
 
 // Only chat.send uses these transactional steps; they are not plugin exports.
 export const start = mutation({
-  args: { threadId: v.id("threads"), text: v.string(), token: v.string() },
-  handler: async (ctx, { threadId, text, token }) => {
+  args: { threadId: v.id("threads"), text: v.string(), token: v.string(), machineId: v.optional(v.string()) },
+  handler: async (ctx, { threadId, text, token, machineId }) => {
     const { db } = ctx;
     text = nonempty(text);
     const current = await thread(db, threadId);
-    const backend = current.backend;
-    if (!backend) throw new Error("No agents found. Install `claude-agent-acp` or `codex-acp` (see README)");
+    const remote = await usesMachineLink(ctx);
+    const selection = remote
+      ? (
+          await db
+            .query("selections")
+            .withIndex("by_owner_thread", (q) => q.eq("owner", ctx.user.id).eq("threadId", threadId))
+            .collect()
+        )[0]
+      : undefined;
+    const owned = remote ? await liveMachines(db, ctx.user.id) : [];
+    const first = owned.flatMap((m) => m.agents)[0];
+    const backend = remote
+      ? (selection?.backend ??
+        (first ? { kind: "plugin" as const, plugin: "acp", backendId: first.id } : undefined))
+      : current.backend;
+    if (!backend)
+      throw new Error(
+        remote ? offline : "No agents found. Install `claude-agent-acp` or `codex-acp` (see README)",
+      );
+    const available = remote
+      ? owned.filter((m) => backend.plugin === "acp" && m.agents.some((a) => a.id === backend.backendId))
+      : [];
+    const machine = machineId
+      ? available.find((m) => m.machineId === machineId)
+      : available.sort((a, b) => a.machineId.localeCompare(b.machineId))[0];
+    if (remote && !machine) throw new Error(offline);
     const runs = await db
       .query("runs")
       .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
       .collect();
-    if (runs.some((run) => run.status === "running")) throw new Error("Thread already has an active run");
+    if (
+      runs.some(
+        (run) =>
+          run.status === "running" &&
+          (!remote || ((run.owner ?? ctx.user.id) === ctx.user.id && run.backendId === backend.backendId)),
+      )
+    )
+      throw new Error(
+        remote ? "Your agent already has an active run in this thread" : "Thread already has an active run",
+      );
 
     const history = await db
       .query("messages")
@@ -48,7 +82,9 @@ export const start = mutation({
       threadId,
       messageId,
       status: "running",
-      token,
+      ...(remote ? { machine: machine!._id, machineEpoch: machine!.epoch } : { token }),
+      owner: ctx.user.id,
+      backendId: backend.backendId,
       ...(backend?.kind === "plugin" ? { backendPlugin: backend.plugin } : {}),
       startedAt: Date.now(),
     });
@@ -58,7 +94,7 @@ export const start = mutation({
         ? Array.from(text).slice(0, 80).join("")
         : current.title;
     await db.patch(threadId, { title, updatedAt: Date.now() });
-    return {
+    const started = {
       runId,
       messageId,
       backend,
@@ -66,7 +102,9 @@ export const start = mutation({
         ...history
           .filter((message) => message.status === "complete")
           .map((message) => ({
-            role: message.role,
+            role: remote
+              ? `${message.role} (${message.author?.name ?? message.askedBy?.name ?? "Unknown"}; ${message.author?.id ?? message.askedBy?.id ?? "unknown"})`
+              : message.role,
             content: message.parts
               .map((part) =>
                 part.type === "text"
@@ -79,9 +117,29 @@ export const start = mutation({
               )
               .join(""),
           })),
-        { role: "user" as const, content: text },
+        { role: remote ? `user (${ctx.user.name}; ${ctx.user.id})` : "user", content: text },
       ],
     };
+    if (machine)
+      await db.insert("work", {
+        runId,
+        machine: machine._id,
+        epoch: machine.epoch,
+        owner: ctx.user.id,
+        backendId: backend.backendId,
+        text,
+        history: started.history,
+        participants: [
+          ...new Map(
+            [
+              ...history.flatMap((m) => (m.author ? [m.author] : m.askedBy ? [m.askedBy] : [])),
+              { id: ctx.user.id, name: ctx.user.name },
+            ].map((person) => [person.id, person]),
+          ).values(),
+        ],
+        status: "queued",
+      });
+    return { ...started, remote };
   },
 });
 
@@ -95,14 +153,32 @@ export const update = mutation({
     runId: v.id("runs"),
     token: v.string(),
     delta: v.string(),
+    sequence: v.optional(v.number()),
     outcome: v.optional(v.union(v.literal("done"), v.literal("error"), v.literal("cancelled"))),
     error: v.optional(v.string()),
     tool: v.optional(toolUpdate),
     upsertTools: v.optional(v.boolean()),
     plan: v.optional(planPart),
   },
-  handler: async ({ db }, { runId, token, delta, outcome, error, tool, plan, upsertTools }) => {
-    const run = await turn(db, runId, token);
+  handler: async (
+    { db, user },
+    { runId, token, delta, outcome, error, tool, plan, upsertTools, sequence },
+  ) => {
+    const previous = await db.get(runId);
+    if (
+      previous?.machine &&
+      previous.owner === user.id &&
+      sequence !== undefined &&
+      sequence === previous.sequence &&
+      (previous.token === token || previous.status !== "running")
+    )
+      return previous.status;
+    const run = await turn(db, runId, token, user.id);
+    if (run.machine) {
+      if (!Number.isSafeInteger(sequence) || sequence !== (run.sequence ?? 0) + 1)
+        throw new Error("Invalid output sequence");
+      await db.patch(runId, { sequence });
+    }
     await db.patch(runId, { updatedAt: Date.now(), heartbeat: (run.heartbeat ?? 0) + 1 });
     if (![delta, outcome, tool, plan].some(Boolean)) return "running" as const;
 
@@ -120,8 +196,14 @@ export const update = mutation({
       ...(error === undefined ? {} : { error: boundedError(error) }),
     });
     await db.patch(run.threadId, { updatedAt: Date.now() });
-    if (outcome)
+    if (outcome) {
       await db.patch(runId, { status: outcome, token: null, waiting: false, finishedAt: Date.now() });
+      for (const work of await db
+        .query("work")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .collect())
+        await db.patch(work._id, { status: "finished" });
+    }
     return outcome ?? "running";
   },
 });
@@ -136,8 +218,9 @@ export const session = mutation({
     settings: v.any(),
     state: v.any(),
   },
-  handler: async ({ db }, { runId, token, threadId, plugin, backendId, settings, state }) => {
-    const run = await turn(db, runId, token);
+  handler: async ({ db, user }, { runId, token, threadId, plugin, backendId, settings, state }) => {
+    const run = await turn(db, runId, token, user.id);
+    if (run.machine) throw new Error("Machine sessions stay on the machine");
     if (run.threadId !== threadId || run.backendPlugin !== plugin) throw new Error("Turn backend mismatch");
     const current = await db.get(threadId);
     const backend = current?.backend;

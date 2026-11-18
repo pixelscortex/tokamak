@@ -34,6 +34,8 @@ export interface ServersOptions {
   /** The hosted server's origin when the page came from one. */
   origin?: string;
   storage?: Storage;
+  /** Desktop only: configure the local machine before opening a remote session. */
+  serveHubs?: (local: Endpoint, hubs: { url: string; token: string }[]) => Promise<string>;
 }
 
 export function defaultServers(local?: () => Endpoint | Promise<Endpoint>): ServersOptions {
@@ -47,10 +49,28 @@ export function createServers(options: ServersOptions): Servers {
   // Signal writes apply at the next flush; `latest` lets a save be selected right away.
   let latest = loadServers(storage);
   const [state, setState] = createSignal<SavedState>(latest, { ownedWrite: true });
+  let configured = "";
+  let machine: Promise<string | undefined> = Promise.resolve(undefined);
+  const synchronize = () => {
+    if (!options.local || !options.serveHubs || options.origin) return;
+    const hubs = latest.servers.map((s) => ({ url: s.address, token: s.token }));
+    const signature = JSON.stringify(hubs);
+    if (signature === configured) return;
+    configured = signature;
+    const previous = machine;
+    machine = previous
+      .catch(() => undefined)
+      .then(async () => options.serveHubs!(await options.local!(), hubs));
+    void machine.catch(() => {
+      configured = "";
+    });
+  };
+  synchronize();
   const update = (change: (previous: SavedState) => SavedState) => {
     latest = change(latest);
     setState(latest);
     storeServers(latest, storage);
+    synchronize();
   };
 
   const listOf = (saved: readonly SavedServer[]): readonly Server[] => {
@@ -139,7 +159,9 @@ export function createServers(options: ServersOptions): Servers {
       const http = new URL(server.address);
       const ws = new URL("/ws", http);
       ws.protocol = http.protocol === "https:" ? "wss:" : "ws:";
-      return { http: http.origin, ws: ws.href, token: server.token };
+      synchronize();
+      const machineId = await machine;
+      return { http: http.origin, ws: ws.href, token: server.token, ...(machineId ? { machineId } : {}) };
     },
   };
 }

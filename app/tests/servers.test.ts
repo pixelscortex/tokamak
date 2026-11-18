@@ -72,3 +72,42 @@ test("a page served by a hosted server has only that server, with the token it s
   expect(servers.list()).toHaveLength(1);
   dispose();
 });
+
+test("desktop bootstrap follows saved hubs and supplies this window's machine id", async () => {
+  const calls: { url: string; token: string }[][] = [];
+  let synced = () => {};
+  const { servers, dispose } = make({
+    local,
+    serveHubs: async (endpoint, hubs) => {
+      expect(endpoint).toEqual(local());
+      calls.push(hubs);
+      synced();
+      return "this-machine";
+    },
+  });
+  const remote = join(servers, "https://hub.example.test", "private");
+  expect(await servers.endpointOf(remote)).toMatchObject({ machineId: "this-machine" });
+  expect(calls).toEqual([[], [{ url: "https://hub.example.test", token: "private" }]]);
+  servers.rename(remote.id, "Studio");
+  servers.select(remote.id);
+  await servers.endpointOf(remote);
+  expect(calls).toHaveLength(2);
+  await new Promise<void>((done) => {
+    synced = done;
+    servers.remove(remote.id);
+  });
+  expect(calls.at(-1)).toEqual([]);
+  dispose();
+});
+
+test("a hosted browser never asks for a machine link", async () => {
+  const { servers, dispose } = make({
+    origin: "https://hub.example.test",
+    serveHubs: async () => {
+      throw new Error("browser bootstrapped a machine");
+    },
+  });
+  join(servers, "https://hub.example.test");
+  expect((await servers.endpointOf(servers.current())).machineId).toBeUndefined();
+  dispose();
+});

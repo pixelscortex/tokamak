@@ -160,7 +160,16 @@ export const age = mutation({
       "bundle.js",
       "bundle.js.map",
       "api.ts",
-      ...(id === "acp" ? ["worker-entry.js", "worker.js", "worker.js.map"] : []),
+      ...(id === "acp"
+        ? [
+            "worker-entry.js",
+            "worker.js",
+            "worker.js.map",
+            "machine-entry.js",
+            "machine.js",
+            "machine.js.map",
+          ]
+        : []),
     ])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");
   }

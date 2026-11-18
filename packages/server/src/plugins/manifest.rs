@@ -35,6 +35,8 @@ pub struct Definition {
     pub placement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maintenance: Option<String>,
     #[serde(default)]
     pub contributes: BTreeMap<String, Vec<Value>>,
     #[serde(default)]
@@ -73,6 +75,8 @@ pub struct WorkerEntry {
 pub struct Entries {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<WorkerEntry>,
     #[serde(default)]
     pub backend: Option<BackendEntry>,
     #[serde(default)]
@@ -194,13 +198,23 @@ impl Manifest {
                 .chain(entry.shell.iter())
         });
 
-        for name in backend_paths.chain(ui_paths).chain(
-            self.entries
-                .worker
-                .as_ref()
-                .into_iter()
-                .flat_map(|e| [&e.entry, &e.code, &e.map]),
-        ) {
+        for name in backend_paths
+            .chain(ui_paths)
+            .chain(
+                self.entries
+                    .machine
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|e| [&e.entry, &e.code, &e.map]),
+            )
+            .chain(
+                self.entries
+                    .worker
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|e| [&e.entry, &e.code, &e.map]),
+            )
+        {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

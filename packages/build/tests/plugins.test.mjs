@@ -173,3 +173,34 @@ test("server artifacts omit UI, verify final hashes and preserve unchanged bytes
     }
   });
 }, 30_000);
+
+test("machine-only artifacts package an independent entry and verified source map", async () => {
+  await scratch(async (root) => {
+    const path = resolve(root, "machine-only");
+    await mkdir(resolve(path, "src/machine"), { recursive: true });
+    await writeFile(resolve(path, "package.json"), JSON.stringify({ name: "machine-only", type: "module" }));
+    await writeFile(
+      resolve(path, "plugin.ts"),
+      'import {definePlugin} from "@tokamak/sdk"; export default definePlugin({id:"machine-only",version:"0.1.0"});',
+    );
+    await writeFile(
+      resolve(path, "src/machine/main.ts"),
+      'import type {MachineContext} from "@tokamak/sdk"; export async function start(ctx: MachineContext) { await ctx.configuration(); }',
+    );
+    const build = spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), path], {
+      encoding: "utf8",
+    });
+    expect(build.status, build.stdout + build.stderr).toBe(0);
+    const manifest = JSON.parse(await readFile(resolve(path, "dist/manifest.json"), "utf8"));
+    expect(manifest.entries.backend).toBeUndefined();
+    expect(manifest.entries.machine).toEqual({
+      entry: "machine-entry.js",
+      code: "machine.js",
+      map: "machine.js.map",
+    });
+    for (const name of Object.values(manifest.entries.machine)) {
+      const bytes = await readFile(resolve(path, "dist", name));
+      expect(manifest.hashes[name]).toBe(createHash("sha256").update(bytes).digest("hex"));
+    }
+  });
+});

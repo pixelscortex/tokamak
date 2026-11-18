@@ -27,7 +27,10 @@ export interface ClientTransport {
 }
 
 export class TokamakClient {
-  constructor(private readonly transport: ClientTransport) {}
+  constructor(
+    private readonly transport: ClientTransport,
+    readonly machineId?: string,
+  ) {}
 
   async query<A, R>(reference: FunctionReference<"query", A, R>, args: NoInfer<A>): Promise<R> {
     const value = await this.transport.query(reference[functionName], jsonSnapshot(args, "args"));

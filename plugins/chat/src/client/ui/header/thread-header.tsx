@@ -30,6 +30,11 @@ export function ThreadHeader(props: { chat: ChatState; onCopy: () => void }): JS
             )}
           </Show>
           <span class="flex-1" />
+          <Show when={props.chat.canStop() && !props.chat.active()}>
+            <Button variant="ghost" onClick={() => void props.chat.cancel()}>
+              Stop
+            </Button>
+          </Show>
           <Menu.Root
             onAction={(value) => {
               if (value === "copy") props.onCopy();

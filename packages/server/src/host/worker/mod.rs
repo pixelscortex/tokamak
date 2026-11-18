@@ -34,6 +34,7 @@ enum Command {
         reply: Reply,
     },
     Cancel(u64),
+    Shutdown,
 }
 struct Process {
     commands: mpsc::Sender<Command>,
@@ -167,7 +168,7 @@ impl Supervisor {
         };
         let result = tokio::select! {
             result = &mut wait => result.map_err(|_| format!("Plugin {} worker exited", self.id))?,
-            _ = tokio::time::sleep(deadline) => {
+            _ = async { if deadline == Duration::MAX { std::future::pending::<()>().await; } else { tokio::time::sleep(deadline).await; } } => {
                 lease.cancel();
                 let _ = wait.await;
                 Err(format!("Plugin {} action deadline exceeded", self.id))
@@ -176,10 +177,54 @@ impl Supervisor {
         lease.active = false;
         result
     }
+    pub(crate) fn start_service(self: &Arc<Self>, ops: Arc<OpRegistry>) {
+        let weak = Arc::downgrade(self);
+        self.runtime.spawn(Self::service_loop(weak, ops));
+    }
+    async fn service_loop(weak: std::sync::Weak<Self>, ops: Arc<OpRegistry>) {
+        let mut backoff = Duration::from_millis(250);
+        loop {
+            let Some(worker) = weak.upgrade() else {
+                return;
+            };
+            if worker.closed.is_cancelled() {
+                return;
+            }
+            let started = tokio::time::Instant::now();
+            let _ = worker
+                .invoke_with_deadline(
+                    "__machine:start".into(),
+                    Value::Null,
+                    ops.clone(),
+                    Duration::MAX,
+                )
+                .await;
+            if worker.closed.is_cancelled() {
+                return;
+            }
+            // A service returning is also an exit; never reuse that process.
+            if let Some(process) = &worker.state.lock().await.process {
+                process.kill.cancel();
+            }
+            let closed = worker.closed.clone();
+            drop(worker);
+            tokio::select! {
+                _ = closed.cancelled() => return,
+                _ = tokio::time::sleep(backoff) => {}
+            }
+            backoff = if started.elapsed() > Duration::from_secs(30) {
+                Duration::from_millis(250)
+            } else {
+                (backoff * 2).min(Duration::from_secs(30))
+            };
+        }
+    }
     pub(crate) async fn stop(&self) {
         self.closed.cancel();
         let state = self.state.lock().await;
         if let Some(process) = &state.process {
+            let _ = process.commands.try_send(Command::Shutdown);
+            tokio::select! { _ = process.stopped.cancelled() => {}, _ = tokio::time::sleep(GRACE) => {} }
             process.kill.cancel();
             process.stopped.cancelled().await;
         }

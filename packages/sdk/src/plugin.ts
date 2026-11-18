@@ -14,6 +14,8 @@ export interface PluginDefinition {
   readonly consumes?: readonly string[];
   readonly permissions?: readonly string[];
   readonly runtime?: "worker";
+  /** Server-owned periodic mutation, called with empty arguments. */
+  readonly maintenance?: string;
   readonly placement?: "hub" | "runner" | "hybrid";
   readonly contributes?: Readonly<Record<string, readonly JsonValue[]>>;
   readonly exports?: string;
@@ -80,6 +82,7 @@ export function definePlugin(
     "permissions",
     "placement",
     "runtime",
+    "maintenance",
     "contributes",
     "exports",
   ];
@@ -134,6 +137,11 @@ function validateLists(definition: PluginDefinition) {
 }
 
 function validateMetadata(definition: PluginDefinition) {
+  if (
+    definition.maintenance !== undefined &&
+    (typeof definition.maintenance !== "string" || !/^[\w/-]+:[\w]+$/.test(definition.maintenance))
+  )
+    throw new Error("Invalid maintenance mutation");
   if (definition.runtime !== undefined && definition.runtime !== "worker")
     throw new Error("Invalid plugin runtime");
   for (const field of ["name", "description"] as const)

@@ -71,7 +71,7 @@ export function createSession(options: SessionOptions): Session {
       });
       if (current !== attempt) return;
       const transport = new WebSocketTransport(socket);
-      const client = new TokamakClient(transport);
+      const client = new TokamakClient(transport, supplied.machineId);
       const plugins = createPluginShell(client, supplied, transport, options.routing);
       close = () => {
         plugins.dispose();

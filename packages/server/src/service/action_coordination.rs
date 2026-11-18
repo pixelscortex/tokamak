@@ -88,7 +88,7 @@ impl Coordinator {
     pub(super) async fn stop_actions(&mut self) {
         self.action_pool.cancel_actions();
         if let Some(loaded) = &self.plugins {
-            for worker in loaded.workers.values() {
+            for worker in loaded.workers.values().chain(loaded.machines.values()) {
                 worker.stop().await;
             }
         }

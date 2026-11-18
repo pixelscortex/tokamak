@@ -1,3 +1,4 @@
+import { machineLinkScenario } from "./machine-link";
 import { prepareAgentEnvironment } from "./chat-sandbox";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -228,6 +229,7 @@ try {
       first.transport.close();
     }
   });
+  await machineLinkScenario();
   console.log("PASS scenarios 2/3/4: independent subscribers + server close/reopen + exact persisted data");
 
   feature = await buildFeature({ source: resolve("e2e/feature"), parent: root });

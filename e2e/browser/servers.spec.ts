@@ -41,3 +41,60 @@ test("add a hosted server, switch to it and back, and keep the choice", async ({
   await page.getByRole("menuitem", { name: "Remove this server" }).click();
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
 });
+
+test("a chat-only hub streams the reply from the member's local machine", async ({
+  page,
+  request,
+  browser,
+}) => {
+  const hub = "http://127.0.0.1:43124";
+  const token = process.env.TOKAMAK_E2E_HOSTED_TOKEN!;
+  const local = `http://127.0.0.1:43123/machine/hubs?token=${process.env.VITE_TOKAMAK_TOKEN}`;
+  // Browser builds do not bootstrap machines. The sealed test plays the desktop
+  // startup operation explicitly; the two windows still talk directly to the hub.
+  const activated = await request.post(local, {
+    headers: { "content-type": "text/plain" },
+    data: JSON.stringify([{ url: hub, token }]),
+  });
+  expect(activated.ok()).toBe(true);
+  const saved = (access: string) =>
+    JSON.stringify({ servers: [{ id: "hub", name: "Hub", address: hub, token: access }], selected: "hub" });
+  await page.addInitScript((value) => localStorage.setItem("tokamak.servers", value), saved(token));
+  let viewer: Awaited<ReturnType<typeof browser.newContext>> | undefined;
+  try {
+    await page.goto("/p/chat");
+    const input = page.getByRole("textbox", { name: "Message" });
+    await expect(input).toBeEnabled();
+    await page.getByRole("button", { name: /New chat/ }).click();
+    await expect(input).toBeEnabled();
+    const prompt = `Machine link workspace ${crypto.randomUUID().slice(0, 8)}`;
+    await input.fill(prompt);
+    await input.press("Enter");
+    await expect(
+      page.getByRole("log", { name: "Conversation" }).getByText(prompt, { exact: true }),
+    ).toBeVisible();
+    const invited = await request.post(`${hub}/members`, {
+      headers: { authorization: `Bearer ${token}`, "content-type": "text/plain" },
+      data: JSON.stringify({ name: "Viewer" }),
+    });
+    expect(invited.ok()).toBe(true);
+    const member = (await invited.json()) as { token: string };
+    viewer = await browser.newContext();
+    await viewer.addInitScript(
+      (value) => localStorage.setItem("tokamak.servers", value),
+      saved(member.token),
+    );
+    const other = await viewer.newPage();
+    await other.goto(`${new URL(page.url()).origin}/p/chat`);
+    await expect(
+      other.getByRole("log", { name: "Conversation" }).getByText(prompt, { exact: true }),
+    ).toBeVisible();
+    const reply = /Tokamak workspace: a Rust server runs TypeScript plugins/;
+    await expect(page.getByRole("log", { name: "Conversation" }).getByText(reply)).toBeVisible();
+    await expect(other.getByRole("log", { name: "Conversation" }).getByText(reply)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  } finally {
+    await viewer?.close();
+    await request.post(local, { headers: { "content-type": "text/plain" }, data: "[]" });
+  }
+});

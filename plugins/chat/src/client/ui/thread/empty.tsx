@@ -59,7 +59,12 @@ export function EmptyThread(props: {
 }
 
 /** No agent CLI was found on this machine: say what to install, then check again. */
-export function NoAgents(props: { checking: boolean; error?: string; onCheck: () => void }): JSX.Element {
+export function NoAgents(props: {
+  checking: boolean;
+  error?: string;
+  remote?: boolean;
+  onCheck: () => void;
+}): JSX.Element {
   return (
     <Centre>
       <div class="flex flex-col items-center gap-2">
@@ -71,11 +76,15 @@ export function NoAgents(props: { checking: boolean; error?: string; onCheck: ()
           <Show
             when={props.error}
             fallback={
-              <>
-                Chat talks to an agent program on this computer. Install{" "}
-                <span class="font-mono text-ink">claude-agent-acp</span> or{" "}
-                <span class="font-mono text-ink">codex-acp</span>, then check again.
-              </>
+              props.remote ? (
+                "Your machine is not connected or has no agents. Open Tokamak on your machine, then check again."
+              ) : (
+                <>
+                  Chat talks to an agent program on this computer. Install{" "}
+                  <span class="font-mono text-ink">claude-agent-acp</span> or{" "}
+                  <span class="font-mono text-ink">codex-acp</span>, then check again.
+                </>
+              )
             }
           >
             {(error) => error()}

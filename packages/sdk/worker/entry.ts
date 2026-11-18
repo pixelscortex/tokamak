@@ -20,7 +20,8 @@ function send(message: object) {
 }
 for (const level of ["log", "info", "warn", "error", "debug"] as const)
   console[level] = (...args: unknown[]) => send({ type: "log", level, text: format(...args).slice(0, 8192) });
-const { functions } = (await import(pathToFileURL(process.argv[2]!).href)) as { functions: FunctionRegistry };
+const module = await import(pathToFileURL(process.argv[2]!).href);
+const functions: FunctionRegistry = module.functions ?? {};
 
 function retire(id: number) {
   calls.delete(id);
@@ -53,6 +54,14 @@ async function invoke(id: number, name: string, args: JsonValue) {
     },
   };
   try {
+    if (name === "__machine:start" && typeof module.start === "function") {
+      await module.start({
+        signal: controller.signal,
+        configuration: () => host.op("machine.configuration", {}),
+      });
+      send({ type: "result", id, value: null });
+      return;
+    }
     if (functions[name]?.kind !== "action") throw new Error(`Unknown worker action: ${name}`);
     const value = await invokeFunction(functions, { name, args }, host);
     send({ type: "result", id, value });

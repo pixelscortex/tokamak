@@ -26,6 +26,9 @@ export const api = createApi<{
         runId: Id<"runs">;
         threadId: Id<"threads">;
         waiting: boolean;
+        mine?: boolean;
+        messageId?: Id<"messages">;
+        backendId?: string;
       }[]
     >;
     active: FunctionReference<"query", { threadId: Id<"threads"> }, Omit<Doc<Model, "runs">, "token"> | null>;
@@ -33,6 +36,11 @@ export const api = createApi<{
     observe: FunctionReference<"mutation", { sweepId: string; tick: number }, null>;
   };
   backends: {
+    available: FunctionReference<
+      "query",
+      {},
+      (import("../../shared/backends").BackendOption & { plugin: string })[] | null
+    >;
     list: FunctionReference<
       "action",
       {},
@@ -47,11 +55,11 @@ export const api = createApi<{
   chat: {
     send: FunctionReference<
       "action",
-      { threadId: Id<"threads">; text: string },
+      { threadId: Id<"threads">; text: string; machineId?: string },
       {
         runId: Id<"runs">;
         messageId: Id<"messages">;
-        status: "done" | "error" | "cancelled";
+        status: "done" | "error" | "cancelled" | "running";
       }
     >;
   };

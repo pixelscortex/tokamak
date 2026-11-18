@@ -177,7 +177,9 @@ pub async fn serve_with_identities(
             .route("/members", get(members).post(invite))
             .route("/members/{id}/revoke", post(revoke));
     } else if access.is_some() {
-        app = app.route("/health", get(health));
+        app = app
+            .route("/health", get(health))
+            .route("/machine/hubs", post(configure_machine));
     }
     if access.is_some() {
         app = app
@@ -233,7 +235,8 @@ async fn authorize(
     mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let browser_route = request.uri().path() == "/account"
+    let browser_route = request.uri().path() == "/machine/hubs"
+        || request.uri().path() == "/account"
         || request.uri().path() == "/ws"
         || request.uri().path() == "/plugins"
         || (request.uri().path().starts_with("/plugins/")
@@ -575,6 +578,17 @@ impl AsyncWrite for ShutdownIo {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
+    }
+}
+
+async fn configure_machine(State(adapter): State<Adapter>, body: String) -> Response {
+    let hubs = match serde_json::from_str(&body) {
+        Ok(value) => value,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid hub configuration").into_response(),
+    };
+    match adapter.server.configure_machine(hubs).await {
+        Ok(value) => account_result(Ok(value)),
+        Err(error) => (StatusCode::BAD_REQUEST, error.to_string()).into_response(),
     }
 }
 

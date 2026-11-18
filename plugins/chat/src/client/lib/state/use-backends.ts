@@ -9,6 +9,7 @@ export function useBackends(client: TokamakClient) {
   });
   const [loading, setLoading] = createSignal(false, { ownedWrite: true });
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
+  const [remote, setRemote] = createSignal(false, { ownedWrite: true });
   let alive = true;
   let pending: Promise<void> | undefined;
   onCleanup(() => {
@@ -16,6 +17,7 @@ export function useBackends(client: TokamakClient) {
   });
 
   function refresh(): Promise<void> {
+    if (remote()) return Promise.resolve();
     if (pending) return pending;
     setLoading(true);
     setError(undefined);
@@ -37,6 +39,22 @@ export function useBackends(client: TokamakClient) {
     return pending;
   }
 
-  void refresh();
-  return { data, loading, error, refresh };
+  setLoading(true);
+  const stop = client.subscribe(api.backends.available, {}, (event) => {
+    if ("error" in event) {
+      setError(event.error.message);
+      setLoading(false);
+      return;
+    }
+    setRemote(event.value !== null);
+    if (event.value === null) {
+      void refresh();
+      return;
+    }
+    setData(event.value);
+    setError(undefined);
+    setLoading(false);
+  });
+  onCleanup(stop);
+  return { data, loading, error, refresh, remote };
 }

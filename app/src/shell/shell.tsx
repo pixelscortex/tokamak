@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { serveHubs } from "../host/machine";
 import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Outlet, type AnyRouter } from "@tanstack/solid-router";
@@ -29,7 +31,10 @@ export function Shell(props: ShellProps): JSX.Element {
 }
 
 function Body(props: ShellProps): JSX.Element {
-  const servers = createServers(defaultServers(props.getEndpoint));
+  const servers = createServers({
+    ...defaultServers(props.getEndpoint),
+    ...(isTauri() ? { serveHubs } : {}),
+  });
   const session = createSession({
     routing: props.routing,
     server: () => servers.current().id,

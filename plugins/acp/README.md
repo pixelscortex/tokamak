@@ -83,3 +83,39 @@ persisted state. Every write includes the turn token, and no chat implementation
 is bundled into ACP. ACP has no client half.
 The compiler derives `chat.backend` from chat's public backend contract and ACP's
 public functions. Callable IDs and behavior are unchanged.
+
+## Machine link
+
+`src/machine/main.ts` exports `start(ctx: MachineContext)`. The compiler emits
+`machine.js`, its source map, and an independent protocol entry under
+`entries.machine`. This is a separate supervised Bun process. It has no action
+invocation or one-hour action deadline. The server restarts an exited service
+with 250 ms–30 s backoff, signals cancellation on shutdown/reload, then terminates
+its process group and descendants after the existing cleanup grace period.
+
+Desktop startup replaces the local server's desired hubs through authenticated,
+local-only `POST /machine/hubs` with `[{url, token}]`. An empty array stops serving
+all hubs. Repeating the same configuration creates no extra links. Tokens stay
+in memory; only the stable machine ID is written by the host. Browser builds do
+not call this operation. Windows returns an unavailable-worker error until its
+worker process containment is implemented.
+
+Each link authenticates to its hub as its owner, registers discovered agents and
+renews a 15 s lease every 3 s. Chat addresses each run to one live owner machine;
+a preferred machine ID must match. Claims are atomic and never replayed. Output
+writes have a contiguous sequence so retrying an append cannot duplicate text.
+Permissions still use chat mutations, with answers restricted to the run owner;
+any member can cancel. A lost lease interrupts the run on the hub's timer even
+when no window is open.
+
+The same ACP turn helpers receive either the local chat port or an SDK-backed
+hub port. Session IDs and folders are saved only in the machine service's
+`sessions.json` (mode 0600), keyed by hub origin, thread, owner and agent. This
+slice starts hub sessions in the owner's home folder; it does not expose a remote
+folder picker. Restorable sessions are reused. Every prompt includes the owner,
+machine, thread participants and the scope of the owner's tools.
+
+Run the sealed two-server test with
+`proto run bun -- e2e/machine-link.ts`. It uses only the scripted ACP agent from
+`e2e/chat-sandbox.ts`. The native stage runs it through `e2e/run.ts`; the browser
+suite also exercises a chat-only hub backed by the disposable local machine.

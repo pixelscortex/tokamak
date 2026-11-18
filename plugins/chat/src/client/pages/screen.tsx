@@ -99,6 +99,7 @@ function NoAgentsHere(props: { chat: ChatState }): JSX.Element {
   return (
     <NoAgents
       checking={props.chat.backendDiscovery.loading()}
+      remote={props.chat.backendDiscovery.remote()}
       error={props.chat.backendDiscovery.error()}
       onCheck={() => void props.chat.backendDiscovery.refresh()}
     />
@@ -123,7 +124,7 @@ function ThreadPane(props: {
   createEffect(list, (value) => {
     props.onMessages(value);
   });
-  const pending = () => pendingPermission(messages.data());
+  const pending = () => pendingPermission(messages.data()?.filter((message) => chat.canAnswer(message._id)));
   const running = () => Boolean(chat.active());
   const agentName = () => chat.agent()?.name ?? "the agent";
 

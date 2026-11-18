@@ -5,6 +5,32 @@ import { permissionPart } from "./messages/permission-part";
 import { backend } from "./backends/backend";
 
 export default defineSchema({
+  machines: defineTable({
+    owner: v.string(),
+    machineId: v.string(),
+    name: v.string(),
+    epoch: v.string(),
+    agents: v.array(v.object({ id: v.string(), title: v.string() })),
+    leaseUntil: v.number(),
+  }).index("by_owner", ["owner"]),
+  work: defineTable({
+    runId: v.id("runs"),
+    machine: v.id("machines"),
+    epoch: v.string(),
+    owner: v.string(),
+    backendId: v.string(),
+    text: v.string(),
+    history: v.array(v.object({ role: v.string(), content: v.string() })),
+    participants: v.array(v.object({ id: v.string(), name: v.string() })),
+    status: v.union(v.literal("queued"), v.literal("claimed"), v.literal("finished")),
+  })
+    .index("by_machine", ["machine"])
+    .index("by_runId", ["runId"]),
+  selections: defineTable({
+    owner: v.string(),
+    threadId: v.id("threads"),
+    backend,
+  }).index("by_owner_thread", ["owner", "threadId"]),
   threads: defineTable({
     backend: v.optional(backend),
     title: v.string(),
@@ -33,6 +59,11 @@ export default defineSchema({
   runs: defineTable({
     token: v.optional(v.union(v.string(), v.null())),
     backendPlugin: v.optional(v.string()),
+    backendId: v.optional(v.string()),
+    owner: v.optional(v.string()),
+    machine: v.optional(v.id("machines")),
+    machineEpoch: v.optional(v.string()),
+    sequence: v.optional(v.number()),
     threadId: v.id("threads"),
     messageId: v.id("messages"),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),

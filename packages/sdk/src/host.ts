@@ -42,6 +42,7 @@ export interface QueryRequest {
  * Writes cannot supply system fields. No undefined/delete-field sentinel.
  */
 export interface HostOperations {
+  "machine.configuration": { args: {}; result: import("./machine").MachineConfiguration };
   "user.current": { args: {}; result: import("./functions").User };
   "db.get": { args: { id: string }; result: StoredDocument | null };
   "db.insert": { args: { table: string; value: JsonObject }; result: Id };

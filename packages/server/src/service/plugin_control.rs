@@ -43,6 +43,9 @@ impl Coordinator {
 
     pub(super) async fn control(&mut self, command: Command) {
         match command {
+            Command::Machine(hubs, reply) => {
+                let _ = reply.send(self.configure_machine(hubs));
+            }
             Command::RenameUser(user, reply) => {
                 for client in self.sessions.values_mut() {
                     let mut current = client.user.write().expect("user lock");
@@ -123,7 +126,7 @@ impl Coordinator {
         // grants running in old worlds; the old pool tears down detached.
         self.action_pool.cancel_actions();
         if let Some(previous) = &self.plugins {
-            for worker in previous.workers.values() {
+            for worker in previous.workers.values().chain(previous.machines.values()) {
                 worker.stop().await;
             }
         }
@@ -153,6 +156,7 @@ impl Coordinator {
             }
         }
         self.plugins = Some(candidate);
+        self.start_machines();
 
         let catalog = self.metadata()?;
         // Use the same bounded ordered stream as data updates. A stale asset

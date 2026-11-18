@@ -106,3 +106,23 @@ paths to the plugin's tsconfig (relative to the plugin root):
 
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
+
+## Machine services and maintenance
+
+A plugin may add `src/machine/main.ts` exporting an async
+`start(ctx: MachineContext)` from the SDK. It may optionally add a sibling
+`tsconfig.json`. The compiler checks and bundles it for Bun separately from
+`src/server`, including the same plugin import boundary. The manifest's
+`entries.machine` has `entry`, `code`, and `map` paths covered by artifact hashes;
+none are downloadable as UI assets. A machine-only plugin is valid. No extra
+`runtime` field is needed for this entry.
+
+The local host starts services on its first authenticated machine configuration,
+keeps their configuration available for the service lifetime, supervises exits,
+and stops them on reload or shutdown. Service code receives a cancellation signal
+and `configuration()`; it has no transaction or action invocation authority.
+
+A descriptor may name `maintenance: "module:mutation"`. Loading checks that this
+is a mutation. The server invokes it with empty arguments every second through
+its normal transaction coordinator, independent of window sessions. Chat uses
+this hook to expire machine leases and interrupted runs.

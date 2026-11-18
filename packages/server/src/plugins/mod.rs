@@ -38,6 +38,8 @@ pub(crate) struct Loaded {
     pub descriptor: Value,
     pub catalog_text: String,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
+    pub(crate) machines: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
+    pub(crate) machine_config: Arc<std::sync::RwLock<Value>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 

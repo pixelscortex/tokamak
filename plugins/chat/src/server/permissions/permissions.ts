@@ -5,8 +5,8 @@ import { claimPermission, permissionPart } from "../messages/permission-part";
 // Generic backend permission lifecycle; answer is exposed to the desktop.
 export const request = mutation({
   args: { runId: v.id("runs"), token: v.string(), part: permissionPart },
-  handler: async ({ db }, { runId, token, part }) => {
-    const run = await turn(db, runId, token);
+  handler: async ({ db, user }, { runId, token, part }) => {
+    const run = await turn(db, runId, token, user.id);
     const message = await db.get(run.messageId);
     if (!message) return false;
     await db.patch(message._id, { parts: [...message.parts, part] });
@@ -29,7 +29,7 @@ export const state = query({
 
 export const answer = mutation({
   args: { messageId: v.id("messages"), requestId: v.string(), optionId: v.string() },
-  handler: async ({ db }, { messageId, requestId, optionId }) => {
+  handler: async ({ db, user }, { messageId, requestId, optionId }) => {
     const message = await db.get(messageId);
     if (!message) throw new Error("Permission no longer exists");
     const runs = await db
@@ -38,6 +38,8 @@ export const answer = mutation({
       .collect();
     const run = runs.find((run) => run.messageId === messageId && run.status === "running");
     if (!run) throw new Error("Run is no longer active");
+    if (run.owner && run.owner !== user.id)
+      throw new Error("Only the agent owner can answer this permission");
     const part = message.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission" || part.status !== "pending")
       throw new Error("Permission is no longer pending");
@@ -54,8 +56,8 @@ export const answer = mutation({
 // Atomically arbitrate answer delivery against timeout and run cancellation.
 export const claim = mutation({
   args: { runId: v.id("runs"), token: v.string(), requestId: v.string(), expired: v.boolean() },
-  handler: async ({ db }, { runId, token, requestId, expired }) => {
-    const run = await turn(db, runId, token);
+  handler: async ({ db, user }, { runId, token, requestId, expired }) => {
+    const run = await turn(db, runId, token, user.id);
     const message = await db.get(run.messageId);
     const part = message?.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission") return null;
@@ -78,8 +80,8 @@ export const claim = mutation({
 // answered the request "cancelled", so the stored answer never took effect.
 export const undelivered = mutation({
   args: { runId: v.id("runs"), token: v.string(), requestId: v.string() },
-  handler: async ({ db }, { runId, token, requestId }) => {
-    const run = await turn(db, runId, token);
+  handler: async ({ db, user }, { runId, token, requestId }) => {
+    const run = await turn(db, runId, token, user.id);
     const message = await db.get(run.messageId);
     const part = message?.parts.find((part) => part.type === "permission" && part.requestId === requestId);
     if (part?.type !== "permission" || part.status !== "answered") return null;

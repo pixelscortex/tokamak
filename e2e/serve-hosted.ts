@@ -19,7 +19,7 @@ try {
       "--listen",
       "127.0.0.1:43124",
       "--plugins",
-      process.env.TOKAMAK_PLUGIN_DIR!,
+      process.env.TOKAMAK_E2E_HUB_PLUGIN_DIR!,
     ],
     {
       stdio: ["pipe", "inherit", "inherit"],

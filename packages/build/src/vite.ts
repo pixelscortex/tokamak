@@ -48,7 +48,8 @@ export function tokamak(
         }
         if (!existsSync(clientEntry(root))) options.ui = false;
         if (options.ui !== false) return uiBuildConfig(root);
-        if (options.backend === false) throw new Error("Plugin has no enabled targets");
+        if (options.backend === false && !existsSync(resolve(root, "src/machine/main.ts")))
+          throw new Error("Plugin has no enabled targets");
         return {
           root,
           build: {
@@ -143,6 +144,18 @@ export function tokamak(
             entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
           }
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
+        }
+        const machine = resolve(root, "src/machine/main.ts");
+        if (existsSync(machine)) {
+          const built = await import("./machine.ts");
+          await built.buildMachine(root, machine);
+          for (const name of ["machine.js", "machine.js.map", "machine-entry.js"])
+            this.emitFile({
+              type: "asset",
+              fileName: name,
+              source: await readFile(resolve(root, "dist", name), "utf8"),
+            });
+          entries.machine = { entry: "machine-entry.js", code: "machine.js", map: "machine.js.map" };
         }
         const functions = publicFunctions(root, plugin.exports);
         if (existsSync(resolve(root, "plugin.ts")))

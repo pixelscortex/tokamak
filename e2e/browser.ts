@@ -10,6 +10,7 @@ const directory = await mkdtemp(resolve("app/.dev/browser-"));
 const env = {
   ...process.env,
   TOKAMAK_PLUGIN_DIR: `${directory}/plugins`,
+  TOKAMAK_E2E_HUB_PLUGIN_DIR: `${directory}/hub-plugins`,
   TOKAMAK_FIXTURE_SOURCE: `${directory}/fixture`,
   TOKAMAK_SERVER_DIR: `${directory}/local`,
   TOKAMAK_ALLOWED_ORIGINS: `http://127.0.0.1:${process.env.TOKAMAK_E2E_PORT ?? "1420"}`,
@@ -33,6 +34,10 @@ try {
   run("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts"]);
   // Adds ACP and a scripted agent; the server then never sees this machine's real agent CLIs.
   const sandbox = await prepareChatSandbox(directory);
+  await cp(env.TOKAMAK_PLUGIN_DIR, env.TOKAMAK_E2E_HUB_PLUGIN_DIR, {
+    recursive: true,
+    filter: (source) => source !== `${env.TOKAMAK_PLUGIN_DIR}/acp`,
+  });
   Object.assign(env, { CHAT_SANDBOX_HOME: sandbox.env.HOME, CHAT_SANDBOX_PATH: sandbox.env.PATH });
   run("proto", ["run", "bun", "--", "run", "--cwd", "app", "build"]);
   run("proto", [

@@ -12,3 +12,11 @@ export {
 
 export type { ToolPart } from "./messages/parts";
 export type { BackendOption, BackendApi, TurnArgs, TurnResult } from "../shared/backends";
+
+export {
+  register as registerMachine,
+  heartbeat as machineHeartbeat,
+  disconnect as disconnectMachine,
+  pending as machineWork,
+  claim as claimMachineWork,
+} from "./machines/machines";

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-export type Endpoint = { http: string; ws: string; token: string | null };
+export type Endpoint = { http: string; ws: string; token: string | null; machineId?: string };
 
 export const hosted = () => !isTauri() && !import.meta.env.DEV && !import.meta.env.VITE_TOKAMAK_HTTP;
 export const hostedTokenKey = "tokamak.access-token";

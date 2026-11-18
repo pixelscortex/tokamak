@@ -6,9 +6,12 @@ impl Coordinator {
         mut commands: mpsc::Receiver<Command>,
         mut closing: mpsc::Receiver<oneshot::Sender<Result<(), Error>>>,
     ) {
+        let mut maintenance = tokio::time::interval(std::time::Duration::from_secs(1));
+        maintenance.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             self.sessions.retain(|_, client| !client.output.is_closed());
             tokio::select! {
+                _ = maintenance.tick() => self.maintenance().await,
                 Some(reply) = closing.recv() => {
                     // Active native transactions remain finishable on Busy.
                     // No database owner can create a new one behind our check.

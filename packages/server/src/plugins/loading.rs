@@ -86,7 +86,10 @@ impl Loaded {
 
         let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
 
-        let workers = start_workers(&catalog)?;
+        validate_maintenance(&catalog, &targets)?;
+        let workers = start_workers(&catalog, false)?;
+        let machine_config = machine_configuration(previous);
+        let machines = start_workers(&catalog, true)?;
         Ok(Arc::new(Self {
             catalog,
             targets,
@@ -94,6 +97,8 @@ impl Loaded {
             catalog_text,
             inspected,
             workers,
+            machines,
+            machine_config,
         }))
     }
 
@@ -155,17 +160,30 @@ impl Loaded {
 
 fn start_workers(
     catalog: &Catalog,
+    machine: bool,
 ) -> Result<BTreeMap<String, Arc<crate::host::worker::Supervisor>>, Error> {
     let mut workers = BTreeMap::new();
     for (id, artifact) in &catalog.plugins {
-        if let Some(entry) = &artifact.manifest.entries.worker {
+        let entries = &artifact.manifest.entries;
+        if let Some(entry) = if machine {
+            &entries.machine
+        } else {
+            &entries.worker
+        } {
             workers.insert(
                 id.clone(),
                 crate::host::worker::Supervisor::new(
                     id.clone(),
                     artifact.assets[&entry.entry].clone(),
                     artifact.assets[&entry.code].clone(),
-                    catalog.directory.join("plugin-data").join(id),
+                    catalog
+                        .directory
+                        .join(if machine {
+                            "machine-data"
+                        } else {
+                            "plugin-data"
+                        })
+                        .join(id),
                     &catalog.environment,
                     &artifact.manifest.plugin.permissions,
                 )?,
@@ -174,4 +192,30 @@ fn start_workers(
     }
 
     Ok(workers)
+}
+
+fn validate_maintenance(
+    catalog: &Catalog,
+    targets: &BTreeMap<String, Target>,
+) -> Result<(), Error> {
+    for (id, artifact) in &catalog.plugins {
+        if let Some(name) = &artifact.manifest.plugin.maintenance
+            && targets
+                .get(&format!("{id}/{name}"))
+                .is_none_or(|t| t.kind != crate::service::FunctionKind::Mutation)
+        {
+            return Err(invalid("Maintenance entry must name a mutation"));
+        }
+    }
+    Ok(())
+}
+
+fn machine_configuration(previous: Option<&Loaded>) -> Arc<std::sync::RwLock<Value>> {
+    previous
+        .map(|p| p.machine_config.clone())
+        .unwrap_or_else(|| {
+            Arc::new(std::sync::RwLock::new(
+                json!({"machineId":"", "name":"This Mac", "hubs":[]}),
+            ))
+        })
 }

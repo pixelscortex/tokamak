@@ -11,6 +11,8 @@
   },
   "include": [
     "run.ts",
+    "machine-link.ts",
+    "serve-hosted.ts",
     "feature/*.ts",
     "browser.ts",
     "chat-sandbox.ts",

@@ -1,6 +1,6 @@
 import { agents, type AgentClient } from "../agents/client";
-import type { ActionContext, Id } from "@tokamak/sdk";
-import { api as chat } from "plugin:chat/server";
+import type { Id } from "@tokamak/sdk";
+import { chatPort, type TurnContext } from "./chat-port";
 import { turnBuffer } from "./turn-buffer";
 import { readAcpTurn } from "./acp-turn";
 
@@ -26,11 +26,12 @@ type Started = {
   token: string;
   messageId: Id<"messages">;
   history: { role: string; content: string }[];
+  identity?: string;
 };
 type Backend = { agent: string; cwd: string; sessionId?: string };
 
 export async function acpSend(
-  ctx: ActionContext,
+  ctx: TurnContext,
   args: { threadId: Id<"threads">; text: string },
   started: Started,
   backend: Backend,
@@ -43,12 +44,12 @@ export async function acpSend(
   let closed = false;
   let openingSession = true;
   const finish = async (outcome: "done" | "error" | "cancelled", error?: string) => {
-    if (!(await ctx.use(chat).runIsRunning({ runId })))
+    if (!(await chatPort(ctx).runIsRunning({ runId })))
       return { runId, messageId, status: "cancelled" as const };
     return {
       runId,
       messageId,
-      status: (await ctx.use(chat).updateRun({
+      status: (await chatPort(ctx).updateRun({
         runId,
         token,
         delta: buffer.pending(),
@@ -72,7 +73,7 @@ export async function acpSend(
     });
     const opened = await buffer.waitFor(opening);
     openingSession = false;
-    await ctx.use(chat).saveBackendState({
+    await chatPort(ctx).saveBackendState({
       runId,
       token,
       threadId: args.threadId,
@@ -81,9 +82,14 @@ export async function acpSend(
       settings: { cwd: backend.cwd },
       state: { sessionId: opened.sessionId },
     });
-    const prefix = opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
+    // A machine session may have missed messages from the other participants.
+    const prefix = opened.restored && !started.identity ? "" : historyPrefix(started.history.slice(0, -1));
     const text = prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim();
-    const events = client.prompt({ agent: backend.agent, sessionId: opened.sessionId, text });
+    const events = client.prompt({
+      agent: backend.agent,
+      sessionId: opened.sessionId,
+      text: started.identity ? `${started.identity}\n\n${text}` : text,
+    });
     const stopReason = await readAcpTurn(ctx, backend.agent, runId, token, buffer, events, client);
     finished = true;
     if (stopReason === "refusal") return await finish("error", "Agent refused");

@@ -26,6 +26,9 @@ try {
   const files = {};
   for (const name of [
     "manifest.json",
+    "machine.js",
+    "machine.js.map",
+    "machine-entry.js",
     "bundle.js",
     "bundle.js.map",
     "api.ts",

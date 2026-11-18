@@ -4,7 +4,6 @@ import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
 import { api } from "../api";
 import { agentOf } from "../agents";
 import { useBackends } from "./use-backends";
-import { useRunRecovery } from "./use-run-recovery";
 
 export { api };
 export type Thread = ResultOf<typeof api.threads.list>[number];
@@ -19,8 +18,20 @@ export function useChat(client: TokamakClient) {
   const [threadId, setThreadId] = createSignal<Id<"threads"> | undefined>(lastThread, { ownedWrite: true });
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const [creating, setCreating] = createSignal(false, { ownedWrite: true });
-  const runs = createMemo(() => Object.fromEntries((running.data() ?? []).map((run) => [run.threadId, run])));
   const discovery = useBackends(client);
+  const runs = createMemo(() =>
+    Object.fromEntries(
+      (running.data() ?? [])
+        .filter(
+          (run) =>
+            run.mine !== false &&
+            (!discovery.remote() ||
+              !run.backendId ||
+              run.backendId === threads.data()?.find((t) => t._id === run.threadId)?.backend?.backendId),
+        )
+        .map((run) => [run.threadId, run]),
+    ),
+  );
   let initialized = false;
   let alive = true;
   let disconnected = false;
@@ -71,14 +82,12 @@ export function useChat(client: TokamakClient) {
       open(list[0]?._id);
   });
 
-  useRunRecovery(client, () => Boolean(running.data()?.length), setError);
-
   const thread = createMemo(() => threads.data()?.find((item) => item._id === threadId()));
   const active = () => runs()[threadId() ?? ""] ?? null;
   const agent = createMemo(() => agentOf(thread()?.backend, discovery.data()));
 
   async function cancel() {
-    const run = active();
+    const run = active() ?? running.data()?.find((run) => run.threadId === threadId());
     if (!run) return;
     try {
       await client.mutation(api.runs.cancel, { runId: run.runId });
@@ -106,6 +115,8 @@ export function useChat(client: TokamakClient) {
     creating,
     createThread,
     cancel,
-    canStop: () => Boolean(active()),
+    canAnswer: (messageId: Id<"messages">) =>
+      Boolean(running.data()?.some((run) => run.mine !== false && run.messageId === messageId)),
+    canStop: () => Boolean(running.data()?.some((run) => run.threadId === threadId())),
   };
 }

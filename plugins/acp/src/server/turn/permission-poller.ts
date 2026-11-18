@@ -1,11 +1,12 @@
-import type { ActionContext, Id, ArgsOf } from "@tokamak/sdk";
+import { chatPort, type TurnContext } from "./chat-port";
+import type { Id, ArgsOf } from "@tokamak/sdk";
 import { api } from "plugin:chat/server";
 const TIMEOUT_MS = 30 * 60_000;
 type PermissionPart = ArgsOf<typeof api.requestPermission>["part"];
 import type { turnBuffer } from "./turn-buffer";
 
 export function permissionPoller(
-  ctx: ActionContext,
+  ctx: TurnContext,
   runId: Id<"runs">,
   token: string,
   buffer: ReturnType<typeof turnBuffer>,
@@ -16,11 +17,11 @@ export function permissionPoller(
   return {
     async request(part: PermissionPart) {
       await buffer.update();
-      if (!(await ctx.use(api).requestPermission({ runId, token, part }))) throw new Error("Run cancelled");
+      if (!(await chatPort(ctx).requestPermission({ runId, token, part }))) throw new Error("Run cancelled");
       pending.set(part.requestId, Date.now() + TIMEOUT_MS);
     },
     async poll() {
-      const state = await ctx.use(api).permissionState({ runId });
+      const state = await chatPort(ctx).permissionState({ runId });
       for (const [requestId, deadline] of pending) {
         const part = state.parts.find((part) => part.requestId === requestId);
         const expired = Date.now() >= deadline;
@@ -32,9 +33,9 @@ export function permissionPoller(
         }
         let outcome;
         try {
-          outcome = await ctx.use(api).claimPermission({ runId, token, requestId, expired });
+          outcome = await chatPort(ctx).claimPermission({ runId, token, requestId, expired });
         } catch (error) {
-          if (await ctx.use(api).runIsRunning({ runId })) throw error;
+          if (await chatPort(ctx).runIsRunning({ runId })) throw error;
           pending.delete(requestId);
           await respond(requestId, null);
           continue;

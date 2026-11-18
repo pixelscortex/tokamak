@@ -10,8 +10,11 @@ export const running = query({
       .collect();
     return visible.map((run) => ({
       runId: run._id,
+      messageId: run.messageId,
       threadId: run.threadId,
       waiting: run.waiting ?? false,
+      mine: !run.owner || run.owner === ctx.user.id,
+      ...(run.backendId ? { backendId: run.backendId } : {}),
     }));
   },
 });
@@ -60,6 +63,7 @@ export const observe = mutation({
       .withIndex("by_status", (q) => q.eq("status", "running"))
       .collect();
     for (const run of runs) {
+      if (run.machine) continue;
       const previous = run.observations?.find((observation) => observation.sweepId === sweepId);
       if (previous && tick <= previous.tick) continue;
       const heartbeat = run.heartbeat ?? 0;
