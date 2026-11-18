@@ -230,6 +230,7 @@ test("public aliases preserve registered wire names and calls go through plugin.
       { name: "main:call", args: {} },
       {
         op(operation, payload) {
+          if (operation === "user.current") return { id: "local", name: "You", role: "owner" };
           calls.push([operation, payload]);
           return "host result";
         },

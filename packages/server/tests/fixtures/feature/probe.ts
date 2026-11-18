@@ -1,6 +1,35 @@
 // Real SDK feature handlers probe host transactions, JSON semantics and readsets.
 // Loose builders deliberately permit arbitrary document fields, as does the SDK.
-import { mutation, query, v, type JsonObject, type Id } from "@tokamak/sdk";
+import {
+  action,
+  createApi,
+  mutation,
+  query,
+  v,
+  type ApiFromModule,
+  type JsonObject,
+  type Id,
+} from "@tokamak/sdk";
+
+export const whoQuery = query({
+  handler: async (ctx) => ({ user: ctx.user, count: (await ctx.db.query("items").collect()).length }),
+});
+export const whoMutation = mutation({
+  handler: async (ctx) => {
+    await ctx.db.insert("items", { author: ctx.user.id });
+    return ctx.user;
+  },
+});
+const identityApi = createApi<{
+  probe: ApiFromModule<{ whoQuery: typeof whoQuery; whoMutation: typeof whoMutation }>;
+}>();
+export const whoAction = action({
+  handler: async (ctx) => ({
+    user: ctx.user,
+    query: await ctx.runQuery(identityApi.probe.whoQuery, {}),
+    mutation: await ctx.runMutation(identityApi.probe.whoMutation, {}),
+  }),
+});
 
 export const list = query({
   args: { table: v.string() },

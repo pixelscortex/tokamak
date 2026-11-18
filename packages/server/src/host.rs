@@ -1,5 +1,5 @@
-//! One invocation's SDK capabilities. No SQL, client, or ambient call identity
-//! reaches JavaScript. Futures are boxed at the database boundary to keep the
+//! One invocation's SDK capabilities, including its explicit caller identity.
+//! No SQL or client reaches JavaScript. Futures are boxed at the database boundary to keep the
 //! embedded engine's large debug futures off the QuickJS worker's native stack.
 
 use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
@@ -53,6 +53,7 @@ pub(crate) struct Invocation<'a> {
     pub space: &'a DataSpace,
     pub plugins: Option<Arc<crate::plugins::Loaded>>,
     pub determinism: Determinism,
+    pub user: crate::identity::User,
 }
 
 pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocation<'_>) -> Call {
@@ -64,6 +65,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         space,
         plugins,
         determinism,
+        user,
     } = invocation;
     let (bundle, name, space, graph) = resolve_invocation(bundle, name, space, plugins);
     let tx = if mutation {
@@ -96,7 +98,10 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         space,
         mutation,
         graph,
-        Some(determinism),
+        CallContext {
+            determinism: Some(determinism),
+            user,
+        },
     );
 
     let result = match pool.submit(bundle, "invoke", json!({"name":name,"args":args}), ops) {
@@ -131,6 +136,11 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
 
 type Graph = Option<(Arc<crate::plugins::Loaded>, String, Vec<String>)>;
 
+struct CallContext {
+    determinism: Option<Determinism>,
+    user: crate::identity::User,
+}
+
 fn operations(
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
@@ -138,9 +148,13 @@ fn operations(
     space: DataSpace,
     writable: bool,
     graph: Graph,
-    determinism: Option<Determinism>,
+    context: CallContext,
 ) -> Arc<OpRegistry> {
+    let CallContext { user, determinism } = context;
     let mut ops = OpRegistry::new();
+    let caller_user = user.clone();
+    ops.register_sync("user.current", move |_| Ok(json!(caller_user)))
+        .expect("unique operation");
 
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
@@ -199,7 +213,10 @@ fn operations(
                     target.space,
                     target.mutation,
                     Some((plugins.clone(), target.owner, child_path)),
-                    None,
+                    CallContext {
+                        determinism: None,
+                        user: user.clone(),
+                    },
                 );
 
                 let failed = failure.clone();

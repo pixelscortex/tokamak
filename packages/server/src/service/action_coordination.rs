@@ -1,7 +1,14 @@
 use super::*;
 
 impl Coordinator {
-    pub(super) fn start_action(&mut self, session: u64, id: u64, name: String, args: Json) {
+    pub(super) fn start_action(
+        &mut self,
+        session: u64,
+        user: crate::identity::User,
+        id: u64,
+        name: String,
+        args: Json,
+    ) {
         if self.action_jobs.len() >= ACTIONS {
             self.respond(session, id, Err("action capacity exceeded".into()));
             return;
@@ -33,6 +40,7 @@ impl Coordinator {
             environment.clone(),
             self.action_pool.limits().clone(),
             vec![name.clone()],
+            user,
         ) {
             Ok(ops) => ops,
             Err(error) => {
@@ -101,6 +109,7 @@ impl Coordinator {
                         &call.name,
                         call.args.clone(),
                         call.kind == FunctionKind::Mutation,
+                        call.user.clone(),
                     )
                     .await;
                 self.drain_changes();

@@ -55,30 +55,7 @@ impl Coordinator {
             };
             self.subscription(owner, id).dirty = false;
 
-            let call = if self.kinds.get(&name) == Some(&FunctionKind::Query) {
-                host::invoke(
-                    &self.database,
-                    &self.pool,
-                    host::Invocation {
-                        bundle: self.bundle.clone(),
-                        name: &name,
-                        args,
-                        mutation: false,
-                        space: &self.space,
-                        plugins: self.plugins.clone(),
-                        determinism: engine::Determinism::default(),
-                    },
-                )
-                .await
-            } else {
-                host::Call {
-                    result: Err(
-                        "Subscription query is not registered in this plugin generation".into(),
-                    ),
-                    reads: ReadSet::new(),
-                    conflict: false,
-                }
-            };
+            let call = self.run_subscription(owner, &name, args).await;
 
             let sub = self.subscription(owner, id);
             sub.reads = call.reads;
@@ -156,5 +133,37 @@ impl Coordinator {
         );
         self.drain_changes();
         self.refresh().await;
+    }
+    async fn run_subscription(&self, owner: u64, name: &str, args: Json) -> host::Call {
+        let user = self.sessions[&owner]
+            .user
+            .read()
+            .expect("user lock")
+            .clone();
+        if self.kinds.get(name) == Some(&FunctionKind::Query) {
+            host::invoke(
+                &self.database,
+                &self.pool,
+                host::Invocation {
+                    bundle: self.bundle.clone(),
+                    name,
+                    args,
+                    mutation: false,
+                    space: &self.space,
+                    plugins: self.plugins.clone(),
+                    determinism: engine::Determinism::default(),
+                    user,
+                },
+            )
+            .await
+        } else {
+            host::Call {
+                result: Err(
+                    "Subscription query is not registered in this plugin generation".into(),
+                ),
+                reads: ReadSet::new(),
+                conflict: false,
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
 import { endpoint } from "../host/endpoint";
+import { syncDisplayName } from "../host/identity";
 import type { ServerEndpoint } from "../plugins/adapter";
 import { createPluginShell, type PluginRouting, type PluginShell } from "../plugins/views";
 
@@ -23,6 +24,7 @@ export interface SessionOptions {
    * connection (its socket and plugin UI) and connects to the new one.
    */
   server?: Accessor<string>;
+  displayName?: () => string | undefined;
   /** Says why a connection failed when the server can tell more than the socket can. */
   explain?: (endpoint: ServerEndpoint) => Promise<{ reason: string; needs?: "token" } | undefined>;
 }
@@ -42,6 +44,7 @@ export function createSession(options: SessionOptions): Session {
     disconnect();
     const current = attempt;
     setConnection({ state: "connecting" });
+    const displayName = options.displayName?.();
     const supplied = await (options.getEndpoint ?? endpoint)();
     if (current !== attempt) return;
     // An empty token is a server that needs one and has none saved; null needs none.
@@ -81,6 +84,8 @@ export function createSession(options: SessionOptions): Session {
         plugins.dispose();
         setConnection({ state: "failed", reason: "The server closed the connection." });
       });
+      await syncDisplayName(supplied, displayName);
+      if (current !== attempt || closed) return;
       await plugins.connect();
       // A socket that closed while the catalog loaded has already reported its failure.
       if (current === attempt && !closed)

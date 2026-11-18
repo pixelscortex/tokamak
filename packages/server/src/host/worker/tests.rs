@@ -6,7 +6,8 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
     static FILES: OnceLock<BTreeMap<String, String>> = OnceLock::new();
     let files = FILES.get_or_init(|| {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let output = Command::new("bun")
+        let output = Command::new("proto")
+            .args(["run", "bun", "--"])
             .arg("packages/server/tests/build-worker.mjs")
             .current_dir(root)
             .output()
@@ -48,13 +49,18 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
 }
 async fn state(worker: &Supervisor) -> Value {
     worker
-        .invoke(
-            "actions:state".into(),
-            json!({}),
-            Arc::new(OpRegistry::new()),
-        )
+        .invoke("actions:state".into(), json!({}), local_user_ops())
         .await
         .unwrap()
+}
+
+fn local_user_ops() -> Arc<OpRegistry> {
+    let mut ops = OpRegistry::new();
+    ops.register_sync("user.current", |_| {
+        Ok(json!(crate::identity::User::local()))
+    })
+    .unwrap();
+    Arc::new(ops)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -65,7 +71,7 @@ async fn deadline_and_dropped_invocation_kill_stuck_worker_then_restart() {
         .invoke_with_deadline(
             "actions:cpu".into(),
             json!({}),
-            Arc::new(OpRegistry::new()),
+            local_user_ops(),
             Duration::from_millis(30),
         )
         .await
@@ -77,11 +83,7 @@ async fn deadline_and_dropped_invocation_kill_stuck_worker_then_restart() {
     let running = worker.clone();
     let call = tokio::spawn(async move {
         running
-            .invoke(
-                "actions:stuck".into(),
-                json!({}),
-                Arc::new(OpRegistry::new()),
-            )
+            .invoke("actions:stuck".into(), json!({}), local_user_ops())
             .await
     });
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -100,7 +102,7 @@ async fn cooperative_cancel_keeps_worker_and_missing_bun_is_readable() {
         .invoke_with_deadline(
             "actions:cooperative".into(),
             json!({}),
-            Arc::new(OpRegistry::new()),
+            local_user_ops(),
             Duration::from_millis(30),
         )
         .await
@@ -114,11 +116,7 @@ async fn cooperative_cancel_keeps_worker_and_missing_bun_is_readable() {
     worker.bun = None;
     assert_eq!(
         worker
-            .invoke(
-                "actions:state".into(),
-                json!({}),
-                Arc::new(OpRegistry::new())
-            )
+            .invoke("actions:state".into(), json!({}), local_user_ops())
             .await
             .unwrap_err(),
         "Plugin worker-test needs Bun: install from https://bun.sh"

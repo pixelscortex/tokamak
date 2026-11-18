@@ -34,6 +34,10 @@ function Body(props: ShellProps): JSX.Element {
     routing: props.routing,
     server: () => servers.current().id,
     getEndpoint: () => servers.endpointOf(untrack(servers.current)),
+    displayName: () => {
+      const server = untrack(servers.current);
+      return server.kind === "local" ? undefined : server.displayName;
+    },
     explain: async (endpoint) => {
       if (untrack(servers.current).kind === "local") return undefined;
       const answer = await reach(endpoint.http, { timeout: 5_000 });

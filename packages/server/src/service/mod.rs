@@ -82,6 +82,7 @@ pub struct Session {
 #[derive(Clone)]
 pub struct SessionSender {
     id: u64,
+    user: Arc<std::sync::RwLock<crate::identity::User>>,
     commands: mpsc::Sender<Command>,
     slow: Arc<AtomicBool>,
     alive: mpsc::WeakSender<Event>,
@@ -103,8 +104,12 @@ type Connection = (
 );
 
 pub(crate) enum Command {
-    Connect(oneshot::Sender<Result<Connection, Error>>),
-    Action(u64, Action),
+    Connect(
+        Arc<std::sync::RwLock<crate::identity::User>>,
+        oneshot::Sender<Result<Connection, Error>>,
+    ),
+    RenameUser(crate::identity::User, oneshot::Sender<()>),
+    Action(u64, crate::identity::User, Action),
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
@@ -156,6 +161,7 @@ struct Subscription {
 }
 
 struct Client {
+    user: Arc<std::sync::RwLock<crate::identity::User>>,
     output: mpsc::Sender<Event>,
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,

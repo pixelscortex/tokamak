@@ -30,6 +30,7 @@ export const start = mutation({
     await db.insert("messages", {
       threadId,
       role: "user",
+      author: { id: ctx.user.id, name: ctx.user.name },
       parts: [{ type: "text", text }],
       status: "complete",
       createdAt: now,
@@ -37,6 +38,7 @@ export const start = mutation({
     const messageId = await db.insert("messages", {
       threadId,
       role: "assistant",
+      askedBy: { id: ctx.user.id, name: ctx.user.name },
       parts: [],
       status: "streaming",
       agent: { plugin: backend.plugin, backendId: backend.backendId },

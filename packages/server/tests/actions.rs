@@ -22,6 +22,15 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
+
+fn local_user_operations() -> OpRegistry {
+    let mut ops = OpRegistry::new();
+    ops.register_sync("user.current", |_| {
+        Ok(json!(server::identity::User::local()))
+    })
+    .unwrap();
+    ops
+}
 fn artifacts() -> &'static BTreeMap<String, String> {
     static BUILT: OnceLock<BTreeMap<String, String>> = OnceLock::new();
     BUILT.get_or_init(|| {
@@ -81,6 +90,98 @@ impl Drop for Installation {
     }
 }
 struct Child(std::process::Child);
+
+#[test]
+fn chat_records_each_members_author_in_one_shared_thread() {
+    let installation = Installation::with_chat(true);
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let backend = server::Backend::start_plugins(
+                Storage::Memory,
+                PoolConfig::default(),
+                &installation.0,
+            )
+            .await
+            .unwrap();
+            let mut alice = backend
+                .server()
+                .connect_as(server::identity::User {
+                    id: "alice".into(),
+                    name: "Alice".into(),
+                    role: "member".into(),
+                })
+                .await
+                .unwrap();
+            let mut bob = backend
+                .server()
+                .connect_as(server::identity::User {
+                    id: "bob".into(),
+                    name: "Bob".into(),
+                    role: "member".into(),
+                })
+                .await
+                .unwrap();
+            verify_plugin_callers(&mut alice, "alice", "Alice").await;
+            verify_plugin_callers(&mut bob, "bob", "Bob").await;
+            let thread = chat_call(
+                &mut alice,
+                "chat/threads:insert",
+                json!({"backend":{"kind":"plugin","plugin":"fixture","backendId":"test"}}),
+            )
+            .await;
+            for (session, text) in [(&mut alice, "from Alice"), (&mut bob, "from Bob")] {
+                let run = chat_call(
+                    session,
+                    "chat/send:start",
+                    json!({"threadId":thread,"text":text,"token":"test-turn"}),
+                )
+                .await;
+                chat_call(
+                    session,
+                    "chat/send:update",
+                    json!({"runId":run["runId"],"token":"test-turn","delta":"","outcome":"done"}),
+                )
+                .await;
+            }
+            let messages =
+                chat_call(&mut bob, "chat/messages:list", json!({"threadId":thread})).await;
+            for (index, id, name) in [(0, "alice", "Alice"), (2, "bob", "Bob")] {
+                assert_eq!(messages[index]["author"], json!({"id":id,"name":name}));
+                assert_eq!(messages[index + 1]["askedBy"], json!({"id":id,"name":name}));
+            }
+            drop((alice, bob));
+            backend.close().await.unwrap();
+        });
+}
+
+async fn chat_call(session: &mut server::Session, name: &str, args: Value) -> Value {
+    session.call(1, name, args).unwrap();
+    let Some(Event::Response { result, .. }) =
+        tokio::time::timeout(Duration::from_secs(10), session.recv())
+            .await
+            .unwrap()
+            .unwrap()
+    else {
+        panic!("missing chat response")
+    };
+    result.unwrap()
+}
+
+async fn verify_plugin_callers(session: &mut server::Session, id: &str, name: &str) {
+    let user = json!({"id":id,"name":name,"role":"member"});
+    for function in ["a/ops:callerViaQuery", "a/ops:callerViaMutation"] {
+        assert_eq!(chat_call(session, function, json!({})).await, user);
+    }
+    assert_eq!(
+        chat_call(session, "a/ops:callerViaAction", json!({})).await,
+        json!([user, user, user])
+    );
+}
+
 impl Drop for Child {
     fn drop(&mut self) {
         let _ = self.0.kill();
@@ -285,7 +386,7 @@ fn action_random_ignores_transaction_replay_seed() {
         .unwrap()
         .block_on(async {
             let bundle = Bundle::new(artifacts()["a/bundle.js"].clone(), None).unwrap();
-            let mut ops = OpRegistry::new();
+            let mut ops = local_user_operations();
             ops.set_determinism(Determinism {
                 timestamp_ms: 123,
                 seed: 456,
@@ -499,7 +600,7 @@ fn web_fix_cancel_disconnects_with_worker_idle() {
                     ..PoolConfig::default()
                 })
                 .unwrap();
-                let mut ops = OpRegistry::new();
+                let mut ops = local_user_operations();
                 ops.set_network_permissions(vec!["net:127.0.0.1".into()]);
                 let pending = pool
                     .submit(

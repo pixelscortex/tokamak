@@ -1,9 +1,13 @@
-//! Thin loopback WebSocket adapter. All execution and outbound ordering remain
+//! Thin WebSocket adapter. All execution and outbound ordering remain
 //! in the same Tower session used by desktop; network failures drop that owner.
 
-use crate::{Server, protocol::Request};
+use crate::{
+    Server,
+    identity::{Identities, User},
+    protocol::Request,
+};
 use axum::{
-    Router,
+    Extension, Router,
     extract::{
         Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
@@ -43,6 +47,7 @@ struct Adapter {
     access: Option<LocalAccess>,
     origins: Arc<Vec<String>>,
     hosted: bool,
+    identities: Arc<Identities>,
 }
 
 fn allowed_origins(web: Option<&HostedWeb>) -> Arc<Vec<String>> {
@@ -70,7 +75,7 @@ fn allowed_origins(web: Option<&HostedWeb>) -> Arc<Vec<String>> {
     })
 }
 
-/// Local desktop capability. Never place the token in discovery or logs.
+/// Bootstrap capability and local discovery metadata. Never log the token.
 #[derive(Clone)]
 pub struct LocalAccess {
     pub token: String,
@@ -104,6 +109,35 @@ pub async fn serve_with_web(
     access: Option<LocalAccess>,
     web: Option<HostedWeb>,
 ) -> std::io::Result<()> {
+    let identities = if web.is_some() {
+        Identities::bootstrap(
+            access
+                .as_ref()
+                .map(|a| a.token.as_str())
+                .unwrap_or_default(),
+        )
+    } else {
+        Identities::local(access.as_ref().map(|a| a.token.as_str()))
+    };
+    serve_with_identities(
+        listener,
+        server,
+        shutdown,
+        access,
+        web,
+        Arc::new(identities),
+    )
+    .await
+}
+
+pub async fn serve_with_identities(
+    listener: TcpListener,
+    server: Arc<Server>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+    access: Option<LocalAccess>,
+    web: Option<HostedWeb>,
+    identities: Arc<Identities>,
+) -> std::io::Result<()> {
     if web.is_some()
         && access
             .as_ref()
@@ -126,17 +160,22 @@ pub async fn serve_with_web(
     let adapter = Adapter {
         server,
         hosted,
+        identities,
         stopping: stopping.clone(),
         connections: connections.clone(),
         access: access.clone(),
         origins: allowed_origins(web.as_ref()),
     };
     let mut app = Router::new()
+        .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
         .route("/plugins", get(plugins))
         .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
     if hosted {
-        app = app.route("/health", get(|| async { "ok" }));
+        app = app
+            .route("/health", get(|| async { "ok" }))
+            .route("/members", get(members).post(invite))
+            .route("/members/{id}/revoke", post(revoke));
     } else if access.is_some() {
         app = app.route("/health", get(health));
     }
@@ -191,10 +230,11 @@ async fn authorize(
     State(adapter): State<Adapter>,
     headers: HeaderMap,
     Query(capability): Query<Capability>,
-    request: axum::extract::Request,
+    mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let browser_route = request.uri().path() == "/ws"
+    let browser_route = request.uri().path() == "/account"
+        || request.uri().path() == "/ws"
         || request.uri().path() == "/plugins"
         || (request.uri().path().starts_with("/plugins/")
             && request.uri().path().contains("/assets/"));
@@ -209,9 +249,7 @@ async fn authorize(
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if let Some(access) = &adapter.access
-        && !(adapter.hosted && request.uri().path() == "/health")
-    {
+    if !(adapter.hosted && request.uri().path() == "/health") {
         let bearer = headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -223,7 +261,7 @@ async fn authorize(
                     .flatten()
             })
             .unwrap_or_default();
-        if !valid_token(actual, &access.token) {
+        let Some(user) = adapter.identities.identify(actual) else {
             // An allowed origin may read the 401, so a client can tell a rejected
             // token from a refused origin or an unreachable server.
             let mut response = StatusCode::UNAUTHORIZED.into_response();
@@ -231,7 +269,14 @@ async fn authorize(
                 allow_origin(&mut response, origin);
             }
             return response;
+        };
+        let path = request.uri().path();
+        if (path.starts_with("/members") || path == "/shutdown" || path.ends_with("/reload"))
+            && user.role != "owner"
+        {
+            return StatusCode::FORBIDDEN.into_response();
         }
+        request.extensions_mut().insert(user);
     }
     let mut response = next.run(request).await;
     if browser_route {
@@ -262,14 +307,6 @@ fn same_http_origin(headers: &HeaderMap, origin: &axum::http::HeaderValue) -> bo
         .is_some_and(|url| origin.as_bytes() == url.origin().ascii_serialization().as_bytes())
 }
 
-// Fixed-size digests keep the comparison constant-time, including unequal lengths.
-// All shared-token policy lives here so invite authentication can replace it.
-fn valid_token(actual: &str, expected: &str) -> bool {
-    use sha2::{Digest, Sha256};
-    use subtle::ConstantTimeEq;
-    bool::from(Sha256::digest(actual.as_bytes()).ct_eq(&Sha256::digest(expected.as_bytes())))
-}
-
 async fn health(State(adapter): State<Adapter>) -> Response {
     (
         [("content-type", "application/json")],
@@ -281,6 +318,68 @@ async fn health(State(adapter): State<Adapter>) -> Response {
 async fn stop(State(adapter): State<Adapter>) -> StatusCode {
     adapter.stopping.cancel();
     StatusCode::ACCEPTED
+}
+
+fn account_result(result: Result<serde_json::Value, String>) -> Response {
+    match result {
+        Ok(value) => (
+            [
+                ("content-type", "application/json"),
+                ("cache-control", "no-store"),
+            ],
+            value.to_string(),
+        )
+            .into_response(),
+        Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
+    }
+}
+
+async fn whoami(Extension(user): Extension<User>) -> Response {
+    account_result(Ok(serde_json::json!(user)))
+}
+
+#[derive(serde::Deserialize)]
+struct DisplayName {
+    name: String,
+}
+
+async fn rename(
+    State(adapter): State<Adapter>,
+    Extension(user): Extension<User>,
+    body: String,
+) -> Response {
+    let result = async {
+        let input: DisplayName = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+        let user = adapter.identities.rename(&user.id, &input.name)?;
+        adapter
+            .server
+            .rename_user(user.clone())
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(serde_json::json!(user))
+    }
+    .await;
+    account_result(result)
+}
+
+async fn members(State(adapter): State<Adapter>) -> Response {
+    account_result(Ok(adapter.identities.list()))
+}
+
+async fn invite(State(adapter): State<Adapter>, body: String) -> Response {
+    account_result((|| {
+        let input: DisplayName = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({"token": adapter.identities.invite(&input.name)?}))
+    })())
+}
+
+async fn revoke(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
+    account_result(
+        adapter
+            .identities
+            .revoke(&id)
+            .map(|()| serde_json::json!({"revoked":id})),
+    )
 }
 
 fn plugin_result(result: Result<serde_json::Value, crate::Error>) -> Response {
@@ -344,7 +443,11 @@ async fn plugin_asset(
     }
 }
 
-async fn upgrade(State(adapter): State<Adapter>, ws: WebSocketUpgrade) -> Response {
+async fn upgrade(
+    State(adapter): State<Adapter>,
+    Extension(user): Extension<User>,
+    ws: WebSocketUpgrade,
+) -> Response {
     let Ok(permit) = adapter.connections.clone().try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -355,17 +458,22 @@ async fn upgrade(State(adapter): State<Adapter>, ws: WebSocketUpgrade) -> Respon
         .max_frame_size(MESSAGE_BYTES)
         .on_upgrade(move |socket| async move {
             let _permit = permit;
-            connection(socket, adapter).await;
+            connection(socket, adapter, user).await;
         })
         .into_response()
 }
 
-async fn connection(socket: WebSocket, adapter: Adapter) {
+async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
+    let revoked = adapter.identities.cancellation(&user.id);
     let session = tokio::select! {
         _ = adapter.stopping.cancelled() => return,
-        session = adapter.server.connect() => match session { Ok(session) => session, Err(_) => return },
+        _ = revoked.cancelled() => return,
+        session = adapter.server.connect_as(user) => match session { Ok(session) => session, Err(_) => return },
     };
-    connection_session(socket, session, adapter.stopping).await;
+    tokio::select! {
+        _ = revoked.cancelled() => {},
+        _ = connection_session(socket, session, adapter.stopping) => {},
+    }
 }
 
 pub(crate) async fn connection_session(
@@ -472,7 +580,7 @@ impl AsyncWrite for ShutdownIo {
 
 #[cfg(test)]
 mod access_tests {
-    use super::{same_http_origin, valid_token};
+    use super::same_http_origin;
 
     #[test]
     fn direct_http_origin_matches_the_request_host_only() {
@@ -488,20 +596,6 @@ mod access_tests {
             "http://untrusted.invalid",
         ] {
             assert!(!same_http_origin(&headers, &origin.parse().unwrap()));
-        }
-    }
-
-    #[test]
-    fn shared_token_requires_an_exact_match() {
-        let secret = "0123456789abcdef0123456789abcdef";
-        assert!(valid_token(secret, secret));
-        for token in [
-            "",
-            "0123456789abcdef",
-            "0123456789abcdef0123456789abcdeg",
-            "0123456789abcdef0123456789abcdefextra",
-        ] {
-            assert!(!valid_token(token, secret));
         }
     }
 }

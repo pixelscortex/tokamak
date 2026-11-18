@@ -14,6 +14,8 @@ export default defineSchema({
   messages: defineTable({
     threadId: v.id("threads"),
     role: v.union(v.literal("user"), v.literal("assistant")),
+    author: v.optional(v.object({ id: v.string(), name: v.string() })),
+    askedBy: v.optional(v.object({ id: v.string(), name: v.string() })),
     parts: v.array(v.union(textPart, toolPart, planPart, permissionPart)),
     status: v.union(
       v.literal("streaming"),

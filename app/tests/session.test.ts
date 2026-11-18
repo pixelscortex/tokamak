@@ -59,3 +59,35 @@ test("a socket that closes while the catalog loads stays failed", async () => {
     vi.unstubAllGlobals();
   }
 });
+
+test("connect sends the saved display name before loading plugins", async () => {
+  vi.stubGlobal("WebSocket", FakeSocket);
+  const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    Response.json({ id: "alice", name: "Alice", role: "member" }),
+  );
+  vi.stubGlobal("fetch", request);
+  try {
+    await createRoot(async (dispose) => {
+      const session = createSession({
+        routing: {} as never,
+        displayName: () => "Alicia",
+        getEndpoint: () => ({ http: "https://example.test", ws: "wss://example.test/ws", token: "invite" }),
+      });
+      await waitFor(() => expect(String(FakeSocket.last.url)).toContain("example.test"));
+      FakeSocket.last.dispatchEvent(new Event("open"));
+      await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+      expect(request.mock.calls[1]![1]).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ name: "Alicia" }),
+      });
+      shell.loaded();
+      await waitFor(() => {
+        flush();
+        expect(session.connection().state).toBe("connected");
+      });
+      dispose();
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

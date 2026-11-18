@@ -122,7 +122,7 @@ fn pool() -> Pool {
 }
 fn fetch(pool: &Pool, count: usize, host: &str) -> engine::PendingCall {
     let bundle = Arc::new(Bundle::new(artifacts()["b/bundle.js"].clone(), None).unwrap());
-    let mut ops = OpRegistry::new();
+    let mut ops = local_user_operations();
     ops.set_network_permissions(vec![format!("net:{host}")]);
     pool.submit(
         bundle,

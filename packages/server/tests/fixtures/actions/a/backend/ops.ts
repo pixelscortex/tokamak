@@ -10,7 +10,18 @@ import {
 } from "@tokamak/sdk";
 
 const self = createApi<{ ops: ApiFromModule<typeof import("./ops")> }>("a");
-import { publicRead } from "plugin:b/server";
+import { publicRead, callerQuery, callerMutation, callerAction } from "plugin:b/server";
+
+export const callerViaQuery = query({ handler: (ctx) => ctx.use({ callerQuery }).callerQuery({}) });
+export const callerViaMutation = mutation({
+  handler: (ctx) => ctx.use({ callerMutation }).callerMutation({}),
+});
+export const callerViaAction = action({
+  handler: async (ctx) => {
+    const calls = ctx.use({ callerQuery, callerMutation, callerAction });
+    return [await calls.callerQuery({}), await calls.callerMutation({}), await calls.callerAction({})];
+  },
+});
 // Deliberately forged private names exercise host denial without importing private source.
 const b = createApi<{
   ops: {

@@ -29,6 +29,7 @@ export type {
   FunctionBuilder,
   FunctionRegistry,
   QueryContext,
+  User,
   MutationContext,
   ActionContext,
   PluginCalls,

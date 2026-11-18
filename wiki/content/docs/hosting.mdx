@@ -17,7 +17,7 @@ docker run --name tokamak -p 3000:3000 \
 
 ## Joining a server
 
-Share one invite: `https://<address>/join#<token>`. The token sits in the URL
+Create a separate invite for each person: `https://<address>/join#<token>`. The token sits in the URL
 fragment, so a browser that opens the link never sends it to the server in the
 request. `<address>#<token>` and a bare address work too; with a bare address,
 "Add a server" asks for the token.
@@ -33,10 +33,63 @@ request. `<address>#<token>` and a bare address work too; with a bare address,
 The app keeps joined servers, their tokens and your name in localStorage on that
 device (the browser keeps it per origin). Remove a server from the switcher to
 forget its token.
-This is one shared secret with full access, pending per-person sign-in. Use HTTPS
+Each invite identifies a member. Every signed-in member can read and write every
+thread; there are no per-thread permissions yet. Use HTTPS
 when exposing the server remotely. Disable proxy query-string logging: WebSocket
 and plugin requests carry the token as `?token=` (HTTP also accepts Bearer auth).
 Tokens are never included in server logs.
+
+## Temporary members and invites
+
+The bootstrap `TOKAMAK_ACCESS_TOKEN` continues to identify the owner (`id: owner`).
+Set `TOKAMAK_OWNER_NAME` to the owner's initial name (default `Owner`). Existing
+saved connections keep working. Hosted mode still requires this bootstrap token.
+These temporary identities will be replaced by real accounts later.
+
+Run these commands on your own machine; they call the server over HTTPS:
+
+```sh
+export TOKAMAK_TOKEN='<owner token>'
+tokamak invite 'Alice' --server https://tokamak.example.app
+tokamak members --server https://tokamak.example.app
+tokamak revoke '<member id>' --server https://tokamak.example.app
+```
+
+Alternatively pass `--token '<owner token>'` to each command. `invite` prints only
+the invite URL, exactly once; save it before closing your terminal. Tokens contain
+256 random bits encoded as URL-safe hex. `members` lists ID, name, role, created
+and revoked timestamps (milliseconds since the epoch), never token hashes or tokens.
+Revocation closes that member's open WebSockets and rejects future connections.
+The bootstrap owner cannot be revoked; rotate its environment token instead.
+HTTP is accepted by the CLI only on loopback for local testing.
+
+Members are stored in `members.json` beside the `--data` store directory: the
+image's `/data/store` uses `/data/members.json`. Each row contains
+`{ id, name, role, token_hash, created_at, revoked_at? }`. Only SHA-256 hashes are
+stored; the file is replaced atomically with private permissions. Keep it with
+your data volume. Owner renames persist; `TOKAMAK_OWNER_NAME` supplies the initial
+name when the owner row is first created.
+
+Built-in HTTP operations accept `Authorization: Bearer <token>`:
+
+- `POST /members` with `{"name":"Alice"}` returns the new token once.
+- `GET /members` lists members; `POST /members/<id>/revoke` revokes one.
+- `GET /account` returns your `{ id, name, role }`.
+- `POST /account` with `{"name":"Alice"}` changes your own name. Names must have
+  1–100 characters and no control characters.
+
+Member management, plugin reload and shutdown are owner-only (403 for members).
+`/account` also accepts `?token=` for browser requests, like `/ws` and `/plugins`.
+The existing connect form sends its saved display name after connecting when it
+differs from the server's name. No new sign-in UI is required.
+
+Plugins receive the authenticated caller as `ctx.user` in every query, mutation
+and action, including subscriptions and calls through other plugins. The built-in
+WebSocket query `tokamak:whoami` with `{}` returns the same identity. Desktop/local
+mode uses `{ id: "local", name: "You", role: "owner" }`; `TOKAMAK_OWNER_NAME` can
+override that local name. Chat user messages snapshot `author: { id, name }`;
+assistant messages snapshot `askedBy: { id, name }` when the run starts. Old rows
+without these optional fields stay valid, and later renames do not rewrite history.
 
 The image includes only the chat plugin. Threads can be created and saved; the
 agent picker is empty until agents on users' machines are connected. No agent

@@ -158,6 +158,10 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     let mut javascript = PoolConfig::default();
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
+        if matches!(flag.as_str(), "invite" | "members" | "revoke") {
+            server::identity::command(&flag, args.collect()).await?;
+            return Ok(None);
+        }
         if flag == "plugin" {
             plugin_command(args.collect()).await?;
             return Ok(None);
@@ -172,7 +176,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nInvites: tokamak invite <name> | members | revoke <id> --server <https://address> [--token <owner token>] (or TOKAMAK_TOKEN)\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -322,6 +326,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         hosted_token
     };
+    let identities = Arc::new(server::identity::Identities::configure(
+        &data,
+        token.as_deref(),
+        hosted,
+    )?);
     // Keep ownership until AFTER ready-file removal. The database lock alone
     // releases during close(): a replacement could otherwise publish readiness
     // in that gap and have this process remove the replacement's descriptor.
@@ -343,7 +352,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     publish_identity(local.as_deref(), &identity, &backend).await?;
     log_listening(listener.local_addr()?, token.is_some(), hosted);
-    let serving = websocket::serve_with_web(
+    let serving = websocket::serve_with_identities(
         listener,
         backend.server().clone(),
         async move {
@@ -359,6 +368,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         token.map(|token| websocket::LocalAccess { token, identity }),
         web,
+        identities,
     )
     .await;
     let closed = backend.close().await;
