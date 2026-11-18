@@ -1,0 +1,30 @@
+plugins/chat/src/client/pages/screen.tsx
+  s_059b0271314ab1::t_e43b034046493e 173
+plugins/chat/src/server/schema.ts
+  s_059b0271314ab1::t_c1b321dd27c1fc 25-28
+plugins/chat/src/client/ui/thread/thread-view.tsx
+  s_059b0271314ab1::t_e43b034046493e 4,12-13,42
+e2e/browser/chat.spec.ts
+  s_059b0271314ab1::t_daed92a31a89b1 154-156,159-167,170-177
+plugins/chat/src/server/runs/send.ts
+  s_059b0271314ab1::t_9117769312ab5f 42
+plugins/chat/src/client/lib/agents.ts
+  s_059b0271314ab1::t_cbbc474da1f481 50-53
+  s_059b0271314ab1::t_d63757e8a7ed04 41-49,54-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "87aab13e13e89e5d9cbd91f1eb2198172ac32fd1",
+  "prompts": {},
+  "sessions": {
+    "s_059b0271314ab1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7010432-013d-457e-bfa7-7aa5ea9a6d19",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
