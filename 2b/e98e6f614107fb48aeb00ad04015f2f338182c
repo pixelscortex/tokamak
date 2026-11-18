@@ -1,0 +1,21 @@
+e2e/fixtures/scripted-agent.py
+  s_8cec559f39b5f2::t_c2f240133c2520 154-159
+e2e/own-machine.ts
+  s_8cec559f39b5f2::t_a4e5a71c095ca3 113,115-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2be98e6f614107fb48aeb00ad04015f2f338182c",
+  "prompts": {},
+  "sessions": {
+    "s_8cec559f39b5f2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41413636-6daa-43d9-ac66-795c7bdee3f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
