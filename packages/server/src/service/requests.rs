@@ -1,7 +1,12 @@
 use super::*;
 
 impl Coordinator {
-    pub(super) async fn action(&mut self, session: u64, action: Action) {
+    pub(super) async fn action(
+        &mut self,
+        session: u64,
+        user: crate::identity::User,
+        action: Action,
+    ) {
         // Admission transfers call ownership to the coordinator. Disconnect
         // retires subscriptions and delivery, not accepted mutations waiting in
         // the command queue. Shutdown must drain those calls too.
@@ -37,7 +42,7 @@ impl Coordinator {
                 args,
                 kind: expected,
             } => {
-                self.call(session, id, name, args, expected).await;
+                self.call(session, user, id, name, args, expected).await;
             }
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
@@ -56,22 +61,34 @@ impl Coordinator {
     async fn call(
         &mut self,
         session: u64,
+        user: crate::identity::User,
         id: u64,
         name: String,
         args: Json,
         expected: Option<FunctionKind>,
     ) {
+        if name == "tokamak:whoami" {
+            let result = if expected.is_none_or(|kind| kind == FunctionKind::Query)
+                && args == serde_json::json!({})
+            {
+                Ok(serde_json::json!(user))
+            } else {
+                Err("whoami requires a query with empty arguments".into())
+            };
+            self.respond(session, id, result);
+            return;
+        }
         let result = match self.kinds.get(&name).copied() {
             None => Err(format!("unknown function: {name}")),
             Some(kind) if expected.is_some_and(|expected| expected != kind) => {
                 Err("function kind does not match request".into())
             }
             Some(FunctionKind::Action) => {
-                self.start_action(session, id, name, args);
+                self.start_action(session, user, id, name, args);
                 return;
             }
             Some(kind) => {
-                self.invoke_function(&name, args, kind == FunctionKind::Mutation)
+                self.invoke_function(&name, args, kind == FunctionKind::Mutation, user)
                     .await
             }
         };

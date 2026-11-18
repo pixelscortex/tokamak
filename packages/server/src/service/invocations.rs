@@ -6,6 +6,7 @@ impl Coordinator {
         name: &str,
         args: Json,
         mutation: bool,
+        user: crate::identity::User,
     ) -> Result<Json, String> {
         let mut result = Err("mutation conflict retry limit exceeded".into());
 
@@ -23,6 +24,7 @@ impl Coordinator {
                     space: &self.space,
                     plugins: self.plugins.clone(),
                     determinism,
+                    user: user.clone(),
                 },
             )
             .await;

@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 pub(crate) struct NestedCall {
+    pub user: crate::identity::User,
     pub generation: Option<Arc<Loaded>>,
     pub owner: Option<String>,
     pub name: String,
@@ -26,8 +27,11 @@ pub(crate) fn operations(
     environment: Arc<crate::environment::Snapshot>,
     limits: Limits,
     path: Vec<String>,
+    user: crate::identity::User,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
+    let caller_user = user.clone();
+    ops.register_sync("user.current", move |_| Ok(serde_json::json!(caller_user)))?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
@@ -50,6 +54,7 @@ pub(crate) fn operations(
         generation.clone(),
         owner.clone(),
         environment.clone(),
+        user.clone(),
     )?;
     if let (Some(loaded), Some(owner)) = (generation, owner) {
         register_plugin_call(
@@ -59,6 +64,7 @@ pub(crate) fn operations(
             commands,
             limits,
             path,
+            user,
         )?;
         register_providers(&mut ops, loaded, owner)?;
     }
@@ -88,6 +94,7 @@ fn register_nested_calls(
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
+    user: crate::identity::User,
 ) -> Result<(), engine::Error> {
     for (operation, kind) in [
         ("action.runQuery", FunctionKind::Query),
@@ -97,11 +104,13 @@ fn register_nested_calls(
         let generation = generation.clone();
         let owner = owner.clone();
         let environment = environment.clone();
+        let user = user.clone();
         ops.register_async(operation, move |payload| {
             let environment = environment.clone();
             let commands = commands.clone();
             let generation = generation.clone();
             let owner = owner.clone();
+            let user = user.clone();
             async move {
                 let name = payload["name"]
                     .as_str()
@@ -116,6 +125,7 @@ fn register_nested_calls(
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
+                        user,
                         generation,
                         owner,
                         name,
@@ -143,6 +153,7 @@ fn register_plugin_call(
     commands: mpsc::WeakSender<Command>,
     limits: Limits,
     path: Vec<String>,
+    user: crate::identity::User,
 ) -> Result<(), engine::Error> {
     let catalog = loaded.clone();
     let caller = owner.clone();
@@ -152,6 +163,7 @@ fn register_plugin_call(
         let commands = commands.clone();
         let limits = limits.clone();
         let mut path = path.clone();
+        let user = user.clone();
         async move {
             let name = payload["name"]
                 .as_str()
@@ -167,6 +179,7 @@ fn register_plugin_call(
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
+                        user,
                         generation: Some(loaded),
                         owner: Some(owner),
                         name: name.into(),
@@ -192,6 +205,7 @@ fn register_plugin_call(
                 environment.clone(),
                 limits.clone(),
                 path,
+                user,
             )
             .map_err(|e| e.to_string())?;
             if let Some(worker) = worker {

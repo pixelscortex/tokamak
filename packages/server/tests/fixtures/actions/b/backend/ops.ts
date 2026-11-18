@@ -1,6 +1,9 @@
 /// <reference lib="dom" />
 import { action, mutation, query, v, createApi } from "@tokamak/sdk";
 export const publicRead = query({ handler: () => "public" });
+export const callerQuery = query({ handler: (ctx) => ctx.user });
+export const callerMutation = mutation({ handler: (ctx) => ctx.user });
+export const callerAction = action({ handler: (ctx) => ctx.user });
 export const privateRead = query({ handler: () => "private" });
 export const privateWrite = mutation({ handler: (ctx) => ctx.db.insert("private", { value: "denied" }) });
 export const deniedFetch = action({

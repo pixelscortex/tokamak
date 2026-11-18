@@ -54,7 +54,14 @@ impl SessionSender {
 
     fn send(&self, action: Action) -> Result<(), Error> {
         self.check_live()?;
-        admit(&self.commands, Command::Action(self.id, action))
+        admit(
+            &self.commands,
+            Command::Action(
+                self.id,
+                self.user.read().expect("user lock").clone(),
+                action,
+            ),
+        )
     }
 }
 
@@ -138,7 +145,11 @@ impl tower::Service<Request> for SessionSender {
             // whose commit outcome might already be unknown.
             let permit = sender.commands.reserve().await.map_err(|_| Error::Closed)?;
             sender.check_live()?;
-            permit.send(Command::Action(sender.id, action));
+            permit.send(Command::Action(
+                sender.id,
+                sender.user.read().expect("user lock").clone(),
+                action,
+            ));
 
             Ok(())
         })

@@ -45,14 +45,26 @@ impl Server {
     }
 
     pub async fn connect(&self) -> Result<Session, Error> {
+        self.connect_as(crate::identity::User::local()).await
+    }
+
+    pub async fn rename_user(&self, user: crate::identity::User) -> Result<(), Error> {
         let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::Connect(reply))?;
+        admit(&self.commands, Command::RenameUser(user, reply))?;
+        wait.await.map_err(|_| Error::Closed)
+    }
+
+    pub async fn connect_as(&self, user: crate::identity::User) -> Result<Session, Error> {
+        let user = Arc::new(std::sync::RwLock::new(user));
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::Connect(user.clone(), reply))?;
 
         let (id, output, slow, alive) = wait.await.map_err(|_| Error::Closed)??;
 
         Ok(Session {
             sender: SessionSender {
                 id,
+                user,
                 commands: self.commands.clone(),
                 slow,
                 alive,

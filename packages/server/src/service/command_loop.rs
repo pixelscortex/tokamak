@@ -21,8 +21,8 @@ impl Coordinator {
                     // barrier, even when the caller of close has disappeared.
                     while let Some(command) = commands.recv().await {
                         match command {
-                            Command::Action(session, action) => self.action(session, action).await,
-                            Command::Connect(reply) => {
+                            Command::Action(session, user, action) => self.action(session, user, action).await,
+                            Command::Connect(_, reply) => {
                                 let _ = reply.send(Err(Error::Closed));
                             }
                             command => self.control(command).await,
@@ -53,7 +53,7 @@ impl Coordinator {
                     self.refresh().await;
                 }
                 command = commands.recv() => match command {
-                    Some(Command::Connect(reply)) => {
+                    Some(Command::Connect(user, reply)) => {
                         if self.sessions.len() >= SESSIONS || self.next_session == u64::MAX {
                             let _ = reply.send(Err(Error::Overloaded));
                             continue;
@@ -68,6 +68,7 @@ impl Coordinator {
 
                         let alive = output.downgrade();
                         self.sessions.insert(id, Client {
+                            user,
                             output,
                             slow: slow.clone(),
                             subscriptions: BTreeMap::new(),
@@ -77,7 +78,7 @@ impl Coordinator {
                             self.sessions.remove(&id);
                         }
                     }
-                    Some(Command::Action(session, action)) => self.action(session, action).await,
+                    Some(Command::Action(session, user, action)) => self.action(session, user, action).await,
                     Some(command) => self.control(command).await,
                     None => break,
                 }

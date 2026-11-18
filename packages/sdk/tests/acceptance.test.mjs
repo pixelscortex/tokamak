@@ -158,6 +158,7 @@ test("moon bundles one importable ESM feature with canonical CRUD/query dispatch
   const row = { _id: "tasks:a", _creationTime: 100, title: "SHIP", done: false, priority: 2 };
   const host = {
     op(name, payload) {
+      if (name === "user.current") return { id: "local", name: "You", role: "owner" };
       calls.push([name, payload]);
       if (name === "db.insert") return "tasks:a";
       if (name === "db.get") return payload.id === "tasks:a" ? row : null;

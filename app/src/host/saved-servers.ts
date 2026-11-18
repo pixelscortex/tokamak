@@ -14,8 +14,7 @@ export interface SavedServer {
   address: string;
   token: string;
   /**
-   * The name this person uses on the server. The server has no per-person identity
-   * yet, so it stays here until sign-in can send it.
+   * The name this person uses on the server, synchronized after connecting.
    */
   displayName?: string;
   /** When it was last selected, in ms since the epoch. */

@@ -13,6 +13,13 @@ import { callHost } from "./host";
 
 export type FunctionKind = "query" | "mutation" | "action";
 
+/** Authenticated caller, preserved across subscriptions and plugin calls. */
+export interface User {
+  readonly id: string;
+  readonly name: string;
+  readonly role: "owner" | "member";
+}
+
 type WireValue<V> = V extends void ? null : V;
 
 export type WireResult<R> = WireValue<Awaited<R>>;
@@ -26,12 +33,14 @@ export type PluginCalls<T, K extends FunctionKind> =
     : { readonly [P in keyof T]: PluginCalls<T[P], K> };
 
 export interface QueryContext<M extends DataModel> {
+  readonly user: User;
   readonly db: DatabaseReader<M>;
   use<T>(api: T): PluginCalls<T, "query">;
   providers<T>(interfaceName: string): Promise<readonly T[]>;
 }
 
 export interface MutationContext<M extends DataModel> {
+  readonly user: User;
   readonly db: DatabaseWriter<M>;
   use<T>(api: T): PluginCalls<T, "query" | "mutation">;
   providers<T>(interfaceName: string): Promise<readonly T[]>;
@@ -39,6 +48,7 @@ export interface MutationContext<M extends DataModel> {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext {
+  readonly user: User;
   use<T>(api: T): PluginCalls<T, FunctionKind>;
   readonly signal?: HostBridge["signal"];
   /** Requires a manifest env:<name> grant; unset values return null. */
@@ -85,6 +95,9 @@ function builder<K extends FunctionKind, M extends DataModel>(
         // while a handler is suspended on a database operation.
         const args = jsonSnapshot(input, "args");
         validate(description, args);
+        // Direct definition invocation supports lightweight standalone hosts;
+        // server entry points always supply the authenticated user below.
+        const user = Object.freeze(host.user ?? { id: "local", name: "You", role: "owner" as const });
 
         const providers = async <T>(interfaceName: string) =>
           (await callHost(host, "plugin.providers", { interface: interfaceName })).map((id) =>
@@ -102,6 +115,7 @@ function builder<K extends FunctionKind, M extends DataModel>(
         const ctx = Object.freeze(
           kind === "action"
             ? {
+                user,
                 use: <T>(api: T) => bindCalls(api, host),
                 signal: host.signal,
                 env: (name: string) => callHost(host, "action.env", { name }),
@@ -112,6 +126,7 @@ function builder<K extends FunctionKind, M extends DataModel>(
                 providers,
               }
             : {
+                user,
                 db:
                   kind === "query"
                     ? createDatabase<M>(host, false, schema)
@@ -205,5 +220,12 @@ export async function invokeFunction(
   host: HostBridge,
 ): Promise<JsonValue> {
   if (!Object.hasOwn(registry, request.name)) throw new Error(`Unknown function: ${request.name}`);
-  return registry[request.name].invoke(request.args, host);
+  const args = jsonSnapshot(request.args, "args");
+  validate(registry[request.name].args, args);
+  const user = await callHost(host, "user.current", {});
+  return registry[request.name].invoke(args, {
+    user,
+    signal: host.signal,
+    op: (name, payload) => host.op(name, payload),
+  });
 }

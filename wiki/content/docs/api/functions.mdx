@@ -37,9 +37,18 @@ export const add = mutation({
 
 ## Handler context
 
+Every query, mutation and action receives `ctx.user: { id, name, role }`, supplied
+by the server from the signed-in connection. Subscriptions retain their caller,
+and nested action calls and plugin-to-plugin calls preserve the original user.
+Local mode supplies the owner `local`, named `You` (or `TOKAMAK_OWNER_NAME`).
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="User" />
+
 <api-declaration path="../../../../packages/sdk/src/functions.ts" name="QueryContext" />
 
 <api-declaration path="../../../../packages/sdk/src/functions.ts" name="MutationContext" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="ActionContext" />
 
 `ctx.use(api)` binds another plugin's generated references to calls through
 the host. A query can only call queries. `ctx.providers(name)` lists the

@@ -42,6 +42,7 @@ export interface QueryRequest {
  * Writes cannot supply system fields. No undefined/delete-field sentinel.
  */
 export interface HostOperations {
+  "user.current": { args: {}; result: import("./functions").User };
   "db.get": { args: { id: string }; result: StoredDocument | null };
   "db.insert": { args: { table: string; value: JsonObject }; result: Id };
   "db.patch": { args: { id: string; value: JsonObject }; result: null };
@@ -65,6 +66,7 @@ export interface ActionSignal {
 }
 
 export interface HostBridge {
+  readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
   op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;

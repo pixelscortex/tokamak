@@ -43,6 +43,15 @@ impl Coordinator {
 
     pub(super) async fn control(&mut self, command: Command) {
         match command {
+            Command::RenameUser(user, reply) => {
+                for client in self.sessions.values_mut() {
+                    let mut current = client.user.write().expect("user lock");
+                    if current.id == user.id {
+                        *current = user.clone();
+                    }
+                }
+                let _ = reply.send(());
+            }
             Command::RunFunction(call) => self.run_function(call).await,
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
