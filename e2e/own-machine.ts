@@ -110,15 +110,18 @@ export async function ownMachineScenario(root: string, serve: typeof headless, d
                     cwd,
                   });
                 try {
-                  const request = "Describe this workspace";
+                  const request = "Describe this workspace with a stream checkpoint";
                   const requestId = crypto.randomUUID();
-                  const first = await send(request, requestId);
+                  const firstTurn = send(request, requestId);
+                  void firstTurn.catch(() => {});
+                  await until(() => streamed);
+                  await writeFile(`${probe}.release`, "");
+                  const first = await firstTurn;
                   assert.equal(first.status, "done");
                   const reply = await until(() =>
                     messages.find((msg) => msg._id === first.messageId && msg.status === "complete"),
                   );
                   assert.match(JSON.stringify(reply.parts), /This is a Tokamak workspace/);
-                  assert.ok(streamed, "B saw streamed text before completion");
                   const { prompt, pid } = await observed();
                   const lines = prompt.split("\n");
                   const fence = lines.indexOf("<thread-context>");

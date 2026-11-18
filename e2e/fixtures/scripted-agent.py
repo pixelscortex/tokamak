@@ -151,6 +151,12 @@ def run(request):
     tool(turn, "search", "Searched for refresh(", "search", 0.4)
     tool(turn, "open", "Read README.md", "read", 0.3)
     stream(turn, "This is a Tokamak workspace: a Rust server runs TypeScript plugins, and the desktop client renders their views. Chat is the core plugin; agents reach it through the ACP plugin.")
+    if "stream checkpoint" in lowered:
+        release = probe.with_name(probe.name + ".release")
+        deadline = time.monotonic() + 15
+        while not release.exists() and time.monotonic() < deadline:
+            if turn.cancelled.wait(0.05):
+                break
     finish()
 
 
