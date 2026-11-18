@@ -1,0 +1,21 @@
+.ci/README.md
+  s_776a0593f37b8e::t_a455b5bea2a00a 33-34
+.ci/setup/action.yml
+  s_776a0593f37b8e::t_043bc112a332aa 120-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ceb55bbcc6822ba84765961b5be34ab381fbc664",
+  "prompts": {},
+  "sessions": {
+    "s_776a0593f37b8e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eeb9-9f42-7bd0-b518-bc2bdc1dc16a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
