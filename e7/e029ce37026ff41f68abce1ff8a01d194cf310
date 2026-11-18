@@ -1,0 +1,29 @@
+packages/runtime/tools/local-server.ts
+  s_0e92c3a8ca720e::t_220c02f96d4ef0 197
+  s_0e92c3a8ca720e::t_58ef2cfea97c8d 10-14
+app/src-tauri/src/server.rs
+  s_0e92c3a8ca720e::t_1500f3bbc05620 1-3,7
+  s_0e92c3a8ca720e::t_59c708c499173b 355,363
+  s_0e92c3a8ca720e::t_5eadae2ed03bdc 426
+  s_0e92c3a8ca720e::t_86586c7cb71a0a 472-475
+app/scripts/server.ts
+  s_0e92c3a8ca720e::t_cd9697a5050c62 23
+app/src-tauri/src/server/command.rs
+  s_0e92c3a8ca720e::t_fdcd42cadaae8d 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e7e029ce37026ff41f68abce1ff8a01d194cf310",
+  "prompts": {},
+  "sessions": {
+    "s_0e92c3a8ca720e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "48887696-7c5b-4e46-94a0-6a95e2c25188",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
