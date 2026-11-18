@@ -1,0 +1,32 @@
+packages/server/src/main.rs
+  s_ceb0d2e521b053::t_ea40708d6f1b6d 9,16-30,163-166,173,288,294
+app/src-tauri/src/server.rs
+  s_ceb0d2e521b053::t_b684846d8acaf1 211
+  s_ceb0d2e521b053::t_2a1ac422322bd6 118,135,222,272,299,306,351-360,364-372
+  s_ceb0d2e521b053::t_0682a8b674e9c4 181-210,212-221,224,227
+  s_ceb0d2e521b053::t_749b588143dc88 122-127,130,133,177,179-180,233,235,238-250,254,260-261,265,267-269,271,284,286,297-298,305,401,415-418,420,439,456-507,510
+  s_ceb0d2e521b053::t_7cdba60a5391d5 29,114-117,119-121,128-129,131-132,134,136-137,140,150,153-154,157,164-176,178,223,225-226,228-232,234,236-237,251-253,255-259,262-264,266,270,273-283,285,287-296,300-304,307,386,508-509,511,519,535
+packages/server/tests/plugins.rs
+  s_ceb0d2e521b053::t_0682a8b674e9c4 725-751,753-754,766
+  s_ceb0d2e521b053::t_693965301e1c5d 752
+app/src-tauri/Cargo.toml
+  s_ceb0d2e521b053::t_6e727edbb0476a 18-23
+Cargo.lock
+  s_ceb0d2e521b053::t_25101b8be9fa35 6741,6748
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b54a8c5af356d79d64fc81642c937285c4b730ce",
+  "prompts": {},
+  "sessions": {
+    "s_ceb0d2e521b053": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ed9f-10b6-75c3-bf19-45cd23b23813",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
