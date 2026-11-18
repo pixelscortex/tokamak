@@ -13,6 +13,7 @@ packages/server/tests/workers.rs
 .ci/README.md
   s_0e92c3a8ca720e::t_28650136127514 47
   s_0e92c3a8ca720e::t_524af0e211307d 90-93
+  s_0e92c3a8ca720e::t_faf37554fe3333 19-20
 packages/server/src/host/worker/tests.rs
   s_0e92c3a8ca720e::t_4284515e6f513f 69,75,80-82,89,91-94,100-107,109-111
 packages/server/tests/build-worker.mjs
