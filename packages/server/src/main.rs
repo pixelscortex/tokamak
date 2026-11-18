@@ -6,11 +6,27 @@ use server::{Backend, BackendConfig, data::Storage, websocket};
 use sha2::{Digest, Sha256};
 use std::{
     fs::File,
+    io::Read,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
+
+// Hash the executable rather than the plugin catalog: native host changes must
+// invalidate reuse even when the JavaScript and package version are unchanged.
+fn build_id() -> Result<String, Box<dyn std::error::Error>> {
+    let mut executable = File::open(std::env::current_exe()?)?;
+    let mut hash = Sha256::new();
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let count = executable.read(&mut buffer)?;
+        if count == 0 {
+            return Ok(format!("{:x}", hash.finalize()));
+        }
+        hash.update(&buffer[..count]);
+    }
+}
 
 fn local_ownership(directory: &Path) -> Result<File, Box<dyn std::error::Error>> {
     let mut options = std::fs::OpenOptions::new();
@@ -144,13 +160,17 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             plugin_command(args.collect()).await?;
             return Ok(None);
         }
+        if flag == "--build-id" {
+            println!("{}", build_id()?);
+            return Ok(None);
+        }
         if flag == "--local-path" {
             println!("{}", local_directory()?.display());
             return Ok(None);
         }
         if flag == "--help" {
             println!(
-                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--data <path>] [--listen <127.0.0.1:3000>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -265,11 +285,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(unix)]
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let plugin_root = plugins.as_ref().map(std::fs::canonicalize).transpose()?;
+    let build_id = build_id()?;
     let (backend, bundle_hash) = start_backend(data, javascript, plugins, source).await?;
     let identity = serde_json::json!({
         "url": format!("ws://{}/ws", listener.local_addr()?),
         "pid": std::process::id(),
         "bundleHash": bundle_hash,
+        "buildId": build_id,
         "pluginRoot": plugin_root,
     });
     publish_identity(local.as_deref(), &identity, &backend).await?;

@@ -54,8 +54,10 @@ pub struct BackendEntry {
 pub struct UiEntry {
     pub code: String,
     pub map: String,
-    pub css: String,
-    pub shell: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub css: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -185,12 +187,12 @@ impl Manifest {
             .into_iter()
             .flat_map(|entry| [&entry.code, &entry.map, &entry.api]);
 
-        let ui_paths = self
-            .entries
-            .ui
-            .as_ref()
-            .into_iter()
-            .flat_map(|entry| [&entry.code, &entry.map, &entry.css, &entry.shell]);
+        let ui_paths = self.entries.ui.as_ref().into_iter().flat_map(|entry| {
+            [&entry.code, &entry.map]
+                .into_iter()
+                .chain(entry.css.iter())
+                .chain(entry.shell.iter())
+        });
 
         for name in backend_paths.chain(ui_paths).chain(
             self.entries

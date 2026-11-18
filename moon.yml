@@ -20,6 +20,7 @@ tasks:
       - "!/.moon/cache/**"
       - "!/.proto/**"
       - "!/.ci-results/**"
+      - "!/app/.dev/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
       - "$RUNNER_OS"
@@ -44,26 +45,30 @@ tasks:
     script: "mkdir -p .ci-results && proto run bun -- test plugins/acp --reporter=junit --reporter-outfile=.ci-results/acp.xml"
     options:
       cache: false
-  rust-test:
-    # :test already runs per-crate integration/doc suites. Add feature-unified
-    # unit/bin tests and the app's e2e suite omitted by its selected test script,
-    # without repeating all server integration tests and their deadline waits.
-    deps: ["app:bundle", "app:test-fixtures", "lab:bundle", "render:bundle", "render:styles"]
+  plugins-check:
     script: >-
-      cargo test --locked --workspace --all-features --lib --bins --jobs 2 -- --test-threads=1 &&
-      cargo test --locked --package tokamak-app --test e2e --jobs 2 -- --test-threads=1
+      proto run bun -- packages/sdk/tools/bundle.mjs plugins/chat/src/server --plugin chat &&
+      proto run bun -- check --no-script --project plugins/chat/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/chat/src/client/tsconfig.json &&
+      proto run bun -- packages/build/src/build.ts plugins/acp &&
+      proto run bun -- check --no-script --project plugins/acp/src/server/tsconfig.json
     options:
       cache: false
-      mutex: "cargo"
-  gpu-test:
-    # Explicitly select only offline captures, never all ignored tests.
-    deps: ["lab:bundle"]
-    command: "cargo test --locked --package tokamak-lab --test shell --jobs 2 -- --ignored capture_ --test-threads=1"
+  e2e-check:
+    command: "proto run bun -- check --no-script --project e2e/tsconfig.json"
+    options:
+      cache: false
+  wiki-check:
+    command: "proto run bun -- check --no-script --project wiki/tsconfig.json"
+    options:
+      cache: false
+  rust-test:
+    deps: ["app:web-build"]
+    command: "cargo test --locked --workspace --jobs 2"
     options:
       cache: false
       mutex: "cargo"
   e2e:
-    deps: ["app:test"]
     command: "proto run bun -- e2e/run.ts"
     options:
       cache: false
@@ -92,7 +97,7 @@ tasks:
       cache: true
       mutex: "cargo"
   size:
-    deps: ["app:build"]
+    deps: ["workspace:build-release"]
     # stat fails on a missing artifact, unlike reporting an absent baseline as zero.
     command:
       - "proto"
@@ -102,7 +107,7 @@ tasks:
       - "-e"
       - >-
         import { stat } from "node:fs/promises";
-        for (const binary of ["tokamak", "tokamak-desktop"]) {
+        for (const binary of ["tokamak"]) {
           const path = "target/release/" + binary + (process.platform === "win32" ? ".exe" : "");
           const { size } = await stat(path);
           console.log(path + ": " + size + " bytes");
@@ -118,17 +123,16 @@ tasks:
     options:
       cache: false
   lint-rust:
-    deps: ["app:bundle", "app:test-fixtures", "lab:bundle", "render:bundle", "render:styles"]
     command: "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
     options:
       cache: false
       mutex: "cargo"
   lint-ts:
-    command: "proto run bun -- run oxlint packages app lab plugins"
+    command: "proto run bun -- run oxlint packages app plugins"
     options:
       cache: false
   duplicates:
-    command: 'bun run jscpd packages app lab plugins --format rust,typescript,tsx,javascript --ignore "**/tests/**,**/vendor/**,**/dist/**,**/target/**,**/node_modules/**,**/protocol.ts" --min-lines 6 --min-tokens 50'
+    command: 'bun run jscpd packages app plugins --format rust,typescript,tsx,javascript --ignore "**/tests/**,**/vendor/**,**/dist/**,**/target/**,**/node_modules/**,**/protocol.ts" --min-lines 6 --min-tokens 50'
     options:
       cache: false
       allowFailure: true

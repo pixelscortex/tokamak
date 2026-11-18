@@ -1,6 +1,3 @@
-/** Internal application integration, not a configurable customer framework.
- * SDK discovery uses src/server/; Vite/Solid compile src/client/api.ts and
- * emit the static Blitz document, CSS, backend bundle, and original maps. */
 import type { InlineConfig, PluginOption } from "vite";
 import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 import { dirname, relative, resolve, sep } from "node:path";
@@ -10,44 +7,33 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { pluginBoundary } from "./plugin-boundary.ts";
-import { pluginImports } from "./plugin-imports.ts";
 import { artifactBundle } from "./artifact-bundle.ts";
-import { publicFunctions } from "./exports.ts";
-import { compileCss } from "./css.ts";
-import { uiContributions } from "./contributions.ts";
-import { nativeSolid } from "./native.ts";
-import { nativePlugins } from "./native.ts";
+import solid from "@solidjs/vite-plugin";
 import { clientSurface } from "./client-surface.ts";
+import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
+import { publicFunctions } from "./exports.ts";
 import {
   readDescriptor,
   serverDirectory,
-  clientEntry,
   deriveInterfaces,
   deriveProviders,
+  clientEntry,
 } from "./descriptor.ts";
-import { uiBuildConfig } from "./ui-build-config.ts";
+
+export const PLUGIN_UI_BUILD_ENABLED = true;
 
 export function tokamak(
-  options: { backend?: false; ui?: false; plugin?: PluginDefinition; standalone?: boolean } = {},
+  options: { backend?: false; ui?: false; plugin?: PluginDefinition } = {},
 ): PluginOption {
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   return [
-    pluginBoundary(() => root, options),
-    ...(!options.standalone && options.ui !== false
-      ? [
-          clientSurface(
-            () => root,
-            () => plugin.id,
-          ),
-        ]
-      : []),
-    ...(options.ui === false ? [] : options.standalone ? nativePlugins() : [nativeSolid()]),
+    pluginBoundary(() => root),
     {
       name: "tokamak-application",
       config(config, environment) {
         if (environment.command !== "build") {
-          throw new Error("Tokamak is a native build; use its Moon run task, not a browser dev server");
+          throw new Error("Plugin artifacts require a build");
         }
         // Explicit --config must work from the workspace root as well as Moon's
         // app cwd. For implicit discovery Vite already searches the project cwd.
@@ -60,20 +46,31 @@ export function tokamak(
           if (!existsSync(resolve(root, "src/server"))) options.backend = false;
           if (!existsSync(resolve(root, "src/client"))) options.ui = false;
         }
-        return uiBuildConfig(root, options);
+        if (!existsSync(clientEntry(root))) options.ui = false;
+        if (options.ui !== false) return uiBuildConfig(root);
+        if (options.backend === false) throw new Error("Plugin has no enabled targets");
+        return {
+          root,
+          build: {
+            target: "es2022",
+            emptyOutDir: false,
+            outDir: "dist",
+            lib: {
+              entry: resolve(root, ".tokamak-backend-entry.js"),
+              formats: ["es"],
+              fileName: () => ".tokamak-backend-entry.js",
+            },
+          },
+        };
       },
-      // Run on emitted JS after type erasure/Solid, so type queries never look
-      // like runtime imports. Computed imports cannot be safely classified as
-      // plugin versus host names and are forbidden in plugin UI artifacts.
-      transform: pluginImports(options),
       resolveId(id) {
-        if (options.ui === false && id === resolve(root, ".tokamak-empty-ui.js")) return "\0tokamak-empty-ui";
+        if (id === resolve(root, ".tokamak-backend-entry.js")) return "\0tokamak-backend-entry";
       },
       load(id) {
-        if (id === "\0tokamak-empty-ui") return "export {};";
+        if (id === "\0tokamak-backend-entry") return "export {};";
       },
       async buildStart() {
-        if (!options.standalone || existsSync(resolve(root, "plugin.ts"))) checkPluginImports(root);
+        checkPluginImports(root);
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
           options.plugin ??
@@ -89,10 +86,6 @@ export function tokamak(
             ...deriveInterfaces(root),
             ...(existsSync(resolve(server, "api.ts")) ? { exports: "./src/server/api.ts" } : {}),
           });
-        }
-        if (options.ui !== false && !options.standalone) {
-          const ui = uiContributions(root);
-          plugin = definePlugin({ ...plugin, contributes: ui.contributes });
         }
         const entries: Record<string, unknown> = {};
         if (options.backend === false && plugin.exports !== undefined)
@@ -150,17 +143,6 @@ export function tokamak(
           }
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
         }
-        if (options.ui !== false) {
-          const cssPath = resolve(dirname(clientEntry(root)), "styles.css");
-          const css = !options.standalone && !existsSync(cssPath) ? "" : await compileCss(cssPath);
-          this.emitFile({ type: "asset", fileName: "styles.css", source: css });
-          this.emitFile({
-            type: "asset",
-            fileName: "shell.html",
-            source: `<!doctype html>\n<html><head><style>${css}</style></head><body><div id="app"></div></body></html>\n`,
-          });
-          entries.ui = { code: "ui.js", map: "ui.js.map", css: "styles.css", shell: "shell.html" };
-        }
         const functions = publicFunctions(root, plugin.exports);
         if (existsSync(resolve(root, "plugin.ts")))
           plugin = definePlugin({ ...plugin, provides: deriveProviders(root, plugin, functions) });
@@ -171,9 +153,18 @@ export function tokamak(
             JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: functions }, null, 2) + "\n",
         });
       },
-      generateBundle(_options, bundle, isWrite) {
-        return artifactBundle(root, plugin, options).call(this, _options, bundle, isWrite);
+      generateBundle: {
+        order: "post",
+        handler(_options, bundle, isWrite) {
+          return artifactBundle(root, plugin, options).call(this, _options, bundle, isWrite);
+        },
       },
     },
+    clientAssets(() => root),
+    clientSurface(
+      () => root,
+      () => plugin.id,
+    ),
+    solid(),
   ];
 }

@@ -24,8 +24,17 @@ impl Server {
         id: String,
         name: String,
     ) -> Result<Option<Arc<crate::plugins::Asset>>, Error> {
+        self.plugin_asset_at(id, name, None).await
+    }
+
+    pub async fn plugin_asset_at(
+        &self,
+        id: String,
+        name: String,
+        revision: Option<String>,
+    ) -> Result<Option<Arc<crate::plugins::Asset>>, Error> {
         let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::Asset(id, name, reply))?;
+        admit(&self.commands, Command::Asset(revision, id, name, reply))?;
         wait.await.map_err(|_| Error::Closed)?
     }
 

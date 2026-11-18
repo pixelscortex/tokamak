@@ -1,0 +1,4 @@
+/* The Tailwind entry this package is linted against; apps import theme.css into their own. */
+@layer ui-sdk;
+@import "tailwindcss";
+@import "./theme.css";

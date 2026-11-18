@@ -1,103 +1,121 @@
-# Product shell
+# Tokamak app
 
-This native client hosts one shared Solid/renderer/SDK runtime and a memory
-router. It discovers installed plugin manifests and loads UI modules on demand.
-The component catalog remains root `lab/`.
-The app's own backend registry is empty; installed plugins own feature schemas.
+The client is Solid 2 and TanStack Router in a Tauri 2 window, with no SSR.
+The shell is the frame; everything inside it comes from plugin views.
 
-## Commands (repository root)
+Install proto, Rust and the platform Tauri prerequisites, then from the root:
 
 ```sh
-bun run app            # debug build/start or reuse server, then launch desktop
-bun run app:dev        # same development path
-bun run build          # explicit release server + desktop
-bun run ui:lab         # independent native UI, no backend/storage
-bun run server:start
-bun run server:status
-bun run server:stop
+proto run bun -- install --frozen-lockfile
+proto run bun -- run app
 ```
 
-`runtime::client` owns native execution, local WebSocket discovery and bounded
-client disposal. Main consumes a generated context; `app.config.json` declares
-title and geometry. The server
-survives desktop quit/crash. Explicit stop awaits backend/storage shutdown.
-The shared artifact builder preserves no-op embed mtimes, and Cargo's build
-helper validates the artifact and generates context into OUT_DIR.
-Release/full-LTO builds remain explicit, not part of the development loop.
+The Tauri hooks build Chat and the server. The host starts or reuses the server
+and connects automatically. Retry repeats endpoint discovery. Closing the window
+leaves the server running; `proto run bun -- run server:stop` stops it.
+`TOKAMAK_SERVER_DIR` selects a separate store/discovery directory. Development
+uses workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR`
+overrides the installation for disposable integration runs. Stop the server
+before changing installations. Discovery and the private token normally live in
+`~/Library/Application Support/com.pixelscortex.Tokamak` on macOS.
 
-## Local service
-
-The existing macOS store is unchanged:
-`~/Library/Application Support/com.pixelscortex.Tokamak/store`.
-No data deletion or migration occurs. Do not open that store in two processes.
-
-The directory also holds private `server.token`, public discovery `server.json`
-and `server.log`. The launcher verifies readiness and the canonical plugin installation root
-before reuse. Plugin edits use `tokamak plugin reload <id>`. Legacy bundle
-regressions still verify the loaded bundle hash. Native server
-code changes likewise require restart. Local discovery accepts only loopback WebSockets.
-
-`TOKAMAK_SERVER_DIR` selects an isolated directory. Launcher-relative overrides
-resolve from the repository root. A crashed launcher can leave `server-start.lock`;
-startup fails explicitly instead of stealing a lock or killing an unverified PID.
-
-The runtime connection bounds admission at 64 requests / 64 KiB each and keeps
-one completion outstanding. Client shutdown drains for up to five seconds;
-timeouts/disconnections can leave mutation outcomes unknown. No automatic retry
-or reconnect is provided.
-
-## Validation
-
-`moon run app:test` builds a standalone compatibility host from the record fixture, exercises compiler/Solid lifecycle
-regressions, the real native controls, the production
-socket bridge and actual standalone server ownership/auth/persistence.
-`tests/support/embedded.rs` exists only for in-process regressions.
-`moon run :e2e` retains the original five POC scenarios on isolated fixture data.
-No tests open the real user store.
-
-`moon run lab:test` separately checks the actual UI catalog. Physical native
-close/IME/VoiceOver and visual presentation remain separate manual acceptance.
-
-The application is a shared-runtime plugin shell. `bun run app` builds Chat and
-starts/reuses the independent server with `--plugins <workspace>/plugins`.
-[The host contract](../packages/runtime/PLUGINS.md) documents contribution slots,
-module loading and the separate presentation frame for the current zen screen.
-
-## Chat
-
-The default screen uses the Chat plugin's persisted threads and live message
-queries through the shared SDK client. The normal bundle task builds Chat. Install Bun and the agent adapters using the root README quick start; restart
-the server after changing agent configuration.
-
-Enter sends; Shift+Enter adds a line; Escape stops the current run. Tab opens
-Map and Tab/Escape closes it. Type to filter thread titles, use arrows and Enter
-or 1–9 to open a thread, and use Cmd+Enter in Map or Cmd+N to create one.
-Cmd+Shift+C copies the last assistant reply and briefly shows COPIED in the strip.
-The selected thread stays in memory for the shell's lifetime. Conversations open
-at the end and follow replies until you scroll up; scroll to the bottom to resume.
-
-For an isolated manual run, use `TOKAMAK_SERVER_DIR=/tmp/tokamak-chat bun run app`.
-Stop that server with the same variable and `bun run server:stop` after closing
-the desktop window.
-
-The existing native socket harness includes `chat_screen_socket_workflow`. Its
-default mode stays offline and checks the persisted error state. After building
-with `moon run app:bundle`, opt in to the real provider and offscreen GPU captures:
+For browser development, use two terminals:
 
 ```sh
-TOKAMAK_CHAT_LIVE=1 \
-  TK_CAPTURE_DIR=/tmp/tokamak-chat-shots \
-  cargo test --locked -p tokamak-app --test plugins chat_screen_socket_workflow -- --nocapture --test-threads=1
+proto run bun -- run server:start
+proto run bun -- run --cwd app dev
 ```
 
-Live mode requires Bun and at least one adapter available through the discovery
-paths in the root README. It configures the selected agent with a disposable
-working folder before sending. The agent CLI must already be authenticated.
-The test uses disposable storage, sends a long reply prompt, verifies streaming follow/pause/resume, clipboard
-contents on macOS, and stopping, and exercises Map search and thread switching.
-`markdown.png` captures a short list and a three-line Python block;
-`recovery.png` captures a recovered thread after the native app reopens and observes an
-abandoned run for three sweep ticks. `ux-autoscroll.png` captures the completed
-long reply at the bottom. Captures use the production Blitz painter with the bundled fonts.
+Open `http://127.0.0.1:1420`. The helper builds Chat and serves a disposable store
+on port 43123, removed on exit. `VITE_TOKAMAK_HTTP` changes the browser endpoint; `VITE_TOKAMAK_TOKEN` supplies
+a capability for a private local server (development only).
+No external agent runs. Desktop `tokamak_endpoint` returns `{ http, ws, token }`;
+the adapter adds the token to server module, stylesheet and catalog requests,
+and the app adds it to the WebSocket URL. The server allows the Tauri origins
+and port 1420 by default; other origins require `TOKAMAK_ALLOWED_ORIGINS`.
 
-Add `TOKAMAK_CHAT_QUICKSTART=1` for a single-message check with Chat installed; it saves `quickstart.png` and skips the longer UX checks.
+## Shell
+
+`src/shell/` is the frame: a top strip (sidebar toggle, search, back and forward,
+one tab per open route), the rail of plugin views with settings at its foot, the
+sidebar, the stage with its page header and footer, and an optional right panel.
+`shell.tsx` owns the connection (`session.ts`), the theme, the tabs
+(`navigation.ts`) and the window's keys; `frame.tsx` lays them out. A plugin view
+fills the sidebar, header and panel with `Region.Sidebar`, `Region.Header` and
+`Region.Panel` from `@tokamak/sdk/client`; empty regions are hidden, and an empty
+header shows the page title a view set with `usePageTitle`, else the view's
+title. Tabs keep the page title they last had; a view's optional `icon` marks
+it in the rail, tabs and search (the first letter otherwise). The rail can be
+turned off in `shell/config.ts`.
+
+Keys go through the SDK `Shortcuts` facade (`ShortcutContext`): ⌘B sidebar, ⌘K
+search, ⌘[ and ⌘] back and forward, ⌃Tab and ⌃⇧Tab next and previous tab (Ctrl
+instead of ⌘ off macOS). `/kit` opens full-bleed from the settings menu.
+
+`src/plugins/views.tsx` still exports `createPluginShell` and `PluginViews`; the
+frame reads `views()` for the rail, tabs and search. See
+[src/plugins/README.md](src/plugins/README.md) for loader lifetime details.
+
+## Checks and builds
+
+From the root:
+
+```sh
+proto run bun -- run check
+proto run bun -- run typecheck
+cargo check --workspace --all-targets --locked
+cargo test --workspace --locked
+proto run bun -- run moon run sdk:test build:test
+proto run bun -- run --cwd app test
+proto run bun -- run --cwd app build
+proto run bun -- run --cwd app tauri build --no-sign
+```
+
+Plugin typechecking first generates Chat's server API with the SDK bundler.
+Direct Cargo checks do not require bundled sidecars or plugin resources: the
+Tauri build script omits absent packaging inputs. Tauri dev/build hooks prepare
+the actual server binary and plugin resources before launching or bundling.
+Release builds package the server as an external binary. No signing is required
+for this local build. The CSP permits loopback HTTP/styles and WebSockets, blob
+modules and a hashed import map, with no eval. Keep the Vite Solid runtime alias:
+mixing development and production runtimes can produce a blank window.
+
+## Disposable end-to-end fixture
+
+Build/install Chat and the UI fixture, then launch the desktop app:
+
+```sh
+proto run bun -- app/scripts/integration-fixture.ts
+TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" TOKAMAK_PLUGIN_DIR="$PWD/app/.dev/integration/plugins" proto run bun -- run app
+```
+
+In the window, check the live thread count and select `FixtureView` in Plugin
+views. Its `useQuery` uses the same Chat thread API. Create a thread and confirm
+both counts update. Change `Fixture revision one` in
+`app/tests/fixtures/integration/src/client/api.tsx`, then in a second terminal:
+
+```sh
+TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" proto run bun -- app/scripts/integration-fixture.ts --reload
+```
+
+The rebuild installs the complete artifact, then explicitly asks the running
+server to reload it. The selected view changes revision without restarting the
+window or server. There is no file watcher. Restore the source afterward.
+For browser verification against that same private server, stop Tauri dev
+(Ctrl+C; the server stays running), then:
+
+```sh
+TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" proto run bun -- app/scripts/integration-browser.ts
+```
+
+Open port 1420, repeat thread creation and fixture selection, then repeat the
+rebuild/reload command above. This helper reads the disposable discovery and
+token into Vite's development environment without printing the capability.
+
+Verified locally on macOS arm64 with the unsigned release app and its release
+sidecar: Chat threads loaded; FixtureView rendered; creating a thread updated
+both host and fixture queries; rebuild/install plus explicit reload swapped the
+selected revision without restarting. Vite against the same private server also
+passed, including authenticated stylesheet loading and preservation of the
+browser document across reload. Screenshot and accessibility captures are kept
+locally under `app/.dev/integration/proof`. Windows/Linux were not exercised.

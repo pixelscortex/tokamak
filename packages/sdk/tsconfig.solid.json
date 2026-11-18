@@ -1,5 +1,12 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": { "skipLibCheck": true },
-  "include": ["solid.ts"]
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web",
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["solid.ts", "client.tsx", "tests/web/**/*.tsx", "vitest.config.ts"]
 }

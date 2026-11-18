@@ -1,38 +1,55 @@
-# Retired Record regression acceptance
+# Server end-to-end checks
 
-Run `CARGO_BUILD_JOBS=2 moon run :e2e` (or `bun run e2e`).
-The task depends on `app:test`, which builds the small record fixture from
-`app/tests/fixtures/record` (with an isolated standalone build at `app/dist/tests/record`) and retains their native/Solid/compiler regressions.
+Run `proto run bun -- run e2e` from the repository root.
 
-| Scenario                | Automated evidence                                                                                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add/toggle/delete       | `app/tests/native.rs` drives the retired fixture's UI and real SDK/backend.                                                                                                                                |
-| Two independent clients | `run.ts` opens two WebSocket SDK connections, subscribes **both**, waits for both initial results, and requires both to receive another client's committed add.                                            |
-| Persistence             | `app/tests/e2e.rs` writes through the actual SDK/native connection, awaits shutdown, reopens the same SurrealKV folder, checks exact rows and awaits shutdown again.                                       |
-| Headless shared storage | `run.ts` starts `tokamak` with `app/dist/tests/record/dist/bundle.js` on the released folder and compares exact rows over WebSocket.                                                                       |
-| Endless-loop recovery   | A separately bundled test-only SDK feature loops on CPU. A one-worker real headless function service must report the wall-clock budget error, then complete the very next mutation on the same connection. |
+The runner uses the real server and SDK. It creates a record through a mutation,
+toggles it, stops and reopens the store, and checks exact persisted rows. Two
+independent WebSocket clients must both receive a committed update. A separate
+single-worker fixture verifies CPU-budget interruption and the next healthy call.
+Temporary stores and processes are cleaned up. No user store is opened.
 
-No raw DB writes, alternate Record schema, auth bypass, foreground simulation,
-screenshots or committed evidence. Temporary data is under ignored `target/`;
-the runner owns and cleans each process and directory, never application data.
-An unknown mutation outcome fails rather than retrying the mutation.
+The former native window driver and its capture/interaction fixtures are gone.
+The reusable record server fixture lives in `packages/server/tests/fixtures/record`.
+`tests/compiler-selection.py` separately checks pinned Rust selection when its
+two-toolchain prerequisite is met.
 
-## Manual macOS checklist (not automated proof)
+## Browser checks
 
-- Run `bun run ui:lab`. Confirm a physical native component catalog renders.
-- Exercise controlled/uncontrolled/invalid/read-only inputs and action/toggle/disabled buttons.
-- Use Tab/Shift-Tab, Enter and Space to operate real controls; check focus visibility.
-- Enter composed/non-Latin text with the actual system IME; check no premature
-  submission during composition and correct final text.
-- Reset/filter the examples and verify native remount and focus behavior.
-- The lab state is local; persisted Record behavior is retained only in test fixtures.
-- Record pass/fail outside source control. Native document tests do **not** prove
-  foreground presentation, physical mouse/keyboard or system IME behavior.
+Install the real browsers once, then run the production build harness:
 
-Record final bytes from the existing `moon run :size` task separately. No size
-threshold or fabricated baseline is part of this suite.
+```sh
+proto run bun -- x playwright install --no-shell chromium webkit
+proto run bun -- run e2e:browser
+proto run bun -- run e2e:browser --repeat-each=3
+TOKAMAK_E2E_CPU_RATE=6 proto run bun -- run e2e:browser --project=chromium --repeat-each=10
+```
 
-Historical pre-standalone measurement from `CARGO_BUILD_JOBS=2 moon run :size` on
-`aarch64-apple-darwin`: desktop **46,191,600 bytes**, headless **39,542,368
-bytes**. This is not a current-source measurement or claimed before/after delta;
-the integration owner independently reruns it.
+On Linux use `playwright install --with-deps --no-shell chromium webkit` through the same
+pinned Bun command. Ports 1420, 1421 and 43123 must be free (set `TOKAMAK_E2E_PORT` to override 1420); the runner refuses to
+reuse a running app. It builds the server, Chat and the integration fixture,
+builds Vite in production mode and serves it with Vite preview. Every run owns a
+fresh store, private capability and plugin installation. Fixture source edits happen in a disposable
+copy under `app/.dev`, never in the checkout's source fixture. Processes and
+stores are removed on exit. No credentials or external agents are needed.
+
+Add tests in `e2e/browser/*.spec.ts`. Select by role and accessible name; keep
+layout and styling out of assertions. Wait for live state with Playwright's
+assertions, without sleeps. Use the observed thread count as a baseline, since
+browser projects share one disposable server. Keep fixture rebuilds serial.
+The host accessibility contract includes `Connection status`, `Sidebar`, `Page header`,
+`Panel`, `Views`, `Open pages`, `Settings`, `Server unreachable` and `Plugin view error`; the fixture adds `Threads`, `New thread` and `New thread title`.
+Keep those names when restyling the host.
+Use `--project=chromium` or `--project=webkit` to narrow a run. Failure traces and
+HTML reports live under `.ci-results/playwright*` and are uploaded by native CI.
+
+Chat also holds a thread-creation response while delivering live updates to check
+that the previous composer cannot send during the switch, and opens the agent
+picker to select and use another agent. `TOKAMAK_E2E_CPU_RATE` applies Chromium
+CPU throttling to the chat checks.
+
+Coverage: connection, two-page live thread creation, compiler-built plugin
+catalog/navigation and live query, explicit rebuild/reload without replacing the
+document, plugin view error containment and recovery, and HTTP/WebSocket origin
+rejection. The existing server suite still covers persistence and CPU budgets.
+Desktop window automation, OS integration, signing and external agents are outside
+this browser suite.

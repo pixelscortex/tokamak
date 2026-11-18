@@ -1,6 +1,6 @@
 /** Client extension points share the shell's owner and plugin generations. */
 import {
-  ErrorBoundary,
+  Errored,
   For,
   Show,
   createContext,
@@ -9,13 +9,15 @@ import {
   createSignal,
   onCleanup,
   useContext,
-  mergeProps,
+  merge,
   untrack,
   type Component,
+  createComponent,
 } from "solid-js";
-import { createComponent, warn, type JSX } from "@tokamak/render";
+import type { JSX } from "@solidjs/web";
 import { contributionBrand } from "./src/contributions";
 export { useClient, useQuery } from "./solid";
+export { view, itemRenderer, toolbar, command, entityCard, contributionBrand } from "./src/contributions";
 
 export interface SlotDefinition<P extends object> {
   readonly name: string;
@@ -59,56 +61,64 @@ const Extensions = createContext<() => Loaded[]>(() => []);
 /** Catalog discovery loads only extension contributors. Removing a plugin clears
  * its layers synchronously; late loads cannot publish into a retired owner. */
 export function ExtensionProvider(props: { host: ExtensionHost; children?: JSX.Element }) {
-  const [loaded, setLoaded] = createSignal<Loaded[]>([]);
+  const [loaded, setLoaded] = createSignal<Loaded[]>([], { ownedWrite: true });
   const plugins = new Map<string, { version: number; stop(): void }>();
   onCleanup(() => {
     for (const plugin of plugins.values()) plugin.stop();
     plugins.clear();
   });
-  createEffect(() => {
-    const contributions = ["fill", "wrap", "replace"].flatMap((kind) =>
-      props.host.contributions(kind as "fill" | "wrap" | "replace"),
-    );
-    const groups = new Map<string, ExtensionContribution[]>();
-    for (const c of contributions) {
-      const group = groups.get(c.plugin) ?? [];
-      group.push(c);
-      groups.set(c.plugin, group);
-    }
-    for (const [id, plugin] of plugins) {
-      if (!groups.has(id) || plugin.version !== props.host.version(id)) {
-        plugin.stop();
-        plugins.delete(id);
-        setLoaded((previous) => previous.filter((c) => c.plugin !== id));
+  createEffect(
+    () =>
+      ["fill", "wrap", "replace"].flatMap((kind) =>
+        props.host.contributions(kind as "fill" | "wrap" | "replace").map((contribution) => ({
+          ...contribution,
+          version: props.host.version(contribution.plugin),
+        })),
+      ),
+    (contributions) => {
+      const groups = new Map<string, (ExtensionContribution & { version: number })[]>();
+      for (const c of contributions) {
+        const group = groups.get(c.plugin) ?? [];
+        group.push(c);
+        groups.set(c.plugin, group);
       }
-    }
-    for (const [id, group] of groups) {
-      const version = props.host.version(id);
-      if (plugins.has(id)) continue;
-      let failed = false;
-      const plugin = {
-        version,
-        stop: props.host.onError(id, (cause) => {
-          failed = true;
+      for (const [id, plugin] of plugins) {
+        if (!groups.has(id) || plugin.version !== groups.get(id)?.[0]?.version) {
+          plugin.stop();
+          plugins.delete(id);
           setLoaded((previous) => previous.filter((c) => c.plugin !== id));
-          warn(`Extension ${id} failed: ${String(cause)}`);
-        }),
-      };
-      plugins.set(id, plugin);
-      void props.host.load(id).then(
-        (exports) => {
-          if (plugins.get(id) !== plugin || failed) return;
-          const values = group.flatMap((c) => {
-            const component = exports[c.id];
-            return typeof component === "function" ? [{ ...c, component } as Loaded] : [];
-          });
-          setLoaded((previous) => [...previous, ...values]);
-        },
-        (cause) => warn(`Extension ${id} failed: ${String(cause)}`),
-      );
-    }
-  });
-  return <Extensions.Provider value={loaded}>{props.children}</Extensions.Provider>;
+        }
+      }
+      for (const [id, group] of groups) {
+        const version = group[0]!.version;
+        if (plugins.has(id)) continue;
+        let failed = false;
+        const plugin = {
+          version,
+          stop: props.host.onError(id, (cause) => {
+            failed = true;
+            setLoaded((previous) => previous.filter((c) => c.plugin !== id));
+            console.warn(`Extension ${id} failed: ${String(cause)}`);
+          }),
+        };
+        plugins.set(id, plugin);
+        void props.host.load(id).then(
+          (exports) => {
+            if (plugins.get(id) !== plugin || failed) return;
+            const values = group.flatMap((c) => {
+              const component = exports[c.id];
+              return typeof component === "function"
+                ? [{ ...c, component: component as Loaded["component"] }]
+                : [];
+            });
+            setLoaded((previous) => [...previous, ...values]);
+          },
+          (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
+        );
+      }
+    },
+  );
+  return <Extensions value={loaded}>{props.children}</Extensions>;
 }
 export function Slot<P extends object>(props: { of: SlotDefinition<P>; props: P }) {
   const extensions = useContext(Extensions);
@@ -125,14 +135,14 @@ export function Slot<P extends object>(props: { of: SlotDefinition<P>; props: P 
   return (
     <For each={fills()}>
       {(fill) => (
-        <ErrorBoundary fallback={() => null}>
+        <Errored fallback={() => null}>
           {untrack(() =>
             createComponent(
               fill.component,
-              mergeProps(() => props.props),
+              merge(() => props.props),
             ),
           )}
-        </ErrorBoundary>
+        </Errored>
       )}
     </For>
   );
@@ -164,18 +174,18 @@ export function publicComponent<P extends object>(
         )) {
         if (mod.kind === "replace") {
           if (replaced) {
-            warn(`Ignoring second replacement for ${name}: ${mod.plugin}/${mod.id}`);
+            console.warn(`Ignoring second replacement for ${name}: ${mod.plugin}/${mod.id}`);
             continue;
           }
           replaced = true;
         }
         const inner = result;
         result = (p) => (
-          <ErrorBoundary fallback={() => createComponent(inner, p)}>
+          <Errored fallback={() => createComponent(inner, p)}>
             {mod.kind === "wrap"
               ? createComponent(mod.component(inner), p)
               : createComponent(mod.component, p)}
-          </ErrorBoundary>
+          </Errored>
         );
       }
       return result;
@@ -198,3 +208,13 @@ export function useShortcuts(): Shortcuts {
   if (!shortcuts) throw new Error("Plugin UI requires shell shortcuts");
   return shortcuts;
 }
+
+export {
+  Region,
+  RegionOutlet,
+  RegionProvider,
+  useRegionFilled,
+  usePageTitle,
+  usePageTitleValue,
+  type RegionName,
+} from "./regions";

@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { source, build, built, workspace } from "../../../app/tests/plugin-fixtures.mjs";
+import { source, build, built, workspace } from "./plugin-fixtures.mjs";
 
 async function scratch(check) {
   const parent = resolve(workspace, "packages/build/dist");
@@ -165,8 +165,8 @@ test("sanctioned client imports use the registry, including lazy slots", async (
     );
     built(path);
     const code = await output(path, "ui.js");
-    expect(code).toContain('require("@plugins/owner/ui")');
-    expect(code).toMatch(/__tokamakModules\.load\(["'`]@plugins\/owner\/ui["'`]\)/);
+    expect(code).toMatch(/from ["']@plugins\/owner\/ui["']/);
+    expect(code).toMatch(/import\(["'`]@plugins\/owner\/ui["'`]\)/);
     const manifest = JSON.parse(await output(path, "manifest.json"));
     expect(manifest.plugin.depends).toEqual({ owner: "*" });
     expect(manifest.plugin.contributes.fill[0].target).toBe("owner.actions");
@@ -288,6 +288,7 @@ test("standalone host mode cannot disable a declared plugin's boundary", async (
       "plugin.ts",
       'import {definePlugin} from "@tokamak/sdk"; export default definePlugin({id:"client",version:"1.0.0"});',
     );
+    await file(path, "src/client/api.ts", 'import "../../../outside";');
     const result = build(path);
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toContain("Plugin import boundary");
@@ -304,5 +305,23 @@ test("a symlinked client entry cannot bring in a peer implementation", async () 
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toContain("Plugin import boundary");
     expect(result.stdout + result.stderr).toContain("src/main.tsx");
+  });
+}, 30_000);
+
+test("client rejects erased peer source imports and internal module spelling", async () => {
+  await scratch(async (root) => {
+    const owner = await source(root, "owner", "");
+    await file(owner, "src/client/api.ts", "export type Shape = string;");
+    const path = await source(root, "client", "");
+    for (const statement of [
+      'import type {Shape} from "../../owner/src/client/api"; export type Used = Shape;',
+      'export type Used = import("../../owner/src/client/api").Shape;',
+      'export const load = () => import("@plugins/owner/ui");',
+    ]) {
+      await file(path, "src/main.tsx", statement);
+      const result = build(path);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("Plugin import boundary");
+    }
   });
 }, 30_000);

@@ -1,14 +1,12 @@
 import type { Plugin } from "vite";
-import { isAbsolute, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { assertPluginResolution, pluginReferenceSource } from "../../sdk/tools/plugin-boundary.mjs";
 
-export function pluginBoundary(root: () => string, options: { standalone?: boolean }): Plugin {
+export function pluginBoundary(root: () => string): Plugin {
   return {
     name: "tokamak-plugin-boundary",
     enforce: "pre",
     async resolveId(id, importer) {
-      if (options.standalone && !existsSync(resolve(root(), "plugin.ts"))) return;
       if (id.startsWith("plugin:")) {
         const client = /^plugin:([^/]+)\/client$/.exec(id);
         if (client) return { id: `@plugins/${client[1]}/ui`, external: true };

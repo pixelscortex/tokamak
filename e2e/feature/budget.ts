@@ -1,4 +1,4 @@
-/** Scenario 5 only. Never discovered by app/backend or embedded in the app. */
+/** Isolated server budget-recovery fixture. */
 import { mutation } from "@tokamak/sdk";
 
 export const endless = mutation({

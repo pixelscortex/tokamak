@@ -1,12 +1,19 @@
-# Share Cargo tasks through moon's Rust toolchain inheritance.
 language: "rust"
 layer: "library"
 tasks:
+  ts-check:
+    script: >-
+      proto run bun -- check --no-script --project tsconfig.json &&
+      proto run bun -- check --no-script --project tools/tsconfig.json
+    options:
+      cache: false
   check:
-    command: "proto run bun -- tools/check.ts"
+    deps: ["ts-check"]
+    command: "cargo check --locked --all-features --all-targets"
     options:
       mergeArgs: "replace"
   test:
-    command: "sh tests/run.sh"
+    command: "proto run bun -- --conditions=browser test tests/plugins.test.mjs"
     options:
+      cache: false
       mergeArgs: "replace"

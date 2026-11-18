@@ -5,18 +5,17 @@
   "type": "module",
   "exports": {
     "./vite": "./src/vite.ts",
-    "./native": "./src/native.ts",
     "./css": "./src/css.ts"
   },
   "dependencies": {
+    "@solidjs/vite-plugin": "3.0.0",
     "@tailwindcss/node": "4.3.4",
     "@tailwindcss/oxide": "4.3.4",
     "@tokamak/sdk": "workspace:*",
     "magic-string": "0.30.21",
     "tailwindcss": "4.3.4",
     "typescript": "5.9.3",
-    "vite": "8.3.6",
-    "vite-plugin-solid": "2.11.15"
+    "vite": "8.3.6"
   },
   "devDependencies": {
     "@types/node": "26.6.6"

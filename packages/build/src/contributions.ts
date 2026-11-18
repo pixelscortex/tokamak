@@ -15,6 +15,8 @@ const fields = {
   command: "title",
   entityCard: "table",
 } as const;
+/** Options a kind may also carry; each must be a string the compiler can read statically. */
+const optional: Partial<Record<keyof typeof fields, readonly string[]>> = { view: ["icon"] };
 export function uiContributions(root: string) {
   const entry = clientEntry(root);
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
@@ -59,8 +61,9 @@ export function uiContributions(root: string) {
     const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
     const values = ["fill", "wrap", "replace"].includes(kind)
       ? extensionOptions(declaration, kind, checker, fail)
-      : contributionOptions(declaration, fields[kind], fail);
+      : contributionOptions(declaration, fields[kind], optional[kind] ?? [], checker, fail);
     if (kind === "view") validateRoute(String(values.route!), fail);
+    if (values.icon !== undefined) validateIcon(String(values.icon), fail);
     (contributes[kind] ??= []).push({ id: exported.name, ...values });
   }
   return { contributes };
@@ -97,6 +100,8 @@ function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
 function contributionOptions(
   declaration: ts.Declaration,
   field: string,
+  extra: readonly string[],
+  checker: ts.TypeChecker,
   fail: () => never,
 ): Record<string, string> {
   let initializer = ts.isVariableDeclaration(declaration)
@@ -112,13 +117,29 @@ function contributionOptions(
   if (!options || !ts.isObjectLiteralExpression(options)) fail();
   const values: Record<string, string> = {};
   for (const property of (options as ts.ObjectLiteralExpression).properties) {
-    const p = literalProperty(property, fail);
-    const key = (p.name as ts.Identifier).text;
-    if (key !== field || key in values) fail();
-    values[key] = (p.initializer as ts.StringLiteral).text;
+    if (!ts.isPropertyAssignment(property) || !property.name) fail();
+    const name = (property as ts.PropertyAssignment).name;
+    const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : fail();
+    if ((key !== field && !extra.includes(key)) || key in values) fail();
+    // The required field stays a literal; extras may also name a const string.
+    values[key] =
+      key === field
+        ? (literalProperty(property, fail).initializer as ts.StringLiteral).text
+        : constantString((property as ts.PropertyAssignment).initializer, checker, fail);
   }
   if (!values[field]) fail();
   return values;
+}
+
+function constantString(expression: ts.Expression, checker: ts.TypeChecker, fail: () => never): string {
+  const value = unwrap(expression)!;
+  if (ts.isStringLiteralLike(value)) return value.text;
+  const type = checker.getTypeAtLocation(value);
+  return type.isStringLiteral() ? type.value : fail();
+}
+
+function validateIcon(icon: string, fail: () => never): void {
+  if (!icon || icon.length > 8192 || !/^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]+$/.test(icon)) fail();
 }
 
 function validateRoute(route: string, fail: () => never): void {

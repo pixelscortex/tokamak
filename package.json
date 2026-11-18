@@ -3,12 +3,10 @@
   "private": true,
   "workspaces": [
     "app",
-    "lab",
     "packages/build",
     "packages/sdk",
     "packages/runtime",
     "packages/ui",
-    "packages/render",
     "plugins/*",
     "wiki"
   ],
@@ -21,18 +19,24 @@
     "app": "moon run app:run",
     "app:dev": "moon run app:run",
     "plugin:build": "proto run bun -- packages/build/src/build.ts",
-    "ui:lab": "moon run lab:run",
-    "server:start": "moon run app:server-start",
+    "server:start": "moon run app:server",
     "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop debug",
-    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug"
+    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug",
+    "typecheck": "moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check",
+    "e2e:browser": "proto run bun -- e2e/browser.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/json-schema": "7.0.15",
     "@types/node": "26.6.6",
     "jscpd": "5.4.3",
     "oxfmt": "0.78.0",
     "oxlint": "1.93.0",
     "vite": "8.3.6"
+  },
+  "overrides": {
+    "@solidjs/web": "2.0.0",
+    "solid-js": "2.0.0"
   },
   "packageManager": "bun@1.4.4"
 }

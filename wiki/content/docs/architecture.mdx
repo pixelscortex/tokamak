@@ -1,98 +1,52 @@
 ---
 title: Architecture
-description: A Rust kernel with a JavaScript userland, plugins all the way down, one server and a thin desktop.
+description: A Rust server, TypeScript plugins, and a web client in Tauri.
 ---
 
-Tokamak is a personal AI harness: threads plus one input, and everything else
-is a plugin. This page summarizes the decisions the code follows today, and
-says which parts are still planned. The linked pages have the details.
+The server owns plugins, storage, scheduling, and live queries. Clients connect
+over the SDK WebSocket protocol and never open storage.
 
 ```text
- desktop (app/)                              tokamak server (packages/server)
- ┌──────────────────────────┐   loopback    ┌────────────────────────────────┐
- │ runtime::client          │   WebSocket   │ plugin loader, manifests       │
- │ Solid UI on QuickJS      │ ◀───────────▶ │ QuickJS worker pool (engine)   │
- │ render: Blitz, wgpu      │  SDK protocol │ embedded SurrealDB (SurrealKV) │
- └──────────────────────────┘               └────────────────────────────────┘
+app/                              packages/server/
+Solid 2 + TanStack Router         plugin catalog and asset snapshots
+browser DOM in Tauri 2  <------>  QuickJS workers in packages/engine
+SDK WebSocket transport          embedded SurrealDB / SurrealKV
 ```
 
-## Rust kernel, JavaScript userland
+## Server
 
-The kernel is Rust: the server host, the QuickJS engine, the runtime hosts and
-the native renderer. It owns storage, scheduling, loading, transport and
-rendering, and offers generic host operations. Feature logic is never written
-in Rust.
+Server plugins use the portable `@tokamak/sdk` API. Queries read snapshots;
+mutations share a transaction across nested calls. Committed footprints drive
+live query invalidation. Actions perform external effects through host
+capabilities. Opted-in worker plugins run actions in Bun; queries and mutations
+stay in QuickJS. The client uses the system webview’s JavaScript engine.
 
-Everything a feature does, backend and UI, is TypeScript that runs on QuickJS
-(QuickJS-NG through `rquickjs`). There is no JIT. Each backend call gets a
-fresh QuickJS world, with time and heap budgets from the worker pool, and the
-world is dropped before the reply. The UI is Solid's universal renderer,
-drawn by Blitz on wgpu, with no browser DOM.
+The server validates plugin identities, dependencies, hashes, and public
+contracts before installation. Assets are served from verified immutable
+snapshots. A failed reload preserves the previous generation.
 
-## No Bun or Node at run time
+## Client
 
-Bun is build tooling only: it bundles, checks and tests TypeScript on the
-developer's machine. The SDK's `src/` is checked against `lib: ES2022` with no
-ambient types, so runtime code cannot reach Bun, Node or browser globals. The
-shipped binaries contain no Node or Bun.
+`@tokamak/app` is a client-rendered Solid 2 web app. It uses TanStack Router,
+Tailwind 4, and ui-sdk controls. There is no SSR or meta-framework. Tauri supplies
+the native window and a drag capability. The current development helper starts
+the existing server separately with a disposable loopback store.
 
-## Function kinds
+The skeleton has a live thread list at `/` and a controls page at `/kit`.
+The shared UI package is empty. Chat's old client source is retained for its
+rewrite and excluded from the build.
 
-- **query**: reads a real read-only snapshot. A subscription to a query
-  reruns when the data it read changes.
-- **mutation**: one transaction across awaits. Nested calls into other
-  plugins share it, so all writes commit together or none do. A definite
-  conflict replays the whole handler, up to three attempts. Time and the
-  random seed are fixed per call, so a replay sees the same inputs.
-- **action**: planned for M2.1. Network and other external effects belong
-  here, never in queries or mutations, because those can run more than once.
-  Until then a `net:host` permission is metadata only.
+## Plugin UI
 
-See [Functions](/docs/api/functions) and the
-[server delivery contract](/docs/server#service-api-and-delivery-contract).
+The author API remains unchanged. The SDK supplies DOM contexts, live queries,
+slots, fills, wrappers, and replacements. Static analysis preserves the
+compiler-qualified contribution identities.
 
-## One server: hub and runners
+Plugin UI compilation is disabled while the web ESM target is built. Server
+artifacts omit `entries.ui`. The reusable catalog and generation lifecycle code
+lives in `@tokamak/runtime/plugins`; it has no evaluator. The next loader must
+use server-provided modules and share host runtime identities. Plugin isolation,
+server discovery/authentication, and desktop server packaging remain open work.
 
-There is one server binary, `tokamak`. Plugins are installed on the server,
-the hub, and clients keep no plugin state of their own: the server serves each
-plugin's declared UI files, and the client-side loader that consumes them is
-the next milestone (TKM-44). A plugin's descriptor declares a `placement` of `hub`,
-`runner` or `hybrid`, and defaults to `hub`. Today that field is validated
-metadata and every plugin runs on the hub; `runner` and `hybrid` are reserved.
-
-## Thin desktop
-
-The desktop app is a thin native client. It connects to the local server
-over authenticated loopback WebSocket and never opens storage. The server
-outlives the desktop: quitting or crashing the app does not stop it. In
-`runtime`, the client build has no database in its dependency graph, and the
-server build has no GUI.
-
-## Embedded SurrealDB
-
-SurrealDB runs inside the server process, on SurrealKV on disk (or in
-memory); there is no separate database service. Plugins only see the
-portable SDK's `ctx.db`, never SurrealQL or a native client. Each plugin has
-its own data space, and reads another plugin's data only through that
-plugin's public API. Commit footprints drive reactive invalidation.
-
-See [Store boundary](/docs/server/store) and [Database](/docs/api/database).
-
-## Plugins all the way down
-
-- **Static manifests.** A plugin declares its identity with
-  [`definePlugin`](/docs/api/plugin); the build writes `dist/manifest.json`
-  with file hashes. The server resolves versions, host API ranges,
-  dependencies, conflicts and cycles before it evaluates any module.
-- **Typed exports.** `exports: "./api.ts"` names a plugin's public backend.
-  Generated references such as `acme.notes/notes:list` carry types, not
-  handlers. A handler calls another plugin with `ctx.use(api)`, which goes
-  through the host and requires a declared dependency or interface.
-- **Slots.** `contributes` holds static arrays of contributions. Mounting them
-  into the shell's slots is the next milestone (TKM-44), along with the
-  client-plugin loader.
-- **Reload.** A reload swaps one whole generation of plugins. A failed reload
-  keeps the old code, subscriptions and data working.
-
-This is a trusted, personal plugin system, not a sandbox for hostile code.
-See [Plugin installation](/docs/server/plugins).
+The former renderer route is parked under TKM-121. It no longer constrains web
+design. See [Design rules](/docs/design) and [Plugin installation](/docs/server/plugins).

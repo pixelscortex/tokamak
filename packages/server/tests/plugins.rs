@@ -85,25 +85,6 @@ fn built() -> PathBuf {
     })
     .clone()
 }
-#[test]
-fn public_ui_builder_hashes_final_assets_for_the_native_catalog() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let output = std::process::Command::new("proto")
-        .args(["run", "bun", "--", "packages/build/src/build.ts", "lab"])
-        .current_dir(&root)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let artifact = server::plugins::Artifact::read(&root.join("lab/dist")).unwrap();
-    assert!(artifact.bundle.is_none());
-    assert!(artifact.ui_asset("ui.js").is_some());
-    assert!(artifact.ui_asset("ui.js.map").is_some());
-}
 
 async fn next(session: &mut Session) -> Event {
     // Existing backend assertions consume data events. UI generation notices
@@ -741,6 +722,36 @@ async fn assert_nested_plugin_transactions(writer: &mut server::Session) {
     );
 }
 
+async fn assert_build_identity(
+    client: &reqwest::Client,
+    base: &str,
+    binary: &str,
+    local: &std::path::Path,
+) {
+    let discovery: Value =
+        serde_json::from_slice(&std::fs::read(local.join("server.json")).unwrap()).unwrap();
+    let output = std::process::Command::new(binary)
+        .arg("--build-id")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let build = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        build.trim(),
+        format!("{:x}", Sha256::digest(std::fs::read(binary).unwrap()))
+    );
+    assert_eq!(discovery["buildId"], build.trim());
+    let health = client
+        .get(format!("{base}/health"))
+        .bearer_auth("a".repeat(64))
+        .send()
+        .await
+        .unwrap();
+    assert!(health.status().is_success());
+    let health: Value = serde_json::from_str(&health.text().await.unwrap()).unwrap();
+    assert_eq!(health, discovery);
+}
+
 fn assert_authenticated_plugin_controls(base: &str, binary: &str, local: &std::path::Path) {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -752,6 +763,7 @@ fn assert_authenticated_plugin_controls(base: &str, binary: &str, local: &std::p
                 .timeout(Duration::from_secs(10))
                 .build()
                 .unwrap();
+            assert_build_identity(&client, base, binary, local).await;
             assert_eq!(
                 client
                     .get(format!("{base}/plugins"))

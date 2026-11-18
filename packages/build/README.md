@@ -1,73 +1,63 @@
 # Tokamak artifact build
 
-One public pipeline coordinates maintained Vite/Solid, the existing SDK backend
-compiler and Tailwind v4. It does not introduce another TypeScript compiler,
-runtime loader. The build enforces source isolation; the host enforces call permissions.
+Build a plugin's server artifact from the repository root:
 
 ```sh
-bun run plugin:build path/to/plugin
-bun run app:dev
-bun run ui:lab
-bun run build          # explicit size-oriented release build
+proto run bun -- packages/build/src/build.ts plugins/chat
 ```
 
-The builder accepts a folder (defaults to cwd) or `--config <vite.config.ts>`.
-App, lab and regression fixtures all use this publisher. If a folder has no
-static `plugin.ts`, the normal `src/server/`, `src/client/api.ts`, `src/client/styles.css` conventions
-apply.
+The builder reads literal `plugin.ts` metadata, bundles `src/server/` through the
+SDK compiler, derives public function references and provider contracts, and
+writes a versioned `dist/manifest.json` with hashes of final emitted bytes.
+Worker plugins also receive their Bun action bundle and worker entry.
+Unchanged output preserves bytes and modification times. The manifest is
+published last; installation still needs its own complete-artifact staging.
 
-## Definition and output
+The UI target emits browser ESM in `ui.js` and `ui.js.map`, compiled with Solid 2
+DOM JSX. `ui: false` explicitly disables the
+UI target; the server target and `backend: false` option keep their names.
+Client `styles.css` is discovered beside the client entry and compiled with
+Tailwind. Imported CSS is also collected by Vite. No registration wrapper or
+HTML shell is emitted.
 
-```ts
-import { defineConfig } from "vite";
-import { definePlugin } from "@tokamak/sdk";
-import { tokamak } from "@tokamak/build/vite";
+`entries.ui` is `{ "code": "ui.js", "map": "ui.js.map", "css": "styles.css" }`;
+`css` is omitted when no stylesheet is emitted. Contributions and qualified
+slot/component names still come from the compiler, without executing the client.
+Final file hashes cover JavaScript, source maps, CSS and server output.
 
-export default defineConfig({
-  plugins: [
-    tokamak({
-      plugin: definePlugin({ id: "acme.notes", version: "0.1.0" }),
-    }),
-  ],
-});
-```
+Shared imports remain bare: `solid-js`, `solid-js/*`, `@solidjs/web` (including
+subpaths), `@tokamak/sdk` (including subpaths), `@tokamak/ui` (including subpaths),
+`@tokamak/runtime/router`, `@ui-sdk/solid` and `@ui-sdk/core` (including subpaths),
+and compiler-emitted `@plugins/*` module names. Authors use
+`import { Panel } from "plugin:example/client"`. The compiler emits
+`@plugins/example/ui`; the web loader resolves it to the dependency's
+revision-pinned module, including literal dynamic imports. Static imports infer
+required dependencies; literal dynamic imports infer optional dependencies.
 
-`backend: false` builds UI-only artifacts; `ui: false` builds backend-only
-artifacts. Omitting the descriptor derives identity from package.json for
-internal/test projects. Explicit identity is recommended for real plugins.
-Dependency resolution, grants, contribution registration and runtime loading
-belong to M1; `definePlugin` currently validates packaging identity only.
+The catalog keeps existing manifest fields and adds `revision`, `uiUrl` and
+`stylesheetUrl` per plugin. URLs are `/plugins/<id>/<catalog revision>/assets/<name>`;
+plugins without UI or CSS have null URLs. Only manifest-declared UI assets from
+the current verified snapshot are served. Stale revisions return 404. Successful
+assets use `private, max-age=31536000, immutable` caching and JavaScript uses
+`text/javascript`.
 
-The versioned `dist/manifest.json` declares only emitted entries:
+Asset GET, catalog GET and WebSocket upgrades accept exactly the origins in
+`TOKAMAK_ALLOWED_ORIGINS` (comma-separated, replacing the defaults):
+`tauri://localhost`, `http://tauri.localhost`, `http://127.0.0.1:1420`.
+Other origins receive 403. Requests without Origin remain supported.
+Desktop mode requires the existing local token, either `Authorization: Bearer …`
+or `?token=…` on those browser routes. Web loaders must append the token to each
+asset URL, including stylesheet URLs, and the WebSocket URL. Missing or wrong
+tokens receive 401. Tokenless loopback development exposes these routes too,
+with the same origin checks. Control routes remain native-only and require
+header authorization in desktop mode.
 
-```json
-{
-  "formatVersion": 1,
-  "plugin": { "id": "acme.notes", "version": "0.1.0" },
-  "entries": {
-    "backend": { "code": "bundle.js", "map": "bundle.js.map", "api": "api.ts" },
-    "ui": { "code": "ui.js", "map": "ui.js.map", "css": "styles.css", "shell": "shell.html" }
-  }
-}
-```
-
-- Backend is self-contained ESM; UI is native Solid-universal IIFE.
-- Maps preserve original TS/TSX source. SDK type checking uses a temporary file,
-  while bundling uses a stable virtual entry and canonical cwd.
-- `api.ts` contains typed references, not executable handlers. As in the existing
-  SDK, its type imports require the author's backend source when type-checking.
-  This is not a portable declaration-only SDK publishing format.
-- Only changed output bytes are atomically replaced. No-op mtimes remain stable,
-  including source-map-only and backend-only edits.
-- Manifest is written last, but publication is not an atomic multi-file install.
-  The M1 installer must stage complete artifacts. Consumers must use manifest
-  entries, not assume unreferenced leftover files are active.
-- Chunking is deferred; there is no native module/resource loader yet.
-
-M1 still must establish shared Solid/renderer ownership, contribution
-registration and disposal before loading several UI plugins into one window.
-The current self-contained application/preview IIFE must not simply be
-evaluated repeatedly over a running shell's global renderer state.
+Run the focused build tests from this directory with `sh tests/run.sh`.
+The browser fixture lives in `tests/fixtures/browser`; its optional cross-plugin
+module need not be installed to build or serve it.
+After building `target/debug/tokamak`, run the real curl/WebSocket checks from the
+repository root with `proto run bun -- packages/build/tests/browser-assets.mjs`.
+They cover loopback, desktop token authentication and a configured origin list.
 
 ## Plugin imports
 
@@ -92,9 +82,11 @@ named imports also carry references. No runtime helpers or handlers cross the
 boundary. Legacy packages use `backend/api.ts`. Public APIs are inspected
 statically and are never executed by the builder.
 
-`plugin:<id>/client` resolves to the client registry (`@plugins/<id>/ui`, which
-remains supported). Static imports declare dependencies and dynamic imports
-use the lazy registry loader. Public client types come from `src/client/api.ts`.
+`plugin:<id>/client` compiles to the internal module name `@plugins/<id>/ui`.
+Authors use only `plugin:<id>/client`; authored `@plugins/*` imports are rejected.
+Static imports declare dependencies and literal dynamic imports declare optional
+dependencies. The web loader rewrites both to revision-owned browser modules.
+Public client types come from `src/client/api.ts` or `src/client/api.tsx`.
 
 The builder generates ignored type facades in `.tokamak/types` and configures
 its checkers automatically. For editor checking outside the builder, add these
@@ -114,38 +106,3 @@ paths to the plugin's tsconfig (relative to the plugin root):
 
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
-
-## Generated native context
-
-Applications add the `tokamak-build` Cargo build dependency from this directory
-and a build.rs calling `tokamak_build::build()`. It reads app.config.json:
-
-```json
-{ "title": "My app", "width": 680, "height": 820 }
-```
-
-The helper validates `dist/manifest.json` and required UI assets, tracks them as
-Cargo inputs, and writes context into OUT_DIR without changing identical output.
-Authored entry points use `runtime::context!()`, never generated paths or manual
-asset embedding. Connected apps call `runtime::client::run`; UI-only tools call
-`runtime::client::run_ui`.
-
-## CSS
-
-Pinned Tailwind 4.3.4 Node compilation + maintained Oxide extraction run only at
-build time. Automatic sources start beside the target stylesheet, not at the
-monorepo root. Use `@source` for shared code and complete static utility names.
-Shared UI theme/utilities omit browser preflight to preserve native input defaults.
-Generating a utility does not prove every browser CSS feature renders in Blitz.
-
-## Ownership and checks
-
-- Build package: packaging, code generation and CSS compilation.
-- Runtime tools: independent server process discovery/start/status/stop.
-- Engine: JavaScript execution; never Vite/Bun/Tailwind.
-- SDK: portable plugin/function authoring and typed references.
-
-`app/tests/compiler.ts` exercises cwd/spacing, maps, guards, optional entries,
-stable bytes/mtimes and repair. Build tests check CSS extraction and compile the
-generated Rust context with a minimal independent client type. Lab tests execute
-the actual native control/layout path.

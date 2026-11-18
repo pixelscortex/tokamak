@@ -7,8 +7,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # Explicit saves also work on Depot's composite-action implementation and
-    # preserve downloads when later validation fails.
+    # Explicit saves preserve downloads when later validation fails.
     - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       id: tools
       with:
@@ -66,9 +65,11 @@ runs:
           cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
         fi
         proto run bun -- install --frozen-lockfile
-        # Both Depot services inject short-lived cache credentials. Keep their
-        # preconfigured endpoint (it may be an authenticated local proxy).
+        # Depot's runners inject a short-lived cache credential. Keep their
+        # preconfigured endpoint (it may be an authenticated local proxy), and
+        # mask the value so later steps do not print it in their environment.
         if [ -n "${DEPOT_CACHE_TOKEN:-}" ]; then
+          echo "::add-mask::$DEPOT_CACHE_TOKEN"
           echo "DEPOT_TOKEN=$DEPOT_CACHE_TOKEN" >> "$GITHUB_ENV"
         fi
         if [ "${{ inputs.native }}" = "true" ]; then

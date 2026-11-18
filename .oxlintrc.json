@@ -1,5 +1,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./packages/ui/lint/oxlint.json"],
+  "settings": {
+    "shadcn": {
+      "ui": "@tokamak/ui",
+      "themeImports": ["^@tokamak/ui/"],
+      "note": "Tokamak design rules: wiki docs/design. Tokens: @tokamak/ui/theme.css."
+    }
+  },
   "ignorePatterns": [
     "**/vendor/**",
     "**/dist/**",
@@ -8,7 +16,8 @@
     "**/protocol.ts",
     "**/_generated/**",
     "packages/engine/tests/fixtures/array-initializer.js",
-    "packages/engine/tests/fixtures/startup.js"
+    "packages/engine/tests/fixtures/startup.js",
+    "packages/ui/lint/fixtures/**"
   ],
   "rules": {
     "max-depth": ["warn", 4],
@@ -41,7 +50,20 @@
   "plugins": ["typescript", "import"],
   "overrides": [
     {
-      "files": ["packages/build/**", "**/tools/**", "**/tests/**", "**/*.test.*", "**/*.spec.*"],
+      "files": [
+        "packages/build/**",
+        "**/tools/**",
+        "**/tests/**",
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/scripts/**"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["packages/sdk/client.tsx"],
       "rules": {
         "no-console": "off"
       }

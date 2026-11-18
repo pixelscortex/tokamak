@@ -96,7 +96,10 @@ function provider(root, id) {
       ? existsSync(backendEntry)
         ? backendEntry
         : resolve(folder, "api.ts")
-      : resolve(folder, "src/client/api.ts");
+      : resolve(
+          folder,
+          existsSync(resolve(folder, "src/client/api.ts")) ? "src/client/api.ts" : "src/client/api.tsx",
+        );
   if (!existsSync(entry)) throw new Error(`Plugin import ${id}: missing public API ${entry}`);
   return { folder, entry, side, id: match[1] };
 }
@@ -233,7 +236,8 @@ export function checkPluginImports(root) {
         }
         return;
       }
-      if (/^@plugins\/[^/]+(?:\/ui)?$/.test(id) || isBuiltin(id)) return;
+      if (id.startsWith("@plugins/")) throw diagnostic(path, id);
+      if (isBuiltin(id)) return;
       const resolved = ts.resolveModuleName(id, path, options, ts.sys).resolvedModule;
       if (resolved) {
         const bare = !id.startsWith(".") && !isAbsolute(id);

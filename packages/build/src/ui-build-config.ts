@@ -1,43 +1,46 @@
-import { clientEntry } from "./descriptor.ts";
 import type { UserConfig } from "vite";
-import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { nativeConfig } from "./native.ts";
+import { compileCss } from "./css.ts";
+import { clientEntry } from "./descriptor.ts";
 
-export function uiBuildConfig(root: string, options: { ui?: false; standalone?: boolean }): UserConfig {
-  if (options.ui === false) {
-    return {
-      root,
-      build: {
-        target: "es2022",
-        emptyOutDir: false,
-        outDir: "dist",
-        lib: {
-          entry: resolve(root, ".tokamak-empty-ui.js"),
-          name: "TokamakEmpty",
-          formats: ["iife"],
-          fileName: () => "ui.js",
-        },
-      },
-    };
-  }
-  const renderer = createRequire(resolve(root, "package.json")).resolve("@tokamak/render");
-  const { plugins: _plugins, ...native } = nativeConfig(resolve(dirname(renderer), ".."), {
-    entry: clientEntry(root),
-    outDir: resolve(root, "dist"),
-    fileName: "ui.js",
-  });
-  if (options.standalone) return { ...native, root };
+export const hostModule = (id: string) =>
+  /^(solid-js(?:$|\/)|@solidjs\/web(?:$|\/)|@tokamak\/(?:sdk(?:$|\/)|ui(?:$|\/)|runtime\/router$)|@ui-sdk\/(?:solid|core)(?:$|\/)|@plugins\/)/.test(
+    id,
+  );
+
+export function uiBuildConfig(root: string): UserConfig {
   return {
-    ...native,
     root,
     build: {
-      ...native.build,
-      lib: { entry: clientEntry(root), formats: ["cjs"], fileName: () => "ui.js" },
-      rollupOptions: {
-        external: (id) => /^(solid-js(?:$|\/)|@tokamak\/|@plugins\/)/.test(id),
-        output: { exports: "named", codeSplitting: false },
+      target: "es2022",
+      emptyOutDir: false,
+      outDir: "dist",
+      sourcemap: true,
+      lib: {
+        entry: clientEntry(root),
+        formats: ["es"],
+        fileName: () => "ui.js",
+        cssFileName: "styles",
       },
+      rollupOptions: { external: hostModule, output: { codeSplitting: false } },
+    },
+  };
+}
+
+export function clientAssets(root: () => string): import("vite").Plugin {
+  return {
+    name: "tokamak-client-entry",
+    enforce: "post",
+    async load(id) {
+      const css = resolve(dirname(clientEntry(root())), "styles.css");
+      if (id === css) return compileCss(css);
+    },
+    transform(code, id) {
+      const entry = clientEntry(root());
+      const css = resolve(dirname(entry), "styles.css");
+      if (id === entry && existsSync(css))
+        return { code: `${code}\nimport ${JSON.stringify(css)};`, map: null };
     },
   };
 }

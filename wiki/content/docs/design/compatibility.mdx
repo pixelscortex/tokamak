@@ -1,0 +1,141 @@
+---
+title: DOM compatibility
+description: What the client needs before DOM-dependent UI libraries such as ui-sdk can run on it.
+---
+
+This page describes the parked Blitz route (TKM-121) and no longer limits design work.
+
+The goal is to run ui-sdk's behaviours on our renderer without moving to a
+webview. This page is the working list: each row is a browser API a library
+expects, where we stand, and what kind of work closes it. Update a row when its
+status changes.
+
+## Where we are
+
+A spike on branch `spike/ui-sdk-dom` (not merged) ran a ui-sdk menu on the
+renderer: a button opens a five-item menu beside it, the arrow keys move focus,
+Enter activates, and Escape or a press outside closes it and returns focus. The
+behaviour comes from `@ui-sdk/core` 0.1.0-beta.6 (`definePrimitive`,
+`createRovingFocus`, `bindLayer`), through an opt-in DOM layer in
+`packages/render/js/dom/` and a 25-line Solid 1.9 adapter. Two headless native
+tests cover it. Solid and Blitz were not changed.
+
+The spike's full report is `spikes/ui-sdk-dom/REPORT.md` on that branch.
+
+Not verified by the spike: a real window with physical input, GPU output,
+screen readers, ui-sdk's full popup (`createPopup`), and any component other
+than this menu.
+
+## Status words
+
+- **Have:** works in the spike's DOM layer and is covered by a native test.
+  "Limited" means only the part the menu needed.
+- **Wiring:** JavaScript only. Our renderer owns the tree, so the answer can be
+  computed in QuickJS.
+- **Bridge:** needs a call into Rust and back. Blitz already holds the answer.
+- **Engine:** needs Blitz itself to change.
+- **Unchecked:** nobody has looked yet.
+
+The "uses" column counts how often `@ui-sdk/core` refers to the API in its 388
+built files, from a text search. It shows roughly how much depends on a row.
+
+## The tree
+
+| API                                   | Uses | Status        | Notes                                                     |
+| ------------------------------------- | ---- | ------------- | --------------------------------------------------------- |
+| `ownerDocument`, `getRootNode`        | 192  | Have, limited | One document, no frames or shadow roots.                  |
+| `contains`, `closest`, `matches`      | 272  | Have, limited | Selectors: tag, id, one attribute, comma lists, `:focus`. |
+| `getAttribute`, `setAttribute`        | 195  | Have          |                                                           |
+| `querySelector`, `getElementById`     | 51   | Have, limited | Same restricted selectors.                                |
+| `compareDocumentPosition`             | 1    | Have, limited | Tested on a static list of five.                          |
+| `TreeWalker`                          | 3    | Wiring        | ui-sdk switches to it for lists of 16 or more.            |
+| `document.createElement`, style nodes | 4    | Wiring        | The full popup needs them.                                |
+| `MutationObserver`                    | 51   | Wiring        | ui-sdk guards its use, so a static menu works without it. |
+| Shadow roots                          | 16   | Unchecked     | Likely only for the web components adapter.               |
+
+## Events
+
+| API                                       | Uses | Status        | Notes                                                     |
+| ----------------------------------------- | ---- | ------------- | --------------------------------------------------------- |
+| `addEventListener`, `removeEventListener` | 203  | Have, limited | Capture and `once`. No abort signals or object listeners. |
+| `dispatchEvent`                           | 24   | Have, limited | Capture, target and bubble phases, with cancellation.     |
+| Keyboard events                           | 542  | Have, limited | Arrows, Tab, Shift+Tab, Enter and Escape are tested.      |
+| Pointer events                            | 296  | Have, limited | Mouse only. Touch and pen are mapped but not tested.      |
+| `setPointerCapture`                       | 6    | Unchecked     | Needed for sliders and dragging.                          |
+| Composition events, `isComposing`         | 59   | Unchecked     | Fields are forwarded; a real IME was not tested.          |
+| Drag and drop                             | 12   | Unchecked     |                                                           |
+
+## Focus
+
+| API                               | Uses | Status        | Notes                                                                                                                                           |
+| --------------------------------- | ---- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `element.focus()`, `blur()`       | 180  | Have, limited | No Blitz change needed: released Blitz has `set_focus_to` and `clear_focus`. Native focus moves when the JavaScript turn ends, not at the call. |
+| `document.activeElement`          | 25   | Have, limited | Read from Rust before each input; updated optimistically after a script request.                                                                |
+| `focus`, `blur`, `focusin` events | —    | Wiring        | Partly done. No `relatedTarget`.                                                                                                                |
+| `inert`                           | 134  | Unchecked     | Used to trap focus in dialogs.                                                                                                                  |
+| `:focus-visible`                  | —    | Engine        | Blitz sets focus and focus ring together.                                                                                                       |
+
+## Layout and measurement
+
+| API                               | Uses | Status         | Notes                                                                                                                                                      |
+| --------------------------------- | ---- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getBoundingClientRect`           | 90   | Bridge, partly | Returns the last box Rust reported. A fresh answer right after a write is not possible with how our bridge batches changes; that is our design, not Blitz. |
+| `getComputedStyle`                | 48   | Bridge, partly | Direction and border widths only.                                                                                                                          |
+| Placing an element beside another | —    | Have, limited  | Done after layout through `observeLayout`. No flipping when it would not fit.                                                                              |
+| `ResizeObserver`                  | 34   | Wiring         | Can sit on `observeLayout`.                                                                                                                                |
+| `IntersectionObserver`            | 3    | Wiring         | Can sit on `observeLayout`.                                                                                                                                |
+| Scroll position, `scrollIntoView` | 198  | Bridge         | `scrollTo` exists and is queued.                                                                                                                           |
+| `visualViewport`, `matchMedia`    | 22   | Bridge         | The full popup's positioning reads them.                                                                                                                   |
+
+## Popups
+
+| API                              | Uses | Status        | Notes                                                                                                                                         |
+| -------------------------------- | ---- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| A positioned layer (`bindLayer`) | —    | Have, limited | ui-sdk allows a layer without the top layer; the caller places it.                                                                            |
+| The full popup (`createPopup`)   | —    | Bridge        | Has a fallback without the Popover API, read in its source but not run. Needs element styles, frame callbacks and the measurement rows above. |
+| A true top layer                 | 345  | Engine        | Drawing and hit testing above clipped parents. Or a separate overlay surface of ours.                                                         |
+
+## Text
+
+| API                            | Uses | Status    | Notes                                           |
+| ------------------------------ | ---- | --------- | ----------------------------------------------- |
+| Selection, `setSelectionRange` | 23   | Bridge    | We report the caret; setting it is not exposed. |
+| `aria-live` announcements      | 12   | Unchecked | There is no accessibility host yet.             |
+
+## Timing and the language
+
+Checked by running code in the UI's own QuickJS realm.
+
+| API                     | Uses | Status         | Notes                                                                                                         |
+| ----------------------- | ---- | -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `queueMicrotask`        | 114  | Have           | Already present.                                                                                              |
+| `WeakRef`               | 3    | Have           | Already present.                                                                                              |
+| `setTimeout`            | 70   | Bridge, partly | Absent natively. The shim runs zero delays as a promise job; longer delays use `afterDelay` (60 s, 32 waits). |
+| `requestAnimationFrame` | 42   | Bridge         | Absent. The full popup needs a callback before paint.                                                         |
+| `Intl`                  | 66   | Wiring         | Absent. Needs a JavaScript implementation with locale data, or a host service.                                |
+| `AbortController`       | 6    | Wiring         | Absent.                                                                                                       |
+| `history`, `location`   | 34   | Unchecked      |                                                                                                               |
+
+## Solid
+
+- A small adapter of our own from `@ui-sdk/core` to Solid 1.9 works for this
+  menu. Moving to Solid 2 would not help: ui-sdk's own Solid adapter targets
+  browser elements, not our renderer.
+- The adapter uses `@ui-sdk/core/renderer`, which ui-sdk says is not public
+  API and may change in any release. Pin the version and keep native tests.
+- ui-sdk's types name browser globals. Adding the DOM type library to the
+  client broke Solid's JSX types, so the adapter asserts the type in one place.
+
+## What is left
+
+Rough estimates from the spike, for a tested common subset and not all of
+ui-sdk:
+
+1. **Wiring, about 1–2 weeks:** full selectors, `TreeWalker`, mutation
+   records, richer events, `AbortController`, element styles, timers. `Intl` is
+   extra.
+2. **Bridge, about 2–4 weeks:** measurement after layout, computed styles,
+   frame callbacks, scrolling, consistent focus events, and a reusable adapter.
+   This is what the full popup needs.
+3. **Engine:** only a true top layer and `:focus-visible`. Nothing else was
+   shown to need a Blitz change.

@@ -318,3 +318,25 @@ process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
 `ctx.signal` observes cancellation. Module state persists until reload, disable,
 or process exit. Bun must be installed on the host. See the root README's
 [worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
+
+## Web client entries
+
+`@tokamak/sdk` keeps the portable transport, function references, and plugin API.
+`@tokamak/sdk/solid` supplies `useQuery`, `ClientContext`, and `useClient` for
+Solid 2. Provide the connected client with `<ClientContext value={client}>`.
+Reactive query argument changes unsubscribe the old query; owner disposal
+unsubscribes the current query.
+
+`@tokamak/sdk/client` supplies DOM slots, extension providers, public component
+wrappers/replacements, contribution helpers and brands, and shortcut contexts.
+These entries use Solid 2.0.0 and `@solidjs/web` 2.0.0. They do not mount the app,
+open sockets, or implement plugin module loading.
+
+## Views in the shell
+
+`view({ route, icon }, Component)` declares a page. `icon` is optional: one
+single-colour SVG path in a 24 × 24 box, written as a literal or a `const`
+string so the compiler can read it; the shell shows it in the rail, tabs and
+search. Inside a view, `Region.Sidebar`, `Region.Header` and `Region.Panel`
+place content in the shell, and `usePageTitle(() => title)` names the page for
+its tab and the window title while the view is mounted.

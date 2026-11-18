@@ -1,5 +1,11 @@
-/** Per-window navigation. No URL, DOM, browser history or global router. */
-import { createMemoryHistory } from "@tanstack/history";
+/** The legacy plugin navigation surface backed by the shell TanStack history. */
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  type AnyRouter,
+} from "@tanstack/solid-router";
 import { createContext, useContext, createSignal, getOwner, onCleanup, type Accessor } from "solid-js";
 
 export interface RouteLocation {
@@ -67,13 +73,24 @@ export function matchRoute(pattern: string, pathname: string): RouteMatch | unde
 
 export function createMemoryRouter(initial = "/"): MemoryRouter {
   checkHref(initial);
-  const history = createMemoryHistory({ initialEntries: [initial] });
+  const root = createRootRoute();
+  const catchAll = createRoute({ getParentRoute: () => root, path: "$" });
+  return routerFacade(
+    createRouter({
+      routeTree: root.addChildren([catchAll]),
+      history: createMemoryHistory({ initialEntries: [initial] }),
+    }),
+    true,
+  );
+}
+
+export function routerFacade(router: AnyRouter, ownsHistory = false): MemoryRouter {
   const snapshot = (): RouteLocation => {
-    const { href, pathname, search, hash } = history.location;
-    return Object.freeze({ href, pathname, search, hash });
+    const { href, pathname, search, hash } = router.history.location;
+    return { href, pathname, search, hash };
   };
-  const [location, setLocation] = createSignal(snapshot());
-  const unsubscribe = history.subscribe(() => setLocation(snapshot()));
+  const [location, setLocation] = createSignal(snapshot(), { ownedWrite: true });
+  const unsubscribe = router.history.subscribe(() => setLocation(snapshot()));
   let disposed = false;
   const live = () => {
     if (disposed) throw new Error("Router is disposed");
@@ -82,28 +99,27 @@ export function createMemoryRouter(initial = "/"): MemoryRouter {
     if (disposed) return;
     disposed = true;
     unsubscribe();
-    history.destroy();
+    if (ownsHistory) router.history.destroy();
   };
   if (getOwner()) onCleanup(dispose);
-  return Object.freeze({
+  return {
     location,
-    navigate(href: string, options?: { replace?: boolean }) {
+    navigate(href, options) {
       live();
       checkHref(href);
-      if (options?.replace) history.replace(href);
-      else history.push(href);
+      void router.navigate({ href, replace: options?.replace });
     },
     back() {
       live();
-      history.back();
+      router.history.back();
     },
     forward() {
       live();
-      history.forward();
+      router.history.forward();
     },
-    match: (pattern: string) => matchRoute(pattern, location().pathname),
+    match: (pattern) => matchRoute(pattern, location().pathname),
     dispose,
-  });
+  };
 }
 
 /** Navigation is owned by the shell, shared through the same Solid context as

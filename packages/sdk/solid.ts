@@ -1,7 +1,7 @@
 /** Optional Solid integration lives outside portable src, so backend bundles and
  * their checked ES2022-only type graph never depend on a UI runtime.
  * Each reactive argument change owns exactly one live subscription. */
-import { createContext, useContext, createEffect, createSignal, onCleanup } from "solid-js";
+import { createContext, useContext, createEffect, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { FunctionReference } from "./src/api";
 import type { TokamakClient } from "./src/client";
@@ -17,27 +17,30 @@ export function useQuery<A, R>(
   reference: FunctionReference<"query", A, R>,
   args: Accessor<NoInfer<A>>,
 ): QueryState<R> {
-  const [data, setData] = createSignal<R>();
-  const [loading, setLoading] = createSignal(true);
-  const [error, setError] = createSignal<Error>();
+  const [data, setData] = createSignal<R | undefined>(undefined, { ownedWrite: true });
+  const [loading, setLoading] = createSignal(true, { ownedWrite: true });
+  const [error, setError] = createSignal<Error | undefined>(undefined, { ownedWrite: true });
 
-  createEffect(() => {
-    const input = args();
+  createEffect(args, (input) => {
+    let active = true;
     setData(undefined);
     setError(undefined);
     setLoading(true);
     try {
       const stop = client.subscribe(reference, input, (event) => {
+        if (!active) return;
         if ("value" in event) {
           setData(() => event.value);
           setError(undefined);
-        } else {
-          setError(event.error);
-        }
+        } else setError(event.error);
         setLoading(false);
       });
-      onCleanup(stop);
+      return () => {
+        active = false;
+        stop();
+      };
     } catch (cause) {
+      active = false;
       setError(cause instanceof Error ? cause : new Error(String(cause)));
       setLoading(false);
     }

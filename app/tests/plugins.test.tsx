@@ -1,0 +1,339 @@
+import { expect, test, vi } from "vitest";
+import { render } from "@solidjs/web";
+import { createRoot, createSignal, flush, onCleanup } from "solid-js";
+import { waitFor } from "@testing-library/dom";
+import {
+  type AnyRouter,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/solid-router";
+import { view } from "@tokamak/sdk/client";
+import { useClient, useQuery } from "@tokamak/sdk/solid";
+import type { JsonValue, TokamakClient } from "@tokamak/sdk";
+import {
+  createPluginLoader,
+  type PluginAssets,
+  type PluginManifest,
+  type PluginModuleHost,
+} from "../../packages/runtime/js/plugins";
+import { adaptCatalog, assetURL } from "../src/plugins/adapter";
+import { createPluginShell } from "../src/plugins/views";
+import { WebPluginHost } from "../src/plugins/web-host";
+import { createMemoryRouter, matchRoute } from "../src/plugins/router";
+
+export function catalog(revision = "one") {
+  return {
+    revision,
+    plugins: [
+      {
+        plugin: {
+          id: "fixture",
+          version: revision,
+          contributes: { view: [{ id: "View", route: "/", title: "Fixture" }] },
+        },
+        entries: {
+          ui: {
+            code: `/plugins/fixture/${revision}/assets/ui.js`,
+            css: `/plugins/fixture/${revision}/assets/ui.css`,
+          },
+        },
+        hashes: {},
+      },
+    ],
+  };
+}
+test("adapter pins URL and token, preserves metadata, refuses another origin", () => {
+  const endpoint = { http: "http://127.0.0.1:4000", ws: "ws://127.0.0.1:4000/ws", token: "a&b" };
+  expect(assetURL(endpoint, "/plugins/fixture/one/assets/ui.js")).toBe(
+    "http://127.0.0.1:4000/plugins/fixture/one/assets/ui.js?token=a%26b",
+  );
+  expect(() => assetURL(endpoint, "http://example.com/ui.js")).toThrow("server origin");
+  expect(adaptCatalog(catalog()).plugins[0]?.plugin.contributes?.view?.[0]?.title).toBe("Fixture");
+  const raw = catalog();
+  const real = {
+    ...raw,
+    plugins: raw.plugins.map((plugin) => ({
+      ...plugin,
+      revision: "server-revision",
+      uiUrl: "/plugins/fixture/server-revision/assets/module.js",
+      stylesheetUrl: "/plugins/fixture/server-revision/assets/styles.css",
+    })),
+  };
+  const entry = adaptCatalog(real).plugins[0]!.entries.ui!;
+  expect(entry.code).toBe(real.plugins[0]!.uiUrl);
+  expect(assetURL(endpoint, entry.css)).toBe(
+    "http://127.0.0.1:4000/plugins/fixture/server-revision/assets/styles.css?token=a%26b",
+  );
+});
+
+test("ESM lifecycle rejects a load retired while import is pending", async () => {
+  let finish!: (value: Record<string, unknown>) => void;
+  let notify!: Parameters<PluginAssets["onPluginsChanged"]>[0];
+  const host: PluginModuleHost = {
+    affected: (names) => new Set(names),
+    remove: vi.fn(),
+    evaluate: vi.fn(),
+    dependencies: () => [],
+    has: () => true,
+    require: () => ({}),
+    setLoader: vi.fn(),
+    notifyError: vi.fn(),
+    onError: () => () => {},
+    importModule: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  };
+  const assets: PluginAssets = {
+    plugins: async () => catalog(),
+    pluginAsset: vi.fn(),
+    onPluginsChanged: (listener) => {
+      notify = listener;
+      return () => {};
+    },
+  };
+  const loader = createRoot(() => createPluginLoader(host, assets));
+  await loader.connect();
+  const pending = loader.load("fixture");
+  notify({ plugins: ["fixture"], catalog: catalog("two") });
+  finish({ stale: true });
+  await expect(pending).rejects.toThrow("Retired plugin generation");
+  expect(assets.pluginAsset).not.toHaveBeenCalled();
+  loader.dispose();
+});
+
+test("web host rewrites literal imports, owns CSS and disposers, and invalidates actual importers", async () => {
+  const manifests = catalog().plugins;
+  manifests.push({
+    ...manifests[0]!,
+    plugin: { ...manifests[0]!.plugin, id: "other" },
+    entries: { ui: { code: "/plugins/other/one/assets/ui.js", css: "" } },
+  });
+  const blobs = new Map<string, Blob>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => ({
+      ok: true,
+      text: async () =>
+        url.includes("/other/")
+          ? "export const value = 1"
+          : `import { value } from '@plugins/other/ui'; export const lazy = () => import('@plugins/other/ui'); export const url = import.meta.url;`,
+    })),
+  );
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    const url = `blob:test-${blobs.size}`;
+    blobs.set(url, blob as Blob);
+    return url;
+  });
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const host = new WebPluginHost(
+    { http: "http://localhost", ws: "ws://localhost", token: null },
+    () => manifests,
+  );
+  try {
+    // jsdom cannot execute native blob modules; the browser harness executes the same graph.
+    await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.toThrow();
+    expect(blobs.size).toBe(2);
+    expect(host.dependencies("@plugins/fixture/ui")).toEqual(["@plugins/other/ui"]);
+    expect(host.affected(["@plugins/other/ui"])).toEqual(
+      new Set(["@plugins/other/ui", "@plugins/fixture/ui"]),
+    );
+    expect(document.querySelector('link[data-plugin="fixture"]')).toBeTruthy();
+    const dispose = vi.fn();
+    host.own("fixture", dispose);
+    host.remove(host.affected(["@plugins/other/ui"]));
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('link[data-plugin="fixture"]')).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
+});
+
+test("runtime routes mount, retire query owners, swap revision, contain throws, and remove routes", async () => {
+  let current = catalog();
+  let notify!: (event: { plugins: string[]; catalog: JsonValue }) => void;
+  const stopQuery = vi.fn();
+  const client = {
+    subscribe: vi.fn((_ref, _args, next) => {
+      next({ value: "query" });
+      return stopQuery;
+    }),
+  } as unknown as TokamakClient;
+  const root = createRootRoute({ component: Outlet });
+  const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <p>Host survived</p> });
+  const router: AnyRouter = createRouter({
+    routeTree: root.addChildren([home]),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  const source = {
+    plugins: async () => current,
+    onPluginsChanged(listener: typeof notify) {
+      notify = listener;
+      return () => {};
+    },
+  };
+  const fixtureCleanup = vi.fn();
+  vi.spyOn(WebPluginHost.prototype, "importModule").mockImplementation(
+    async (_name, manifest: PluginManifest) => {
+      const revision = manifest.plugin.version;
+      return {
+        sharedSignal: createSignal,
+        View: view({ route: "/" }, () => {
+          if (revision === "throws") throw new Error("fixture exploded");
+          const query = useQuery(useClient(), "fixture:read" as never, () => ({}));
+          onCleanup(fixtureCleanup);
+          return (
+            <p>
+              {revision}: {query.data() as string}
+            </p>
+          );
+        }),
+      };
+    },
+  );
+  // The mock import still establishes a generation so host retirement can own it.
+  vi.spyOn(WebPluginHost.prototype, "own").mockImplementation(() => () => {});
+  const shell = createPluginShell(
+    client,
+    { http: "http://localhost", ws: "ws://localhost", token: null },
+    source,
+    { router, root, base: [home] },
+  );
+  const target = document.body.appendChild(document.createElement("div"));
+  const dispose = render(() => <RouterProvider router={router} />, target);
+  const publish = (revision: string) => {
+    current = catalog(revision);
+    notify({ plugins: ["fixture"], catalog: current });
+    flush();
+  };
+  try {
+    await shell.connect();
+    flush();
+    await waitFor(() => expect(router.routesByPath["/p/fixture"]).toBeTruthy());
+    expect(shell.views()[0]).toMatchObject({
+      id: "View",
+      plugin: "fixture",
+      route: "/p/fixture",
+      title: "Fixture",
+    });
+    await router.navigate({ href: "/p/fixture" });
+    await waitFor(() => expect(target.textContent).toContain("one: query"));
+    publish("two");
+    await waitFor(() => expect(target.textContent).toContain("two: query"));
+    expect(stopQuery).toHaveBeenCalledOnce();
+    expect(fixtureCleanup).toHaveBeenCalledOnce();
+    publish("throws");
+    await waitFor(() =>
+      expect(target.querySelector('[role="alert"]')?.textContent).toContain("fixture exploded"),
+    );
+    expect(target.querySelector("button")?.textContent).toBe("Reload");
+    await router.navigate({ to: "/" });
+    await waitFor(() => expect(target.textContent).toContain("Host survived"));
+    notify({ plugins: ["fixture"], catalog: { revision: "removed", plugins: [] } });
+    flush();
+    await waitFor(() => expect(router.routesByPath["/p/fixture"]).toBeUndefined());
+    expect(shell.views()).toEqual([]);
+  } finally {
+    dispose();
+    shell.dispose();
+    vi.restoreAllMocks();
+  }
+});
+
+test("legacy route names and parameter matching remain available", async () => {
+  expect(matchRoute("/p/:id/*tail", "/p/a/b%20c/d")?.params).toEqual({ id: "a", tail: "b c/d" });
+  expect(matchRoute("/p/:id", "/p/%ZZ")).toBeUndefined();
+  const router = createMemoryRouter("/");
+  router.navigate("/p/a");
+  await waitFor(() => expect(router.location().pathname).toBe("/p/a"));
+  router.navigate("/p/b", { replace: true });
+  await waitFor(() => expect(router.match("/p/:id")?.params.id).toBe("b"));
+  router.dispose();
+  expect(() => router.navigate("/")).toThrow("disposed");
+});
+
+test("concurrent cross-plugin UI cycles reject instead of waiting on each other", async () => {
+  const manifests = catalog().plugins;
+  manifests.push({
+    ...manifests[0]!,
+    plugin: { ...manifests[0]!.plugin, id: "other" },
+    entries: { ui: { code: "/plugins/other/one/assets/ui.js", css: "" } },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => ({
+      ok: true,
+      text: async () => `import '@plugins/${url.includes("/other/") ? "fixture" : "other"}/ui';`,
+    })),
+  );
+  const host = new WebPluginHost(
+    { http: "http://localhost", ws: "ws://localhost", token: null },
+    () => manifests,
+  );
+  try {
+    await expect(
+      Promise.all([
+        host.importModule("@plugins/fixture/ui", manifests[0]!),
+        host.importModule("@plugins/other/ui", manifests[1]!),
+      ]),
+    ).rejects.toThrow("UI module dependency cycle");
+  } finally {
+    host.remove(["@plugins/fixture/ui", "@plugins/other/ui"]);
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a dynamic import of an absent plugin is left to fail when called, and a failed fetch is retried", async () => {
+  const manifests = catalog().plugins;
+  manifests.push({
+    ...manifests[0]!,
+    plugin: { ...manifests[0]!.plugin, id: "other" },
+    entries: { ui: { code: "/plugins/other/one/assets/ui.js", css: "" } },
+  });
+  const blobs = new Map<string, Blob>();
+  let otherFetches = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url.includes("/other/") && ++otherFetches === 1) throw new Error("offline");
+      return {
+        ok: true,
+        text: async () =>
+          url.includes("/other/")
+            ? "export const value = 1"
+            : `import '@plugins/other/ui'; export const lazy = () => import('@plugins/absent/ui').catch(() => null);`,
+      };
+    }),
+  );
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    const url = `blob:retry-${blobs.size}`;
+    blobs.set(url, blob as Blob);
+    return url;
+  });
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const host = new WebPluginHost(
+    { http: "http://localhost", ws: "ws://localhost", token: null },
+    () => manifests,
+  );
+  try {
+    await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.toThrow("offline");
+    // Reloading the importer fetches the dependency again instead of replaying the failure.
+    host.remove(["@plugins/fixture/ui"]);
+    await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.not.toThrow(
+      /offline|missing UI dependency/,
+    );
+    expect(otherFetches).toBe(2);
+    const fixture = await [...blobs.values()].at(-1)!.text();
+    expect(fixture).toContain("import('@plugins/absent/ui')");
+  } finally {
+    host.remove(["@plugins/fixture/ui", "@plugins/other/ui"]);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
+});

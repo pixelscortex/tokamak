@@ -2,8 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "skipLibCheck": true,
-    "jsx": "preserve",
-    "jsxImportSource": "@tokamak/render"
+    "lib": ["ES2022", "DOM"]
   },
-  "include": ["js/**/*.ts", "tests/router.tsx"]
+  "include": ["js/**/*.ts"]
 }

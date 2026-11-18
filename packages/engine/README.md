@@ -89,18 +89,13 @@ Dropping the pool closes admission, refuses queued work and joins active workers
 As with execution, shutdown relies on host callbacks obeying the cooperative
 contract. JS limits do not bound Rust input/source/map allocations or process RSS.
 
-## Thread-affine UI path
+## Thread-affine contexts
 
-`QuickJsContext::new(heap_bytes)` supplies the same capped QuickJS setup without
+`QuickJsContext::new(heap_bytes)` supplies the capped server interpreter without
 a pool. It exposes `context()` for local `with`/`async_with` work and `runtime()`
-for local promise driving. `set_deadline` arms the same interrupt for UI startup
-or events. `install_ops(ctx, registry, &invocation)` constructs the same host
-object for a local context; retire/drop the `Invocation` before publishing its
-result. Invocation leases cannot be reactivated. UI code owns persistent JS
-roots and their disposal; it must release roots before dropping its context and
-supply an async timer when awaiting promises. No cross-thread JS feature is
-enabled. `Engine` is only the backend JSON invocation boundary, not an attempt to
-force a persistent UI document into backend concurrency/lifecycle rules.
+for promise driving. `set_deadline` arms its interrupt. Invocation leases cannot
+be reactivated, and persistent roots must be released before dropping a context.
+No cross-thread JS feature is enabled.
 
 ## Errors and source maps
 

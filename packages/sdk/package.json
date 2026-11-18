@@ -11,17 +11,22 @@
     },
     "./client": "./client.tsx"
   },
-  "dependencies": {
-    "@tokamak/render": "workspace:*"
-  },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "@solidjs/vite-plugin": "3.0.0",
+    "@testing-library/dom": "10.4.2",
+    "jsdom": "31.0.1",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
   },
   "peerDependencies": {
-    "solid-js": "1.9.18"
+    "@solidjs/web": "2.0.0",
+    "solid-js": "2.0.0"
   },
   "peerDependenciesMeta": {
     "solid-js": {
+      "optional": true
+    },
+    "@solidjs/web": {
       "optional": true
     }
   }

@@ -1,15 +1,45 @@
+import { Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
+import { Button } from "@tokamak/ui";
 import { useComposer } from "../../lib/composer";
-/** The current keyboard-first layout has no visible send affordance. Mods can
- * place this public control in the actions slot without replacing the composer. */
-export function SendButton() {
+import { glyphs } from "../../lib/icons";
+
+/**
+ * Send, or stop while a reply runs. Typing during a run turns the arrow into
+ * "Queue follow-up"; stop stays beside it.
+ */
+export function SendButton(props: { onStop?: () => void; disabled?: boolean }): JSX.Element {
   const composer = useComposer();
+  const draft = () => composer.getDraft().trim();
   return (
-    <button
-      aria-label="Send"
-      disabled={composer.busy() || !composer.getDraft().trim()}
-      onClick={() => void composer.submit()}
-    >
-      Send
-    </button>
+    <span class="flex shrink-0 items-center gap-1">
+      <Show
+        when={composer.busy() && props.onStop}
+        fallback={
+          <Button
+            variant={draft() ? "primary" : "ghost"}
+            icon={glyphs.arrowUp}
+            label="Send"
+            disabled={props.disabled || !draft()}
+            onClick={() => void composer.submit()}
+          />
+        }
+      >
+        {(stop) => (
+          <>
+            <Show when={draft()}>
+              <Button
+                variant="ghost"
+                icon={glyphs.arrowUp}
+                label="Queue follow-up"
+                disabled={props.disabled}
+                onClick={() => void composer.submit()}
+              />
+            </Show>
+            <Button variant="primary" icon={glyphs.stop} label="Stop" onClick={() => stop()()} />
+          </>
+        )}
+      </Show>
+    </span>
   );
 }

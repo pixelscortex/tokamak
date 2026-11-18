@@ -1,5 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": { "types": ["node"], "skipLibCheck": true },
-  "include": ["vite.config.ts", "tools/**/*.ts"]
-}

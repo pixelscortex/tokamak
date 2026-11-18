@@ -1,14 +1,9 @@
-// Shared by Depot CI and Actions. Only a complete, verified main commit replaces
+// Shared by the CI workflows. Only a complete, verified main commit replaces
 // the published nightly; per-commit drafts prevent mixed-platform releases.
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 
-export const archives = [
-  "server-linux-x64.tar.gz",
-  "server-linux-arm64.tar.gz",
-  "server-macos-arm64.tar.gz",
-  "desktop-macos-arm64.tar.gz",
-];
+export const archives = ["server-linux-x64.tar.gz", "server-linux-arm64.tar.gz", "server-macos-arm64.tar.gz"];
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const candidateTag = (sha) => `ci-main-${sha}`;
 

@@ -1,7 +1,6 @@
-//! Shared JavaScript engine and host operations for server and render.
-//!
-//! Backend calls use a bounded pool and fresh worlds; UI code can instead own
-//! a `QuickJsContext` on its event-loop thread. Actions install the documented web API subset.
+//! Server JavaScript engine and host operations.
+//! Backend calls use a bounded pool and fresh worlds.
+//! Actions install the documented web API subset.
 
 mod action;
 mod bridge;
