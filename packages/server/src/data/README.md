@@ -64,10 +64,13 @@ single-bundle loader applies the same registry in its selected DataSpace.
 Field descriptions travel as metadata; writes do not enforce them (TKM-92).
 
 Repeated identical declarations are no-ops even after rows exist. New indexes
-on nonempty tables and changes to an existing name fail the load explicitly:
-index backfill is not supported yet (TKM-91). Removed declarations leave indexes
-in storage; dropping and migrations are out of scope. Installation rollback uses
-the existing catalog gate, poisoning and cancellation-safe outcome handling.
+on nonempty tables and changes to an existing index definition are incompatible.
+At startup, the loader clears the affected plugin's rows and indexes (including
+undeclared tables in its namespace) and installs the new schema in the same
+transaction. Legacy bundles without a namespace can only reset their declared,
+unnamespaced tables. Other plugins, kernel metadata, and identity files are not
+part of the reset. A live reload reports the incompatibility without resetting
+anything. Removed declarations alone still leave their indexes in storage.
 
 `db.query` retains `{table, where, order, limit}`. Indexed requests additionally
 carry `index: {name, eq: [{field, value}], range: [{field, operator, value}]}` and
