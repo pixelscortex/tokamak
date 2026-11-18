@@ -13,8 +13,10 @@ runnable locally: `cargo test --workspace`, `proto run bun -- e2e/run.ts`,
 `proto run bun -- run e2e:browser` (see `e2e/README.md`), and
 `proto run bun -- test plugins/acp`.
 
-The `desktop-mac` and `desktop-windows` jobs build the unsigned apps on pushes to
-`main` and when started by hand; they are skipped on pull requests. They build,
+The `desktop-windows` job builds the unsigned installer on pushes to `main` and
+when started by hand. The `desktop-mac` job runs only when started by hand,
+because macOS runner minutes cost 20 times Linux minutes; build the Mac app
+locally instead. Both are skipped on pull requests. They build,
 smoke-check the server's `--build-id` and upload the bundle (`desktop-mac-<arch>`,
 `desktop-windows-x64`); they run no test suites. Download caches cover pinned
 tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
