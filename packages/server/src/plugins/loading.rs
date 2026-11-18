@@ -86,6 +86,7 @@ impl Loaded {
 
         let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
 
+        validate_maintenance(&catalog, &targets)?;
         let workers = start_workers(&catalog)?;
         Ok(Arc::new(Self {
             catalog,
@@ -174,4 +175,20 @@ fn start_workers(
     }
 
     Ok(workers)
+}
+
+fn validate_maintenance(
+    catalog: &Catalog,
+    targets: &BTreeMap<String, Target>,
+) -> Result<(), Error> {
+    for (id, artifact) in &catalog.plugins {
+        if let Some(name) = &artifact.manifest.plugin.maintenance
+            && targets
+                .get(&format!("{id}/{name}"))
+                .is_none_or(|target| target.kind != crate::service::FunctionKind::Mutation)
+        {
+            return Err(invalid("Maintenance entry must name a mutation"));
+        }
+    }
+    Ok(())
 }

@@ -1,6 +1,6 @@
-import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { view, Region, usePageTitle, useShortcuts } from "@tokamak/sdk/client";
+import { ChatMachineContext, view, Region, usePageTitle, useShortcuts } from "@tokamak/sdk/client";
 import { useClient, useQuery } from "@tokamak/sdk/solid";
 import type { Id } from "@tokamak/sdk";
 import { useRouter } from "@tokamak/runtime/router";
@@ -24,7 +24,7 @@ export const Chat = view({ route: "/", icon: chatIcon }, () => {
   const client = useClient();
   const router = useRouter();
   const shortcuts = useShortcuts();
-  const chat = useChat(client);
+  const chat = useChat(client, useContext(ChatMachineContext) ?? undefined);
   const drafts = useDrafts(chat);
   const editor = createComposerAPI(chat, drafts);
   usePageTitle(() => chat.thread()?.title);
@@ -101,6 +101,7 @@ function NoAgentsHere(props: { chat: ChatState }): JSX.Element {
       checking={props.chat.backendDiscovery.loading()}
       error={props.chat.backendDiscovery.error()}
       onCheck={() => void props.chat.backendDiscovery.refresh()}
+      noMachine={Boolean(props.chat.remote && !props.chat.remote.machine)}
     />
   );
 }
@@ -117,13 +118,16 @@ function ThreadPane(props: {
 }): JSX.Element {
   const { chat, drafts, editor } = props;
   const messages = useQuery(chat.client, api.messages.list, () => ({ threadId: props.threadId }));
-  const run = useQuery(chat.client, api.runs.active, () => ({ threadId: props.threadId }));
   const [answering, setAnswering] = createSignal(false, { ownedWrite: true });
   const list = () => messages.data() ?? [];
   createEffect(list, (value) => {
     props.onMessages(value);
   });
-  const pending = () => pendingPermission(messages.data());
+  const pending = () =>
+    pendingPermission(
+      messages.data(),
+      (message) => !chat.remote || (Boolean(chat.userId()) && message.askedBy?.id === chat.userId()),
+    );
   const running = () => Boolean(chat.active());
   const agentName = () => chat.agent()?.name ?? "the agent";
 
@@ -158,21 +162,28 @@ function ThreadPane(props: {
   });
 
   const placeholder = () =>
-    chat.noAgents()
-      ? "No agents found"
-      : pending()
-        ? `Or tell ${agentName()} what to do instead`
-        : running()
-          ? "Queue a follow-up"
-          : `Ask ${agentName()}`;
+    chat.remote
+      ? chat.agent()
+        ? `Ask ${agentName()}`
+        : "Write a message"
+      : chat.noAgents()
+        ? "No agents found"
+        : pending()
+          ? `Or tell ${agentName()} what to do instead`
+          : running()
+            ? "Queue a follow-up"
+            : `Ask ${agentName()}`;
 
   return (
     <div class="flex min-h-0 flex-1 flex-col" onKeyDown={keys}>
       <ThreadView
         messages={list()}
         agents={chat.backends()}
-        run={run.data() ? { messageId: run.data()!.messageId, startedAt: run.data()!.startedAt } : undefined}
-        canRetry={!running() && !chat.noAgents()}
+        runs={chat.currentRuns()}
+        remote={Boolean(chat.remote)}
+        viewer={chat.userId()}
+        onStop={(runId) => void chat.cancel(runId)}
+        canRetry={!running() && !chat.noAgents() && (!chat.remote || Boolean(chat.agent()))}
         onRetry={(id) => {
           const text = promptBefore(list(), id);
           if (text) void drafts.send(text);
@@ -180,7 +191,7 @@ function ThreadPane(props: {
         empty={
           <Show when={!messages.loading()}>
             <Show
-              when={chat.noAgents() || chat.backendDiscovery.error()}
+              when={chat.noAgents() || chat.backendDiscovery.error() || (chat.remote && !chat.agent())}
               fallback={
                 <EmptyThread
                   agent={chat.agent()}
@@ -191,7 +202,12 @@ function ThreadPane(props: {
                 />
               }
             >
-              <NoAgentsHere chat={chat} />
+              <Show
+                when={chat.remote?.machine && !chat.noAgents() && !chat.backendDiscovery.error()}
+                fallback={<NoAgentsHere chat={chat} />}
+              >
+                <EmptyThread onStart={() => {}} agent={undefined} messageOnly />
+              </Show>
             </Show>
           </Show>
         }
@@ -212,7 +228,7 @@ function ThreadPane(props: {
               </div>
             )}
           </Show>
-          <Show when={!chat.noAgents()}>
+          <Show when={chat.remote || !chat.noAgents()}>
             <Composer
               band={
                 <Show when={pending()}>
@@ -231,21 +247,27 @@ function ThreadPane(props: {
                   running={running()}
                   note={props.note ?? (drafts.raced() ? "A reply is already running" : undefined)}
                   picker={
-                    <Show when={!chat.noAgents()}>
+                    <Show
+                      when={
+                        chat.remote
+                          ? chat.remote.machine && (!chat.noAgents() || chat.agent())
+                          : !chat.noAgents()
+                      }
+                    >
                       <AgentPicker chat={chat} open={props.pickerOpen} onOpenChange={props.onPickerOpen} />
                     </Show>
                   }
                 />
               }
               placeholder={placeholder()}
-              disabled={chat.creating() || Boolean(chat.noAgents())}
+              disabled={chat.creating() || (!chat.remote && chat.noAgents())}
               queued={drafts.queued()}
               onUnqueue={() => drafts.unqueue()}
               onEdit={(text) => {
                 drafts.edit(text);
                 drafts.clearRace();
               }}
-              onStop={() => void chat.cancel()}
+              onStop={chat.remote ? undefined : () => void chat.cancel()}
             />
           </Show>
         </div>

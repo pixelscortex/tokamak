@@ -20,13 +20,17 @@ function Header(props: { lead: JSX.Element; name: string; fact: string }): JSX.E
 
 const LONG = 600;
 
-export function UserTurn(props: { message: Message }): JSX.Element {
+export function UserTurn(props: { message: Message; name?: string }): JSX.Element {
   const text = () => textOf(props.message);
   const long = () => text().length > LONG || text().split("\n").length > 10;
   const [open, setOpen] = createSignal(false);
   return (
-    <article aria-label="You" data-role="user" class="flex flex-col gap-2">
-      <Header lead={<Avatar name="You" size={16} />} name="You" fact={timeOfDay(props.message.createdAt)} />
+    <article aria-label={props.name ?? "You"} data-role="user" class="flex flex-col gap-2">
+      <Header
+        lead={<Avatar name={props.name ?? "You"} size={16} />}
+        name={props.name ?? "You"}
+        fact={timeOfDay(props.message.createdAt)}
+      />
       <p
         class={
           long() && !open()
@@ -55,6 +59,8 @@ export function AgentTurn(props: {
   agent: Agent | undefined;
   startedAt?: number;
   onRetry?: () => void;
+  onStop?: () => void;
+  waitingFor?: string;
 }): JSX.Element {
   const turn = createMemo(() => foldTurn(props.message));
   const name = () => props.agent?.name ?? "Agent";
@@ -77,7 +83,25 @@ export function AgentTurn(props: {
           </div>
         </Show>
       </div>
-      <Show when={turn().work}>{(work) => <WorkRow work={work()} startedAt={props.startedAt} />}</Show>
+      <Show when={turn().work}>
+        {(work) => (
+          <WorkRow
+            work={
+              props.waitingFor && work().waiting
+                ? { ...work(), latest: `Waiting for ${props.waitingFor}` }
+                : work()
+            }
+            startedAt={props.startedAt}
+          />
+        )}
+      </Show>
+      <Show when={props.onStop}>
+        {(stop) => (
+          <Button class="self-start" variant="ghost" icon={glyphs.stop} onClick={() => stop()()}>
+            Stop
+          </Button>
+        )}
+      </Show>
       <Show when={turn().plan}>
         {(plan) => <PlanList plan={plan()} live={props.message.status === "streaming"} />}
       </Show>

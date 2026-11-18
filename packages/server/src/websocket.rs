@@ -472,7 +472,7 @@ async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     };
     tokio::select! {
         _ = revoked.cancelled() => {},
-        _ = connection_session(socket, session, adapter.stopping) => {},
+        _ = connection_session(socket, session, adapter.stopping, !adapter.hosted && adapter.access.is_some() && cfg!(not(windows))) => {},
     }
 }
 
@@ -480,6 +480,7 @@ pub(crate) async fn connection_session(
     mut socket: WebSocket,
     mut session: crate::Session,
     stopping: CancellationToken,
+    local_relay: bool,
 ) {
     let mut service = session.sender();
     loop {
@@ -489,6 +490,9 @@ pub(crate) async fn connection_session(
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
                         let Ok(request) = serde_json::from_str::<Request>(&text) else { break };
+                        if !local_relay && matches!(&request, Request::Action { name, .. } if name == "acp/relay:relayTurn") {
+                            break;
+                        }
                         // Admission failures terminate the stream rather than
                         // race a transport-generated error ahead of prior updates.
                         if tower::Service::call(&mut service, request).await.is_err() { break; }

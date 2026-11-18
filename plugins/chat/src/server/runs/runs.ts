@@ -1,6 +1,6 @@
 import { interruptResponse } from "./run-messages";
-import { v } from "@tokamak/sdk";
-import { mutation, query } from "../_functions";
+import { v, type DatabaseWriter, type Doc } from "@tokamak/sdk";
+import { mutation, query, type Model } from "../_functions";
 
 export const running = query({
   handler: async (ctx) => {
@@ -12,6 +12,8 @@ export const running = query({
       runId: run._id,
       threadId: run.threadId,
       waiting: run.waiting ?? false,
+      messageId: run.messageId,
+      startedAt: run.startedAt,
     }));
   },
 });
@@ -53,13 +55,15 @@ export const cancel = mutation({
 // Three observations span two intervals on the desktop's 30-second timer.
 export const observe = mutation({
   args: { sweepId: v.string(), tick: v.number() },
-  handler: async ({ db }, { sweepId, tick }) => {
+  handler: async ({ db, user }, { sweepId, tick }) => {
+    if (user.id !== "local") throw new Error("Run recovery is server-managed");
     if (!Number.isSafeInteger(tick) || tick < 0) throw new Error("Invalid sweep tick");
     const runs = await db
       .query("runs")
       .withIndex("by_status", (q) => q.eq("status", "running"))
       .collect();
     for (const run of runs) {
+      if (run.requestId) continue;
       const previous = run.observations?.find((observation) => observation.sweepId === sweepId);
       if (previous && tick <= previous.tick) continue;
       const heartbeat = run.heartbeat ?? 0;
@@ -76,17 +80,35 @@ export const observe = mutation({
         await db.patch(run._id, { observations });
         continue;
       }
-      const now = Date.now();
-      await db.patch(run._id, {
-        status: "error",
-        token: null,
-        waiting: false,
-        error: "Interrupted",
-        finishedAt: now,
-      });
-      await interruptResponse(db, run, "error", "Interrupted");
-      await db.patch(run.threadId, { updatedAt: now });
+      await interrupt(db, run);
     }
     return null;
   },
 });
+
+export const recover = mutation({
+  handler: async ({ db }) => {
+    const now = Date.now();
+    const runs = await db
+      .query("runs")
+      .withIndex("by_status", (q) => q.eq("status", "running"))
+      .collect();
+    for (const run of runs) {
+      if (run.requestId && now - (run.updatedAt ?? run.startedAt) >= 65_000) await interrupt(db, run);
+    }
+    return null;
+  },
+});
+
+async function interrupt(db: DatabaseWriter<Model>, run: Doc<Model, "runs">) {
+  const now = Date.now();
+  await db.patch(run._id, {
+    status: "error",
+    token: null,
+    waiting: false,
+    error: "Interrupted",
+    finishedAt: now,
+  });
+  await interruptResponse(db, run, "error", "Interrupted");
+  await db.patch(run.threadId, { updatedAt: now });
+}

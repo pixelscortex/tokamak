@@ -1,4 +1,4 @@
-import { createFunctions, type DatabaseReader, type ModelFromSchema, type Id } from "@tokamak/sdk";
+import { createFunctions, type DatabaseReader, type ModelFromSchema, type Id, type User } from "@tokamak/sdk";
 import schema from "./schema";
 
 export const { query, mutation, action } = createFunctions(schema);
@@ -19,9 +19,14 @@ export function nonempty(text: string) {
 }
 
 // Backend writes carry a capability issued only to the action owning this turn.
-export async function turn(db: DatabaseReader<Model>, runId: Id<"runs">, token: string) {
+export async function turn(
+  { db, user }: { db: DatabaseReader<Model>; user: User },
+  runId: Id<"runs">,
+  token: string,
+) {
   const run = await db.get(runId);
   if (!run || run.status !== "running") throw new Error("Run is no longer running");
-  if (!run.token || run.token !== token) throw new Error("Invalid turn token");
+  if (!run.token || run.token !== token || (run.owner?.id ?? "local") !== user.id)
+    throw new Error("Invalid turn token or owner");
   return run;
 }

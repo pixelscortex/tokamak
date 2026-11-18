@@ -17,6 +17,7 @@ import {
 import type { JSX } from "@solidjs/web";
 import { contributionBrand } from "./src/contributions";
 export { useClient, useQuery } from "./solid";
+export { ChatMachineContext, type ChatMachine, type RemoteChat } from "./chat-machine";
 export { view, itemRenderer, toolbar, command, entityCard, contributionBrand } from "./src/contributions";
 
 export interface SlotDefinition<P extends object> {

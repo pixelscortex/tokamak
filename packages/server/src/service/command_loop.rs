@@ -6,6 +6,8 @@ impl Coordinator {
         mut commands: mpsc::Receiver<Command>,
         mut closing: mpsc::Receiver<oneshot::Sender<Result<(), Error>>>,
     ) {
+        let mut maintenance = tokio::time::interval(std::time::Duration::from_secs(5));
+        maintenance.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             self.sessions.retain(|_, client| !client.output.is_closed());
             tokio::select! {
@@ -44,6 +46,7 @@ impl Coordinator {
                     }
                 }
                 _ = self.cleanup.notified() => {},
+                _ = maintenance.tick(), if self.plugins.is_some() => self.maintain_plugins().await,
                 change = self.changes.recv() => {
                     match change {
                         Ok(change) => self.invalidate(Some(&change)),
@@ -92,5 +95,36 @@ impl Coordinator {
             .await
             .map_err(|e| Error::Invalid(e.to_string()));
         self.closed.send_replace(Some(result));
+    }
+
+    async fn maintain_plugins(&mut self) {
+        let names: Vec<_> = self
+            .plugins
+            .iter()
+            .flat_map(|loaded| loaded.catalog.plugins.iter())
+            .filter_map(|(id, plugin)| {
+                plugin
+                    .manifest
+                    .plugin
+                    .maintenance
+                    .as_ref()
+                    .map(|name| format!("{id}/{name}"))
+            })
+            .collect();
+        for name in names {
+            if let Err(error) = self
+                .invoke_function(
+                    &name,
+                    serde_json::json!({}),
+                    true,
+                    crate::identity::User::local(),
+                )
+                .await
+            {
+                eprintln!("Plugin maintenance {name}: {error}");
+            }
+            self.drain_changes();
+            self.refresh().await;
+        }
     }
 }

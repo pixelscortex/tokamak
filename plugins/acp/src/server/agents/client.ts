@@ -244,9 +244,10 @@ class AgentProcess {
     this.permissions(turn);
     // SDK request handlers enqueue replies asynchronously. Permission answers
     // must reach the adapter before the cancellation notification.
-    await new Promise<void>((resolve) => setImmediate(resolve));
     turn.timer = setTimeout(() => this.close(new Error("ACP cancellation timed out after 5 s")), 5_000);
-    await this.connection.agent.notify("session/cancel", { sessionId });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (this.turns.get(sessionId) === turn)
+      await this.connection.agent.notify("session/cancel", { sessionId });
   }
   private permissions(turn: Turn) {
     for (const permission of turn.permissions.values())

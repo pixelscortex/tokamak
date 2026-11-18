@@ -33,6 +33,10 @@ export default defineSchema({
   runs: defineTable({
     token: v.optional(v.union(v.string(), v.null())),
     backendPlugin: v.optional(v.string()),
+    backendId: v.optional(v.string()),
+    owner: v.optional(v.object({ id: v.string(), name: v.string() })),
+    requestId: v.optional(v.string()),
+    sequence: v.optional(v.number()),
     threadId: v.id("threads"),
     messageId: v.id("messages"),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),

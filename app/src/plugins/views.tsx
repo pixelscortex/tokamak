@@ -14,7 +14,13 @@ import type { JSX } from "@solidjs/web";
 import { createRoute, type AnyRoute, type AnyRouter } from "@tanstack/solid-router";
 import type { TokamakClient } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
-import { ExtensionProvider, ShortcutContext, contributionBrand } from "@tokamak/sdk/client";
+import {
+  ChatMachineContext,
+  ExtensionProvider,
+  ShortcutContext,
+  contributionBrand,
+  type RemoteChat,
+} from "@tokamak/sdk/client";
 import {
   createPluginLoader,
   type PluginLoader,
@@ -45,6 +51,7 @@ export interface PluginShell {
   host: WebPluginHost;
   navigation: MemoryRouter;
   client: TokamakClient;
+  remoteChat?: RemoteChat;
   connect(): Promise<void>;
   dispose(): void;
 }
@@ -53,6 +60,7 @@ export function createPluginShell(
   endpoint: ServerEndpoint,
   source: CatalogSource | undefined,
   routing: PluginRouting,
+  remoteChat?: RemoteChat,
 ): PluginShell {
   let stop!: () => void;
   return createRoot((dispose) => {
@@ -75,6 +83,7 @@ export function createPluginShell(
       loader,
       host,
       client,
+      remoteChat,
       navigation,
       connect: () => loader.connect(),
       dispose: () => stop(),
@@ -261,7 +270,9 @@ function OwnedView(props: {
         <RouterContext value={props.shell.navigation}>
           <ShortcutContext value={{ registerShortcut }}>
             <ExtensionProvider host={props.shell.loader}>
-              {createComponent(props.component, { router: props.shell.navigation })}
+              <ChatMachineContext value={props.plugin === "chat" ? (props.shell.remoteChat ?? null) : null}>
+                {createComponent(props.component, { router: props.shell.navigation })}
+              </ChatMachineContext>
             </ExtensionProvider>
           </ShortcutContext>
         </RouterContext>

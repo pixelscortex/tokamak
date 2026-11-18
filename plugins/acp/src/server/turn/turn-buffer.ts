@@ -1,12 +1,13 @@
+import type { ChatPort } from "./chat-port";
 // ACP owns pending bytes and timers; every chat write goes through the host.
-import type { ActionContext, Id, ArgsOf } from "@tokamak/sdk";
+import type { Id, ArgsOf } from "@tokamak/sdk";
 import { api } from "plugin:chat/server";
 import type { ToolPart } from "plugin:chat/server";
 type Plan = NonNullable<ArgsOf<typeof api.updateRun>["plan"]>;
 
 const HEARTBEAT_MS = 10_000;
 
-export function turnBuffer(ctx: ActionContext, runId: Id<"runs">, token: string) {
+export function turnBuffer(chat: ChatPort, runId: Id<"runs">, token: string) {
   let pending = "";
   let flushDue = false;
   let heartbeatDue = false;
@@ -27,7 +28,7 @@ export function turnBuffer(ctx: ActionContext, runId: Id<"runs">, token: string)
 
   const update = async (tool?: ToolPart, plan?: Plan) => {
     const delta = pending;
-    const status = await ctx.use(api).updateRun({
+    const status = await chat.updateRun({
       runId,
       token,
       delta,
@@ -56,7 +57,7 @@ export function turnBuffer(ctx: ActionContext, runId: Id<"runs">, token: string)
         }),
       ]).finally(() => clearTimeout(timer));
 
-      if (!(await ctx.use(api).runIsRunning({ runId }))) throw new Error("Run cancelled");
+      if (!(await chat.runIsRunning({ runId }))) throw new Error("Run cancelled");
       await maintain();
       if (result) return result.value;
     }

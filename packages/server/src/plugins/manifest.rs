@@ -35,6 +35,8 @@ pub struct Definition {
     pub placement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maintenance: Option<String>,
     #[serde(default)]
     pub contributes: BTreeMap<String, Vec<Value>>,
     #[serde(default)]

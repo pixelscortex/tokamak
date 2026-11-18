@@ -21,7 +21,7 @@ export function AgentPicker(props: {
   const [saving, setSaving] = createSignal(false, { ownedWrite: true });
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const agent = () => props.chat.agent();
-  const backend = () => props.chat.thread()?.backend as Backend | undefined;
+  const backend = () => props.chat.backend() as Backend | undefined;
 
   async function save(choice: { plugin: string; backendId: string }, path: string) {
     const thread = props.chat.thread();
@@ -29,6 +29,10 @@ export function AgentPicker(props: {
     setSaving(true);
     setError(undefined);
     try {
+      if (props.chat.remote) {
+        await props.chat.setMachineAgent(thread._id, choice.backendId, path);
+        return undefined;
+      }
       const settings = await props.chat.client.action(api.backends.configure, {
         plugin: choice.plugin,
         backendId: choice.backendId,
@@ -51,12 +55,18 @@ export function AgentPicker(props: {
 
   function choose(value: string) {
     if (value === FOLDER) {
-      setFolder(agent()?.folder ?? lastFolder);
+      setFolder(agent()?.folder ?? (props.chat.remote ? "" : lastFolder));
       setError(undefined);
       setFolderOpen(true);
       return;
     }
     const option = props.chat.backends()?.find((item) => `${item.plugin}/${item.id}` === value);
+    if (props.chat.remote) {
+      const id = props.chat.threadId();
+      if (id && (option || value === "message"))
+        void props.chat.setMachineAgent(id, option?.id).catch((error) => props.chat.setError(String(error)));
+      return;
+    }
     if (!option) return;
     void save({ plugin: option.plugin, backendId: option.id }, agent()?.folder || lastFolder).then(
       (failure) => {
@@ -88,7 +98,9 @@ export function AgentPicker(props: {
             <Show when={agent()}>
               {(current) => <Icon path={current().mark} size={12} class="text-ink" />}
             </Show>
-            <span class="text-row text-ink-2">{agent()?.name ?? "Choose an agent"}</span>
+            <span class="text-row text-ink-2">
+              {agent()?.name ?? (props.chat.remote ? "Message only" : "Choose an agent")}
+            </span>
             <Show when={agent()?.folder}>
               {(path) => <span class="min-w-0 truncate text-data text-ink-3">{folderName(path())}</span>}
             </Show>
@@ -97,7 +109,10 @@ export function AgentPicker(props: {
         </Menu.Trigger>
         <Menu.Content>
           <Menu.Group>
-            <Menu.GroupLabel>Agent</Menu.GroupLabel>
+            <Menu.GroupLabel>{props.chat.remote ? "Agents on this computer" : "Agent"}</Menu.GroupLabel>
+            <Show when={props.chat.remote}>
+              <Menu.Item value="message">Message only</Menu.Item>
+            </Show>
             <For each={props.chat.backends() ?? []}>
               {(option: BackendOption) => (
                 <Menu.Item value={`${option.plugin}/${option.id}`}>

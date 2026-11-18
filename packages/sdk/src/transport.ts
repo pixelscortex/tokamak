@@ -14,6 +14,8 @@ export interface MessageConnection {
   close(): void;
 }
 
+export class RemoteFunctionError extends Error {}
+
 type Pending = { resolve(value: JsonValue): void; reject(error: Error): void };
 type Observer = (event: SubscriptionEvent<JsonValue>) => void;
 // Per-connection admission budget, not a catalog/plugin quota. Correlation and
@@ -257,7 +259,7 @@ export class InProcessTransport implements ClientTransport {
       if (pending) {
         this.pending.delete(event.id);
         if ("Ok" in result) pending.resolve(result.Ok);
-        else pending.reject(new Error(result.Err));
+        else pending.reject(new RemoteFunctionError(result.Err));
         return;
       }
     }

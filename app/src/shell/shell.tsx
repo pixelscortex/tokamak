@@ -4,7 +4,8 @@ import { Outlet, type AnyRouter } from "@tanstack/solid-router";
 import { RegionProvider, ShortcutContext, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
 import { checkAccess, reach } from "../host/reach";
-import { createServers, defaultServers, type Servers } from "../host/servers";
+import { createServers, defaultServers, thisMac, type Servers } from "../host/servers";
+import { remoteChat } from "../host/chat-machine";
 import type { PluginRouting } from "../plugins/views";
 import type { ServerEndpoint } from "../plugins/adapter";
 import { ShellContext, keys, serverKey, type ShellState } from "./context";
@@ -34,6 +35,12 @@ function Body(props: ShellProps): JSX.Element {
     routing: props.routing,
     server: () => servers.current().id,
     getEndpoint: () => servers.endpointOf(untrack(servers.current)),
+    remoteChat: (hub) => {
+      const kind = untrack(servers.current).kind;
+      return kind === "local"
+        ? undefined
+        : remoteChat(hub, kind === "remote" ? () => servers.endpointOf(thisMac) : undefined);
+    },
     displayName: () => {
       const server = untrack(servers.current);
       return server.kind === "local" ? undefined : server.displayName;

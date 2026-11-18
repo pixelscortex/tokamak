@@ -18,7 +18,7 @@ export function Composer(props: {
   queued: string;
   onUnqueue: () => void;
   onEdit: (text: string) => void;
-  onStop: () => void;
+  onStop?: () => void;
 }): JSX.Element {
   const composer = useComposer();
   return (

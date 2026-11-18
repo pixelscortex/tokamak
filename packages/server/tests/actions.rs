@@ -127,23 +127,19 @@ fn chat_records_each_members_author_in_one_shared_thread() {
                 .unwrap();
             verify_plugin_callers(&mut alice, "alice", "Alice").await;
             verify_plugin_callers(&mut bob, "bob", "Bob").await;
-            let thread = chat_call(
-                &mut alice,
-                "chat/threads:insert",
-                json!({"backend":{"kind":"plugin","plugin":"fixture","backendId":"test"}}),
-            )
-            .await;
+            let thread = chat_call(&mut alice, "chat/threads:insert", json!({})).await;
+            let token = "ab".repeat(32);
             for (session, text) in [(&mut alice, "from Alice"), (&mut bob, "from Bob")] {
                 let run = chat_call(
                     session,
                     "chat/send:start",
-                    json!({"threadId":thread,"text":text,"token":"test-turn"}),
+                    json!({"threadId":thread,"text":text,"token":token,"relay":{"backendId":"test","requestId":"test"}}),
                 )
                 .await;
                 chat_call(
                     session,
                     "chat/send:update",
-                    json!({"runId":run["runId"],"token":"test-turn","delta":"","outcome":"done"}),
+                    json!({"runId":run["runId"],"token":token,"sequence":1,"delta":"","outcome":"done"}),
                 )
                 .await;
             }

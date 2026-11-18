@@ -6,6 +6,7 @@ import {
   type FunctionReference,
   type TokamakClient,
 } from "@tokamak/sdk";
+import { localChatPort } from "./acp/src/server/turn/chat-port";
 import { acpSend } from "./acp/src/server/turn/acp";
 import { api as acp } from "./acp/src/server/_generated/api";
 import { api } from "./chat/src/server/_generated/api";
@@ -216,6 +217,7 @@ export async function acpScenario(client: TokamakClient) {
       threadId,
       text: "race",
     });
+    assert.ok(started.started);
     const delivered: (string | null)[] = [];
     let release!: () => void;
     const stopped = new Promise<void>((resolve) => {
@@ -266,7 +268,7 @@ export async function acpScenario(client: TokamakClient) {
       },
     } as unknown as ActionContext & { agent: import("./acp/src/server/agents/client").AgentClient };
     const action = acpSend(
-      context,
+      localChatPort(context),
       { threadId, text: "race" },
       { ...started, token: "fixture-turn-token" },
       {

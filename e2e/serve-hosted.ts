@@ -3,23 +3,25 @@
 // access token from TOKAMAK_E2E_HOSTED_TOKEN and, like serve.ts, only sees the
 // sealed chat sandbox's HOME and PATH.
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const directory = await mkdtemp(`${root}/app/.dev/serve-hosted-`);
 try {
+  await mkdir(`${directory}/plugins`);
+  await cp(`${process.env.TOKAMAK_PLUGIN_DIR}/chat`, `${directory}/plugins/chat`, { recursive: true });
   const child = spawn(
     `${root}/target/debug/tokamak`,
     [
       "--web",
-      `${root}/app/dist`,
+      process.env.TOKAMAK_E2E_WEB_ROOT!,
       "--data",
       `${directory}/store`,
       "--listen",
       "127.0.0.1:43124",
       "--plugins",
-      process.env.TOKAMAK_PLUGIN_DIR!,
+      `${directory}/plugins`,
     ],
     {
       stdio: ["pipe", "inherit", "inherit"],

@@ -19,16 +19,7 @@ export const api = createApi<{
   messages: ApiFromModule<typeof import("../../server/messages/messages")>;
   permissions: Pick<ApiFromModule<typeof import("../../server/permissions/permissions")>, "answer">;
   runs: {
-    running: FunctionReference<
-      "query",
-      {},
-      {
-        runId: Id<"runs">;
-        threadId: Id<"threads">;
-        waiting: boolean;
-      }[]
-    >;
-    active: FunctionReference<"query", { threadId: Id<"threads"> }, Omit<Doc<Model, "runs">, "token"> | null>;
+    running: ApiFromModule<typeof import("../../server/runs/runs")>["running"];
     cancel: FunctionReference<"mutation", { runId: Id<"runs"> }, null>;
     observe: FunctionReference<"mutation", { sweepId: string; tick: number }, null>;
   };
@@ -56,3 +47,7 @@ export const api = createApi<{
     >;
   };
 }>("chat");
+
+export const account = createApi<{
+  tokamak: { whoami: FunctionReference<"query", {}, import("@tokamak/sdk").User> };
+}>().tokamak;

@@ -34,12 +34,13 @@ export function useDrafts(chat: ChatState) {
     setRaced((previous) => ({ ...previous, [threadId]: false }));
     setSending((previous) => ({ ...previous, [threadId]: true }));
     try {
-      await chat.client.action(api.chat.send, { threadId: threadId as never, text });
+      if (chat.remote) await chat.submit(threadId as never, text);
+      else await chat.client.action(api.chat.send, { threadId: threadId as never, text });
     } catch (cause) {
       // Put the text back where it was typed, unless something new was typed since.
       if (!kept.drafts[threadId]) write(threadId, text);
       if (!alive) return;
-      if (String(cause).includes("already has an active run"))
+      if (!chat.remote && String(cause).includes("already has an active run"))
         setRaced((previous) => ({ ...previous, [threadId]: true }));
       else chat.setError(String(cause));
       void chat.backendDiscovery.refresh();
@@ -53,7 +54,7 @@ export function useDrafts(chat: ChatState) {
     const threadId = key();
     if (chat.creating() || !threadId || !text.trim()) return;
     write(threadId, "");
-    if (chat.active() || untrack(sending)[threadId]) {
+    if (!chat.remote && (chat.active() || untrack(sending)[threadId])) {
       const before = untrack(queued)[threadId];
       queue(threadId, before ? `${before}\n\n${text}` : text);
       return;
@@ -66,7 +67,7 @@ export function useDrafts(chat: ChatState) {
     () => [chat.runs(), sending(), queued(), chat.runsLoaded()] as const,
     ([runs, busy, waiting, loaded]) => {
       // Until the running list has arrived, an empty list does not mean idle.
-      if (!loaded) return;
+      if (chat.remote || !loaded) return;
       setRaced((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => runs[id])));
       for (const [threadId, text] of Object.entries(waiting)) {
         if (runs[threadId] || busy[threadId]) continue;

@@ -22,10 +22,17 @@ function readableError(cause: unknown) {
 export const send = action({
   args: { threadId: v.id("threads"), text: v.string() },
   handler: async (ctx, args): Promise<Result> => {
-    const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
-    if (active) throw new Error("Thread already has an active run");
+    if (ctx.user.id !== "local") throw new Error("Agents run from the desktop app on your own computer.");
     const current = (await ctx.runQuery(api.threads.list, {})).find((thread) => thread._id === args.threadId);
     if (!current) throw new Error("Thread no longer exists");
+    const active = await ctx.runQuery(api.runs.active, { threadId: args.threadId });
+    if (
+      active &&
+      (active.owner?.id ?? "local") === ctx.user.id &&
+      (active.backendId === undefined ||
+        (active.backendId === current.backend?.backendId && active.backendPlugin === current.backend.plugin))
+    )
+      throw new Error("Thread already has an active run");
     const options = await listBackends(ctx);
     if (
       !current.backend ||
@@ -39,6 +46,7 @@ export const send = action({
       byte.toString(16).padStart(2, "0"),
     ).join("");
     const started = await ctx.runMutation(api.send.start, { ...args, token });
+    if (!started.started) throw new Error("Local turn did not start");
     const backend = started.backend;
     try {
       const provider = (await ctx.providers<BackendApi>("chat.backend")).find(
