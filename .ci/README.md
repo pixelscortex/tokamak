@@ -25,6 +25,9 @@ release consumers, but these workflows do not invoke it.
 
 ## Windows desktop
 
+The Windows job runs on pushes to `main` and when the workflow is started by hand. It is
+skipped on pull requests because the build takes about 20 minutes.
+
 `desktop-windows` builds an unsigned x64 NSIS installer on Depot's documented
 `depot-windows-2025` runner on every PR and main push. It is temporarily
 `continue-on-error: true`; remove that once builds and installed-app smoke checks

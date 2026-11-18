@@ -92,6 +92,9 @@ jobs:
       - if: always()
         run: sccache --show-stats
   desktop-windows:
+    # The installer takes about 20 minutes to build, so it is built for main
+    # (and by hand) only, not for every pull request.
+    if: github.event_name != 'pull_request'
     # Remove continue-on-error after Windows builds and installed-app smoke checks are reliable.
     continue-on-error: true
     # https://depot.dev/docs/github-actions/runner-types#windows-runners
