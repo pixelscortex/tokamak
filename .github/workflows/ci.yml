@@ -79,8 +79,9 @@ jobs:
     runs-on: depot-macos-latest
     timeout-minutes: 60
     env:
-      CARGO_BUILD_JOBS: "2"
-      RAYON_NUM_THREADS: "2"
+      # The macOS runner has 8 CPUs; two jobs left it mostly idle.
+      CARGO_BUILD_JOBS: "4"
+      RAYON_NUM_THREADS: "4"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
         with:
