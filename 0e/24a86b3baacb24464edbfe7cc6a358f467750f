@@ -1,0 +1,25 @@
+.ci/README.md
+  s_4ccc9a2575a981::t_15e71f6b52f1c4 3-4,7-8,21
+.ci/release.mjs
+  s_4ccc9a2575a981::t_135043b424ac5e 1
+.ci/setup/action.yml
+  s_4ccc9a2575a981::t_b14bb9590ecfd1 10,68-70,72
+.github/workflows/ci.yml
+  s_4ccc9a2575a981::t_14b4d8e0188b39 1,5,9,77-85,87-92,94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e24a86b3baacb24464edbfe7cc6a358f467750f",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
