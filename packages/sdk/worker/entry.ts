@@ -92,6 +92,7 @@ process.stdin.on("data", (chunk: Buffer) => {
   if (buffer.length >= LIMIT) throw new Error("Worker message exceeds 1 MiB limit");
 });
 function shutdown() {
+  if (process.platform === "win32") process.exit(0);
   // EOF also covers an abruptly exited server. The worker leads the group.
   try {
     process.kill(-process.pid, "SIGKILL");

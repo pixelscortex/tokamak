@@ -2,6 +2,8 @@
 mod discovery;
 mod logs;
 mod process;
+#[cfg(windows)]
+mod windows;
 
 use crate::plugins::Asset;
 use engine::OpRegistry;
@@ -76,6 +78,27 @@ impl Supervisor {
                 env.insert(name.to_owned(), value);
             }
         }
+        // Windows runtimes and CLI shims need system folders and user profile
+        // paths even when the rest of the server environment is cleared.
+        #[cfg(windows)]
+        for name in [
+            "SYSTEMROOT",
+            "SYSTEMDRIVE",
+            "COMSPEC",
+            "PATHEXT",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "TEMP",
+            "TMP",
+            "USERNAME",
+            "HOMEDRIVE",
+            "HOMEPATH",
+        ] {
+            if let Ok(value) = std::env::var(name) {
+                env.insert(name.to_owned(), value);
+            }
+        }
         Ok(Arc::new(Self {
             id,
             entry,
@@ -93,10 +116,6 @@ impl Supervisor {
         }))
     }
     async fn process(&self) -> Result<Arc<Process>, String> {
-        // Windows needs Job Object containment before worker descendants can be
-        // terminated reliably on cancellation or server exit.
-        #[cfg(windows)]
-        windows_worker_support()?;
         let mut state = self.state.lock().await;
         if self.closed.is_cancelled() {
             return Err(format!("Plugin {} worker is stopped", self.id));
@@ -220,8 +239,3 @@ impl Drop for Supervisor {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(windows)]
-fn windows_worker_support() -> Result<(), String> {
-    Err("Plugin worker runtime is unavailable on Windows (Job Object containment is not implemented)".into())
-}
