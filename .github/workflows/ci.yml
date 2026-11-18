@@ -127,6 +127,11 @@ jobs:
             !target/release/incremental
           key: windows-release-v1-${{ runner.arch }}-x86_64-pc-windows-msvc-${{ hashFiles('.prototools', 'rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', '.cargo/config*') }}-${{ github.sha }}
           restore-keys: windows-release-v1-${{ runner.arch }}-x86_64-pc-windows-msvc-${{ hashFiles('.prototools', 'rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', '.cargo/config*') }}-
+      - name: Restore unchanged Windows input timestamps
+        run: |
+          proto run bun -- test ./.ci/windows-cache-inputs.test.ts
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          proto run bun -- .ci/windows-cache-inputs.mjs
       # Build only: Windows test suites are intentionally outside this job's scope.
       - name: Build unsigned Windows installer
         run: proto run bun -- run --cwd app tauri build --no-sign --bundles nsis
@@ -146,30 +151,6 @@ jobs:
             !target/release/bundle
             !target/release/incremental
           key: ${{ steps.windows-release.outputs.cache-primary-key }}
-      # Temporary diagnostic: reproduce the old backend without wrapping the build.
-      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
-        env:
-          SCCACHE_GHA_ENABLED: "true"
-        with:
-          version: v0.19.0
-      - name: Diagnose previous Windows sccache backend
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $env:SCCACHE_GHA_ENABLED = 'true'
-          $env:SCCACHE_WEBDAV_ENDPOINT = ''
-          $env:SCCACHE_LOG = 'debug'
-          $env:SCCACHE_ERROR_LOG = "$env:RUNNER_TEMP/sccache-errors.log"
-          Write-Output "GHA cache mode override: $env:SCCACHE_GHA_RW_MODE"
-          'pub fn cache_probe() -> u32 { 42 }' | Set-Content "$env:RUNNER_TEMP/cache_probe.rs"
-          $compiler = Join-Path (& rustc --print sysroot) 'bin/rustc.exe'
-          sccache $compiler --crate-name cache_probe --crate-type rlib "$env:RUNNER_TEMP/cache_probe.rs" --out-dir "$env:RUNNER_TEMP"
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          sccache --show-stats --stats-format=json
-          sccache --stop-server
-          if (Test-Path $env:SCCACHE_ERROR_LOG) {
-            Get-Content $env:SCCACHE_ERROR_LOG | Select-String 'storage write check|storage check result|Error|error|status'
-          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-windows-x64

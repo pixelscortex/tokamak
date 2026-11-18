@@ -117,8 +117,8 @@ runs:
         }
         proto run bun -- install --frozen-lockfile
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    # Depot's Windows Actions cache endpoint rejects sccache writes. Keep the
-    # working tool/dependency caches there without an ineffective compiler cache.
+    # desktop-windows caches Cargo release outputs, including linking, separately.
+    # Its sccache GHA client rejected Depot's upload URL (missing Azure SAS).
     - if: inputs.native == 'true' && runner.os != 'Windows'
       uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
       with:

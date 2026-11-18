@@ -26,15 +26,46 @@ release consumers, but these workflows do not invoke it.
 ## Windows desktop
 
 The Windows job runs on pushes to `main` and when the workflow is started by hand. It is
-skipped on pull requests because the build takes about 20 minutes.
+skipped on pull requests.
 
 `desktop-windows` builds an unsigned x64 NSIS installer on Depot's documented
-`depot-windows-2025` runner on every PR and main push. It is temporarily
+`depot-windows-2025` runner. It is temporarily
 `continue-on-error: true`; remove that once builds and installed-app smoke checks
 are reliable. It builds and bundles only (no Windows test suites), then runs the
-server's `--build-id` smoke check. Tool and dependency downloads use Actions
-caches. Windows omits sccache: Depot's Windows Actions cache endpoint rejected
-all compiler-cache writes during validation. Linux/macOS retain sccache.
+server's `--build-id` smoke check. The job reads the runner's logical CPU count
+and uses it for `CARGO_BUILD_JOBS` and `RAYON_NUM_THREADS`; Depot documents this
+runner as 2 CPUs and 8 GB of memory.
+
+Tool and dependency downloads use Actions caches. A separate Windows-only
+Actions cache stores `target/release`, excluding installer bundles and incremental
+files. This reuses compiled dependencies, build scripts, proc macros and linking
+outputs; Cargo still checks whether inputs changed. The key includes the x64
+MSVC target, architecture, pinned toolchain files, Cargo lockfile/manifests and
+Cargo configuration, with a commit suffix. A matching prefix restores the latest
+compatible build after a source change; successful builds save a new entry after
+the smoke check. Exact hits do not upload again. Depot backs these Actions caches
+and controls their retention and storage limits at the organization level.
+
+The cache also records hashes and timestamps for tracked inputs. Before building,
+`.ci/windows-cache-inputs.mjs` restores a timestamp only if the file's SHA-256
+matches the saved input, so Cargo can reuse unchanged workspace crates after a
+fresh checkout. Changed or new files get fresh timestamps to invalidate stale
+outputs. Generated plugin/frontend resources are rebuilt normally.
+
+Windows does not use sccache. The earlier validation explicitly enabled its GHA
+backend (`SCCACHE_GHA_ENABLED=true`), which reported `ReadOnly`, zero cache writes
+and 263 write errors. This was not the WebDAV backend described in Depot's
+sccache documentation. A diagnostic reproduced its startup failure:
+`ghac returns invalid signed url that sas is missing`. sccache's GHA client
+expects an Azure SAS upload URL, which Depot's cache proxy did not return;
+sccache therefore disabled writes. The pinned Actions cache client successfully
+saves/restores archives through that proxy. Caching Cargo's release directory also covers the Rust
+binaries and proc macros that sccache reported as non-cacheable. Linux/macOS
+retain their existing sccache configuration.
+
+Runner and cache documentation: [Windows runner sizes](https://depot.dev/docs/github-actions/runner-types#windows-runners),
+[Depot Actions cache](https://depot.dev/docs/cache/integrations/github-actions),
+[Depot sccache configuration](https://depot.dev/docs/cache/integrations/sccache).
 
 Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 `gh run download <run-id> -n desktop-windows-x64`). Extract the artifact and run
