@@ -472,7 +472,7 @@ async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     };
     tokio::select! {
         _ = revoked.cancelled() => {},
-        _ = connection_session(socket, session, adapter.stopping, !adapter.hosted && adapter.access.is_some() && cfg!(not(windows))) => {},
+        _ = connection_session(socket, session, adapter.stopping, !adapter.hosted && adapter.access.is_some()) => {},
     }
 }
 
