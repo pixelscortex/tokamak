@@ -57,7 +57,7 @@ jobs:
       - run: moon run workspace:ci-rust --summary detailed
       - if: always()
         run: sccache --show-stats
-  desktop:
+  desktop-mac:
     # The unsigned macOS Tauri bundle. Like the Windows installer, it is built
     # for main (and by hand) only, so pull requests are not held up by it.
     if: github.event_name != 'pull_request'
@@ -72,7 +72,26 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.ci/setup
-      - run: proto run bun -- run --cwd app tauri build --no-sign
+      - name: Build unsigned macOS bundle
+        run: proto run bun -- run --cwd app tauri build --no-sign
+      - name: Smoke check server build identity
+        shell: bash
+        run: |
+          id=$(./target/release/tokamak --build-id)
+          if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]]; then
+            printf '%s\n' 'Server did not print a 64-character build identity' >&2
+            exit 1
+          fi
+      - name: Archive macOS bundle
+        run: |
+          mkdir -p .ci-results
+          ditto -c -k --sequesterRsrc --keepParent target/release/bundle/macos/Tokamak.app .ci-results/Tokamak-macos.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-mac-${{ runner.arch }}
+          path: .ci-results/Tokamak-macos.zip
+          if-no-files-found: error
+          retention-days: 7
       - if: always()
         run: sccache --show-stats
   desktop-windows:

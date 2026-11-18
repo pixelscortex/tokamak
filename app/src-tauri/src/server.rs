@@ -1,7 +1,10 @@
+mod command;
+
+use command::server_command;
 use std::{
     fs::{self, OpenOptions},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     sync::Mutex,
     thread,
     time::{Duration, Instant},
@@ -349,7 +352,7 @@ fn server_log(directory: &Path) -> Result<fs::File> {
 }
 
 fn server_metadata(binary: &Path) -> Result<(String, PathBuf)> {
-    let output = Command::new(binary).arg("--build-id").output()?;
+    let output = server_command(binary).arg("--build-id").output()?;
     let build = String::from_utf8(output.stdout)?.trim().to_owned();
     if !output.status.success()
         || build.len() != 64
@@ -357,7 +360,7 @@ fn server_metadata(binary: &Path) -> Result<(String, PathBuf)> {
     {
         return Err("Cannot determine local server build identity".into());
     }
-    let output = Command::new(binary).arg("--local-path").output()?;
+    let output = server_command(binary).arg("--local-path").output()?;
     if !output.status.success() {
         return Err("Cannot discover local server directory".into());
     }
@@ -420,7 +423,7 @@ fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
     let deadline = Instant::now() + Duration::from_secs(20);
     ensure_token(&directory)?;
     let log = server_log(&directory)?;
-    let mut command = Command::new(binary);
+    let mut command = server_command(&binary);
     command
         .args(["--local-dir"])
         .arg(&directory)
@@ -466,7 +469,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn exited_server_child_is_reaped() {
-        let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "exit 0"])
+            .spawn()
+            .unwrap();
         let process = LocalProcess::open(child.id()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         while !process.exited().unwrap() {

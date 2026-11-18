@@ -5,9 +5,12 @@ pub(super) fn search_paths() -> Vec<PathBuf> {
         .map(|path| std::env::split_paths(&path).collect())
         .unwrap_or_default();
     let home = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf());
+    #[cfg(windows)]
+    let directories = ["~/.bun/bin"];
     // Static locations keep listing cheap, including when Finder omitted the
     // shell PATH. Never launch npm (or a downloading npx/bunx) during discovery.
-    for directory in [
+    #[cfg(not(windows))]
+    let directories = [
         "~/.local/bin",
         "~/.npm-global/bin",
         "~/.bun/bin",
@@ -15,7 +18,8 @@ pub(super) fn search_paths() -> Vec<PathBuf> {
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "~/.volta/bin",
-    ] {
+    ];
+    for directory in directories {
         if let Some(relative) = directory.strip_prefix("~/") {
             if let Some(home) = &home {
                 paths.push(home.join(relative));
@@ -29,6 +33,10 @@ pub(super) fn search_paths() -> Vec<PathBuf> {
 
 pub(super) fn resolve(command: &str, paths: &[PathBuf]) -> Option<PathBuf> {
     let command = Path::new(command);
+    #[cfg(windows)]
+    let executable = command.with_extension("exe");
+    #[cfg(windows)]
+    let command = executable.as_path();
     let candidates = if command.components().count() > 1 || command.is_absolute() {
         vec![command.to_path_buf()]
     } else {

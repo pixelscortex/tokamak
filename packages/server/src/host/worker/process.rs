@@ -1,5 +1,10 @@
+#[cfg(windows)]
+use super::windows::Child as WorkerChild;
 use super::*;
+#[cfg(not(windows))]
 use std::process::Stdio;
+#[cfg(not(windows))]
+use tokio::process::Child as WorkerChild;
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::Child,
@@ -12,7 +17,9 @@ struct Call {
     active: CancellationToken,
     cancel_at: Option<tokio::time::Instant>,
 }
+#[cfg(not(windows))]
 struct Group(u32);
+#[cfg(not(windows))]
 impl Drop for Group {
     fn drop(&mut self) {
         // Every descendant inherits this group, including plugin-launched agents.
@@ -23,6 +30,7 @@ impl Drop for Group {
     }
 }
 
+#[cfg(not(windows))]
 fn guardian(group: u32) -> Result<Option<Child>, String> {
     #[cfg(unix)]
     {
@@ -48,6 +56,35 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
     }
 }
 
+#[cfg(not(windows))]
+fn launch(
+    id: &str,
+    bun: &Path,
+    entry: &Path,
+    code: &Path,
+    cwd: &Path,
+    env: &BTreeMap<String, String>,
+) -> Result<(WorkerChild, Group, Option<Child>), String> {
+    let mut command = tokio::process::Command::new(bun);
+    #[cfg(unix)]
+    command.process_group(0);
+    let child = command
+        .arg(entry)
+        .arg(code)
+        .env_clear()
+        .envs(env)
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
+    let group = Group(child.id().ok_or("Worker has no pid")?);
+    let guardian = guardian(group.0)?;
+    Ok((child, group, guardian))
+}
+
 pub(super) fn spawn(
     runtime: &tokio::runtime::Handle,
     id: &str,
@@ -60,24 +97,15 @@ pub(super) fn spawn(
     // Nested QuickJS actions can run on a short-lived runtime. Bind child I/O
     // to the server runtime that owns the long-lived worker instead.
     let _entered = runtime.enter();
-    let mut command = tokio::process::Command::new(bun);
-    #[cfg(unix)]
-    command.process_group(0);
-    // Future OS sandbox hooks (Linux cgroups/Landlock) belong here.
-    let mut child = command
-        .arg(entry.path())
-        .arg(code.path())
-        .env_clear()
-        .envs(env)
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
-    let group = Group(child.id().ok_or("Worker has no pid")?);
-    let mut guardian = guardian(group.0)?;
+    #[cfg(windows)]
+    let (mut child, containment, mut guardian) = {
+        let (child, job) = super::windows::spawn(bun, entry.path(), code.path(), cwd, env)
+            .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
+        (child, job, None::<Child>)
+    };
+    #[cfg(not(windows))]
+    let (mut child, containment, mut guardian) =
+        launch(id, bun, entry.path(), code.path(), cwd, env)?;
     let guardian_input = guardian.as_mut().and_then(|child| child.stdin.take());
     let input = child.stdin.take().ok_or("Worker stdin missing")?;
     let output = child.stdout.take().ok_or("Worker stdout missing")?;
@@ -131,7 +159,8 @@ pub(super) fn spawn(
         .err()
         .unwrap_or_else(|| "Worker stopped".into());
         let _ = writes.try_send(json!({"type":"shutdown"}));
-        drop(group);
+        drop(containment);
+        #[cfg(not(windows))]
         let _ = child.kill().await;
         let _ = child.wait().await;
         if let Some(mut guardian) = guardian {
@@ -160,7 +189,7 @@ struct Control<'a> {
 }
 async fn run(
     id: &str,
-    child: &mut Child,
+    child: &mut WorkerChild,
     output: tokio::process::ChildStdout,
     mut commands: mpsc::Receiver<Command>,
     control: Control<'_>,
@@ -294,10 +323,16 @@ async fn write_messages(
         if bytes.len() > FRAME {
             return Err("Worker message exceeds 1 MiB limit".into());
         }
-        tokio::time::timeout(Duration::from_secs(5), input.write_all(&bytes))
-            .await
-            .map_err(|_| "Worker stdin stalled")?
-            .map_err(|e| e.to_string())?;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            input.write_all(&bytes).await?;
+            // Tokio's Windows pipe writes can finish in its blocking pool.
+            #[cfg(windows)]
+            input.flush().await?;
+            Ok::<_, std::io::Error>(())
+        })
+        .await
+        .map_err(|_| "Worker stdin stalled")?
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

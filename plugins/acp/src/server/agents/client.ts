@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
-import { delimiter, dirname } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import {
   ClientApp,
   ndJsonStream,
@@ -60,6 +60,71 @@ type Turn = {
   cancelled: boolean;
   timer?: ReturnType<typeof setTimeout>;
 };
+function spawnAgent(definition: Agent) {
+  const env: Record<string, string> = {};
+  for (const name of ["PATH", "HOME", "USER", "LANG"])
+    if (process.env[name] !== undefined) env[name] = process.env[name]!;
+  env.PATH = [dirname(definition.command), env.PATH].filter(Boolean).join(delimiter);
+  if (process.platform !== "win32")
+    return spawn(definition.command, definition.args, { env, stdio: "pipe", detached: true });
+
+  for (const name of [
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "COMSPEC",
+    "PATHEXT",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "TEMP",
+    "TMP",
+    "USERNAME",
+    "HOMEDRIVE",
+    "HOMEPATH",
+  ])
+    if (process.env[name] !== undefined) env[name] = process.env[name]!;
+  if (!/\.(cmd|bat)$/i.test(definition.command))
+    return spawn(definition.command, definition.args, { env, stdio: "pipe", windowsHide: true });
+
+  if (!env.SYSTEMROOT) throw new Error("ACP batch launch requires SystemRoot");
+  const cmd = join(env.SYSTEMROOT, "System32", "cmd.exe");
+  // cmd expands each quoted value once; keep paths and arguments out of the
+  // command text itself, and disable delayed expansion for literal ! in paths.
+  const words = [definition.command, ...definition.args].map((word, i) => {
+    if (/["\r\n]/.test(word)) throw new Error("Invalid ACP batch command argument");
+    const name = `TOKAMAK_ACP_WORD_${i}`;
+    env[name] = word;
+    return `"%${name}%"`;
+  });
+  return spawn(cmd, ["/d", "/v:off", "/s", "/c", `"${words.join(" ")}"`], {
+    argv0: "cmd.exe",
+    env,
+    stdio: "pipe",
+    windowsHide: true,
+    windowsVerbatimArguments: true,
+  });
+}
+
+function watchAgent(pid: number | undefined, onError: (error: Error) => void) {
+  if (process.platform === "win32") return;
+  // The adapter has its own group. The guardian handles worker death even if
+  // plugin JavaScript is stuck and cannot run an exit handler.
+  const guardian = spawn(
+    "/bin/sh",
+    [
+      "-c",
+      'trap "" TERM; while IFS= read -r line; do :; done; kill -TERM -"$1" 2>/dev/null; /bin/sleep 0.2; kill -KILL -"$1" 2>/dev/null',
+      "acp-guardian",
+      String(pid),
+    ],
+    { env: {}, detached: true, stdio: ["pipe", "ignore", "ignore"] },
+  );
+  guardian.stdin.on("error", () => {});
+  guardian.on("error", onError);
+  guardian.on("exit", () => onError(new Error("ACP process guardian exited")));
+  return guardian;
+}
+
 class AgentProcess {
   readonly turns = new Map<string, Turn>();
   readonly opening = new Set<string>();
@@ -70,26 +135,8 @@ class AgentProcess {
   private readonly guardian;
   private failure?: Error;
   constructor(readonly definition: Agent) {
-    const env: Record<string, string> = {};
-    for (const name of ["PATH", "HOME", "USER", "LANG"])
-      if (process.env[name] !== undefined) env[name] = process.env[name]!;
-    env.PATH = [dirname(definition.command), env.PATH].filter(Boolean).join(delimiter);
-    this.child = spawn(definition.command, definition.args, { env, stdio: "pipe", detached: true });
-    // The adapter has its own group. A separate process watches worker death,
-    // including when plugin JavaScript is stuck and cannot run an exit handler.
-    this.guardian = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        'trap "" TERM; while IFS= read -r line; do :; done; kill -TERM -"$1" 2>/dev/null; /bin/sleep 0.2; kill -KILL -"$1" 2>/dev/null',
-        "acp-guardian",
-        String(this.child.pid),
-      ],
-      { env: {}, detached: true, stdio: ["pipe", "ignore", "ignore"] },
-    );
-    this.guardian.stdin.on("error", () => {});
-    this.guardian.on("error", (error) => this.close(error));
-    this.guardian.on("exit", () => this.close(new Error("ACP process guardian exited")));
+    this.child = spawnAgent(definition);
+    this.guardian = watchAgent(this.child.pid, (error) => this.close(error));
     this.child.stderr.on("data", (data: Buffer) => {
       this.tail = (this.tail + data.toString()).slice(-2048);
     });
@@ -263,19 +310,25 @@ class AgentProcess {
     if (this.failure) return;
     this.failure = error;
     this.connection?.close(error);
-    const pid = this.child.pid;
-    const kill = (signal: NodeJS.Signals) => {
-      if (pid) {
-        try {
-          process.kill(-pid, signal);
-        } catch {
-          /* group already exited */
+    if (process.platform === "win32") {
+      // The worker's job owns the whole tree, including children of batch shims.
+      this.child.stdin.destroy();
+      this.child.kill();
+    } else {
+      const pid = this.child.pid;
+      const kill = (signal: NodeJS.Signals) => {
+        if (pid) {
+          try {
+            process.kill(-pid, signal);
+          } catch {
+            /* group already exited */
+          }
         }
-      }
-    };
-    kill("SIGTERM");
-    setTimeout(() => kill("SIGKILL"), 200).unref();
-    this.guardian.stdin.end();
+      };
+      kill("SIGTERM");
+      setTimeout(() => kill("SIGKILL"), 200).unref();
+      this.guardian?.stdin.end();
+    }
     for (const [session, turn] of this.turns) {
       this.settle(session, turn);
       turn.events.fail(error);

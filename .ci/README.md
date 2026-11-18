@@ -13,9 +13,11 @@ runnable locally: `cargo test --workspace`, `proto run bun -- e2e/run.ts`,
 `proto run bun -- run e2e:browser` (see `e2e/README.md`), and
 `proto run bun -- test plugins/acp`.
 
-The desktop jobs build the apps on pushes to `main` and when started by hand; they
-are skipped on pull requests. Download caches cover pinned tools, Bun and Cargo;
-sccache covers Rust compilation on Linux and macOS.
+The `desktop-mac` and `desktop-windows` jobs build the unsigned apps on pushes to
+`main` and when started by hand; they are skipped on pull requests. They build,
+smoke-check the server's `--build-id` and upload the bundle (`desktop-mac-<arch>`,
+`desktop-windows-x64`); they run no test suites. Download caches cover pinned
+tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
 
 Run `bash .ci/release-macos.sh` on macOS arm64 for a manual local release, or
 manually dispatch the **Unsigned macOS release** workflow. The Tauri hook builds
@@ -41,8 +43,8 @@ skipped on pull requests.
 `desktop-windows` builds an unsigned x64 NSIS installer on Depot's documented
 `depot-windows-2025` runner. It is temporarily
 `continue-on-error: true`; remove that once builds and installed-app smoke checks
-are reliable. It builds and bundles only (no Windows test suites), then runs the
-server's `--build-id` smoke check. The job reads the runner's logical CPU count
+are reliable. It builds and bundles the app, runs the server's `--build-id` smoke
+check, and uploads the installer. The job reads the runner's logical CPU count
 and uses it for `CARGO_BUILD_JOBS` and `RAYON_NUM_THREADS`; Depot documents this
 runner as 2 CPUs and 8 GB of memory.
 
@@ -83,11 +85,18 @@ Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 The installer is unsigned; Windows may require accepting its unknown-publisher
 prompt. No signing secrets are required.
 
-The worker runtime (including the ACP plugin's agent actions) returns an explicit
-unsupported error on Windows until Job Object process-tree containment exists.
-The host uses graceful HTTP server shutdown; its Unix SIGTERM fallback is not
-available on Windows. Token files rely on the user's inherited Windows profile
-ACLs rather than Unix mode bits. CI does not launch the desktop UI: a first manual
-run should check installation, window rendering, bundled plugin/resource loading,
-local server startup/authentication, persistence, restart/reuse and upgrade
-shutdown, and confirm worker actions show the unsupported error.
+Plugin workers and ACP agents run on Windows with Bun installed. The server
+creates each worker inside a Job Object that ends the whole process tree when the
+server closes the job handle or exits. The app's server probes and sidecar, Bun
+workers, and ACP agent launches do not open a console. Windows CI checks the
+build and server identity only; it does not run worker or ACP tests, launch the
+installer or desktop UI, or run real Claude or Codex adapters.
+
+On a Windows PC, install and open the bundle, then switch servers. No terminal
+should appear. With Bun and an authenticated adapter on `PATH`, check that the app
+offers the adapter, opens a session in a folder with spaces, streams a reply, and
+handles cancellation. When the local server stops, no worker or adapter processes
+should remain. Also check local server authentication, persistence, and upgrade
+behavior. The host uses graceful HTTP server shutdown; its Unix SIGTERM fallback
+is not available on Windows. Token files rely on the user's inherited Windows
+profile ACLs rather than Unix mode bits.
