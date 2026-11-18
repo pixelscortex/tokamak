@@ -20,7 +20,7 @@ try {
       "--plugins",
       process.env.TOKAMAK_PLUGIN_DIR ?? `${directory}/plugins`,
     ],
-    { stdio: "inherit" },
+    { stdio: "inherit", windowsHide: process.platform === "win32" },
   );
   const forward = (signal: NodeJS.Signals) => child.kill(signal);
   process.on("SIGINT", forward);

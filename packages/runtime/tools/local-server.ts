@@ -7,7 +7,11 @@ import { resolve } from "node:path";
 export type Identity = { pid: number; url: string; bundleHash: string; pluginRoot?: string };
 
 export function localDirectory(binary: string, cwd = process.cwd()): string {
-  const result = spawnSync(binary, ["--local-path"], { cwd, encoding: "utf8" });
+  const result = spawnSync(binary, ["--local-path"], {
+    cwd,
+    encoding: "utf8",
+    windowsHide: process.platform === "win32",
+  });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error("Cannot discover local server directory");
   return resolve(cwd, result.stdout.trim());
@@ -190,6 +194,7 @@ async function startServer(
     {
       detached: true,
       stdio: ["ignore", log.fd, log.fd],
+      windowsHide: process.platform === "win32",
     },
   );
   let failure: Error | undefined;
