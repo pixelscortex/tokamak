@@ -145,11 +145,13 @@ struct Configuration {
     plugins: Option<PathBuf>,
     local: Option<PathBuf>,
     javascript: PoolConfig,
+    web: Option<PathBuf>,
 }
 
 async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Error>> {
     let mut data = PathBuf::from("tokamak.db");
-    let mut listen: SocketAddr = "127.0.0.1:3000".parse()?;
+    let mut listen = None;
+    let mut web = std::env::var_os("TOKAMAK_WEB_DIR").map(PathBuf::from);
     let mut bundle = None;
     let mut plugins = None;
     let mut local = None;
@@ -170,7 +172,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -179,12 +181,12 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             .ok_or_else(|| format!("missing value for {flag}"))?;
         match flag.as_str() {
             "--data" => data = value.into(),
-            "--listen" => listen = value.parse()?,
+            "--listen" => listen = Some(value.parse::<SocketAddr>()?),
+            "--web" => web = Some(PathBuf::from(value)),
             "--bundle" => bundle = Some(PathBuf::from(value)),
             "--plugins" => plugins = Some(PathBuf::from(value)),
             "--local-dir" => {
                 local = Some(PathBuf::from(value));
-                listen = "127.0.0.1:0".parse()?;
             }
             "--workers" => javascript.workers = value.parse()?,
             "--queue" => javascript.queue_capacity = value.parse()?,
@@ -194,6 +196,18 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             _ => return Err(format!("unknown option {flag}").into()),
         }
     }
+    if local.is_some() && web.is_some() {
+        return Err("--web cannot be combined with --local-dir".into());
+    }
+    let listen = if local.is_some() {
+        "127.0.0.1:0".parse()?
+    } else if let Some(listen) = listen {
+        listen
+    } else if let Ok(port) = std::env::var("PORT") {
+        SocketAddr::from(([0, 0, 0, 0], port.parse::<u16>()?))
+    } else {
+        "127.0.0.1:3000".parse()?
+    };
     Ok(Some(Configuration {
         data,
         listen,
@@ -201,6 +215,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         plugins,
         local,
         javascript,
+        web,
     }))
 }
 
@@ -249,6 +264,34 @@ async fn publish_identity(
     Ok(())
 }
 
+fn hosted_token(hosted: bool) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    if !hosted {
+        return Ok(None);
+    }
+    let token = std::env::var("TOKAMAK_ACCESS_TOKEN")
+        .map_err(|_| "Hosted mode requires TOKAMAK_ACCESS_TOKEN (at least 32 characters)")?;
+    if token.chars().count() < 32 {
+        return Err("TOKAMAK_ACCESS_TOKEN must contain at least 32 characters".into());
+    }
+    Ok(Some(token))
+}
+
+fn log_listening(address: SocketAddr, authenticated: bool, hosted: bool) {
+    println!(
+        "Tokamak listening on ws://{}/ws ({}, no TLS)",
+        address,
+        if authenticated {
+            if hosted {
+                "hosted access token"
+            } else {
+                "local capability"
+            }
+        } else {
+            "unauthenticated local POC"
+        }
+    );
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Some(Configuration {
@@ -258,13 +301,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         plugins,
         local,
         javascript,
+        web,
     }) = configuration().await?
     else {
         return Ok(());
     };
-    if !listen.ip().is_loopback() {
-        return Err("unauthenticated POC must bind loopback".into());
+    let hosted = web.is_some();
+    let hosted_token = hosted_token(hosted)?;
+    if !listen.ip().is_loopback() && !hosted {
+        return Err("Non-loopback listeners require --web and TOKAMAK_ACCESS_TOKEN".into());
     }
+    let web = websocket::HostedWeb::configure(web, listen)?;
     if bundle.is_some() == plugins.is_some() {
         return Err("Specify exactly one of --plugins or --bundle".into());
     }
@@ -273,7 +320,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data = directory.join("store");
         Some(capability(directory)?)
     } else {
-        None
+        hosted_token
     };
     // Keep ownership until AFTER ready-file removal. The database lock alone
     // releases during close(): a replacement could otherwise publish readiness
@@ -295,16 +342,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "pluginRoot": plugin_root,
     });
     publish_identity(local.as_deref(), &identity, &backend).await?;
-    println!(
-        "Tokamak listening on ws://{}/ws ({}, no TLS)",
-        listener.local_addr()?,
-        if token.is_some() {
-            "local capability"
-        } else {
-            "unauthenticated local POC"
-        }
-    );
-    let serving = websocket::serve_with_access(
+    log_listening(listener.local_addr()?, token.is_some(), hosted);
+    let serving = websocket::serve_with_web(
         listener,
         backend.server().clone(),
         async move {
@@ -319,6 +358,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         token.map(|token| websocket::LocalAccess { token, identity }),
+        web,
     )
     .await;
     let closed = backend.close().await;

@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/target
+**/dist
+**/.moon/cache
+.proto
+.ci-results
+.env
+.env.*
+**/.DS_Store
+*.db
+**/.dev
+**/.env
+**/.env.*
+.codegraph
