@@ -1,0 +1,31 @@
+packages/ui/src/cn.ts
+  s_930cf27627eb83::t_4a2097733bddf6 27
+wiki/content/docs/design/index.mdx
+  s_930cf27627eb83::t_ad39f338dba762 182-183
+  s_930cf27627eb83::t_d5eff37478f9c8 172-177
+  s_930cf27627eb83::t_fb9a278581464d 102,107,117,169-171,178-181,266-269,352
+packages/ui/src/kit/tokens.tsx
+  s_930cf27627eb83::t_d5eff37478f9c8 92-93
+  s_930cf27627eb83::t_48e17e2bcf1bde 56-60,76-77
+packages/ui/src/theme.css
+  s_930cf27627eb83::t_4a2097733bddf6 32-37,193,196,229,269-270,272,281
+packages/ui/src/button.tsx
+  s_930cf27627eb83::t_4fa56c3b62759c 29-30,32
+  s_930cf27627eb83::t_3e14cf2bfb116f 26-28,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38d808f0a7662df8083fb19c527524251b4b14cb",
+  "prompts": {},
+  "sessions": {
+    "s_930cf27627eb83": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ffc91910-4702-4766-ae58-99af66d5a489",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
