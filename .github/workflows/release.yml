@@ -17,8 +17,8 @@ jobs:
     runs-on: depot-macos-latest
     timeout-minutes: 60
     env:
-      CARGO_BUILD_JOBS: "2"
-      RAYON_NUM_THREADS: "2"
+      CARGO_BUILD_JOBS: "4"
+      RAYON_NUM_THREADS: "4"
       MACOS_SIGNING_IDENTITY: ${{ inputs.macos_signing_identity }}
       MACOS_NOTARIZATION_PROFILE: ${{ inputs.macos_notarization_profile }}
     steps:
