@@ -1,0 +1,37 @@
+app/scripts/prepare-host.ts
+  s_4ccc9a2575a981::t_cfc10a3d806d34 12-14
+app/src/plugins/web-host.ts
+  s_4ccc9a2575a981::t_534607f73e5716 90-93,116-121
+app/src/shell/session.ts
+  s_4ccc9a2575a981::t_0371ac8713ba2d 66,68,74-76
+app/tests/plugins.test.tsx
+  s_4ccc9a2575a981::t_322f8d7cba4d6b 291-339
+app/tests/session.test.ts
+  s_4ccc9a2575a981::t_e835e1269f1304 1-61
+packages/build/src/client-surface.ts
+  s_4ccc9a2575a981::t_8228fc6985664c 83,85-89,91,93-94,97
+packages/build/tests/plugins.test.mjs
+  s_4ccc9a2575a981::t_682424a5d3c25c 112-128
+plugins/chat/src/client/lib/state/use-chat.ts
+  s_4ccc9a2575a981::t_83b2c4403a5cea 101-102
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_4ccc9a2575a981::t_7e93b9378cac9e 21,24,29,40-41,66-69
+plugins/chat/tests/composer.test.tsx
+  s_4ccc9a2575a981::t_1393753ec9f2d0 27,34,45,90-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0036dff85f68dff506857c012f0c0d215e39f876",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
