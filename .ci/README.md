@@ -1,11 +1,21 @@
 # CI and unsigned release
 
 All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
-TypeScript, blocking Rust lint and the native stage on every PR. Rust lint checks all targets and features in every remaining
-workspace crate, including `app/src-tauri`, with warnings denied. Native installs
-the Linux Tauri libraries and Playwright's Chromium/WebKit dependencies. Download caches cover pinned tools, Bun, Cargo and
-Playwright browsers; sccache covers Rust compilation. The same workflow's `desktop` job builds the
-unsigned macOS Tauri bundle on pushes to `main` and when started by hand; it is skipped on pull requests. `.ci/check.sh` contains the stage commands.
+three fast jobs on every PR, and `.ci/check.sh` holds their commands:
+
+- `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied). These
+  do not depend on the platform, so they run once.
+- `typescript`: type checks, TypeScript unit tests and the web build.
+- `rust`: unit tests inside the Rust crates.
+
+Integration, end-to-end and browser suites are not run in CI for now. They stay
+runnable locally: `cargo test --workspace`, `proto run bun -- e2e/run.ts`,
+`proto run bun -- run e2e:browser` (see `e2e/README.md`), and
+`proto run bun -- test plugins/acp`.
+
+The desktop jobs build the apps on pushes to `main` and when started by hand; they
+are skipped on pull requests. Download caches cover pinned tools, Bun and Cargo;
+sccache covers Rust compilation on Linux and macOS.
 
 Run `bash .ci/release-macos.sh` on macOS arm64 for a manual local release, or
 manually dispatch the **Unsigned macOS release** workflow. The Tauri hook builds

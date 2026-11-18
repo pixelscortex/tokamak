@@ -28,16 +28,15 @@ tasks:
     options:
       cache: true
       outputStyle: stream
-  ci-rust:
-    command: "bash .ci/check.sh rust"
+  ci-lint:
+    command: "bash .ci/check.sh lint"
     inputs: *ci-inputs
     options:
       cache: true
       outputStyle: stream
-  ci-native:
-    command: "bash .ci/check.sh native"
+  ci-rust:
+    command: "bash .ci/check.sh rust"
     inputs: *ci-inputs
-    outputs: [".ci-results/acp.xml"]
     options:
       cache: true
       outputStyle: stream
