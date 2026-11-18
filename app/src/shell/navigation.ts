@@ -1,6 +1,7 @@
 import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import type { AnyRouter } from "@tanstack/solid-router";
 import type { PluginView } from "../plugins/views";
+import { isShellPage } from "./pages";
 import { hrefOf, viewFor } from "./views";
 
 export interface Tab {
@@ -23,6 +24,8 @@ export interface Navigation {
   openNew(href: string): void;
   close(href: string): void;
   cycle(step: 1 | -1): void;
+  /** Closes every plugin tab and goes home: the views belonged to another server. */
+  reset(): void;
 }
 
 const same = (a: PluginView, b: PluginView) => a.plugin === b.plugin && a.id === b.id;
@@ -30,8 +33,15 @@ const same = (a: PluginView, b: PluginView) => a.plugin === b.plugin && a.id ===
 /**
  * One tab per open route. A route a view navigates to inside its own tab replaces that
  * tab's address; a route under another view opens a tab after the active one.
+ *
+ * `ready` is false while the server's views are unknown (connecting or failed). Tabs
+ * then keep the view they last had, so they stay listed and can be switched between.
  */
-export function createNavigation(router: AnyRouter, views: Accessor<readonly PluginView[]>): Navigation {
+export function createNavigation(
+  router: AnyRouter,
+  views: Accessor<readonly PluginView[]>,
+  ready: Accessor<boolean> = () => true,
+): Navigation {
   const read = () => {
     const { pathname, search, state } = router.history.location;
     return { href: pathname + search, pathname, index: state.__TSR_index ?? 0 };
@@ -49,19 +59,31 @@ export function createNavigation(router: AnyRouter, views: Accessor<readonly Plu
   const [active, setActive] = createSignal("", { ownedWrite: true });
   let opening = false;
 
+  const known = new Map<string, PluginView>();
+  const resolve = (href: string) =>
+    viewFor(views(), href.split("?")[0]!) ?? (ready() ? undefined : known.get(href));
   const tabs = () =>
     hrefs().flatMap((href) => {
-      const view = viewFor(views(), href.split("?")[0]!);
+      const view = resolve(href);
       return view ? [{ href, view }] : [];
     });
 
   createEffect(
-    () => ({ at: location(), list: views() }),
-    ({ at, list }) =>
+    () => ({ at: location(), list: views(), settled: ready() }),
+    ({ at, list, settled }) =>
       untrack(() => {
+        for (const href of hrefs()) {
+          const view = viewFor(list, href.split("?")[0]!);
+          if (view) known.set(href, view);
+        }
         const view = viewFor(list, at.pathname);
-        if (!view) return;
-        const open = hrefs().filter((href) => viewFor(list, href.split("?")[0]!));
+        if (!view) {
+          if (!settled && hrefs().includes(at.href)) setActive(at.href);
+          return;
+        }
+        known.set(at.href, view);
+        // While the server's views are unknown, keep every tab; only shell pages resolve.
+        const open = settled ? hrefs().filter((href) => viewFor(list, href.split("?")[0]!)) : hrefs();
         if (!open.includes(at.href)) {
           const from = open.indexOf(active());
           const fromView = from >= 0 ? viewFor(list, open[from]!.split("?")[0]!) : undefined;
@@ -78,7 +100,7 @@ export function createNavigation(router: AnyRouter, views: Accessor<readonly Plu
   const go = (href: string) => void router.navigate({ href });
   return {
     pathname: () => location().pathname,
-    current: () => viewFor(views(), location().pathname),
+    current: () => resolve(location().href),
     tabs,
     active: () => (tabs().some((tab) => tab.href === location().href) ? location().href : ""),
     canBack: () => location().index > 0,
@@ -99,9 +121,16 @@ export function createNavigation(router: AnyRouter, views: Accessor<readonly Plu
     close(href) {
       const list = tabs();
       const index = list.findIndex((tab) => tab.href === href);
-      if (index < 0 || list.length < 2) return;
+      if (index < 0) return;
+      // The last tab stays open, unless it is a shell page: closing that goes home.
+      if (list.length < 2 && !isShellPage(href.split("?")[0]!)) return;
       setHrefs(hrefs().filter((candidate) => candidate !== href));
-      if (href === location().href) go((list[index + 1] ?? list[index - 1])!.href);
+      if (href === location().href) go((list[index + 1] ?? list[index - 1])?.href ?? "/");
+    },
+    reset() {
+      known.clear();
+      setHrefs(hrefs().filter((href) => isShellPage(href.split("?")[0]!)));
+      if (!isShellPage(location().pathname)) void router.navigate({ href: "/", replace: true });
     },
     cycle(step) {
       const list = tabs();

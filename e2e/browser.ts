@@ -15,6 +15,7 @@ const env = {
   TOKAMAK_ALLOWED_ORIGINS: `http://127.0.0.1:${process.env.TOKAMAK_E2E_PORT ?? "1420"}`,
   VITE_TOKAMAK_HTTP: "http://127.0.0.1:43123",
   VITE_TOKAMAK_TOKEN: randomBytes(32).toString("hex"),
+  TOKAMAK_E2E_HOSTED_TOKEN: randomBytes(32).toString("hex"),
 };
 function run(command: string, args: string[]) {
   const result = spawnSync(command, args, { env, stdio: "inherit" });

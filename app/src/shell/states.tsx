@@ -1,7 +1,6 @@
-import { Show, createSignal } from "solid-js";
+import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button, Icon, StatusIcon, Textarea, icons } from "@tokamak/ui";
-import { hosted, hostedTokenKey } from "../host/endpoint";
+import { Button, Icon, StatusIcon, icons } from "@tokamak/ui";
 import { useShell } from "./context";
 import { shellIcons } from "./icons";
 import { hrefOf } from "./views";
@@ -42,55 +41,60 @@ export function Connecting(): JSX.Element {
   );
 }
 
-export function Unreachable(props: { reason: string }): JSX.Element {
+/**
+ * The selected server cannot be reached. A band on the stage, not a wall: the frame,
+ * the switcher and the tabs stay usable around it.
+ */
+export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Element {
   const shell = useShell();
-  const [token, setToken] = createSignal("", { ownedWrite: true });
+  const server = shell.servers.current;
+  const address = () => {
+    const current = server();
+    return current.kind === "local" ? undefined : current.address;
+  };
   return (
-    <Notice
-      role="alert"
-      label="Server unreachable"
-      mark={<Icon path={icons.failed} label="Not connected" class="text-removed" />}
-      title="Can't reach the Tokamak server"
-      action={
-        <div class="flex flex-col items-center gap-4">
-          <p class="text-data text-ink-3">{props.reason}</p>
-          <Show
-            when={hosted()}
-            fallback={
-              <Button variant="primary" onClick={() => shell.session.retry()}>
-                Retry
-              </Button>
-            }
-          >
-            <form
-              class="flex w-full max-w-read flex-col gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                localStorage.setItem(hostedTokenKey, token());
-                shell.session.retry();
-              }}
-            >
-              <label class="text-row text-ink" for="access-token">
-                Access token
-              </label>
-              <Textarea
-                id="access-token"
-                aria-label="Access token"
-                autocomplete="off"
-                value={token()}
-                onInput={(event) => setToken(event.currentTarget.value)}
-                required
-              />
-              <Button variant="primary" type="submit">
-                Connect
-              </Button>
-            </form>
-          </Show>
+    <div class="m-auto w-full max-w-thread px-8 py-16">
+      <div
+        role="alert"
+        aria-label="Server unreachable"
+        class="flex flex-wrap items-center gap-3 rounded-lg surface-band py-2 ps-4 pe-2"
+      >
+        <Icon path={icons.failed} label="Not connected" class="text-removed" />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <p class="text-row font-medium text-ink">
+            {props.needs === "token" ? `${server().name} needs an invite` : `Can't reach ${server().name}`}
+          </p>
+          <p class="text-label text-ink-3">
+            <Show when={address() && !props.reason.includes(new URL(address()!).host) && address()}>
+              {(origin) => <span class="text-data">{new URL(origin()).host} </span>}
+            </Show>
+            {props.reason}
+          </p>
         </div>
-      }
+        <Button variant="ghost" onClick={() => shell.setServerMenuOpen(true)}>
+          Connect to another server
+        </Button>
+        <Show
+          when={props.needs === "token" && address()}
+          fallback={<QuietButton onClick={() => shell.session.retry()}>Retry</QuietButton>}
+        >
+          {(origin) => <QuietButton onClick={() => shell.openConnect(origin())}>Add invite</QuietButton>}
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+/** A quiet tone step: the band's own action, lighter than a key and without an outline. */
+function QuietButton(props: { onClick: () => void; children: string }): JSX.Element {
+  return (
+    <button
+      type="button"
+      class="flex h-8 shrink-0 cursor-pointer items-center rounded-sm bg-edge/50 px-3 text-row font-medium text-ink transition duration-200 hover:bg-edge focus-ring"
+      onClick={() => props.onClick()}
     >
-      The window could not open a connection to the server.
-    </Notice>
+      {props.children}
+    </button>
   );
 }
 

@@ -113,7 +113,7 @@ test("the sidebar shows a view's region and the keyboard toggles it", async () =
   const { dispose } = mount();
   try {
     const sidebar = await screen.findByRole("complementary", { name: "Sidebar" });
-    await waitFor(() => expect(sidebar.textContent).toBe("Sidebar rows"));
+    await waitFor(() => expect(sidebar.textContent).toContain("Sidebar rows"));
     expect(sidebar.hidden).toBe(false);
     await user.keyboard(
       `{${shortcutName("mod+b").startsWith("Meta") ? "Meta" : "Control"}>}b{/Meta}{/Control}`,

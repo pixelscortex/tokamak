@@ -15,8 +15,24 @@ docker run --name tokamak -p 3000:3000 \
   -e TOKAMAK_PUBLIC_URL=http://localhost:3000 tokamak
 ```
 
-Open `http://localhost:3000`, enter the token, and select **Connect**. The browser
-stores the token in localStorage for this origin. Clear it there to forget it.
+## Joining a server
+
+Share one invite: `https://<address>/join#<token>`. The token sits in the URL
+fragment, so a browser that opens the link never sends it to the server in the
+request. `<address>#<token>` and a bare address work too; with a bare address,
+"Add a server" asks for the token.
+
+- **Desktop app:** open the server switcher at the top of the sidebar (with the
+  sidebar hidden, the server button in the top strip) and choose **Add server…**.
+  Paste the invite or the address. The app checks that something answers at
+  `/health`, then checks the token with the plugin catalog request, then asks for
+  the name to show. Plain `http://` is accepted only for a loopback address.
+- **Browser:** open the invite link, or open `http://localhost:3000` and choose
+  **Add invite**. A page served by the server talks only to that server.
+
+The app keeps joined servers, their tokens and your name in localStorage on that
+device (the browser keeps it per origin). Remove a server from the switcher to
+forget its token.
 This is one shared secret with full access, pending per-person sign-in. Use HTTPS
 when exposing the server remotely. Disable proxy query-string logging: WebSocket
 and plugin requests carry the token as `?token=` (HTTP also accepts Bearer auth).
@@ -42,6 +58,8 @@ Mount a volume at `/data` and keep it across container replacements. The contain
 runs as UID 10001; bind mounts must be writable by that user. The healthcheck uses
 public `/health`. The shell HTML, JavaScript and CSS are public so the connect
 form can load; `/ws`, the plugin catalog and all plugin assets require the token.
+A rejected token on those routes answers 401 with the CORS header for an allowed
+origin, so the app can say "invite not accepted" instead of "unreachable".
 Hashed shell assets cache for a year; HTML uses `no-cache`. API routes take priority
 over client-side navigation fallback. Desktop `--local-dir` is separate and cannot
 be combined with `--web`.

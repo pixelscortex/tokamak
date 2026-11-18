@@ -3,19 +3,25 @@ import { createRootRoute, createRoute, createRouter, RouterProvider } from "@tan
 import { Kit } from "./kit";
 import type { ServerEndpoint } from "./plugins/adapter";
 import { useShell } from "./shell/context";
+import { Connect } from "./shell/connect/flow";
 import { Shell } from "./shell/shell";
 import { NoPlugins, NotFound } from "./shell/states";
 import { hrefOf } from "./shell/views";
+import { Welcome, welcomeDue } from "./shell/welcome";
 
 let getEndpoint: (() => ServerEndpoint | Promise<ServerEndpoint>) | undefined;
 
 const root = createRootRoute({
-  component: () => <Shell routing={{ router, root, base: [home, kit] }} getEndpoint={getEndpoint} />,
+  component: () => <Shell routing={{ router, root, base }} getEndpoint={getEndpoint} />,
 });
 const home = createRoute({ getParentRoute: () => root, path: "/", component: Home });
 const kit = createRoute({ getParentRoute: () => root, path: "/kit", component: Kit });
+const connect = createRoute({ getParentRoute: () => root, path: "/connect", component: Connect });
+const welcome = createRoute({ getParentRoute: () => root, path: "/welcome", component: Welcome });
+const join = createRoute({ getParentRoute: () => root, path: "/join", component: Join });
+const base = [home, kit, connect, welcome, join];
 export const router = createRouter({
-  routeTree: root.addChildren([home, kit]),
+  routeTree: root.addChildren(base),
   defaultNotFoundComponent: NotFound,
 });
 
@@ -27,9 +33,23 @@ function Home() {
     return connection.state === "connected" ? connection.plugins.views()[0] : undefined;
   };
   createEffect(first, (view) => {
-    if (view) void router.navigate({ href: hrefOf(view), replace: true });
+    if (!view) return;
+    void router.navigate({ href: welcomeDue(shell) ? "/welcome" : hrefOf(view), replace: true });
   });
   return <>{!first() && <NoPlugins />}</>;
+}
+
+/**
+ * An invite opened in a browser: `https://<server>/join#<token>`. The server serves the
+ * app here, so the page hands the invite to "Add a server" and drops it from the address.
+ */
+function Join() {
+  const shell = useShell();
+  const invite = window.location.href;
+  window.history.replaceState(window.history.state, "", "/join");
+  if (invite.includes("#")) shell.openConnect(invite);
+  else void router.navigate({ href: "/", replace: true });
+  return null;
 }
 
 export function ClientRouter(props: { getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint> }) {
