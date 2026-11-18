@@ -1,0 +1,179 @@
+plugins/chat/src/server/runs/send.ts
+  s_8cec559f39b5f2::t_ec506571594e87 9-11,18-19,23-27,29,36-42,44-59,70-102,104-107,174-180,183-187,206,208-210
+  s_8cec559f39b5f2::t_585fbbb662cb3e 28,67-69,103,207
+  s_8cec559f39b5f2::t_c90c29a4e5a664 3,8,12-14,16,20-22,30,43,60-61,108-109,117,125,136-139,148,162,169-173,181-182,205,211,226-229
+packages/sdk/chat-machine.ts
+  s_8cec559f39b5f2::t_56b8216f1ed1bc 1-6,14-16
+  s_8cec559f39b5f2::t_ec506571594e87 7-13
+  s_8cec559f39b5f2::t_13253167d5e6ab 17
+packages/server/tests/chat-acp-driver.ts
+  s_8cec559f39b5f2::t_2633c2d19a4553 9,271
+  s_8cec559f39b5f2::t_852ae9aeb551d6 220
+plugins/chat/src/client/lib/api.ts
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 22,50
+  s_8cec559f39b5f2::t_ec506571594e87 51-53
+plugins/chat/src/server/runs/chat.ts
+  s_8cec559f39b5f2::t_c90c29a4e5a664 25,28-35,49
+plugins/chat/src/server/permissions/permissions.ts
+  s_8cec559f39b5f2::t_c90c29a4e5a664 8-10,16,37,46-47,64-66,89-91
+  s_8cec559f39b5f2::t_ec506571594e87 13-15
+packages/sdk/src/index.ts
+  s_8cec559f39b5f2::t_258469eb1feead 67-68
+packages/server/src/service/command_loop.rs
+  s_8cec559f39b5f2::t_ec506571594e87 101-103,105-112,115-123
+  s_8cec559f39b5f2::t_258469eb1feead 9-10,49,99-100,104,113-114,124-128
+  s_8cec559f39b5f2::t_fb1e01fe9bf9d9 129
+e2e/serve-hosted.ts
+  s_8cec559f39b5f2::t_ec506571594e87 6,12-13,18,24
+plugins/acp/src/server/turn/acp-turn.ts
+  s_8cec559f39b5f2::t_f9b62c26676705 1,3-4,10,20,25
+e2e/browser.ts
+  s_8cec559f39b5f2::t_ec506571594e87 14,21-22,38-44
+plugins/chat/src/server/schema.ts
+  s_8cec559f39b5f2::t_c90c29a4e5a664 36-39
+plugins/chat/src/client/ui/composer/agent-picker.tsx
+  s_8cec559f39b5f2::t_ec506571594e87 101-103
+  s_8cec559f39b5f2::t_6aa7b29c344837 24,32-35,58,64-69,112-115
+packages/sdk/src/thread-context.ts
+  s_8cec559f39b5f2::t_ec506571594e87 6-8
+  s_8cec559f39b5f2::t_86e58204ffa317 1-5,9-37
+app/src/shell/shell.tsx
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 7-8,38-39,43
+  s_8cec559f39b5f2::t_ec506571594e87 40-42
+plugins/chat/src/server/messages/messages.ts
+  s_8cec559f39b5f2::t_258469eb1feead 2,13-18,24,30-33,37
+  s_8cec559f39b5f2::t_e71ace428f0302 38-39
+  s_8cec559f39b5f2::t_ec506571594e87 19-23,25-29,34-36
+plugins/chat/src/client/lib/turns.ts
+  s_8cec559f39b5f2::t_ec506571594e87 121-124
+  s_8cec559f39b5f2::t_6aa7b29c344837 125
+plugins/chat/src/client/ui/thread/empty.tsx
+  s_8cec559f39b5f2::t_6aa7b29c344837 25
+  s_8cec559f39b5f2::t_ec506571594e87 27-35,72-86
+plugins/acp/src/server/relay.ts
+  s_8cec559f39b5f2::t_7ea22879ed098a 120,136-137,144
+  s_8cec559f39b5f2::t_ec506571594e87 5-10,22-25,35-36,42-51,53-55,68-69,77-89,99-114,158
+  s_8cec559f39b5f2::t_8dde7e27f46c60 1-4,11-21,26-34,37-41,52,56-67,70-76,90-98,115-119,121-135,138-143,145-157,159-177
+plugins/acp/src/server/turn/turn-buffer.ts
+  s_8cec559f39b5f2::t_f9b62c26676705 1,3,10,31,60
+packages/server/src/websocket.rs
+  s_8cec559f39b5f2::t_258469eb1feead 475,483,493-495
+e2e/fixtures/scripted-agent.py
+  s_8cec559f39b5f2::t_13253167d5e6ab 6,14,111-115,173-175,177
+app/src/host/chat-machine.ts
+  s_afca289c1b96c3::t_7e3730fff3a107 18
+  s_8cec559f39b5f2::t_ec506571594e87 8-10,53-65
+  s_8cec559f39b5f2::t_a2b482b2b991e7 1-7,11-17,19-52,66-68
+plugins/acp/src/server/backend.ts
+  s_8cec559f39b5f2::t_878169a356d5ac 1
+  s_8cec559f39b5f2::t_ec506571594e87 39-50
+  s_8cec559f39b5f2::t_f9b62c26676705 35
+plugins/chat/src/client/lib/state/use-chat.ts
+  s_8cec559f39b5f2::t_01545a9c1bf37c 47
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 4-5,17,23,91,95-103,110-129,137,139-140,142,150-155
+  s_8cec559f39b5f2::t_ec506571594e87 20-22,28-30,38-46,104-109,130-136
+packages/server/tests/actions.rs
+  s_cf72cadada7104::t_533385476cd4e2 130-131,136,142
+plugins/chat/plugin.ts
+  s_8cec559f39b5f2::t_258469eb1feead 4
+e2e/run.ts
+  s_8cec559f39b5f2::t_13253167d5e6ab 2,47,50-51,56,89,95-96,106-109,249,254
+  s_8cec559f39b5f2::t_ec506571594e87 55
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 37-38,43,57,70
+plugins/chat/src/client/ui/thread/thread-view.tsx
+  s_8cec559f39b5f2::t_6aa7b29c344837 8,15-18,40-41,76
+  s_8cec559f39b5f2::t_ec506571594e87 42-66,68-70,74-75
+e2e/browser/servers.spec.ts
+  s_8cec559f39b5f2::t_ec506571594e87 7,39-43,45-52,58-67,69-75
+  s_8cec559f39b5f2::t_906da1f940962e 68
+  s_8cec559f39b5f2::t_655116afffec28 44
+  s_8cec559f39b5f2::t_8aaba5034c1c5c 76
+e2e/own-machine.ts
+  s_8cec559f39b5f2::t_f6f77d7b5c1651 1-17,34-62,76,78,136,150,190,205,225,257,259-260,262,270-272,280
+  s_8cec559f39b5f2::t_ec506571594e87 18-33,63-75,77,79-135,137-149,151-189,191-204,206-224,226-256,258,261,263-269,273-279
+plugins/chat/src/client/pages/screen.tsx
+  s_8cec559f39b5f2::t_ec506571594e87 126-130,169-175,205-208,250-256
+  s_8cec559f39b5f2::t_585fbbb662cb3e 165-168
+  s_8cec559f39b5f2::t_6aa7b29c344837 1,3,27,104,182-186,194,209-210,231,263,270
+plugins/acp/src/server/turn/permission-poller.ts
+  s_8cec559f39b5f2::t_d506689775bb33 36,38
+  s_8cec559f39b5f2::t_f9b62c26676705 1-2,9,20,24
+plugins/chat/src/client/ui/thread/turn.tsx
+  s_8cec559f39b5f2::t_6aa7b29c344837 23,28,62-63,86,97-98,104
+  s_8cec559f39b5f2::t_ec506571594e87 29-33,87-96,99-103
+packages/server/src/plugins/manifest.rs
+  s_8cec559f39b5f2::t_258469eb1feead 38-39
+packages/sdk/src/plugin.ts
+  s_8cec559f39b5f2::t_258469eb1feead 17,84,141
+app/src/plugins/views.tsx
+  s_8cec559f39b5f2::t_ec506571594e87 17-23
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 54,63,86,273-275
+plugins/acp/src/server/turn/acp.ts
+  s_8cec559f39b5f2::t_f9b62c26676705 2-4,34,39-40,43,53,66,68,77,86,91,103,112
+  s_8cec559f39b5f2::t_ec506571594e87 49,87-89
+packages/build/src/descriptor.ts
+  s_8cec559f39b5f2::t_ec506571594e87 68-78
+packages/server/src/plugins/loading.rs
+  s_8cec559f39b5f2::t_0606a8b50d9b52 89,179-183,194
+  s_8cec559f39b5f2::t_ec506571594e87 187-188
+  s_8cec559f39b5f2::t_32480e7c371f22 191-193
+  s_8cec559f39b5f2::t_258469eb1feead 189-190
+  s_8cec559f39b5f2::t_32e75b98f0b028 184-186
+plugins/chat/src/server/runs/runs.ts
+  s_8cec559f39b5f2::t_258469eb1feead 2-3,15-16,58-59,66,83,88-91,96-114
+  s_8cec559f39b5f2::t_ec506571594e87 92-95
+plugins/chat/src/client/lib/state/use-backends.ts
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 2,6,22
+plugins/chat/src/client/ui/composer/chat-composer.tsx
+  s_8cec559f39b5f2::t_6aa7b29c344837 21
+packages/sdk/src/transport.ts
+  s_8cec559f39b5f2::t_258469eb1feead 17-18,262
+plugins/chat/src/server/_functions.ts
+  s_8cec559f39b5f2::t_c90c29a4e5a664 1,22-26,29-30
+packages/sdk/client.tsx
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 20
+plugins/chat/src/server/api.ts
+  s_8cec559f39b5f2::t_ec506571594e87 5-10
+app/src/shell/session.ts
+  s_8cec559f39b5f2::t_cea6b410a1f4b3 4,23
+  s_8cec559f39b5f2::t_ec506571594e87 77-83
+plugins/acp/src/server/agents/client.ts
+  s_8cec559f39b5f2::t_f9b62c26676705 248
+  s_8cec559f39b5f2::t_ec506571594e87 249-250
+plugins/acp/src/server/turn/chat-port.ts
+  s_8cec559f39b5f2::t_ff2f2070c58c2f 1-2,14-15
+  s_8cec559f39b5f2::t_cf71d951a75da0 3-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7869f3843709be4b2b61960a54322c09771762fc",
+  "prompts": {},
+  "sessions": {
+    "s_8cec559f39b5f2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41413636-6daa-43d9-ac66-795c7bdee3f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_afca289c1b96c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a8d77fdb-d204-4a86-aab3-ddf98ecd7ea2",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_cf72cadada7104": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ef7b-cbcc-74b3-a041-a18b04fe5b24",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
