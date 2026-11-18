@@ -1,5 +1,6 @@
 import { createContext, useContext, type Accessor, type Setter } from "solid-js";
 import type { AnyRouter } from "@tanstack/solid-router";
+import type { Servers } from "../host/servers";
 import type { Navigation } from "./navigation";
 import type { Session } from "./session";
 import type { ShellShortcuts } from "./shortcuts";
@@ -14,9 +15,21 @@ export const keys = {
   previousTab: "ctrl+shift+Tab",
 } as const;
 
+/** ⌘1 to ⌘9 select the servers in the switcher's order. */
+export const serverKey = (index: number) => (index < 9 ? `mod+${index + 1}` : undefined);
+
 export interface ShellState {
   router: AnyRouter;
   session: Session;
+  servers: Servers;
+  /** Selects another server: its connection replaces this one and its tabs close. */
+  switchServer(id: string): void;
+  /** Opens the "Add a server" page, optionally starting from an address or a whole invite. */
+  openConnect(invite?: string): void;
+  /** Hands the invite given to openConnect to the page, once. */
+  takeInvite(): string | undefined;
+  serverMenuOpen: Accessor<boolean>;
+  setServerMenuOpen: Setter<boolean>;
   navigation: Navigation;
   theme: Theme;
   shortcuts: ShellShortcuts;

@@ -7,7 +7,9 @@ import { showRail } from "./config";
 import { useShell } from "./context";
 import { Palette } from "./palette";
 import { Rail } from "./rail";
+import { isShellPage } from "./pages";
 import { Connecting, Unreachable } from "./states";
+import { ServerSwitcher } from "./switcher";
 import { TopStrip } from "./top-strip";
 
 /**
@@ -31,6 +33,9 @@ export function Frame(): JSX.Element {
             hidden={!sidebarShown()}
             class="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto pt-1 pe-4 pb-3 ps-2 density-dense"
           >
+            <Show when={sidebarShown()}>
+              <ServerSwitcher />
+            </Show>
             <RegionOutlet name="sidebar" />
           </aside>
         </div>
@@ -69,11 +74,17 @@ function Stage(): JSX.Element {
       </header>
       <main class="flex min-h-0 flex-1 flex-col overflow-auto">
         <Switch>
+          <Match when={isShellPage(shell.navigation.pathname())}>
+            <Outlet />
+          </Match>
           <Match when={connection().state === "connecting"}>
             <Connecting />
           </Match>
           <Match when={connection().state === "failed" && connection()}>
-            {(failed) => <Unreachable reason={(failed() as { reason: string }).reason} />}
+            {(failed) => {
+              const state = () => failed() as { reason: string; needs?: "token" };
+              return <Unreachable reason={state().reason} needs={state().needs} />;
+            }}
           </Match>
           <Match when={connection().state === "connected"}>
             <Outlet />

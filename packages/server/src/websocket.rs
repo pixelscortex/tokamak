@@ -224,11 +224,25 @@ async fn authorize(
             })
             .unwrap_or_default();
         if !valid_token(actual, &access.token) {
-            return StatusCode::UNAUTHORIZED.into_response();
+            // An allowed origin may read the 401, so a client can tell a rejected
+            // token from a refused origin or an unreachable server.
+            let mut response = StatusCode::UNAUTHORIZED.into_response();
+            if browser_route {
+                allow_origin(&mut response, origin);
+            }
+            return response;
         }
     }
     let mut response = next.run(request).await;
-    if browser_route && let Some(origin) = origin {
+    if browser_route {
+        allow_origin(&mut response, origin);
+    }
+    response
+}
+
+// Only called once the origin has passed the allowlist above.
+fn allow_origin(response: &mut Response, origin: Option<&axum::http::HeaderValue>) {
+    if let Some(origin) = origin {
         response
             .headers_mut()
             .insert("access-control-allow-origin", origin.clone());
@@ -236,7 +250,6 @@ async fn authorize(
             .headers_mut()
             .insert("vary", "Origin".parse().expect("header"));
     }
-    response
 }
 
 // Direct HTTP hosting needs no origin configuration, even on a wildcard bind.

@@ -1,13 +1,14 @@
-import { createSignal, onCleanup, type Accessor } from "solid-js";
+import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
-import { endpoint, hosted } from "../host/endpoint";
+import { endpoint } from "../host/endpoint";
 import type { ServerEndpoint } from "../plugins/adapter";
 import { createPluginShell, type PluginRouting, type PluginShell } from "../plugins/views";
 
 export type Connection =
   | { state: "connecting" }
   | { state: "connected"; client: TokamakClient; plugins: PluginShell; endpoint: ServerEndpoint }
-  | { state: "failed"; reason: string };
+  /** `token`: the server wants a (new) access token before it lets this window in. */
+  | { state: "failed"; reason: string; needs?: "token" };
 
 export interface Session {
   connection: Accessor<Connection>;
@@ -17,6 +18,13 @@ export interface Session {
 export interface SessionOptions {
   routing: PluginRouting;
   getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint>;
+  /**
+   * Which server the endpoint belongs to. When it changes, the session drops the old
+   * connection (its socket and plugin UI) and connects to the new one.
+   */
+  server?: Accessor<string>;
+  /** Says why a connection failed when the server can tell more than the socket can. */
+  explain?: (endpoint: ServerEndpoint) => Promise<{ reason: string; needs?: "token" } | undefined>;
 }
 
 export function createSession(options: SessionOptions): Session {
@@ -36,8 +44,9 @@ export function createSession(options: SessionOptions): Session {
     setConnection({ state: "connecting" });
     const supplied = await (options.getEndpoint ?? endpoint)();
     if (current !== attempt) return;
-    if (!options.getEndpoint && hosted() && !supplied.token) {
-      setConnection({ state: "failed", reason: "Enter your access token to connect." });
+    // An empty token is a server that needs one and has none saved; null needs none.
+    if (supplied.token === "") {
+      setConnection({ state: "failed", reason: "This server needs an access token.", needs: "token" });
       return;
     }
     const url = new URL(supplied.ws);
@@ -50,9 +59,7 @@ export function createSession(options: SessionOptions): Session {
         socket.addEventListener(
           "close",
           () => reject(new Error("The connection closed before it was ready.")),
-          {
-            once: true,
-          },
+          { once: true },
         );
         socket.addEventListener("open", () => resolve(), { once: true });
         socket.addEventListener("error", () => reject(new Error(`No answer from ${url.host}.`)), {
@@ -80,7 +87,9 @@ export function createSession(options: SessionOptions): Session {
         setConnection({ state: "connected", client, plugins, endpoint: supplied });
     } catch (cause) {
       socket.close();
-      if (current === attempt) setConnection({ state: "failed", reason: message(cause) });
+      if (current !== attempt) return;
+      const explained = await options.explain?.(supplied).catch(() => undefined);
+      if (current === attempt) setConnection({ state: "failed", reason: message(cause), ...explained });
     } finally {
       clearTimeout(timeout);
     }
@@ -89,7 +98,8 @@ export function createSession(options: SessionOptions): Session {
   const retry = () => {
     void connect().catch((cause) => setConnection({ state: "failed", reason: message(cause) }));
   };
-  retry();
+  if (options.server) createEffect(options.server, retry);
+  else retry();
   onCleanup(disconnect);
   return { connection, retry };
 }

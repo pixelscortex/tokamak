@@ -3,11 +3,14 @@ import type { JSX } from "@solidjs/web";
 import { Outlet, type AnyRouter } from "@tanstack/solid-router";
 import { RegionProvider, ShortcutContext, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
+import { checkAccess, reach } from "../host/reach";
+import { createServers, defaultServers, type Servers } from "../host/servers";
 import type { PluginRouting } from "../plugins/views";
 import type { ServerEndpoint } from "../plugins/adapter";
-import { ShellContext, keys, type ShellState } from "./context";
+import { ShellContext, keys, serverKey, type ShellState } from "./context";
 import { Frame } from "./frame";
 import { createNavigation } from "./navigation";
+import { shellPageList, shellPages } from "./pages";
 import { createSession, type Session } from "./session";
 import { createShortcuts, shortcutName } from "./shortcuts";
 import { createTheme } from "./theme";
@@ -26,8 +29,24 @@ export function Shell(props: ShellProps): JSX.Element {
 }
 
 function Body(props: ShellProps): JSX.Element {
-  const session = createSession({ routing: props.routing, getEndpoint: props.getEndpoint });
-  const shell = createShellState(props.routing.router, session);
+  const servers = createServers(defaultServers(props.getEndpoint));
+  const session = createSession({
+    routing: props.routing,
+    server: () => servers.current().id,
+    getEndpoint: () => servers.endpointOf(untrack(servers.current)),
+    explain: async (endpoint) => {
+      if (untrack(servers.current).kind === "local") return undefined;
+      const answer = await reach(endpoint.http, { timeout: 5_000 });
+      if (!answer.ok)
+        return answer.kind === "no-answer"
+          ? { reason: "Not answering." }
+          : { reason: "Something answered, but it isn't a Tokamak server." };
+      if ((await checkAccess(endpoint.http, endpoint.token ?? "", { timeout: 5_000 })) === "rejected")
+        return { reason: "The server no longer accepts the saved access token.", needs: "token" };
+      return undefined;
+    },
+  });
+  const shell = createShellState(props.routing.router, session, servers);
   const navigation = shell.navigation;
   return (
     <ShellContext value={shell}>
@@ -48,14 +67,20 @@ function Body(props: ShellProps): JSX.Element {
 }
 
 /** Everything the frame reads, with the window's keys bound. Call inside a RegionProvider. */
-export function createShellState(router: AnyRouter, session: Session): ShellState {
+export function createShellState(
+  router: AnyRouter,
+  session: Session,
+  servers: Servers = createServers(defaultServers()),
+): ShellState {
   const views = () => {
     const connection = session.connection();
-    return connection.state === "connected" ? connection.plugins.views() : [];
+    return [...shellPageList, ...(connection.state === "connected" ? connection.plugins.views() : [])];
   };
-  const navigation = createNavigation(router, views);
+  const navigation = createNavigation(router, views, () => session.connection().state === "connected");
   const shortcuts = createShortcuts();
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  const [serverMenuOpen, setServerMenuOpen] = createSignal(false);
+  let invite: string | undefined;
 
   const sidebarFilled = useRegionFilled("sidebar");
   const panelFilled = useRegionFilled("panel");
@@ -98,6 +123,23 @@ export function createShellState(router: AnyRouter, session: Session): ShellStat
     tabTitle: (href, fallback) => titles()[href] ?? fallback,
     paletteOpen,
     setPaletteOpen,
+    servers,
+    switchServer(id) {
+      if (id === servers.current().id) return;
+      if (servers.select(id)) navigation.reset();
+    },
+    openConnect(text) {
+      invite = text;
+      setServerMenuOpen(false);
+      navigation.openView(shellPages.connect);
+    },
+    takeInvite() {
+      const text = invite;
+      invite = undefined;
+      return text;
+    },
+    serverMenuOpen,
+    setServerMenuOpen,
   };
   const bind = (key: string, run: () => void) =>
     onCleanup(shortcuts.registerShortcut(shortcutName(key), run));
@@ -109,5 +151,10 @@ export function createShellState(router: AnyRouter, session: Session): ShellStat
   bind(keys.forward, navigation.forward);
   bind(keys.nextTab, () => navigation.cycle(1));
   bind(keys.previousTab, () => navigation.cycle(-1));
+  for (let index = 0; index < 9; index++)
+    bind(serverKey(index)!, () => {
+      const server = servers.list()[index];
+      if (server) shell.switchServer(server.id);
+    });
   return shell;
 }

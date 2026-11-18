@@ -25,7 +25,7 @@ TOKAMAK_E2E_CPU_RATE=6 proto run bun -- run e2e:browser --project=chromium --rep
 ```
 
 On Linux use `playwright install --with-deps --no-shell chromium webkit` through the same
-pinned Bun command. Ports 1420, 1421 and 43123 must be free (set `TOKAMAK_E2E_PORT` to override 1420); the runner refuses to
+pinned Bun command. Ports 1420, 1421, 43123 and 43124 must be free (set `TOKAMAK_E2E_PORT` to override 1420); the runner refuses to
 reuse a running app. It builds the server, Chat and the integration fixture,
 builds Vite in production mode and serves it with Vite preview. Every run owns a
 fresh store, private capability and plugin installation. Fixture source edits happen in a disposable
@@ -37,7 +37,9 @@ layout and styling out of assertions. Wait for live state with Playwright's
 assertions, without sleeps. Use the observed thread count as a baseline, since
 browser projects share one disposable server. Keep fixture rebuilds serial.
 The host accessibility contract includes `Connection status`, `Sidebar`, `Page header`,
-`Panel`, `Views`, `Open pages`, `Settings`, `Server unreachable` and `Plugin view error`; the fixture adds `Threads`, `New thread` and `New thread title`.
+`Panel`, `Views`, `Open pages`, `Settings`, `Server unreachable`, `Plugin view error`, the
+switcher's `Server: <name>` button and the `Add a server` region with its `Server address`,
+`Invite token` and `Your name` fields; the fixture adds `Threads`, `New thread` and `New thread title`.
 Keep those names when restyling the host.
 Use `--project=chromium` or `--project=webkit` to narrow a run. Failure traces and
 HTML reports live under `.ci-results/playwright*` and are uploaded by native CI.
@@ -47,7 +49,12 @@ that the previous composer cannot send during the switch, and opens the agent
 picker to select and use another agent. `TOKAMAK_E2E_CPU_RATE` applies Chromium
 CPU throttling to the chat checks.
 
-Coverage: connection, two-page live thread creation, compiler-built plugin
+A second server runs in hosted mode on `127.0.0.1:43124` (`e2e/serve-hosted.ts`)
+with its own random access token, the same plugins and the same sealed sandbox.
+`servers.spec.ts` adds it through "Add a server" (including a rejected token),
+switches between it and the first server with ⌘1 and ⌘2, and removes it.
+
+Coverage: connection, adding and switching servers, two-page live thread creation, compiler-built plugin
 catalog/navigation and live query, explicit rebuild/reload without replacing the
 document, plugin view error containment and recovery, and HTTP/WebSocket origin
 rejection. The existing server suite still covers persistence and CPU budgets.

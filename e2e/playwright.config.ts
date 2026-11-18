@@ -28,6 +28,14 @@ export default defineConfig({
     },
     {
       cwd: resolve(import.meta.dirname, ".."),
+      command: "proto run bun -- e2e/serve-hosted.ts",
+      url: "http://127.0.0.1:43124/health",
+      timeout: 30_000,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 30_000 },
+      reuseExistingServer: false,
+    },
+    {
+      cwd: resolve(import.meta.dirname, ".."),
       command: `proto run bun -- run --cwd app vite preview --host 127.0.0.1 --port ${appPort} --strictPort`,
       url: appURL,
       reuseExistingServer: false,

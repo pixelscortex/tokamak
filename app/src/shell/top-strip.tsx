@@ -5,7 +5,9 @@ import { showRail } from "./config";
 import { keys, useShell } from "./context";
 import { Control, TipText } from "./control";
 import { shellIcons } from "./icons";
+import { isShellPage } from "./pages";
 import { SettingsMenu } from "./settings-menu";
+import { ServerSwitcher } from "./switcher";
 import { hrefOf } from "./views";
 
 const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -42,6 +44,10 @@ export function TopStrip(): JSX.Element {
           disabled={shell.session.connection().state !== "connected"}
           onClick={() => shell.setPaletteOpen(true)}
         />
+        {/* With the sidebar hidden, the server switcher becomes one icon button here. */}
+        <Show when={!shell.sidebar.shown()}>
+          <ServerSwitcher compact />
+        </Show>
         <div data-tauri-drag-region class="h-8 min-w-2 flex-1" />
         <Control
           icon={shellIcons.back}
@@ -93,7 +99,7 @@ function Tabs(): JSX.Element {
                 {tab.view.icon && <Icon path={tab.view.icon} class="text-ink-3" />}
                 <span class="truncate">{title()}</span>
               </button>
-              <Show when={nav.tabs().length > 1}>
+              <Show when={nav.tabs().length > 1 || isShellPage(tab.href.split("?")[0]!)}>
                 <button
                   type="button"
                   aria-label={`Close ${title()}`}
