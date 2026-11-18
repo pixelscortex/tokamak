@@ -32,7 +32,6 @@ COPY --from=build /src/app/dist /opt/tokamak/web
 COPY --from=build /src/plugins/chat/dist /opt/tokamak/plugins/chat
 ENV PORT=3000 TOKAMAK_WEB_DIR=/opt/tokamak/web
 USER tokamak
-VOLUME /data
 EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD curl --fail --silent "http://127.0.0.1:${PORT}/health" || exit 1
 ENTRYPOINT ["tokamak", "--plugins", "/opt/tokamak/plugins", "--data", "/data/store"]

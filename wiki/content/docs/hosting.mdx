@@ -50,3 +50,7 @@ For Railway: deploy using the root Dockerfile, attach a volume at `/data`, and s
 `TOKAMAK_ACCESS_TOKEN` and `TOKAMAK_PUBLIC_URL` to the service's public HTTPS origin.
 Railway supplies `PORT`. Termination signals close the store cleanly. Run one
 replica per volume; the embedded store owns an exclusive lock.
+
+Railway mounts volumes as root, and the image runs as a non-root user. Set
+`RAILWAY_RUN_UID=0` on the service so the server can write to `/data`. The
+Dockerfile has no `VOLUME` line because Railway attaches the volume itself.
