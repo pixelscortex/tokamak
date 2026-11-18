@@ -1,0 +1,149 @@
+packages/server/tests/fixtures/actions/b/api.ts
+  s_7f5f2d5084e561::t_db84429a13446c 2
+packages/server/src/service/subscriptions.rs
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 138-142
+  s_7f5f2d5084e561::t_c076d06085bd38 154-155
+  s_7f5f2d5084e561::t_1caa8e2fa7f7b9 58,137,143-153,156-168
+app/tests/identity.test.ts
+  s_7f5f2d5084e561::t_30b0be78f10d28 2-20,24
+  s_7f5f2d5084e561::t_469b0b7d36c57a 1,21-23
+packages/server/tests/identity.rs
+  s_7f5f2d5084e561::t_4495cc1ad2ca65 36-37
+  s_7f5f2d5084e561::t_61b594dc471469 1-2,9-17,23-26,35,38-41,248-249
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 3-8,18-22,27-34,42-79,146-155,157-167,169-182,200-239,241-247
+  s_7f5f2d5084e561::t_909d26cda3e7ef 80-145,156,168,183-199,240
+  s_7f5f2d5084e561::t_cd7c1d0c09f779 250-285
+packages/server/src/actions.rs
+  s_7f5f2d5084e561::t_abeb923796e304 128,156,182
+  s_7f5f2d5084e561::t_aa7ea854fa197d 14,30,33-34,57,67,97,107,113,166,208
+packages/server/tests/helpers/actions_dns.rs
+  s_7f5f2d5084e561::t_0b2ed9b11ef374 125
+packages/server/src/service/session.rs
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 57-64,148-152
+packages/server/src/host.rs
+  s_7f5f2d5084e561::t_aa7ea854fa197d 56,68,155
+  s_7f5f2d5084e561::t_9cb91ce54267ed 1-2
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 156-157
+  s_776a0593f37b8e::t_d2bd865c2867da 101-104,139-143,151,153,216-219
+app/src/host/identity.ts
+  s_7f5f2d5084e561::t_30b0be78f10d28 1-20
+app/src/shell/session.ts
+  s_7f5f2d5084e561::t_3f65a13a5e25c6 87-88
+  s_7f5f2d5084e561::t_30b0be78f10d28 4,27,47
+packages/server/tests/fixtures/actions/b/backend/ops.ts
+  s_7f5f2d5084e561::t_db84429a13446c 4-6
+packages/server/Cargo.toml
+  s_7f5f2d5084e561::t_ebe99fe625c9f4 26,31
+packages/sdk/src/index.ts
+  s_7f5f2d5084e561::t_9ab762535bc005 32
+packages/sdk/src/host.ts
+  s_7f5f2d5084e561::t_9ab762535bc005 45,69
+packages/sdk/tests/acceptance.test.mjs
+  s_7f5f2d5084e561::t_469b0b7d36c57a 161
+packages/server/src/service/invocations.rs
+  s_7f5f2d5084e561::t_aa7ea854fa197d 9,27
+packages/server/src/websocket.rs
+  s_7f5f2d5084e561::t_9cb91ce54267ed 1,78,325
+  s_7f5f2d5084e561::t_3f65a13a5e25c6 175-178
+  s_7f5f2d5084e561::t_886f48cb6d2b71 323-324,326-334,338,344-346,352,355-369,376-377,379,470
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 4-8,10,113-118,122-130,274-276,335-337,339-343,347-351,353-354,370-375,449
+  s_7f5f2d5084e561::t_0bd3f97a2d0b89 50,112,119-121,131-139,163,170,233,236-237,252,264,272-273,277,279,446,466-467
+  s_7f5f2d5084e561::t_0627d4ca156f46 111,378,380-384,447-448,450,461,471,473-476,583
+wiki/content/docs/api/functions.mdx
+  s_7f5f2d5084e561::t_469b0b7d36c57a 40-46,51
+  s_7f5f2d5084e561::t_648db9e76be796 52
+packages/server/src/service/server.rs
+  s_7f5f2d5084e561::t_aa7ea854fa197d 48-58,60,67
+packages/server/src/service/action_coordination.rs
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 4-11
+  s_7f5f2d5084e561::t_aa7ea854fa197d 43,112
+packages/server/src/service/mod.rs
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 107-110
+  s_7f5f2d5084e561::t_aa7ea854fa197d 85,111-112,164
+app/tests/session.test.ts
+  s_7f5f2d5084e561::t_16229ba64b0d60 62-64,66-81,86-91
+  s_7f5f2d5084e561::t_3f65a13a5e25c6 65,82-85
+  s_7f5f2d5084e561::t_1a121fe82e7f76 92-93
+packages/server/src/lib.rs
+  s_7f5f2d5084e561::t_ebe99fe625c9f4 14
+packages/build/tests/boundary.test.mjs
+  s_7f5f2d5084e561::t_909d26cda3e7ef 233
+app/src/shell/shell.tsx
+  s_7f5f2d5084e561::t_30b0be78f10d28 37-40
+packages/server/tests/fixtures/feature/probe.ts
+  s_7f5f2d5084e561::t_f3ae7d73434f08 3-21,26,30
+  s_7f5f2d5084e561::t_2fae042bfb0041 22-25,27-29,31-32
+packages/server/src/identity.rs
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 52-55,83-84,92-96,113-120,124-128,149-155,173-181,189-191,193-196,207-210,216-219,230-232
+  s_7f5f2d5084e561::t_886f48cb6d2b71 78-82,85-87
+  s_7f5f2d5084e561::t_f4233495d9d7cf 8-10,67-77
+  s_7f5f2d5084e561::t_ebe99fe625c9f4 1-7,11-51,56-66,88-91,97-112,121-123,129-148,156-172,182-188,192,197-206,211-215,220-229,233-267
+  s_7f5f2d5084e561::t_8aff9bad8405a1 268-273
+packages/server/tests/actions.rs
+  s_7f5f2d5084e561::t_0b2ed9b11ef374 28-31,389,603
+  s_7f5f2d5084e561::t_7d0ec413c0a55e 25-27,32-33,179-182
+  s_7f5f2d5084e561::t_9b3fa040e2b7d9 93-96,159-162,171,183-184
+  s_7f5f2d5084e561::t_16229ba64b0d60 97-158,163-170,172-178
+packages/server/src/host/worker/tests.rs
+  s_7f5f2d5084e561::t_90a1e3a4c19ac2 9-10,57-58,63
+  s_7f5f2d5084e561::t_0b2ed9b11ef374 52,59-62,74,86,105,119
+  s_7f5f2d5084e561::t_cebf8256c91274 64-65
+plugins/chat/src/server/runs/send.ts
+  s_7f5f2d5084e561::t_9ab762535bc005 33,41
+packages/server/src/main.rs
+  s_7f5f2d5084e561::t_37621fdbc49f83 161,163-164
+  s_7f5f2d5084e561::t_909d26cda3e7ef 162,179,329
+  s_7f5f2d5084e561::t_efa413d839a337 330-333,355,371
+packages/sdk/src/functions.ts
+  s_7f5f2d5084e561::t_9ab762535bc005 16-22,36,43,51,98-100,118,129,225,227-230
+  s_7f5f2d5084e561::t_9cb91ce54267ed 223-224,226
+packages/server/src/service/requests.rs
+  s_7f5f2d5084e561::t_bfdaae11dd5abf 4-9
+  s_7f5f2d5084e561::t_aa7ea854fa197d 45,64
+  s_7f5f2d5084e561::t_9b3fa040e2b7d9 70-78
+  s_7f5f2d5084e561::t_a7c0f23e3f32bf 79-80,87,91
+packages/server/src/web.rs
+  s_7f5f2d5084e561::t_886f48cb6d2b71 65
+packages/server/src/identity/cli.rs
+  s_7f5f2d5084e561::t_909d26cda3e7ef 1-98
+app/src/host/saved-servers.ts
+  s_7f5f2d5084e561::t_30b0be78f10d28 17
+plugins/chat/src/server/schema.ts
+  s_7f5f2d5084e561::t_9ab762535bc005 17-18
+packages/server/tests/fixtures/actions/a/backend/ops.ts
+  s_7f5f2d5084e561::t_db84429a13446c 13-20
+  s_7f5f2d5084e561::t_a1e32be35d4be6 21-24
+packages/server/src/service/command_loop.rs
+  s_7f5f2d5084e561::t_aa7ea854fa197d 24-25,56,71
+  s_7f5f2d5084e561::t_f3ae7d73434f08 81
+Cargo.lock
+  s_7f5f2d5084e561::t_b769fc0258dfb4 5307
+packages/server/src/service/plugin_control.rs
+  s_7f5f2d5084e561::t_172c25894120b5 46-54
+wiki/content/docs/hosting.mdx
+  s_7f5f2d5084e561::t_b38d796b5cd434 20,36-37,42-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a530232e64cfe4e1f251cfaeabcfad005461123",
+  "prompts": {},
+  "sessions": {
+    "s_776a0593f37b8e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eeb9-9f42-7bd0-b518-bc2bdc1dc16a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_7f5f2d5084e561": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eeb8-dd6d-7883-98b3-7385758fce72",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
