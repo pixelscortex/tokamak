@@ -1,6 +1,7 @@
 //! Logical plugin IDs never become physical table names without host mediation.
 use super::{Document, Error, Id, Result, Table};
 use super::{Object, SurrealValue, Value};
+use std::collections::BTreeSet;
 
 pub fn json_object(value: &serde_json::Value) -> Result<Object> {
     match value.clone().into_value() {
@@ -41,6 +42,20 @@ impl DataSpace {
     }
     pub fn owner(&self) -> Option<&str> {
         self.plugin.as_deref()
+    }
+    pub(super) fn can_reset_table(&self, physical: &str, declared: &BTreeSet<&str>) -> bool {
+        if let Some(plugin) = self.owner() {
+            return plugin != "tokamak.host" && physical.starts_with(&self.prefix);
+        }
+        // A legacy bundle has no prefix. Only its declared tables are in scope,
+        // and qualified table names (including kernel metadata) remain reserved.
+        declared.contains(physical)
+            && !physical
+                .strip_prefix('p')
+                .and_then(|name| name.split_once("__"))
+                .is_some_and(|(prefix, _)| {
+                    !prefix.is_empty() && prefix.bytes().all(|c| c.is_ascii_hexdigit())
+                })
     }
     pub fn table(&self, logical: &Table) -> Result<Table> {
         Table::new(format!("{}{}", self.prefix, logical.as_str()))

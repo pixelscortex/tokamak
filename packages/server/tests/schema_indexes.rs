@@ -7,11 +7,11 @@
 //! runs the public builder, so changed generations are real artifacts rather
 //! than hand-edited metadata. Expected query results are computed in Rust from
 //! the rows the test inserted, never from another index read.
-use engine::{Pool, PoolConfig};
+use engine::{Bundle, Pool, PoolConfig};
 use serde_json::{Value, json};
 use server::{
     Event, Server, Session,
-    data::{DataSpace, Database, Id, Storage, Table},
+    data::{DataSpace, Database, Id, Storage, Table, json_object},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -238,7 +238,7 @@ impl Installation {
     }
     fn storage(&self) -> Storage {
         if self.disk {
-            Storage::Disk(self.root.join("database"))
+            Storage::Disk(self.root.join("store"))
         } else {
             Storage::Memory
         }
@@ -858,6 +858,210 @@ fn new_indexes_on_empty_tables_install_on_reload() {
     });
 }
 
+#[test]
+fn startup_resets_only_the_incompatible_plugin_and_logs_why() {
+    run(async {
+        let installation = Installation::new(true);
+        installation.install(&ALPHA);
+        installation.install(&BETA);
+        installation.load().await.unwrap().close().await.unwrap();
+
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        let mut tx = database.begin().await.unwrap();
+        let mut seeded = Vec::new();
+        for (plugin, table) in [
+            ("alpha", "todos"),
+            ("alpha", "notes"),
+            ("alpha", "old"),
+            ("beta", "todos"),
+        ] {
+            let table = DataSpace::plugin(plugin)
+                .unwrap()
+                .table(&Table::new(table).unwrap())
+                .unwrap();
+            let value = json_object(&todo("ann", "existing", 1)).unwrap();
+            seeded.push((plugin, tx.insert(&table, value).await.unwrap()));
+        }
+        tx.commit().await.unwrap();
+        database.close().await.unwrap();
+        installation.install(&ALPHA_ADDED);
+        assert_local_reset_log(&installation).await;
+
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        let mut tx = database.read_only().await.unwrap();
+        for (plugin, id) in &seeded {
+            assert_eq!(
+                tx.get(id).await.unwrap().is_some(),
+                *plugin == "beta",
+                "{id}"
+            );
+        }
+        assert!(
+            tx.query(seeded[0].1.table())
+                .with_index("by_done")
+                .collect()
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            tx.query(seeded[3].1.table())
+                .with_index("by_owner_created")
+                .collect()
+                .await
+                .unwrap()[0]
+                .id,
+            seeded[3].1
+        );
+        tx.commit().await.unwrap();
+        assert!(grant_exists(&database, "alpha@1.0.0").await);
+        database.close().await.unwrap();
+    });
+}
+
+async fn assert_local_reset_log(installation: &Installation) {
+    use std::os::unix::fs::PermissionsExt;
+    let log = installation.root.join("server.log");
+    let token_path = installation.root.join("server.token");
+    let token = "a".repeat(64);
+    std::fs::write(&token_path, &token).unwrap();
+    std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_tokamak"))
+        .arg("--local-dir")
+        .arg(&installation.root)
+        .arg("--plugins")
+        .arg(installation.plugins())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::fs::File::create(&log).unwrap())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let descriptor = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Ok(text) = std::fs::read_to_string(installation.root.join("server.json")) {
+                break serde_json::from_str::<Value>(&text).unwrap();
+            }
+            assert!(
+                child.try_wait().unwrap().is_none(),
+                "{}",
+                std::fs::read_to_string(&log).unwrap()
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("local server did not become ready");
+    let log = std::fs::read_to_string(log).unwrap();
+    let resets = log
+        .lines()
+        .filter(|line| line.starts_with("Schema hard reset:"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        resets,
+        [
+            "Schema hard reset: wiped stored data for Plugin alpha schema index todos.by_done: cannot define an index on a table with rows; index backfill is not supported yet"
+        ]
+    );
+    assert_eq!(std::fs::read_to_string(token_path).unwrap(), token);
+
+    let url = descriptor["url"]
+        .as_str()
+        .unwrap()
+        .replace("ws://", "http://")
+        .replace("/ws", "/shutdown");
+    let _ = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+        .post(url)
+        .bearer_auth(token)
+        .send()
+        .await;
+    assert!(
+        tokio::time::timeout(Duration::from_secs(10), child.wait())
+            .await
+            .unwrap()
+            .unwrap()
+            .success()
+    );
+}
+
+#[test]
+fn chat_starts_with_current_schema_after_resetting_legacy_runs() {
+    let output = std::process::Command::new("proto")
+        .args([
+            "run",
+            "bun",
+            "--",
+            "-e",
+            r#"
+            import { schemaMetadata } from './packages/sdk/src/index';
+            import previous from './plugins/chat/tests/fixtures/schema-before-own-machine';
+            import current from './plugins/chat/src/server/schema';
+            console.log(JSON.stringify([schemaMetadata(previous), schemaMetadata(current)]));
+        "#,
+        ])
+        .current_dir(workspace())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let [previous, current]: [Value; 2] = serde_json::from_slice(&output.stdout).unwrap();
+
+    run(async {
+        let installation = Installation::new(true);
+        let space = DataSpace::plugin("chat").unwrap();
+        let runs = space.table(&Table::new("runs").unwrap()).unwrap();
+        start_chat_schema(&installation, &space, previous).await;
+
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        let mut tx = database.begin().await.unwrap();
+        tx.insert(
+            &runs,
+            json_object(&json!({
+                "threadId": "chat/threads:legacy", "messageId": "chat/messages:legacy",
+                "status": "done", "startedAt": 1,
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        database.close().await.unwrap();
+
+        start_chat_schema(&installation, &space, current).await;
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        let mut tx = database.read_only().await.unwrap();
+        assert!(
+            tx.query(&runs)
+                .with_index("by_status_expiresAt")
+                .collect()
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(tx.query(&runs).collect().await.unwrap().is_empty());
+        tx.commit().await.unwrap();
+        database.close().await.unwrap();
+    });
+}
+
+async fn start_chat_schema(installation: &Installation, space: &DataSpace, schema: Value) {
+    let source =
+        format!("export function describe() {{ return {{ schema: {schema}, functions: [] }}; }}");
+    let bundle = Arc::new(Bundle::new(source, None).unwrap());
+    let database = Database::open(installation.storage()).await.unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_in_space(database, pool, bundle, space.clone())
+        .await
+        .unwrap();
+    server.close().await.unwrap();
+}
+
 // ---------------------------------------------------------------------------
 // 7. Live updates and isolation
 // ---------------------------------------------------------------------------
@@ -1276,15 +1480,6 @@ async fn assert_failed_index_reload_persistence(
         let mut database = database;
         database.close().await.unwrap();
 
-        // The same refusal applies to a startup load over existing rows ...
-        installation.install(&ALPHA_ADDED);
-        let error = installation
-            .load()
-            .await
-            .map(|_| panic!("startup with a new index over rows was accepted"))
-            .unwrap_err();
-        assert!(error.contains(BACKFILL), "{error}");
-        // ... and a failed startup leaves the database loadable by the old code.
         installation.install(&ALPHA);
         let server = installation.load().await.unwrap();
         let mut client = Client::connect(&server).await;

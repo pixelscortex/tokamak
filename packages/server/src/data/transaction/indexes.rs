@@ -1,5 +1,7 @@
 use super::*;
-use crate::data::types::check_field;
+use crate::data::{DataSpace, types::check_field};
+use std::borrow::Cow;
+use surrealdb_datastore::key::schema::RecordPrefix;
 use surrealdb_idx::catalog::{Index, IndexDefinition, providers::*};
 use surrealdb_idx::val::{TableName, Value as StoredValue};
 
@@ -14,6 +16,22 @@ impl Transaction {
         fields: &[&str],
         unique: bool,
     ) -> Result<()> {
+        let result = self.try_define_index(table, name, fields, unique).await;
+        self.finish(result.and_then(|conflict| match conflict {
+            Some(reason) => Err(Error::Invalid(reason)),
+            None => Ok(()),
+        }))
+    }
+
+    /// Report an incompatible on-disk schema without poisoning the loader's
+    /// transaction. Validation and storage errors still poison it.
+    pub(crate) async fn try_define_index(
+        &mut self,
+        table: &Table,
+        name: &str,
+        fields: &[&str],
+        unique: bool,
+    ) -> Result<Option<&'static str>> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
@@ -39,10 +57,6 @@ impl Transaction {
             let core = &tx.state.storage;
 
             let tb = TableName::from(table.as_str());
-            tx.inner
-                .get_or_add_tb(None, "tokamak", "tokamak", &tb, None)
-                .await?;
-
             let cols = fields
                 .iter()
                 .map(|field| {
@@ -63,24 +77,23 @@ impl Transaction {
                 .get_tb_index(core.ns, core.db, &tb, name, None)
                 .await?
             {
-                return if existing.cols == cols && existing.index == kind {
-                    Ok(())
-                } else {
-                    Err(Error::Invalid(
-                        "a different index definition already uses that name; index backfill is not supported yet",
-                    ))
-                };
+                return Ok((existing.cols != cols || existing.index != kind).then_some(
+                    "a different index definition already uses that name; index backfill is not supported yet",
+                ));
             }
             tx.catalog(true)?;
 
             let core = &tx.state.storage;
 
             if tx.inner.tb_has_records(core.ns, core.db, &tb).await? {
-                return Err(Error::Invalid(
+                return Ok(Some(
                     "cannot define an index on a table with rows; index backfill is not supported yet",
                 ));
             }
 
+            tx.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &tb, None)
+                .await?;
             let index_id = core
                 .sequences
                 .next_index_id(None, core.ns, core.db, tb.clone())
@@ -101,6 +114,42 @@ impl Transaction {
             tx.inner.put_tb_index(core.ns, core.db, &tb, &index).await?;
             tx.catalog_changed = true;
 
+            Ok(None)
+        }
+        .await;
+        mutation.finish(result)
+    }
+
+    pub(crate) async fn reset_schema_space(
+        &mut self,
+        space: &DataSpace,
+        declared: &BTreeSet<&str>,
+    ) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
+        let result = async {
+            tx.ready(true)?;
+            tx.catalog(true)?;
+            let core = &tx.state.storage;
+            for table in tx.inner.all_tb(core.ns, core.db, None).await?.iter() {
+                let tb = &table.name;
+                if !space.can_reset_table(tb.as_str(), declared) {
+                    continue;
+                }
+                let indexes = tx.inner.all_tb_indexes(core.ns, core.db, tb, None).await?;
+                for index in indexes.iter() {
+                    tx.inner
+                        .del_tb_index(core.ns, core.db, tb, &index.name)
+                        .await?;
+                }
+                let records = RecordPrefix {
+                    ns: core.ns,
+                    db: core.db,
+                    tb: Cow::Borrowed(tb),
+                };
+                tx.inner.delr(records.range()?).await?;
+            }
+            tx.catalog_changed = true;
             Ok(())
         }
         .await;

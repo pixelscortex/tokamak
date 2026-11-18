@@ -129,28 +129,61 @@ impl Schema {
         }
         Ok(schema)
     }
-    pub(crate) async fn apply(&self, tx: &mut Transaction, space: &DataSpace) -> Result<(), Error> {
+    pub(crate) async fn apply(
+        &self,
+        tx: &mut Transaction,
+        space: &DataSpace,
+        startup: bool,
+    ) -> Result<Option<String>, Error> {
+        let Some(reason) = self.apply_indexes(tx, space).await? else {
+            return Ok(None);
+        };
+        if !startup {
+            return Err(invalid(reason));
+        }
+
+        // Replace this startup-only hard reset with migrations once supported.
+        let declared = self.tables.keys().map(String::as_str).collect();
+        Box::pin(tx.reset_schema_space(space, &declared))
+            .await
+            .map_err(|e| invalid(format!("{reason}; schema reset failed: {e}")))?;
+        if let Some(incompatibility) = self.apply_indexes(tx, space).await? {
+            return Err(invalid(incompatibility));
+        }
+        Ok(Some(reason))
+    }
+
+    async fn apply_indexes(
+        &self,
+        tx: &mut Transaction,
+        space: &DataSpace,
+    ) -> Result<Option<String>, Error> {
         for (name, definition) in &self.tables {
             let table = space
                 .table(&Table::new(name).map_err(|e| invalid(e.to_string()))?)
                 .map_err(|e| invalid(e.to_string()))?;
             for index in &definition.indexes {
                 let fields = index.fields.iter().map(String::as_str).collect::<Vec<_>>();
-                // define_index compares the complete catalog definition before
-                // checking for rows, under the existing gate/epoch contract.
-                Box::pin(tx.define_index(&table, &index.name, &fields, index.unique))
-                    .await
-                    .map_err(|e| {
-                        invalid(format!(
-                            "Plugin {} schema index {name}.{}: {e}",
-                            space.owner().unwrap_or("<legacy>"),
-                            index.name
-                        ))
-                    })?;
+                let context = |reason: &str| {
+                    format!(
+                        "Plugin {} schema index {name}.{}: {reason}",
+                        space.owner().unwrap_or("<legacy>"),
+                        index.name
+                    )
+                };
+                let conflict =
+                    Box::pin(tx.try_define_index(&table, &index.name, &fields, index.unique))
+                        .await
+                        .map_err(|e| invalid(context(&e.to_string())))?;
+                if let Some(reason) = conflict {
+                    return Ok(Some(context(reason)));
+                }
             }
-            // Removed declarations deliberately leave catalog indexes in place:
-            // dropping indexes and migration/backfill belong to later work.
         }
-        Ok(())
+        Ok(None)
     }
+}
+
+pub(crate) fn log_reset(reason: &str) {
+    eprintln!("Schema hard reset: wiped stored data for {reason}");
 }

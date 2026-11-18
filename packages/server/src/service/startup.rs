@@ -34,10 +34,15 @@ impl Server {
                 .await
                 .map_err(|e| Error::Invalid(e.to_string()))?;
 
-            match Box::pin(schema.apply(&mut tx, &space)).await {
-                Ok(()) => Box::pin(tx.commit())
-                    .await
-                    .map_err(|e| Error::Invalid(e.to_string()))?,
+            match Box::pin(schema.apply(&mut tx, &space, true)).await {
+                Ok(reset) => {
+                    Box::pin(tx.commit())
+                        .await
+                        .map_err(|e| Error::Invalid(e.to_string()))?;
+                    if let Some(reason) = reset {
+                        crate::schema::log_reset(&reason);
+                    }
+                }
                 Err(error) => {
                     Box::pin(tx.rollback()).await.map_err(|e| {
                         Error::Invalid(format!("{error}; schema rollback failed: {e}"))

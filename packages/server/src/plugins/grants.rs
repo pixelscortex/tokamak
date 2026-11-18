@@ -24,11 +24,15 @@ impl Loaded {
 
         let result = async {
             // Schemas and grants commit together for the candidate generation.
+            let mut resets = Vec::new();
             for (id, (descriptor, _)) in &self.inspected {
                 let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
-
                 let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
-                Box::pin(schema.apply(&mut tx, &space)).await?;
+                if let Some(reason) =
+                    Box::pin(schema.apply(&mut tx, &space, previous.is_none())).await?
+                {
+                    resets.push(reason);
+                }
             }
 
             let mut granted = Vec::new();
@@ -43,16 +47,19 @@ impl Loaded {
                 }
             }
 
-            Ok(granted)
+            Ok((granted, resets))
         }
         .await;
 
         match result {
-            Ok(granted) => {
+            Ok((granted, resets)) => {
                 Box::pin(tx.commit())
                     .await
                     .map_err(|e| invalid(e.to_string()))?;
 
+                for reason in resets {
+                    crate::schema::log_reset(&reason);
+                }
                 for Grant { id, version, count } in granted {
                     eprintln!(
                         "Auto-granted {count} declared capabilities to {id}@{version} (trusted local plugins)"
