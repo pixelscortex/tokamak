@@ -3,6 +3,7 @@ import { clientEntry } from "./descriptor.ts";
 /** Public client declarations come from the entry's symbol graph, never a
  * runtime scan. This also intercepts calls inside the declaring plugin. */
 import ts from "typescript";
+import { normalizePath } from "vite";
 import MagicString from "magic-string";
 import type { Plugin } from "vite";
 
@@ -15,7 +16,7 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
     name: "tokamak-client-surface",
     enforce: "pre",
     transform(code, id) {
-      if (!id.startsWith(root() + "/src/") || !/\.tsx?$/.test(id)) return;
+      if (!normalizePath(id).startsWith(normalizePath(root()) + "/src/") || !/\.tsx?$/.test(id)) return;
       if (!declarations) {
         declarations = new Map();
         const entry = clientEntry(root());
@@ -54,8 +55,8 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
             continue;
           const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
           if (type.getProperties().some((p) => p.name.startsWith("__@contributionBrand@"))) continue;
-          const file = declaration.getSourceFile().fileName;
-          if (!file.startsWith(root() + "/src/")) continue;
+          const file = normalizePath(declaration.getSourceFile().fileName);
+          if (!normalizePath(file).startsWith(normalizePath(root()) + "/src/")) continue;
           let names = declarations.get(file);
           if (!names) declarations.set(file, (names = new Map()));
           const targets = names.get(symbol.name) ?? [];

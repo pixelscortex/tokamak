@@ -93,6 +93,10 @@ impl Supervisor {
         }))
     }
     async fn process(&self) -> Result<Arc<Process>, String> {
+        // Windows needs Job Object containment before worker descendants can be
+        // terminated reliably on cancellation or server exit.
+        #[cfg(windows)]
+        windows_worker_support()?;
         let mut state = self.state.lock().await;
         if self.closed.is_cancelled() {
             return Err(format!("Plugin {} worker is stopped", self.id));
@@ -216,3 +220,8 @@ impl Drop for Supervisor {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(windows)]
+fn windows_worker_support() -> Result<(), String> {
+    Err("Plugin worker runtime is unavailable on Windows (Job Object containment is not implemented)".into())
+}

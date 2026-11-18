@@ -20,7 +20,11 @@ run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak", ...(relea
   if (!target) throw new Error("Cannot determine sidecar target");
   const directory = `${root}app/src-tauri/dist`;
   await mkdir(directory, { recursive: true });
-  await cp(`${root}target/${release ? "release" : "debug"}/tokamak`, `${directory}/tokamak-${target}`);
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  await cp(
+    `${root}target/${release ? "release" : "debug"}/tokamak${suffix}`,
+    `${directory}/tokamak-${target}${suffix}`,
+  );
   await rm(`${directory}/plugins`, { recursive: true, force: true });
   for (const plugin of await readdir(`${root}plugins`, { withFileTypes: true })) {
     if (!plugin.isDirectory()) continue;

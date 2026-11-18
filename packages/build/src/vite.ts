@@ -1,4 +1,4 @@
-import type { InlineConfig, PluginOption } from "vite";
+import { normalizePath, type InlineConfig, type PluginOption } from "vite";
 import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 import { dirname, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
@@ -64,7 +64,8 @@ export function tokamak(
         };
       },
       resolveId(id) {
-        if (id === resolve(root, ".tokamak-backend-entry.js")) return "\0tokamak-backend-entry";
+        if (id === normalizePath(resolve(root, ".tokamak-backend-entry.js")))
+          return "\0tokamak-backend-entry";
       },
       load(id) {
         if (id === "\0tokamak-backend-entry") return "export {};";
