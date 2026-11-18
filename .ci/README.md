@@ -5,7 +5,7 @@ TypeScript, blocking Rust lint and the native stage on every PR. Rust lint check
 workspace crate, including `app/src-tauri`, with warnings denied. Native installs
 the Linux Tauri libraries and Playwright's Chromium/WebKit dependencies. Download caches cover pinned tools, Bun, Cargo and
 Playwright browsers; sccache covers Rust compilation. The same workflow's `desktop` job builds the
-unsigned macOS Tauri bundle on every PR. `.ci/check.sh` contains the stage commands.
+unsigned macOS Tauri bundle on pushes to `main` and when started by hand; it is skipped on pull requests. `.ci/check.sh` contains the stage commands.
 
 Run `bash .ci/release-macos.sh` on macOS arm64 for a manual local release, or
 manually dispatch the **Unsigned macOS release** workflow. The Tauri hook builds

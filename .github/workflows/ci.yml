@@ -75,7 +75,9 @@ jobs:
       - if: always()
         run: sccache --show-stats
   desktop:
-    # The unsigned macOS Tauri bundle, built beside the Linux jobs.
+    # The unsigned macOS Tauri bundle. Like the Windows installer, it is built
+    # for main (and by hand) only, so pull requests are not held up by it.
+    if: github.event_name != 'pull_request'
     runs-on: depot-macos-latest
     timeout-minutes: 60
     env:
