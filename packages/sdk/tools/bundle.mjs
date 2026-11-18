@@ -3,7 +3,7 @@
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
-import { join, resolve, relative, dirname } from "node:path";
+import { join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { workerSources } from "./worker.mjs";
@@ -169,10 +169,11 @@ if (import.meta.main) {
 async function scanFiles(root) {
   const files = [];
   const scanner = new Bun.Transpiler({ loader: "ts" });
-  for await (const file of new Bun.Glob("**/*.ts").scan({
+  for await (const scanned of new Bun.Glob("**/*.ts").scan({
     cwd: root,
     onlyFiles: true,
   })) {
+    const file = scanned.split(sep).join("/");
     if (!isServerModule(root, file)) continue;
     // scan is a real parser, not a regexp. We do not interpret initializer
     // syntax: exported definitions are recognized by their runtime brand.

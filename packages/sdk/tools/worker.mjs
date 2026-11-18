@@ -1,7 +1,7 @@
 // Classify exported definitions through their SDK types, without evaluating
 // authored modules on the build machine (aliases and reexports work too).
 import ts from "typescript";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { bunPluginBoundary, pluginCompilerOptions } from "./plugin-boundary.mjs";
 
 export async function workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot }) {
@@ -60,7 +60,10 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
     ["worker.js", workerSource, "external"],
     [
       "worker-entry.js",
-      (await Bun.file(join(sdkRoot, "worker/entry.ts")).text()).replaceAll("../src/", sdkRoot + "/src/"),
+      (await Bun.file(join(sdkRoot, "worker/entry.ts")).text()).replaceAll(
+        "../src/",
+        sdkRoot.split(sep).join("/") + "/src/",
+      ),
       "none",
     ],
   ]) {
