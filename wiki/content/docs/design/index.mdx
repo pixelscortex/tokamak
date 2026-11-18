@@ -99,12 +99,12 @@ Tailwind utilities defined with the tokens. Use them as classes.
 | `nest-lg/1`                            | Radius and padding on a container; children take `rounded-inner`.              |
 | `rounded-inner`                        | `max(0, container radius − its padding)`: concentric by construction.          |
 | `text-read`, `-row`, `-label`, `-data` | The four type roles; `text-data` is mono.                                      |
-| `focus-ring`                           | The 2 px brand ring with a 2 px gap, on keyboard focus.                        |
+| `focus-ring`                           | The 2 px `brand-text` ring with a 2 px gap, on keyboard focus.                 |
 | `key`                                  | A pressable key: fading fill, `lip`, `highlight`, raised shadow, hover, press. |
 | `lip`, `highlight`                     | The key's parts: the dark bottom edge, the light top edge and inner ring.      |
 | `py-line`                              | Block padding that centres one row line in a 32 px control.                    |
 | `text-trim`                            | Centres text on its cap height where the webview supports it.                  |
-| `link`                                 | Brand, underlined, offset 0.2 em.                                              |
+| `link`                                 | `brand-text`, underlined, offset 0.2 em.                                       |
 | `light:`                               | A variant for light-theme-only adjustments.                                    |
 
 ## Tokens
@@ -114,7 +114,7 @@ Tailwind utilities defined with the tokens. Use them as classes.
 | Tones   | `window`, `stage`, `tray`, `card`, `band`                                                                                    |
 | Text    | `ink`, `ink-2`, `ink-3`                                                                                                      |
 | Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                                                                        |
-| Brand   | `brand`, `brand-ink`, `brand-tint`                                                                                           |
+| Brand   | `brand`, `brand-text`, `brand-ink`, `brand-tint`                                                                             |
 | Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                                                                    |
 | State   | `hover`, `selected` (set by the surface underneath)                                                                          |
 | Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono`                                                 |
@@ -166,15 +166,21 @@ Semantic colours each have one job:
 | Amber  | Warning, needs you          | `#FBBF24` | `#2A2110` | `#8A5300`  | `#FEF4DE`  |
 | Blue   | Information                 | `#60A5FA` | `#111F36` | `#1D4ED8`  | `#EAF1FE`  |
 
-The brand colour is a purple taken from the Porffor site, with only the
-shades that have a job:
+The brand colour is a saturated purple, `#9845F2`, with only the shades that
+have a job:
 
-| Token        | Job                        | Dark      | Light     | Measured                                       |
-| ------------ | -------------------------- | --------- | --------- | ---------------------------------------------- |
-| `brand`      | Brand button, links, focus | `#B787F0` | `#7B3FD1` | as text: 5.86 to 7.38 dark, 4.80 to 6.05 light |
-| `brand-ink`  | Text on the brand fill     | `#0E021C` | `#FFFFFF` | 7.41 dark, 6.05 light                          |
-| `brand-tint` | A quiet brand wash         | `#231433` | `#F3EAFF` | brand on it: 6.35 dark, 5.19 light             |
+| Token        | Job                      | Dark      | Light     | Measured                                           |
+| ------------ | ------------------------ | --------- | --------- | -------------------------------------------------- |
+| `brand`      | The brand button's fill  | `#9845F2` | `#7B1ECF` | white on it: 4.70 to 6.00 dark, 5.43 to 7.17 light |
+| `brand-text` | Brand text, links, focus | `#AB6CF6` | `#7B1ECF` | as text: 4.70 to 5.92 dark, 5.69 to 7.17 light     |
+| `brand-ink`  | Text on the brand fill   | `#FFFFFF` | `#FFFFFF` | see `brand`                                        |
+| `brand-tint` | A quiet brand wash       | `#2B1E39` | `#F4EDFB` | `brand-text` on it: 4.62 dark, 6.27 light          |
 
+- `brand` itself is too dark for text on the dark tones (4.05 on stage), so
+  brand-coloured text, links and the focus ring use `brand-text`. In light the
+  two are the same value. The dark tint is `brand` at 16% over `tray`.
+- White on `brand` is measured from the bottom of the key's fill to its top,
+  which is `brand` at 85% over the surface underneath.
 - Brand marks four things: the brand button, links (`link`: underlined, 0.2 em below the text), the
   keyboard focus ring and nothing else. Selected rows stay a neutral fill with
   ink and weight 500: they are many per screen, and colour there is noise.
@@ -257,8 +263,10 @@ Every filled button is a `key`: the fill fades from the colour at the bottom
 to 85% at the top, interpolated in OKLCH; a 2 px `lip` inside the bottom edge
 (in light also a 1 px edge all round), a translucent white ring and a top
 `highlight`, and `shadow-raised`. Hover brightens it, pressing darkens it.
-A variant is only its colours, for example `key from-brand to-brand/85
-text-brand-ink`.
+A variant is only its colours, for example `key from-ink to-ink/85
+text-stage`. The brand key is the one exception: brightening would drop its
+white label to 4.10 on dark, so on hover its top fills to full `brand`
+instead (`hover:to-brand`).
 
 | Variant       | Fill               | Text        | Use                                          |
 | ------------- | ------------------ | ----------- | -------------------------------------------- |
@@ -341,7 +349,7 @@ words.
   the "fill" glyph beside a 600 label.
 
 - Every click target is at least 32 × 32, even when the icon inside is 16.
-- Keyboard focus is a 2 px `brand` ring with a 2 px gap in the surface colour.
+- Keyboard focus is a 2 px `brand-text` ring with a 2 px gap in the surface colour.
   It does not appear on hover.
 - One brand or primary action per region.
 

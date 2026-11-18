@@ -24,6 +24,7 @@ const colors = [
   "warn-tint",
   "info-tint",
   "brand",
+  "brand-text",
   "brand-ink",
   "brand-tint",
   "edge",
