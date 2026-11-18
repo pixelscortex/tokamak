@@ -128,10 +128,10 @@ fn reuse_decision(
     if actual != identity {
         return Err("Local server identity does not match discovery".into());
     }
-    if identity.plugin_root.as_deref() != Some(plugins) {
-        return Err("Local server uses a different plugin installation; stop it with server:stop before launching Tokamak".into());
-    }
-    Ok(identity.build_id.as_deref() == Some(build))
+    // A server started from another installation (a dev checkout, an older app)
+    // owns the same data folder, so it is replaced like any other stale build.
+    Ok(identity.plugin_root.as_deref() == Some(plugins)
+        && identity.build_id.as_deref() == Some(build))
 }
 
 fn status(client: &Client, directory: &Path, plugins: &Path, build: &str) -> Result<Status> {
@@ -499,14 +499,10 @@ mod tests {
     }
 
     #[test]
-    fn different_plugin_installation_is_preserved_even_for_old_builds() {
-        let discovered = identity(None);
-        assert_eq!(
-            reuse_decision(&discovered, &discovered, Path::new("other"), "current")
-                .unwrap_err()
-                .to_string(),
-            "Local server uses a different plugin installation; stop it with server:stop before launching Tokamak"
-        );
+    fn a_server_from_another_installation_is_replaced() {
+        // Same build, but started from another plugins folder: never reused.
+        let discovered = identity(Some("current"));
+        assert!(!reuse_decision(&discovered, &discovered, Path::new("other"), "current").unwrap());
     }
 
     #[test]
