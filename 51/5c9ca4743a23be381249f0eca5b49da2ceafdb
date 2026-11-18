@@ -1,0 +1,27 @@
+packages/server/tests/build-worker.mjs
+  s_0e92c3a8ca720e::t_740623345f6c10 5-7,12
+.github/workflows/ci.yml
+  s_0e92c3a8ca720e::t_efef80b4ef7049 140,142,144
+packages/server/src/host/worker/windows.rs
+  s_0e92c3a8ca720e::t_82e0e7d9ac52c3 110
+plugins/acp/src/server/agents/discovery.ts
+  s_0e92c3a8ca720e::t_7e1a4e13556a84 22
+  s_0e92c3a8ca720e::t_9332a3b49d9824 72,74
+  s_0e92c3a8ca720e::t_e51b02bee6bc6e 11-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "515c9ca4743a23be381249f0eca5b49da2ceafdb",
+  "prompts": {},
+  "sessions": {
+    "s_0e92c3a8ca720e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "48887696-7c5b-4e46-94a0-6a95e2c25188",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
