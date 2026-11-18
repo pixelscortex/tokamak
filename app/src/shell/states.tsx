@@ -1,6 +1,7 @@
-import { Show } from "solid-js";
+import { Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button, Icon, StatusIcon, icons } from "@tokamak/ui";
+import { Button, Icon, StatusIcon, Textarea, icons } from "@tokamak/ui";
+import { hosted, hostedTokenKey } from "../host/endpoint";
 import { useShell } from "./context";
 import { shellIcons } from "./icons";
 import { hrefOf } from "./views";
@@ -43,6 +44,7 @@ export function Connecting(): JSX.Element {
 
 export function Unreachable(props: { reason: string }): JSX.Element {
   const shell = useShell();
+  const [token, setToken] = createSignal("", { ownedWrite: true });
   return (
     <Notice
       role="alert"
@@ -52,13 +54,42 @@ export function Unreachable(props: { reason: string }): JSX.Element {
       action={
         <div class="flex flex-col items-center gap-4">
           <p class="text-data text-ink-3">{props.reason}</p>
-          <Button variant="primary" onClick={() => shell.session.retry()}>
-            Retry
-          </Button>
+          <Show
+            when={hosted()}
+            fallback={
+              <Button variant="primary" onClick={() => shell.session.retry()}>
+                Retry
+              </Button>
+            }
+          >
+            <form
+              class="flex w-full max-w-read flex-col gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                localStorage.setItem(hostedTokenKey, token());
+                shell.session.retry();
+              }}
+            >
+              <label class="text-row text-ink" for="access-token">
+                Access token
+              </label>
+              <Textarea
+                id="access-token"
+                aria-label="Access token"
+                autocomplete="off"
+                value={token()}
+                onInput={(event) => setToken(event.currentTarget.value)}
+                required
+              />
+              <Button variant="primary" type="submit">
+                Connect
+              </Button>
+            </form>
+          </Show>
         </div>
       }
     >
-      The window could not open a connection to its local server. Retry looks for it again.
+      The window could not open a connection to the server.
     </Notice>
   );
 }

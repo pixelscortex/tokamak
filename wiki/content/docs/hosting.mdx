@@ -1,0 +1,56 @@
+---
+title: Hosting
+description: Run the server and web UI in one container.
+---
+
+Build and run locally:
+
+```sh
+docker build -t tokamak .
+# Generate a private token of at least 32 characters; don't commit it.
+export TOKAMAK_ACCESS_TOKEN="$(openssl rand -hex 32)"
+docker run --name tokamak -p 3000:3000 \
+  -v tokamak-data:/data \
+  -e TOKAMAK_ACCESS_TOKEN \
+  -e TOKAMAK_PUBLIC_URL=http://localhost:3000 tokamak
+```
+
+Open `http://localhost:3000`, enter the token, and select **Connect**. The browser
+stores the token in localStorage for this origin. Clear it there to forget it.
+This is one shared secret with full access, pending per-person sign-in. Use HTTPS
+when exposing the server remotely. Disable proxy query-string logging: WebSocket
+and plugin requests carry the token as `?token=` (HTTP also accepts Bearer auth).
+Tokens are never included in server logs.
+
+The image includes only the chat plugin. Threads can be created and saved; the
+agent picker is empty until agents on users' machines are connected. No agent
+processes run in this image. JavaScript runs in the server's embedded QuickJS;
+chat needs no external Bun, Node, or agent runtime in the final image.
+
+| Setting                                 | Purpose                                                                                                                                                                                                                                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TOKAMAK_ACCESS_TOKEN`                  | Required in hosted mode; at least 32 characters.                                                                                                                                                                                                           |
+| `TOKAMAK_WEB_DIR` / `--web <directory>` | Built web directory; flag overrides env. Enables hosted mode.                                                                                                                                                                                              |
+| `TOKAMAK_PUBLIC_URL`                    | Public HTTP(S) origin, e.g. `https://tokamak.example.app`. Automatically accepted by the WebSocket/plugin origin allowlist, including behind a TLS proxy. Direct HTTP also accepts the request host automatically; set this explicitly for an HTTPS proxy. |
+| `TOKAMAK_ALLOWED_ORIGINS`               | Optional comma-separated additional browser origins (replaces desktop/dev defaults). The public origin is always included.                                                                                                                                 |
+| `PORT`                                  | Without `--listen`, binds `0.0.0.0:$PORT`. Image default: `3000`.                                                                                                                                                                                          |
+| `--listen <address:port>`               | Overrides `PORT`. Outside hosted mode, only loopback is allowed.                                                                                                                                                                                           |
+| `--data <directory>`                    | Persistent store directory; image uses `/data/store`. Created on first start and reused on restart.                                                                                                                                                        |
+| `--plugins <directory>`                 | Plugin artifact root; image contains only `/opt/tokamak/plugins/chat`.                                                                                                                                                                                     |
+
+Mount a volume at `/data` and keep it across container replacements. The container
+runs as UID 10001; bind mounts must be writable by that user. The healthcheck uses
+public `/health`. The shell HTML, JavaScript and CSS are public so the connect
+form can load; `/ws`, the plugin catalog and all plugin assets require the token.
+Hashed shell assets cache for a year; HTML uses `no-cache`. API routes take priority
+over client-side navigation fallback. Desktop `--local-dir` is separate and cannot
+be combined with `--web`.
+
+For Railway: deploy using the root Dockerfile, attach a volume at `/data`, and set
+`TOKAMAK_ACCESS_TOKEN` and `TOKAMAK_PUBLIC_URL` to the service's public HTTPS origin.
+Railway supplies `PORT`. Termination signals close the store cleanly. Run one
+replica per volume; the embedded store owns an exclusive lock.
+
+Railway mounts volumes as root, and the image runs as a non-root user. Set
+`RAILWAY_RUN_UID=0` on the service so the server can write to `/data`. The
+Dockerfile has no `VOLUME` line because Railway attaches the volume itself.

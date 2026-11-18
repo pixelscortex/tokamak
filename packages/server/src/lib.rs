@@ -15,6 +15,7 @@ pub mod plugins;
 pub mod protocol;
 mod schema;
 mod service;
+mod web;
 pub mod websocket;
 
 pub use backend::{Backend, BackendConfig};

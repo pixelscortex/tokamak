@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
-import { endpoint } from "../host/endpoint";
+import { endpoint, hosted } from "../host/endpoint";
 import type { ServerEndpoint } from "../plugins/adapter";
 import { createPluginShell, type PluginRouting, type PluginShell } from "../plugins/views";
 
@@ -36,6 +36,10 @@ export function createSession(options: SessionOptions): Session {
     setConnection({ state: "connecting" });
     const supplied = await (options.getEndpoint ?? endpoint)();
     if (current !== attempt) return;
+    if (!options.getEndpoint && hosted() && !supplied.token) {
+      setConnection({ state: "failed", reason: "Enter your access token to connect." });
+      return;
+    }
     const url = new URL(supplied.ws);
     if (supplied.token) url.searchParams.set("token", supplied.token);
     const socket = new window.WebSocket(url);

@@ -30,6 +30,8 @@ use tokio::{
 
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
+pub use crate::web::HostedWeb;
+
 const CONNECTIONS: u32 = 64;
 const MESSAGE_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
 
@@ -40,6 +42,32 @@ struct Adapter {
     connections: Arc<Semaphore>,
     access: Option<LocalAccess>,
     origins: Arc<Vec<String>>,
+    hosted: bool,
+}
+
+fn allowed_origins(web: Option<&HostedWeb>) -> Arc<Vec<String>> {
+    Arc::new({
+        let mut origins: Vec<String> = std::env::var("TOKAMAK_ALLOWED_ORIGINS")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_else(|_| {
+                vec![
+                    "tauri://localhost".into(),
+                    "http://tauri.localhost".into(),
+                    "http://127.0.0.1:1420".into(),
+                ]
+            });
+        if let Some(web) = web {
+            origins.push(web.origin.clone());
+        }
+        origins
+    })
 }
 
 /// Local desktop capability. Never place the token in discovery or logs.
@@ -51,7 +79,7 @@ pub struct LocalAccess {
 
 /// Own and await this future until completion, then close the backend. Shutdown
 /// closes idle upgraded sockets too, and waits for their session owners to drop.
-/// No authentication/TLS: non-loopback listeners are deliberately refused.
+/// Without hosted configuration, non-loopback listeners are refused.
 pub async fn serve(
     listener: TcpListener,
     server: Arc<Server>,
@@ -66,7 +94,27 @@ pub async fn serve_with_access(
     shutdown: impl Future<Output = ()> + Send + 'static,
     access: Option<LocalAccess>,
 ) -> std::io::Result<()> {
-    if !listener.local_addr()?.ip().is_loopback() {
+    serve_with_web(listener, server, shutdown, access, None).await
+}
+
+pub async fn serve_with_web(
+    listener: TcpListener,
+    server: Arc<Server>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+    access: Option<LocalAccess>,
+    web: Option<HostedWeb>,
+) -> std::io::Result<()> {
+    if web.is_some()
+        && access
+            .as_ref()
+            .is_none_or(|access| access.token.chars().count() < 32)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Hosted mode requires an access token of at least 32 characters",
+        ));
+    }
+    if !listener.local_addr()?.ip().is_loopback() && (web.is_none() || access.is_none()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "unauthenticated POC must bind loopback",
@@ -74,43 +122,41 @@ pub async fn serve_with_access(
     }
     let stopping = CancellationToken::new();
     let connections = Arc::new(Semaphore::new(CONNECTIONS as usize));
+    let hosted = web.is_some();
     let adapter = Adapter {
         server,
+        hosted,
         stopping: stopping.clone(),
         connections: connections.clone(),
         access: access.clone(),
-        origins: Arc::new(
-            std::env::var("TOKAMAK_ALLOWED_ORIGINS")
-                .map(|value| {
-                    value
-                        .split(',')
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_else(|_| {
-                    vec![
-                        "tauri://localhost".into(),
-                        "http://tauri.localhost".into(),
-                        "http://127.0.0.1:1420".into(),
-                    ]
-                }),
-        ),
+        origins: allowed_origins(web.as_ref()),
     };
     let mut app = Router::new()
         .route("/ws", get(upgrade))
         .route("/plugins", get(plugins))
         .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
+    if hosted {
+        app = app.route("/health", get(|| async { "ok" }));
+    } else if access.is_some() {
+        app = app.route("/health", get(health));
+    }
     if access.is_some() {
         app = app
-            .route("/health", get(health))
             .route("/shutdown", post(stop))
             .route("/plugins/{id}/reload", post(reload_plugin));
     }
     let app = app
         .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
         .with_state(adapter);
+    let app = if let Some(web) = web {
+        app.fallback_service(
+            Router::new()
+                .fallback(get(crate::web::shell))
+                .with_state(web),
+        )
+    } else {
+        app
+    };
     // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
@@ -155,14 +201,17 @@ async fn authorize(
     let origin = headers.get("origin");
     if let Some(origin) = origin
         && (!browser_route
-            || !adapter
+            || !(adapter
                 .origins
                 .iter()
-                .any(|allowed| origin.as_bytes() == allowed.as_bytes()))
+                .any(|allowed| origin.as_bytes() == allowed.as_bytes())
+                || (adapter.hosted && same_http_origin(&headers, origin))))
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if let Some(access) = &adapter.access {
+    if let Some(access) = &adapter.access
+        && !(adapter.hosted && request.uri().path() == "/health")
+    {
         let bearer = headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -174,15 +223,7 @@ async fn authorize(
                     .flatten()
             })
             .unwrap_or_default();
-        let expected = access.token.as_bytes();
-        let mismatch = actual.len() != expected.len()
-            || actual
-                .as_bytes()
-                .iter()
-                .zip(expected)
-                .fold(0u8, |a, (x, y)| a | (x ^ y))
-                != 0;
-        if mismatch {
+        if !valid_token(actual, &access.token) {
             return StatusCode::UNAUTHORIZED.into_response();
         }
     }
@@ -196,6 +237,24 @@ async fn authorize(
             .insert("vary", "Origin".parse().expect("header"));
     }
     response
+}
+
+// Direct HTTP hosting needs no origin configuration, even on a wildcard bind.
+// TLS proxies use TOKAMAK_PUBLIC_URL; never trust forwarded headers for this.
+fn same_http_origin(headers: &HeaderMap, origin: &axum::http::HeaderValue) -> bool {
+    headers
+        .get("host")
+        .and_then(|host| host.to_str().ok())
+        .and_then(|host| reqwest::Url::parse(&format!("http://{host}")).ok())
+        .is_some_and(|url| origin.as_bytes() == url.origin().ascii_serialization().as_bytes())
+}
+
+// Fixed-size digests keep the comparison constant-time, including unequal lengths.
+// All shared-token policy lives here so invite authentication can replace it.
+fn valid_token(actual: &str, expected: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    use subtle::ConstantTimeEq;
+    bool::from(Sha256::digest(actual.as_bytes()).ct_eq(&Sha256::digest(expected.as_bytes())))
 }
 
 async fn health(State(adapter): State<Adapter>) -> Response {
@@ -395,5 +454,41 @@ impl AsyncWrite for ShutdownIo {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
+    }
+}
+
+#[cfg(test)]
+mod access_tests {
+    use super::{same_http_origin, valid_token};
+
+    #[test]
+    fn direct_http_origin_matches_the_request_host_only() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "localhost:43123".parse().unwrap());
+        assert!(same_http_origin(
+            &headers,
+            &"http://localhost:43123".parse().unwrap()
+        ));
+        for origin in [
+            "https://localhost:43123",
+            "http://localhost:43124",
+            "http://untrusted.invalid",
+        ] {
+            assert!(!same_http_origin(&headers, &origin.parse().unwrap()));
+        }
+    }
+
+    #[test]
+    fn shared_token_requires_an_exact_match() {
+        let secret = "0123456789abcdef0123456789abcdef";
+        assert!(valid_token(secret, secret));
+        for token in [
+            "",
+            "0123456789abcdef",
+            "0123456789abcdef0123456789abcdeg",
+            "0123456789abcdef0123456789abcdefextra",
+        ] {
+            assert!(!valid_token(token, secret));
+        }
     }
 }
