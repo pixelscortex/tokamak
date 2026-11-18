@@ -1,0 +1,25 @@
+.ci/README.md
+  s_4ccc9a2575a981::t_c48afd72922200 4-18
+.ci/check.sh
+  s_4ccc9a2575a981::t_39f9f9d1c7e1de 3-4,6-9,16-17
+.github/workflows/ci.yml
+  s_4ccc9a2575a981::t_e1dcdf349a99b7 25-26,41,44-46,48,57,142
+moon.yml
+  s_4ccc9a2575a981::t_ac126d6814b151 31-32,37-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0796e0a104c6081c4bfb617c2c887c6ce4410c4e",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
