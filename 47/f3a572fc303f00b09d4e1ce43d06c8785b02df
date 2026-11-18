@@ -1,0 +1,223 @@
+plugins/chat/src/server/backends/backends.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 35-36
+  s_08bcf79c94cd18::t_3ca1ab7b143932 3
+  s_08bcf79c94cd18::t_4cde7692842e3d 37
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 2,9,15,23-25,27-31
+  s_08bcf79c94cd18::t_dcf706d40ca49b 26,38
+packages/build/src/machine.ts
+  s_08bcf79c94cd18::t_d56f575d265414 1-7,9-12
+  s_08bcf79c94cd18::t_909a68d8bb082d 8
+packages/build/src/descriptor.ts
+  s_08bcf79c94cd18::t_d56f575d265414 68-76,78
+  s_08bcf79c94cd18::t_040f4a6f53b8ec 77
+packages/sdk/src/plugin.ts
+  s_08bcf79c94cd18::t_d56f575d265414 17-18,85,140-144
+plugins/chat/src/server/permissions/permissions.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 32,41-42
+  s_08bcf79c94cd18::t_62a9970f95119c 8-9,59-60,83-84
+packages/build/src/vite.ts
+  s_08bcf79c94cd18::t_62a9970f95119c 51-52
+  s_08bcf79c94cd18::t_d56f575d265414 148-155,157-159
+  s_08bcf79c94cd18::t_e23f6e3aec94b5 156
+packages/server/src/plugins/mod.rs
+  s_08bcf79c94cd18::t_d56f575d265414 41-42
+packages/server/src/service/command_loop.rs
+  s_08bcf79c94cd18::t_d56f575d265414 9-10,14
+e2e/machine-link.ts
+  s_08bcf79c94cd18::t_26a9cac642ab55 76,81,84,92,121,154,159,175-176,184,199,208,210-211,213,217,223,243,245-285,289,291,297,308,317,323,331,338,346,354
+  s_08bcf79c94cd18::t_dabce9cee8a093 46-48
+  s_08bcf79c94cd18::t_ab847b377c156f 237
+  s_08bcf79c94cd18::t_30b52428bf4059 1-45,49-75,77-80,82-83,85-91,93-120,122-153,155-158,160-174,177-183,185-198,200-207,209,212,214-216,218-222,224-236,238-242,244,286-288,290,292-296,298-307,309-316,318-322,324-330,332-337,339-345,347-353,355-382
+plugins/chat/src/client/lib/state/use-backends.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 12,20,42,44-59
+  s_08bcf79c94cd18::t_60e787b0651a28 43
+plugins/acp/src/server/turn/acp-turn.ts
+  s_08bcf79c94cd18::t_97dde38ef5888e 2-3,9,24
+packages/server/src/websocket.rs
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 238-239
+  s_08bcf79c94cd18::t_246dd4d778e0cd 584-586,588
+  s_08bcf79c94cd18::t_d56f575d265414 180-182,589,591
+  s_08bcf79c94cd18::t_8277a0dfa23bbc 587,590,592-594
+app/src/host/servers.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 37-38,52-55,57-61,67-68,73,162-164
+  s_08bcf79c94cd18::t_bb9b72a680def1 56,62-66
+plugins/acp/src/machine/main.ts
+  s_08bcf79c94cd18::t_01b4f7cb2af9a3 104-105
+  s_08bcf79c94cd18::t_62a9970f95119c 133
+  s_08bcf79c94cd18::t_97dde38ef5888e 1-6,8-16,18-56,58-80,82-94,96-103,106-127,129-132,134-140,142-172,174-179,181-188,191-193,198,200-201,203,205-206
+  s_08bcf79c94cd18::t_ab847b377c156f 202
+  s_08bcf79c94cd18::t_8fa96996b5669f 7,17,57,81,95,128,141,173,180,189-190,194-197,199,204
+packages/sdk/src/client.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 30-31,33
+  s_08bcf79c94cd18::t_22a129949ff699 32
+plugins/chat/src/client/lib/state/use-chat.ts
+  s_08bcf79c94cd18::t_d88d58f5ab13ae 28-29
+  s_08bcf79c94cd18::t_246dd4d778e0cd 22-25,27,31,34
+  s_08bcf79c94cd18::t_4ae122ccecda3a 26,30,32-33,90,118-120
+packages/server/tests/build-actions.mjs
+  s_08bcf79c94cd18::t_3ca1ab7b143932 163,172
+  s_08bcf79c94cd18::t_4cde7692842e3d 164-171
+packages/server/src/service/plugin_control.rs
+  s_08bcf79c94cd18::t_d56f575d265414 46-48,129,159
+packages/server/src/web.rs
+  s_08bcf79c94cd18::t_62a9970f95119c 65
+e2e/browser.ts
+  s_08bcf79c94cd18::t_dabce9cee8a093 13,37-40
+plugins/acp/src/server/turn/turn-buffer.ts
+  s_08bcf79c94cd18::t_97dde38ef5888e 1,3,10,31,60
+app/src/host/machine.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 1-14,16-18
+  s_08bcf79c94cd18::t_0debb6a7530eb1 15
+packages/sdk/src/host.ts
+  s_08bcf79c94cd18::t_d56f575d265414 45
+plugins/chat/src/server/threads/threads.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 11-13,15,26,113-116,118-122
+  s_08bcf79c94cd18::t_62a9970f95119c 1,9-10
+  s_08bcf79c94cd18::t_3ca1ab7b143932 6,16,112
+  s_08bcf79c94cd18::t_81b67bfb259b16 14,17-25,78-82,85-86,117,123
+packages/sdk/worker/entry.ts
+  s_08bcf79c94cd18::t_d56f575d265414 23-24,57-59,61-64
+  s_08bcf79c94cd18::t_bae468e99821ee 60
+plugins/chat/src/server/api.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 15-20,22
+  s_08bcf79c94cd18::t_2ed0b443b702cd 21
+plugins/acp/src/server/turn/chat-port.ts
+  s_08bcf79c94cd18::t_97dde38ef5888e 1-5,7-17
+  s_08bcf79c94cd18::t_c72c87fbdc7307 6
+packages/server/src/plugins/manifest.rs
+  s_08bcf79c94cd18::t_d56f575d265414 38-39,78-79,201-211,213-216
+  s_08bcf79c94cd18::t_dd07fff1b4bed9 212,217
+plugins/chat/src/client/lib/api.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 29-31,39-43,58,62
+plugins/chat/src/client/lib/state/use-drafts.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 37-39,41
+  s_08bcf79c94cd18::t_79042c859de107 40
+plugins/acp/src/server/turn/permission-poller.ts
+  s_08bcf79c94cd18::t_97dde38ef5888e 1-2,9,20,24,36,38
+packages/server/src/service/machine.rs
+  s_08bcf79c94cd18::t_d56f575d265414 1-12,15,17-94,96,98-109,111-115,117-123,125-134
+  s_08bcf79c94cd18::t_c3ed9b5446c661 13-14,16,95,97,110,116,124
+packages/sdk/src/machine.ts
+  s_08bcf79c94cd18::t_d56f575d265414 1-4,6-16
+  s_08bcf79c94cd18::t_bd425c82bc8815 5
+plugins/chat/src/server/_functions.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 37,39-42
+  s_08bcf79c94cd18::t_3ca1ab7b143932 1-7,15-18
+  s_08bcf79c94cd18::t_62a9970f95119c 33,38
+  s_08bcf79c94cd18::t_18deefe522d633 19
+plugins/chat/src/server/schema.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 8-33,62-66
+app/src/shell/session.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 74
+e2e/serve-hosted.ts
+  s_08bcf79c94cd18::t_dabce9cee8a093 22
+plugins/chat/src/server/runs/runs.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 66
+  s_08bcf79c94cd18::t_246dd4d778e0cd 16
+  s_08bcf79c94cd18::t_50e52a8e2f2e4e 13,17
+plugins/chat/src/server/runs/chat.ts
+  s_08bcf79c94cd18::t_3ca1ab7b143932 4,31
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 9-11,13,27,36-40,48
+  s_08bcf79c94cd18::t_2f49397f18ad32 32
+  s_08bcf79c94cd18::t_d23b2f41d1d891 33
+  s_afca289c1b96c3::t_86638c674b4f32 12
+packages/server/src/plugins/loading.rs
+  s_08bcf79c94cd18::t_d56f575d265414 100-101
+  s_08bcf79c94cd18::t_9530dba4f81a03 89-92,163,167-172,179-186,196-221
+plugins/chat/src/client/ui/header/thread-header.tsx
+  s_08bcf79c94cd18::t_3fb7ebc0479cfa 34-36
+  s_08bcf79c94cd18::t_d4fd39166ef402 33,37
+e2e/browser/servers.spec.ts
+  s_08bcf79c94cd18::t_dabce9cee8a093 44-100
+packages/server/src/host/worker/mod.rs
+  s_08bcf79c94cd18::t_d56f575d265414 171,180-181,185-187,189-198,200-219,221,227
+  s_08bcf79c94cd18::t_df9e2154e423b0 37,182-184,188,199,220,226
+plugins/acp/src/server/turn/acp.ts
+  s_08bcf79c94cd18::t_97dde38ef5888e 2-3,29,34,47,52,76,88-90,92
+  s_08bcf79c94cd18::t_ab847b377c156f 85-86
+  s_08bcf79c94cd18::t_ec0fc9a3b883e5 91
+packages/sdk/tools/machine.mjs
+  s_08bcf79c94cd18::t_62a9970f95119c 1-4,8-13,15-18,20-30,32-34,37-39,41-45
+  s_08bcf79c94cd18::t_d56f575d265414 5-7,46-57,59-61
+  s_08bcf79c94cd18::t_965a219d783ea7 14,19,31,35-36,40,58
+app/src/host/endpoint.ts
+  s_08bcf79c94cd18::t_246dd4d778e0cd 3
+e2e/run.ts
+  s_08bcf79c94cd18::t_91d7f684ed7f3c 1,232
+plugins/chat/src/server/runs/send.ts
+  s_08bcf79c94cd18::t_62a9970f95119c 24,26,29,34,36,163-164,166,168-176,199,201-202,204-206,221-222
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 1,10-11,16-19,21-23,30-31,33,37,39-40,45-48,50-51,85-87,97,105-107,120,123-131,141-142,156,167,177-181
+  s_08bcf79c94cd18::t_d23b2f41d1d891 49
+  s_08bcf79c94cd18::t_d88d58f5ab13ae 52-54
+  s_08bcf79c94cd18::t_3ca1ab7b143932 6,15
+  s_08bcf79c94cd18::t_205084df273f3a 20,25,27-28,32,35,38,132-140,165,203,223
+packages/sdk/src/index.ts
+  s_08bcf79c94cd18::t_d56f575d265414 75-76
+packages/server/src/service/action_coordination.rs
+  s_08bcf79c94cd18::t_d56f575d265414 91
+plugins/chat/plugin.ts
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 4
+plugins/acp/src/machine/tsconfig.json
+  s_08bcf79c94cd18::t_97dde38ef5888e 1-2,4-5
+  s_08bcf79c94cd18::t_01b4f7cb2af9a3 3
+e2e/tsconfig.json
+  s_08bcf79c94cd18::t_91d7f684ed7f3c 14-15
+plugins/chat/src/server/machines/machines.ts
+  s_08bcf79c94cd18::t_62a9970f95119c 72-74,76-77,79-80
+  s_08bcf79c94cd18::t_4bcba2c3d9c55a 1-12,14,16-24,26-34,36-42,44,46-49,51-71,78,81-111,113-114,117-127,131-132,134-143,145-154,156-168,170-174,176-184
+  s_08bcf79c94cd18::t_ce2206c9a63821 13,15,25,35,43,45,50,75,112,115-116,128-130,133,144,155,169,175
+plugins/chat/src/client/ui/thread/empty.tsx
+  s_08bcf79c94cd18::t_246dd4d778e0cd 62-65,67,80,82
+  s_08bcf79c94cd18::t_b307b97a95057d 66,79,81,83-87
+plugins/chat/src/client/pages/screen.tsx
+  s_08bcf79c94cd18::t_246dd4d778e0cd 102
+  s_08bcf79c94cd18::t_c03593e6b4d682 127
+packages/server/src/service/mod.rs
+  s_08bcf79c94cd18::t_d56f575d265414 114
+  s_08bcf79c94cd18::t_406b9db0c62d19 193
+app/src/shell/shell.tsx
+  s_08bcf79c94cd18::t_246dd4d778e0cd 1-2,34-35,37
+  s_08bcf79c94cd18::t_aa65d29fc844a5 36
+app/tests/servers.test.ts
+  s_08bcf79c94cd18::t_bef7a2803a58a6 75-113
+e2e/fixtures/scripted-agent.py
+  s_08bcf79c94cd18::t_6d6ec3e6bbd73a 111-114
+packages/build/README.md
+  s_08bcf79c94cd18::t_b045cb22984c67 109-128
+packages/build/tests/plugins.test.mjs
+  s_08bcf79c94cd18::t_cd6974313a266c 176-206
+packages/server/src/host/worker/process.rs
+  s_08bcf79c94cd18::t_d61b5c8e4cfe61 161-173,217-219,221
+packages/server/src/host/worker/tests.rs
+  s_08bcf79c94cd18::t_7e9bdd56437af1 6-8,46-52,130-174
+packages/server/tests/build-worker.mjs
+  s_08bcf79c94cd18::t_b7450ca4a4575f 29-31
+packages/server/tests/fixtures/worker/src/machine/main.ts
+  s_08bcf79c94cd18::t_bf2534a3ea8a7e 1-16
+plugins/acp/README.md
+  s_08bcf79c94cd18::t_19764feaf6cce8 86-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47f3a572fc303f00b09d4e1ce43d06c8785b02df",
+  "prompts": {},
+  "sessions": {
+    "s_08bcf79c94cd18": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ef12-4991-75b2-9ec1-10c2bf77457f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_afca289c1b96c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a8d77fdb-d204-4a86-aab3-ddf98ecd7ea2",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
