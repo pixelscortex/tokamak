@@ -120,8 +120,6 @@ jobs:
           path: target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
           retention-days: 7
-      - if: always()
-        run: sccache --show-stats
   release:
     # Manual only for now: running this workflow by hand on main builds server release artifacts.
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'

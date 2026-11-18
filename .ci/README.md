@@ -30,7 +30,8 @@ release consumers, but these workflows do not invoke it.
 `continue-on-error: true`; remove that once builds and installed-app smoke checks
 are reliable. It builds and bundles only (no Windows test suites), then runs the
 server's `--build-id` smoke check. Tool and dependency downloads use Actions
-caches; sccache uses the GitHub Actions backend on Windows.
+caches. Windows omits sccache: Depot's Windows Actions cache endpoint rejected
+all compiler-cache writes during validation. Linux/macOS retain sccache.
 
 Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 `gh run download <run-id> -n desktop-windows-x64`). Extract the artifact and run

@@ -113,13 +113,13 @@ runs:
         if ('${{ inputs.native }}' -eq 'true') {
           cargo fetch --locked --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          'RUSTC_WRAPPER=sccache' >> $env:GITHUB_ENV
           'CARGO_INCREMENTAL=0' >> $env:GITHUB_ENV
-          'SCCACHE_GHA_ENABLED=true' >> $env:GITHUB_ENV
         }
         proto run bun -- install --frozen-lockfile
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    - if: inputs.native == 'true'
+    # Depot's Windows Actions cache endpoint rejects sccache writes. Keep the
+    # working tool/dependency caches there without an ineffective compiler cache.
+    - if: inputs.native == 'true' && runner.os != 'Windows'
       uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
       with:
         version: v0.19.0
