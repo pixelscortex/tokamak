@@ -1,6 +1,7 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
 import { endpoint } from "../host/endpoint";
+import type { RemoteChat } from "@tokamak/sdk/client";
 import { syncDisplayName } from "../host/identity";
 import type { ServerEndpoint } from "../plugins/adapter";
 import { createPluginShell, type PluginRouting, type PluginShell } from "../plugins/views";
@@ -19,6 +20,7 @@ export interface Session {
 export interface SessionOptions {
   routing: PluginRouting;
   getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint>;
+  remoteChat?: (hub: ServerEndpoint) => RemoteChat | undefined;
   /**
    * Which server the endpoint belongs to. When it changes, the session drops the old
    * connection (its socket and plugin UI) and connects to the new one.
@@ -72,7 +74,13 @@ export function createSession(options: SessionOptions): Session {
       if (current !== attempt) return;
       const transport = new WebSocketTransport(socket);
       const client = new TokamakClient(transport);
-      const plugins = createPluginShell(client, supplied, transport, options.routing);
+      const plugins = createPluginShell(
+        client,
+        supplied,
+        transport,
+        options.routing,
+        options.remoteChat?.(supplied),
+      );
       close = () => {
         plugins.dispose();
         transport.close();

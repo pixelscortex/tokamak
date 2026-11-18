@@ -33,6 +33,10 @@ export default defineSchema({
   runs: defineTable({
     token: v.optional(v.union(v.string(), v.null())),
     backendPlugin: v.optional(v.string()),
+    backendId: v.optional(v.string()),
+    owner: v.optional(v.object({ id: v.string(), name: v.string() })),
+    requestId: v.optional(v.string()),
+    sequence: v.optional(v.number()),
     threadId: v.id("threads"),
     messageId: v.id("messages"),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),
@@ -40,6 +44,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
     heartbeat: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
     observations: v.optional(
       v.array(
         v.object({ sweepId: v.string(), tick: v.number(), heartbeat: v.number(), unchanged: v.number() }),
@@ -49,5 +54,6 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
   })
     .index("by_threadId", ["threadId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
 });

@@ -22,7 +22,17 @@ function Centre(props: { children: JSX.Element }): JSX.Element {
 export function EmptyThread(props: {
   agent: Agent | undefined;
   onStart: (text: string) => void;
+  messageOnly?: boolean;
 }): JSX.Element {
+  if (props.messageOnly)
+    return (
+      <Centre>
+        <h2 class="text-read font-semibold text-ink">Start the conversation</h2>
+        <p class="max-w-read text-row text-ink-2">
+          Write a message, or pick an agent to run it on your computer.
+        </p>
+      </Centre>
+    );
   return (
     <Centre>
       <div class="flex flex-col items-center gap-2">
@@ -59,7 +69,21 @@ export function EmptyThread(props: {
 }
 
 /** No agent CLI was found on this machine: say what to install, then check again. */
-export function NoAgents(props: { checking: boolean; error?: string; onCheck: () => void }): JSX.Element {
+export function NoAgents(props: {
+  checking: boolean;
+  error?: string;
+  onCheck: () => void;
+  noMachine?: boolean;
+}): JSX.Element {
+  if (props.noMachine)
+    return (
+      <Centre>
+        <h2 class="text-read font-semibold text-ink">Agents run from the desktop app</h2>
+        <p class="max-w-read text-row text-ink-2">
+          Use the desktop app to run agents on your own computer. You can still write messages here.
+        </p>
+      </Centre>
+    );
   return (
     <Centre>
       <div class="flex flex-col items-center gap-2">

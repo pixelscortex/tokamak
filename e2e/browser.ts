@@ -11,14 +11,15 @@ const env = {
   ...process.env,
   TOKAMAK_PLUGIN_DIR: `${directory}/plugins`,
   TOKAMAK_FIXTURE_SOURCE: `${directory}/fixture`,
+  TOKAMAK_E2E_WEB_ROOT: `${directory}/web`,
   TOKAMAK_SERVER_DIR: `${directory}/local`,
   TOKAMAK_ALLOWED_ORIGINS: `http://127.0.0.1:${process.env.TOKAMAK_E2E_PORT ?? "1420"}`,
   VITE_TOKAMAK_HTTP: "http://127.0.0.1:43123",
   VITE_TOKAMAK_TOKEN: randomBytes(32).toString("hex"),
   TOKAMAK_E2E_HOSTED_TOKEN: randomBytes(32).toString("hex"),
 };
-function run(command: string, args: string[]) {
-  const result = spawnSync(command, args, { env, stdio: "inherit" });
+function run(command: string, args: string[], processEnv: NodeJS.ProcessEnv = env) {
+  const result = spawnSync(command, args, { env: processEnv, stdio: "inherit" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} exited ${result.status}`);
 }
@@ -34,7 +35,13 @@ try {
   // Adds ACP and a scripted agent; the server then never sees this machine's real agent CLIs.
   const sandbox = await prepareChatSandbox(directory);
   Object.assign(env, { CHAT_SANDBOX_HOME: sandbox.env.HOME, CHAT_SANDBOX_PATH: sandbox.env.PATH });
-  run("proto", ["run", "bun", "--", "run", "--cwd", "app", "build"]);
+  const build = ["run", "bun", "--", "run", "--cwd", "app", "build"];
+  run("proto", [...build, "--outDir", env.TOKAMAK_E2E_WEB_ROOT], {
+    ...env,
+    VITE_TOKAMAK_HTTP: undefined,
+    VITE_TOKAMAK_TOKEN: undefined,
+  });
+  run("proto", build);
   run("proto", [
     "run",
     "bun",

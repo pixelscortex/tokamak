@@ -14,6 +14,7 @@ export interface PluginDefinition {
   readonly consumes?: readonly string[];
   readonly permissions?: readonly string[];
   readonly runtime?: "worker";
+  readonly maintenance?: string;
   readonly placement?: "hub" | "runner" | "hybrid";
   readonly contributes?: Readonly<Record<string, readonly JsonValue[]>>;
   readonly exports?: string;
@@ -80,6 +81,7 @@ export function definePlugin(
     "permissions",
     "placement",
     "runtime",
+    "maintenance",
     "contributes",
     "exports",
   ];
@@ -136,7 +138,7 @@ function validateLists(definition: PluginDefinition) {
 function validateMetadata(definition: PluginDefinition) {
   if (definition.runtime !== undefined && definition.runtime !== "worker")
     throw new Error("Invalid plugin runtime");
-  for (const field of ["name", "description"] as const)
+  for (const field of ["name", "description", "maintenance"] as const)
     if (definition[field] !== undefined && typeof definition[field] !== "string")
       throw new Error(`Invalid plugin ${field}`);
   if (

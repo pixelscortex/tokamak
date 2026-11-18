@@ -1,3 +1,4 @@
+import { localChatPort } from "./turn/chat-port";
 import { action, v, type JsonValue } from "@tokamak/sdk";
 import { agents } from "./agents/client";
 import { checkFolder } from "./agents/discovery";
@@ -31,13 +32,21 @@ export const turn = action({
     state: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
+    if (ctx.user.id !== "local") throw new Error("Agents run from the desktop app on your own computer.");
     const settings = args.settings as { cwd?: JsonValue };
     const state = args.state as { sessionId?: string } | undefined;
     const cwd = await checkFolder({ path: typeof settings?.cwd === "string" ? settings.cwd : "" });
-    return acpSend(ctx, args, args, {
-      agent: args.backendId,
-      cwd,
-      ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
-    });
+    return acpSend(
+      localChatPort(ctx),
+      args,
+      args,
+      {
+        agent: args.backendId,
+        cwd,
+        ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
+      },
+      agents,
+      ctx.signal,
+    );
   },
 });

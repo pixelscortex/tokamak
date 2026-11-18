@@ -1,7 +1,8 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { useQuery } from "@tokamak/sdk/solid";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
-import { api } from "../api";
+import { account, api } from "../api";
+import type { RemoteChat } from "@tokamak/sdk/client";
 import { agentOf } from "../agents";
 import { useBackends } from "./use-backends";
 import { useRunRecovery } from "./use-run-recovery";
@@ -13,20 +14,36 @@ export type ChatState = ReturnType<typeof useChat>;
 // Survives the view being closed and reopened; the server owns everything else.
 let lastThread: Id<"threads"> | undefined;
 
-export function useChat(client: TokamakClient) {
+export function useChat(client: TokamakClient, remote?: RemoteChat) {
   const threads = useQuery(client, api.threads.list, () => ({}));
   const running = useQuery(client, api.runs.running, () => ({}));
+  const [userId, setUserId] = createSignal<string | undefined>(remote ? undefined : "local", {
+    ownedWrite: true,
+  });
+  const [selection, changed] = createSignal(0, { ownedWrite: true });
   const [threadId, setThreadId] = createSignal<Id<"threads"> | undefined>(lastThread, { ownedWrite: true });
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const [creating, setCreating] = createSignal(false, { ownedWrite: true });
   const runs = createMemo(() => Object.fromEntries((running.data() ?? []).map((run) => [run.threadId, run])));
-  const discovery = useBackends(client);
+  const discovery = useBackends(() =>
+    remote ? (remote.machine?.list() ?? Promise.resolve([])) : client.action(api.backends.list, {}),
+  );
   let initialized = false;
   let alive = true;
   let disconnected = false;
   onCleanup(() => {
     alive = false;
   });
+
+  if (remote)
+    void client.query(account.whoami, {}).then(
+      (user) => {
+        if (alive) setUserId(user.id);
+      },
+      (error) => {
+        if (alive) setError(String(error));
+      },
+    );
 
   // A restored subscription means discovery can reach the server again.
   createEffect(
@@ -71,17 +88,54 @@ export function useChat(client: TokamakClient) {
       open(list[0]?._id);
   });
 
-  useRunRecovery(client, () => Boolean(running.data()?.length), setError);
+  if (!remote) useRunRecovery(client, () => Boolean(running.data()?.length), setError);
 
   const thread = createMemo(() => threads.data()?.find((item) => item._id === threadId()));
+  const threadReady = (id = threadId()) =>
+    Boolean(id && !creating() && threadId() === id && thread()?._id === id && (!remote?.machine || userId()));
   const active = () => runs()[threadId() ?? ""] ?? null;
-  const agent = createMemo(() => agentOf(thread()?.backend, discovery.data()));
+  const currentRuns = () => (running.data() ?? []).filter((run) => run.threadId === threadId());
+  const key = (id: Id<"threads">) => `chat:machine:${JSON.stringify([remote?.hub, userId(), id])}`;
+  const folderKey = (id: Id<"threads">, backendId: string) => `${key(id)}:${backendId}`;
+  const backend = (id = threadId()) => {
+    if (!remote) return thread()?.backend;
+    selection();
+    if (!id || !userId() || !remote.machine) return undefined;
+    const chosen = localStorage.getItem(key(id));
+    if (!chosen) return undefined;
+    return {
+      kind: "plugin" as const,
+      plugin: "acp",
+      backendId: chosen,
+      settings: { cwd: localStorage.getItem(folderKey(id, chosen)) ?? "" },
+    };
+  };
+  const agent = createMemo(() => agentOf(backend(), discovery.data()));
 
-  async function cancel() {
-    const run = active();
-    if (!run) return;
+  async function setMachineAgent(id: Id<"threads">, backendId?: string, path?: string) {
+    if (!remote?.machine || !userId()) throw new Error("This computer has no agent connection yet.");
+    if (!threadReady(id)) throw new Error("Wait for the chat to finish opening before choosing an agent.");
+    const k = key(id);
+    if (!backendId) localStorage.removeItem(k);
+    else {
+      const folder = folderKey(id, backendId);
+      if (path !== undefined) localStorage.setItem(folder, await remote.machine.configure(backendId, path));
+      localStorage.setItem(k, backendId);
+    }
+    changed((value) => value + 1);
+  }
+
+  const stoppable = () =>
+    remote
+      ? currentRuns()
+          .filter((run) => run.ownerId === userId())
+          .sort((a, b) => b.startedAt - a.startedAt)[0]
+      : active();
+
+  async function cancel(runId = stoppable()?.runId) {
+    if (!runId) return;
     try {
-      await client.mutation(api.runs.cancel, { runId: run.runId });
+      await client.mutation(api.runs.cancel, { runId });
     } catch (cause) {
       if (alive) setError(String(cause));
     }
@@ -89,12 +143,18 @@ export function useChat(client: TokamakClient) {
 
   return {
     client,
+    remote,
+    userId,
+    backend,
+    setMachineAgent,
+    currentRuns,
     backends: discovery.data,
     backendDiscovery: discovery,
     noAgents: () => discovery.data()?.length === 0,
     threads,
     threadId,
     thread,
+    threadReady,
     agent,
     open,
     runs,
@@ -106,6 +166,6 @@ export function useChat(client: TokamakClient) {
     creating,
     createThread,
     cancel,
-    canStop: () => Boolean(active()),
+    canStop: () => Boolean(stoppable()),
   };
 }

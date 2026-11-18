@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createRoot, flush } from "solid-js";
 import { TokamakClient, type Id, type JsonValue, type SubscriptionEvent } from "@tokamak/sdk";
+import { chatKeys } from "../src/client/lib/state/chat-keys";
 import { useChat } from "../src/client/lib/state/use-chat";
 import { useDrafts } from "../src/client/lib/state/use-drafts";
 
@@ -57,6 +58,51 @@ test("a thread-list update cannot send the previous draft while creation is awai
     chat.open(oldId);
     flush();
     expect(drafts.draft()).toBe("Keep the previous draft");
+    dispose();
+  });
+});
+
+test("Escape stops an owned hub run and ignores a thread with only another member's run", async () => {
+  await createRoot(async (dispose) => {
+    let publish!: (event: SubscriptionEvent<JsonValue>) => void;
+    const mutation = vi.fn(async (_name: string, _args: JsonValue) => null);
+    const mine = { runId: "runs:mine", threadId: oldId, ownerId: "me", startedAt: 1 };
+    const theirs = { runId: "runs:other", threadId: oldId, ownerId: "other", startedAt: 2 };
+    const chat = useChat(
+      new TokamakClient({
+        query: async () => ({ id: "me", name: "Me", role: "member" }),
+        mutation,
+        action: async () => [],
+        subscribe(name, _args, notify) {
+          if (name === "chat/runs:running") publish = notify;
+          notify({ value: name === "chat/threads:list" ? [row(oldId)] : [mine, theirs] });
+          return () => {};
+        },
+      }),
+      { hub: "http://127.0.0.1" },
+    );
+    await vi.waitFor(() => {
+      flush();
+      expect(chat.userId()).toBe("me");
+    });
+    const keys = chatKeys({
+      draft: () => "",
+      canStop: chat.canStop,
+      stop: () => void chat.cancel(),
+      answer: () => false,
+    });
+    const escape = () => new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    const owned = escape();
+    keys(owned);
+    expect(owned.defaultPrevented).toBe(true);
+    expect(mutation).toHaveBeenCalledExactlyOnceWith("chat/runs:cancel", { runId: mine.runId });
+
+    publish({ value: [theirs] });
+    flush();
+    const other = escape();
+    keys(other);
+    expect(other.defaultPrevented).toBe(false);
+    expect(mutation).toHaveBeenCalledTimes(1);
     dispose();
   });
 });

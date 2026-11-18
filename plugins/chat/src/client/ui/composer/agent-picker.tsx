@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import type { Id } from "@tokamak/sdk";
 import { Button, Dialog, Icon, Menu, Textarea, icons } from "@tokamak/ui";
 import { folderName, folderOf, optionAgent, type Backend, type BackendOption } from "../../lib/agents";
 import { glyphs } from "../../lib/icons";
@@ -13,6 +14,7 @@ const FOLDER = "folder";
 /** The agent and its folder, in the composer strip: a menu of agents and "Change folder…". */
 export function AgentPicker(props: {
   chat: ChatState;
+  threadId: Id<"threads">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
@@ -21,14 +23,19 @@ export function AgentPicker(props: {
   const [saving, setSaving] = createSignal(false, { ownedWrite: true });
   const [error, setError] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const agent = () => props.chat.agent();
-  const backend = () => props.chat.thread()?.backend as Backend | undefined;
+  const backend = () => props.chat.backend() as Backend | undefined;
+  const disabled = () => !props.chat.threadReady(props.threadId);
 
   async function save(choice: { plugin: string; backendId: string }, path: string) {
     const thread = props.chat.thread();
-    if (!thread || saving()) return "busy";
+    if (!thread || disabled() || saving()) return "busy";
     setSaving(true);
     setError(undefined);
     try {
+      if (props.chat.remote) {
+        await props.chat.setMachineAgent(thread._id, choice.backendId, path);
+        return undefined;
+      }
       const settings = await props.chat.client.action(api.backends.configure, {
         plugin: choice.plugin,
         backendId: choice.backendId,
@@ -50,13 +57,21 @@ export function AgentPicker(props: {
   }
 
   function choose(value: string) {
+    if (disabled()) return;
     if (value === FOLDER) {
-      setFolder(agent()?.folder ?? lastFolder);
+      setFolder(agent()?.folder ?? (props.chat.remote ? "" : lastFolder));
       setError(undefined);
       setFolderOpen(true);
       return;
     }
     const option = props.chat.backends()?.find((item) => `${item.plugin}/${item.id}` === value);
+    if (props.chat.remote) {
+      if (option || value === "message")
+        void props.chat
+          .setMachineAgent(props.threadId, option?.id)
+          .catch((error) => props.chat.setError(String(error)));
+      return;
+    }
     if (!option) return;
     void save({ plugin: option.plugin, backendId: option.id }, agent()?.folder || lastFolder).then(
       (failure) => {
@@ -79,16 +94,23 @@ export function AgentPicker(props: {
   return (
     <>
       <Menu.Root
-        open={props.open}
+        open={props.open && !disabled()}
         onOpenChange={props.onOpenChange}
         onAction={(value) => choose(String(value))}
       >
-        <Menu.Trigger variant="ghost" class="-ms-2 min-w-0" aria-label="Agent and folder">
+        <Menu.Trigger
+          variant="ghost"
+          class="-ms-2 min-w-0"
+          aria-label="Agent and folder"
+          disabled={disabled()}
+        >
           <span class="flex min-w-0 items-center gap-2">
             <Show when={agent()}>
               {(current) => <Icon path={current().mark} size={12} class="text-ink" />}
             </Show>
-            <span class="text-row text-ink-2">{agent()?.name ?? "Choose an agent"}</span>
+            <span class="text-row text-ink-2">
+              {agent()?.name ?? (props.chat.remote ? "Message only" : "Choose an agent")}
+            </span>
             <Show when={agent()?.folder}>
               {(path) => <span class="min-w-0 truncate text-data text-ink-3">{folderName(path())}</span>}
             </Show>
@@ -97,7 +119,10 @@ export function AgentPicker(props: {
         </Menu.Trigger>
         <Menu.Content>
           <Menu.Group>
-            <Menu.GroupLabel>Agent</Menu.GroupLabel>
+            <Menu.GroupLabel>{props.chat.remote ? "Agents on this computer" : "Agent"}</Menu.GroupLabel>
+            <Show when={props.chat.remote}>
+              <Menu.Item value="message">Message only</Menu.Item>
+            </Show>
             <For each={props.chat.backends() ?? []}>
               {(option: BackendOption) => (
                 <Menu.Item value={`${option.plugin}/${option.id}`}>

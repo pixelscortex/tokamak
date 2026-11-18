@@ -1,11 +1,18 @@
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import type { Id } from "@tokamak/sdk";
+import { folderOf } from "../agents";
 import { api } from "../api";
 import type { ChatState } from "./use-chat";
 
 type PerThread<T> = Record<string, T>;
 
 // Drafts and queued follow-ups outlive the view, so closing chat loses nothing typed.
-const kept: { drafts: PerThread<string>; queued: PerThread<string> } = { drafts: {}, queued: {} };
+type Attempt = { text: string; requestId: string; backendId: string; cwd: string; pending: boolean };
+const kept = {
+  drafts: {} as PerThread<string>,
+  queued: {} as PerThread<string>,
+  attempts: new Map<string, Attempt>(),
+};
 
 export function useDrafts(chat: ChatState) {
   const [drafts, setDrafts] = createSignal<PerThread<string>>(kept.drafts, { ownedWrite: true });
@@ -29,21 +36,59 @@ export function useDrafts(chat: ChatState) {
     if (alive) setQueued(kept.queued);
   }
 
+  const attemptKey = (threadId: string) => JSON.stringify([chat.remote?.hub, chat.userId(), threadId]);
+
   async function sendTo(threadId: string, text: string) {
+    const id = threadId as Id<"threads">;
+    const key = chat.remote ? attemptKey(threadId) : undefined;
+    const previous = key === undefined ? undefined : kept.attempts.get(key);
+    const replay = previous?.text === text ? previous : undefined;
+    const backend = !replay && chat.remote?.machine ? chat.backend(id) : undefined;
+    const attempt =
+      replay ??
+      (backend && {
+        text,
+        requestId: crypto.randomUUID(),
+        backendId: backend.backendId,
+        cwd: folderOf(backend.settings),
+        pending: false,
+      });
+    if (key !== undefined) {
+      if (attempt) {
+        attempt.pending = true;
+        kept.attempts.set(key, attempt);
+      } else kept.attempts.delete(key);
+    }
+    let forget = false;
     chat.setError(undefined);
     setRaced((previous) => ({ ...previous, [threadId]: false }));
     setSending((previous) => ({ ...previous, [threadId]: true }));
     try {
-      await chat.client.action(api.chat.send, { threadId: threadId as never, text });
+      if (attempt) {
+        if (!chat.remote?.machine) throw new Error("This computer has no agent connection yet.");
+        const { requestId, backendId, cwd } = attempt;
+        const result = await chat.remote.machine.send({ threadId: id, text, requestId, backendId, cwd });
+        if ("notStarted" in result) {
+          // A rejection before dispatch cannot resolve an earlier lost response.
+          forget = !replay;
+          throw new Error(result.notStarted);
+        }
+      } else if (chat.remote) await chat.client.mutation(api.messages.post, { threadId: id, text });
+      else await chat.client.action(api.chat.send, { threadId: id, text });
+      forget = true;
     } catch (cause) {
       // Put the text back where it was typed, unless something new was typed since.
       if (!kept.drafts[threadId]) write(threadId, text);
       if (!alive) return;
-      if (String(cause).includes("already has an active run"))
+      if (!chat.remote && String(cause).includes("already has an active run"))
         setRaced((previous) => ({ ...previous, [threadId]: true }));
       else chat.setError(String(cause));
       void chat.backendDiscovery.refresh();
     } finally {
+      if (attempt) {
+        attempt.pending = false;
+        if (key !== undefined && forget && kept.attempts.get(key) === attempt) kept.attempts.delete(key);
+      }
       if (alive) setSending((previous) => ({ ...previous, [threadId]: false }));
     }
   }
@@ -52,8 +97,16 @@ export function useDrafts(chat: ChatState) {
   async function send(text: string) {
     const threadId = key();
     if (chat.creating() || !threadId || !text.trim()) return;
+    if (chat.remote) {
+      if (!chat.threadReady(threadId as Id<"threads">)) {
+        chat.setError("Wait for the chat to finish opening before sending.");
+        return;
+      }
+      const attempt = kept.attempts.get(attemptKey(threadId));
+      if (attempt?.pending && attempt.text === text) return;
+    }
     write(threadId, "");
-    if (chat.active() || untrack(sending)[threadId]) {
+    if (!chat.remote && (chat.active() || untrack(sending)[threadId])) {
       const before = untrack(queued)[threadId];
       queue(threadId, before ? `${before}\n\n${text}` : text);
       return;
@@ -66,7 +119,7 @@ export function useDrafts(chat: ChatState) {
     () => [chat.runs(), sending(), queued(), chat.runsLoaded()] as const,
     ([runs, busy, waiting, loaded]) => {
       // Until the running list has arrived, an empty list does not mean idle.
-      if (!loaded) return;
+      if (chat.remote || !loaded) return;
       setRaced((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => runs[id])));
       for (const [threadId, text] of Object.entries(waiting)) {
         if (runs[threadId] || busy[threadId]) continue;

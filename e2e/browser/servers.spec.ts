@@ -4,7 +4,34 @@ import { test, expect, type Page } from "@playwright/test";
 const footer = (page: Page) => page.getByRole("status", { name: "Connection status" });
 const flow = (page: Page) => page.getByRole("region", { name: "Add a server" });
 
-test("add a hosted server, switch to it and back, and keep the choice", async ({ page }) => {
+test("retry a lost local reply on a chat-only hub without starting another turn", async ({ page }) => {
+  const requestIds: string[] = [];
+  let holdCreate = false;
+  let releaseCreate: (() => void) | undefined;
+  await page.routeWebSocket("**", (socket) => {
+    const host = new URL(socket.url()).host;
+    const server = socket.connectToServer();
+    let dropResponse: number | undefined;
+    let holdResponse: number | undefined;
+    socket.onMessage((payload) => {
+      const request = JSON.parse(String(payload));
+      if (request.type === "action") {
+        if (host === "127.0.0.1:43123" && request.name === "acp/relay:relayTurn") {
+          requestIds.push(request.args.requestId);
+          if (requestIds.length === 1) dropResponse = request.id;
+        }
+        if (host === "127.0.0.1:43124" && holdCreate && request.name === "chat/threads:create")
+          holdResponse = request.id;
+      }
+      server.send(payload);
+    });
+    server.onMessage((payload) => {
+      const event = JSON.parse(String(payload));
+      if (event.type === "response" && event.id === holdResponse) releaseCreate = () => socket.send(payload);
+      else if (event.type === "response" && event.id === dropResponse) void socket.close();
+      else socket.send(payload);
+    });
+  });
   await page.goto("/p/integration-fixture");
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
 
@@ -36,8 +63,63 @@ test("add a hosted server, switch to it and back, and keep the choice", async ({
 
   await page.reload();
   await expect(footer(page)).toHaveText("127.0.0.1:43124");
+  await page
+    .getByRole("navigation", { name: "Views" })
+    .getByRole("link", { name: "Chat", exact: true })
+    .click();
+  const chat = page.getByRole("region", { name: "Chat", exact: true });
+  const editor = chat.getByRole("textbox", { name: "Message" });
+  const picker = chat.getByRole("button", { name: "Message only", exact: true });
+  await expect(editor).toBeEnabled();
+  const previousThread = (await chat.getAttribute("data-thread-id"))!;
+  holdCreate = true;
+  await page.getByRole("button", { name: /New chat/ }).click();
+  await expect.poll(() => Boolean(releaseCreate)).toBe(true);
+  await expect(chat).toHaveAttribute("data-thread-id", previousThread);
+  await expect(editor).toBeDisabled();
+  await expect(picker).toBeDisabled();
+  holdCreate = false;
+  releaseCreate!();
+  await expect(chat).not.toHaveAttribute("data-thread-id", previousThread);
+  await expect(editor).toBeEnabled();
+  await picker.click();
+  await page.getByRole("menuitem", { name: "Claude", exact: true }).click();
+  await expect(chat.getByRole("button", { name: /^Claude(?:\s|$)/ })).toBeVisible();
+  await expect(editor).toHaveAttribute("placeholder", "Ask Claude");
+  const prompt = "Describe the workspace from my computer";
+  await editor.fill(prompt);
+  await editor.press("Enter");
+  const conversation = page.getByRole("log", { name: "Conversation" });
+  await expect(conversation.getByText(/This is a Tokamak workspace/)).toBeVisible();
+  await expect(editor).toHaveValue(prompt);
+  await editor.press("Enter");
+  await expect(editor).toHaveValue("");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect.poll(() => requestIds).toEqual([expect.any(String), expect.any(String)]);
+  expect(requestIds[0]).toBe(requestIds[1]);
+  await expect(conversation.getByText(prompt, { exact: true })).toHaveCount(1);
+  await expect(conversation.getByText(/This is a Tokamak workspace/)).toHaveCount(1);
   await page.getByRole("button", { name: /^Server: 127\.0\.0\.1:43124/ }).click();
   await expect(page.getByRole("menuitem", { name: "This Mac, answering" })).toBeVisible();
   await page.getByRole("menuitem", { name: "Remove this server" }).click();
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
+});
+
+test("a hosted browser writes messages without a local machine", async ({ page }) => {
+  await page.addInitScript(
+    (token) => localStorage.setItem("tokamak.access-token", token),
+    process.env.TOKAMAK_E2E_HOSTED_TOKEN!,
+  );
+  await page.goto("http://127.0.0.1:43124/p/chat");
+  await expect(footer(page)).toHaveText("127.0.0.1:43124");
+  await page.getByRole("button", { name: /New chat/ }).click();
+  await expect(page.getByRole("heading", { name: "Agents run from the desktop app" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Message only", exact: true })).toHaveCount(0);
+  const editor = page.getByRole("textbox", { name: "Message" });
+  const text = "A message from the hosted browser";
+  await editor.fill(text);
+  await editor.press("Enter");
+  await expect(
+    page.getByRole("log", { name: "Conversation" }).getByText(text, { exact: true }),
+  ).toBeVisible();
 });

@@ -3,6 +3,7 @@
 # The prompt picks the script: "permission", "fail", "slow" or "markdown";
 # anything else gets a short reply after three tool steps.
 import itertools, json, os, sys, threading, time
+from pathlib import Path
 
 SPEED = float(os.environ.get("SCRIPTED_AGENT_SPEED", "1"))
 out = threading.Lock()
@@ -10,6 +11,7 @@ answered = threading.Condition()
 answers = {}
 cancels = {}
 sessions = itertools.count(1)
+folders = {}
 
 
 def send(value):
@@ -106,6 +108,11 @@ def run(request):
     turn = Turn(request["params"]["sessionId"])
     finish = lambda: send(dict(id=request["id"], result=dict(stopReason="cancelled" if turn.cancelled.is_set() else "end_turn")))
     text = request["params"]["prompt"][0].get("text", "")
+    probe = folders.get(turn.session, Path.home()) / ".scripted-agent-probe"
+    if probe.exists():
+        tmp = probe.with_suffix(".tmp")
+        tmp.write_text(json.dumps(dict(pid=os.getpid(), prompt=text)))
+        tmp.replace(probe)
     # Only the newest line picks the script; earlier lines can carry conversation history.
     lowered = (text.strip().splitlines() or [""])[-1].lower()
     if "fail" in lowered:
@@ -144,6 +151,12 @@ def run(request):
     tool(turn, "search", "Searched for refresh(", "search", 0.4)
     tool(turn, "open", "Read README.md", "read", 0.3)
     stream(turn, "This is a Tokamak workspace: a Rust server runs TypeScript plugins, and the desktop client renders their views. Chat is the core plugin; agents reach it through the ACP plugin.")
+    if "stream checkpoint" in lowered:
+        release = probe.with_name(probe.name + ".release")
+        deadline = time.monotonic() + 15
+        while not release.exists() and time.monotonic() < deadline:
+            if turn.cancelled.wait(0.05):
+                break
     finish()
 
 
@@ -163,8 +176,11 @@ for line in sys.stdin:
     elif method == "initialize":
         send(dict(id=message["id"], result=dict(protocolVersion=1, authMethods=[], agentCapabilities=dict(loadSession=True))))
     elif method == "session/new":
-        send(dict(id=message["id"], result=dict(sessionId=f"scripted-{next(sessions)}")))
+        session = f"scripted-{next(sessions)}"
+        folders[session] = Path(params["cwd"])
+        send(dict(id=message["id"], result=dict(sessionId=session)))
     elif method in ("session/load", "session/resume"):
+        folders[params["sessionId"]] = Path(params["cwd"])
         send(dict(id=message["id"], result=dict(sessionId=params.get("sessionId"))))
     elif method == "session/prompt":
         threading.Thread(target=run, args=(message,), daemon=True).start()

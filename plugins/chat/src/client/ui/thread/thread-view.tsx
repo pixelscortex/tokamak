@@ -5,13 +5,17 @@ import { replyAgent, type BackendOption } from "../../lib/agents";
 import { createFollow } from "../../lib/follow";
 import { glyphs } from "../../lib/icons";
 import type { Message } from "../../lib/turns";
+import type { Id } from "@tokamak/sdk";
 import { AgentTurn, UserTurn } from "./turn";
 
 export function ThreadView(props: {
   messages: readonly Message[];
   /** Discovered agents; each reply is labelled from the agent recorded on it. */
   agents: BackendOption[] | undefined;
-  run: { messageId: string; startedAt: number } | undefined;
+  runs: { runId: Id<"runs">; messageId: string; startedAt: number }[];
+  remote: boolean;
+  viewer: string | undefined;
+  onStop: (id: Id<"runs">) => void;
   canRetry: boolean;
   onRetry: (messageId: string) => void;
   empty: JSX.Element;
@@ -33,25 +37,43 @@ export function ThreadView(props: {
         >
           <Show when={props.messages.length} fallback={props.empty}>
             <For each={props.messages} keyed={(message) => message._id}>
-              {(message) => (
-                <Show
-                  when={message().role === "user"}
-                  fallback={
-                    <AgentTurn
+              {(message) => {
+                const run = () => props.runs.find((run) => run.messageId === message()._id);
+                return (
+                  <Show
+                    when={message().role === "user"}
+                    fallback={
+                      <AgentTurn
+                        message={message()}
+                        agent={replyAgent(message().agent, props.agents)}
+                        startedAt={run()?.startedAt}
+                        onStop={props.remote && run() ? () => props.onStop(run()!.runId) : undefined}
+                        waitingFor={
+                          props.remote && message().askedBy?.id !== props.viewer
+                            ? message().askedBy?.name
+                            : undefined
+                        }
+                        onRetry={
+                          props.canRetry &&
+                          message()._id === last() &&
+                          (!props.remote || message().askedBy?.id === props.viewer)
+                            ? () => props.onRetry(message()._id)
+                            : undefined
+                        }
+                      />
+                    }
+                  >
+                    <UserTurn
                       message={message()}
-                      agent={replyAgent(message().agent, props.agents)}
-                      startedAt={props.run?.messageId === message()._id ? props.run.startedAt : undefined}
-                      onRetry={
-                        props.canRetry && message()._id === last()
-                          ? () => props.onRetry(message()._id)
+                      name={
+                        props.remote && message().author?.id !== props.viewer
+                          ? message().author?.name
                           : undefined
                       }
                     />
-                  }
-                >
-                  <UserTurn message={message()} />
-                </Show>
-              )}
+                  </Show>
+                );
+              }}
             </For>
           </Show>
         </div>

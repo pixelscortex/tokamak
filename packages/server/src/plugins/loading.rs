@@ -62,15 +62,11 @@ impl Loaded {
                 );
             }
 
-            for mut function in descriptor["functions"]
-                .as_array()
-                .expect("inspected")
-                .clone()
-            {
-                function["name"] =
-                    format!("{id}/{}", function["name"].as_str().expect("inspected")).into();
-                functions.push(function);
-            }
+            functions.extend(client_descriptors(
+                id,
+                &descriptor,
+                artifact.manifest.plugin.maintenance.as_deref(),
+            ));
         }
         // Keep logical table names scoped by plugin in the aggregate metadata.
         let schemas: BTreeMap<_, _> = inspected
@@ -86,6 +82,7 @@ impl Loaded {
 
         let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
 
+        validate_maintenance(&catalog, &targets)?;
         let workers = start_workers(&catalog)?;
         Ok(Arc::new(Self {
             catalog,
@@ -95,6 +92,23 @@ impl Loaded {
             inspected,
             workers,
         }))
+    }
+
+    pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {
+        self.targets
+            .iter()
+            .filter(|(_, target)| !self.scheduler_only(target))
+            .map(|(name, target)| (name.clone(), target.kind))
+            .collect()
+    }
+
+    fn scheduler_only(&self, target: &Target) -> bool {
+        self.catalog.plugins[&target.owner]
+            .manifest
+            .plugin
+            .maintenance
+            .as_deref()
+            == Some(&target.local_name)
     }
 
     pub fn target(
@@ -126,6 +140,9 @@ impl Loaded {
             .get(name)
             .ok_or_else(|| format!("Unknown plugin function: {name}"))?;
 
+        if self.scheduler_only(target) {
+            return Err(format!("Unknown plugin function: {name}"));
+        }
         if !self.catalog.can_call(caller, &target.owner) {
             return Err(format!(
                 "{caller} does not declare access to {}",
@@ -153,6 +170,23 @@ impl Loaded {
     }
 }
 
+fn client_descriptors(id: &str, descriptor: &Value, maintenance: Option<&str>) -> Vec<Value> {
+    descriptor["functions"]
+        .as_array()
+        .expect("inspected")
+        .iter()
+        .filter_map(|function| {
+            let name = function["name"].as_str().expect("inspected");
+            if maintenance == Some(name) {
+                return None;
+            }
+            let mut function = function.clone();
+            function["name"] = format!("{id}/{name}").into();
+            Some(function)
+        })
+        .collect()
+}
+
 fn start_workers(
     catalog: &Catalog,
 ) -> Result<BTreeMap<String, Arc<crate::host::worker::Supervisor>>, Error> {
@@ -174,4 +208,21 @@ fn start_workers(
     }
 
     Ok(workers)
+}
+
+fn validate_maintenance(
+    catalog: &Catalog,
+    targets: &BTreeMap<String, Target>,
+) -> Result<(), Error> {
+    for (id, artifact) in &catalog.plugins {
+        if let Some(name) = &artifact.manifest.plugin.maintenance
+            && (artifact.manifest.public_functions.contains(name)
+                || targets
+                    .get(&format!("{id}/{name}"))
+                    .is_none_or(|target| target.kind != crate::service::FunctionKind::Mutation))
+        {
+            return Err(invalid("Maintenance entry must name a private mutation"));
+        }
+    }
+    Ok(())
 }

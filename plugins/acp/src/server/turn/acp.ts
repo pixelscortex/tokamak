@@ -1,6 +1,7 @@
 import { agents, type AgentClient } from "../agents/client";
-import type { ActionContext, Id } from "@tokamak/sdk";
-import { api as chat } from "plugin:chat/server";
+import type { ActionSignal, Id } from "@tokamak/sdk";
+import type { ChatPort } from "./chat-port";
+
 import { turnBuffer } from "./turn-buffer";
 import { readAcpTurn } from "./acp-turn";
 
@@ -30,25 +31,26 @@ type Started = {
 type Backend = { agent: string; cwd: string; sessionId?: string };
 
 export async function acpSend(
-  ctx: ActionContext,
+  chat: ChatPort,
   args: { threadId: Id<"threads">; text: string },
   started: Started,
   backend: Backend,
   client: AgentClient = agents,
+  signal?: ActionSignal,
+  prompt?: string,
 ) {
   const { runId, messageId, token } = started;
-  const buffer = turnBuffer(ctx, runId, token);
+  const buffer = turnBuffer(chat, runId, token);
   let sessionId: string | undefined;
   let finished = false;
   let closed = false;
   let openingSession = true;
   const finish = async (outcome: "done" | "error" | "cancelled", error?: string) => {
-    if (!(await ctx.use(chat).runIsRunning({ runId })))
-      return { runId, messageId, status: "cancelled" as const };
+    if (!(await chat.runIsRunning({ runId }))) return { runId, messageId, status: "cancelled" as const };
     return {
       runId,
       messageId,
-      status: (await ctx.use(chat).updateRun({
+      status: (await chat.updateRun({
         runId,
         token,
         delta: buffer.pending(),
@@ -61,9 +63,9 @@ export async function acpSend(
   const cancel = () => {
     if (sessionId) void client.cancel({ agent: backend.agent, sessionId }).catch(() => {});
   };
-  ctx.signal?.addEventListener("abort", cancel, { once: true });
+  signal?.addEventListener("abort", cancel, { once: true });
   try {
-    if (ctx.signal?.aborted) throw new Error("Plugin action cancelled");
+    if (signal?.aborted) throw new Error("Plugin action cancelled");
     // Keep ownership of an open that completes after cancellation so it can be cancelled too.
     const opening = client.open(backend).then(async (opened) => {
       sessionId = opened.sessionId;
@@ -72,7 +74,7 @@ export async function acpSend(
     });
     const opened = await buffer.waitFor(opening);
     openingSession = false;
-    await ctx.use(chat).saveBackendState({
+    await chat.saveBackendState({
       runId,
       token,
       threadId: args.threadId,
@@ -81,10 +83,12 @@ export async function acpSend(
       settings: { cwd: backend.cwd },
       state: { sessionId: opened.sessionId },
     });
-    const prefix = opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
-    const text = prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim();
+    const prefix = prompt !== undefined || opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
+    const text =
+      prompt ??
+      (prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim());
     const events = client.prompt({ agent: backend.agent, sessionId: opened.sessionId, text });
-    const stopReason = await readAcpTurn(ctx, backend.agent, runId, token, buffer, events, client);
+    const stopReason = await readAcpTurn(chat, backend.agent, runId, token, buffer, events, client);
     finished = true;
     if (stopReason === "refusal") return await finish("error", "Agent refused");
     if (stopReason === "cancelled") return await finish("cancelled");
@@ -96,6 +100,7 @@ export async function acpSend(
       return await finish("error", `Unknown agent stop reason: ${stopReason}`);
     return await finish("done");
   } catch (cause) {
+    if (!finished && sessionId) await client.cancel({ agent: backend.agent, sessionId }).catch(() => {});
     const error = cause instanceof Error ? cause.message : String(cause);
     return await finish(
       "error",
@@ -104,7 +109,7 @@ export async function acpSend(
         : error,
     );
   } finally {
-    ctx.signal?.removeEventListener("abort", cancel);
+    signal?.removeEventListener("abort", cancel);
     buffer.close();
     closed = true;
     if (sessionId && !finished) await client.cancel({ agent: backend.agent, sessionId }).catch(() => {});

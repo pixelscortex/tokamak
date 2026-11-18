@@ -118,8 +118,11 @@ export function permissionOptions(part: Permission) {
   );
 }
 
-export function pendingPermission(messages: readonly Message[] | undefined) {
-  for (const message of [...(messages ?? [])].reverse())
+export function pendingPermission(
+  messages: readonly Message[] | undefined,
+  mine = (_message: Message) => true,
+) {
+  for (const message of [...(messages ?? [])].reverse().filter(mine))
     for (const part of [...message.parts].reverse())
       if (part.type === "permission" && part.status === "pending" && part.optionId === undefined)
         return { messageId: message._id as Id<"messages">, part };

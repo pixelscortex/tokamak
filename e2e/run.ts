@@ -1,4 +1,5 @@
 import { prepareAgentEnvironment } from "./chat-sandbox";
+import { ownMachineScenario } from "./own-machine";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -43,26 +44,16 @@ async function bounded<T>(promise: Promise<T>, label: string, ms = 20_000): Prom
   }
 }
 
-async function headless(
+export async function headless(
   bundle: string,
   data: string,
-  check: (address: string) => Promise<void>,
-  budget = false,
+  check: (address: string, child: ReturnType<typeof spawn>) => Promise<void>,
+  options: { args?: string[]; env?: NodeJS.ProcessEnv; timeout?: number; killed?: boolean } = {},
 ) {
   const child = spawn(
     resolve("target/debug/tokamak"),
-    [
-      "--bundle",
-      bundle,
-      "--data",
-      data,
-      "--listen",
-      "127.0.0.1:0",
-      "--workers",
-      "1",
-      ...(budget ? ["--call-ms", "100"] : []),
-    ],
-    { cwd: repository, env: { ...env, ...sandbox.env }, stdio: ["ignore", "pipe", "pipe"] },
+    [...(options.args ?? ["--bundle", bundle]), "--data", data, "--listen", "127.0.0.1:0", "--workers", "1"],
+    { cwd: repository, env: { ...env, ...sandbox.env, ...options.env }, stdio: ["pipe", "pipe", "pipe"] },
   );
   let output = "";
   let ready!: (address: string) => void;
@@ -95,13 +86,14 @@ async function headless(
   try {
     // A real bound address emitted AFTER Backend::start is the startup barrier.
     const address = await bounded(readiness, "headless readiness");
-    await bounded(check(address), "headless scenario", 45_000);
+    await bounded(check(address, child), "headless scenario", options.timeout ?? 45_000);
   } catch (error) {
     throw new Error(`${String(error)}\nheadless output:\n${output}`, { cause: error });
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     try {
-      assert.equal(await bounded(exited, "headless graceful shutdown", 25_000), 0, output);
+      const code = await bounded(exited, "headless graceful shutdown", 25_000);
+      if (!options.killed || child.signalCode !== "SIGKILL") assert.equal(code, 0, output);
     } finally {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
@@ -111,8 +103,10 @@ async function headless(
   }
 }
 
-async function connect(address: string) {
-  const socket = new WebSocket(address);
+export async function connect(address: string, token?: string) {
+  const url = new URL(address);
+  if (token) url.searchParams.set("token", token);
+  const socket = new WebSocket(url);
   try {
     await bounded(
       new Promise<void>((resolve, reject) => {
@@ -252,11 +246,12 @@ try {
         transport.close();
       }
     },
-    true,
+    { args: ["--bundle", join(feature, "dist/bundle.js"), "--call-ms", "100"] },
   );
   console.log(
     "PASS scenario 5: CPU loop interrupted by runtime budget; next real service mutation succeeded",
   );
+  if (process.platform !== "win32") await ownMachineScenario(root, headless, connect);
 } finally {
   // headless always reaps the child before removing its own exclusively owned DB.
   await rm(root, { recursive: true, force: true });
