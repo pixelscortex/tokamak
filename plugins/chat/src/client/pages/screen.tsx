@@ -170,7 +170,7 @@ function ThreadPane(props: {
     <div class="flex min-h-0 flex-1 flex-col" onKeyDown={keys}>
       <ThreadView
         messages={list()}
-        agent={chat.agent()}
+        agents={chat.backends()}
         run={run.data() ? { messageId: run.data()!.messageId, startedAt: run.data()!.startedAt } : undefined}
         canRetry={!running() && !chat.noAgents()}
         onRetry={(id) => {

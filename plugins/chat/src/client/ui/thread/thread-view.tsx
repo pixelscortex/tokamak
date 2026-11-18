@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button } from "@tokamak/ui";
-import type { Agent } from "../../lib/agents";
+import { replyAgent, type BackendOption } from "../../lib/agents";
 import { createFollow } from "../../lib/follow";
 import { glyphs } from "../../lib/icons";
 import type { Message } from "../../lib/turns";
@@ -9,7 +9,8 @@ import { AgentTurn, UserTurn } from "./turn";
 
 export function ThreadView(props: {
   messages: readonly Message[];
-  agent: Agent | undefined;
+  /** Discovered agents; each reply is labelled from the agent recorded on it. */
+  agents: BackendOption[] | undefined;
   run: { messageId: string; startedAt: number } | undefined;
   canRetry: boolean;
   onRetry: (messageId: string) => void;
@@ -38,7 +39,7 @@ export function ThreadView(props: {
                   fallback={
                     <AgentTurn
                       message={message()}
-                      agent={props.agent}
+                      agent={replyAgent(message().agent, props.agents)}
                       startedAt={props.run?.messageId === message()._id ? props.run.startedAt : undefined}
                       onRetry={
                         props.canRetry && message()._id === last()

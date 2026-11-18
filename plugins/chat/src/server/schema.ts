@@ -22,6 +22,10 @@ export default defineSchema({
       v.literal("cancelled"),
     ),
     error: v.optional(v.string()),
+    // The agent that produced an assistant message, recorded when its run starts so
+    // the reply keeps its label after the thread switches agents. Absent on user
+    // messages and on rows written before this field existed.
+    agent: v.optional(v.object({ plugin: v.string(), backendId: v.string() })),
     createdAt: v.number(),
   }).index("by_threadId_createdAt", ["threadId", "createdAt"]),
   runs: defineTable({

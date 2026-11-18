@@ -151,13 +151,28 @@ test("creating a thread disables the old composer until the new thread is select
   await send(page, "Send to the newly selected thread");
 });
 
-test("the composer agent menu opens and changes the thread agent", async ({ page }) => {
+test("switching the thread agent keeps each earlier reply labelled with the agent that wrote it", async ({
+  page,
+}) => {
   await openChat(page);
   await newThread(page);
-  const picker = page.getByRole("button", { name: /^Claude(?:\s|$)/ });
-  await picker.click();
+  const log = page.getByRole("log", { name: "Conversation" });
+  // Every turn is an article named after its author: "You", or the reply's agent.
+  const turns = log.getByRole("article");
+  await send(page, "Answer as the first agent");
+  await expect(turns).toHaveCount(2);
+  await expect(turns.nth(1)).toHaveAccessibleName("Claude");
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Claude(?:\s|$)/ }).click();
   await page.getByRole("menuitem", { name: "Codex", exact: true }).click();
   await expect(page.getByRole("button", { name: /^Codex(?:\s|$)/ })).toBeVisible();
-  await send(page, "Reply with the selected agent");
-  await expect(page.getByRole("log", { name: "Conversation" }).getByText(/Tokamak workspace/)).toBeVisible();
+  // Switching alone must not relabel the reply Claude already wrote.
+  await expect(turns.nth(1)).toHaveAccessibleName("Claude");
+
+  await send(page, "Answer as the second agent");
+  await expect(turns).toHaveCount(4);
+  await expect(turns.nth(3)).toHaveAccessibleName("Codex");
+  await expect(turns.nth(3).getByText(/Tokamak workspace/)).toBeVisible();
+  await expect(turns.nth(1)).toHaveAccessibleName("Claude");
 });

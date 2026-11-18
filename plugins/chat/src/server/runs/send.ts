@@ -39,6 +39,7 @@ export const start = mutation({
       role: "assistant",
       parts: [],
       status: "streaming",
+      agent: { plugin: backend.plugin, backendId: backend.backendId },
       createdAt: now + 1,
     });
     const runId = await db.insert("runs", {

@@ -38,6 +38,23 @@ export function agentOf(backend: Backend | undefined, options?: BackendOption[])
   };
 }
 
+/**
+ * The agent that wrote a reply, from the agent recorded on its message. Only an
+ * agent still in the discovered list resolves; an unrecorded (older) reply or one
+ * from an agent that is gone gets undefined, which the turn shows as "Agent".
+ */
+export function replyAgent(
+  recorded: { plugin: string; backendId: string } | undefined,
+  options: BackendOption[] | undefined,
+): Agent | undefined {
+  if (
+    !recorded ||
+    !options?.some((item) => item.id === recorded.backendId && item.plugin === recorded.plugin)
+  )
+    return undefined;
+  return agentOf({ kind: "plugin", ...recorded }, options);
+}
+
 export function optionAgent(option: BackendOption): Agent {
   return agentOf({ kind: "plugin", plugin: option.plugin, backendId: option.id }, [option])!;
 }
