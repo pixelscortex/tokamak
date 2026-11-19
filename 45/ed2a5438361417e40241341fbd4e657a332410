@@ -1,0 +1,20 @@
+docs/research/plugin-build-outside-repo.md
+  s_832d215ed6b3c0::t_973d05a0c5422c 1-15,17,25-45,48-93,378
+  s_832d215ed6b3c0::t_45d19eba8c1df7 16,18-24,46-47,94-377,379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45ed2a5438361417e40241341fbd4e657a332410",
+  "prompts": {},
+  "sessions": {
+    "s_832d215ed6b3c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f563-54bb-7e20-b1bd-eb0a5dab9add",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
