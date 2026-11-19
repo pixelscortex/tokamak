@@ -14,7 +14,7 @@ permissions:
   contents: read
 jobs:
   release:
-    runs-on: depot-macos-latest
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 60
     env:
       CARGO_BUILD_JOBS: "4"
