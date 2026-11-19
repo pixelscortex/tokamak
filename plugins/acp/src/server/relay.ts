@@ -30,8 +30,7 @@ export const relayTurn = action({
     let origin: URL;
     let cwd: string;
     try {
-      if (ctx.user.id !== "local" || process.platform === "win32")
-        throw new Error("Agents run from the desktop app on your own computer.");
+      if (ctx.user.id !== "local") throw new Error("Agents run from the desktop app on your own computer.");
       origin = hubOrigin(hub.http);
       if (!hub.token || hub.token.length > 4096 || /[^\x21-\x7e]/.test(hub.token))
         throw new Error("Invalid hub access token");
