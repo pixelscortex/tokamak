@@ -1,0 +1,22 @@
+docs/research/plugin-systems-in-other-tools.md
+  s_04d11f4c60b1c5::t_dcb94a5a03f81e 62-120,122-155
+  s_04d11f4c60b1c5::t_dd023df149f9f0 1-19,21-44,46,48-61
+  s_04d11f4c60b1c5::t_6195e2836f7e0e 20,45,47,121
+  s_04d11f4c60b1c5::t_e60b8fbd5f2714 156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fb23716dcd548b53d48b3962045765a1d0886dac",
+  "prompts": {},
+  "sessions": {
+    "s_04d11f4c60b1c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f563-0f37-7733-b628-212b09f18943",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
