@@ -38,6 +38,7 @@ pub(crate) struct Loaded {
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
     pub catalog_text: String,
+    pub(crate) skipped: BTreeMap<String, String>,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     pub(crate) action_lifetimes: BTreeMap<String, tokio_util::sync::CancellationToken>,
     current: Arc<tokio::sync::RwLock<Weak<Self>>>,

@@ -13,8 +13,8 @@ and typed API references. Do not author the artifact manifest by hand.
 
 ```sh
 proto run bun -- packages/build/src/build.ts path/to/plugins/notes
-cargo build --locked -p server --bin tokamak --jobs 2
-target/debug/tokamak --plugins path/to/plugins --local-dir path/to/private-server
+cargo build --locked -p server --bin tokamak-server --jobs 2
+target/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
 ```
 
 The local directory requires the same private `server.token` as the desktop
@@ -22,8 +22,8 @@ launcher. Never pass the token in arguments. The launcher now uses the workspace
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak plugin list
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak plugin reload acme.notes
+TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
+TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin reload acme.notes
 ```
 
 The control CLI validates loopback discovery, uses bearer authentication, disables
@@ -73,11 +73,19 @@ fixed heap quota; the former 64 MiB window ceiling does not limit UI bundles.
 Reload is serialized with admitted calls: old calls finish their commit/rollback
 first. The full candidate installation resolves and is inspected before one
 generation swap. Changed workers must start and import their bundles in temporary
-working directories before the server commits grants and schemas. Failed reload
-leaves old code, workers, subscriptions and data usable. Successful reload
-cancels only actions from retired builds and re-runs existing subscriptions.
-Removed or changed-kind queries produce subscription errors on the same id. The
-named ID must be present in the old or new installation.
+working directories before the server commits grants and schemas. A failed index
+backfill for an active plugin or a failed readiness check for its replacement
+leaves the active catalog, workers, subscriptions and data in place. A successful
+reload cancels only actions from retired builds and re-runs existing subscriptions
+when builds change. Removed or changed-kind queries produce subscription errors
+on the same id. The named ID must be present in the old or new installation.
+
+A unique index backfill that finds duplicate rows at startup skips that plugin
+and its required dependents. Every reload retries skipped plugins, even if their
+builds are unchanged. The reload result lists any that still fail under
+`skipped`; other changed builds can still go live. Recovered plugins and their
+required dependents rejoin the catalog in the same reload. Changing only an index
+declaration changes the backend bundle hash and therefore the plugin's build id.
 On Unix, unchanged files reuse verified snapshots only when canonical path,
 device/inode, size, mtime and ctime still match. Changed files are rehashed, so an
 unchanged manifest cannot conceal an in-place write or atomic replacement.

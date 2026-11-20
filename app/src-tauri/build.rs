@@ -1,7 +1,10 @@
 fn main() {
     println!("cargo:rerun-if-changed=dist");
     let target = std::env::var("TARGET").expect("Cargo target");
-    let sidecar = format!("dist/tokamak-{target}{}", std::env::consts::EXE_SUFFIX);
+    let sidecar = format!(
+        "dist/tokamak-server-{target}{}",
+        std::env::consts::EXE_SUFFIX
+    );
     if !std::path::Path::new(&sidecar).is_file() {
         // Cargo checks need no packaged artifacts; the Tauri hooks prepare them before bundling.
         let mut config: serde_json::Value =

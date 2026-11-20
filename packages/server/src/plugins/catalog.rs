@@ -67,32 +67,43 @@ impl Catalog {
 
         let order = resolve(&plugins)?;
 
+        let environment = root.parent().unwrap_or(root).join(".env.local");
+        let mut catalog = Self {
+            order,
+            plugins,
+            revision: String::new(),
+            providers: BTreeMap::new(),
+            environment,
+            directory: directory.to_owned(),
+        };
+        catalog.update_metadata();
+        Ok(catalog)
+    }
+
+    pub(super) fn update_metadata(&mut self) {
         let mut hash = Sha256::new();
+        self.providers.clear();
 
-        for id in &order {
-            hash.update(plugins[id].build_id.as_bytes());
-        }
-
-        let mut providers = BTreeMap::<String, Vec<String>>::new();
-
-        for id in &order {
-            for interface in &plugins[id].provides {
-                providers
+        for id in &self.order {
+            let artifact = &self.plugins[id];
+            hash.update(artifact.build_id.as_bytes());
+            for interface in &artifact.provides {
+                self.providers
                     .entry(interface.clone())
                     .or_default()
                     .push(id.clone());
             }
         }
 
-        let environment = root.parent().unwrap_or(root).join(".env.local");
+        self.revision = format!("{:x}", hash.finalize());
+    }
 
-        Ok(Self {
-            order,
-            plugins,
-            revision: format!("{:x}", hash.finalize()),
-            providers,
-            environment,
-            directory: directory.to_owned(),
+    pub(super) fn same_build(&self, previous: &Self, id: &str) -> bool {
+        self.plugins.get(id).is_some_and(|artifact| {
+            previous
+                .plugins
+                .get(id)
+                .is_some_and(|old| old.build_id == artifact.build_id)
         })
     }
 

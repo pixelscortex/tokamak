@@ -12,7 +12,7 @@ try {
   await mkdir(`${directory}/plugins`);
   await cp(`${process.env.TOKAMAK_PLUGIN_DIR}/chat`, `${directory}/plugins/chat`, { recursive: true });
   const child = spawn(
-    `${root}/target/debug/tokamak`,
+    `${root}/target/debug/tokamak-server`,
     [
       "--web",
       process.env.TOKAMAK_E2E_WEB_ROOT!,

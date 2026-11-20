@@ -89,57 +89,46 @@ impl Coordinator {
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
-        let catalog =
-            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
+        let previous = self.plugins.as_deref();
+        let catalog = crate::plugins::Catalog::read_reusing(root, previous.map(|p| &p.catalog))?;
 
         if !catalog.plugins.contains_key(id)
-            && !self
-                .plugins
-                .as_ref()
-                .is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
+            && !previous.is_some_and(|old| {
+                old.catalog.plugins.contains_key(id) || old.skipped.contains_key(id)
+            })
         {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        if self
-            .plugins
-            .as_ref()
-            .is_some_and(|old| old.catalog.revision == catalog.revision)
+        if previous
+            .is_some_and(|old| old.skipped.is_empty() && old.catalog.revision == catalog.revision)
         {
             return self.metadata();
         }
 
-        let candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
-                .await?;
-        let mut changed = std::collections::BTreeSet::new();
-        if let Some(previous) = &self.plugins {
-            for (id, artifact) in &previous.catalog.plugins {
-                if candidate
-                    .catalog
-                    .plugins
-                    .get(id)
-                    .is_none_or(|next| artifact.build_id != next.build_id)
-                {
-                    changed.insert(id.clone());
-                }
-            }
-            for id in candidate.catalog.plugins.keys() {
-                if !previous.catalog.plugins.contains_key(id) {
-                    changed.insert(id.clone());
-                }
-            }
-        }
-
-        candidate.check_workers(&changed).await?;
-        Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
-        // All fallible preparation is complete. No requests can observe a
-        // partial swap while the coordinator retires the changed builds.
-        candidate.publish(self.plugins.as_deref(), &changed).await;
+        let mut candidate =
+            crate::plugins::Loaded::load_reusing(catalog, &self.pool, previous).await?;
+        Box::pin(candidate.record_grants(&self.database, previous)).await?;
+        let changed = candidate.changed_plugins(previous);
+        // An empty report marks recovery when the previous load had skips.
+        let skipped = (previous.is_some_and(|old| !old.skipped.is_empty())
+            || !candidate.skipped.is_empty())
+        .then(|| serde_json::json!(candidate.skipped));
+        let candidate = Arc::new(candidate);
+        // Backfill and readiness have both passed for the remaining candidates.
+        // Retire only builds that differ in the catalog we will publish.
+        candidate.publish(previous, &changed).await;
         self.kinds = candidate.client_kinds();
         self.plugins = Some(candidate);
 
-        let catalog = self.metadata()?;
+        let mut catalog = self.metadata()?;
+        if let Some(skipped) = skipped {
+            catalog["skipped"] = skipped;
+        }
+        if changed.is_empty() {
+            return Ok(catalog);
+        }
+
         // Use the same bounded ordered stream as data updates. Asset requests
         // carry the plugin's build id so they cannot mix builds.
         for session in self.sessions.keys().copied().collect::<Vec<_>>() {
@@ -153,7 +142,7 @@ impl Coordinator {
         }
         self.invalidate(None);
         self.refresh().await;
-        self.metadata()
+        Ok(catalog)
     }
 
     pub(super) fn asset_page(

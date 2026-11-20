@@ -16,7 +16,7 @@ mod indexes;
 mod records;
 
 // Hold the catalog stable from a writer's first mutation through its outcome.
-// Read guards coexist; only defining a new index needs exclusive access.
+// Read guards coexist; changing the catalog needs exclusive access.
 enum CatalogGuard {
     Read { _guard: OwnedRwLockReadGuard<()> },
     Write { _guard: OwnedRwLockWriteGuard<()> },

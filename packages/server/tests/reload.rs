@@ -2,7 +2,7 @@ use engine::{Pool, PoolConfig};
 use serde_json::{Value, json};
 use server::{
     Event, Server,
-    data::{Database, Storage},
+    data::{DataSpace, Database, Id, Storage, Table, json_object},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -430,5 +430,326 @@ async fn query_missing_on_reload_errors_and_recovers_on_same_subscription() {
     assert_eq!(server.reload_plugin("a".into()).await.unwrap(), before);
     assert_eq!(subscription(&mut s).await.unwrap(), json!([]));
     drop(s);
+    server.close().await.unwrap();
+}
+
+fn with_index(root: &Path, id: &str, unique: bool) {
+    let schema = json!({"tables":{"records":{
+        "description":{"kind":"object","fields":{"key":{"kind":"string"}}},
+        "indexes":[{"name":"by_key","fields":["key"],"unique":unique}]
+    }}});
+    let source = std::fs::read_to_string(root.join(id).join("bundle.js")).unwrap();
+    let empty_schema = "schemaMetadata(null)";
+    assert_eq!(source.matches(empty_schema).count(), 1);
+    write_asset(
+        root,
+        id,
+        "bundle.js",
+        &source.replace(empty_schema, &schema.to_string()),
+    );
+}
+
+fn copy_worker(root: &Path, id: &str) {
+    std::fs::create_dir(root.join(id)).unwrap();
+    for name in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        std::fs::copy(root.join("b").join(name), root.join(id).join(name)).unwrap();
+    }
+    edit_manifest(root, id, |m| m["plugin"]["id"] = json!(id));
+    install_worker(root, id);
+}
+
+fn records(id: &str) -> Table {
+    DataSpace::plugin(id)
+        .unwrap()
+        .table(&Table::new("records").unwrap())
+        .unwrap()
+}
+
+async fn seed_rows(database: &Database, id: &str, keys: &[&str]) -> Vec<Id> {
+    let mut tx = database.begin().await.unwrap();
+    let mut ids = Vec::new();
+    for key in keys {
+        ids.push(
+            tx.insert(&records(id), json_object(&json!({"key": key})).unwrap())
+                .await
+                .unwrap(),
+        );
+    }
+    tx.commit().await.unwrap();
+    ids
+}
+
+async fn load_with_database(root: &Path, database: Database) -> Server {
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    Server::load_plugins(database, pool, root).await.unwrap()
+}
+
+async fn worker_pid(session: &mut server::Session, id: u64, name: &str) -> u64 {
+    invoke(session, id, name, json!({}));
+    action_response(session, id)
+        .await
+        .unwrap()
+        .as_u64()
+        .unwrap()
+}
+
+fn plugin_entry<'a>(catalog: &'a Value, id: &str) -> &'a Value {
+    catalog["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["plugin"]["id"] == id)
+        .unwrap_or(&Value::Null)
+}
+
+async fn next_event(session: &mut server::Session) -> Event {
+    tokio::time::timeout(Duration::from_secs(5), session.recv())
+        .await
+        .expect("session did not receive the reload event or action response")
+        .unwrap()
+        .unwrap()
+}
+
+async fn assert_changed(session: &mut server::Session, expected: &[&str], result: &Value) {
+    let Event::PluginChanged { plugins, catalog } = next_event(session).await else {
+        panic!("expected a plugin change event");
+    };
+    assert_eq!(plugins, expected);
+    assert_eq!(catalog["revision"], result["revision"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn changed_worker_swaps_while_skipped_index_is_retried() {
+    let installation = installation();
+    let root = &installation.path().join("plugins");
+    for id in ["a", "b"] {
+        install_worker(root, id);
+    }
+    copy_worker(root, "indexed");
+    with_index(root, "indexed", true);
+    let db = Database::open(Storage::Memory).await.unwrap();
+    let rows = seed_rows(&db, "indexed", &["old-collision", "old-collision"]).await;
+    let mut edit = db.begin().await.unwrap();
+    let server = load_with_database(root, db).await;
+    let before = server.plugins().await.unwrap();
+    assert!(plugin_entry(&before, "indexed").is_null());
+    for row in rows {
+        edit.patch(&row, json_object(&json!({"key":"new-collision"})).unwrap())
+            .await
+            .unwrap();
+    }
+    edit.commit().await.unwrap();
+
+    let mut session = server.connect().await.unwrap();
+    let a_pid = worker_pid(&mut session, 1, A).await;
+    let b_pid = worker_pid(&mut session, 2, B).await;
+    invoke(&session, 3, B, json!({"hold":"survives"}));
+    started(root, "b", "survives").await;
+
+    bump(root, "a");
+    let result = server.reload_plugin("a".into()).await.unwrap();
+    assert_changed(&mut session, &["a"], &result).await;
+    assert_eq!(plugin_entry(&result, "a")["plugin"]["version"], "1.0.1");
+    assert_eq!(plugin_entry(&result, "b"), plugin_entry(&before, "b"));
+    assert!(plugin_entry(&result, "indexed").is_null());
+    let reason = result["skipped"]["indexed"].as_str().unwrap();
+    assert!(
+        reason.contains("by_key") && reason.contains("new-collision"),
+        "{reason}"
+    );
+
+    release(root, "b", "survives");
+    assert_eq!(action_response(&mut session, 3).await, Ok(json!(b_pid)));
+    assert_eq!(worker_pid(&mut session, 4, B).await, b_pid);
+    assert_ne!(worker_pid(&mut session, 5, A).await, a_pid);
+    drop(session);
+    server.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn repaired_index_restores_only_skipped_plugin_and_required_dependent() {
+    let installation = installation();
+    let root = &installation.path().join("plugins");
+    for id in ["a", "b"] {
+        install_worker(root, id);
+    }
+    for id in ["indexed", "dependent"] {
+        copy_worker(root, id);
+    }
+    edit_manifest(root, "dependent", |m| {
+        m["plugin"]["depends"] = json!({"indexed":"*"})
+    });
+    with_index(root, "indexed", true);
+
+    let db = Database::open(Storage::Memory).await.unwrap();
+    let rows = seed_rows(&db, "indexed", &["duplicate", "duplicate"]).await;
+    let mut repair = db.begin().await.unwrap();
+    let server = load_with_database(root, db).await;
+    let before = server.plugins().await.unwrap();
+    for id in ["indexed", "dependent"] {
+        assert!(plugin_entry(&before, id).is_null());
+    }
+
+    let mut session = server.connect().await.unwrap();
+    let a_pid = worker_pid(&mut session, 1, A).await;
+    let b_pid = worker_pid(&mut session, 2, B).await;
+    repair
+        .patch(&rows[1], json_object(&json!({"key":"repaired"})).unwrap())
+        .await
+        .unwrap();
+    repair.commit().await.unwrap();
+
+    // No file is rewritten. Reloading the skipped id itself retries both builds.
+    let result = server.reload_plugin("indexed".into()).await.unwrap();
+    assert_changed(&mut session, &["dependent", "indexed"], &result).await;
+    assert_eq!(result["skipped"], json!({}));
+    let indexed = worker_pid(&mut session, 3, "indexed/ops:callerAction").await;
+    let dependent = worker_pid(&mut session, 4, "dependent/ops:callerAction").await;
+    assert_ne!(indexed, dependent);
+    assert_eq!(worker_pid(&mut session, 5, A).await, a_pid);
+    assert_eq!(worker_pid(&mut session, 6, B).await, b_pid);
+    drop(session);
+    server.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn failed_backfill_or_readiness_keeps_live_builds_and_indexes() {
+    let installation = installation();
+    let root = &installation.path().join("plugins");
+    for id in ["a", "b"] {
+        install_worker(root, id);
+    }
+    let storage = Storage::Disk(installation.path().join("store"));
+    let db = Database::open(storage.clone()).await.unwrap();
+    seed_rows(&db, "a", &["duplicate", "duplicate"]).await;
+    seed_rows(&db, "b", &["kept"]).await;
+    let server = load_with_database(root, db).await;
+    let before = server.plugins().await.unwrap();
+    let mut session = server.connect().await.unwrap();
+    let a_pid = worker_pid(&mut session, 1, A).await;
+    let b_pid = worker_pid(&mut session, 2, B).await;
+    invoke(&session, 3, B, json!({"hold":"survives"}));
+    started(root, "b", "survives").await;
+
+    // Dependencies load first. Stage B's valid index, then fail A's backfill.
+    with_index(root, "b", false);
+    with_index(root, "a", true);
+    let err = server
+        .reload_plugin("a".into())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("by_key") && err.contains("duplicate"), "{err}");
+    assert_eq!(server.plugins().await.unwrap(), before);
+
+    // Allow both indexes to be staged, then make A fail the readiness probe.
+    write_asset(root, "a", "bundle.js", &artifacts()["a/bundle.js"]);
+    with_index(root, "a", false);
+    write_asset(root, "a", "worker.js", "export const broken = ;");
+    let err = server
+        .reload_plugin("a".into())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Plugin a worker failed readiness"), "{err}");
+    assert_eq!(server.plugins().await.unwrap(), before);
+    release(root, "b", "survives");
+    let Event::Response { id: 3, result } = next_event(&mut session).await else {
+        panic!("refused reload published a plugin change");
+    };
+    assert_eq!(result, Ok(json!(b_pid)));
+    assert_eq!(worker_pid(&mut session, 4, A).await, a_pid);
+    assert_eq!(worker_pid(&mut session, 5, B).await, b_pid);
+
+    drop(session);
+    server.close().await.unwrap();
+    let mut db = Database::open(storage).await.unwrap();
+    for id in ["a", "b"] {
+        let mut tx = db.read_only().await.unwrap();
+        let err = tx
+            .query(&records(id))
+            .with_index("by_key")
+            .collect()
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
+        tx.rollback().await.unwrap();
+    }
+    db.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn index_only_build_changes_revision_and_restarts_only_its_worker() {
+    let installation = installation();
+    let root = &installation.path().join("plugins");
+    for id in ["a", "b"] {
+        install_worker(root, id);
+    }
+    let storage = Storage::Disk(installation.path().join("store"));
+    let db = Database::open(storage.clone()).await.unwrap();
+    let rows = seed_rows(&db, "a", &["kept"]).await;
+    let server = load_with_database(root, db).await;
+    let before = server.plugins().await.unwrap();
+    let mut session = server.connect().await.unwrap();
+    let a_pid = worker_pid(&mut session, 1, A).await;
+    let b_pid = worker_pid(&mut session, 2, B).await;
+
+    with_index(root, "a", false);
+    let result = server.reload_plugin("a".into()).await.unwrap();
+    assert_changed(&mut session, &["a"], &result).await;
+    let (old, new) = (plugin_entry(&before, "a"), plugin_entry(&result, "a"));
+    assert_eq!(old["plugin"], new["plugin"]);
+    assert_eq!(old["hashes"]["worker.js"], new["hashes"]["worker.js"]);
+    assert_ne!(old["hashes"]["bundle.js"], new["hashes"]["bundle.js"]);
+    assert_ne!(old["revision"], new["revision"]);
+    assert_ne!(worker_pid(&mut session, 3, A).await, a_pid);
+    assert_eq!(worker_pid(&mut session, 4, B).await, b_pid);
+
+    drop(session);
+    server.close().await.unwrap();
+    let mut db = Database::open(storage).await.unwrap();
+    let mut tx = db.read_only().await.unwrap();
+    assert_eq!(
+        tx.query(&records("a"))
+            .with_index("by_key")
+            .collect()
+            .await
+            .unwrap(),
+        vec![tx.get(&rows[0]).await.unwrap().unwrap()]
+    );
+    tx.rollback().await.unwrap();
+    db.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn no_op_reload_preserves_running_actions_and_worker_pids() {
+    let installation = installation();
+    let root = &installation.path().join("plugins");
+    for id in ["a", "b"] {
+        install_worker(root, id);
+    }
+    let server = start(root).await;
+    let before = server.plugins().await.unwrap();
+    let mut session = server.connect().await.unwrap();
+    let a_pid = worker_pid(&mut session, 1, A).await;
+    let b_pid = worker_pid(&mut session, 2, B).await;
+    invoke(&session, 3, A, json!({"hold":"a"}));
+    invoke(&session, 4, B, json!({"hold":"b"}));
+    started(root, "a", "a").await;
+    started(root, "b", "b").await;
+
+    let result = server.reload_plugin("a".into()).await.unwrap();
+    assert_eq!(result, before);
+    // Release one at a time and check for an action response before any event.
+    for (id, hold, request, pid) in [("a", "a", 3, a_pid), ("b", "b", 4, b_pid)] {
+        release(root, id, hold);
+        let Event::Response { id, result } = next_event(&mut session).await else {
+            panic!("no-op reload published a plugin change");
+        };
+        assert_eq!((id, result), (request, Ok(json!(pid))));
+    }
+    assert_eq!(worker_pid(&mut session, 5, A).await, a_pid);
+    assert_eq!(worker_pid(&mut session, 6, B).await, b_pid);
+    drop(session);
     server.close().await.unwrap();
 }

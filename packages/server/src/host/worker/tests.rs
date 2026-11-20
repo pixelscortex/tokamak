@@ -40,11 +40,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
     )
     .await
     .unwrap();
-    let worker = Arc::get_mut(&mut loaded)
-        .unwrap()
-        .workers
-        .remove("worker-test")
-        .unwrap();
+    let worker = loaded.workers.remove("worker-test").unwrap();
     (directory, worker)
 }
 async fn state(worker: &Supervisor) -> Value {
