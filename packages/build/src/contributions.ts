@@ -1,4 +1,5 @@
-import { pluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
+import { dirname } from "node:path";
+import { readPluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { clientEntry } from "./descriptor.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
  * 6.0.3 is the newest JS API release; 7.x has no JS API. Upgrading belongs to
@@ -19,14 +20,8 @@ const fields = {
 const optional: Partial<Record<keyof typeof fields, readonly string[]>> = { view: ["icon"] };
 export function uiContributions(root: string) {
   const entry = clientEntry(root);
-  const configPath = ts.findConfigFile(root, ts.sys.fileExists);
-  const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
-  if (configResult.error)
-    throw new Error(ts.flattenDiagnosticMessageText(configResult.error.messageText, "\n"));
-  const config = configResult.config;
-  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
   const program = ts.createProgram([entry], {
-    ...pluginCompilerOptions(root, parsed.options),
+    ...readPluginCompilerOptions(root, dirname(entry), true),
     noEmit: false,
     noEmitOnError: false,
     declaration: false,

@@ -43,6 +43,69 @@ function configuration(file) {
   return ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path));
 }
 
+const checkoutWindow = resolve(sdkRoot, "../../app");
+const moduleDefaults = {
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.Preserve,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  strict: true,
+};
+let checkoutPaths;
+function sharedTypePaths() {
+  if (checkoutPaths) return checkoutPaths;
+  checkoutPaths = {};
+  const importer = resolve(checkoutWindow, "src/styles.ts");
+  for (const name of [
+    "@tokamak/sdk",
+    "@tokamak/ui",
+    "@tokamak/runtime",
+    "solid-js",
+    "@solidjs/web",
+    "@ui-sdk/solid",
+    "@ui-sdk/core",
+  ]) {
+    const manifest = [checkoutWindow, dirname(checkoutWindow)]
+      .map((folder) => resolve(folder, "node_modules", name, "package.json"))
+      .find(existsSync);
+    if (!manifest) continue;
+    const exports = JSON.parse(readFileSync(manifest, "utf8")).exports;
+    for (const key of [".", ...Object.keys(exports ?? {}).filter((key) => key.startsWith("./"))]) {
+      const id = key === "." ? name : name + key.slice(1);
+      const target = ts.resolveModuleName(id, importer, moduleDefaults, ts.sys).resolvedModule;
+      if (target) checkoutPaths[id] = [target.resolvedFileName];
+    }
+  }
+  return checkoutPaths;
+}
+
+export function pluginTsconfig(root, folder) {
+  for (let dir = folder; inside(root, dir); dir = dirname(dir)) {
+    const path = resolve(dir, "tsconfig.json");
+    if (existsSync(path)) return path;
+    if (dir === root || dirname(dir) === dir) break;
+  }
+}
+
+export function readPluginCompilerOptions(root, folder, window = false) {
+  const path = pluginTsconfig(root, folder);
+  const config = path ? ts.readConfigFile(path, ts.sys.readFile) : { config: {} };
+  const parsed = ts.parseJsonConfigFileContent(config.config ?? {}, ts.sys, path ? dirname(path) : folder);
+  const invalid = config.error ?? parsed.errors.find(({ code }) => code !== 18002 && code !== 18003);
+  if (invalid) throw new Error(ts.flattenDiagnosticMessageText(invalid.messageText, "\n"));
+  return pluginCompilerOptions(root, {
+    ...(window
+      ? {
+          lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
+          jsx: ts.JsxEmit.Preserve,
+          jsxImportSource: "@solidjs/web",
+          allowImportingTsExtensions: true,
+          skipLibCheck: true,
+        }
+      : {}),
+    ...parsed.options,
+  });
+}
+
 export function pluginCompilerOptions(root, options) {
   // Resolve inherited paths at their declaring config, before adding our own.
   const base = options.baseUrl ?? options.pathsBasePath ?? root;
@@ -53,8 +116,10 @@ export function pluginCompilerOptions(root, options) {
     ]),
   );
   return {
+    ...moduleDefaults,
     ...options,
     paths: {
+      ...sharedTypePaths(),
       ...paths,
       "plugin:*/server": [resolve(generated(root), "*/server.d.ts")],
       "plugin:*/client": [resolve(generated(root), "*/client.d.ts")],
@@ -322,9 +387,9 @@ export function bunPluginReferences(root) {
   return {
     name: "plugin-references",
     setup(build) {
-      build.onResolve({ filter: /^@tokamak\/sdk$/ }, ({ importer }) => {
-        if (importer.startsWith("plugin:")) return { path: Bun.resolveSync("@tokamak/sdk", root) };
-      });
+      build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
+        path: resolve(sdkRoot, "src/index.ts"),
+      }));
       build.onResolve({ filter: /^plugin:/ }, ({ path }) => ({ path, namespace: "plugin-reference" }));
       build.onLoad({ filter: /.*/, namespace: "plugin-reference" }, ({ path }) => ({
         contents: pluginReferenceSource(root, path),

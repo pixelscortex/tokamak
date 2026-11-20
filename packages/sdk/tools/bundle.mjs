@@ -2,7 +2,7 @@
 // Bun's parser scans module exports without executing feature code on the build
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,7 @@ import {
   checkPluginImports,
   featurePluginRoot,
   pluginCompilerOptions,
+  pluginTsconfig,
 } from "./plugin-boundary.mjs";
 import ts from "typescript";
 
@@ -55,7 +56,7 @@ function apiType(modules, files) {
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
 export async function bundleFeature(folder, namespace, worker = false) {
-  const root = resolve(folder);
+  const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
   checkPluginImports(pluginRoot);
@@ -119,14 +120,6 @@ export async function bundleFeature(folder, namespace, worker = false) {
             }));
           },
         },
-        {
-          name: "portable-sdk",
-          setup(build) {
-            build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
-              path: join(sdkRoot, "src/index.ts"),
-            }));
-          },
-        },
       ],
     });
     if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
@@ -186,12 +179,8 @@ async function scanFiles(root) {
 
 async function checkFeature(root, temporary, generated, files, entry, worker) {
   const config = join(temporary, "tsconfig.json");
-  // Inherit resolution options unchanged, including paths relative to the
-  // config that declared them. A build-only SDK alias or TS-extension opt-in
-  // would accept code that generated-reference consumers cannot type-check.
-  const parentConfig = (await Bun.file(join(root, "tsconfig.json")).exists())
-    ? join(root, "tsconfig.json")
-    : join(sdkRoot, "../..", "tsconfig.json");
+  const parentConfig =
+    pluginTsconfig(featurePluginRoot(root), root) ?? join(sdkRoot, "../..", "tsconfig.json");
   const inherited = ts.getParsedCommandLineOfConfigFile(
     parentConfig,
     {},

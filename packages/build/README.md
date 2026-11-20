@@ -106,3 +106,26 @@ paths to the plugin's tsconfig (relative to the plugin root):
 
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
+
+## Building outside the checkout
+
+Run the build from an installed checkout and pass the plugin folder:
+
+```sh
+proto run bun -- packages/build/src/build.ts /path/to/plugin
+```
+
+A source-only plugin can contain just `plugin.ts` and `src/`. Put the server
+part in `src/server` and the window part in `src/client`. The build supplies
+TypeScript defaults and resolves shared library types and the Tailwind and
+Tokamak theme styles from the checkout. A `tsconfig.json` in the plugin folder
+or in the relevant source folder can override the compiler defaults. A
+`package.json` is optional with a descriptor; the build does not install
+dependencies. Output goes to the plugin's own `dist/` folder.
+
+To test the external artifact against a real server:
+
+```sh
+cargo build --locked -p server --bin tokamak
+proto run bun -- test packages/build/tests/outside-server.test.mjs
+```
