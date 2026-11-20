@@ -1,92 +1,75 @@
 /** Local process ownership only; the server owns storage and shutdown. */
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { link, lstat, mkdir, open, readFile, rm, rmdir, writeFile } from "node:fs/promises";
-import { isIP } from "node:net";
+import { link, lstat, mkdir, open, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { resolve, toNamespacedPath } from "node:path";
+import { CommandError } from "./command";
+import { acquireLock, codeOf } from "./lock";
+import { inspectLocalServer, readToken, requestShutdown } from "./server";
 
-// Bun fetch uses an empty proxy override to connect directly to loopback.
-const direct = { proxy: "" };
+type Identity = NonNullable<Awaited<ReturnType<typeof inspectLocalServer>>>["identity"];
 
-type Identity = {
-  pid: number;
-  url: string;
-  bundleHash: string;
-  buildId?: string;
-  pluginRoot?: string;
-};
+const sharedServerEnv = new Set([
+  "TOKAMAK_TOKEN",
+  "TOKAMAK_ACCESS_TOKEN",
+  "TOKAMAK_SERVER",
+  "TOKAMAK_WEB_DIR",
+]);
 
-async function token(directory: string): Promise<string> {
-  const path = resolve(directory, "server.token");
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || (process.platform !== "win32" && metadata.mode & 0o077)) {
-    throw new Error("Local capability must be a private regular file");
-  }
-  const value = await readFile(path, "utf8");
-  if (!/^[a-f0-9]{64}$/i.test(value)) throw new Error("Invalid local capability");
-  return value;
+export function localServerEnv() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !sharedServerEnv.has(name.toUpperCase())),
+  );
 }
 
-function endpoint(identity: Identity, path: string): URL {
-  const url = new URL(identity.url);
-  if (
-    url.protocol !== "ws:" ||
-    !(url.hostname === "[::1]" || (isIP(url.hostname) === 4 && url.hostname.startsWith("127."))) ||
-    url.username ||
-    url.password ||
-    url.pathname !== "/ws" ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error("Invalid local server discovery");
+async function lifecycleLock<T>(directory: string, action: () => Promise<T>) {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const lock = resolve(directory, "server-start.lock");
+  // The desktop uses mkdir too. An empty lock may belong to the desktop.
+  await acquireLock(
+    () => mkdir(lock, { mode: 0o700 }),
+    90_000,
+    async (error) => {
+      if (codeOf(error) !== "EEXIST") throw error;
+    },
+    `local server lifecycle lock: ${lock}`,
+  );
+  try {
+    return await action();
+  } finally {
+    await rmdir(lock);
   }
-  url.protocol = "http:";
-  url.pathname = path;
-  return url;
 }
 
-export async function status(directory: string): Promise<Identity | undefined> {
-  let identity: Identity;
+async function hasFile(path: string) {
   try {
-    identity = JSON.parse(await readFile(resolve(directory, "server.json"), "utf8"));
+    return (await stat(path)).isFile();
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    if (["ENOENT", "ENOTDIR"].includes(codeOf(error) ?? "")) return false;
     throw error;
   }
-  if (
-    !Number.isSafeInteger(identity.pid) ||
-    identity.pid <= 0 ||
-    identity.pid > 0xffffffff ||
-    !/^[a-f0-9]{64}$/i.test(identity.bundleHash)
-  )
-    throw new Error("Invalid local server discovery");
-  const url = endpoint(identity, "/health");
-  const capability = await token(directory);
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: { authorization: `Bearer ${capability}` },
-      signal: AbortSignal.timeout(5000),
-      redirect: "error",
-      ...direct,
-    });
-  } catch (error) {
-    const failure = error as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
-    if ([failure.code, failure.cause?.code].includes("ECONNREFUSED")) return;
-    throw error;
+}
+
+async function hasArtifact(folder: string) {
+  return (
+    (await hasFile(resolve(folder, "manifest.json"))) ||
+    (await hasFile(resolve(folder, "dist/manifest.json")))
+  );
+}
+
+async function checkPlugins(plugins: string) {
+  if (await hasArtifact(plugins)) return;
+  for (const name of await readdir(plugins)) {
+    if (name.startsWith(".")) continue;
+    const folder = resolve(plugins, name);
+    if ((await hasFile(resolve(folder, "package.json"))) && !(await hasArtifact(folder))) {
+      const arg = process.platform === "win32" ? `"${folder}"` : "'" + folder.replaceAll("'", "'\\''") + "'";
+      throw new CommandError(
+        "A plugin in the plugins folder has not been built",
+        `proto run bun -- run tokamak plugin build ${arg}`,
+      );
+    }
   }
-  if (!response.ok) throw new Error(`Local server health refused (${response.status})`);
-  const actual = (await response.json()) as Identity;
-  if (
-    actual.pid !== identity.pid ||
-    actual.url !== identity.url ||
-    actual.bundleHash !== identity.bundleHash ||
-    (actual.buildId ?? null) !== (identity.buildId ?? null) ||
-    (actual.pluginRoot ?? null) !== (identity.pluginRoot ?? null)
-  ) {
-    throw new Error("Local server identity does not match discovery");
-  }
-  return identity;
 }
 
 async function wait(): Promise<void> {
@@ -99,69 +82,50 @@ export async function ensure(
   buildId: string,
   directory: string,
 ): Promise<{ identity: Identity; reused: boolean }> {
-  function compatible(identity: Identity): Identity {
-    // Rust canonicalizes Windows paths to their extended-length form.
-    if (
-      !identity.pluginRoot ||
-      toNamespacedPath(identity.pluginRoot) !== toNamespacedPath(plugins) ||
-      identity.buildId !== buildId
-    ) {
-      throw new Error("Local server is running with a different build or plugins folder; stop it first");
+  return lifecycleLock(directory, async () => {
+    const running = await inspectLocalServer(directory);
+    if (running) {
+      if (!running.responsive)
+        throw new CommandError(
+          "Local server is running but is not responding",
+          `Inspect ${resolve(directory, "server.log")}`,
+        );
+      const { identity } = running;
+      // Rust canonicalizes Windows paths to their extended-length form.
+      if (
+        !identity.pluginRoot ||
+        toNamespacedPath(identity.pluginRoot) !== toNamespacedPath(plugins) ||
+        identity.buildId !== buildId
+      )
+        throw new CommandError(
+          "Local server is running with a different server build or plugins folder",
+          "tokamak server stop",
+        );
+      return { identity, reused: true };
     }
-    return identity;
-  }
-  const running = await status(directory);
-  if (running) return { identity: compatible(running), reused: true };
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const lock = resolve(directory, "server-start.lock");
-  // Serialize launchers, not the actual server. A crashed launcher's stale lock
-  // produces an explicit error; never kill a PID or silently steal ownership.
-  let owner = false;
-  const deadline = Date.now() + 60_000;
-  while (!owner && Date.now() < deadline) {
-    try {
-      await mkdir(lock, { mode: 0o700 });
-      owner = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const running = await status(directory);
-      if (running) return { identity: compatible(running), reused: true };
-      await wait();
-    }
-  }
-  if (!owner) throw new Error("Local server startup lock is busy or stale; inspect server-start.lock");
-  try {
-    const running = await status(directory);
-    if (running) return { identity: compatible(running), reused: true };
+    await checkPlugins(plugins);
     await createToken(directory);
-    await token(directory);
+    await readToken(directory);
     const identity = await startServer(binary, plugins, directory, Date.now() + 60_000);
-    return { identity: compatible(identity), reused: false };
-  } finally {
-    await rmdir(lock);
-  }
+    return { identity, reused: false };
+  });
 }
 
 export async function stop(directory: string): Promise<boolean> {
-  const running = await status(directory);
-  if (!running) return false;
-  const url = endpoint(running, "/shutdown");
-  const capability = await token(directory);
-  let response: Response | undefined;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${capability}` },
-      signal: AbortSignal.timeout(5000),
-      redirect: "error",
-      ...direct,
-    });
-  } catch {
-    // Cancellation closes accepted HTTP I/O as well as WebSockets. A lost
-    // acknowledgement is not proof of shutdown: still await the readiness
-    // removal barrier below, and never retry or signal a PID.
-  }
-  if (response && !response.ok) throw new Error(`Local server shutdown refused (${response.status})`);
+  return lifecycleLock(directory, async () => {
+    const running = await inspectLocalServer(directory);
+    if (!running) return false;
+    if (!running.responsive)
+      throw new CommandError(
+        "Local server is running but is not responding",
+        `Inspect ${resolve(directory, "server.log")}`,
+      );
+    await requestShutdown(running.endpoint);
+    return await waitForShutdown(directory);
+  });
+}
+
+async function waitForShutdown(directory: string): Promise<boolean> {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     try {
@@ -198,7 +162,7 @@ async function startServer(
   const log = await open(resolve(directory, "server.log"), "a", 0o600);
   const child = spawn(binary, ["--local-dir", directory, "--plugins", plugins], {
     detached: true,
-    env: { ...process.env, TOKAMAK_WEB_DIR: undefined },
+    env: localServerEnv(),
     stdio: ["ignore", log.fd, log.fd],
     windowsHide: process.platform === "win32",
   });
@@ -209,8 +173,8 @@ async function startServer(
   child.unref();
   await log.close();
   while (Date.now() < deadline) {
-    const ready = await status(directory);
-    if (ready && ready.pid === child.pid) return ready;
+    const ready = await inspectLocalServer(directory);
+    if (ready?.responsive && ready.identity.pid === child.pid) return ready.identity;
     if (failure) throw failure;
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error("Local server exited before readiness; inspect server.log");

@@ -5,9 +5,6 @@ use std::{io, path::PathBuf, sync::Mutex, time::SystemTime};
 use subtle::ConstantTimeEq;
 use tokio_util::sync::CancellationToken;
 
-mod cli;
-pub use cli::revoke;
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct User {
     pub id: String,
@@ -142,13 +139,12 @@ impl Identities {
                 cancelled: CancellationToken::new(),
             });
         }
-        let identities = Self {
+        Self::save(Some(&path), &members)?;
+        Ok(Self {
             path: Some(path),
             members: Mutex::new(members),
             anonymous: false,
-        };
-        identities.save(&identities.members.lock().expect("members lock"))?;
-        Ok(identities)
+        })
     }
 
     /// The single token-to-user boundary for hosted and local connections.
@@ -241,17 +237,19 @@ impl Identities {
         let mut members = self.members.lock().expect("members lock");
         let mut next = members.clone();
         let result = update(&mut next)?;
-        self.save(&next).map_err(|e| e.to_string())?;
+        Self::save(self.path.as_deref(), &next).map_err(|e| e.to_string())?;
         *members = next;
         Ok(result)
     }
 
-    fn save(&self, members: &[Member]) -> io::Result<()> {
+    fn save(path: Option<&std::path::Path>, members: &[Member]) -> io::Result<()> {
         use std::io::Write;
-        let Some(path) = &self.path else {
+        let Some(path) = path else {
             return Ok(());
         };
-        let directory = path.parent().expect("members directory");
+        let directory = path
+            .parent()
+            .ok_or_else(|| io::Error::other("Missing members directory"))?;
         std::fs::create_dir_all(directory)?;
         let mut file = tempfile::NamedTempFile::new_in(directory)?;
         file.write_all(&serde_json::to_vec_pretty(members)?)?;

@@ -273,7 +273,9 @@ async fn authorize(
             return response;
         };
         let path = request.uri().path();
-        if (path.starts_with("/members") || path == "/shutdown" || path.ends_with("/reload"))
+        if (path.starts_with("/members")
+            || matches!(path, "/health" | "/shutdown")
+            || path.ends_with("/reload"))
             && user.role != "owner"
         {
             return StatusCode::FORBIDDEN.into_response();

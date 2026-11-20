@@ -48,7 +48,8 @@ These temporary identities will be replaced by real accounts later.
 
 From a Tokamak checkout, install the workspace dependencies with
 `proto run bun -- install --frozen-lockfile`. Run the CLI on your own machine;
-it calls the shared server over HTTPS:
+it calls the shared server over HTTPS. Set the CLI's `TOKAMAK_TOKEN` to the
+service's `TOKAMAK_ACCESS_TOKEN`:
 
 ```sh
 export TOKAMAK_SERVER='https://tokamak.example.app'
@@ -62,7 +63,7 @@ proto run bun -- run tokamak revoke '<member id>'
 `members` lists active members by ID, name, and role.
 Revocation closes that member's open WebSockets and rejects future connections.
 The bootstrap owner cannot be revoked; rotate its environment token instead.
-HTTP is accepted by the CLI only on loopback for local testing.
+The CLI people commands accept plain HTTP only for loopback addresses during local testing.
 
 Members are stored in `members.json` beside the `--data` store directory: the
 image's `/data/store` uses `/data/members.json`. Each row contains

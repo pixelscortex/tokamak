@@ -17,7 +17,7 @@ A server that several people connect to. Its workspace lives only there.
 _Avoid_: Hub, remote, cloud server
 
 **Local server**:
-The server that the desktop app runs on a person's own computer. Its workspace has that person as its only member.
+The server that runs on a person's own computer. The desktop app or CLI can start it. The owner can invite members to its workspace.
 _Avoid_: This Mac, desktop server, embedded server
 
 **Machine**:
