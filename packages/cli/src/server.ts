@@ -1,13 +1,10 @@
 import { lstat, readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { join } from "node:path";
+import { direct, loopback } from "../../runtime/tools/direct-http";
 import { CommandError } from "./command";
 import { dataFolder } from "./data";
 import { processIsAlive } from "./process";
-
-const loopback = (host: string) =>
-  host === "localhost" || host === "[::1]" || (isIP(host) === 4 && host.startsWith("127."));
-const noProxy = { proxy: "" };
 
 function httpAddress(address: string) {
   let url: URL;
@@ -87,17 +84,16 @@ export class ServerRefusal extends CommandError {
 async function request(path: string, endpoint: { url: URL; token: string }, body?: object): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(new URL(path, endpoint.url), {
-      ...(loopback(endpoint.url.hostname) ? noProxy : {}),
-      headers: {
-        Authorization: `Bearer ${endpoint.token}`,
-        ...(body && { "Content-Type": "application/json" }),
-      },
-      method: body ? "POST" : "GET",
-      body: body && JSON.stringify(body),
-      signal: AbortSignal.timeout(body ? 30_000 : 5000),
-      redirect: "error",
+    const url = new URL(path, endpoint.url);
+    const headers = new Headers({
+      Authorization: `Bearer ${endpoint.token}`,
+      ...(body && { "Content-Type": "application/json" }),
     });
+    const options = { method: body ? "POST" : "GET", body: body && JSON.stringify(body) };
+    const signal = AbortSignal.timeout(body ? 30_000 : 5000);
+    response = loopback(url.hostname)
+      ? await direct(url, headers, signal, options)
+      : await fetch(url, { ...options, headers, signal, redirect: "error" });
   } catch {
     throw new Error("Could not connect to the server");
   }
