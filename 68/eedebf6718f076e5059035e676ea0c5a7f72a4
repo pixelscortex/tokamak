@@ -1,0 +1,23 @@
+packages/runtime/tools/direct-http.ts
+  s_99c048955442cf::t_96aa8b8974cc6b 1-32
+packages/cli/tests/discovery.test.mjs
+  s_99c048955442cf::t_96aa8b8974cc6b 1-80
+packages/runtime/tools/server-discovery.ts
+  s_99c048955442cf::t_f151ab29371c23 5-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68eedebf6718f076e5059035e676ea0c5a7f72a4",
+  "prompts": {},
+  "sessions": {
+    "s_99c048955442cf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f95a-ae94-7cf2-9034-28e7842f9b41",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
