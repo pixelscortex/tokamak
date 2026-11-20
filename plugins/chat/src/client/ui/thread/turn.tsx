@@ -1,6 +1,7 @@
+import { AgentMark } from "../agent-mark";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Avatar, Button, Icon, StatusIcon } from "@tokamak/ui";
+import { Avatar, Button, StatusIcon } from "@tokamak/ui";
 import type { Agent } from "../../lib/agents";
 import { glyphs } from "../../lib/icons";
 import { foldTurn, textOf, timeOfDay, type Message } from "../../lib/turns";
@@ -73,7 +74,7 @@ export function AgentTurn(props: {
     >
       <div class="flex flex-col gap-2">
         <Header
-          lead={<Icon path={props.agent?.mark ?? glyphs.chat} class="text-ink" />}
+          lead={<AgentMark agent={props.agent} fallback={glyphs.chat} class="text-ink" />}
           name={name()}
           fact={[
             props.message.model?.name ?? props.message.model?.id,

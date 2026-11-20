@@ -1,3 +1,4 @@
+import { AgentMark } from "../agent-mark";
 import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Icon } from "@tokamak/ui";
@@ -36,7 +37,7 @@ export function EmptyThread(props: {
   return (
     <Centre>
       <div class="flex flex-col items-center gap-2">
-        <Icon path={props.agent?.mark ?? glyphs.newChat} class="mb-2 text-ink" />
+        <AgentMark agent={props.agent} fallback={glyphs.newChat} class="mb-2 text-ink" />
         <h2 class="text-read font-semibold text-ink">
           What should {props.agent?.name ?? "the agent"} work on?
         </h2>

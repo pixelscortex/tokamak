@@ -1,3 +1,4 @@
+import { AgentMark } from "../agent-mark";
 import { For, Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { Id } from "@tokamak/sdk";
@@ -106,7 +107,9 @@ export function AgentPicker(props: {
         >
           <span class="flex min-w-0 items-center gap-2">
             <Show when={agent()}>
-              {(current) => <Icon path={current().mark} size={12} class="text-ink" />}
+              {(current) => (
+                <AgentMark agent={current()} fallback={current().mark} size={12} class="text-ink" />
+              )}
             </Show>
             <span class="text-row text-ink-2">
               {agent()?.name ?? (props.chat.remote ? "Message only" : "Choose an agent")}
@@ -126,7 +129,11 @@ export function AgentPicker(props: {
             <For each={props.chat.backends() ?? []}>
               {(option: BackendOption) => (
                 <Menu.Item value={`${option.plugin}/${option.id}`}>
-                  <Icon path={optionAgent(option).mark} class="text-ink-2" />
+                  <AgentMark
+                    agent={optionAgent(option)}
+                    fallback={optionAgent(option).mark}
+                    class="text-ink-2"
+                  />
                   {optionAgent(option).name}
                   <Show when={backend()?.backendId === option.id && backend()?.plugin === option.plugin}>
                     <Icon path={glyphs.check} class="ms-auto text-ink-3" label="current" />
