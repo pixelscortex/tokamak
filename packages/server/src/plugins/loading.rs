@@ -35,7 +35,11 @@ impl Loaded {
 
             let (descriptor, kinds) = match cached {
                 Some(value) => value.clone(),
-                None => crate::service::inspect(pool, bundle.clone()).await?,
+                None => {
+                    let mut ops = engine::OpRegistry::new();
+                    crate::plugin_log::console(&mut ops, id.clone());
+                    crate::service::inspect_with_ops(pool, bundle.clone(), ops).await?
+                }
             };
             inspected.insert(id.clone(), (descriptor.clone(), kinds.clone()));
 

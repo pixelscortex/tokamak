@@ -66,6 +66,21 @@ export function createPluginShell(
   return createRoot((dispose) => {
     stop = dispose;
     const host: WebPluginHost = new WebPluginHost(endpoint, () => loader.metadata().plugins);
+    const unhandled = (event: ErrorEvent | PromiseRejectionEvent) => {
+      const cause = "reason" in event ? event.reason : event.error;
+      const plugin = host.errorOwner("filename" in event ? event.filename : "", cause);
+      if (plugin)
+        host.reportError(
+          plugin,
+          describe(cause ?? ("message" in event ? event.message : "Unhandled rejection")),
+        );
+    };
+    window.addEventListener("error", unhandled);
+    window.addEventListener("unhandledrejection", unhandled);
+    onCleanup(() => {
+      window.removeEventListener("error", unhandled);
+      window.removeEventListener("unhandledrejection", unhandled);
+    });
     const loader: PluginLoader = createPluginLoader(host, serverAssets(endpoint, source));
     const navigation = routerFacade(routing.router);
     const views = createMemo(() =>
@@ -136,6 +151,7 @@ export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
             <ViewFailure
               view={props.view}
               cause={cause()}
+              report={(text) => props.shell.host.reportError(props.view.plugin, text)}
               reload={() => props.shell.loader.reload(props.view.plugin)}
             />
           )}
@@ -146,7 +162,26 @@ export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
     </Show>
   );
 }
-function ViewFailure(props: { view: PluginView; cause: unknown; reload(): void }) {
+function ViewFailure(props: {
+  view: PluginView;
+  cause: unknown;
+  reload(): void;
+  report(text: string): void;
+}) {
+  const command = () => `tokamak plugin logs ${props.view.plugin}`;
+  createEffect(
+    () => describe(props.cause),
+    (text) => props.report(text),
+  );
+  const [copyStatus, setCopyStatus] = createSignal("");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command());
+      setCopyStatus("Copied plugin log command.");
+    } catch {
+      setCopyStatus("Could not copy plugin log command.");
+    }
+  };
   return (
     <div
       role="alert"
@@ -165,6 +200,11 @@ function ViewFailure(props: { view: PluginView; cause: unknown; reload(): void }
       <Button variant="primary" onClick={() => props.reload()}>
         Reload
       </Button>
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <code class="text-data break-all">{command()}</code>
+        <Button onClick={() => void copy()}>Copy plugin log command</Button>
+        <span role="status">{copyStatus()}</span>
+      </div>
     </div>
   );
 }

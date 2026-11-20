@@ -55,13 +55,14 @@ impl Coordinator {
             .cloned();
         if let Some(worker) = worker {
             self.action_jobs.spawn(async move {
+                let result = worker
+                    .invoke(local_name, args, ops)
+                    .await
+                    .map_err(|e| environment.redact(e));
                 (
                     session,
                     id,
-                    worker
-                        .invoke(local_name, args, ops)
-                        .await
-                        .map_err(|e| environment.redact(e)),
+                    crate::plugin_log::action_result(owner.as_deref(), &name, result),
                 )
             });
             return;
@@ -74,10 +75,11 @@ impl Coordinator {
         ) {
             Ok(pending) => {
                 self.action_jobs.spawn(async move {
+                    let result = pending.await.map_err(|e| environment.redact(e.to_string()));
                     (
                         session,
                         id,
-                        pending.await.map_err(|e| environment.redact(e.to_string())),
+                        crate::plugin_log::action_result(owner.as_deref(), &name, result),
                     )
                 });
             }

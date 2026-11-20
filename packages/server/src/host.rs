@@ -91,6 +91,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
 
     let failure: Failure = Arc::default();
 
+    let owner = graph.as_ref().map(|(_, owner, _)| owner.clone());
     let ops = operations(
         shared.clone(),
         observations.clone(),
@@ -108,6 +109,10 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         Ok(pending) => pending.await.map_err(|e| e.to_string()),
         Err(e) => Err(e.to_string()),
     };
+
+    if let (Some(owner), Err(error)) = (owner, &result) {
+        crate::plugin_log::function_error(&owner, &name, error);
+    }
 
     let tx = shared
         .lock()
@@ -169,28 +174,8 @@ fn operations(
     );
 
     if let Some((plugins, owner, path)) = graph {
-        let catalog = plugins.clone();
-
-        let caller = owner.clone();
-
-        let failed = failure.clone();
-        ops.register_sync("plugin.providers", move |payload| {
-            let result = text(&payload, "interface")
-                .map_err(|e| e.to_string())
-                .and_then(|interface| {
-                    catalog
-                        .catalog
-                        .providers(&caller, interface)
-                        .map_err(|e| e.to_string())
-                })
-                .map(|ids| json!(ids));
-
-            if let Err(error) = &result {
-                *failed.lock().expect("failure lock") = Some(error.clone());
-            }
-            result
-        })
-        .expect("unique operation");
+        crate::plugin_log::console(&mut ops, owner.clone());
+        register_providers(&mut ops, plugins.clone(), owner.clone(), failure.clone());
         ops.register_module("plugin.call", move |payload| {
             let resolved = (|| {
                 if failure.lock().expect("failure lock").is_some() {
@@ -206,6 +191,8 @@ fn operations(
                 let mut child_path = path.clone();
                 child_path.push(name.into());
 
+                let log_owner = target.owner.clone();
+                let log_name = target.local_name.clone();
                 let child_ops = operations(
                     shared.clone(),
                     observations.clone(),
@@ -227,6 +214,7 @@ fn operations(
                     json!({"name":target.local_name,"args":args}),
                     child_ops,
                     move |error| {
+                        crate::plugin_log::function_error(&log_owner, &log_name, &error);
                         *failed.lock().expect("failure lock") = Some(error);
                     },
                 ))
@@ -240,6 +228,30 @@ fn operations(
         .expect("unique operation");
     }
     Arc::new(ops)
+}
+
+fn register_providers(
+    ops: &mut OpRegistry,
+    plugins: Arc<crate::plugins::Loaded>,
+    owner: String,
+    failure: Failure,
+) {
+    ops.register_sync("plugin.providers", move |payload| {
+        let result = text(&payload, "interface")
+            .map_err(|e| e.to_string())
+            .and_then(|interface| {
+                plugins
+                    .catalog
+                    .providers(&owner, interface)
+                    .map_err(|e| e.to_string())
+            })
+            .map(|ids| json!(ids));
+        if let Err(error) = &result {
+            *failure.lock().expect("failure lock") = Some(error.clone());
+        }
+        result
+    })
+    .expect("unique operation");
 }
 
 mod database_operations;

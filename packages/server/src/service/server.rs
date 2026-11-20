@@ -19,6 +19,12 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
+    pub(crate) async fn window_error(&self, id: String, text: String) -> Result<bool, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::WindowError(id, text, reply))?;
+        wait.await.map_err(|_| Error::Closed)?
+    }
+
     pub async fn plugin_asset(
         &self,
         id: String,

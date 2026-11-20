@@ -53,6 +53,10 @@ impl Coordinator {
                 let _ = reply.send(());
             }
             Command::RunFunction(call) => self.run_function(call).await,
+            Command::WindowError(id, text, reply) => {
+                let result = self.record_window_error(id, &text);
+                let _ = reply.send(result);
+            }
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
@@ -84,6 +88,33 @@ impl Coordinator {
             }
             _ => unreachable!("application commands have their own admission path"),
         }
+    }
+
+    fn record_window_error(&mut self, id: String, text: &str) -> Result<bool, Error> {
+        use std::time::{Duration, Instant};
+        if !self
+            .plugins
+            .as_ref()
+            .is_some_and(|p| p.catalog.plugins.contains_key(&id))
+        {
+            return Ok(false);
+        }
+        // Keep a runaway view from filling the disk with repeated reports.
+        let (start, count) = self
+            .window_reports
+            .entry(id.clone())
+            .or_insert_with(|| (Instant::now(), 0));
+        if start.elapsed() >= Duration::from_secs(10) {
+            *start = Instant::now();
+            *count = 0;
+        }
+        if *count >= 8 {
+            return Err(Error::Overloaded);
+        }
+        crate::plugin_log::window(&id, text)
+            .map_err(|error| Error::Invalid(format!("Could not write plugin log: {error}")))?;
+        *count += 1;
+        Ok(true)
     }
 
     pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
@@ -121,12 +152,8 @@ impl Coordinator {
         // commit/rollback. Nothing below can fail before the generation swap.
         // Cancel old-generation actions so a reload cannot leave revoked network
         // grants running in old worlds; the old pool tears down detached.
-        self.action_pool.cancel_actions();
-        if let Some(previous) = &self.plugins {
-            for worker in previous.workers.values() {
-                worker.stop().await;
-            }
-        }
+        self.stop_actions().await;
+        let log_reset = crate::plugin_log::clear(id);
         self.action_pool = action_pool;
         self.kinds = candidate.client_kinds();
 
@@ -148,6 +175,8 @@ impl Coordinator {
                 }
             }
         }
+        self.window_reports
+            .retain(|plugin, _| plugin != id && candidate.catalog.plugins.contains_key(plugin));
         self.plugins = Some(candidate);
 
         let catalog = self.metadata()?;
@@ -164,6 +193,11 @@ impl Coordinator {
         }
         self.invalidate(None);
         self.refresh().await;
+        log_reset.map_err(|error| {
+            Error::Invalid(format!(
+                "Plugin reloaded, but could not clear plugin log: {error}"
+            ))
+        })?;
         self.metadata()
     }
 

@@ -33,6 +33,7 @@ pub(crate) fn operations(
     let caller_user = user.clone();
     ops.register_sync("user.current", move |_| Ok(serde_json::json!(caller_user)))?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
+        crate::plugin_log::console(&mut ops, owner.clone());
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
                 .manifest
@@ -197,6 +198,7 @@ fn register_plugin_call(
                 Some(&loaded),
                 Some(&target.owner),
             ));
+            let log_owner = target.owner.clone();
             let worker = loaded.workers.get(&target.owner).cloned();
             let ops = operations(
                 commands,
@@ -209,10 +211,11 @@ fn register_plugin_call(
             )
             .map_err(|e| e.to_string())?;
             if let Some(worker) = worker {
-                return worker
+                let result = worker
                     .invoke(target.local_name, args, ops)
                     .await
                     .map_err(|e| environment.redact(e));
+                return crate::plugin_log::action_result(Some(&log_owner), name, result);
             }
             // A separate, invocation-owned lane avoids recursive waits on the
             // bounded root action pool. Dropping it cancels the child on reload.
@@ -230,7 +233,8 @@ fn register_plugin_call(
                     ops,
                 )
                 .map_err(|e| e.to_string())?;
-            pending.await.map_err(|e| environment.redact(e.to_string()))
+            let result = pending.await.map_err(|e| environment.redact(e.to_string()));
+            crate::plugin_log::action_result(Some(&log_owner), name, result)
         }
     })?;
 

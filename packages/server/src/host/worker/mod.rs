@@ -1,6 +1,7 @@
 //! Generic process actions. Database authority stays in invocation-bound ops.
 mod discovery;
 mod logs;
+pub(crate) use logs::send as server_line;
 mod process;
 #[cfg(windows)]
 mod windows;

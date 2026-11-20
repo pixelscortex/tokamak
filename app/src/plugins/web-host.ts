@@ -169,6 +169,39 @@ export class WebPluginHost implements PluginModuleHost {
       throw cause;
     }
   }
+  errorOwner(filename: string, cause: unknown): string | undefined {
+    const pluginForUrl = (url: string) => {
+      for (const manifest of this.manifests()) {
+        const id = manifest.plugin.id;
+        if (this.generations.get(moduleName(id))?.urls.has(url)) return id;
+      }
+    };
+    const direct = pluginForUrl(filename);
+    if (direct) return direct;
+    // Browser stack frames carry the actual blob module URLs. Leave errors
+    // without a known module unattributed, even if a plugin view is open.
+    if (cause instanceof Error) {
+      for (const frame of cause.stack?.split("\n") ?? []) {
+        const url = frame.match(/blob:[^\s)]+?(?::\d+:\d+)(?=[\s)]|$)/)?.[0].replace(/:\d+:\d+$/, "");
+        const owner = url && pluginForUrl(url);
+        if (owner) return owner;
+      }
+    }
+  }
+  reportError(id: string, text: string) {
+    if (!this.endpoint.token) return;
+    const bytes = new Uint8Array(8192);
+    const { written } = new TextEncoder().encodeInto(text, bytes);
+    const body = new TextDecoder().decode(bytes.subarray(0, written));
+    // Use the same signed-in browser access as plugin assets. A text body
+    // keeps cross-origin desktop requests on the simple-request path.
+    void fetch(assetURL(this.endpoint, `/plugins/${encodeURIComponent(id)}/window-error`), {
+      method: "POST",
+      body,
+    }).catch(() => {
+      // Reporting is best effort if the window has lost its connection.
+    });
+  }
   notifyError(name: string, cause: unknown) {
     const error = new Error(`${name}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
     for (const affected of this.affected([name])) {

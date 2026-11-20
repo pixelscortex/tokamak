@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { render } from "@solidjs/web";
 import { createRoot, createSignal, flush, onCleanup } from "solid-js";
-import { waitFor } from "@testing-library/dom";
+import { getByRole, waitFor } from "@testing-library/dom";
 import {
   type AnyRouter,
   createMemoryHistory,
@@ -138,6 +138,12 @@ test("web host rewrites literal imports, owns CSS and disposers, and invalidates
     // jsdom cannot execute native blob modules; the browser harness executes the same graph.
     await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.toThrow();
     expect(blobs.size).toBe(2);
+    expect(host.errorOwner("blob:test-0", undefined)).toBe("other");
+    const unhandled = Object.assign(new Error("Rejected view callback"), {
+      stack: "callback@blob:test-1:4:12",
+    });
+    expect(host.errorOwner("", unhandled)).toBe("fixture");
+    expect(host.errorOwner("", new Error("Unattributed"))).toBeUndefined();
     expect(host.dependencies("@plugins/fixture/ui")).toEqual(["@plugins/other/ui"]);
     expect(host.affected(["@plugins/other/ui"])).toEqual(
       new Set(["@plugins/other/ui", "@plugins/fixture/ui"]),
@@ -199,9 +205,12 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
   );
   // The mock import still establishes a generation so host retirement can own it.
   vi.spyOn(WebPluginHost.prototype, "own").mockImplementation(() => () => {});
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const report = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
   const shell = createPluginShell(
     client,
-    { http: "http://localhost", ws: "ws://localhost", token: null },
+    { http: "http://localhost", ws: "ws://localhost", token: "fixture-token" },
     source,
     { router, root, base: [home] },
   );
@@ -233,6 +242,19 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
       expect(target.querySelector('[role="alert"]')?.textContent).toContain("fixture exploded"),
     );
     expect(target.querySelector("button")?.textContent).toBe("Reload");
+    const alert = getByRole(target, "alert", { name: "Plugin view error" });
+    expect(alert.textContent).toContain("tokamak plugin logs fixture");
+    getByRole(alert, "button", { name: "Copy plugin log command" }).click();
+    expect(writeText).toHaveBeenCalledWith("tokamak plugin logs fixture");
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith(
+        "http://localhost/plugins/fixture/window-error?token=fixture-token",
+        {
+          method: "POST",
+          body: "Error: fixture exploded",
+        },
+      ),
+    );
     await router.navigate({ to: "/" });
     await waitFor(() => expect(target.textContent).toContain("Host survived"));
     notify({ plugins: ["fixture"], catalog: { revision: "removed", plugins: [] } });
@@ -242,6 +264,7 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
   } finally {
     dispose();
     shell.dispose();
+    Reflect.deleteProperty(navigator, "clipboard");
     vi.restoreAllMocks();
   }
 });

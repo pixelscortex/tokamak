@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
@@ -150,14 +150,14 @@ async function withServer(root, check) {
   );
   const server = Bun.spawn([binary, "--local-dir", data, "--plugins", plugins], {
     cwd: root,
-    env: { ...process.env, TOKAMAK_WEB_DIR: undefined },
+    env: { ...process.env, TOKAMAK_WEB_DIR: undefined, TOKAMAK_PLUGIN_LOG_DIR: join(root, "logs") },
     stdout: "ignore",
     stderr: "pipe",
   });
   let address;
   const serverErrors = new Response(server.stderr).text();
   try {
-    const deadline = Date.now() + 35_000;
+    const deadline = Date.now() + 90_000;
     while (true) {
       const ready = await readFile(join(data, "server.json"), "utf8").catch((error) => {
         if (error.code !== "ENOENT") throw error;
@@ -221,3 +221,133 @@ test("a real local server loads and removes an indexed plugin on restart", async
     });
   });
 }, 120_000);
+
+test("reads an indexed plugin's log offline and filters errors", async () => {
+  await withPlugin(async (plugin, root) => {
+    expect(cli(root, ["plugin", "add", plugin]).code).toBe(0);
+    const logs = join(root, "logs");
+    await mkdir(logs);
+    const info = { time: 1000, source: "server", level: "info", text: "ready" };
+    const error = { time: 1001, source: "server", level: "error", text: "save: fixture failed" };
+    await writeFile(join(logs, "outside-fixture.log"), [info, error].map(JSON.stringify).join("\n") + "\n");
+    const run = (...args) => cli(root, ["plugin", "logs", ...args], { TOKAMAK_PLUGIN_LOG_DIR: logs });
+    const all = run("outside-fixture");
+    expect(all.code, all.stderr).toBe(0);
+    expect(all.stdout).toContain("ready");
+    const filtered = run("outside-fixture", "--errors", "--json");
+    expect(filtered.code, filtered.stderr).toBe(0);
+    expect(JSON.parse(filtered.stdout)).toEqual({ ok: true, entries: [error] });
+    const unknown = run("unknown-fixture", "--json");
+    expect(unknown.code).not.toBe(0);
+    expect(JSON.parse(unknown.stdout).error.message).toContain("Unknown plugin: unknown-fixture");
+  });
+});
+
+function invoke(address, token, type, name) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(address.replace(/^http/, "ws") + "/ws?token=" + token);
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error("Invocation timed out"));
+    }, 25_000);
+    ws.onopen = () => ws.send(JSON.stringify({ type, id: 1, name, args: {} }));
+    ws.onmessage = ({ data }) => {
+      const event = JSON.parse(data);
+      if (event.id !== 1) return;
+      clearTimeout(timeout);
+      ws.close();
+      resolve(event.result);
+    };
+    ws.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error("WebSocket failed"));
+    };
+  });
+}
+
+test("records worker and embedded plugin output in order and clears only the reloaded plugin", async () => {
+  await withPlugin(async (plugin, root) => {
+    const worker = join(root, "worker");
+    await cp(plugin, worker, { recursive: true });
+    await symlink(join(workspace, "node_modules"), join(worker, "node_modules"), "junction");
+    const descriptor = join(worker, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8"))
+        .replace("outside-fixture", "worker-fixture")
+        .replace(/id:/, 'runtime: "worker", id:'),
+    );
+    await writeFile(
+      join(worker, "src/server/flood.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      export const run = action({ handler: () => {
+        for (let i = 0; i < 1000; i++) console.log("burst-" + i + " " + "x".repeat(4500));
+        return null;
+      } });
+    `,
+    );
+    await writeFile(
+      join(plugin, "src/server/failure.ts"),
+      `
+      import { mutation } from "@tokamak/sdk";
+      export const save = mutation({ handler: () => {
+        console.log("embedded console");
+        throw new Error("fixture mutation failed");
+      } });
+    `,
+    );
+    const run = (...args) => {
+      const result = cli(root, ["plugin", ...args, "--json"], { TOKAMAK_PLUGIN_LOG_DIR: join(root, "logs") });
+      expect(result.code, result.stdout + result.stderr).toBe(0);
+      return JSON.parse(result.stdout);
+    };
+    for (const folder of [plugin, worker]) {
+      run("build", folder);
+      run("add", folder);
+    }
+    await withServer(root, async (address, token) => {
+      expect((await invoke(address, token, "mutation", "outside-fixture/failure:save")).Err).toContain(
+        "fixture mutation failed",
+      );
+      expect(run("logs", "outside-fixture", "--errors").entries).toEqual([
+        expect.objectContaining({
+          level: "error",
+          source: "server",
+          text: expect.stringMatching(/failure:save.*fixture mutation failed/s),
+        }),
+      ]);
+      expect(run("logs", "outside-fixture").entries).toContainEqual(
+        expect.objectContaining({ level: "log", text: "embedded console" }),
+      );
+      expect(await invoke(address, token, "action", "worker-fixture/flood:run")).toEqual({ Ok: null });
+      const readBurst = () => run("logs", "worker-fixture").entries.map(({ text }) => text.split(" ")[0]);
+      const burst = readBurst();
+      expect(burst).toEqual(Array.from({ length: 1000 }, (_, i) => "burst-" + i));
+      const report = (id, body, auth = token) =>
+        fetch(`${address}/plugins/${id}/window-error`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${auth}` },
+          body,
+        });
+      expect((await report("outside-fixture", "view failed")).status).toBe(204);
+      expect((await report("unknown", "view failed")).status).toBe(404);
+      expect((await report("outside-fixture", "view failed", "invalid")).status).toBe(401);
+      expect((await report("outside-fixture", "x".repeat(8193))).status).toBe(413);
+      for (let i = 0; i < 7; i++) {
+        expect((await report("outside-fixture", "repeated window error")).status).toBe(204);
+      }
+      expect((await report("outside-fixture", "over the window report limit")).status).toBe(429);
+      expect(run("logs", "outside-fixture", "--errors").entries).toContainEqual(
+        expect.objectContaining({ source: "window", text: "view failed" }),
+      );
+      const reload = await fetch(`${address}/plugins/outside-fixture/reload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(reload.ok).toBe(true);
+      expect(run("logs", "outside-fixture").entries).toEqual([]);
+      expect(readBurst()).toEqual(burst);
+    });
+  });
+}, 180_000);

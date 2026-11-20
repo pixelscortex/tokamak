@@ -187,6 +187,19 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
     { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
   );
   const paths = pluginCompilerOptions(featurePluginRoot(root), inherited?.options ?? {}).paths;
+  const consoleTypes = join(temporary, "console.d.ts");
+  if (!worker) {
+    await Bun.write(
+      consoleTypes,
+      `interface Console {
+      log(...args: unknown[]): void;
+      info(...args: unknown[]): void;
+      warn(...args: unknown[]): void;
+      error(...args: unknown[]): void;
+      debug(...args: unknown[]): void;
+    }\ndeclare var console: Console;\n`,
+    );
+  }
   await Bun.write(
     config,
     JSON.stringify({
@@ -198,7 +211,12 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
         noEmit: true,
         strict: true,
       },
-      files: [entry, join(generated, "api.ts"), ...files.map((file) => join(root, file))],
+      files: [
+        entry,
+        join(generated, "api.ts"),
+        ...(worker ? [] : [consoleTypes]),
+        ...files.map((file) => join(root, file)),
+      ],
       include: [],
       exclude: [],
     }),
@@ -207,7 +225,8 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
     stdout: "inherit",
     stderr: "inherit",
   });
-  if (check.exitCode !== 0) throw new Error("Feature type check failed (only ES2022 globals are allowed)");
+  if (check.exitCode !== 0)
+    throw new Error("Feature type check failed (only supported server globals are allowed)");
 }
 
 function featureSource(root, files, modules, hasSchema) {

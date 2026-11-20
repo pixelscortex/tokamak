@@ -110,6 +110,7 @@ pub(crate) enum Command {
     ),
     RenameUser(crate::identity::User, oneshot::Sender<()>),
     Action(u64, crate::identity::User, Action),
+    WindowError(String, String, oneshot::Sender<Result<bool, Error>>),
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
@@ -175,6 +176,7 @@ struct Coordinator {
     space: DataSpace,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
+    window_reports: BTreeMap<String, (std::time::Instant, u8)>,
     changes: broadcast::Receiver<ChangeEvent>,
     action_pool: Arc<Pool>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
@@ -196,4 +198,4 @@ mod session;
 mod startup;
 mod subscriptions;
 
-pub(crate) use startup::inspect;
+pub(crate) use startup::inspect_with_ops;

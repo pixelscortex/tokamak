@@ -7,6 +7,7 @@ proto run bun -- run tokamak --help
 proto run bun -- run tokamak plugin build /path/to/my-plugin --json
 proto run bun -- run tokamak plugin add /path/to/my-plugin
 proto run bun -- run tokamak plugin list --json
+proto run bun -- run tokamak plugin logs my-plugin --errors --json
 proto run bun -- run tokamak plugin remove my-plugin
 ```
 
@@ -35,6 +36,21 @@ For a server at a specific address, set `TOKAMAK_SERVER` and `TOKAMAK_TOKEN`,
 or supply `--server <address>` with `TOKAMAK_TOKEN`. The flag takes precedence.
 The CLI never starts a server.
 
+`plugin logs <id>` reads a local file, including when the server is stopped if
+the plugin is indexed. For a plugin outside the index, the CLI checks the
+running server's catalog. `--errors` shows only entries whose level is `error`.
+
+The server writes one JSON object per line to `<OS temp>/tokamak/logs/<id>.log`.
+Each entry has `time` (Unix epoch milliseconds), `source` (`server` or
+`window`), `level` (`log`, `info`, `warn`, `error`, or `debug`), and `text`.
+Thrown server errors include the function name in `text`. A reload clears that
+plugin's file. Set `TOKAMAK_PLUGIN_LOG_DIR` to override the folder for both the
+server and the CLI; tests should set it to a folder they own. Window reports
+accept at most 8,192 UTF-8 bytes of text; including JSON escaping and metadata,
+a stored window entry is under 49,300 bytes. The server accepts eight window
+reports per plugin per 10-second period; excess requests return HTTP 429.
+This limit does not apply to server console output or function errors.
+
 With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, human text goes to stdout. Exit status is zero on success and
 nonzero on failure. The CLI never prompts. Success has `ok: true` and:
@@ -45,6 +61,7 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 | `plugin add`    | `id`, `folder`, `restartRequired: true`             |
 | `plugin remove` | `id`, `restartRequired: true`                       |
 | `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }` |
+| `plugin logs`   | `entries`: the matching plugin log entries          |
 | `--help`        | `help`                                              |
 
 Failures return `{ ok: false, error: { message, next } }`. Build failures with

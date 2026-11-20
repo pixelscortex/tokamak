@@ -9,6 +9,7 @@ await mkdir("app/.dev", { recursive: true });
 const directory = await mkdtemp(resolve("app/.dev/browser-"));
 const env = {
   ...process.env,
+  TOKAMAK_PLUGIN_LOG_DIR: resolve(directory, "logs"),
   TOKAMAK_PLUGIN_DIR: `${directory}/plugins`,
   TOKAMAK_FIXTURE_SOURCE: `${directory}/fixture`,
   TOKAMAK_E2E_WEB_ROOT: `${directory}/web`,

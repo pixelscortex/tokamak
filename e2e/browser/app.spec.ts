@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { cp, readFile, writeFile } from "node:fs/promises";
 
 const connected = (page: Page) =>
@@ -69,6 +70,27 @@ test("live threads, compiler views, regions, revision replacement and error cont
   await rail(page).getByRole("link", { name: "ThrowingView", exact: true }).click();
   const failure = page.getByRole("alert", { name: "Plugin view error" });
   await expect(failure).toContainText("Deliberate fixture failure");
+  await expect(failure).toContainText("tokamak plugin logs integration-fixture");
+  const pluginLog = join(process.env.TOKAMAK_PLUGIN_LOG_DIR!, "integration-fixture.log");
+  await expect
+    .poll(async () => {
+      const log = await readFile(pluginLog, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return "";
+        throw error;
+      });
+      return log
+        .split("\n")
+        .slice(0, -1)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+    })
+    .toContainEqual(
+      expect.objectContaining({
+        source: "window",
+        level: "error",
+        text: expect.stringContaining("Deliberate fixture failure"),
+      }),
+    );
   await expect(failure.getByRole("button", { name: "Reload" })).toBeVisible();
   await expect(sidebar).toBeHidden();
   await expect(header.getByRole("heading", { name: "ThrowingView" })).toBeVisible();

@@ -171,6 +171,7 @@ impl Server {
             space,
             plugins,
             plugin_root,
+            window_reports: BTreeMap::new(),
             changes,
             action_pool,
             action_jobs: tokio::task::JoinSet::new(),
@@ -199,13 +200,16 @@ pub(crate) async fn inspect(
     pool: &Pool,
     bundle: Arc<Bundle>,
 ) -> Result<(Json, BTreeMap<String, FunctionKind>), Error> {
+    inspect_with_ops(pool, bundle, OpRegistry::new()).await
+}
+
+pub(crate) async fn inspect_with_ops(
+    pool: &Pool,
+    bundle: Arc<Bundle>,
+    ops: OpRegistry,
+) -> Result<(Json, BTreeMap<String, FunctionKind>), Error> {
     let descriptor = pool
-        .submit(
-            bundle.clone(),
-            "describe",
-            Json::Null,
-            Arc::new(OpRegistry::new()),
-        )
+        .submit(bundle.clone(), "describe", Json::Null, Arc::new(ops))
         .map_err(|e| Error::Invalid(e.to_string()))?
         .await
         .map_err(|e| Error::Invalid(e.to_string()))?;

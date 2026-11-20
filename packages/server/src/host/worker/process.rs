@@ -135,10 +135,12 @@ pub(super) fn spawn(
             let _ = failed.send(result.err().unwrap_or_else(|| "Worker stdin closed".into()));
         }));
         let mut calls = BTreeMap::new();
+        let mut output = BufReader::new(output);
+        let mut frame = Vec::new();
         let supervise = run(
             &id,
             &mut child,
-            output,
+            (&mut output, &mut frame),
             receive,
             Control {
                 input: &writes,
@@ -166,6 +168,7 @@ pub(super) fn spawn(
         if let Some(mut guardian) = guardian {
             let _ = guardian.wait().await;
         }
+        drain_logs(&id, &mut output, &mut frame).await;
         fail_pending_calls(&id, &error, calls);
         running.stopped.cancel();
     });
@@ -190,7 +193,7 @@ struct Control<'a> {
 async fn run(
     id: &str,
     child: &mut WorkerChild,
-    output: tokio::process::ChildStdout,
+    (output, frame): (&mut BufReader<tokio::process::ChildStdout>, &mut Vec<u8>),
     mut commands: mpsc::Receiver<Command>,
     control: Control<'_>,
     calls: &mut BTreeMap<u64, Call>,
@@ -200,8 +203,6 @@ async fn run(
         failure,
         kill,
     } = control;
-    let mut output = BufReader::new(output);
-    let mut frame = Vec::new();
     let mut ops = JoinSet::new();
     loop {
         let deadline = calls.values().filter_map(|call| call.cancel_at).min();
@@ -237,7 +238,7 @@ async fn run(
                 },
                 None => return Err("worker owner closed".into()),
             },
-            line = read_frame(&mut output, &mut frame) => {
+            line = read_frame(output, frame) => {
                 let line = line?.ok_or("stdout closed")?;
                 let message: Value = serde_json::from_slice(&line).map_err(|_| "Invalid worker JSON")?;
                 match message["type"].as_str() {
@@ -266,13 +267,42 @@ async fn run(
                             (call_id, op, result)
                         });
                     }
-                    Some("log") => logs::send(format!("Plugin {id} [{}]: {}", message["level"].as_str().unwrap_or("info"), message["text"].as_str().unwrap_or(""))),
+                    Some("log") => store_log(id, &message)?,
                     _ => return Err("Invalid worker message".into()),
                 }
             }
         }
     }
 }
+async fn drain_logs(id: &str, output: &mut (impl AsyncBufRead + Unpin), frame: &mut Vec<u8>) {
+    // A reload or process exit can win the select with complete log frames
+    // still in the pipe. Drain them before a reload clears the log.
+    let drained = tokio::time::timeout(GRACE, async {
+        while let Some(bytes) = read_frame(output, frame).await? {
+            if let Ok(message) = serde_json::from_slice::<Value>(&bytes)
+                && message["type"] == "log"
+            {
+                store_log(id, &message)?;
+            }
+        }
+        Ok::<(), String>(())
+    })
+    .await;
+    match drained {
+        Ok(Ok(())) => (),
+        Ok(Err(error)) => logs::send(format!("Plugin {id} worker: {error}")),
+        Err(_) => logs::send(format!("Plugin {id} worker: timeout draining plugin log")),
+    }
+}
+
+fn store_log(id: &str, message: &Value) -> Result<(), String> {
+    crate::plugin_log::server(
+        id,
+        message["level"].as_str().unwrap_or("info"),
+        message["text"].as_str().unwrap_or(""),
+    )
+}
+
 // fill_buf is cancellation-safe. Keep the partial frame across select branches.
 async fn read_frame(
     output: &mut (impl AsyncBufRead + Unpin),

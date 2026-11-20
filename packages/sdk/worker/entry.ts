@@ -1,4 +1,5 @@
 // Stdout belongs exclusively to the worker protocol, including during imports.
+import { writeSync } from "node:fs";
 import { format } from "node:util";
 import { pathToFileURL } from "node:url";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
@@ -12,11 +13,21 @@ const pending = new Map<
   { call: number; resolve(value: JsonValue): void; reject(error: Error): void }
 >();
 let next = 0;
+const stdoutReady = new Int32Array(new SharedArrayBuffer(4));
 function send(message: object) {
-  const line = JSON.stringify(message) + "\n";
-  if (Buffer.byteLength(line) > LIMIT) throw new Error("Worker message exceeds 1 MiB limit");
-  if (!process.stdout.write(line) && process.stdout.writableLength > 4 * LIMIT)
-    throw new Error("Worker output queue exceeds 4 MiB limit");
+  const line = Buffer.from(JSON.stringify(message) + "\n");
+  if (line.length > LIMIT) throw new Error("Worker message exceeds 1 MiB limit");
+  // Block the worker on a full pipe. The server drains it independently, and
+  // writing all frames this way keeps console output ahead of invocation replies.
+  for (let offset = 0; offset < line.length;) {
+    try {
+      offset += writeSync(1, line, offset, line.length - offset);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EAGAIN" && code !== "EWOULDBLOCK" && code !== "EINTR") throw error;
+      Atomics.wait(stdoutReady, 0, 0, 1);
+    }
+  }
 }
 for (const level of ["log", "info", "warn", "error", "debug"] as const)
   console[level] = (...args: unknown[]) => send({ type: "log", level, text: format(...args).slice(0, 8192) });

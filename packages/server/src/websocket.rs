@@ -9,7 +9,7 @@ use crate::{
 use axum::{
     Extension, Router,
     extract::{
-        Path, Query, State, WebSocketUpgrade,
+        DefaultBodyLimit, Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::{HeaderMap, StatusCode},
@@ -169,8 +169,7 @@ pub async fn serve_with_identities(
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
-        .route("/plugins", get(plugins))
-        .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
+        .merge(plugin_routes());
     if hosted {
         app = app
             .route("/health", get(|| async { "ok" }))
@@ -233,12 +232,21 @@ async fn authorize(
     mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let browser_route = request.uri().path() == "/account"
+    let path = request.uri().path();
+    let window_report = path
+        .strip_prefix("/plugins/")
+        .and_then(|suffix| suffix.split_once('/'))
+        .is_some_and(|(_, action)| action == "window-error");
+    let browser_route = window_report
+        || path == "/account"
         || request.uri().path() == "/ws"
         || request.uri().path() == "/plugins"
         || (request.uri().path().starts_with("/plugins/")
             && request.uri().path().contains("/assets/"));
     let origin = headers.get("origin");
+    if window_report && adapter.access.is_none() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
     if let Some(origin) = origin
         && (!browser_route
             || !(adapter
@@ -393,11 +401,32 @@ fn plugin_result(result: Result<serde_json::Value, crate::Error>) -> Response {
             .into_response(),
     }
 }
+fn plugin_routes() -> Router<Adapter> {
+    Router::new()
+        .route("/plugins", get(plugins))
+        .route(
+            "/plugins/{id}/window-error",
+            post(window_error).layer(DefaultBodyLimit::max(crate::plugin_log::WINDOW_TEXT_BYTES)),
+        )
+        .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset))
+}
 async fn plugins(State(adapter): State<Adapter>) -> Response {
     plugin_result(adapter.server.plugins().await)
 }
 async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
     plugin_result(adapter.server.reload_plugin(id).await)
+}
+async fn window_error(
+    State(adapter): State<Adapter>,
+    Path(id): Path<String>,
+    text: String,
+) -> StatusCode {
+    match adapter.server.window_error(id, text).await {
+        Ok(true) => StatusCode::NO_CONTENT,
+        Ok(false) => StatusCode::NOT_FOUND,
+        Err(crate::Error::Overloaded) => StatusCode::TOO_MANY_REQUESTS,
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 async fn plugin_asset(
     State(adapter): State<Adapter>,
