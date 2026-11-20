@@ -116,6 +116,7 @@ pub(crate) enum Command {
     WindowError(String, String, String, oneshot::Sender<Result<bool, Error>>),
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<ReloadResult, Error>>),
+    RemovePlugin(String, oneshot::Sender<Result<ReloadResult, Error>>),
     UploadPackage(
         crate::plugins::package::Upload,
         oneshot::Sender<Result<ReloadResult, Error>>,

@@ -20,6 +20,148 @@ pub(crate) struct StagedPackage {
 
 pub(crate) struct Promotion(Option<Arc<StagedPackage>>);
 
+#[derive(Clone)]
+pub(crate) enum PackageChange {
+    Upload(Arc<StagedPackage>),
+    Remove { root: PathBuf, id: String },
+}
+
+pub(super) enum AppliedPackageChange {
+    Uploaded(Promotion),
+    Removed(Removal),
+}
+
+pub(super) struct Removal(Option<StagedRemoval>);
+
+struct StagedRemoval {
+    root: PathBuf,
+    archive: Vec<u8>,
+    current: PathBuf,
+}
+
+impl PackageChange {
+    pub(super) async fn apply(self) -> Result<AppliedPackageChange, Error> {
+        match self {
+            Self::Upload(package) => package.promote().await.map(AppliedPackageChange::Uploaded),
+            Self::Remove { root, id } => blocking(move || StagedRemoval::apply(root, &id))
+                .await
+                .map(AppliedPackageChange::Removed),
+        }
+    }
+}
+
+impl AppliedPackageChange {
+    pub(super) async fn finish(self, committed: bool) {
+        match self {
+            Self::Uploaded(promotion) => promotion.finish(committed).await,
+            Self::Removed(mut removal) => {
+                if let Some(staged) = removal.0.take()
+                    && !committed
+                    && let Err(error) = blocking(move || staged.restore()).await
+                {
+                    eprintln!("Could not finalize plugin package removal: {error}");
+                }
+            }
+        }
+    }
+}
+
+impl Drop for Removal {
+    fn drop(&mut self) {
+        if let Some(staged) = self.0.take() {
+            let rollback = move || {
+                if let Err(error) = staged.restore() {
+                    eprintln!("Could not restore removed plugin package: {error}");
+                }
+            };
+            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+                runtime.spawn_blocking(rollback);
+            } else {
+                rollback();
+            }
+        }
+    }
+}
+
+impl StagedRemoval {
+    fn apply(root: PathBuf, id: &str) -> Result<Removal, Error> {
+        let current = removal_path(&root, id)?;
+        // Leave pending backups for startup to validate and recover.
+        if node_exists(&root.join(format!("{BACKUP}{id}")))? {
+            return Err(invalid("A previous package backup needs recovery"));
+        }
+        // Keep the archive available until the database commits. Recursive
+        // deletion can fail after unlinking some of the original files.
+        let mut archive = Vec::new();
+        let mut reader =
+            io(File::open(current.join("package.zip")))?.take(PACKAGE_BYTES as u64 + 1);
+        io(reader.read_to_end(&mut archive))?;
+        if archive.len() > PACKAGE_BYTES {
+            return Err(invalid("Stored package exceeds 50 MiB"));
+        }
+        read_zip(Cursor::new(&archive), None)?;
+
+        let staging = io(tempfile::Builder::new().prefix(STAGING).tempdir_in(&root))?;
+        let removed = staging.path().join("removed");
+        rename(&current, &removed)?;
+        if let Err(error) = sync_directory(staging.path()).and_then(|()| sync_directory(&root)) {
+            rename(&removed, &current)?;
+            return Err(error);
+        }
+        let staged = Self {
+            root,
+            archive,
+            current,
+        };
+        // Startup ignores this directory if the process stops during deletion.
+        if let Err(error) = fs::remove_dir_all(staging.keep()) {
+            return match staged.restore() {
+                Ok(()) => Err(invalid(format!("Could not delete stored package: {error}"))),
+                Err(rollback) => Err(invalid(format!(
+                    "Could not delete stored package: {error}; could not restore it: {rollback}"
+                ))),
+            };
+        }
+        Ok(Removal(Some(staged)))
+    }
+
+    fn restore(self) -> Result<(), Error> {
+        require_store(&self.root)?;
+        if node_exists(&self.current)? {
+            return Err(invalid("Cannot restore a package over an existing path"));
+        }
+        let staging = io(tempfile::Builder::new()
+            .prefix(STAGING)
+            .tempdir_in(&self.root))?;
+        let dist = staging.path().join("dist");
+        io(fs::create_dir(&dist))?;
+        read_zip(Cursor::new(&self.archive), Some(&dist))?;
+        io(fs::write(staging.path().join("package.zip"), self.archive))?;
+        sync_tree(staging.path())?;
+        rename(staging.path(), &self.current)?;
+        sync_directory(&self.root)
+    }
+}
+
+pub(super) fn removal_path(root: &Path, id: &str) -> Result<PathBuf, Error> {
+    DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+    require_store(root)?;
+    let current = root.join(id);
+    require_directory(&current)?;
+    if !io(fs::symlink_metadata(current.join("package.zip")))?.is_file() {
+        return Err(invalid(format!("Stored package not found: {id}")));
+    }
+    Ok(current)
+}
+
+fn require_store(root: &Path) -> Result<(), Error> {
+    require_directory(root)?;
+    if io(root.canonicalize())? != root {
+        return Err(invalid("Package store path has changed"));
+    }
+    Ok(())
+}
+
 impl StagedPackage {
     pub(crate) fn read(
         root: &Path,
@@ -180,12 +322,12 @@ pub(super) fn check_overlap(store: &Path, source: &Path) -> Result<(), Error> {
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn starts_with_path(path: &Path, prefix: &Path) -> bool {
+pub(super) fn starts_with_path(path: &Path, prefix: &Path) -> bool {
     path.starts_with(prefix)
 }
 
 #[cfg(any(windows, target_os = "macos"))]
-fn starts_with_path(path: &Path, prefix: &Path) -> bool {
+pub(super) fn starts_with_path(path: &Path, prefix: &Path) -> bool {
     // A source can name a differently cased path before the store exists.
     let mut path = path.components();
     prefix.components().all(|expected| {

@@ -26,7 +26,7 @@ impl Loaded {
         &mut self,
         database: &crate::data::Database,
         previous: Option<&Self>,
-        package: Option<Arc<package::StagedPackage>>,
+        package: Option<package::PackageChange>,
     ) -> Result<(), Error> {
         // Previously skipped plugins count as new to the active catalog even
         // when their builds are unchanged. If one still fails, exclude it and
@@ -40,6 +40,9 @@ impl Loaded {
                 .cloned()
                 .collect();
             if ids.is_empty() {
+                if let Some(package) = package {
+                    package.apply().await?.finish(true).await;
+                }
                 return Ok(());
             }
             let failure = match Box::pin(self.record_grants_for(
@@ -116,7 +119,7 @@ impl Loaded {
         previous: Option<&Self>,
         ids: &[String],
         commit: bool,
-        package: Option<Arc<package::StagedPackage>>,
+        package: Option<package::PackageChange>,
     ) -> Result<(), InstallFailure> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
@@ -176,7 +179,7 @@ impl Loaded {
 
             // A rename failure can still roll back the schema transaction.
             let promotion = match package {
-                Some(package) => Some(package.promote().await?),
+                Some(package) => Some(package.apply().await?),
                 None => None,
             };
             Ok((granted, resets, promotion))

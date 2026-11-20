@@ -15,7 +15,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use std::{
     future::Future,
@@ -213,6 +213,7 @@ fn application_router(adapter: Adapter, web: Option<HostedWeb>) -> Router {
     if authenticated {
         app = app
             .route("/shutdown", post(stop))
+            .route("/plugins/{id}", delete(remove_plugin))
             .route("/plugins/{id}/reload", post(reload_plugin))
             .route("/plugins/{id}/package", put(upload_package));
     }
@@ -295,7 +296,11 @@ async fn authorize(
         if (path.starts_with("/members")
             || matches!(path, "/health" | "/shutdown")
             || path.ends_with("/reload")
-            || path.ends_with("/package"))
+            || path.ends_with("/package")
+            || (request.method() == axum::http::Method::DELETE
+                && path
+                    .strip_prefix("/plugins/")
+                    .is_some_and(|id| !id.contains('/'))))
             && user.role != "owner"
         {
             return StatusCode::FORBIDDEN.into_response();
@@ -448,6 +453,9 @@ async fn plugins(State(adapter): State<Adapter>) -> Response {
 }
 async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
     plugin_result(adapter.server.reload_plugin(id).await)
+}
+async fn remove_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
+    plugin_result(adapter.server.remove_plugin(id).await)
 }
 async fn upload_package(
     State(adapter): State<Adapter>,
