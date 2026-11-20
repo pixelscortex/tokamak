@@ -1,4 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import { execFile } from "node:child_process";
+import { mkdir, realpath } from "node:fs/promises";
+import { basename } from "node:path";
+import { promisify } from "node:util";
 
 // The real server runs chat and ACP; ACP finds only the scripted agent from
 // e2e/fixtures/scripted-agent.py, so replies, tool steps and permissions are real
@@ -175,4 +179,68 @@ test("switching the thread agent keeps each earlier reply labelled with the agen
   await expect(turns.nth(3)).toHaveAccessibleName("Codex");
   await expect(turns.nth(3).getByText(/Tokamak workspace/)).toBeVisible();
   await expect(turns.nth(1)).toHaveAccessibleName("Claude");
+});
+
+async function openFromCli(folder: string, args: string[], env: NodeJS.ProcessEnv) {
+  const { stdout, stderr } = await promisify(execFile)(
+    "proto",
+    ["run", "bun", "--", "run", "tokamak", "open", folder, "--json", ...args],
+    { env: { ...process.env, TOKAMAK_SERVER: undefined, TOKAMAK_TOKEN: undefined, ...env }, timeout: 45_000 },
+  );
+  return { result: JSON.parse(stdout), text: stderr };
+}
+
+test("tokamak open switches a connected window to the thread and sets the default agent folder", async ({
+  page,
+}, testInfo) => {
+  const serverDir = process.env.TOKAMAK_SERVER_DIR;
+  if (!serverDir || !process.env.TOKAMAK_E2E_WEB_ROOT)
+    throw new Error("Run this test through the browser suite's isolated server harness.");
+  const folder = testInfo.outputPath("working folder");
+  await mkdir(folder, { recursive: true });
+
+  await openChat(page);
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  const chat = page.getByRole("region", { name: "Chat" });
+  const previous = await chat.getAttribute("data-thread-id");
+  await page.getByRole("link", { name: "FixtureView", exact: true }).click();
+  await expect(chat).toBeHidden();
+
+  const { result: opened, text } = await openFromCli(folder, ["--new"], { TOKAMAK_SERVER_DIR: serverDir });
+  expect(opened, text).toMatchObject({
+    ok: true,
+    created: true,
+    folder: await realpath(folder),
+    folderRecorded: true,
+    agent: { plugin: "acp", backendId: "claude" },
+    windowConnected: true,
+  });
+  expect(opened.threadId).not.toBe(previous);
+  await expect(page).toHaveURL(/\/p\/chat$/);
+  await expect(chat).toHaveAttribute("data-thread-id", opened.threadId);
+  await expect(page.getByRole("button", { name: /^Claude(?:\s|$)/ })).toContainText(basename(folder));
+});
+
+test("tokamak open leaves the agent and folder to the window on a shared server", async ({}, testInfo) => {
+  const token = process.env.TOKAMAK_E2E_HOSTED_TOKEN;
+  if (!token) throw new Error("Run this test through the browser suite's isolated server harness.");
+  const folder = testInfo.outputPath("shared thread folder");
+  await mkdir(folder, { recursive: true });
+
+  const address = "http://127.0.0.1:43124";
+  const open = () => openFromCli(folder, ["--server", address], { TOKAMAK_TOKEN: token });
+  const first = await open();
+  const second = await open();
+  for (const { result, text } of [first, second]) {
+    expect(result, text).toMatchObject({
+      ok: true,
+      created: true,
+      server: address,
+      windowConnected: false,
+      agent: null,
+      folderRecorded: false,
+    });
+    expect(text).toContain("Choose an agent and folder in the window.");
+  }
+  expect(first.result.threadId).not.toBe(second.result.threadId);
 });

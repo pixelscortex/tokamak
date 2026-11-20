@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
+import { build, withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
 
-function cli(root, args, extra = {}) {
-  const result = Bun.spawnSync([process.execPath, "run", "tokamak", ...args], {
-    cwd: workspace,
+function cli(root, args, extra = {}, cwd = workspace) {
+  const entry = cwd === workspace ? "tokamak" : join(workspace, "packages/cli/src/main.ts");
+  const result = Bun.spawnSync([process.execPath, "run", entry, ...args], {
+    cwd,
     env: {
       ...process.env,
       TOKAMAK_SERVER: undefined,
@@ -133,7 +134,7 @@ test("every registered command shares help and JSON output rules", async () => {
   });
 }, 30_000);
 
-async function withServer(root, check) {
+async function withServer(root, check, startupTimeout = 35_000) {
   const data = join(root, "data");
   const plugins = join(root, "installed");
   await mkdir(plugins, { recursive: true });
@@ -157,7 +158,7 @@ async function withServer(root, check) {
   let address;
   const serverErrors = new Response(server.stderr).text();
   try {
-    const deadline = Date.now() + 35_000;
+    const deadline = Date.now() + startupTimeout;
     while (true) {
       const ready = await readFile(join(data, "server.json"), "utf8").catch((error) => {
         if (error.code !== "ENOENT") throw error;
@@ -221,3 +222,57 @@ test("a real local server loads and removes an indexed plugin on restart", async
     });
   });
 }, 120_000);
+
+test("open reports a missing folder and explains how to start a missing local server", async () => {
+  await withPlugin((folder, root) => {
+    const invalid = cli(root, ["open", join(root, "missing"), "--json"]);
+    expect(invalid.code).not.toBe(0);
+    expect(JSON.parse(invalid.stdout).error.message).toContain("Folder does not exist");
+    const offline = cli(root, ["open", folder, "--json"]);
+    expect(offline.code).not.toBe(0);
+    expect(JSON.parse(offline.stdout).error.next).toBe("tokamak server start");
+  });
+});
+
+test("open remembers the folder on a real local server without an agent or window", async () => {
+  await withPlugin(async (folder, root) => {
+    const chat = join(workspace, "plugins/chat");
+    const built = build(chat);
+    expect(built.code, built.output).toBe(0);
+    await mkdir(join(root, "installed"), { recursive: true });
+    await cp(join(chat, "dist"), join(root, "installed", "chat"), { recursive: true });
+    await withServer(
+      root,
+      (address, token) => {
+        const open = (args, cwd = workspace, env = {}) => {
+          const result = cli(root, ["open", ...args, "--json"], env, cwd);
+          expect(result.code, result.stderr).toBe(0);
+          expect(result.stderr).toContain("exists. Opening Tokamak");
+          expect(result.stderr).toContain("Choose an agent");
+          return JSON.parse(result.stdout);
+        };
+        const first = open([folder]);
+        expect(first).toEqual({
+          ok: true,
+          threadId: expect.any(String),
+          created: true,
+          folder,
+          server: address,
+          windowConnected: false,
+          agent: null,
+          folderRecorded: true,
+        });
+        const reused = { ...first, created: false };
+        expect(open([relative(root, folder)], root)).toEqual(reused);
+        expect(open(["."], folder)).toEqual(reused);
+        expect(open([], folder, { TOKAMAK_SERVER: address, TOKAMAK_TOKEN: token })).toEqual(reused);
+
+        const fresh = open([folder, "--new", "--server", address], workspace, { TOKAMAK_TOKEN: token });
+        expect(fresh).toEqual({ ...first, threadId: expect.any(String) });
+        expect(fresh.threadId).not.toBe(first.threadId);
+        expect(open([folder])).toEqual({ ...fresh, created: false });
+      },
+      90_000,
+    );
+  });
+}, 180_000);

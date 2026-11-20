@@ -1,4 +1,4 @@
-import { functionName, v, type ActionContext } from "@tokamak/sdk";
+import { functionName, v, type ActionContext, type JsonValue } from "@tokamak/sdk";
 import { action } from "../_functions";
 import type { BackendApi } from "../../shared/backends";
 export const list = action({
@@ -14,11 +14,15 @@ export async function listBackends(ctx: ActionContext) {
 }
 export const configure = action({
   args: { plugin: v.string(), backendId: v.string(), settings: v.any() },
-  handler: async (ctx, args) => {
-    const provider = (await ctx.providers<BackendApi>("chat.backend")).find(
-      (provider) => provider.backend.turn[functionName].split("/")[0] === args.plugin,
-    );
-    if (!provider) throw new Error(`Backend plugin unavailable: ${args.plugin}`);
-    return ctx.use(provider).backend.configure({ backendId: args.backendId, settings: args.settings });
-  },
+  handler: configureBackend,
 });
+export async function configureBackend(
+  ctx: ActionContext,
+  args: { plugin: string; backendId: string; settings: JsonValue },
+) {
+  const provider = (await ctx.providers<BackendApi>("chat.backend")).find(
+    (provider) => provider.backend.turn[functionName].split("/")[0] === args.plugin,
+  );
+  if (!provider) throw new Error(`Backend plugin unavailable: ${args.plugin}`);
+  return ctx.use(provider).backend.configure({ backendId: args.backendId, settings: args.settings });
+}

@@ -34,14 +34,27 @@ async function localEndpoint() {
   return { url: httpAddress(address), token };
 }
 
+export async function serverEndpoint(address?: string) {
+  if (!address) return localEndpoint();
+  const token = process.env.TOKAMAK_TOKEN;
+  if (!token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
+  return { url: httpAddress(address), token };
+}
+
+export function serverFailure(error: unknown, address: string | undefined, operation: string) {
+  const next = address ? "tokamak --help" : "tokamak server start";
+  if (!address && (error as NodeJS.ErrnoException).code === "ENOENT")
+    return new CommandError("No local server is running", next);
+  return new CommandError(
+    `Could not ${operation} from the ${address ? "selected server" : "local server"}: ${error instanceof Error ? error.message : String(error)}`,
+    next,
+  );
+}
+
 export async function serverGet(path: string, explicit?: string): Promise<unknown> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
-  const next = address ? "tokamak --help" : "tokamak server start";
   try {
-    const endpoint = address
-      ? { url: httpAddress(address), token: process.env.TOKAMAK_TOKEN }
-      : await localEndpoint();
-    if (!endpoint.token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
+    const endpoint = await serverEndpoint(address);
     const response = await fetch(new URL(path, endpoint.url), {
       headers: { Authorization: `Bearer ${endpoint.token}` },
       signal: AbortSignal.timeout(5000),
@@ -50,11 +63,6 @@ export async function serverGet(path: string, explicit?: string): Promise<unknow
     if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
     return await response.json();
   } catch (error) {
-    if (!address && (error as NodeJS.ErrnoException).code === "ENOENT")
-      throw new CommandError("No local server is running", next);
-    throw new CommandError(
-      `Could not read ${path} from the ${address ? "selected server" : "local server"}: ${error instanceof Error ? error.message : String(error)}`,
-      next,
-    );
+    throw serverFailure(error, address, `read ${path}`);
   }
 }
