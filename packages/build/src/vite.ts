@@ -74,7 +74,7 @@ export function tokamak(
       },
       async buildStart() {
         const manifest = await readPluginPackage(root);
-        if (manifest) installPluginPackages(root);
+        if (manifest) await installPluginPackages(root, manifest);
         checkPluginImports(root, console.warn);
         const descriptor = options.plugin ?? readDescriptor(root);
         if (!descriptor && !manifest) throw new Error("Expected plugin.ts or package.json");

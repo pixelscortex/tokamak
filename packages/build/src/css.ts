@@ -15,7 +15,7 @@ export async function compileCss(path: string): Promise<string> {
     from: path,
     onDependency() {},
     async customCssResolver(id, base) {
-      checkTokamakImport(id, base);
+      checkTokamakImport(id, base, "stylesheet");
       const tailwind = id === "tailwindcss" || id.startsWith("tailwindcss/");
       if (!tailwind && id !== "@tokamak/ui/theme.css") return;
       const request = id === "tailwindcss" ? "tailwindcss/index.css" : id;

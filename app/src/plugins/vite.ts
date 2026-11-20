@@ -1,4 +1,4 @@
-import { windowSharedImports } from "../../../packages/build/src/shared-libraries.mts";
+import { windowAliases, windowSharedImports } from "../../../packages/build/src/shared-libraries.mts";
 import type { Plugin } from "vite";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -32,7 +32,9 @@ export function pluginModules(): Plugin {
       const specifier = decodeURIComponent(id.slice(prefix.length + 1));
       if (!specifiers.includes(specifier)) throw new Error(`Unknown host module: ${specifier}`);
       const target =
-        specifier === "@tokamak/runtime/router" ? resolve(import.meta.dirname, "router.ts") : specifier;
+        specifier === "@tokamak/runtime/router"
+          ? resolve(import.meta.dirname, "router.ts")
+          : (windowAliases[specifier] ?? specifier);
       return `export * from ${JSON.stringify(target)};`;
     },
     buildStart() {
