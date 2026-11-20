@@ -1,13 +1,10 @@
 import { lstat, readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { join } from "node:path";
+import { direct, loopback } from "../../runtime/tools/direct-http";
 import { CommandError } from "./command";
 import { dataFolder } from "./data";
 import { processIsAlive } from "./process";
-
-const loopback = (host: string) =>
-  host === "localhost" || host === "[::1]" || (isIP(host) === 4 && host.startsWith("127."));
-const noProxy = { proxy: "" };
 
 function httpAddress(address: string) {
   let url: URL;
@@ -78,12 +75,12 @@ async function localEndpoint() {
 async function get(path: string, endpoint: { url: URL; token: string }): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(new URL(path, endpoint.url), {
-      ...(loopback(endpoint.url.hostname) ? noProxy : {}),
-      headers: { Authorization: `Bearer ${endpoint.token}` },
-      signal: AbortSignal.timeout(5000),
-      redirect: "error",
-    });
+    const url = new URL(path, endpoint.url);
+    const headers = new Headers({ Authorization: `Bearer ${endpoint.token}` });
+    const signal = AbortSignal.timeout(5000);
+    response = loopback(url.hostname)
+      ? await direct(url, headers, signal, {})
+      : await fetch(url, { headers, signal, redirect: "error" });
   } catch {
     throw new Error("Could not connect to the server");
   }
