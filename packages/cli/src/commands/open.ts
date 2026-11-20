@@ -5,7 +5,7 @@ import { TokamakClient } from "../../../sdk/src/client";
 import { WebSocketTransport } from "../../../sdk/src/transport";
 import type { Id } from "../../../sdk/src/values";
 import { CommandError, type Command } from "../command";
-import { serverEndpoint, serverFailure } from "../server";
+import { withServerEndpoint } from "../server";
 
 type Agent = { plugin: string; backendId: string };
 type OpenResult = {
@@ -66,6 +66,7 @@ async function waitForWindow(client: TokamakClient, requestId: OpenResult["reque
 
 export default {
   path: "open",
+  usesServer: true,
   summary:
     "Open a thread in a folder. Use --server <address> or TOKAMAK_SERVER with TOKAMAK_TOKEN for another server; saved names are only available in the window.",
   args: { name: "folder", optional: true },
@@ -81,46 +82,44 @@ export default {
     if (!(await stat(folder)).isDirectory())
       throw new CommandError(`Not a folder: ${folder}`, "tokamak open --help");
 
-    const address = server ?? process.env.TOKAMAK_SERVER;
     let transport: WebSocketTransport | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const endpoint = await serverEndpoint(address);
-      transport = await connect(endpoint.url, endpoint.token);
-      const client = new TokamakClient(transport);
-      const connection = transport;
-      timeout = setTimeout(() => connection.close(), 30_000);
-      const { threadId, requestId, created, agent, folderRecorded, local } = await client.action(
-        requests.request,
-        {
-          folder,
-          alwaysNew: flags.new === true,
-        },
-      );
-      clearTimeout(timeout);
-      const windowConnected = await waitForWindow(client, requestId);
-      let text = windowConnected
-        ? `Opened thread ${threadId}.`
-        : `Thread ${threadId} exists. Opening Tokamak on this server will show it.`;
-      if (!local) text += " Choose an agent and folder in the window.";
-      else if (!agent) text += " Choose an agent in the window.";
-      return {
-        data: {
-          threadId,
-          created,
-          folder,
-          server: endpoint.url.origin,
-          windowConnected,
-          agent,
-          folderRecorded,
-        },
-        text,
-      };
-    } catch (error) {
-      throw serverFailure(error, address, "open a thread");
-    } finally {
-      clearTimeout(timeout);
-      transport?.close();
-    }
+    return withServerEndpoint(server, "open a thread", async (endpoint) => {
+      try {
+        transport = await connect(endpoint.url, endpoint.token);
+        const client = new TokamakClient(transport);
+        const connection = transport;
+        timeout = setTimeout(() => connection.close(), 30_000);
+        const { threadId, requestId, created, agent, folderRecorded, local } = await client.action(
+          requests.request,
+          {
+            folder,
+            alwaysNew: flags.new === true,
+          },
+        );
+        clearTimeout(timeout);
+        const windowConnected = await waitForWindow(client, requestId);
+        let text = windowConnected
+          ? `Opened thread ${threadId}.`
+          : `Thread ${threadId} exists. Opening Tokamak on this server will show it.`;
+        if (!local) text += " Choose an agent and folder in the window.";
+        else if (!agent) text += " Choose an agent in the window.";
+        return {
+          data: {
+            threadId,
+            created,
+            folder,
+            server: endpoint.url.origin,
+            windowConnected,
+            agent,
+            folderRecorded,
+          },
+          text,
+        };
+      } finally {
+        clearTimeout(timeout);
+        transport?.close();
+      }
+    });
   },
 } satisfies Command;
