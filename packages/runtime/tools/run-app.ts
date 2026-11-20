@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { ensure, localDirectory, status, stop } from "./local-server";
+import { serverBinaryCandidates } from "./server-binary";
 
 const [command = "status", profile = "debug"] = process.argv.slice(2);
 if (!["start", "stop", "status"].includes(command) || !["debug", "release"].includes(profile)) {
@@ -9,10 +10,8 @@ if (!["start", "stop", "status"].includes(command) || !["debug", "release"].incl
 }
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const suffix = process.platform === "win32" ? ".exe" : "";
-let binary = resolve(root, `target/${profile}/tokamak-server${suffix}`);
-if (!existsSync(binary) && ["stop", "status"].includes(command)) {
-  binary = resolve(root, `target/${profile === "debug" ? "release" : "debug"}/tokamak-server${suffix}`);
-}
+const candidates = serverBinaryCandidates(command, profile, suffix).map((path) => resolve(root, path));
+const binary = candidates.find((path) => existsSync(path)) ?? candidates[0]!;
 const directory = localDirectory(binary, root);
 if (command === "stop") {
   await stop(directory);
