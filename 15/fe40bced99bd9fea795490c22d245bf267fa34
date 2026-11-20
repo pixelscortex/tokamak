@@ -1,0 +1,49 @@
+packages/server/src/plugins/package.rs
+  s_e8261854231ede::t_7ced4a450afee3 43
+  s_e8261854231ede::t_80661526a49b3b 26-31,33-42,45,47-56,58-66,68-85
+  s_e8261854231ede::t_e840c854527d21 32,44,46,57,67
+packages/server/src/service/server.rs
+  s_e8261854231ede::t_7e756dc23bcd61 43-47
+  s_e8261854231ede::t_80661526a49b3b 40-42,48-49
+packages/server/src/service/mod.rs
+  s_e8261854231ede::t_7e756dc23bcd61 119
+packages/server/src/websocket.rs
+  s_e8261854231ede::t_80661526a49b3b 18,215,298-299,456-457
+  s_e8261854231ede::t_6586c6803f72f2 300-302
+  s_e8261854231ede::t_cedb1989b3ca2a 458
+packages/server/src/plugins/catalog.rs
+  s_e8261854231ede::t_6586c6803f72f2 155-159,161-163,166-170,466-468,478-480
+  s_e8261854231ede::t_2173d42721471f 118-146,476
+  s_e8261854231ede::t_7ced4a450afee3 147-154,160,164-165,171-194,455-465,469-475,477,481,489
+  s_e8261854231ede::t_f933d122b9d40f 482
+packages/server/src/service/plugin_control.rs
+  s_e8261854231ede::t_7e756dc23bcd61 269,286-290,292-297
+  s_e8261854231ede::t_7ced4a450afee3 2,92-94,267-268,270-273,278-285,306
+  s_e8261854231ede::t_6586c6803f72f2 260-264,274-277,291,309-312
+  s_e8261854231ede::t_85619d84791ffa 265-266
+packages/server/src/plugins/grants.rs
+  s_e8261854231ede::t_80661526a49b3b 29,43-45,117,176
+packages/server/tests/plugins.rs
+  s_e8261854231ede::t_6586c6803f72f2 1300-1308,1341,1346-1347,1355-1360,1369-1374,1384,1626-1634,1655-1693,1701-1714,1716-1855
+  s_e8261854231ede::t_7e756dc23bcd61 940-953,1635-1654,1694-1700,1715
+  s_e8261854231ede::t_e290212994f24b 1856
+packages/server/tests/fixtures/plugins/a/backend/ops.ts
+  s_e8261854231ede::t_7e756dc23bcd61 1,37-42
+  s_e8261854231ede::t_ed647fddc6212e 43-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15fe40bced99bd9fea795490c22d245bf267fa34",
+  "prompts": {},
+  "sessions": {
+    "s_e8261854231ede": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f9b2-2f2a-77b0-80d0-08e9f1cfdcf3",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
