@@ -66,21 +66,7 @@ export function createPluginShell(
   return createRoot((dispose) => {
     stop = dispose;
     const host: WebPluginHost = new WebPluginHost(endpoint, () => loader.metadata().plugins);
-    const unhandled = (event: ErrorEvent | PromiseRejectionEvent) => {
-      const cause = "reason" in event ? event.reason : event.error;
-      const plugin = host.errorOwner("filename" in event ? event.filename : "", cause);
-      if (plugin)
-        host.reportError(
-          plugin,
-          describe(cause ?? ("message" in event ? event.message : "Unhandled rejection")),
-        );
-    };
-    window.addEventListener("error", unhandled);
-    window.addEventListener("unhandledrejection", unhandled);
-    onCleanup(() => {
-      window.removeEventListener("error", unhandled);
-      window.removeEventListener("unhandledrejection", unhandled);
-    });
+    watchUnhandledPluginErrors(host);
     const loader: PluginLoader = createPluginLoader(host, serverAssets(endpoint, source));
     const navigation = routerFacade(routing.router);
     const views = createMemo(() =>
@@ -138,6 +124,24 @@ export function createPluginShell(
       void routing.router.invalidate();
     });
     return shell;
+  });
+}
+
+function watchUnhandledPluginErrors(host: WebPluginHost) {
+  const unhandled = (event: ErrorEvent | PromiseRejectionEvent) => {
+    const cause = "reason" in event ? event.reason : event.error;
+    const plugin = host.errorOwner("filename" in event ? event.filename : "", cause);
+    if (plugin)
+      host.reportError(
+        plugin,
+        describe(cause ?? ("message" in event ? event.message : "Unhandled rejection")),
+      );
+  };
+  window.addEventListener("error", unhandled);
+  window.addEventListener("unhandledrejection", unhandled);
+  onCleanup(() => {
+    window.removeEventListener("error", unhandled);
+    window.removeEventListener("unhandledrejection", unhandled);
   });
 }
 
