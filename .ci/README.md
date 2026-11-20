@@ -13,8 +13,9 @@ runnable locally: `cargo test --workspace`, `proto run bun -- e2e/run.ts`,
 `proto run bun -- run e2e:browser` (see `e2e/README.md`), and
 `proto run bun -- test plugins/acp`.
 
-Pull requests and pushes to `main` run only the cheap Linux jobs: lint,
-TypeScript and Rust. The `desktop-mac` and `desktop-windows` jobs build the
+Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint,
+TypeScript and Rust. `dev` is the integration branch: feature pull requests target
+it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
 workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build,
 smoke-check the server's `--build-id` and upload the bundle (`desktop-mac-<arch>`,
