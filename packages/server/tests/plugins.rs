@@ -31,7 +31,13 @@ impl Installation {
         for id in ["a", "b"] {
             let target = path.join(id);
             std::fs::create_dir(&target).unwrap();
-            for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+            for file in [
+                "manifest.json",
+                "bundle.js",
+                "bundle.js.map",
+                "api.ts",
+                "public.d.ts",
+            ] {
                 std::fs::copy(source.join(id).join("dist").join(file), target.join(file)).unwrap();
             }
         }
@@ -62,7 +68,7 @@ fn built() -> PathBuf {
     static ROOT: OnceLock<PathBuf> = OnceLock::new();
     ROOT.get_or_init(|| {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for id in ["a", "b"] {
+        for id in ["b", "a"] {
             let output = std::process::Command::new("proto")
                 .args([
                     "run",

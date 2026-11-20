@@ -1,6 +1,9 @@
 // One import policy for the SDK's Bun bundles and the public Vite builder.
-// Provider source is read by TypeScript for types/metadata, never evaluated or bundled.
+// Dependency types and reference metadata come from built artifacts.
 import ts from "typescript";
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { fetchLocal } from "../../runtime/tools/local-server.ts";
 import {
   existsSync,
   mkdirSync,
@@ -95,10 +98,9 @@ export function pluginCompilerOptions(root, options) {
   // Resolve inherited paths at their declaring config, before adding our own.
   const base = options.baseUrl ?? options.pathsBasePath ?? root;
   const paths = Object.fromEntries(
-    Object.entries(options.paths ?? {}).map(([key, values]) => [
-      key,
-      values.map((value) => resolve(base, value)),
-    ]),
+    Object.entries(options.paths ?? {})
+      .filter(([key]) => !key.startsWith("plugin:"))
+      .map(([key, values]) => [key, values.map((value) => resolve(base, value))]),
   );
   return {
     ...moduleDefaults,
@@ -138,25 +140,6 @@ export function assertPluginResolution(root, importer, id, target, packageImport
   throw diagnostic(importer, id, target);
 }
 
-function provider(root, id) {
-  const match = specifier.exec(id);
-  if (!match || match[1] === "." || match[1] === "..") throw new Error(`Invalid plugin specifier ${id}`);
-  const folder = resolve(root, "..", match[1]);
-  const side = match[2] ?? "server";
-  const backendEntry = resolve(server(folder), "api.ts");
-  const entry =
-    side === "server"
-      ? existsSync(backendEntry)
-        ? backendEntry
-        : resolve(folder, "api.ts")
-      : resolve(
-          folder,
-          existsSync(resolve(folder, "src/client/api.ts")) ? "src/client/api.ts" : "src/client/api.tsx",
-        );
-  if (!existsSync(entry)) throw new Error(`Plugin import ${id}: missing public API ${entry}`);
-  return { folder, entry, side, id: match[1] };
-}
-
 /** Runtime exports only: erased named/star re-exports must never grant references. */
 export function runtimeExportNames(checker, module, seen = new Set()) {
   if (seen.has(module)) return new Set();
@@ -188,7 +171,7 @@ export function runtimeExportNames(checker, module, seen = new Set()) {
   return names;
 }
 
-function publicReferences(folder, entry) {
+export function publicReferences(folder, entry) {
   const options = pluginCompilerOptions(folder, configuration(entry).options);
   const program = ts.createProgram([entry], options);
   const checker = program.getTypeChecker();
@@ -222,22 +205,28 @@ function publicReferences(folder, entry) {
     const target = targets.get(original(exported));
     return target ? [[exported.name, target]] : [];
   });
-  const imports = new Set();
-  for (const source of program.getSourceFiles()) {
-    if (!inside(folder, source.fileName) || inside(generated(folder), source.fileName)) continue;
-    for (const imported of ts.preProcessFile(source.text, true, true).importedFiles)
-      if (imported.fileName.startsWith("plugin:")) imports.add(imported.fileName);
-  }
-  return { refs, imports };
+  return { refs };
 }
 
 export function pluginReferenceSource(root, id) {
-  const target = provider(root, id);
-  if (target.side === "client") throw new Error(`Use ${id} in a client bundle through the client registry`);
-  const { refs } = publicReferences(target.folder, target.entry);
+  const [, dependency, side] = pluginImport(id);
+  if (side === "client") throw new Error(`Use ${id} in a window bundle through the window registry`);
+  const types = readFileSync(resolve(generated(root), dependency, "public.d.ts"), "utf8");
+  const refs = JSON.parse(/^\/\/ References: (.*)$/m.exec(types)?.[1] ?? "[]");
+  if (
+    !Array.isArray(refs) ||
+    refs.some(
+      ([key, address]) =>
+        !ts.isIdentifierText(key, ts.ScriptTarget.Latest) ||
+        !Array.isArray(address) ||
+        address.length !== 2 ||
+        address.some((part) => typeof part !== "string"),
+    )
+  )
+    throw new Error(`Invalid public reference metadata for ${dependency}`);
   return (
     'import { createApi } from "@tokamak/sdk";\n' +
-    `const references = createApi(${JSON.stringify(target.id)});\n` +
+    `const references = createApi(${JSON.stringify(dependency)});\n` +
     refs
       .map(
         ([name, [module, method]]) =>
@@ -248,35 +237,95 @@ export function pluginReferenceSource(root, id) {
   );
 }
 
-function declarePlugin(root, id, declared) {
-  if (declared.has(id)) return;
-  declared.add(id);
-  const target = provider(root, id);
-  const path = resolve(generated(root), target.id, `${target.side}.d.ts`);
-  mkdirSync(dirname(path), { recursive: true });
-  const entry = JSON.stringify(target.entry);
-  const { refs, imports } = publicReferences(target.folder, target.entry);
+function pluginImport(id) {
+  const match = specifier.exec(id);
+  if (!match || !/^[a-z0-9][a-z0-9._-]*$/.test(match[1])) throw new Error(`Invalid plugin specifier ${id}`);
+  return match;
+}
+
+function neighbourTypes(root, id) {
+  const parent = dirname(root);
+  for (const name of readdirSync(parent).sort()) {
+    const dist = resolve(parent, name, "dist");
+    try {
+      const manifest = JSON.parse(readFileSync(resolve(dist, "manifest.json"), "utf8"));
+      if (manifest.plugin?.id === id && manifest.entries?.types === "public.d.ts") {
+        const bytes = readFileSync(resolve(dist, "public.d.ts"));
+        if (createHash("sha256").update(bytes).digest("hex") === manifest.hashes?.["public.d.ts"])
+          return bytes.toString("utf8");
+      }
+    } catch (error) {
+      if (!["ENOENT", "ENOTDIR", "EACCES"].includes(error.code) && !(error instanceof SyntaxError))
+        throw error;
+    }
+  }
+}
+
+function localDirectory() {
+  if (process.env.TOKAMAK_SERVER_DIR) return process.env.TOKAMAK_SERVER_DIR;
+  const home = homedir();
+  // Match directories::ProjectDirs::data_local_dir, used by the desktop app.
+  if (process.platform === "darwin")
+    return resolve(home, "Library/Application Support/com.pixelscortex.Tokamak");
+  if (process.platform === "win32")
+    return resolve(process.env.LOCALAPPDATA ?? resolve(home, "AppData/Local"), "pixelscortex/Tokamak/data");
+  return resolve(process.env.XDG_DATA_HOME || resolve(home, ".local/share"), "tokamak");
+}
+
+async function localTypes(id) {
+  const directory = localDirectory();
+  try {
+    const catalog = await fetchLocal(directory, "/plugins");
+    if (!catalog?.ok) return;
+    const { plugins, revision } = await catalog.json();
+    const manifest = plugins.find((entry) => entry.plugin.id === id);
+    if (manifest?.entries.types !== "public.d.ts" || !/^[0-9a-f]{64}$/.test(revision)) return;
+    const resource = await fetchLocal(directory, `/plugins/${id}/${revision}/assets/public.d.ts`);
+    if (resource?.ok) return resource.text();
+  } catch {
+    // Discovery can disappear between reading the identity and fetching the file.
+  }
+}
+
+export function pluginSlots(root, id) {
+  const file = resolve(generated(root), pluginImport(`plugin:${id}/client`)[1], "public.d.ts");
+  if (!existsSync(file)) return {};
+  return JSON.parse(/^\/\/ Slots: (.*)$/m.exec(readFileSync(file, "utf8"))?.[1] ?? "{}");
+}
+
+async function declarePlugin(root, id, loaded, requireSide = true) {
+  const [, dependency, side = "server"] = pluginImport(id);
+  const directory = resolve(generated(root), dependency);
+  if (!loaded.has(dependency)) {
+    const types = neighbourTypes(root, dependency) ?? (await localTypes(dependency));
+    if (types === undefined) throw new Error(`Plugin import ${id}: build or install "${dependency}" first.`);
+    loaded.set(dependency, types);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(resolve(directory, "public.d.ts"), types);
+    for (const imported of ts.preProcessFile(types, true, true).importedFiles) {
+      if (imported.fileName.startsWith("plugin:") && pluginImport(imported.fileName)[1] !== dependency)
+        await declarePlugin(root, imported.fileName, loaded);
+    }
+  }
+  const types = loaded.get(dependency);
+  if (!types.includes(`declare module "plugin:${dependency}/${side}"`)) {
+    if (!requireSide) return;
+    throw new Error(`Plugin import ${id}: "${dependency}" has no public ${side} API`);
+  }
+  const sections = types.split(/^\/\/ Tokamak public (server|client) declarations\r?\n/m);
+  const index = sections.indexOf(side);
+  if (index < 0) throw new Error(`Invalid public declarations for ${dependency}`);
+  writeFileSync(resolve(directory, `${side}-types.d.ts`), sections[index + 1]);
   writeFileSync(
-    path,
-    `// Generated public plugin types. Runtime imports use references or the client registry.\n` +
-      (target.side === "client"
-        ? `export * from ${entry};\n`
-        : `export type * from ${entry};\n` +
-          `type PublicApi = import("@tokamak/sdk").ApiFromModule<typeof import(${entry})>;\n` +
-          `export declare const api: PublicApi;\n` +
-          refs
-            .map(([name]) => `export declare const ${name}: PublicApi[${JSON.stringify(name)}];\n`)
-            .join("")),
+    resolve(directory, `${side}.d.ts`),
+    `/// <reference path="./${side}-types.d.ts" />\nexport * from "plugin-types:${dependency}/${side}/public";\n`,
   );
-  // Public API types can themselves depend on other sanctioned public types.
-  // Materialize that type graph in the consumer; no provider code is emitted.
-  for (const dependency of imports) declarePlugin(root, dependency, declared);
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export function checkPluginImports(root, warn = () => {}) {
+export async function checkPluginImports(root, warn = () => {}, dependencies = []) {
   root = resolve(root);
-  const declared = new Set();
+  const imports = new Set();
   const warned = new Set();
   function checkFile(path) {
     const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
@@ -288,14 +337,10 @@ export function checkPluginImports(root, warn = () => {}) {
         warn(`Warning: direct import ${JSON.stringify(id)} in ${path} is unstable. Prefer @tokamak/ui.`);
       }
       if (id.startsWith("plugin:")) {
-        try {
-          declarePlugin(root, id, declared);
-        } catch (error) {
-          throw new Error(`${diagnostic(path, id).message} ${error.message}`);
-        }
+        imports.add(id);
         return;
       }
-      if (id.startsWith("@plugins/")) throw diagnostic(path, id);
+      if (id.startsWith("@plugins/") || id.startsWith("plugin-types:")) throw diagnostic(path, id);
       if (isBuiltin(id)) return;
       const resolved = ts.resolveModuleName(id, path, options, ts.sys).resolvedModule;
       if (resolved) {
@@ -372,6 +417,9 @@ export function checkPluginImports(root, warn = () => {}) {
     }
   }
   walk(root);
+  const loaded = new Map();
+  for (const id of imports) await declarePlugin(root, id, loaded);
+  for (const id of dependencies) await declarePlugin(root, `plugin:${id}`, loaded, false);
 }
 
 export function bunPluginReferences(root) {

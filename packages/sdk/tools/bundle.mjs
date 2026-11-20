@@ -59,7 +59,7 @@ export async function bundleFeature(folder, namespace, worker = false) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
-  checkPluginImports(pluginRoot);
+  await checkPluginImports(pluginRoot);
   const files = await scanFiles(root);
   // An explicit empty product backend is valid; a missing root still fails.
   const organized = isServerRoot(root);

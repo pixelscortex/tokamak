@@ -44,7 +44,7 @@ required dependencies; literal dynamic imports infer optional dependencies.
 
 The catalog keeps existing manifest fields and adds `revision`, `uiUrl` and
 `stylesheetUrl` per plugin. URLs are `/plugins/<id>/<catalog revision>/assets/<name>`;
-plugins without UI or CSS have null URLs. Only manifest-declared UI assets from
+plugins without UI or CSS have null URLs. Only manifest-declared window assets and public declarations from
 the current verified snapshot are served. Stale revisions return 404. Successful
 assets use `private, max-age=31536000, immutable` caching and JavaScript uses
 `text/javascript`.
@@ -61,8 +61,8 @@ with the same origin checks. Control routes remain native-only and require
 header authorization in desktop mode.
 
 Run the focused build tests from this directory with `sh tests/run.sh`.
-The browser fixture lives in `tests/fixtures/browser`; its optional cross-plugin
-module need not be installed to build or serve it.
+The browser fixture lives in `tests/fixtures/browser`; its optional dependency
+is built for type checking and need not be installed to serve the fixture.
 After building `target/debug/tokamak`, run the real curl/WebSocket checks from the
 repository root with `proto run bun -- packages/build/tests/browser-assets.mjs`.
 They cover loopback, desktop token authentication and a configured origin list.
@@ -112,8 +112,26 @@ paths to the plugin's tsconfig (relative to the plugin root):
 }
 ```
 
-The current authoring build requires sibling public source APIs for type and
-reference metadata; installed artifacts remain independent of that source.
+Each build publishes a single `dist/public.d.ts`. The manifest lists it at
+`entries.types` and hashes it in `hashes`. It contains declarations for the
+plugin's existing public server and window APIs. Public signatures can use types
+from the shared library list, but cannot expose types from a plugin's own npm
+packages.
+
+The builder looks for a sibling folder whose `dist/manifest.json` declares the
+dependency's id. If it finds no built copy, it looks in the running local
+server's catalog using `server.json` and `server.token` in the desktop app's data
+folder. Set `TOKAMAK_SERVER_DIR` to use another data folder. The build copies the
+declarations into `.tokamak/types/` without opening the dependency's source.
+If neither location has the declarations, build or install that plugin first.
+
+Build the starter set in dependency order. Chat must publish its types before
+ACP builds; the repository's `workspace:plugins-check` task does this:
+
+```sh
+proto run bun -- packages/build/src/build.ts plugins/chat
+proto run bun -- packages/build/src/build.ts plugins/acp
+```
 
 ## Building outside the checkout
 

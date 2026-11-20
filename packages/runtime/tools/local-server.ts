@@ -79,6 +79,18 @@ export async function status(directory: string): Promise<Identity | undefined> {
   return identity;
 }
 
+/** Read an HTTP resource from the local server identified by the desktop app's
+ * discovery and capability files. Never forward the capability on a redirect. */
+export async function fetchLocal(directory: string, path: string): Promise<Response | undefined> {
+  const identity = await status(directory);
+  if (!identity) return;
+  return fetch(endpoint(identity, path), {
+    headers: { authorization: `Bearer ${await token(directory)}` },
+    redirect: "error",
+    signal: AbortSignal.timeout(3000),
+  });
+}
+
 async function wait(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 50));
 }

@@ -126,7 +126,7 @@ export function deriveInterfaces(root: string) {
 export function deriveProviders(root: string, plugin: PluginDefinition, functions: string[]): string[] {
   const provides = new Set<string>();
   for (const id of Object.keys(plugin.depends ?? {})) {
-    const entry = resolve(root, "..", id, "src/server/api.ts");
+    const entry = resolve(root, ".tokamak/types", id, "server.d.ts");
     if (!existsSync(entry)) continue;
     const apiPath = resolve(serverDirectory(root), "_generated/api.ts");
     if (!existsSync(apiPath)) continue;

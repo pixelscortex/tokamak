@@ -68,11 +68,9 @@ impl Coordinator {
                         {
                             return None;
                         }
-                        loaded
-                            .catalog
-                            .plugins
-                            .get(&id)
-                            .and_then(|plugin| plugin.ui_asset(&name))
+                        loaded.catalog.plugins.get(&id).and_then(|plugin| {
+                            plugin.ui_asset(&name).or_else(|| plugin.types_asset(&name))
+                        })
                     });
 
                 let _ = reply.send(result);

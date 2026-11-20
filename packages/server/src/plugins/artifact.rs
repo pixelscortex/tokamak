@@ -71,6 +71,12 @@ impl Artifact {
         })
     }
 
+    pub fn types_asset(&self, name: &str) -> Option<Arc<Asset>> {
+        (self.manifest.entries.types.as_deref() == Some(name))
+            .then(|| self.assets.get(name).cloned())
+            .flatten()
+    }
+
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,
     /// server source, credentials or on-disk files can be fetched by this method.
     pub fn ui_asset(&self, name: &str) -> Option<Arc<Asset>> {
