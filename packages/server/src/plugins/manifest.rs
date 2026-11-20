@@ -129,12 +129,18 @@ impl Manifest {
             .strip_prefix("tokamak@")
             .ok_or_else(|| invalid("Host API requirement must start with tokamak@"))?;
 
-        let requirement = VersionReq::parse(requirement)
-            .map_err(|e| invalid(format!("Invalid host API range: {e}")))?;
-
-        if !requirement
-            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).expect("package version"))
-        {
+        let server = Version::parse(env!("CARGO_PKG_VERSION")).expect("package version");
+        // Full build versions pin the release line. Older manifests may declare a range.
+        let compatible = if let Ok(built_with) = Version::parse(requirement) {
+            server.major == built_with.major
+                && server.minor == built_with.minor
+                && !server.cmp_precedence(&built_with).is_lt()
+        } else {
+            VersionReq::parse(requirement)
+                .map_err(|e| invalid(format!("Invalid host API range: {e}")))?
+                .matches(&server)
+        };
+        if !compatible {
             return Err(invalid(format!(
                 "Incompatible host API for {}",
                 self.plugin.id

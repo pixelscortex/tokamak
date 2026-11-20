@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import { workspace } from "../../build/tests/outside-fixture.mjs";
 
-export function cli(root, args, extra = {}) {
-  const result = Bun.spawnSync([process.execPath, "run", "--silent", "tokamak", ...args], {
-    cwd: workspace,
+export function cli(root, args, extra = {}, cwd = workspace) {
+  const result = Bun.spawnSync([process.execPath, join(workspace, "packages/cli/src/main.ts"), ...args], {
+    cwd,
     timeout: 60_000,
     env: {
       ...process.env,

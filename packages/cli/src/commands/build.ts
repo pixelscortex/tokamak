@@ -1,8 +1,7 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { CommandError, type Command } from "../command";
-import { runBuilder } from "../plugin-build";
-import { acquireLock } from "../plugin-index";
+import { runBuilder, withBuildLock } from "../plugin-build";
 
 export default {
   path: "plugin build",
@@ -10,21 +9,12 @@ export default {
   args: { name: "folder", optional: true },
   example: "tokamak plugin build . --json",
   async run([folder]) {
-    const root = await realpath(resolve(folder ?? ".")).catch(() => resolve(folder ?? "."));
-    // Let the builder report missing folders using its structured diagnostics.
-    const release = await acquireLock(root, ".tokamak-build").catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-    });
-    try {
-      return await buildInFolder(root);
-    } finally {
-      await release?.();
-    }
+    return withBuildLock(folder, buildInFolder);
   },
 } satisfies Command;
 
 export async function buildInFolder(folder: string) {
-  const { outputFolder } = await runBuilder(folder, "--result-json");
+  const { outputFolder, warnings } = await runBuilder(folder, "--result-json");
   if (!outputFolder) throw new Error("The build did not report its output folder");
   const id = await readFile(resolve(outputFolder, "manifest.json"), "utf8")
     .then((source) => {
@@ -37,5 +27,5 @@ export async function buildInFolder(folder: string) {
         { message: `Could not read the build manifest: ${error.message}` },
       ]);
     });
-  return { data: { id, outputFolder }, text: `Built ${id}: ${outputFolder}` };
+  return { data: { id, outputFolder }, text: `Built ${id}: ${outputFolder}`, warnings };
 }

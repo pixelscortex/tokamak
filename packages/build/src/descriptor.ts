@@ -5,7 +5,8 @@ import ts from "typescript";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
-import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
+import { definePlugin, PluginDefinitionError, type PluginDefinition } from "../../sdk/src/plugin";
+import { BuildError, sourceLocation } from "./diagnostics";
 
 export function serverDirectory(root: string): string {
   return resolve(root, existsSync(resolve(root, "src/server")) ? "src/server" : "backend");
@@ -23,8 +24,10 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
   const path = resolve(root, "plugin.ts");
   if (!existsSync(path)) return;
   const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
-  const fail = (): never => {
-    throw new Error("plugin.ts must export default definePlugin({...}) with static literal metadata");
+  const at = (node: ts.Node, message: string) =>
+    new BuildError([{ ...sourceLocation(path, source.text, node.getStart(source)), message }]);
+  const fail = (node: ts.Node = source): never => {
+    throw at(node, "plugin.ts must export default definePlugin({...}) with static literal metadata");
   };
   const helper = source.statements.flatMap((statement) =>
     ts.isImportDeclaration(statement) &&
@@ -38,14 +41,15 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
       : [],
   );
   const assignment = source.statements.find(ts.isExportAssignment);
-  if (!assignment || assignment.isExportEquals || !ts.isCallExpression(assignment.expression)) return fail();
+  if (!assignment || assignment.isExportEquals || !ts.isCallExpression(assignment.expression))
+    return fail(assignment);
   const call = assignment.expression;
   if (
     !ts.isIdentifier(call.expression) ||
     !helper.includes(call.expression.text) ||
     call.arguments.length !== 1
   )
-    return fail();
+    return fail(call);
   function literal(node: ts.Node): unknown {
     if (ts.isStringLiteralLike(node)) return node.text;
     if (ts.isArrayLiteralExpression(node)) return node.elements.map(literal);
@@ -56,16 +60,23 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
           !ts.isPropertyAssignment(property) ||
           !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
         )
-          return fail();
+          return fail(property);
         const key = property.name.text;
-        if (Object.hasOwn(result, key)) return fail();
+        if (Object.hasOwn(result, key)) return fail(property);
         result[key] = literal(property.initializer);
       }
       return result;
     }
-    return fail();
+    return fail(node);
   }
-  const value = literal(call.arguments[0]!) as Record<string, unknown>;
+  const descriptor = call.arguments[0]!;
+  if (!ts.isObjectLiteralExpression(descriptor)) return fail(descriptor);
+  const value = literal(descriptor) as Record<string, unknown>;
+  const fields = new Map(
+    descriptor.properties
+      .filter(ts.isPropertyAssignment)
+      .map((property) => [property.name.getText(source).replace(/^['"]|['"]$/g, ""), property]),
+  );
   const allowed = [
     "id",
     "version",
@@ -77,16 +88,22 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
     "runtime",
     "maintenance",
   ];
-  if (!value || Array.isArray(value) || Object.keys(value).some((key) => !allowed.includes(key)))
-    return fail();
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  if (unknown !== undefined) return fail(fields.get(unknown) ?? descriptor);
   for (const key of ["depends", "optional"]) {
     if (value[key] === undefined) continue;
     const ids = value[key];
     if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string") || new Set(ids).size !== ids.length)
-      return fail();
+      return fail(fields.get(key) ?? descriptor);
     value[key] = Object.fromEntries(ids.map((id) => [id, "*"]));
   }
-  return value as unknown as PluginDefinition;
+  try {
+    return definePlugin(value as unknown as PluginDefinition);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    const node = error instanceof PluginDefinitionError ? fields.get(error.field) : undefined;
+    throw at(node ?? descriptor, error.message);
+  }
 }
 
 export async function readSourcePlugin(
@@ -94,7 +111,7 @@ export async function readSourcePlugin(
   prefetched?: Record<string, unknown> | null,
 ): Promise<PluginDefinition> {
   const descriptor = readDescriptor(root);
-  if (descriptor) return definePlugin(descriptor);
+  if (descriptor) return descriptor;
   const manifest =
     prefetched === undefined ? JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) : prefetched;
   if (!manifest) throw new Error("Expected plugin.ts or package.json");

@@ -1,5 +1,6 @@
 import type { Command } from "./command";
 import build from "./commands/build";
+import pack from "./commands/pack";
 import add from "./commands/add";
 import remove from "./commands/remove";
 import list from "./commands/list";
@@ -17,6 +18,7 @@ const peopleAndServer = [members, invite, revoke, serverStart, serverStop, serve
 
 export const commands: readonly Command[] = [
   build,
+  pack,
   add,
   remove,
   list,
