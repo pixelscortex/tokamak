@@ -1,0 +1,25 @@
+packages/cli/README.md
+  s_4ccc9a2575a981::t_af4e1198461ec2 58-67
+packages/cli/src/command.ts
+  s_4ccc9a2575a981::t_b1280f5698afad 1-14,20-22
+packages/cli/src/main.ts
+  s_4ccc9a2575a981::t_e259a8943840a5 1,9,22-38,40-54,56,68,70-73,87
+packages/cli/tests/cli.test.mjs
+  s_4ccc9a2575a981::t_5ab903ce5696cf 113-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29b7af23e1b6685ace610e274779a8e955e41996",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
