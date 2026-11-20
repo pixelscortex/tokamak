@@ -1971,6 +1971,7 @@ test("help and report load with missing TypeScript and doctor runs an actual com
     await mkdir(join(checkout, "packages/build"), { recursive: true });
     await cp(join(workspace, "packages/cli/src"), join(checkout, "packages/cli/src"), { recursive: true });
     await cp(join(workspace, "packages/cli/package.json"), join(checkout, "packages/cli/package.json"));
+    await cp(join(workspace, "packages/tokamak-version.ts"), join(checkout, "packages/tokamak-version.ts"));
     await cp(join(workspace, "packages/build/src"), join(checkout, "packages/build/src"), {
       recursive: true,
     });

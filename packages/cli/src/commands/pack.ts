@@ -1,4 +1,4 @@
-import { zipSync, type Zippable } from "fflate";
+import type { Zippable } from "fflate";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -34,6 +34,7 @@ async function archive(outputFolder: string) {
     entries[name] = bytes;
   }
 
+  const { zipSync } = await import("fflate");
   const path = resolve(`${id}-${version}.zip`);
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
