@@ -416,15 +416,22 @@ async fn plugins(State(adapter): State<Adapter>) -> Response {
 async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
     plugin_result(adapter.server.reload_plugin(id).await)
 }
+#[derive(serde::Deserialize)]
+struct WindowRevision {
+    revision: String,
+}
+
 async fn window_error(
     State(adapter): State<Adapter>,
     Path(id): Path<String>,
+    Query(report): Query<WindowRevision>,
     text: String,
 ) -> StatusCode {
-    match adapter.server.window_error(id, text).await {
+    match adapter.server.window_error(id, report.revision, text).await {
         Ok(true) => StatusCode::NO_CONTENT,
         Ok(false) => StatusCode::NOT_FOUND,
         Err(crate::Error::Overloaded) => StatusCode::TOO_MANY_REQUESTS,
+        Err(crate::Error::Invalid(_)) => StatusCode::CONFLICT,
         Err(_) => StatusCode::SERVICE_UNAVAILABLE,
     }
 }

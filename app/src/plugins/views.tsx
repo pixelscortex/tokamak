@@ -134,6 +134,7 @@ function watchUnhandledPluginErrors(host: WebPluginHost) {
     if (plugin)
       host.reportError(
         plugin,
+        host.logRevision(plugin),
         describe(cause ?? ("message" in event ? event.message : "Unhandled rejection")),
       );
   };
@@ -149,20 +150,23 @@ export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
   const key = () => `${props.view.plugin}:${props.view.id}:${props.shell.loader.version(props.view.plugin)}`;
   return (
     <Show keyed when={key()}>
-      {(_key) => (
-        <Errored
-          fallback={(cause) => (
-            <ViewFailure
-              view={props.view}
-              cause={cause()}
-              report={(text) => props.shell.host.reportError(props.view.plugin, text)}
-              reload={() => props.shell.loader.reload(props.view.plugin)}
-            />
-          )}
-        >
-          <LoadedView {...props} />
-        </Errored>
-      )}
+      {(_key) => {
+        const revision = props.shell.host.logRevision(props.view.plugin);
+        return (
+          <Errored
+            fallback={(cause) => (
+              <ViewFailure
+                view={props.view}
+                cause={cause()}
+                report={(text) => props.shell.host.reportError(props.view.plugin, revision, text)}
+                reload={() => props.shell.loader.reload(props.view.plugin)}
+              />
+            )}
+          >
+            <LoadedView {...props} revision={revision} />
+          </Errored>
+        );
+      }}
     </Show>
   );
 }
@@ -215,7 +219,7 @@ function ViewFailure(props: {
 function describe(cause: unknown): string {
   return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
 }
-function LoadedView(props: { shell: PluginShell; view: PluginView }) {
+function LoadedView(props: { shell: PluginShell; view: PluginView; revision?: string }) {
   const [module, setModule] = createSignal<ModuleExports>();
   const [failure, setFailure] = createSignal<{ cause: unknown }>();
   let alive = true;
@@ -255,6 +259,7 @@ function LoadedView(props: { shell: PluginShell; view: PluginView }) {
           <OwnedView
             shell={props.shell}
             plugin={props.view.plugin}
+            revision={props.revision}
             component={component as Component<Record<string, unknown>>}
           />
         );
@@ -265,6 +270,7 @@ function LoadedView(props: { shell: PluginShell; view: PluginView }) {
 function OwnedView(props: {
   shell: PluginShell;
   plugin: string;
+  revision?: string;
   component: Component<Record<string, unknown>>;
 }) {
   let dispose = () => {};
@@ -272,6 +278,9 @@ function OwnedView(props: {
   return createRoot((stop): JSX.Element => {
     dispose = stop;
     onCleanup(props.shell.host.own(props.plugin, stop));
+    const revision = props.revision;
+    const reportCallbackError = (cause: unknown) =>
+      props.shell.host.reportError(props.plugin, revision, describe(cause));
     const shortcuts = new Map<string, Set<() => void>>();
     const registerShortcut = (key: string, handler: () => void) => {
       const handlers = shortcuts.get(key) ?? new Set();
@@ -298,9 +307,9 @@ function OwnedView(props: {
       event.preventDefault();
       for (const handler of handlers) {
         try {
-          handler();
+          void Promise.resolve(handler()).catch(reportCallbackError);
         } catch (cause) {
-          props.shell.host.notifyError(`@plugins/${props.plugin}/ui`, cause);
+          reportCallbackError(cause);
         }
       }
     };

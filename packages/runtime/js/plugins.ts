@@ -17,6 +17,7 @@ export interface PluginModuleHost {
 }
 
 export interface PluginManifest {
+  logRevision?: string;
   plugin: {
     id: string;
     version: string;

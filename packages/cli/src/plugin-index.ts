@@ -6,7 +6,7 @@ import { dataFolder } from "./data";
 
 const name = "plugin-index.json";
 
-async function readIndex(folder: string): Promise<Map<string, string>> {
+export async function readIndex(folder = dataFolder()): Promise<Map<string, string>> {
   const file = join(folder, name);
   const source = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return "{}";

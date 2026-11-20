@@ -89,8 +89,8 @@ pub(super) fn spawn(
     runtime: &tokio::runtime::Handle,
     id: &str,
     bun: &Path,
-    entry: Arc<Asset>,
-    code: Arc<Asset>,
+    (entry, code): (Arc<Asset>, Arc<Asset>),
+    log: Option<crate::plugin_log::Log>,
     cwd: &Path,
     env: &BTreeMap<String, String>,
 ) -> Result<Arc<Process>, String> {
@@ -137,10 +137,11 @@ pub(super) fn spawn(
         let mut calls = BTreeMap::new();
         let mut output = BufReader::new(output);
         let mut frame = Vec::new();
+        let mut malformed_log = false;
         let supervise = run(
-            &id,
+            (&id, log.as_ref()),
             &mut child,
-            (&mut output, &mut frame),
+            (&mut output, &mut frame, &mut malformed_log),
             receive,
             Control {
                 input: &writes,
@@ -162,18 +163,28 @@ pub(super) fn spawn(
         .unwrap_or_else(|| "Worker stopped".into());
         let _ = writes.try_send(json!({"type":"shutdown"}));
         drop(containment);
-        #[cfg(not(windows))]
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-        if let Some(mut guardian) = guardian {
-            let _ = guardian.wait().await;
-        }
-        drain_logs(&id, &mut output, &mut frame).await;
+        reap(child, guardian).await;
+        drain_logs(
+            (&id, log.as_ref()),
+            &mut output,
+            &mut frame,
+            &mut malformed_log,
+        )
+        .await;
         fail_pending_calls(&id, &error, calls);
         running.stopped.cancel();
     });
     Ok(process)
 }
+async fn reap(mut child: WorkerChild, guardian: Option<Child>) {
+    #[cfg(not(windows))]
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    if let Some(mut guardian) = guardian {
+        let _ = guardian.wait().await;
+    }
+}
+
 fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
     if oversized(&value)? {
         return Err("Worker message exceeds 1 MiB limit".into());
@@ -191,9 +202,13 @@ struct Control<'a> {
     kill: &'a CancellationToken,
 }
 async fn run(
-    id: &str,
+    (id, log): (&str, Option<&crate::plugin_log::Log>),
     child: &mut WorkerChild,
-    (output, frame): (&mut BufReader<tokio::process::ChildStdout>, &mut Vec<u8>),
+    (output, frame, malformed_log): (
+        &mut BufReader<tokio::process::ChildStdout>,
+        &mut Vec<u8>,
+        &mut bool,
+    ),
     mut commands: mpsc::Receiver<Command>,
     control: Control<'_>,
     calls: &mut BTreeMap<u64, Call>,
@@ -240,7 +255,7 @@ async fn run(
             },
             line = read_frame(output, frame) => {
                 let line = line?.ok_or("stdout closed")?;
-                let message: Value = serde_json::from_slice(&line).map_err(|_| "Invalid worker JSON")?;
+                let Some(message) = worker_message(id, &line, malformed_log)? else { continue };
                 match message["type"].as_str() {
                     Some("result") => {
                         let id = message["id"].as_u64().ok_or("Invalid worker call id")?;
@@ -267,22 +282,27 @@ async fn run(
                             (call_id, op, result)
                         });
                     }
-                    Some("log") => store_log(id, &message)?,
+                    Some("log") => store_log(id, log, &message),
                     _ => return Err("Invalid worker message".into()),
                 }
             }
         }
     }
 }
-async fn drain_logs(id: &str, output: &mut (impl AsyncBufRead + Unpin), frame: &mut Vec<u8>) {
+async fn drain_logs(
+    (id, log): (&str, Option<&crate::plugin_log::Log>),
+    output: &mut (impl AsyncBufRead + Unpin),
+    frame: &mut Vec<u8>,
+    malformed_log: &mut bool,
+) {
     // A reload or process exit can win the select with complete log frames
     // still in the pipe. Drain them before a reload clears the log.
     let drained = tokio::time::timeout(GRACE, async {
         while let Some(bytes) = read_frame(output, frame).await? {
-            if let Ok(message) = serde_json::from_slice::<Value>(&bytes)
+            if let Ok(Some(message)) = worker_message(id, &bytes, malformed_log)
                 && message["type"] == "log"
             {
-                store_log(id, &message)?;
+                store_log(id, log, &message);
             }
         }
         Ok::<(), String>(())
@@ -295,12 +315,44 @@ async fn drain_logs(id: &str, output: &mut (impl AsyncBufRead + Unpin), frame: &
     }
 }
 
-fn store_log(id: &str, message: &Value) -> Result<(), String> {
-    crate::plugin_log::server(
-        id,
-        message["level"].as_str().unwrap_or("info"),
-        message["text"].as_str().unwrap_or(""),
-    )
+const LOG_PREFIX: &[u8] = br#"{"type":"log""#;
+const OVERLONG_LOG: &[u8] = br#"{"type":"log","oversized":"#;
+
+fn worker_message(id: &str, bytes: &[u8], diagnosed: &mut bool) -> Result<Option<Value>, String> {
+    let decoded = serde_json::from_slice::<Value>(bytes);
+    match decoded {
+        Ok(message)
+            if message["type"] != "log"
+                || (message["level"].is_string() && message["text"].is_string()) =>
+        {
+            Ok(Some(message))
+        }
+        Ok(_) => {
+            malformed_log(id, diagnosed);
+            Ok(None)
+        }
+        Err(_) if bytes.starts_with(LOG_PREFIX) => {
+            malformed_log(id, diagnosed);
+            Ok(None)
+        }
+        Err(_) => Err("Invalid worker JSON".into()),
+    }
+}
+
+fn malformed_log(id: &str, diagnosed: &mut bool) {
+    if !std::mem::replace(diagnosed, true) {
+        logs::send(format!("Plugin {id} worker: dropped malformed log frame"));
+    }
+}
+
+fn store_log(id: &str, log: Option<&crate::plugin_log::Log>, message: &Value) {
+    let level = crate::plugin_log::console_level(message["level"].as_str().unwrap_or("info"));
+    let text = message["text"].as_str().unwrap_or("");
+    if let Some(log) = log {
+        log.record("server", level, "console", text);
+    } else {
+        logs::send(format!("Plugin {id} [{level}]: {text}"));
+    }
 }
 
 // fill_buf is cancellation-safe. Keep the partial frame across select branches.
@@ -319,10 +371,17 @@ async fn read_frame(
         }
         let end = bytes.iter().position(|b| *b == b'\n');
         let count = end.map_or(bytes.len(), |n| n + 1);
-        if frame.len() + count > FRAME {
-            return Err("Worker message exceeds 1 MiB limit".into());
+        if frame == OVERLONG_LOG {
+            // Discard the rest of an oversized log frame without growing the buffer.
+        } else if frame.len() + count > FRAME {
+            if !frame.starts_with(LOG_PREFIX) {
+                return Err("Worker message exceeds 1 MiB limit".into());
+            }
+            frame.clear();
+            frame.extend_from_slice(OVERLONG_LOG);
+        } else {
+            frame.extend_from_slice(&bytes[..count]);
         }
-        frame.extend_from_slice(&bytes[..count]);
         output.consume(count);
         if end.is_some() {
             return Ok(Some(std::mem::take(frame)));

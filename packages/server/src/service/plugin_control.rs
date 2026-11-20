@@ -6,7 +6,7 @@ impl Coordinator {
             Error::Invalid("Server uses a legacy bundle, not a plugin installation".into())
         })?;
 
-        let mut metadata = plugins.catalog.metadata();
+        let mut metadata = plugins.catalog.metadata_with_logs(&plugins.logs);
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
 
@@ -53,8 +53,8 @@ impl Coordinator {
                 let _ = reply.send(());
             }
             Command::RunFunction(call) => self.run_function(call).await,
-            Command::WindowError(id, text, reply) => {
-                let result = self.record_window_error(id, &text);
+            Command::WindowError(id, revision, text, reply) => {
+                let result = self.record_window_error(id, &revision, &text);
                 let _ = reply.send(result);
             }
             Command::Plugins(reply) => {
@@ -90,14 +90,18 @@ impl Coordinator {
         }
     }
 
-    fn record_window_error(&mut self, id: String, text: &str) -> Result<bool, Error> {
+    fn record_window_error(
+        &mut self,
+        id: String,
+        revision: &str,
+        text: &str,
+    ) -> Result<bool, Error> {
         use std::time::{Duration, Instant};
-        if !self
-            .plugins
-            .as_ref()
-            .is_some_and(|p| p.catalog.plugins.contains_key(&id))
-        {
+        let Some(log) = self.plugins.as_ref().and_then(|p| p.logs.get(&id)) else {
             return Ok(false);
+        };
+        if log.revision() != revision {
+            return Err(Error::Invalid("Stale plugin log revision".into()));
         }
         // Keep a runaway view from filling the disk with repeated reports.
         let (start, count) = self
@@ -109,15 +113,26 @@ impl Coordinator {
             *count = 0;
         }
         if *count >= 8 {
+            if *count == 8 {
+                log.record(
+                    "window",
+                    "warn",
+                    "dropped",
+                    "window report rate limit reached; further reports dropped",
+                );
+                *count += 1;
+            }
             return Err(Error::Overloaded);
         }
-        crate::plugin_log::window(&id, text)
-            .map_err(|error| Error::Invalid(format!("Could not write plugin log: {error}")))?;
+        log.record("window", "error", "exception", text);
         *count += 1;
         Ok(true)
     }
 
-    pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+    pub(super) async fn reload(
+        &mut self,
+        id: &str,
+    ) -> Result<(Json, Vec<crate::plugin_log::Log>), Error> {
         let root = self
             .plugin_root
             .as_ref()
@@ -135,9 +150,18 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        let candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
-                .await?;
+        let previous = self
+            .plugins
+            .as_deref()
+            .ok_or_else(|| Error::Invalid("No plugin installation".into()))?;
+        let candidate = crate::plugins::Loaded::load_reusing(
+            catalog,
+            &self.pool,
+            Some(previous),
+            &previous.log_folder,
+            Some(id),
+        )
+        .await?;
         // Each generation gets a fresh action lane; build it before the swap so
         // a pool failure leaves the current generation fully intact.
         let action_pool = Arc::new(
@@ -153,18 +177,23 @@ impl Coordinator {
         // Cancel old-generation actions so a reload cannot leave revoked network
         // grants running in old worlds; the old pool tears down detached.
         self.stop_actions().await;
-        let log_reset = crate::plugin_log::clear(id);
+        let logs: Vec<_> = candidate.logs.values().cloned().collect();
+        for log in &logs {
+            log.publish();
+        }
         self.action_pool = action_pool;
         self.kinds = candidate.client_kinds();
 
-        let mut changed = std::collections::BTreeSet::new();
+        let mut changed = std::collections::BTreeSet::from([id.to_owned()]);
 
         if let Some(previous) = &self.plugins {
             for (id, artifact) in &previous.catalog.plugins {
-                if candidate.catalog.plugins.get(id).is_none_or(|next| {
-                    serde_json::to_value(&artifact.manifest).ok()
-                        != serde_json::to_value(&next.manifest).ok()
-                }) {
+                if candidate
+                    .catalog
+                    .plugins
+                    .get(id)
+                    .is_none_or(|next| artifact.manifest != next.manifest)
+                {
                     changed.insert(id.clone());
                 }
             }
@@ -193,12 +222,7 @@ impl Coordinator {
         }
         self.invalidate(None);
         self.refresh().await;
-        log_reset.map_err(|error| {
-            Error::Invalid(format!(
-                "Plugin reloaded, but could not clear plugin log: {error}"
-            ))
-        })?;
-        self.metadata()
+        Ok((self.metadata()?, logs))
     }
 
     pub(super) fn asset_page(

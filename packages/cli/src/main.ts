@@ -16,10 +16,10 @@ function endOnStreamError(error: unknown): never {
 
 for (const stream of [process.stdout, process.stderr]) stream.on("error", endOnStreamError);
 
-function write(stream: NodeJS.WriteStream, text: string) {
+function write(stream: NodeJS.WriteStream, text: string, newline = "\n") {
   return new Promise<void>((done) => {
     try {
-      stream.write(text + "\n", (error) => {
+      stream.write(text + newline, (error) => {
         if (error) endOnStreamError(error);
         done();
       });
@@ -117,8 +117,14 @@ try {
     if (!command) throw new CommandError(group ? "Unknown or incomplete command" : "Missing command", next);
     if (command.args && !command.args.optional && !args.length)
       throw new CommandError(`Missing argument: ${command.args.name}`, next);
-    const { data, text } = await command.run(args, { server, flags });
-    await output({ ok: true, ...data }, text);
+    const result = await command.run(args, { server, flags });
+    if ("stream" in result) {
+      await result.stream({
+        json,
+        write: (text) => write(process.stdout, text, ""),
+        notice: (text) => write(process.stderr, text, ""),
+      });
+    } else await output({ ok: true, ...result.data }, result.text);
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

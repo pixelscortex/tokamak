@@ -169,6 +169,9 @@ export class WebPluginHost implements PluginModuleHost {
       throw cause;
     }
   }
+  logRevision(id: string) {
+    return this.manifests().find((manifest) => manifest.plugin.id === id)?.logRevision;
+  }
   errorOwner(filename: string, cause: unknown): string | undefined {
     const pluginForUrl = (url: string) => {
       for (const manifest of this.manifests()) {
@@ -176,26 +179,27 @@ export class WebPluginHost implements PluginModuleHost {
         if (this.generations.get(moduleName(id))?.urls.has(url)) return id;
       }
     };
-    const direct = pluginForUrl(filename);
-    if (direct) return direct;
     // Browser stack frames carry the actual blob module URLs. Leave errors
     // without a known module unattributed, even if a plugin view is open.
     if (cause instanceof Error) {
-      for (const frame of cause.stack?.split("\n") ?? []) {
+      for (const frame of cause.stack?.split("\n").reverse() ?? []) {
         const url = frame.match(/blob:[^\s)]+?(?::\d+:\d+)(?=[\s)]|$)/)?.[0].replace(/:\d+:\d+$/, "");
         const owner = url && pluginForUrl(url);
         if (owner) return owner;
       }
     }
+    return pluginForUrl(filename);
   }
-  reportError(id: string, text: string) {
-    if (!this.endpoint.token) return;
+  reportError(id: string, revision: string | undefined, text: string) {
+    if (!this.endpoint.token || !revision) return;
     const bytes = new Uint8Array(8192);
     const { written } = new TextEncoder().encodeInto(text, bytes);
     const body = new TextDecoder().decode(bytes.subarray(0, written));
     // Use the same signed-in browser access as plugin assets. A text body
     // keeps cross-origin desktop requests on the simple-request path.
-    void fetch(assetURL(this.endpoint, `/plugins/${encodeURIComponent(id)}/window-error`), {
+    const url = new URL(assetURL(this.endpoint, `/plugins/${encodeURIComponent(id)}/window-error`));
+    url.searchParams.set("revision", revision);
+    void fetch(url.href, {
       method: "POST",
       body,
     }).catch(() => {

@@ -38,6 +38,8 @@ pub(crate) struct Loaded {
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
     pub catalog_text: String,
+    pub(crate) logs: BTreeMap<String, crate::plugin_log::Log>,
+    pub(crate) log_folder: PathBuf,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }

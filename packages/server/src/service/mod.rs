@@ -110,9 +110,12 @@ pub(crate) enum Command {
     ),
     RenameUser(crate::identity::User, oneshot::Sender<()>),
     Action(u64, crate::identity::User, Action),
-    WindowError(String, String, oneshot::Sender<Result<bool, Error>>),
+    WindowError(String, String, String, oneshot::Sender<Result<bool, Error>>),
     Plugins(oneshot::Sender<Result<Json, Error>>),
-    Reload(String, oneshot::Sender<Result<Json, Error>>),
+    Reload(
+        String,
+        oneshot::Sender<Result<(Json, Vec<crate::plugin_log::Log>), Error>>,
+    ),
     RunFunction(crate::actions::NestedCall),
     Asset(
         Option<String>,

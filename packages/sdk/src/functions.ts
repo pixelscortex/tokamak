@@ -220,8 +220,13 @@ export async function invokeFunction(
   host: HostBridge,
 ): Promise<JsonValue> {
   if (!Object.hasOwn(registry, request.name)) throw new Error(`Unknown function: ${request.name}`);
-  const args = jsonSnapshot(request.args, "args");
-  validate(registry[request.name].args, args);
+  let args: JsonValue;
+  try {
+    args = jsonSnapshot(request.args, "args");
+    validate(registry[request.name].args, args);
+  } catch (error) {
+    throw new Error(`ValidationError: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const user = await callHost(host, "user.current", {});
   return registry[request.name].invoke(args, {
     user,

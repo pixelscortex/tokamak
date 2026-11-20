@@ -42,32 +42,41 @@ or supply `--server <address>` with `TOKAMAK_TOKEN`. The flag takes precedence.
 Local discovery checks the process and compares the authenticated health
 identity to the discovery file. The CLI never starts a server.
 
-`plugin logs <id>` reads a local file, including when the server is stopped if
-the plugin is indexed. For a plugin outside the index, the CLI checks the
-running server's catalog. `--errors` shows only entries whose level is `error`.
+`plugin logs <id>` streams this installation's log in order. The plugin is
+known if it is indexed, loaded by the running server, or has a local log file.
+`--errors` shows only entries with level `error`. Malformed records are skipped
+and counted. Use the CLI on the machine that runs the server to read its files.
 
-The server writes one JSON object per line to `<OS temp>/tokamak/logs/<id>.log`.
-Each entry has `time` (Unix epoch milliseconds), `source` (`server` or
-`window`), `level` (`log`, `info`, `warn`, `error`, or `debug`), and `text`.
-Thrown server errors include the function name in `text`. A reload clears that
-plugin's file. Set `TOKAMAK_PLUGIN_LOG_DIR` to override the folder for both the
-server and the CLI; tests should set it to a folder they own. Window reports
-accept at most 8,192 UTF-8 bytes of text; including JSON escaping and metadata,
-a stored window entry is under 49,300 bytes. The server accepts eight window
-reports per plugin per 10-second period; excess requests return HTTP 429.
-This limit does not apply to server console output or function errors.
+Logs live at `<OS temp>/tokamak/logs/<key>/<id>.log`. The key is the first 16
+hex digits of SHA-256 of the canonical app data folder path (the storage folder
+for a server without an app data folder). Set `TOKAMAK_PLUGIN_LOG_DIR` to
+override the entire log folder for both the server and CLI; tests should use a
+folder they own.
+
+Each JSON Lines record has `time` (Unix epoch milliseconds), `source`
+(`server` or `window`), `level` (`log`, `info`, `warn`, `error`, or `debug`),
+`kind` (`console`, `exception`, `validation`, `cancellation`, or `dropped`),
+and `text`. Function errors include the function name and available stack.
+A successful reload replaces the log with output from the new version's load
+onward. A log stops accepting records after 10 MiB or when its writer falls
+behind. One marker records the drop, and the next reload starts a fresh file.
+
+Window reports are limited to 8,192 UTF-8 bytes and eight reports per plugin
+per 10 seconds, with one marker per period for excess reports. Reports from a
+previous plugin revision are discarded.
 
 With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, normal output goes to stdout and errors go to stderr. Exit status is zero on success and
 nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 
-| Command         | Additional result fields                                       |
-| --------------- | -------------------------------------------------------------- |
-| `plugin build`  | `id`, `outputFolder`                                           |
-| `plugin add`    | `id`, `folder`, `restartRequired: true`, `precedence: "index"` |
-| `plugin remove` | `id`, `restartRequired: true`                                  |
-| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`            |
-| `--help`        | `help`                                                         |
+| Command         | Additional result fields                                           |
+| --------------- | ------------------------------------------------------------------ |
+| `plugin build`  | `id`, `outputFolder`                                               |
+| `plugin add`    | `id`, `folder`, `restartRequired: true`, `precedence: "index"`     |
+| `plugin remove` | `id`, `restartRequired: true`                                      |
+| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`                |
+| `plugin logs`   | `entries`: matching records, and `skipped`: malformed record count |
+| `--help`        | `help`                                                             |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
 configuration failures include `error.diagnostics`, an array with a full

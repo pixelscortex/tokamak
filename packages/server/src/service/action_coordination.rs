@@ -53,17 +53,17 @@ impl Coordinator {
             .as_ref()
             .and_then(|p| owner.as_ref().and_then(|owner| p.workers.get(owner)))
             .cloned();
+        let log = owner
+            .as_ref()
+            .and_then(|owner| self.plugins.as_ref()?.logs.get(owner))
+            .cloned();
         if let Some(worker) = worker {
             self.action_jobs.spawn(async move {
                 let result = worker
                     .invoke(local_name, args, ops)
                     .await
                     .map_err(|e| environment.redact(e));
-                (
-                    session,
-                    id,
-                    crate::plugin_log::action_result(owner.as_deref(), &name, result),
-                )
+                (session, id, log_action_result(result, log.as_ref(), &name))
             });
             return;
         }
@@ -76,11 +76,7 @@ impl Coordinator {
             Ok(pending) => {
                 self.action_jobs.spawn(async move {
                     let result = pending.await.map_err(|e| environment.redact(e.to_string()));
-                    (
-                        session,
-                        id,
-                        crate::plugin_log::action_result(owner.as_deref(), &name, result),
-                    )
+                    (session, id, log_action_result(result, log.as_ref(), &name))
                 });
             }
             Err(error) => self.respond(session, id, Err(environment.redact(error.to_string()))),
@@ -143,4 +139,15 @@ impl Coordinator {
 
         Ok(())
     }
+}
+
+fn log_action_result(
+    result: Result<Json, String>,
+    log: Option<&crate::plugin_log::Log>,
+    name: &str,
+) -> Result<Json, String> {
+    if let (Some(log), Err(error)) = (log, &result) {
+        log.failure(name, error);
+    }
+    result
 }

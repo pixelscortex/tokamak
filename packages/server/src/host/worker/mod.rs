@@ -13,7 +13,7 @@ use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -58,6 +58,7 @@ pub(crate) struct Supervisor {
     closed: CancellationToken,
     runtime: tokio::runtime::Handle,
     bun: Option<PathBuf>,
+    log: OnceLock<crate::plugin_log::Log>,
 }
 impl Supervisor {
     pub(crate) fn new(
@@ -113,8 +114,12 @@ impl Supervisor {
             next: AtomicU64::new(0),
             closed: CancellationToken::new(),
             runtime: tokio::runtime::Handle::current(),
+            log: OnceLock::new(),
             bun: discovery::resolve("bun", &discovery::search_paths()),
         }))
+    }
+    pub(crate) fn attach_log(&self, log: crate::plugin_log::Log) {
+        let _ = self.log.set(log);
     }
     async fn process(&self) -> Result<Arc<Process>, String> {
         let mut state = self.state.lock().await;
@@ -142,8 +147,8 @@ impl Supervisor {
             &self.runtime,
             &self.id,
             bun,
-            self.entry.clone(),
-            self.code.clone(),
+            (self.entry.clone(), self.code.clone()),
+            self.log.get().cloned(),
             &self.directory,
             &self.env,
         )?;

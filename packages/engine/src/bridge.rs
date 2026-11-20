@@ -16,7 +16,7 @@ use std::{
     time::Instant,
 };
 
-type Console = dyn Fn(&str, &str) -> Result<(), String> + Send + Sync;
+type Console = dyn Fn(&str, &str) + Send + Sync;
 
 type OpResult = Result<Json, String>;
 
@@ -86,10 +86,7 @@ impl OpRegistry {
     }
 
     /// Installs a host-provided sink for this module's console.
-    pub fn set_console(
-        &mut self,
-        sink: impl Fn(&str, &str) -> Result<(), String> + Send + Sync + 'static,
-    ) {
+    pub fn set_console(&mut self, sink: impl Fn(&str, &str) + Send + Sync + 'static) {
         self.3 = Some(Arc::new(sink));
     }
 
@@ -101,12 +98,9 @@ impl OpRegistry {
         let Some(sink) = self.3.clone() else {
             return Ok(false);
         };
-        let emit = Function::new(
-            ctx.clone(),
-            move |ctx: Ctx<'js>, level: String, text: String| {
-                sink(&level, &text).map_err(|error| Exception::throw_message(&ctx, &error))
-            },
-        )?;
+        let emit = Function::new(ctx.clone(), move |level: String, text: String| {
+            sink(&level, &text)
+        })?;
         let factory: Function = ctx.eval(
             r#"emit => {
             const format = value => {
