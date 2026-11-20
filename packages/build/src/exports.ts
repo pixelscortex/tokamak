@@ -1,4 +1,4 @@
-import { pluginCompilerOptions, runtimeExportNames } from "../../sdk/tools/plugin-boundary.mjs";
+import { readPluginCompilerOptions, runtimeExportNames } from "../../sdk/tools/plugin-boundary.mjs";
 import { isServerModule } from "../../sdk/tools/server-files.mjs";
 import { serverDirectory, serverModule } from "./descriptor.ts";
 /** Resolve public aliases with the compiler so re-exports never execute plugin code. */
@@ -12,16 +12,8 @@ export function publicFunctions(root: string, entry: string | undefined): string
     throw new Error(`Invalid plugin exports ${entry}: ${message}`);
   };
   if (!ts.sys.fileExists(path)) fail("file does not exist");
-  const configPath = ts.findConfigFile(serverDirectory(root), ts.sys.fileExists);
-  const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
-  if (config.error) fail(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
-  const parsed = ts.parseJsonConfigFileContent(
-    config.config,
-    ts.sys,
-    configPath ? resolve(configPath, "..") : root,
-  );
   const program = ts.createProgram([path, resolve(serverDirectory(root), "_generated/api.ts")], {
-    ...pluginCompilerOptions(root, parsed.options),
+    ...readPluginCompilerOptions(root, serverDirectory(root)),
     noEmit: true,
   });
   const diagnostics = ts.getPreEmitDiagnostics(program);

@@ -1,7 +1,7 @@
 import { normalizePath, type InlineConfig, type PluginOption } from "vite";
 import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 import { dirname, relative, resolve, sep } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -38,10 +38,11 @@ export function tokamak(
         // Explicit --config must work from the workspace root as well as Moon's
         // app cwd. For implicit discovery Vite already searches the project cwd.
         const configFile = (config as InlineConfig).configFile;
-        root =
+        root = realpathSync(
           typeof configFile === "string"
             ? dirname(resolve(configFile))
-            : resolve(config.root ?? process.cwd());
+            : resolve(config.root ?? process.cwd()),
+        );
         if (existsSync(resolve(root, "plugin.ts"))) {
           if (!existsSync(resolve(root, "src/server"))) options.backend = false;
           if (!existsSync(resolve(root, "src/client"))) options.ui = false;
@@ -72,13 +73,15 @@ export function tokamak(
       },
       async buildStart() {
         checkPluginImports(root);
-        const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+        const descriptor = options.plugin ?? readDescriptor(root);
+        const manifest = descriptor
+          ? undefined
+          : JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
-          options.plugin ??
-            readDescriptor(root) ?? {
-              id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
-              version: manifest.version ?? "0.1.0",
-            },
+          descriptor ?? {
+            id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
+            version: manifest.version ?? "0.1.0",
+          },
         );
         const server = serverDirectory(root);
         if (existsSync(resolve(root, "plugin.ts"))) {

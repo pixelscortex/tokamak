@@ -16,8 +16,10 @@ published last; installation still needs its own complete-artifact staging.
 The UI target emits browser ESM in `ui.js` and `ui.js.map`, compiled with Solid 2
 DOM JSX. `ui: false` explicitly disables the
 UI target; the server target and `backend: false` option keep their names.
-Client `styles.css` is discovered beside the client entry and compiled with
-Tailwind. Imported CSS is also collected by Vite. No registration wrapper or
+Put plugin styles in `src/client/styles.css`. The build discovers this file
+beside the window entry and compiles it with Tailwind. Vite can bundle other
+imported CSS files, but those files do not get the checkout's Tailwind and
+Tokamak theme resolver. No registration wrapper or
 HTML shell is emitted.
 
 `entries.ui` is `{ "code": "ui.js", "map": "ui.js.map", "css": "styles.css" }`;
@@ -106,3 +108,30 @@ paths to the plugin's tsconfig (relative to the plugin root):
 
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
+
+## Building outside the checkout
+
+Run the build from an installed checkout and pass the plugin folder:
+
+```sh
+proto run bun -- packages/build/src/build.ts /path/to/plugin
+```
+
+A source-only plugin can contain just `plugin.ts` and `src/`. Put the server
+part in `src/server` and the window part in `src/client`. The build supplies
+TypeScript defaults and resolves shared library types and the Tailwind and
+Tokamak theme styles from the checkout. A `tsconfig.json` in the plugin folder
+or in the relevant source folder overrides the defaults option by option.
+The build still selects the source files it checks, controls emission and
+generated `plugin:*` paths, and fixes the server libraries and ambient types:
+ES2022 and no ambient type packages for the default runtime; ES2022, DOM and
+Node types from the checkout for the worker runtime. A
+`package.json` is optional with a descriptor; the build does not install
+dependencies. Output goes to the plugin's own `dist/` folder.
+
+To test the external artifact against a real server:
+
+```sh
+cargo build --locked -p server --bin tokamak
+proto run bun -- test packages/build/tests/outside-server.test.mjs
+```

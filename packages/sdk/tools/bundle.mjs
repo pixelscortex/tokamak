@@ -12,6 +12,7 @@ import {
   checkPluginImports,
   featurePluginRoot,
   pluginCompilerOptions,
+  pluginTsconfig,
 } from "./plugin-boundary.mjs";
 import ts from "typescript";
 
@@ -119,14 +120,6 @@ export async function bundleFeature(folder, namespace, worker = false) {
             }));
           },
         },
-        {
-          name: "portable-sdk",
-          setup(build) {
-            build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
-              path: join(sdkRoot, "src/index.ts"),
-            }));
-          },
-        },
       ],
     });
     if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
@@ -186,14 +179,10 @@ async function scanFiles(root) {
 
 async function checkFeature(root, temporary, generated, files, entry, worker) {
   const config = join(temporary, "tsconfig.json");
-  // Inherit resolution options unchanged, including paths relative to the
-  // config that declared them. A build-only SDK alias or TS-extension opt-in
-  // would accept code that generated-reference consumers cannot type-check.
-  const parentConfig = (await Bun.file(join(root, "tsconfig.json")).exists())
-    ? join(root, "tsconfig.json")
-    : join(sdkRoot, "../..", "tsconfig.json");
+  const defaults = join(sdkRoot, "../..", "tsconfig.json");
+  const local = pluginTsconfig(featurePluginRoot(root), root);
   const inherited = ts.getParsedCommandLineOfConfigFile(
-    parentConfig,
+    local ?? defaults,
     {},
     { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
   );
@@ -201,13 +190,13 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
   await Bun.write(
     config,
     JSON.stringify({
-      extends: parentConfig,
+      extends: local ? [defaults, local] : defaults,
       compilerOptions: {
         lib: worker ? ["ES2022", "DOM"] : ["ES2022"],
         types: worker ? ["node"] : [],
         paths,
         noEmit: true,
-        strict: true,
+        ...(worker ? { typeRoots: [join(sdkRoot, "../../node_modules/@types")] } : {}),
       },
       files: [entry, join(generated, "api.ts"), ...files.map((file) => join(root, file))],
       include: [],
