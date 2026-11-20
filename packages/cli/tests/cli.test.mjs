@@ -111,6 +111,18 @@ test("every registered command shares help and JSON output rules", async () => {
         error: { message: expect.stringContaining("Unknown flag"), next: expect.stringContaining("--help") },
       });
     }
+    // Flags a command declares must show in its help, and a flag that takes a
+    // value must reject a missing one. This covers commands added later.
+    for (const command of commands) {
+      for (const [name, flag] of Object.entries(command.flags ?? {})) {
+        const words = command.path.split(" ");
+        expect(cli(root, [...words, "--help"]).stdout).toContain(`--${name}`);
+        if (!flag.value) continue;
+        const missing = cli(root, [...words, `--${name}`, "--json"]);
+        expect(missing.code).not.toBe(0);
+        expect(JSON.parse(missing.stdout).error.message).toContain(`after --${name}`);
+      }
+    }
     for (const command of commands.filter(({ args }) => args && !args.optional)) {
       const missing = cli(root, [...command.path.split(" "), "--json"]);
       expect(missing.code).not.toBe(0);
