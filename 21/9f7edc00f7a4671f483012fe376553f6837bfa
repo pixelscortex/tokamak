@@ -1,0 +1,21 @@
+.ci/README.md
+  s_4ccc9a2575a981::t_30076fa62fd715 3-4
+.github/workflows/ci.yml
+  s_4ccc9a2575a981::t_fe5ea8d84d36da 14-17,19,31,36-37,53,58-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "219f7edc00f7a4671f483012fe376553f6837bfa",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
