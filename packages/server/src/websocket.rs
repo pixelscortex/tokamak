@@ -402,24 +402,12 @@ async fn plugins(State(adapter): State<Adapter>) -> Response {
 async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
     plugin_result(adapter.server.reload_plugin(id).await)
 }
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IndexedReload {
-    ids: Vec<String>,
-    remove_missing: bool,
-}
-
 async fn reload_indexed(State(adapter): State<Adapter>, body: String) -> Response {
-    let input: IndexedReload = match serde_json::from_str(&body) {
+    let input: crate::plugins::IndexedReload = match serde_json::from_str(&body) {
         Ok(input) => input,
         Err(error) => return plugin_result(Err(crate::Error::Invalid(error.to_string()))),
     };
-    plugin_result(
-        adapter
-            .server
-            .reload_indexed(input.ids, input.remove_missing)
-            .await,
-    )
+    plugin_result(adapter.server.reload_indexed(input).await)
 }
 
 async fn plugin_asset(

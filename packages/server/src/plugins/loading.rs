@@ -1,5 +1,5 @@
 use super::{
-    catalog::{IndexedArtifacts, read_index, read_installed},
+    catalog::{IndexedArtifacts, installed_paths, read_index, read_installed},
     *,
 };
 
@@ -18,6 +18,7 @@ impl Loaded {
             directory,
             pool,
             database,
+            index_path: index,
         };
         let loaded = match config.commit(&installed, &candidates, None).await {
             Ok(loaded) => loaded,
@@ -304,6 +305,7 @@ struct StartupCatalog<'a> {
     directory: &'a Path,
     pool: &'a engine::Pool,
     database: &'a crate::data::Database,
+    index_path: Option<&'a Path>,
 }
 
 impl StartupCatalog<'_> {
@@ -321,7 +323,9 @@ impl StartupCatalog<'_> {
                 (id.clone(), folder.clone())
             })
             .collect();
-        let catalog = Catalog::assemble(self.root, self.directory, plugins, Arc::new(index))?;
+        let mut catalog = Catalog::assemble(self.root, self.directory, plugins, Arc::new(index))?;
+        catalog.installed = installed_paths(installed);
+        catalog.index_path = self.index_path.map(Path::to_owned);
         Loaded::load_reusing(catalog, self.pool, previous).await
     }
 

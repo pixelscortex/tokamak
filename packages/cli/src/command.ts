@@ -29,7 +29,7 @@ export class CommandError extends Error {
     message: string,
     readonly next: string,
     readonly diagnostics?: object[],
-    readonly data?: { plugins: object[] },
+    readonly data?: object,
   ) {
     super(message);
   }

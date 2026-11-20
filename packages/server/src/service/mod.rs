@@ -112,7 +112,10 @@ pub(crate) enum Command {
     Action(u64, crate::identity::User, Action),
     Plugins(oneshot::Sender<Result<Json, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
-    ReloadIndexed(Vec<String>, bool, oneshot::Sender<Result<Json, Error>>),
+    ReloadIndexed(
+        crate::plugins::IndexedReload,
+        oneshot::Sender<Result<Json, Error>>,
+    ),
     RunFunction(crate::actions::NestedCall),
     Asset(
         Option<String>,

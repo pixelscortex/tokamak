@@ -15,6 +15,8 @@ use std::{
 
 pub struct Artifact {
     pub manifest: Manifest,
+    pub(crate) build_id: String,
+    source: PathBuf,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
     provides: BTreeSet<String>,
@@ -26,7 +28,9 @@ pub struct Catalog {
     pub plugins: BTreeMap<String, Arc<Artifact>>,
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
-    index: Arc<BTreeMap<String, PathBuf>>,
+    pub(crate) index: Arc<BTreeMap<String, PathBuf>>,
+    installed: BTreeMap<String, PathBuf>,
+    index_path: Option<PathBuf>,
     pub(crate) environment: PathBuf,
     pub(crate) directory: PathBuf,
 }
@@ -38,6 +42,7 @@ pub(crate) struct Loaded {
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
     pub catalog_text: String,
+    pub(crate) action_lifetimes: BTreeMap<String, tokio_util::sync::CancellationToken>,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
@@ -71,3 +76,17 @@ pub use manifest::*;
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndexedBuild {
+    pub id: String,
+    pub build_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndexedReload {
+    pub builds: Vec<IndexedBuild>,
+    pub remove_missing: bool,
+}

@@ -11,26 +11,33 @@ impl Catalog {
             .unwrap_or(root.parent().unwrap_or(root));
         let mut plugins = read_installed(root, previous)?;
         let index = previous.map(|p| Arc::clone(&p.index)).unwrap_or_default();
-        for (id, folder) in index.iter() {
-            let old = previous.and_then(|p| p.plugins.get(id));
-            plugins.insert(
-                id.clone(),
-                read_indexed(id, folder, old.map(AsRef::as_ref))?,
-            );
+        let installed = installed_paths(&plugins);
+        if let Some(previous) = previous {
+            for id in index.keys() {
+                if let Some(artifact) = previous.plugins.get(id) {
+                    plugins.insert(id.clone(), Arc::clone(artifact));
+                }
+            }
         }
-        Self::assemble(root, directory, plugins, index)
+        let mut catalog = Self::assemble(root, directory, plugins, index)?;
+        catalog.installed = installed;
+        catalog.index_path = previous.and_then(|old| old.index_path.clone());
+        Ok(catalog)
     }
 
     pub(crate) fn read_indexed_reload(
         root: &Path,
         previous: &Self,
-        ids: &[String],
-        remove_missing: bool,
+        request: &IndexedReload,
     ) -> Result<Self, Error> {
-        let entries = index_entries(&previous.directory.join("plugin-index.json"))?;
+        let path = previous
+            .index_path
+            .as_deref()
+            .ok_or_else(|| invalid("Server has no local plugin index"))?;
+        let entries = index_entries(path)?;
         let mut plugins = previous.plugins.clone();
         let mut index = (*previous.index).clone();
-        if remove_missing {
+        if request.remove_missing {
             for id in previous
                 .index
                 .keys()
@@ -38,18 +45,31 @@ impl Catalog {
             {
                 index.remove(id);
                 plugins.remove(id);
+                if let Some(source) = previous.installed.get(id) {
+                    let fallback = Artifact::read(source)?;
+                    if fallback.manifest.plugin.id != *id {
+                        return Err(invalid(format!("Installed copy of {id} changed identity")));
+                    }
+                    plugins.insert(id.clone(), Arc::new(fallback));
+                }
             }
         }
-        for id in ids {
+        for IndexedBuild { id, build_id } in &request.builds {
             let folder = entries
                 .get(id)
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid(format!("Plugin is not indexed: {id}")))?;
             let old = previous.plugins.get(id).map(AsRef::as_ref);
-            plugins.insert(id.clone(), read_indexed(id, Path::new(folder), old)?);
+            plugins.insert(
+                id.clone(),
+                read_indexed_build(id, Path::new(folder), old, Some(build_id))?,
+            );
             index.insert(id.clone(), PathBuf::from(folder));
         }
-        Self::assemble(root, &previous.directory, plugins, Arc::new(index))
+        let mut catalog = Self::assemble(root, &previous.directory, plugins, Arc::new(index))?;
+        catalog.installed.clone_from(&previous.installed);
+        catalog.index_path.clone_from(&previous.index_path);
+        Ok(catalog)
     }
 
     pub(super) fn assemble(
@@ -86,6 +106,8 @@ impl Catalog {
             revision: format!("{:x}", hash.finalize()),
             providers,
             index,
+            installed: BTreeMap::new(),
+            index_path: None,
             environment,
             directory: directory.to_owned(),
         })
@@ -203,11 +225,26 @@ fn index_entries(path: &Path) -> Result<BTreeMap<String, Value>, Error> {
 }
 
 fn read_indexed(id: &str, folder: &Path, old: Option<&Artifact>) -> Result<Arc<Artifact>, Error> {
+    read_indexed_build(id, folder, old, None)
+}
+
+fn read_indexed_build(
+    id: &str,
+    folder: &Path,
+    old: Option<&Artifact>,
+    expected: Option<&str>,
+) -> Result<Arc<Artifact>, Error> {
     if !folder.is_absolute() {
         return Err(invalid("Expected an absolute source folder"));
     }
     let dist = folder.join("dist");
-    let artifact = Artifact::read_reusing(&dist, Manifest::read(&dist)?, old)?;
+    let manifest = Manifest::read(&dist)?;
+    if expected.is_some_and(|build_id| build_id != manifest.1) {
+        return Err(invalid(format!(
+            "{id}: the build changed after this reload started; run the command again"
+        )));
+    }
+    let artifact = Artifact::read_reusing(&dist, manifest, old)?;
     if artifact.manifest.plugin.id != id {
         return Err(invalid(format!(
             "Build has plugin identity {}",
@@ -262,4 +299,13 @@ pub(super) fn read_installed(
         }
     }
     Ok(plugins)
+}
+
+pub(super) fn installed_paths(
+    plugins: &BTreeMap<String, Arc<Artifact>>,
+) -> BTreeMap<String, PathBuf> {
+    plugins
+        .iter()
+        .map(|(id, artifact)| (id.clone(), artifact.source.clone()))
+        .collect()
 }

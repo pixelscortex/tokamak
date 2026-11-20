@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
@@ -135,10 +135,10 @@ async function withServer(root, check) {
       if (Date.now() >= deadline) throw new Error("Server did not publish readiness");
       await Bun.sleep(20);
     }
-    await check(address, token);
+    await check(address, token, server);
   } finally {
     try {
-      if (address) {
+      if (address && server.exitCode === null && server.signalCode === null) {
         // The server can close the connection before writing the shutdown reply.
         const response = await fetch(`${address}/shutdown`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -349,14 +349,22 @@ test("reload applies index additions and removals without a restart", async () =
       expect(result.code, result.stderr).toBe(0);
       return JSON.parse(result.stdout);
     };
-    await withServer(root, () => {
+    await withServer(root, async () => {
       run("add", plugin);
       expect(run("reload", "outside-fixture")).toMatchObject({
-        plugins: [{ id: "outside-fixture", status: "loaded" }],
+        plugins: [
+          { id: "outside-fixture", status: "loaded", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        ],
       });
       expect(run("list").plugins).toEqual([{ id: "outside-fixture", version: "0.1.0", fromIndex: true }]);
+      expect(run("reload", "outside-fixture").plugins).toEqual([
+        { id: "outside-fixture", status: "unchanged", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      ]);
+      const unrelated = join(root, "installed", "unrelated", "dist");
+      await mkdir(unrelated, { recursive: true });
+      await writeFile(join(unrelated, "manifest.json"), "{}");
       run("remove", "outside-fixture");
-      expect(run("reload").plugins).toEqual([]);
+      expect(run("reload")).toMatchObject({ plugins: [], removed: ["outside-fixture"] });
       expect(run("list").plugins).toEqual([]);
     });
   });
@@ -403,9 +411,11 @@ test("reload updates an existing connection and preserves old code on build or l
         const read = () => client.query(api.notes.marker, {});
         expect(await read()).toBe("old");
         await writeFile(notes, marker(original, "edited"));
-        expect(run("reload", "outside-fixture")).toEqual({
+        expect(run("reload", "outside-fixture")).toMatchObject({
           ok: true,
-          plugins: [{ id: "outside-fixture", status: "loaded" }],
+          plugins: [
+            { id: "outside-fixture", status: "loaded", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+          ],
         });
         expect(await read()).toBe("edited");
 
@@ -458,6 +468,233 @@ test("reload updates an existing connection and preserves old code on build or l
       } finally {
         if (transport) transport.close();
         else socket.close();
+      }
+    });
+  });
+}, 180_000);
+
+test("reload refuses a different manifest and verifies the bytes under a matching manifest", async () => {
+  await withPlugin(async (folder, root) => {
+    const build = () => {
+      const result = cli(root, ["plugin", "build", folder, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+    };
+    expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+    build();
+    const manifest = join(folder, "dist", "manifest.json");
+    const old = await readFile(manifest);
+    const hash = (bytes) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+    await withServer(root, async (address, token) => {
+      const submit = (buildId) =>
+        fetch(address + "/plugin-index/reload", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ builds: [{ id: "outside-fixture", buildId }], removeMissing: false }),
+        });
+      const notes = join(folder, "src/server/notes.ts");
+      await writeFile(
+        notes,
+        (await readFile(notes, "utf8")) + "\nexport const marker = query({ handler: () => 42 });",
+      );
+      build();
+      const stale = await submit(hash(old));
+      expect(stale.status).toBe(400);
+      expect((await stale.json()).error).toContain("build changed after this reload started");
+      await writeFile(manifest, old);
+      const mixed = await submit(hash(old));
+      expect(mixed.status).toBe(400);
+      expect((await mixed.json()).error).toContain("hash mismatch");
+    });
+  });
+}, 180_000);
+
+test("legacy reload leaves indexed snapshots alone and ignores new index entries", async () => {
+  await withPlugin(async (folder, root) => {
+    const installed = join(root, "installed", "base");
+    await mkdir(join(root, "installed"));
+    await cp(folder, installed, { recursive: true });
+    const id = join(installed, "plugin.ts");
+    await writeFile(id, (await readFile(id, "utf8")).replace("outside-fixture", "base-plugin"));
+    expect(cli(root, ["plugin", "build", installed]).code).toBe(0);
+    await withServer(root, async (address, token) => {
+      expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+      await mkdir(join(folder, "dist"), { recursive: true });
+      await writeFile(join(folder, "dist", "manifest.json"), "{}");
+      const res = await fetch(address + "/plugins/base-plugin/reload", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).plugins.map(({ plugin }) => plugin.id)).toEqual(["base-plugin"]);
+    });
+  });
+}, 180_000);
+
+function spawnReload(root, token, address) {
+  const args = ["plugin", "reload", "outside-fixture", "--json"];
+  if (address) args.push("--server", address);
+  const child = Bun.spawn([process.execPath, "packages/cli/src/main.ts", ...args], {
+    cwd: workspace,
+    env: {
+      ...process.env,
+      TOKAMAK_SERVER_DIR: join(root, "data"),
+      TOKAMAK_SERVER: undefined,
+      TOKAMAK_TOKEN: token,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 90_000,
+  });
+  return Promise.all([child.exited, new Response(child.stdout).json(), new Response(child.stderr).text()]);
+}
+
+for (const scenario of ["race", "timeout", "death"]) {
+  test(`reload ${scenario}: reports only what the server is known to run`, async () => {
+    await withPlugin(async (folder, root) => {
+      expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+      const notes = join(folder, "src/server/notes.ts");
+      const original = await readFile(notes, "utf8");
+      const edit = (n) =>
+        writeFile(notes, original + `\nexport const marker = query({ handler: () => ${n} });`);
+      await withServer(root, async (address, token, server) => {
+        const arrived = Promise.withResolvers();
+        const release = Promise.withResolvers();
+        let applied;
+        const proxy = Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          idleTimeout: 0,
+          async fetch(req, self) {
+            const path = new URL(req.url).pathname;
+            if (req.method === "GET") return fetch(address + path, { headers: req.headers });
+            const body = await req.text();
+            if (scenario === "race") {
+              arrived.resolve(JSON.parse(body).builds[0].buildId);
+              await release.promise;
+            }
+            const res = await fetch(address + path, { method: "POST", headers: req.headers, body });
+            applied = (await res.clone().json()).plugins?.[0]?.revision;
+            if (scenario === "timeout") await release.promise;
+            if (scenario === "death") {
+              server.kill("SIGKILL");
+              await server.exited;
+              self.stop(true);
+            }
+            return res;
+          },
+        });
+        try {
+          await edit(1);
+          const first = spawnReload(root, token, proxy.url.origin);
+          if (scenario === "race") {
+            const firstId = await Promise.race([
+              arrived.promise,
+              first.then((result) => {
+                throw new Error(JSON.stringify(result));
+              }),
+            ]);
+            await edit(2);
+            const second = spawnReload(root, token);
+            expect(
+              await Promise.race([second.then(() => "completed"), Bun.sleep(500).then(() => "waiting")]),
+            ).toBe("waiting");
+            expect(
+              new Bun.CryptoHasher("sha256")
+                .update(await readFile(join(folder, "dist/manifest.json")))
+                .digest("hex"),
+            ).toBe(firstId);
+            release.resolve();
+            const [firstCode, firstResult] = await first;
+            const [secondCode, secondResult] = await second;
+            expect(firstCode).toBe(0);
+            expect(secondCode).toBe(0);
+            expect(firstResult.plugins[0]).toMatchObject({ buildId: firstId, status: "loaded" });
+            expect(secondResult.plugins[0].buildId).not.toBe(firstId);
+          } else {
+            const [code, result, stderr] = await first;
+            expect(applied).toMatch(/^[a-f0-9]{64}$/);
+            expect(code === 0).toBe(scenario === "timeout");
+            expect(result.plugins[0]).toMatchObject({
+              buildId: applied,
+              status: scenario === "timeout" ? "loaded" : "unknown",
+            });
+            if (scenario === "death") expect(stderr).toContain("tokamak plugin list");
+          }
+        } finally {
+          release.resolve();
+          proxy.stop(true);
+        }
+      });
+    });
+  }, 180_000);
+}
+
+test("batch fallback loads a provider before its dependent after a third plugin is refused", async () => {
+  await withPlugin(async (folder, root) => {
+    const create = async (id, extra = "") => {
+      const path = join(root, id);
+      await cp(folder, path, { recursive: true });
+      await writeFile(
+        join(path, "plugin.ts"),
+        `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "${id}", version:"1.0.0"${extra} });`,
+      );
+      expect(cli(root, ["plugin", "add", path]).code).toBe(0);
+      return path;
+    };
+    await create("dependent", ', depends: ["provider"]');
+    await create("provider");
+    const refused = await create("refused");
+    const notes = join(refused, "src/server/notes.ts");
+    await writeFile(notes, (await readFile(notes, "utf8")) + '\nthrow new Error("refused at import");');
+    await withServer(root, () => {
+      const output = cli(root, ["plugin", "reload", "--json"]);
+      expect(output.code).not.toBe(0);
+      expect(JSON.parse(output.stdout).plugins).toEqual([
+        expect.objectContaining({ id: "dependent", status: "loaded" }),
+        expect.objectContaining({ id: "provider", status: "loaded" }),
+        expect.objectContaining({
+          id: "refused",
+          status: "load-failed",
+          error: { message: expect.stringContaining("refused at import") },
+        }),
+      ]);
+    });
+  });
+}, 180_000);
+
+test("reload refuses a worker that throws during import and keeps the old worker", async () => {
+  await withPlugin(async (_, root) => {
+    const folder = join(root, "worker-test");
+    await cp(join(workspace, "packages/server/tests/fixtures/worker"), folder, { recursive: true });
+    await symlink(join(workspace, "node_modules"), join(folder, "node_modules"), "dir");
+    expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+    await withServer(root, async (address, token) => {
+      const reload = () => cli(root, ["plugin", "reload", "worker-test", "--json"]);
+      expect(reload().code).toBe(0);
+      const socket = new WebSocket(address.replace(/^http:/, "ws:") + "/ws?token=" + token);
+      await new Promise((done, reject) => {
+        socket.addEventListener("open", done, { once: true });
+        socket.addEventListener("error", reject, { once: true });
+      });
+      const transport = new WebSocketTransport(socket);
+      try {
+        const state = () => new TokamakClient(transport).action(createApi("worker-test").actions.state, {});
+        const old = await state();
+        const actions = join(folder, "src/server/actions.ts");
+        await writeFile(
+          actions,
+          'if (typeof process !== "undefined") throw new Error("worker import failed intentionally");\n' +
+            (await readFile(actions, "utf8")),
+        );
+        const refused = reload();
+        expect(refused.code).not.toBe(0);
+        expect(JSON.parse(refused.stdout).plugins[0]).toMatchObject({
+          status: "load-failed",
+          error: { message: expect.stringContaining("worker import failed intentionally") },
+        });
+        expect((await state()).pid).toBe(old.pid);
+      } finally {
+        transport.close();
       }
     });
   });

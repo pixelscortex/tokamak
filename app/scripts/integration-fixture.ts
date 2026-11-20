@@ -12,7 +12,7 @@ if (process.argv.includes("--reload")) {
     ["add", fixture],
     ["reload", "integration-fixture"],
   ]) {
-    const result = spawnSync("proto", ["run", "bun", "--", "run", "tokamak", "plugin", ...args], {
+    const result = spawnSync("proto", ["run", "bun", "--", "run", "--silent", "tokamak", "plugin", ...args], {
       cwd: root,
       env: { ...process.env, TOKAMAK_SERVER: undefined, TOKAMAK_TOKEN: undefined },
       stdio: "inherit",

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
-import { cp, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 const connected = (page: Page) =>
   expect(page.getByRole("status", { name: "Connection status" })).toHaveText("127.0.0.1:43123");
@@ -14,7 +14,6 @@ const fixtureHome = "/p/integration-fixture";
 test("live threads, compiler views, regions, per-plugin reload and error containment", async ({
   page,
   context,
-  request,
 }) => {
   await page.goto(fixtureHome);
   await connected(page);
@@ -54,27 +53,18 @@ test("live threads, compiler views, regions, per-plugin reload and error contain
   }, sentinel);
   const source = `${process.env.TOKAMAK_FIXTURE_SOURCE}/src/client/api.tsx`;
   const revision = `Fixture revision ${crypto.randomUUID()}`;
-  await writeFile(source, (await readFile(source, "utf8")).replace(/Fixture revision [^<]+/, revision));
-  const built = spawnSync(
-    "proto",
-    ["run", "bun", "--", "packages/build/src/build.ts", process.env.TOKAMAK_FIXTURE_SOURCE!],
-    { stdio: "inherit" },
+  // The new contribution name proves the other window applied the catalog.
+  const throwingTitle = `ThrowingView${crypto.randomUUID().replaceAll("-", "")}`;
+  await writeFile(
+    source,
+    (await readFile(source, "utf8"))
+      .replace(/Fixture revision [^<]+/, revision)
+      .replace(/export const ThrowingView\w* = view/, `export const ${throwingTitle} = view`),
   );
-  expect(built.status).toBe(0);
-  await cp(`${process.env.TOKAMAK_FIXTURE_SOURCE}/dist`, `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist`, {
-    recursive: true,
+  const reload = spawnSync("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts", "--reload"], {
+    encoding: "utf8",
   });
-  const manifestPath = `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist/manifest.json`;
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  // This link shows that the other window has applied the new catalog.
-  const throwingTitle = `ThrowingView ${crypto.randomUUID()}`;
-  manifest.plugin.contributes.view.find((view: { id: string }) => view.id === "ThrowingView").title =
-    throwingTitle;
-  await writeFile(manifestPath, JSON.stringify(manifest));
-  const reload = await request.post("http://127.0.0.1:43123/plugins/integration-fixture/reload", {
-    headers: { Authorization: `Bearer ${process.env.VITE_TOKAMAK_TOKEN}` },
-  });
-  expect(reload.ok()).toBe(true);
+  expect(reload.status, reload.stderr + reload.stdout).toBe(0);
   await expect(fixture.getByRole("heading", { name: revision, exact: true })).toBeVisible();
   expect(
     await page.evaluate(() => (window as unknown as { documentSentinel: string }).documentSentinel),

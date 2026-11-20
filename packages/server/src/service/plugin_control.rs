@@ -79,8 +79,8 @@ impl Coordinator {
 
                 let _ = reply.send(result);
             }
-            Command::ReloadIndexed(ids, remove_missing, reply) => {
-                let _ = reply.send(self.reload_indexed(&ids, remove_missing).await);
+            Command::ReloadIndexed(request, reply) => {
+                let _ = reply.send(self.reload_indexed(&request).await);
             }
             _ => unreachable!("application commands have their own admission path"),
         }
@@ -88,8 +88,7 @@ impl Coordinator {
 
     async fn reload_indexed(
         &mut self,
-        ids: &[String],
-        remove_missing: bool,
+        request: &crate::plugins::IndexedReload,
     ) -> Result<Json, Error> {
         let root = self
             .plugin_root
@@ -99,13 +98,31 @@ impl Coordinator {
             .plugins
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
-        let catalog = crate::plugins::Catalog::read_indexed_reload(
-            root,
-            &previous.catalog,
-            ids,
-            remove_missing,
-        )?;
-        self.swap_catalog(catalog).await
+        let catalog =
+            crate::plugins::Catalog::read_indexed_reload(root, &previous.catalog, request)?;
+        let unchanged: Vec<_> = request
+            .builds
+            .iter()
+            .filter(|build| {
+                previous
+                    .catalog
+                    .plugins
+                    .get(&build.id)
+                    .is_some_and(|artifact| artifact.build_id == build.build_id)
+            })
+            .map(|build| build.id.clone())
+            .collect();
+        let removed: Vec<_> = previous
+            .catalog
+            .index
+            .keys()
+            .filter(|id| !catalog.index.contains_key(*id))
+            .cloned()
+            .collect();
+        let mut response = self.swap_catalog(catalog).await?;
+        response["removed"] = serde_json::json!(removed);
+        response["unchanged"] = serde_json::json!(unchanged);
+        Ok(response)
     }
 
     async fn reload(&mut self, id: &str) -> Result<Json, Error> {
