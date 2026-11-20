@@ -57,9 +57,19 @@ async function reapLock(lock: string) {
 export async function updateIndex(change: (entries: Map<string, string>) => boolean) {
   const folder = dataFolder();
   await mkdir(folder, { recursive: true, mode: 0o700 });
-  const lock = join(folder, `${name}.lock`);
+  const release = await acquireLock(folder, name);
+  try {
+    const entries = await readIndex(folder);
+    if (change(entries)) await writeIndex(folder, entries);
+  } finally {
+    await release();
+  }
+}
+
+export async function acquireLock(folder: string, label: string) {
+  const lock = join(folder, `${label}.lock`);
   const owner = `${process.pid}.${randomUUID()}`;
-  const candidate = await mkdtemp(join(folder, `.${name}.lock-`));
+  const candidate = await mkdtemp(join(folder, `.${label}.lock-`));
   let acquired = false;
   try {
     // Publish a nonempty lock atomically. A reaper can unlink only the dead
@@ -73,16 +83,18 @@ export async function updateIndex(change: (entries: Map<string, string>) => bool
       } catch (error) {
         if (!["EEXIST", "ENOTEMPTY", "EPERM", "EACCES"].includes(codeOf(error) ?? "")) throw error;
         await reapLock(lock);
-        if (performance.now() >= deadline)
-          throw new Error(`Timed out waiting for plugin index lock: ${lock}`);
+        if (performance.now() >= deadline) throw new Error(`Timed out waiting for lock: ${lock}`);
         await new Promise((done) => setTimeout(done, 25 + Math.random() * 50));
       }
     }
-    const entries = await readIndex(folder);
-    if (change(entries)) await writeIndex(folder, entries);
+    return async () => {
+      await rm(join(lock, owner), { force: true });
+      await removeEmptyLock(lock);
+    };
   } finally {
-    const directory = acquired ? lock : candidate;
-    await rm(join(directory, owner), { force: true });
-    await removeEmptyLock(directory);
+    if (!acquired) {
+      await rm(join(candidate, owner), { force: true });
+      await removeEmptyLock(candidate);
+    }
   }
 }

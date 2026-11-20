@@ -1,12 +1,11 @@
 import { test, expect } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { source, build, built, workspace } from "./plugin-fixtures.mjs";
 
 async function scratch(check) {
-  const parent = resolve(workspace, "packages/build/dist");
-  await mkdir(parent, { recursive: true });
-  const root = await mkdtemp(resolve(parent, "boundary-"));
+  const root = await mkdtemp(resolve(await realpath(tmpdir()), "tokamak-boundary-"));
   try {
     await check(root);
   } finally {
@@ -116,6 +115,8 @@ for (const worker of [false, true]) {
         "src/server/api.ts",
         'import type {Label} from "plugin:third/server"; export {read as readOther} from "./x"; export type Shape<T = Label> = {value:T};',
       );
+      built(third);
+      built(other);
       const path = await backend(root, "consumer", worker);
       await file(
         path,
@@ -155,6 +156,7 @@ test("sanctioned client imports use the registry, including lazy slots", async (
       `import {defineSlot} from "@tokamak/sdk/client";
       export const actions = defineSlot<{text:string}>("actions");`,
     );
+    built(owner);
     const path = await source(
       root,
       "client",
@@ -209,6 +211,7 @@ test("public aliases preserve registered wire names and calls go through plugin.
       `export { read as renamed, helper } from "./ops";
       export type { hidden } from "./ops";`,
     );
+    built(other);
     const path = await backend(root, "consumer");
     await file(
       path,

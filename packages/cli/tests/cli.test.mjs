@@ -3,6 +3,7 @@ import { chmod, cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
+import { createApi, TokamakClient, WebSocketTransport } from "../../sdk/src/index";
 import { cli } from "./cli-fixture.mjs";
 
 test("adds and removes folders and protects an existing id", async () => {
@@ -15,7 +16,7 @@ test("adds and removes folders and protects an existing id", async () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         ok: true,
         id: "outside-fixture",
-        restartRequired: true,
+        reloadRequired: true,
       });
     }
     expect(JSON.parse(await readFile(index, "utf8"))).toEqual({ "outside-fixture": plugin });
@@ -30,7 +31,7 @@ test("adds and removes folders and protects an existing id", async () => {
     expect(JSON.parse(removed.stdout)).toMatchObject({
       ok: true,
       id: "outside-fixture",
-      restartRequired: true,
+      reloadRequired: true,
     });
     expect(JSON.parse(await readFile(index, "utf8"))).toEqual({});
     expect(remove().code).not.toBe(0);
@@ -50,7 +51,7 @@ test("every registered command shares help and JSON output rules", async () => {
   const { commands } = await import("../src/commands");
   await withPlugin((_, root) => {
     expect(commands.map(({ path }) => path)).toEqual(
-      expect.arrayContaining(["plugin build", "plugin add", "plugin remove", "plugin list"]),
+      expect.arrayContaining(["plugin build", "plugin add", "plugin remove", "plugin list", "plugin reload"]),
     );
     const paths = new Set([""]);
     for (const { path } of commands) {
@@ -96,7 +97,7 @@ test("every registered command shares help and JSON output rules", async () => {
   });
 }, 120_000);
 
-async function withServer(root, check, overrides = {}) {
+async function withServer(root, check, { killed = false, ...overrides } = {}) {
   const data = join(root, "data");
   const plugins = join(root, "installed");
   await mkdir(plugins, { recursive: true });
@@ -139,10 +140,10 @@ async function withServer(root, check, overrides = {}) {
       if (Date.now() >= deadline) throw new Error("Server did not publish readiness");
       await Bun.sleep(20);
     }
-    await check(address, token);
+    await check(address, token, server);
   } finally {
     try {
-      if (address) {
+      if (address && !killed) {
         // The server can close the connection before writing the shutdown reply.
         const response = await fetch(`${address}/shutdown`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -335,6 +336,433 @@ test("stale discovery sends no token and mismatched health cannot supply a catal
     }
   });
 }, 120_000);
+
+test("reload tells the user how to add an unknown plugin", async () => {
+  await withPlugin((_, root) => {
+    const result = cli(root, ["plugin", "reload", "missing", "--json"]);
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      ok: false,
+      error: { message: expect.stringContaining("missing"), next: "tokamak plugin add" },
+    });
+  });
+});
+
+test("reload applies index additions and removals without a restart", async () => {
+  await withPlugin(async (plugin, root) => {
+    const run = (...args) => {
+      const result = cli(root, ["plugin", ...args, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      return JSON.parse(result.stdout);
+    };
+    await withServer(root, async () => {
+      run("add", plugin);
+      expect(run("reload", "outside-fixture")).toMatchObject({
+        plugins: [
+          { id: "outside-fixture", status: "loaded", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        ],
+      });
+      expect(run("list").plugins).toEqual([{ id: "outside-fixture", version: "0.1.0", fromIndex: true }]);
+      expect(run("reload", "outside-fixture").plugins).toEqual([
+        { id: "outside-fixture", status: "unchanged", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      ]);
+      const unrelated = join(root, "installed", "unrelated", "dist");
+      await mkdir(unrelated, { recursive: true });
+      await writeFile(join(unrelated, "manifest.json"), "{}");
+      run("remove", "outside-fixture");
+      expect(run("reload")).toMatchObject({
+        plugins: [],
+        removed: ["outside-fixture"],
+        warnings: [expect.stringContaining("unrelated")],
+      });
+      expect(run("list").plugins).toEqual([]);
+    });
+  });
+}, 180_000);
+
+test("reload updates an existing connection and preserves old code on build or load failure", async () => {
+  await withPlugin(async (plugin, root) => {
+    const peer = join(root, "peer");
+    await cp(plugin, peer, { recursive: true });
+    const descriptor = join(peer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("outside-fixture", "reload-peer"),
+    );
+    const notes = join(plugin, "src/server/notes.ts");
+    const original = await readFile(notes, "utf8");
+    const marker = (source, value) =>
+      source + `\nexport const marker = query({ handler: () => ${JSON.stringify(value)} });\n`;
+    await writeFile(notes, marker(original, "old"));
+    await writeFile(join(peer, "src/server/notes.ts"), marker(original, "peer"));
+    const run = (...args) => {
+      const result = cli(root, ["plugin", ...args, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      return JSON.parse(result.stdout);
+    };
+    run("build", plugin);
+    run("add", plugin);
+    await withServer(root, async (address, token) => {
+      const socket = new WebSocket(address.replace(/^http:/, "ws:") + "/ws?token=" + token);
+      let transport;
+      try {
+        await new Promise((resolve, reject) => {
+          const signal = AbortSignal.timeout(30_000);
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          socket.addEventListener("open", resolve, { once: true, signal });
+          socket.addEventListener("error", () => reject(new Error("WebSocket startup failed")), {
+            once: true,
+            signal,
+          });
+        });
+        transport = new WebSocketTransport(socket);
+        const client = new TokamakClient(transport);
+        const api = createApi("outside-fixture");
+        const read = () => client.query(api.notes.marker, {});
+        expect(await read()).toBe("old");
+        await writeFile(notes, marker(original, "edited"));
+        expect(run("reload", "outside-fixture")).toMatchObject({
+          ok: true,
+          plugins: [
+            { id: "outside-fixture", status: "loaded", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+          ],
+        });
+        expect(await read()).toBe("edited");
+
+        for (let i = 0; i < 2; i++) await client.mutation(api.notes.add, { text: "duplicate" });
+        const schema = join(plugin, "src/server/schema.ts");
+        await writeFile(
+          schema,
+          (await readFile(schema, "utf8")).replace(
+            "defineTable({ text: v.string() })",
+            'defineTable({ text: v.string() }).unique("by_text", ["text"])',
+          ),
+        );
+        await writeFile(notes, marker(original, "refused"));
+        const refused = cli(root, ["plugin", "reload", "outside-fixture", "--json"]);
+        expect(refused.code).not.toBe(0);
+        expect(JSON.parse(refused.stdout)).toMatchObject({
+          ok: false,
+          plugins: [
+            {
+              id: "outside-fixture",
+              status: "load-failed",
+              error: { message: expect.stringContaining("by_text") },
+            },
+          ],
+        });
+        expect(await read()).toBe("edited");
+        run("add", peer);
+        const refusedBatch = cli(root, ["plugin", "reload", "--json"]);
+        expect(refusedBatch.code).not.toBe(0);
+        expect(JSON.parse(refusedBatch.stdout).plugins).toEqual([
+          expect.objectContaining({
+            id: "outside-fixture",
+            status: "load-failed",
+            error: { message: expect.stringContaining("duplicate") },
+          }),
+          expect.objectContaining({ id: "reload-peer", status: "load-failed" }),
+        ]);
+        expect(run("list").plugins.map(({ id }) => id)).toEqual(["outside-fixture"]);
+
+        await writeFile(join(plugin, "src/server/broken.ts"), "\nexport const broken: string = 42;\n");
+        const broken = cli(root, ["plugin", "reload", "outside-fixture", "--json"]);
+        const diagnostic = { file: expect.stringMatching(/broken\.ts$/), line: 2, code: "TS2322" };
+        expect(broken.code).not.toBe(0);
+        expect(JSON.parse(broken.stdout)).toMatchObject({
+          ok: false,
+          plugins: [{ id: "outside-fixture", status: "build-failed", error: { diagnostics: [diagnostic] } }],
+        });
+        expect(await read()).toBe("edited");
+
+        run("add", peer);
+        const batch = cli(root, ["plugin", "reload", "--json"]);
+        expect(batch.code).not.toBe(0);
+        expect(JSON.parse(batch.stdout)).toMatchObject({
+          ok: false,
+          plugins: [
+            { id: "outside-fixture", status: "build-failed", error: { diagnostics: [diagnostic] } },
+            { id: "reload-peer", status: "loaded" },
+          ],
+        });
+        expect(await read()).toBe("edited");
+        expect(await client.query(createApi("reload-peer").notes.marker, {})).toBe("peer");
+      } finally {
+        if (transport) transport.close();
+        else socket.close();
+      }
+    });
+  });
+}, 180_000);
+
+test("reload refuses a different manifest and verifies the bytes under a matching manifest", async () => {
+  await withPlugin(async (folder, root) => {
+    const build = () => {
+      const result = cli(root, ["plugin", "build", folder, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+    };
+    expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+    build();
+    const manifest = join(folder, "dist", "manifest.json");
+    const old = await readFile(manifest);
+    const hash = (bytes) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+    await withServer(root, async (address, token) => {
+      const submit = (buildId) =>
+        fetch(address + "/plugin-index/reload", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ builds: [{ id: "outside-fixture", buildId }], removeMissing: false }),
+        });
+      const notes = join(folder, "src/server/notes.ts");
+      await writeFile(
+        notes,
+        (await readFile(notes, "utf8")) + "\nexport const marker = query({ handler: () => 42 });",
+      );
+      build();
+      const stale = await submit(hash(old));
+      expect(stale.status).toBe(400);
+      expect((await stale.json()).error).toContain("build changed after this reload started");
+      await writeFile(manifest, old);
+      const mixed = await submit(hash(old));
+      expect(mixed.status).toBe(400);
+      expect((await mixed.json()).error).toContain("hash mismatch");
+    });
+  });
+}, 180_000);
+
+test("legacy reload leaves indexed snapshots alone and ignores new index entries", async () => {
+  await withPlugin(async (folder, root) => {
+    const installed = join(root, "installed", "base");
+    await mkdir(join(root, "installed"));
+    await cp(folder, installed, { recursive: true });
+    const id = join(installed, "plugin.ts");
+    await writeFile(id, (await readFile(id, "utf8")).replace("outside-fixture", "base-plugin"));
+    expect(cli(root, ["plugin", "build", installed]).code).toBe(0);
+    await withServer(root, async (address, token) => {
+      expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+      await mkdir(join(folder, "dist"), { recursive: true });
+      await writeFile(join(folder, "dist", "manifest.json"), "{}");
+      const res = await fetch(address + "/plugins/base-plugin/reload", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).plugins.map(({ plugin }) => plugin.id)).toEqual(["base-plugin"]);
+    });
+  });
+}, 180_000);
+
+function spawnReload(root, token, address) {
+  const args = ["plugin", "reload", "outside-fixture", "--json"];
+  if (address) args.push("--server", address);
+  const child = Bun.spawn([process.execPath, "packages/cli/src/main.ts", ...args], {
+    cwd: workspace,
+    env: {
+      ...process.env,
+      TOKAMAK_SERVER_DIR: join(root, "data"),
+      TOKAMAK_SERVER: undefined,
+      TOKAMAK_TOKEN: token,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 90_000,
+  });
+  return Promise.all([child.exited, new Response(child.stdout).json(), new Response(child.stderr).text()]);
+}
+
+for (const scenario of ["race", "timeout", "death"]) {
+  test(`reload ${scenario}: reports only what the server is known to run`, async () => {
+    await withPlugin(async (folder, root) => {
+      expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+      const notes = join(folder, "src/server/notes.ts");
+      const original = await readFile(notes, "utf8");
+      const edit = (n) =>
+        writeFile(notes, original + `\nexport const marker = query({ handler: () => ${n} });`);
+      await withServer(
+        root,
+        async (address, token, server) => {
+          const arrived = Promise.withResolvers();
+          const release = Promise.withResolvers();
+          let applied;
+          const proxy = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            idleTimeout: 0,
+            async fetch(req, self) {
+              const path = new URL(req.url).pathname;
+              if (req.method === "GET") return fetch(address + path, { headers: req.headers });
+              const body = await req.text();
+              if (scenario === "race") {
+                arrived.resolve(JSON.parse(body).builds[0].buildId);
+                await release.promise;
+              }
+              const res = await fetch(address + path, { method: "POST", headers: req.headers, body });
+              applied = (await res.clone().json()).plugins?.[0]?.revision;
+              if (scenario === "timeout") await release.promise;
+              if (scenario === "death") {
+                server.kill("SIGKILL");
+                await server.exited;
+                self.stop(true);
+              }
+              return res;
+            },
+          });
+          try {
+            await edit(1);
+            const first = spawnReload(root, token, proxy.url.origin);
+            if (scenario === "race") {
+              const firstId = await Promise.race([
+                arrived.promise,
+                first.then((result) => {
+                  throw new Error(JSON.stringify(result));
+                }),
+              ]);
+              await edit(2);
+              const second = spawnReload(root, token);
+              expect(
+                await Promise.race([second.then(() => "completed"), Bun.sleep(500).then(() => "waiting")]),
+              ).toBe("waiting");
+              expect(
+                new Bun.CryptoHasher("sha256")
+                  .update(await readFile(join(folder, "dist/manifest.json")))
+                  .digest("hex"),
+              ).toBe(firstId);
+              release.resolve();
+              const [firstCode, firstResult] = await first;
+              const [secondCode, secondResult] = await second;
+              expect(firstCode).toBe(0);
+              expect(secondCode).toBe(0);
+              expect(firstResult.plugins[0]).toMatchObject({ buildId: firstId, status: "loaded" });
+              expect(secondResult.plugins[0].buildId).not.toBe(firstId);
+            } else {
+              const [code, result, stderr] = await first;
+              expect(applied).toMatch(/^[a-f0-9]{64}$/);
+              expect(code === 0).toBe(scenario === "timeout");
+              expect(result.plugins[0]).toMatchObject({
+                buildId: applied,
+                status: scenario === "timeout" ? "loaded" : "unknown",
+              });
+              if (scenario === "death") expect(stderr).toContain("tokamak plugin list");
+            }
+          } finally {
+            release.resolve();
+            proxy.stop(true);
+          }
+        },
+        { killed: scenario === "death" },
+      );
+    });
+  }, 180_000);
+}
+
+test("batch fallback loads a provider before its dependent after a third plugin is refused", async () => {
+  await withPlugin(async (folder, root) => {
+    const create = async (id, extra = "") => {
+      const path = join(root, id);
+      await cp(folder, path, { recursive: true });
+      await writeFile(
+        join(path, "plugin.ts"),
+        `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "${id}", version:"1.0.0"${extra} });`,
+      );
+      expect(cli(root, ["plugin", "add", path]).code).toBe(0);
+      return path;
+    };
+    await create("dependent", ', depends: ["provider"]');
+    await create("provider");
+    const refused = await create("refused");
+    const notes = join(refused, "src/server/notes.ts");
+    await writeFile(notes, (await readFile(notes, "utf8")) + '\nthrow new Error("refused at import");');
+    await withServer(root, () => {
+      const output = cli(root, ["plugin", "reload", "--json"]);
+      expect(output.code).not.toBe(0);
+      expect(JSON.parse(output.stdout).plugins).toEqual([
+        expect.objectContaining({ id: "dependent", status: "loaded" }),
+        expect.objectContaining({ id: "provider", status: "loaded" }),
+        expect.objectContaining({
+          id: "refused",
+          status: "load-failed",
+          error: { message: expect.stringContaining("refused at import") },
+        }),
+      ]);
+    });
+  });
+}, 180_000);
+
+test("reload refuses a worker that throws during import and keeps the old worker", async () => {
+  await withPlugin(async (_, root) => {
+    const folder = join(root, "worker-test");
+    await cp(join(workspace, "packages/server/tests/fixtures/worker"), folder, { recursive: true });
+    await symlink(join(workspace, "node_modules"), join(folder, "node_modules"), "dir");
+    expect(cli(root, ["plugin", "add", folder]).code).toBe(0);
+    await withServer(root, async (address, token) => {
+      const reload = () => cli(root, ["plugin", "reload", "worker-test", "--json"]);
+      expect(reload().code).toBe(0);
+      const socket = new WebSocket(address.replace(/^http:/, "ws:") + "/ws?token=" + token);
+      await new Promise((done, reject) => {
+        socket.addEventListener("open", done, { once: true });
+        socket.addEventListener("error", reject, { once: true });
+      });
+      const transport = new WebSocketTransport(socket);
+      try {
+        const state = () => new TokamakClient(transport).action(createApi("worker-test").actions.state, {});
+        const old = await state();
+        const actions = join(folder, "src/server/actions.ts");
+        await writeFile(
+          actions,
+          'if (typeof process !== "undefined") throw new Error("worker import failed intentionally");\n' +
+            (await readFile(actions, "utf8")),
+        );
+        const refused = reload();
+        expect(refused.code).not.toBe(0);
+        expect(JSON.parse(refused.stdout).plugins[0]).toMatchObject({
+          status: "load-failed",
+          error: { message: expect.stringContaining("worker import failed intentionally") },
+        });
+        expect((await state()).pid).toBe(old.pid);
+      } finally {
+        transport.close();
+      }
+    });
+  });
+}, 180_000);
+
+test("reload reports skipped plugins separately unless the command asked for them", async () => {
+  await withPlugin(async (folder, root) => {
+    const broken = join(root, "broken");
+    await cp(folder, broken, { recursive: true });
+    const descriptor = join(broken, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("outside-fixture", "skipped-plugin"),
+    );
+    const notes = join(broken, "src/server/notes.ts");
+    await writeFile(notes, (await readFile(notes, "utf8")) + '\nthrow new Error("still skipped");');
+    for (const path of [folder, broken]) {
+      expect(cli(root, ["plugin", "build", path]).code).toBe(0);
+      expect(cli(root, ["plugin", "add", path]).code).toBe(0);
+    }
+    await withServer(root, () => {
+      const other = cli(root, ["plugin", "reload", "outside-fixture", "--json"]);
+      expect(other.code, other.stderr).toBe(0);
+      expect(JSON.parse(other.stdout)).toMatchObject({
+        plugins: [{ id: "outside-fixture", status: "unchanged" }],
+        skipped: { "skipped-plugin": expect.stringContaining("still skipped") },
+      });
+      const selected = cli(root, ["plugin", "reload", "skipped-plugin", "--json"]);
+      expect(selected.code).not.toBe(0);
+      expect(JSON.parse(selected.stdout)).toMatchObject({
+        plugins: [
+          {
+            id: "skipped-plugin",
+            status: "load-failed",
+            error: { message: expect.stringContaining("still skipped") },
+          },
+        ],
+        skipped: {},
+      });
+    });
+  });
+}, 180_000);
 
 test("reads an indexed plugin's log offline and filters errors", async () => {
   await withPlugin(async (plugin, root) => {
@@ -582,18 +1010,21 @@ test("records worker and embedded plugin output in order and clears only the rel
       expect(run("logs", "outside-fixture", "--errors").entries).toContainEqual(
         expect.objectContaining({ source: "window", text: "view failed" }),
       );
-      const reload = () =>
-        fetch(`${address}/plugins/outside-fixture/reload`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      expect((await reload()).ok).toBe(true);
+      const source = join(plugin, "src/server/failure.ts");
+      const original = await readFile(source, "utf8");
+      const reload = () => run("reload", "outside-fixture");
+      const baseline = run("logs", "outside-fixture").entries;
+      expect(reload().plugins[0].status).toBe("unchanged");
+      expect(run("logs", "outside-fixture").entries).toEqual(baseline);
+      expect(readBurst()).toEqual(burst);
+
+      const changed = original + "\nexport const version = query({ handler: () => 2 });\n";
+      await writeFile(source, changed);
+      expect(reload().plugins[0].status).toBe("loaded");
       expect(run("logs", "outside-fixture").entries).toEqual([]);
       expect(readBurst()).toEqual(burst);
       expect((await report("outside-fixture", "stale view")).status).toBe(409);
 
-      const source = join(plugin, "src/server/failure.ts");
-      const original = await readFile(source, "utf8");
       const active = invoke(address, token, "action", "outside-fixture/failure:wait");
       const logFile = join(root, "logs", "outside-fixture.log");
       const deadline = Date.now() + 10_000;
@@ -601,17 +1032,20 @@ test("records worker and embedded plugin output in order and clears only the rel
         if (Date.now() > deadline) throw new Error("Old action never started");
         await Bun.sleep(20);
       }
-      await writeFile(source, 'console.info("new initializer");\n' + original);
-      run("build", plugin);
-      expect((await reload()).ok).toBe(true);
-      expect((await active).Err).toContain("closed");
+      await writeFile(source, 'console.info("new initializer");\n' + changed);
+      expect(reload().plugins[0].status).toBe("loaded");
+      expect((await active).Err).toContain("Plugin action cancelled by reload");
       expect(run("logs", "outside-fixture").entries.map(({ text }) => text)).toEqual(["new initializer"]);
       await writeFile(
         source,
         'console.info("rejected initializer"); throw new Error("reject candidate");\n' + original,
       );
-      run("build", plugin);
-      expect((await reload()).ok).toBe(false);
+      const refused = cli(root, ["plugin", "reload", "outside-fixture", "--json"]);
+      expect(refused.code).not.toBe(0);
+      expect(JSON.parse(refused.stdout).plugins[0]).toMatchObject({
+        status: "load-failed",
+        error: { message: expect.stringContaining("reject candidate") },
+      });
       expect(run("logs", "outside-fixture").entries.map(({ text }) => text)).toEqual(["new initializer"]);
       expect(readBurst()).toEqual(burst);
     });
@@ -681,6 +1115,13 @@ test("two installations sharing an OS temp folder keep independent offline plugi
             ).toEqual({ Ok: "only B" });
             expect(read(a)).toEqual(["only A"]);
             expect(read(b)).toEqual(["only B"]);
+            const source = join(plugin, "src/server/marker.ts");
+            await writeFile(
+              source,
+              (await readFile(source, "utf8")) + "\nexport const version = query({ handler: () => 2 });\n",
+            );
+            expect(cli(root, ["plugin", "build", plugin]).code).toBe(0);
+            await cp(join(plugin, "dist"), join(b, "installed", "fixture", "dist"), { recursive: true });
             const reload = await fetch(second + "/plugins/outside-fixture/reload", {
               method: "POST",
               headers: { Authorization: `Bearer ${secondToken}` },

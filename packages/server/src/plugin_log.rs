@@ -212,6 +212,7 @@ impl Log {
             ("error", "validation")
         } else if error == "runtime worker is closed"
             || error == "Plugin action cancelled"
+            || error == "Plugin action cancelled by reload"
             || error.ends_with("worker exited: worker stopped")
             || error.ends_with("worker is stopped")
         {

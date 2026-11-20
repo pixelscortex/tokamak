@@ -1,14 +1,14 @@
 use super::*;
 use crate::data::{DataSpace, types::check_field};
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeMap};
 use surrealdb_datastore::key::schema::RecordPrefix;
-use surrealdb_idx::catalog::{Index, IndexDefinition, providers::*};
+use surrealdb_idx::catalog::{Index, IndexDefinition, TableId, providers::*};
 use surrealdb_idx::val::{TableName, Value as StoredValue};
 
 impl Transaction {
     /// Define a b-tree value index on application fields (including metadata).
-    /// Existing rows cannot be backfilled here: a new definition on a nonempty
-    /// table is rejected. Repeating the identical definition is a no-op.
+    /// Backfill existing rows in this transaction. Repeating an identical
+    /// definition is a no-op; changing it replaces the old index.
     pub async fn define_index(
         &mut self,
         table: &Table,
@@ -16,22 +16,6 @@ impl Transaction {
         fields: &[&str],
         unique: bool,
     ) -> Result<()> {
-        let result = self.try_define_index(table, name, fields, unique).await;
-        self.finish(result.and_then(|conflict| match conflict {
-            Some(reason) => Err(Error::Invalid(reason)),
-            None => Ok(()),
-        }))
-    }
-
-    /// Report an incompatible on-disk schema without poisoning the loader's
-    /// transaction. Validation and storage errors still poison it.
-    pub(crate) async fn try_define_index(
-        &mut self,
-        table: &Table,
-        name: &str,
-        fields: &[&str],
-        unique: bool,
-    ) -> Result<Option<&'static str>> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
@@ -70,28 +54,30 @@ impl Transaction {
                 })
                 .collect::<Vec<_>>();
 
-            let kind = if unique { Index::Uniq } else { Index::Idx };
+            let kind = if unique {
+                Index::Uniq
+            } else {
+                Index::Idx
+            };
 
-            if let Some(existing) = tx
+            let existing = tx
                 .inner
                 .get_tb_index(core.ns, core.db, &tb, name, None)
-                .await?
+                .await?;
+            if existing
+                .as_ref()
+                .is_some_and(|index| index.cols == cols && index.index == kind)
             {
-                return Ok((existing.cols != cols || existing.index != kind).then_some(
-                    "a different index definition already uses that name; index backfill is not supported yet",
-                ));
+                return Ok(());
             }
             tx.catalog(true)?;
 
             let core = &tx.state.storage;
-
-            if tx.inner.tb_has_records(core.ns, core.db, &tb).await? {
-                return Ok(Some(
-                    "cannot define an index on a table with rows; index backfill is not supported yet",
-                ));
+            if existing.is_some() {
+                tx.inner.del_tb_index(core.ns, core.db, &tb, name).await?;
             }
-
-            tx.inner
+            let definition = tx
+                .inner
                 .get_or_add_tb(None, "tokamak", "tokamak", &tb, None)
                 .await?;
             let index_id = core
@@ -114,7 +100,81 @@ impl Transaction {
             tx.inner.put_tb_index(core.ns, core.db, &tb, &index).await?;
             tx.catalog_changed = true;
 
-            Ok(None)
+            Box::pin(tx.backfill_index(table, definition.table_id, &index)).await
+        }
+        .await;
+        mutation.finish(result)
+    }
+
+    async fn backfill_index(
+        &self,
+        table: &Table,
+        table_id: TableId,
+        index: &IndexDefinition,
+    ) -> Result<()> {
+        let core = &self.state.storage;
+        let env = crate::data::storage::IndexContext {
+            tx: self.inner.clone(),
+            core,
+        };
+        for row in self.scan_table(table).await? {
+            let values = index_values(index, &row)?;
+            surrealdb_idx::index::IndexOperation::new(
+                &env,
+                core.ns,
+                core.db,
+                table_id,
+                index,
+                None,
+                Some(values),
+                &row.id.record(),
+            )
+            .compute(&crate::data::storage::NoAnalyzer, &mut false)
+            .await
+            .map_err(backfill_error)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn drop_undeclared_indexes(
+        &mut self,
+        space: &DataSpace,
+        declared: &BTreeMap<&str, BTreeSet<&str>>,
+    ) -> Result<()> {
+        let mutation = Mutation::new(self);
+        let tx = &mut *mutation.tx;
+        let result = async {
+            tx.ready(true)?;
+            let tables = declared.keys().copied().collect();
+            let core = &tx.state.storage;
+            let mut obsolete = Vec::new();
+            for table in tx.inner.all_tb(core.ns, core.db, None).await?.iter() {
+                let tb = &table.name;
+                if !space.owns_schema_table(tb.as_str(), &tables) {
+                    continue;
+                }
+                let names = declared.get(tb.as_str());
+                let indexes = tx.inner.all_tb_indexes(core.ns, core.db, tb, None).await?;
+                obsolete.extend(
+                    indexes
+                        .iter()
+                        .filter(|index| {
+                            !names.is_some_and(|names| names.contains(index.name.as_str()))
+                        })
+                        .map(|index| (tb.clone(), index.name.clone())),
+                );
+            }
+            if !obsolete.is_empty() {
+                tx.catalog(true)?;
+                let core = &tx.state.storage;
+                for (table, index) in obsolete {
+                    tx.inner
+                        .del_tb_index(core.ns, core.db, &table, &index)
+                        .await?;
+                }
+                tx.catalog_changed = true;
+            }
+            Ok(())
         }
         .await;
         mutation.finish(result)
@@ -133,7 +193,7 @@ impl Transaction {
             let core = &tx.state.storage;
             for table in tx.inner.all_tb(core.ns, core.db, None).await?.iter() {
                 let tb = &table.name;
-                if !space.can_reset_table(tb.as_str(), declared) {
+                if !space.owns_schema_table(tb.as_str(), declared) {
                     continue;
                 }
                 let indexes = tx.inner.all_tb_indexes(core.ns, core.db, tb, None).await?;
@@ -209,6 +269,16 @@ impl Transaction {
 
         Ok(())
     }
+}
+
+fn backfill_error(error: anyhow::Error) -> Error {
+    if let Some(surrealdb_idx::Error::IndexExists { index, value, .. }) = error.downcast_ref() {
+        return Error::BackfillUniqueViolation {
+            index: index.clone(),
+            value: value.clone(),
+        };
+    }
+    error.into()
 }
 
 fn index_values(index: &IndexDefinition, document: &Document) -> Result<Vec<StoredValue>> {

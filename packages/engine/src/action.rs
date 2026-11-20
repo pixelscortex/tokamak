@@ -33,14 +33,21 @@ impl Engine for ActionEngine {
         args: Json,
         ops: Arc<OpRegistry>,
     ) -> Result<Json, Error> {
+        if ops.action_lifetime().is_cancelled() {
+            return Err(Error::Engine("Plugin action cancelled by reload".into()));
+        }
         if self.shutdown.is_cancelled() {
             return Err(Error::Closed);
         }
         let world = QuickJsContext::new(self.limits.heap_bytes).await?;
         let stopped = self.shutdown.clone();
+        let lifetime = ops.action_lifetime().clone();
+        let interrupted = lifetime.clone();
         world
             .runtime()
-            .set_interrupt_handler(Some(Box::new(move || stopped.is_cancelled())))
+            .set_interrupt_handler(Some(Box::new(move || {
+                stopped.is_cancelled() || interrupted.is_cancelled()
+            })))
             .await;
         let invocation = Invocation::unbounded();
         let web = web::WebHost::new(ops.network_permissions())?;
@@ -51,6 +58,7 @@ impl Engine for ActionEngine {
         // explicit shutdown/reload; an idle 30-minute await has no deadline.
         let result = tokio::select! {
             biased;
+            _ = lifetime.cancelled() => Err(Error::Closed),
             _ = self.shutdown.cancelled() => Err(Error::Closed),
             result = world.context().async_with(async |ctx| {
                 let run = async {
@@ -72,6 +80,9 @@ impl Engine for ActionEngine {
         };
         invocation.retire();
         drop(web_lease);
+        if lifetime.is_cancelled() {
+            return Err(Error::Engine("Plugin action cancelled by reload".into()));
+        }
         if self.shutdown.is_cancelled() {
             return Err(Error::Closed);
         }

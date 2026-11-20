@@ -14,24 +14,25 @@ try {
   const files = {};
   for (const id of ["a", "b"])
     await cp(new URL(`./fixtures/actions/${id}/`, import.meta.url), join(root, id), { recursive: true });
-  for (const id of ["chat", "acp"])
+  for (const id of ["chat", "acp"]) {
     await cp(join(workspace, `plugins/${id}`), join(root, id), {
       recursive: true,
       filter: (path) => !["dist", "_generated", "node_modules", ".tokamak"].includes(path.split("/").at(-1)),
     });
-  await symlink(join(workspace, "plugins/acp/node_modules"), join(root, "acp/node_modules"), "dir");
+    // The fixture calls the checkout's builder directly and installs only the plugin's runtime packages.
+    const path = join(root, id, "package.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    delete manifest.devDependencies;
+    await writeFile(path, JSON.stringify(manifest));
+  }
   await cp(join(workspace, "packages/server/tests/fixtures/record"), join(root, "record"), {
     recursive: true,
     filter: (path) => !["dist", "_generated", "node_modules", ".tokamak"].includes(path.split("/").at(-1)),
   });
-  // Install all peers before checking any public API's transitive types.
-  for (const id of ["record", "a", "b", "chat"])
-    await symlink(
-      join(workspace, id === "chat" ? "plugins/chat/node_modules" : "app/node_modules"),
-      join(root, id, "node_modules"),
-      "dir",
-    );
-  for (const id of ["record", "a", "b", "chat", "acp"]) {
+  // Resolve fixture libraries from the checkout while building in dependency order.
+  for (const id of ["record", "a", "b"])
+    await symlink(join(workspace, "app/node_modules"), join(root, id, "node_modules"), "dir");
+  for (const id of ["record", "b", "a", "chat", "acp"]) {
     const path = join(root, id);
     // Replace the copied workspace-relative client config; SDK dependencies
     // resolve through the installed package symlinks above.
@@ -182,6 +183,7 @@ export const seedTranscript = mutation({
       "bundle.js",
       "bundle.js.map",
       "api.ts",
+      "public.d.ts",
       ...(id === "acp" ? ["worker-entry.js", "worker.js", "worker.js.map"] : []),
     ])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");

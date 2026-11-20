@@ -41,6 +41,7 @@ pub enum Error {
     Overloaded,
     SlowConsumer,
     Invalid(String),
+    IndexBackfill(String),
 }
 
 impl fmt::Display for Error {
@@ -49,7 +50,7 @@ impl fmt::Display for Error {
             Self::Closed => f.write_str("server/session is closed"),
             Self::Overloaded => f.write_str("server capacity exceeded; request was not admitted"),
             Self::SlowConsumer => f.write_str("session disconnected: output queue filled; reconnect and resubscribe (mutation outcomes may be unknown)"),
-            Self::Invalid(message) => f.write_str(message),
+            Self::Invalid(message) | Self::IndexBackfill(message) => f.write_str(message),
         }
     }
 }
@@ -103,6 +104,8 @@ type Connection = (
     mpsc::WeakSender<Event>,
 );
 
+type ReloadResult = (Json, Vec<crate::plugin_log::Log>);
+
 pub(crate) enum Command {
     Connect(
         Arc<std::sync::RwLock<crate::identity::User>>,
@@ -112,9 +115,10 @@ pub(crate) enum Command {
     Action(u64, crate::identity::User, Action),
     WindowError(String, String, String, oneshot::Sender<Result<bool, Error>>),
     Plugins(oneshot::Sender<Result<Json, Error>>),
-    Reload(
-        String,
-        oneshot::Sender<Result<(Json, Vec<crate::plugin_log::Log>), Error>>,
+    Reload(String, oneshot::Sender<Result<ReloadResult, Error>>),
+    ReloadIndexed(
+        crate::plugins::IndexedReload,
+        oneshot::Sender<Result<ReloadResult, Error>>,
     ),
     RunFunction(crate::actions::NestedCall),
     Asset(

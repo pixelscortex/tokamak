@@ -5,6 +5,10 @@ import { CommandError } from "./command";
 import { dataFolder } from "./data";
 import { processIsAlive } from "./process";
 
+const loopback = (host: string) =>
+  host === "localhost" || host === "[::1]" || (isIP(host) === 4 && host.startsWith("127."));
+const noProxy = { proxy: "" };
+
 function httpAddress(address: string) {
   let url: URL;
   try {
@@ -66,21 +70,43 @@ async function localEndpoint() {
     throw new Error("Invalid local server discovery address");
   const token = await readToken(folder);
   const endpoint = { url: httpAddress(identity.url), token };
-  const health = discovery(await get("/health", endpoint));
+  const health = discovery(await request("/health", endpoint));
   if (JSON.stringify(health) !== JSON.stringify(identity)) throw new Error("Local server identity changed");
   return endpoint;
 }
 
-async function get(path: string, endpoint: { url: URL; token: string }): Promise<unknown> {
+export class ServerRefusal extends CommandError {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message, "tokamak plugin list");
+  }
+}
+
+async function request(path: string, endpoint: { url: URL; token: string }, body?: object): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(new URL(path, endpoint.url), {
-      headers: { Authorization: `Bearer ${endpoint.token}` },
-      signal: AbortSignal.timeout(5000),
+      ...(loopback(endpoint.url.hostname) ? noProxy : {}),
+      headers: {
+        Authorization: `Bearer ${endpoint.token}`,
+        ...(body && { "Content-Type": "application/json" }),
+      },
+      method: body ? "POST" : "GET",
+      body: body && JSON.stringify(body),
+      signal: AbortSignal.timeout(body ? 30_000 : 5000),
       redirect: "error",
     });
   } catch {
     throw new Error("Could not connect to the server");
+  }
+  if (body && response.status >= 400 && response.status < 500 && response.status !== 408) {
+    const result = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
+    throw new ServerRefusal(
+      typeof result?.error === "string" ? result.error : `Server refused reload (HTTP ${response.status})`,
+      result?.code,
+    );
   }
   if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
   try {
@@ -90,13 +116,22 @@ async function get(path: string, endpoint: { url: URL; token: string }): Promise
   }
 }
 
-export async function serverGet(path: string, explicit?: string): Promise<unknown> {
+export function serverGet(path: string, explicit?: string) {
+  return serverRequest(path, explicit);
+}
+
+export function serverPost(path: string, body: object, explicit?: string) {
+  return serverRequest(path, explicit, body);
+}
+
+async function serverRequest(path: string, explicit?: string, body?: object): Promise<unknown> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
   if (!address) {
     const endpoint = await localEndpoint().catch(() => {
       throw new CommandError("No local server is running", "tokamak server start");
     });
-    return get(path, endpoint).catch((error: Error) => {
+    return request(path, endpoint, body).catch((error: Error) => {
+      if (error instanceof ServerRefusal) throw error;
       throw new CommandError(
         `Could not read ${path} from the local server: ${error.message}`,
         "tokamak server start",
@@ -106,8 +141,9 @@ export async function serverGet(path: string, explicit?: string): Promise<unknow
   try {
     const token = process.env.TOKAMAK_TOKEN;
     if (!token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
-    return await get(path, { url: httpAddress(address), token });
+    return await request(path, { url: httpAddress(address), token }, body);
   } catch (error) {
+    if (error instanceof ServerRefusal) throw error;
     throw new CommandError(
       `Could not read ${path} from the selected server: ${error instanceof Error ? error.message : "Request failed"}`,
       "tokamak --help",

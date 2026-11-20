@@ -34,7 +34,7 @@ export class WebPluginHost implements PluginModuleHost {
     expandImporters(affected, importers);
     return affected;
   }
-  remove(names: Iterable<string>) {
+  remove(names: Iterable<string>, { keepImports = false } = {}) {
     for (const name of names) {
       const generation = this.generations.get(name);
       if (generation) {
@@ -45,7 +45,9 @@ export class WebPluginHost implements PluginModuleHost {
         for (const url of generation.modules.keys()) this.moduleImports.delete(url);
       }
       this.generations.delete(name);
-      this.imports.delete(name);
+      // A failed fetch may use a retired asset URL. Keep its observed edge so
+      // the next catalog can retire the importer and remount its view.
+      if (!keepImports) this.imports.delete(name);
       this.errors.delete(name);
     }
   }
@@ -112,6 +114,10 @@ export class WebPluginHost implements PluginModuleHost {
       let target = entry.n;
       if (target.startsWith("@plugins/")) {
         const [, id, ...rest] = target.split("/");
+        const dependency = moduleName(id!);
+        const dependencies = this.imports.get(name) ?? new Set();
+        dependencies.add(dependency);
+        this.imports.set(name, dependencies);
         const manifest = this.manifests().find((p) => p.plugin.id === id);
         if (!manifest?.entries.ui) {
           // A dynamic import of an absent plugin is optional: leave it to reject
@@ -120,10 +126,6 @@ export class WebPluginHost implements PluginModuleHost {
           throw new Error(`${name}: missing UI dependency ${target}`);
         }
         this.attachStyles(manifest, this.generation(moduleName(id!)));
-        const dependency = moduleName(id!);
-        const dependencies = this.imports.get(name) ?? new Set();
-        dependencies.add(dependency);
-        this.imports.set(name, dependencies);
         const suffix = rest.join("/");
         const path = ["", "ui", "client", "src/client/api", "src/client/api.ts"].includes(suffix)
           ? manifest.entries.ui.code

@@ -105,6 +105,10 @@ impl Server {
             }
         };
 
+        loaded.publish(None, &loaded.changed_plugins(None)).await;
+        for log in loaded.logs.values() {
+            log.published().await;
+        }
         let kinds = loaded.client_kinds();
         Self::start(
             database,

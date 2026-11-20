@@ -48,6 +48,7 @@ impl Coordinator {
                 return;
             }
         };
+        let lifetime = ops.action_lifetime().clone();
         let worker = self
             .plugins
             .as_ref()
@@ -59,10 +60,11 @@ impl Coordinator {
             .cloned();
         if let Some(worker) = worker {
             self.action_jobs.spawn(async move {
-                let result = worker
-                    .invoke(local_name, args, ops)
-                    .await
-                    .map_err(|e| environment.redact(e));
+                let result = tokio::select! {
+                    biased;
+                    _ = lifetime.cancelled() => Err("Plugin action cancelled by reload".into()),
+                    result = worker.invoke(local_name, args, ops) => result.map_err(|e| environment.redact(e)),
+                };
                 (session, id, log_action_result(result, log.as_ref(), &name))
             });
             return;
@@ -75,7 +77,11 @@ impl Coordinator {
         ) {
             Ok(pending) => {
                 self.action_jobs.spawn(async move {
-                    let result = pending.await.map_err(|e| environment.redact(e.to_string()));
+                    let result = tokio::select! {
+                        biased;
+                        _ = lifetime.cancelled() => Err("Plugin action cancelled by reload".into()),
+                        result = pending => result.map_err(|e| environment.redact(e.to_string())),
+                    };
                     (session, id, log_action_result(result, log.as_ref(), &name))
                 });
             }
@@ -120,8 +126,17 @@ impl Coordinator {
     }
 
     fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
+        if call
+            .target_build
+            .as_ref()
+            .is_some_and(tokio_util::sync::CancellationToken::is_cancelled)
+        {
+            return Err("Plugin action cancelled by reload".into());
+        }
         match (&self.plugins, &call.generation, &call.owner) {
-            (Some(current), Some(generation), Some(owner)) if Arc::ptr_eq(current, generation) => {
+            (Some(current), Some(generation), Some(owner))
+                if !generation.action_lifetimes[owner].is_cancelled() =>
+            {
                 let target =
                     current.target(owner, &call.name, call.kind == FunctionKind::Mutation, &[])?;
 

@@ -77,6 +77,7 @@ pub struct OpRegistry(
     BTreeMap<String, Op>,
     pub(crate) Option<Determinism>,
     Vec<String>,
+    tokio_util::sync::CancellationToken,
     Option<Arc<Console>>,
 );
 
@@ -87,7 +88,7 @@ impl OpRegistry {
 
     /// Installs a host-provided sink for this module's console.
     pub fn set_console(&mut self, sink: impl Fn(&str, &str) + Send + Sync + 'static) {
-        self.3 = Some(Arc::new(sink));
+        self.4 = Some(Arc::new(sink));
     }
 
     pub(crate) fn install_console<'js>(
@@ -95,7 +96,7 @@ impl OpRegistry {
         ctx: &Ctx<'js>,
         global: &str,
     ) -> rquickjs::Result<bool> {
-        let Some(sink) = self.3.clone() else {
+        let Some(sink) = self.4.clone() else {
             return Ok(false);
         };
         let emit = Function::new(ctx.clone(), move |level: String, text: String| {
@@ -128,6 +129,16 @@ impl OpRegistry {
     /// never enable external effects in the query/mutation engine.
     pub fn set_network_permissions(&mut self, permissions: Vec<String>) {
         self.2 = permissions;
+    }
+
+    /// Bind action execution to the server-selected lifetime of its plugin build.
+    pub fn set_action_lifetime(&mut self, lifetime: tokio_util::sync::CancellationToken) {
+        self.3 = lifetime;
+    }
+
+    /// Returns the token cancelled when the server retires this action's plugin build.
+    pub fn action_lifetime(&self) -> &tokio_util::sync::CancellationToken {
+        &self.3
     }
 
     pub(crate) fn network_permissions(&self) -> Vec<String> {

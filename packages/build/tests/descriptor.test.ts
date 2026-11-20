@@ -1,9 +1,11 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { readDescriptor, deriveInterfaces, deriveProviders, serverModule } from "../src/descriptor";
 import { definePlugin } from "@tokamak/sdk";
+import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
+import { build } from "./outside-fixture.mjs";
 
 test("descriptor discovery never executes code and normalizes dependency IDs", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "tokamak-descriptor-"));
@@ -85,7 +87,7 @@ test("consumer inference excludes every non-bundled server module", async () => 
 });
 
 test("provider inference checks public SDK reference kinds, arguments and results", async () => {
-  const root = await mkdtemp(resolve(import.meta.dir, ".tmp-providers-"));
+  const root = await mkdtemp(resolve(await realpath(tmpdir()), "tokamak-providers-"));
   try {
     const provider = resolve(root, "provider");
     const server = resolve(provider, "src/server");
@@ -113,6 +115,15 @@ test("provider inference checks public SDK reference kinds, arguments and result
       }};
     `,
     );
+    const contract = resolve(root, "contract");
+    await writeFile(
+      resolve(contract, "plugin.ts"),
+      'import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "contract", version: "1.0.0" });',
+    );
+    const result = build(contract);
+    expect(result.code, result.output).toBe(0);
+    await rm(resolve(contract, "src"), { recursive: true });
+    await checkPluginImports(provider, undefined, ["contract"]);
     await writeFile(
       resolve(server, "_generated/api.ts"),
       `

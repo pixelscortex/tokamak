@@ -42,6 +42,7 @@ struct Process {
     commands: mpsc::Sender<Command>,
     kill: CancellationToken,
     stopped: CancellationToken,
+    exit_error: OnceLock<String>,
 }
 struct State {
     process: Option<Arc<Process>>,
@@ -143,27 +144,74 @@ impl Supervisor {
             .ok_or_else(|| format!("Plugin {} needs Bun: install from https://bun.sh", self.id))?;
         std::fs::create_dir_all(&self.directory)
             .map_err(|e| format!("Plugin {} data folder: {e}", self.id))?;
-        let process = process::spawn(
-            &self.runtime,
-            &self.id,
-            bun,
-            (self.entry.clone(), self.code.clone()),
-            self.log.get().cloned(),
-            &self.directory,
-            &self.env,
-        )?;
+        let process = process::spawn(self, bun, &self.directory, false)?;
         state.process = Some(process.clone());
         // Bound restart frequency even when a broken worker exits immediately.
         state.retry = tokio::time::Instant::now() + Duration::from_millis(250);
         Ok(process)
     }
+    pub(crate) async fn check_ready(&self) -> Result<(), String> {
+        let bun = self
+            .bun
+            .as_ref()
+            .ok_or_else(|| format!("Plugin {} needs Bun", self.id))?;
+        let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let process = process::spawn(self, bun, directory.path(), true)?;
+        let _kill_on_drop = process.kill.clone().drop_guard();
+        // The SDK rejects an empty function name after loading the bundle.
+        // This also checks the transport for builds with an older worker entry.
+        let (reply, wait) = oneshot::channel();
+        let result = async {
+            process
+                .commands
+                .try_send(Command::Invoke {
+                    id: 0,
+                    name: String::new(),
+                    args: json!({}),
+                    ops: Arc::new(OpRegistry::new()),
+                    reply,
+                })
+                .map_err(|_| "worker closed before readiness check")?;
+            match tokio::time::timeout(Duration::from_secs(10), wait).await {
+                Ok(Ok(Ok(_))) => Ok(()),
+                Ok(Ok(Err(error))) if error.lines().next() == Some("Unknown worker action: ") => {
+                    Ok(())
+                }
+                Ok(Ok(Err(error))) => Err(error),
+                Ok(Err(_)) => Err("worker exited before readiness check".into()),
+                Err(_) => Err("worker readiness check timed out".into()),
+            }
+        }
+        .await;
+        process.kill.cancel();
+        process.stopped.cancelled().await;
+        result.map_err(|error| {
+            let detail = process.exit_error.get().filter(|detail| !detail.is_empty());
+            match detail {
+                Some(detail) => format!("{error}: {detail}"),
+                None => error,
+            }
+        })
+    }
+
     pub(crate) async fn invoke(
         &self,
         name: String,
         args: Value,
         ops: Arc<OpRegistry>,
     ) -> Result<Value, String> {
-        self.invoke_with_deadline(name, args, ops, DEADLINE).await
+        self.invoke_with_deadline(name, args, ops, DEADLINE, None)
+            .await
+    }
+    pub(crate) async fn invoke_nested(
+        &self,
+        name: String,
+        args: Value,
+        ops: Arc<OpRegistry>,
+        caller: CancellationToken,
+    ) -> Result<Value, String> {
+        self.invoke_with_deadline(name, args, ops, DEADLINE, Some(caller))
+            .await
     }
     async fn invoke_with_deadline(
         &self,
@@ -171,6 +219,7 @@ impl Supervisor {
         args: Value,
         ops: Arc<OpRegistry>,
         deadline: Duration,
+        caller: Option<CancellationToken>,
     ) -> Result<Value, String> {
         let process = self.process().await?;
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
@@ -189,6 +238,7 @@ impl Supervisor {
             process,
             id,
             active: true,
+            caller,
         };
         let result = tokio::select! {
             result = &mut wait => result.map_err(|_| format!("Plugin {} worker exited", self.id))?,
@@ -214,6 +264,7 @@ struct Lease {
     process: Arc<Process>,
     id: u64,
     active: bool,
+    caller: Option<CancellationToken>,
 }
 impl Lease {
     fn cancel(&self) {
@@ -229,7 +280,14 @@ impl Lease {
 }
 impl Drop for Lease {
     fn drop(&mut self) {
-        if self.active {
+        // A retired caller gives up its reply. The callee belongs to its own
+        // build, so do not escalate cancellation against its worker.
+        if self.active
+            && !self
+                .caller
+                .as_ref()
+                .is_some_and(CancellationToken::is_cancelled)
+        {
             self.cancel();
         }
     }
