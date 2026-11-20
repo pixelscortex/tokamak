@@ -1,0 +1,21 @@
+packages/cli/tests/cli.test.mjs
+  s_96a5584ff9bc22::t_a92089b75212e6 211-265
+packages/build/tests/outside-server.test.mjs
+  s_96a5584ff9bc22::t_373546fb9f2435 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "add1b7ff2a333429b04b0c5dbbff80eedc4c3e1f",
+  "prompts": {},
+  "sessions": {
+    "s_96a5584ff9bc22": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1fa91-86af-7a01-ab26-4f90571f77be",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
