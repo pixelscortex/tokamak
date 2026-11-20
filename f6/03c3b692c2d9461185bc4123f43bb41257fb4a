@@ -1,0 +1,134 @@
+e2e/serve-hosted.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 15
+Dockerfile
+  s_41043d0f7459bd::t_f5bc85cef3aa89 23,30,37
+packages/runtime/tests/server-binary.test.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 1-19
+packages/server/src/plugins/grants.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 10-23,26,33,48-93,103,106-112,120,125-131,147-148,175,181-194
+  s_41043d0f7459bd::t_1d89b79ed4aef3 30-32,34-47,136-146
+  s_41043d0f7459bd::t_fc47b26639708a 149
+e2e/serve.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 11
+app/moon.yml
+  s_41043d0f7459bd::t_f5bc85cef3aa89 25
+packages/build/tests/browser-assets.mjs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 14
+packages/server/src/data/types.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 16,58-59
+  s_41043d0f7459bd::t_b04d97a5cf9327 60
+packages/server/src/data/transaction/indexes.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 3,5,10-11,57-61,63,66-69,71,76-77,79-80,103-177,196,274-281
+  s_41043d0f7459bd::t_b8514b308b18bf 282-283
+packages/server/tests/data_indexes.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 187,227,623-640,1409,1411-1413,1415-1419,1424-1426,1428-1432
+packages/server/src/data/transaction.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 19
+packages/server/tests/workers.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 258
+app/src-tauri/build.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 4-7
+packages/server/src/service/startup.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 95,97
+packages/server/README.md
+  s_41043d0f7459bd::t_f5bc85cef3aa89 14,25,96,431
+packages/server/src/main.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 82-86,183
+packages/server/src/plugins/catalog.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 70-81,83-85,87-89
+  s_41043d0f7459bd::t_15837dc82d3e6d 90-91,98-99,101-106
+e2e/run.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 54,177
+packages/server/src/data/space.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 46
+packages/server/src/service/plugin_control.rs
+  s_41043d0f7459bd::t_2bd971c19a9ef4 92-93,96-98,103-104,110-120,124-130
+  s_41043d0f7459bd::t_f5bc85cef3aa89 109,145
+  s_41043d0f7459bd::t_762053ce291e65 131
+app/src-tauri/src/server.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 60,66-67
+app/scripts/prepare-host.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 15-23,33-34
+packages/server/tests/schema_indexes.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 81-82,85-92,94-95,99-107,243-248,728,740,749-765,787,797,812-823,839,848-926,929-1194,1222,1242-1246,1253-1254,1258-1259,1261,1266-1268,1279-1288,1294,1301,1350,1354,1402-1404,1409-1410,1844,1857-1906
+  s_41043d0f7459bd::t_2e559121a41e9e 1907
+e2e/chat-sandbox.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 89
+packages/runtime/tools/server-binary.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 1-25
+packages/sdk/README.md
+  s_41043d0f7459bd::t_f5bc85cef3aa89 86-90
+app/scripts/integration-fixture.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 22-28
+packages/runtime/moon.yml
+  s_41043d0f7459bd::t_f5bc85cef3aa89 16
+packages/server/src/data/README.md
+  s_41043d0f7459bd::t_f5bc85cef3aa89 66-82,92-103,106,129-131,150-151
+packages/server/src/plugins/mod.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 41
+.ci/release-macos.sh
+  s_41043d0f7459bd::t_f5bc85cef3aa89 21
+packages/server/Cargo.toml
+  s_41043d0f7459bd::t_f5bc85cef3aa89 9
+.github/workflows/ci.yml
+  s_41043d0f7459bd::t_f5bc85cef3aa89 80,140,179
+wiki/content/docs/hosting.mdx
+  s_41043d0f7459bd::t_f5bc85cef3aa89 53-55
+packages/server/tests/reload.rs
+  s_41043d0f7459bd::t_8131059946a4b6 5,435-755
+packages/server/PLUGINS.md
+  s_41043d0f7459bd::t_f5bc85cef3aa89 16-17,25-26
+  s_41043d0f7459bd::t_0dedfe69013fe9 76-88
+wiki/src/pages/index.tsx
+  s_41043d0f7459bd::t_f5bc85cef3aa89 28
+packages/server/src/service/mod.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 44,53
+wiki/content/docs/index.mdx
+  s_41043d0f7459bd::t_f5bc85cef3aa89 11
+app/src-tauri/tauri.conf.json
+  s_41043d0f7459bd::t_f5bc85cef3aa89 40
+packages/server/src/plugins/loading.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 4,12-26,28-42,44-56,63,77-79,81,84-87,89,93-95,97-105,107-124,126-134,136-139,141-174,177-185,190-207,333,335-348,353,357
+  s_41043d0f7459bd::t_16ba4119ad3d7a 349,354,356,358-361
+moon.yml
+  s_41043d0f7459bd::t_f5bc85cef3aa89 76,94,109
+packages/server/HOW_IT_WORKS.md
+  s_41043d0f7459bd::t_f5bc85cef3aa89 24
+packages/server/tests/sdk_transport.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 114,329
+packages/server/tests/plugins.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 238
+e2e/browser.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 33
+packages/build/README.md
+  s_41043d0f7459bd::t_f5bc85cef3aa89 58
+app/scripts/server.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 12
+packages/server/src/schema.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 32,159,164-184,187-189,192-193,198-204
+  s_41043d0f7459bd::t_2a53e27dc64a64 205-206
+packages/runtime/tools/run-app.ts
+  s_41043d0f7459bd::t_f5bc85cef3aa89 5,13-14
+packages/server/src/host/worker/tests.rs
+  s_41043d0f7459bd::t_f5bc85cef3aa89 43
+packages/runtime/PLUGINS.md
+  s_41043d0f7459bd::t_7d995d975022bf 40
+packages/server/src/service/server.rs
+  s_41043d0f7459bd::t_19142e2bb28ecf 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f603c3b692c2d9461185bc4123f43bb41257fb4a",
+  "prompts": {},
+  "sessions": {
+    "s_41043d0f7459bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8f5-553e-75a0-9193-800eaf6c5ea3",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
