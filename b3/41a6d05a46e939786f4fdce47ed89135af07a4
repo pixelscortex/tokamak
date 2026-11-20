@@ -1,0 +1,70 @@
+plugins/acp/package.json
+  s_37fba9922bcb72::t_71a5156a27f322 7
+moon.yml
+  s_37fba9922bcb72::t_fdfbd10e307d06 1,3
+packages/build/tests/browser.test.ts
+  s_37fba9922bcb72::t_b2e4b672cd9cca 32,45-46
+packages/build/src/plugin-packages.ts
+  s_37fba9922bcb72::t_82d01def16b9ab 38-48,52-53
+  s_37fba9922bcb72::t_71e3bcd97addc9 1-3,5-24,28-29,33-37
+  s_37fba9922bcb72::t_b2e4b672cd9cca 25-27,30-32,49-51
+  s_37fba9922bcb72::t_8995cdeb61f888 4
+packages/build/README.md
+  s_37fba9922bcb72::t_0906dc62bc9a6f 131-132
+  s_37fba9922bcb72::t_fdfbd10e307d06 29-39
+  s_37fba9922bcb72::t_74734fa66bf84b 28
+plugins/chat/src/client/tsconfig.json
+  s_37fba9922bcb72::t_71a5156a27f322 3-5,7-12
+  s_37fba9922bcb72::t_b2e4b672cd9cca 6
+packages/build/src/vite.ts
+  s_37fba9922bcb72::t_71e3bcd97addc9 76,80
+  s_37fba9922bcb72::t_82d01def16b9ab 14,77
+  s_37fba9922bcb72::t_00b21d5ee232c5 78
+packages/build/tests/outside.test.mjs
+  s_37fba9922bcb72::t_71e3bcd97addc9 44,46,49,73,83,85-104
+  s_37fba9922bcb72::t_5b01ba6a4152ee 47-48,50-70,84
+  s_37fba9922bcb72::t_74cae8cc4823b6 42-43,45,71-72,74-82
+plugins/chat/package.json
+  s_37fba9922bcb72::t_71a5156a27f322 10
+plugins/chat/src/server/tsconfig.json
+  s_37fba9922bcb72::t_b2e4b672cd9cca 4
+  s_37fba9922bcb72::t_71a5156a27f322 2-3,5-12
+plugins/acp/src/server/tsconfig.json
+  s_37fba9922bcb72::t_71a5156a27f322 3,5-9
+  s_37fba9922bcb72::t_b2e4b672cd9cca 10
+packages/build/src/css.ts
+  s_37fba9922bcb72::t_b2e4b672cd9cca 18
+  s_37fba9922bcb72::t_f0969faf4514dc 8
+packages/build/src/ui-build-config.ts
+  s_37fba9922bcb72::t_881641deca70fd 8-10
+  s_37fba9922bcb72::t_22c29da67c24a3 7
+package.json
+  s_37fba9922bcb72::t_b2e4b672cd9cca 30-33,36,40
+app/src/plugins/vite.ts
+  s_37fba9922bcb72::t_881641deca70fd 16
+  s_37fba9922bcb72::t_88ab7ccb114d46 1
+packages/sdk/tools/plugin-boundary.mjs
+  s_37fba9922bcb72::t_0906dc62bc9a6f 16
+  s_37fba9922bcb72::t_881641deca70fd 59-61,277,280,285
+  s_37fba9922bcb72::t_a4839a94af289e 286-289
+bun.lock
+  s_37fba9922bcb72::t_c4e60d03c144a6 9-12,15,19
+packages/build/src/shared-libraries.mts
+  s_37fba9922bcb72::t_afa4541f262563 1-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b341a6d05a46e939786f4fdce47ed89135af07a4",
+  "prompts": {},
+  "sessions": {
+    "s_37fba9922bcb72": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8c6-419b-7e43-ac5d-3e48baf67113",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
