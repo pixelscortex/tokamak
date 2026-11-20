@@ -1,0 +1,61 @@
+packages/runtime/js/plugins.ts
+  s_6eacfd82cfd757::t_430b3618d1481f 86-87
+  s_6eacfd82cfd757::t_83260b89729895 20,97,100
+app/src/plugins/README.md
+  s_6eacfd82cfd757::t_6080a3f135bd40 23
+packages/build/README.md
+  s_6eacfd82cfd757::t_6080a3f135bd40 38
+packages/server/src/plugins/loading.rs
+  s_6eacfd82cfd757::t_158bb395ead42e 86,95,192,197,201,204-207,209-212,214-215,218,222-227
+  s_6eacfd82cfd757::t_83260b89729895 193-196
+  s_6eacfd82cfd757::t_b071221a49b58f 87,198-200,202-203,208,213
+packages/server/src/actions.rs
+  s_6eacfd82cfd757::t_83260b89729895 36,212-214
+app/src/plugins/web-host.ts
+  s_6eacfd82cfd757::t_83260b89729895 115-118
+packages/server/src/plugins/artifact.rs
+  s_6eacfd82cfd757::t_158bb395ead42e 5,10,65
+packages/server/src/service/plugin_control.rs
+  s_6eacfd82cfd757::t_83260b89729895 69-71,104-108,118-123,181,185,190
+  s_6eacfd82cfd757::t_158bb395ead42e 109-111,133-149,153-154,186-188
+  s_6eacfd82cfd757::t_474025217f9a66 189
+packages/server/src/service/action_coordination.rs
+  s_6eacfd82cfd757::t_83260b89729895 51,59-64,76-81,126-128
+packages/server/src/plugins/catalog.rs
+  s_6eacfd82cfd757::t_158bb395ead42e 53-57,73,101-103,105-107
+packages/engine/src/action.rs
+  s_6eacfd82cfd757::t_83260b89729895 36-38,44-45,48-50,61,84-86
+packages/engine/src/bridge.rs
+  s_6eacfd82cfd757::t_83260b89729895 78,97-104
+  s_6eacfd82cfd757::t_32a48bef0f35b6 105
+packages/server/tests/actions.rs
+  s_6eacfd82cfd757::t_bdaf34d870f0bf 9,316-410,453-458,460-482,510-512
+  s_6eacfd82cfd757::t_430b3618d1481f 420-425,439-446
+  s_6eacfd82cfd757::t_dedf88406f1879 411-419,426-438,447-452,459
+packages/server/src/plugins/manifest.rs
+  s_6eacfd82cfd757::t_158bb395ead42e 102,105-107
+  s_6eacfd82cfd757::t_83260b89729895 103-104
+packages/runtime/PLUGINS.md
+  s_6eacfd82cfd757::t_6080a3f135bd40 20,28-30,37-41,47
+e2e/browser/app.spec.ts
+  s_6eacfd82cfd757::t_868e846a8f8467 14,42-50,67-73,84-90,95
+  s_6eacfd82cfd757::t_9c2543f0ab3840 10
+packages/server/src/plugins/mod.rs
+  s_6eacfd82cfd757::t_158bb395ead42e 18,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f05205a23b301137ea523b822e4c1d034b5856c3",
+  "prompts": {},
+  "sessions": {
+    "s_6eacfd82cfd757": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8bd-46ee-7463-b518-33d9c0973041",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
