@@ -7,35 +7,75 @@ struct Grant {
     count: usize,
 }
 
+struct InstallFailure {
+    plugin: Option<String>,
+    error: Error,
+}
+
+impl From<Error> for InstallFailure {
+    fn from(error: Error) -> Self {
+        Self {
+            plugin: None,
+            error,
+        }
+    }
+}
+
 impl Loaded {
     pub async fn record_grants(
-        &self,
+        &mut self,
         database: &crate::data::Database,
         previous: Option<&Self>,
     ) -> Result<(), Error> {
-        self.record_grants_for(database, previous, &self.catalog.order)
-            .await
+        // Repairs can happen without a build change. Try the full installation,
+        // then retry the transaction without any previously skipped plugin
+        // that still fails, preserving one commit for the published reload.
+        loop {
+            let failure =
+                match Box::pin(self.record_grants_for(database, previous, &self.catalog.order))
+                    .await
+                {
+                    Ok(()) => return Ok(()),
+                    Err(failure) => failure,
+                };
+            let Some(id) = failure
+                .plugin
+                .filter(|id| previous.is_some_and(|old| old.skipped.contains_key(id)))
+            else {
+                return Err(failure.error);
+            };
+            self.skip(id, failure.error.to_string());
+            for id in self.catalog.order.clone() {
+                if !self.skipped.contains_key(&id)
+                    && let Some(reason) = self.skipped_dependency(&id)
+                {
+                    self.skip(id, reason);
+                }
+            }
+            self.prune_skipped()?;
+        }
     }
 
     pub async fn record_startup_grants(
         &mut self,
         database: &crate::data::Database,
     ) -> Result<(), Error> {
-        // A duplicate in one plugin must not discard another plugin's schema.
-        let mut skipped = BTreeSet::new();
-        for id in &self.catalog.order {
-            match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(id))).await {
-                Err(Error::IndexBackfill(message)) => {
-                    eprintln!("Skipping plugin {id}: {message}");
-                    skipped.insert(id.clone());
-                }
-                result => result?,
+        // Catalog order puts required dependencies before their dependents.
+        for id in self.catalog.order.clone() {
+            if let Some(reason) = self.skipped_dependency(&id) {
+                self.skip(id, reason);
+                continue;
+            }
+            match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(&id))).await
+            {
+                Err(InstallFailure {
+                    error: Error::IndexBackfill(message),
+                    ..
+                }) => self.skip(id, message),
+                result => result.map_err(|failure| failure.error)?,
             }
         }
-        if !skipped.is_empty() {
-            self.remove_skipped(&skipped)?;
-        }
-        Ok(())
+        self.prune_skipped()
     }
 
     async fn record_grants_for(
@@ -43,7 +83,7 @@ impl Loaded {
         database: &crate::data::Database,
         previous: Option<&Self>,
         ids: &[String],
-    ) -> Result<(), Error> {
+    ) -> Result<(), InstallFailure> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
             .table(&Table::new("grants").map_err(|e| invalid(e.to_string()))?)
@@ -53,17 +93,16 @@ impl Loaded {
             .await
             .map_err(|e| invalid(e.to_string()))?;
 
-        let result = async {
+        let result: Result<_, InstallFailure> = async {
             // Schemas and grants commit together for the candidate generation.
             let mut resets = Vec::new();
             for id in ids {
-                let schema = match self.inspected.get(id) {
-                    Some((descriptor, _)) => crate::schema::Schema::parse(&descriptor["schema"])?,
-                    None => crate::schema::Schema::default(),
-                };
-                let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
-                if let Some(reason) =
-                    Box::pin(schema.apply(&mut tx, &space, previous.is_none())).await?
+                if let Some(reason) = Box::pin(self.stage_schema(&mut tx, id, previous.is_none()))
+                    .await
+                    .map_err(|error| InstallFailure {
+                        plugin: Some(id.clone()),
+                        error,
+                    })?
                 {
                     resets.push(reason);
                 }
@@ -76,7 +115,13 @@ impl Loaded {
 
                 let old = previous.and_then(|old| old.catalog.plugins.get(id));
 
-                if let Some(grant) = stage_grant(&mut tx, &table, id, definition, old).await? {
+                if let Some(grant) = stage_grant(&mut tx, &table, id, definition, old)
+                    .await
+                    .map_err(|error| InstallFailure {
+                        plugin: Some(id.clone()),
+                        error,
+                    })?
+                {
                     granted.push(grant);
                 }
             }
@@ -106,11 +151,25 @@ impl Loaded {
             Err(error) => {
                 Box::pin(tx.rollback())
                     .await
-                    .map_err(|e| invalid(format!("{error}; grant rollback failed: {e}")))?;
+                    .map_err(|e| invalid(format!("{}; grant rollback failed: {e}", error.error)))?;
 
                 Err(error)
             }
         }
+    }
+
+    async fn stage_schema(
+        &self,
+        tx: &mut Transaction,
+        id: &str,
+        startup: bool,
+    ) -> Result<Option<String>, Error> {
+        let schema = match self.inspected.get(id) {
+            Some((descriptor, _)) => crate::schema::Schema::parse(&descriptor["schema"])?,
+            None => crate::schema::Schema::default(),
+        };
+        let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+        Box::pin(schema.apply(tx, &space, startup)).await
     }
 }
 

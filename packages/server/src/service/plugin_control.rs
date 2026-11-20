@@ -104,7 +104,7 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        let candidate =
+        let mut candidate =
             crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
                 .await?;
         // Each generation gets a fresh action lane; build it before the swap so
@@ -148,7 +148,7 @@ impl Coordinator {
                 }
             }
         }
-        self.plugins = Some(candidate);
+        self.plugins = Some(Arc::new(candidate));
 
         let catalog = self.metadata()?;
         // Use the same bounded ordered stream as data updates. A stale asset
@@ -164,7 +164,11 @@ impl Coordinator {
         }
         self.invalidate(None);
         self.refresh().await;
-        self.metadata()
+        let mut catalog = self.metadata()?;
+        if let Some(loaded) = &self.plugins {
+            catalog["skipped"] = serde_json::json!(loaded.skipped);
+        }
+        Ok(catalog)
     }
 
     pub(super) fn asset_page(

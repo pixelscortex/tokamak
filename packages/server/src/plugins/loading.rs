@@ -1,7 +1,7 @@
 use super::*;
 
 impl Loaded {
-    pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Arc<Self>, Error> {
+    pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Self, Error> {
         Self::load_reusing(catalog, pool, None).await
     }
 
@@ -9,34 +9,58 @@ impl Loaded {
         catalog: Catalog,
         pool: &engine::Pool,
         previous: Option<&Self>,
-    ) -> Result<Arc<Self>, Error> {
-        let mut targets = BTreeMap::new();
-
-        let mut inspected = BTreeMap::new();
-
-        for id in &catalog.order {
-            let artifact = &catalog.plugins[id];
-
-            let Some(bundle) = &artifact.bundle else {
+    ) -> Result<Self, Error> {
+        let mut loaded = Self {
+            catalog,
+            targets: BTreeMap::new(),
+            descriptor: Value::Null,
+            catalog_text: String::new(),
+            inspected: BTreeMap::new(),
+            workers: BTreeMap::new(),
+            skipped: BTreeMap::new(),
+        };
+        for id in loaded.catalog.order.clone() {
+            if let Some(reason) = loaded.skipped_dependency(&id) {
+                loaded.skip(id, reason);
                 continue;
-            };
+            }
+            if let Err(error) = loaded.prepare_plugin(&id, pool, previous).await {
+                if !previous.is_some_and(|old| old.skipped.contains_key(&id)) {
+                    return Err(error);
+                }
+                loaded.skip(id, error.to_string());
+            }
+        }
+        if loaded.skipped.is_empty() {
+            loaded.update_metadata()?;
+        } else {
+            loaded.prune_skipped()?;
+        }
+        Ok(loaded)
+    }
 
+    async fn prepare_plugin(
+        &mut self,
+        id: &str,
+        pool: &engine::Pool,
+        previous: Option<&Self>,
+    ) -> Result<(), Error> {
+        let artifact = &self.catalog.plugins[id];
+        let worker = prepare_worker(&self.catalog, id, artifact)?;
+        if let Some(bundle) = &artifact.bundle {
             let cached = previous
                 .filter(|old| {
                     old.catalog
                         .plugins
                         .get(id)
                         .and_then(|p| p.bundle.as_ref())
-                        .is_some_and(|b| Arc::ptr_eq(b, bundle))
+                        .is_some_and(|old| Arc::ptr_eq(old, bundle))
                 })
                 .and_then(|old| old.inspected.get(id));
-
             let (descriptor, kinds) = match cached {
                 Some(value) => value.clone(),
                 None => crate::service::inspect(pool, bundle.clone()).await?,
             };
-            inspected.insert(id.clone(), (descriptor.clone(), kinds.clone()));
-
             for name in &artifact.manifest.public_functions {
                 if !kinds.contains_key(name) {
                     return Err(invalid(format!(
@@ -44,46 +68,62 @@ impl Loaded {
                     )));
                 }
             }
-
-            for (local_name, kind) in kinds {
+            validate_maintenance(artifact, Some(&kinds))?;
+            let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+            for (local_name, kind) in &kinds {
                 let name = format!("{id}/{local_name}");
-                targets.insert(
+                self.targets.insert(
                     name,
                     Target {
-                        owner: id.clone(),
-                        local_name,
-                        mutation: kind == crate::service::FunctionKind::Mutation,
-                        kind,
+                        owner: id.to_owned(),
+                        local_name: local_name.clone(),
+                        mutation: *kind == crate::service::FunctionKind::Mutation,
+                        kind: *kind,
                         bundle: bundle.clone(),
-                        space: DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?,
+                        space: space.clone(),
                     },
                 );
             }
+            self.inspected.insert(id.to_owned(), (descriptor, kinds));
+        } else {
+            validate_maintenance(artifact, None)?;
         }
-        validate_maintenance(&catalog, &targets)?;
-        let workers = start_workers(&catalog)?;
-        let mut loaded = Self {
-            catalog,
-            targets,
-            descriptor: Value::Null,
-            catalog_text: String::new(),
-            inspected,
-            workers,
-        };
-        loaded.update_metadata()?;
-        Ok(Arc::new(loaded))
+        if let Some(worker) = worker {
+            self.workers.insert(id.to_owned(), worker);
+        }
+        Ok(())
     }
 
-    pub(super) fn remove_skipped(&mut self, skipped: &BTreeSet<String>) -> Result<(), Error> {
-        self.catalog.plugins.retain(|id, _| !skipped.contains(id));
-        self.catalog.order.retain(|id| !skipped.contains(id));
+    pub(super) fn prune_skipped(&mut self) -> Result<(), Error> {
+        if self.skipped.is_empty() {
+            return Ok(());
+        }
+        let skipped = &self.skipped;
+        self.catalog
+            .plugins
+            .retain(|id, _| !skipped.contains_key(id));
+        self.catalog.order.retain(|id| !skipped.contains_key(id));
         self.catalog.update_metadata()?;
         self.targets
-            .retain(|_, target| !skipped.contains(&target.owner));
-        self.workers.retain(|id, _| !skipped.contains(id));
-        self.inspected.retain(|id, _| !skipped.contains(id));
-
+            .retain(|_, target| !skipped.contains_key(&target.owner));
+        self.workers.retain(|id, _| !skipped.contains_key(id));
+        self.inspected.retain(|id, _| !skipped.contains_key(id));
         self.update_metadata()
+    }
+
+    pub(super) fn skipped_dependency(&self, id: &str) -> Option<String> {
+        self.catalog.plugins[id]
+            .manifest
+            .plugin
+            .depends
+            .keys()
+            .find(|dependency| self.skipped.contains_key(*dependency))
+            .map(|dependency| format!("requires {dependency}, which did not load"))
+    }
+
+    pub(super) fn skip(&mut self, id: String, reason: String) {
+        eprintln!("Skipping plugin {id}: {reason}");
+        self.skipped.insert(id, reason);
     }
 
     fn update_metadata(&mut self) -> Result<(), Error> {
@@ -215,42 +255,35 @@ fn client_descriptors(id: &str, descriptor: &Value, maintenance: Option<&str>) -
         .collect()
 }
 
-fn start_workers(
+fn prepare_worker(
     catalog: &Catalog,
-) -> Result<BTreeMap<String, Arc<crate::host::worker::Supervisor>>, Error> {
-    let mut workers = BTreeMap::new();
-    for (id, artifact) in &catalog.plugins {
-        if let Some(entry) = &artifact.manifest.entries.worker {
-            workers.insert(
-                id.clone(),
-                crate::host::worker::Supervisor::new(
-                    id.clone(),
-                    artifact.assets[&entry.entry].clone(),
-                    artifact.assets[&entry.code].clone(),
-                    catalog.directory.join("plugin-data").join(id),
-                    &catalog.environment,
-                    &artifact.manifest.plugin.permissions,
-                )?,
-            );
-        }
-    }
-
-    Ok(workers)
+    id: &str,
+    artifact: &Artifact,
+) -> Result<Option<Arc<crate::host::worker::Supervisor>>, Error> {
+    let Some(entry) = &artifact.manifest.entries.worker else {
+        return Ok(None);
+    };
+    crate::host::worker::Supervisor::new(
+        id.to_owned(),
+        artifact.assets[&entry.entry].clone(),
+        artifact.assets[&entry.code].clone(),
+        catalog.directory.join("plugin-data").join(id),
+        &catalog.environment,
+        &artifact.manifest.plugin.permissions,
+    )
+    .map(Some)
 }
 
 fn validate_maintenance(
-    catalog: &Catalog,
-    targets: &BTreeMap<String, Target>,
+    artifact: &Artifact,
+    kinds: Option<&BTreeMap<String, crate::service::FunctionKind>>,
 ) -> Result<(), Error> {
-    for (id, artifact) in &catalog.plugins {
-        if let Some(name) = &artifact.manifest.plugin.maintenance
-            && (artifact.manifest.public_functions.contains(name)
-                || targets
-                    .get(&format!("{id}/{name}"))
-                    .is_none_or(|target| target.kind != crate::service::FunctionKind::Mutation))
-        {
-            return Err(invalid("Maintenance entry must name a private mutation"));
-        }
+    if let Some(name) = &artifact.manifest.plugin.maintenance
+        && (artifact.manifest.public_functions.contains(name)
+            || kinds.and_then(|kinds| kinds.get(name))
+                != Some(&crate::service::FunctionKind::Mutation))
+    {
+        return Err(invalid("Maintenance entry must name a private mutation"));
     }
     Ok(())
 }

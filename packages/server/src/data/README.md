@@ -74,9 +74,12 @@ The server completes index changes in the schema transaction before publishing
 the new plugin version. Colliding writes receive a retryable conflict. Failed
 loads discard partial changes, leaving the old indexes and rows in place. A
 unique backfill that encounters duplicates reports the index and conflicting
-value; on reload the old version continues serving, and at startup the server
-skips that plugin and continues loading the others. Large tables can make
-loading slow because the transaction holds index writes in memory.
+value. A failed reload of an active plugin leaves the old version installed.
+At startup the server skips the affected plugin and anything that requires it,
+including transitive dependents. Optional dependencies do not cause skips. Each
+reload retries skipped plugins, so a repair to stored rows takes effect even
+without a new build. The reload result reports any remaining skips and reasons
+under `skipped`.
 
 `db.query` retains `{table, where, order, limit}`. Indexed requests additionally
 carry `index: {name, eq: [{field, value}], range: [{field, operator, value}]}` and
@@ -85,6 +88,18 @@ lower and one upper bound on the next field after the ordered equality prefix.
 Native query execution validates catalog existence and field order even for a
 zero limit. Indexed limits saturate at the native `u32::MAX` scan ceiling.
 Unindexed queries retain their JSON equality and creation-time ordering.
+
+### Known limits
+
+- A reload runs on the server's single command loop. While backfill runs, other
+  requests wait and are answered after the reload finishes. They are delayed,
+  not lost.
+- At startup each plugin's schema, indexes, and grants commit in its own
+  transaction. A fatal error in a later plugin leaves earlier plugins' changes
+  committed. Each plugin's transaction is all-or-nothing, and index changes do
+  not touch rows.
+- Large tables can make loading slow because the transaction holds index writes
+  in memory.
 
 ## Rust indexes
 

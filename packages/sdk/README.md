@@ -85,8 +85,9 @@ Unique violations reject the host operation with the index name and abort the
 invocation even if caught in JS. Reloading identical definitions is a no-op.
 The server fills new and changed indexes from existing rows and removes indexes
 that are no longer declared. Rows are preserved. If existing rows violate a new
-unique index, the server reports the index and conflicting value. The old version
-continues serving on reload; at startup the server skips the affected plugin.
+unique index, the server reports the index and conflicting value. A failed reload keeps
+the old version installed. At startup the server skips the affected plugin and
+plugins that require it.
 
 Limits, checked at declaration and again by the server at load: 256 tables per
 plugin, 32 indexes per table, 16 fields per index, 64 characters per table or
