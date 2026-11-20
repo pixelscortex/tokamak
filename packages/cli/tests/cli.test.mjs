@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
-import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { build, withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
 import { cli } from "./cli-fixture.mjs";
+import { prepareChatSandbox } from "../../../e2e/chat-sandbox";
+import { createApi, TokamakClient, WebSocketTransport } from "../../sdk/src/index";
 
 test("adds and removes folders and protects an existing id", async () => {
   await withPlugin(async (plugin, root) => {
@@ -96,7 +98,7 @@ test("every registered command shares help and JSON output rules", async () => {
   });
 }, 120_000);
 
-async function withServer(root, check) {
+async function withServer(root, check, env = {}) {
   const data = join(root, "data");
   const plugins = join(root, "installed");
   await mkdir(plugins, { recursive: true });
@@ -113,7 +115,7 @@ async function withServer(root, check) {
   );
   const server = Bun.spawn([binary, "--local-dir", data, "--plugins", plugins], {
     cwd: root,
-    env: { ...process.env, TOKAMAK_WEB_DIR: undefined },
+    env: { ...process.env, TOKAMAK_WEB_DIR: undefined, ...env },
     stdout: "ignore",
     timeout: 110_000,
     stderr: "pipe",
@@ -335,6 +337,11 @@ test("open reports a missing folder and explains how to start a missing local se
     const invalid = cli(root, ["open", join(root, "missing"), "--json"]);
     expect(invalid.code).not.toBe(0);
     expect(JSON.parse(invalid.stdout).error.message).toContain("Folder does not exist");
+    const plain = cli(root, ["open", join(root, "missing")]);
+    expect(plain.code).not.toBe(0);
+    expect(plain.stdout).toBe("");
+    expect(plain.stderr).toContain("Folder does not exist");
+    expect(invalid.stderr).toContain("Folder does not exist");
     const offline = cli(root, ["open", folder, "--json"]);
     expect(offline.code).not.toBe(0);
     expect(JSON.parse(offline.stdout).error.next).toBe("tokamak server start");
@@ -352,7 +359,7 @@ test("open remembers the folder on a real local server without an agent or windo
       const open = (args, cwd = workspace, env = {}) => {
         const result = cli(root, ["open", ...args, "--json"], env, cwd);
         expect(result.code, result.stderr).toBe(0);
-        expect(result.stderr).toContain("exists. Opening Tokamak");
+        expect(result.stderr).toContain("opens within 5 minutes");
         expect(result.stderr).toContain("Choose an agent");
         return JSON.parse(result.stdout);
       };
@@ -364,6 +371,7 @@ test("open remembers the folder on a real local server without an agent or windo
         folder,
         server: address,
         windowConnected: false,
+        shown: "pending",
         agent: null,
         folderRecorded: true,
       });
@@ -377,5 +385,85 @@ test("open remembers the folder on a real local server without an agent or windo
       expect(fresh.threadId).not.toBe(first.threadId);
       expect(open([folder])).toEqual({ ...fresh, created: false });
     });
+  });
+}, 180_000);
+
+const chatApi = createApi("chat");
+
+test("open resolves a symlink before traversing its parent and rejects a redirected agent folder", async () => {
+  await withPlugin(async (_, root) => {
+    const sandbox = await prepareChatSandbox(root, { build: true });
+    await cp(join(root, "plugins"), join(root, "installed"), { recursive: true });
+    const outer = join(root, "outer");
+    const child = join(outer, "child");
+    const link = join(root, "link");
+    const spaced = join(root, "name ");
+    await mkdir(child, { recursive: true });
+    await symlink(child, link, "dir");
+    await mkdir(spaced);
+    await mkdir(spaced.trimEnd());
+    await withServer(
+      root,
+      async (address, token) => {
+        const socket = new WebSocket(address.replace(/^http/, "ws") + "/ws", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        await new Promise((done, fail) => {
+          socket.addEventListener("open", done, { once: true });
+          socket.addEventListener("error", fail, { once: true });
+        });
+        const transport = new WebSocketTransport(socket);
+        const client = new TokamakClient(transport);
+        try {
+          const opened = cli(root, ["open", link + "/..", "--json"]);
+          expect(opened.code, opened.stderr).toBe(0);
+          expect(JSON.parse(opened.stdout).folder).toBe(outer);
+          const before = await client.query(chatApi.threads.list, {});
+          const invalid = cli(root, ["open", spaced, "--new", "--json"]);
+          expect(invalid.code).not.toBe(0);
+          expect(JSON.parse(invalid.stdout).error.message).toContain("different folder");
+          expect(await client.query(chatApi.threads.list, {})).toEqual(before);
+
+          const threadId = await client.action(chatApi.threads.create, {});
+          const agent = { plugin: "acp", backendId: "claude" };
+          const settings = await client.action(chatApi.backends.configure, {
+            ...agent,
+            settings: { cwd: link + "/" },
+          });
+          await client.mutation(chatApi.threads.setBackend, {
+            threadId,
+            backend: { kind: "plugin", ...agent, settings },
+          });
+          const reused = cli(root, ["open", child, "--json"]);
+          expect(reused.code, reused.stderr).toBe(0);
+          expect(JSON.parse(reused.stdout)).toMatchObject({ threadId, created: false });
+          await expect(
+            client.mutation(chatApi.open.record, { threadId, backend: { settings } }),
+          ).rejects.toThrow();
+          expect(await client.query(chatApi.threads.list, {})).toHaveLength(before.length + 1);
+          const previous = await client.query(chatApi.open.latest, {});
+          const newer = await client.action(chatApi.open.request, { folder: child });
+          expect(await client.query(chatApi.open.status, { requestId: previous._id })).toBe("replaced");
+          expect(await client.query(chatApi.open.status, { requestId: newer.requestId })).toBe("pending");
+          await client.mutation(chatApi.open.shown, { requestId: newer.requestId });
+          expect(await client.query(chatApi.open.latest, {})).toBeNull();
+          expect(await client.query(chatApi.open.status, { requestId: newer.requestId })).toBe(
+            "acknowledged",
+          );
+
+          const starterId = await client.mutation(chatApi.threads.insert, { starterFolder: child });
+          await client.mutation(chatApi.threads.setBackend, {
+            threadId: starterId,
+            backend: { kind: "plugin", ...agent, settings },
+          });
+          const starter = (await client.query(chatApi.threads.list, {})).find(({ _id }) => _id === starterId);
+          expect(starter).toMatchObject({ backend: { settings } });
+          expect(starter).not.toHaveProperty("starterFolder");
+        } finally {
+          transport.close();
+        }
+      },
+      sandbox.env,
+    );
   });
 }, 180_000);

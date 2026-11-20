@@ -1,3 +1,4 @@
+import { pruneOpenRequests } from "../open";
 import { interruptResponse } from "./run-messages";
 import { v, type DatabaseWriter, type Doc } from "@tokamak/sdk";
 import { mutation, query, type Model } from "../_functions";
@@ -89,6 +90,7 @@ export const observe = mutation({
 
 export const recover = mutation({
   handler: async ({ db }) => {
+    await pruneOpenRequests(db);
     const runs = await db
       .query("runs")
       .withIndex("by_status_expiresAt", (q) =>

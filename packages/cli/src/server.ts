@@ -49,7 +49,7 @@ async function readToken(folder: string) {
   return token;
 }
 
-async function localEndpoint() {
+async function localEndpoint(expectedOrigin?: string) {
   const folder = dataFolder();
   const identity = discovery(JSON.parse(await readFile(join(folder, "server.json"), "utf8")));
   const ws = new URL(identity.url);
@@ -64,8 +64,10 @@ async function localEndpoint() {
     !(ws.hostname === "[::1]" || (isIP(ws.hostname) === 4 && ws.hostname.startsWith("127.")))
   )
     throw new Error("Invalid local server discovery address");
+  const url = httpAddress(identity.url);
+  if (expectedOrigin && expectedOrigin !== url.origin) throw new Error("Not the local server");
   const token = await readToken(folder);
-  const endpoint = { url: httpAddress(identity.url), token };
+  const endpoint = { url, token, local: true };
   const health = discovery(await get("/health", endpoint));
   if (JSON.stringify(health) !== JSON.stringify(identity)) throw new Error("Local server identity changed");
   return endpoint;
@@ -90,10 +92,16 @@ async function get(path: string, endpoint: { url: URL; token: string }): Promise
   }
 }
 
+export async function matchesLocalServer(url: URL) {
+  if (!(url.hostname === "[::1]" || (isIP(url.hostname) === 4 && url.hostname.startsWith("127."))))
+    return false;
+  return Boolean(await localEndpoint(url.origin).catch(() => null));
+}
+
 export async function withServerEndpoint<T>(
   explicit: string | undefined,
   operation: string,
-  use: (endpoint: { url: URL; token: string }) => Promise<T>,
+  use: (endpoint: { url: URL; token: string; local?: boolean }) => Promise<T>,
 ): Promise<T> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
   if (!address) {

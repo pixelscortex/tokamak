@@ -18,7 +18,7 @@ import { createShortcuts, shortcutName } from "./shortcuts";
 import { createTheme } from "./theme";
 
 const chatOpen = createApi<{
-  open: { latest: FunctionReference<"query", {}, { _id: Id<"openRequests">; shown: boolean } | null> };
+  open: { latest: FunctionReference<"query", {}, { _id: Id<"openRequests">; expiresAt: number } | null> };
 }>("chat").open;
 
 export interface ShellProps {
@@ -97,13 +97,22 @@ export function createShellState(
     () => {
       const connection = session.connection();
       const chat = views().find((view) => view.route === "/p/chat");
-      return { connection, chat };
+      const path = navigation.pathname();
+      return { connection, chat, connecting: path === shellPages.connect.route || path === "/join" };
     },
-    ({ connection, chat }) => {
-      if (connection.state !== "connected" || !chat) return;
+    ({ connection, chat, connecting }) => {
+      if (connection.state !== "connected" || !chat || connecting) return;
       let opened: Id<"openRequests"> | undefined;
       return connection.client.subscribe(chatOpen.latest, {}, (event) => {
-        if ("error" in event || !event.value || event.value.shown || event.value._id === opened) return;
+        if (
+          "error" in event ||
+          !event.value ||
+          event.value.expiresAt <= Date.now() ||
+          event.value._id === opened
+        )
+          return;
+        const path = navigation.pathname();
+        if (path === shellPages.connect.route || path === "/join") return;
         opened = event.value._id;
         if (navigation.current()?.route !== chat.route) navigation.openView(chat);
       });

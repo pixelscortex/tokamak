@@ -92,7 +92,13 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
   createEffect(
     () => [openRequest.data(), threads.data(), creating()] as const,
     ([request, list, busy]) => {
-      if (!request || request.shown || busy || !list?.some((item) => item._id === request.threadId)) return;
+      if (
+        !request ||
+        request.expiresAt <= Date.now() ||
+        busy ||
+        !list?.some((item) => item._id === request.threadId)
+      )
+        return;
       open(request.threadId);
       void client.mutation(api.open.shown, { requestId: request._id }).catch(() => {});
     },

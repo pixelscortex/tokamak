@@ -1,4 +1,4 @@
-import { backend } from "../backends/backend";
+import { backend, folderSetting } from "../backends/backend";
 import { listBackends } from "../backends/backends";
 import { api } from "../_generated/api";
 import { v } from "@tokamak/sdk";
@@ -20,13 +20,17 @@ export const create = action({
 });
 
 export const insert = mutation({
-  args: { title: v.optional(v.string()), backend: v.optional(backend) },
-  handler: (ctx, { title, backend }) => {
+  args: {
+    title: v.optional(v.string()),
+    backend: v.optional(backend),
+    starterFolder: v.optional(v.string()),
+  },
+  handler: (ctx, { title, backend, starterFolder }) => {
     const { db } = ctx;
     const now = Date.now();
 
     return db.insert("threads", {
-      ...(backend ? { backend } : {}),
+      ...(backend ? { backend } : ctx.user.id === "local" && starterFolder ? { starterFolder } : {}),
       title: title === undefined ? DEFAULT_TITLE : nonempty(title),
       createdAt: now,
       updatedAt: now,
@@ -83,6 +87,10 @@ export const setBackend = mutation({
           ? { state: previous.state }
           : {}),
       };
+    }
+    if (current.starterFolder && folderSetting(backend.settings)) {
+      const { _id, _creationTime, starterFolder: _starterFolder, ...fields } = current;
+      return db.replace(threadId, { ...fields, backend, updatedAt: Date.now() });
     }
     return db.patch(threadId, {
       backend,

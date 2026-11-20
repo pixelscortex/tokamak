@@ -15,8 +15,17 @@ export default defineSchema({
   openRequests: defineTable({
     userId: v.string(),
     threadId: v.id("threads"),
-    shown: v.boolean(),
-  }).index("by_userId", ["userId"]),
+    expiresAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
+  openReceipts: defineTable({
+    userId: v.string(),
+    requestId: v.id("openRequests"),
+    expiresAt: v.number(),
+  })
+    .index("by_requestId", ["requestId"])
+    .index("by_expiresAt", ["expiresAt"]),
   messages: defineTable({
     threadId: v.id("threads"),
     role: v.union(v.literal("user"), v.literal("assistant")),
