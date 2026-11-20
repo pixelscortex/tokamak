@@ -55,6 +55,16 @@ To add a command, create a file under `src/commands/` that satisfies `Command`,
 then register it in `src/commands.ts`. The entry point handles flags, help,
 output and exit codes. The CLI test walks the registry to check that contract.
 
+A command that needs its own flags declares them in `flags`, for example
+`flags: { errors: { summary: "Show only errors." }, out: { value: "path", summary: "Where to write the file." } }`.
+A flag with `value` takes one value; a flag without it is a switch; `short` adds a
+one-letter form. The command receives them as `options.flags`. Help lists them, and a
+flag the command did not declare is an error. `--json`, `--server` and `--help` work on
+every command and are never declared.
+
+Without `--json`, a command's text goes to stdout. With `--json`, stdout holds exactly
+one JSON value and the text goes to stderr.
+
 Run the CLI tests with the real server:
 
 ```sh
