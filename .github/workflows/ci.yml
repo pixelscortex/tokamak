@@ -11,8 +11,12 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  # The three fast checks run on GitHub's own runners. They ran on Depot until
+  # Depot stopped handing out runners (jobs sat queued for hours). Depot's
+  # machines are faster and carry the Rust compile cache, so move these back
+  # (runs-on: ubuntu-24.04, and drop SCCACHE_GHA_ENABLED) once it is healthy.
   typescript:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
@@ -24,11 +28,13 @@ jobs:
       - run: moon run workspace:ci-ts --summary detailed
   lint:
     # Formatting and lint for TypeScript and Rust. Platform independent, so it runs once.
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CARGO_BUILD_JOBS: "2"
       RAYON_NUM_THREADS: "2"
+      # Off Depot there is no Depot cache, so sccache stores in GitHub's cache.
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
         with:
@@ -44,11 +50,13 @@ jobs:
   rust:
     # Unit tests inside the Rust crates. Integration, end-to-end and browser
     # suites are not run in CI for now; they stay runnable locally.
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CARGO_BUILD_JOBS: "2"
       RAYON_NUM_THREADS: "2"
+      # Off Depot there is no Depot cache, so sccache stores in GitHub's cache.
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
         with:

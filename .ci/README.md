@@ -1,6 +1,7 @@
 # CI and unsigned release
 
-All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
+All CI runs in GitHub Actions. The three fast jobs run on GitHub's own Linux runners
+for now, because Depot stopped handing out runners; the desktop jobs still use Depot's. `.github/workflows/ci.yml` runs
 three fast jobs on every PR, and `.ci/check.sh` holds their commands:
 
 - `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied). These
