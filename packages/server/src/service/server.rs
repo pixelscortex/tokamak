@@ -37,6 +37,16 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
+    pub(crate) async fn remove_plugin(&self, id: String) -> Result<Json, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::RemovePlugin(id, reply))?;
+        let (response, logs) = wait.await.map_err(|_| Error::Closed)??;
+        for log in logs {
+            log.published().await;
+        }
+        Ok(response)
+    }
+
     pub(crate) async fn upload_package(
         &self,
         upload: crate::plugins::package::Upload,

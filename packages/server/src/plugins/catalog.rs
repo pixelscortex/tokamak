@@ -115,6 +115,83 @@ impl Catalog {
         Ok((catalog, skipped))
     }
 
+    pub(crate) fn removable_package(
+        &self,
+        id: &str,
+        skipped: &BTreeMap<String, String>,
+    ) -> Result<&Path, Error> {
+        if self.index.contains_key(id) {
+            return Err(invalid(format!(
+                "Plugin {id} is managed by the local plugin index; use tokamak plugin remove {id}"
+            )));
+        }
+        let source = self.installed.get(id);
+        if let Some(root) = self.package_root.as_deref() {
+            let package = root.join(id);
+            let stored = match source {
+                Some(source) => same_directory(source, &package.join("dist")),
+                None => skipped.contains_key(id) && package.join("package.zip").is_file(),
+            };
+            if stored {
+                return Ok(root);
+            }
+        }
+        if source.is_some() || skipped.contains_key(id) {
+            return Err(invalid(format!(
+                "Plugin {id} comes from the --plugins folder and cannot be removed here"
+            )));
+        }
+        Err(invalid(format!("Plugin not found: {id}")))
+    }
+
+    pub(crate) fn without_package(
+        root: &Path,
+        previous: &Loaded,
+        package_root: &Path,
+        id: &str,
+    ) -> Result<(Self, BTreeMap<String, String>), Error> {
+        let old = &previous.catalog;
+        if let Some((dependent, _)) = old.plugins.iter().find(|(_, artifact)| {
+            artifact
+                .manifest
+                .plugin
+                .dependencies()
+                .any(|(dependency, _)| dependency == id)
+        }) {
+            return Err(invalid(format!(
+                "Cannot remove {id}: plugin {dependent} depends on it"
+            )));
+        }
+
+        let fallback = find_package_fallback(root, package_root, id).map_err(|error| {
+            invalid(format!(
+                "Cannot restore the --plugins copy of {id}: {error}"
+            ))
+        })?;
+        let mut plugins = old.plugins.clone();
+        let mut installed = old.installed.clone();
+        plugins.remove(id);
+        installed.remove(id);
+        if let Some(artifact) = fallback {
+            installed.insert(id.to_owned(), artifact.source.clone());
+            plugins.insert(id.to_owned(), Arc::new(artifact));
+        }
+        let mut skipped = previous.skipped.clone();
+        skipped.remove(id);
+
+        let mut catalog = Self::assemble_candidate(
+            root,
+            &old.directory,
+            plugins,
+            Arc::clone(&old.index),
+            &skipped,
+        )?;
+        catalog.installed = installed;
+        catalog.index_path.clone_from(&old.index_path);
+        catalog.package_root.clone_from(&old.package_root);
+        Ok((catalog, skipped))
+    }
+
     pub(super) fn assemble(
         root: &Path,
         directory: &Path,
@@ -375,16 +452,41 @@ fn installed_directories(root: &Path, exclude_packages: bool) -> Result<Vec<Path
     })
 }
 
+fn find_package_fallback(
+    root: &Path,
+    package_root: &Path,
+    id: &str,
+) -> Result<Option<Artifact>, Error> {
+    // Match startup's source selection, but load only the build being restored.
+    let mut fallback = None;
+    for directory in installed_directories(root, same_directory(root, package_root))? {
+        let build = Manifest::read(&directory)?;
+        if build.0.plugin.id == id {
+            if fallback.is_some() {
+                return Err(invalid(format!(
+                    "Duplicate installed plugin identity: {id}"
+                )));
+            }
+            fallback = Some(Artifact::read_reusing(&directory, build, None)?);
+        }
+    }
+    Ok(fallback)
+}
+
+fn same_directory(left: &Path, right: &Path) -> bool {
+    left == right
+        || left
+            .canonicalize()
+            .is_ok_and(|left| right.canonicalize().is_ok_and(|right| left == right))
+}
+
 pub(super) fn read_installed(
     root: &Path,
     previous: Option<&Loaded>,
     package_root: Option<&Path>,
     is_shadowed: impl Fn(&str) -> bool,
 ) -> Result<(Artifacts, ArtifactFailures), Error> {
-    let exclude_packages = package_root.is_some_and(|path| {
-        path.canonicalize()
-            .is_ok_and(|package_root| root.canonicalize().is_ok_and(|root| root == package_root))
-    });
+    let exclude_packages = package_root.is_some_and(|path| same_directory(root, path));
     let directories = installed_directories(root, exclude_packages)?;
     let mut plugins = BTreeMap::new();
     let mut skipped = BTreeMap::new();

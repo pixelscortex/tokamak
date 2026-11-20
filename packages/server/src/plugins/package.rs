@@ -23,6 +23,66 @@ pub(crate) struct Promotion<'a> {
     committed: bool,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum PackageChange<'a> {
+    Upload(&'a StagedPackage),
+    Remove { root: &'a Path, id: &'a str },
+}
+
+pub(super) enum AppliedPackageChange<'a> {
+    Uploaded(Promotion<'a>),
+    Removed(Removal),
+}
+
+pub(super) struct Removal {
+    staging: tempfile::TempDir,
+    current: PathBuf,
+    committed: bool,
+}
+
+impl<'a> PackageChange<'a> {
+    pub(super) fn apply(self) -> Result<AppliedPackageChange<'a>, Error> {
+        match self {
+            Self::Upload(package) => package.promote().map(AppliedPackageChange::Uploaded),
+            Self::Remove { root, id } => {
+                let current = root.join(id);
+                if !io(current.join("package.zip").try_exists())? {
+                    return Err(invalid(format!("Stored package not found: {id}")));
+                }
+                let staging = io(tempfile::Builder::new().prefix(STAGING).tempdir_in(root))?;
+                // Recovery must never mistake an old upload backup for the current package.
+                io(remove_directory(&root.join(format!("{BACKUP}{id}"))))?;
+                // Startup discards staging directories, even if cleanup was interrupted.
+                io(fs::rename(&current, staging.path().join("removed")))?;
+                Ok(AppliedPackageChange::Removed(Removal {
+                    staging,
+                    current,
+                    committed: false,
+                }))
+            }
+        }
+    }
+}
+
+impl AppliedPackageChange<'_> {
+    pub(super) fn commit(self) {
+        match self {
+            Self::Uploaded(promotion) => promotion.commit(),
+            Self::Removed(mut removal) => removal.committed = true,
+        }
+    }
+}
+
+impl Drop for Removal {
+    fn drop(&mut self) {
+        if !self.committed
+            && let Err(error) = fs::rename(self.staging.path().join("removed"), &self.current)
+        {
+            eprintln!("Could not restore removed plugin package: {error}");
+        }
+    }
+}
+
 impl StagedPackage {
     pub(crate) fn read(
         root: &Path,

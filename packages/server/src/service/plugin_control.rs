@@ -1,5 +1,5 @@
 use super::*;
-use crate::plugins::package::{StagedPackage, Upload};
+use crate::plugins::package::{PackageChange, StagedPackage, Upload};
 
 impl Coordinator {
     pub(super) fn metadata(&self) -> Result<Json, Error> {
@@ -88,6 +88,9 @@ impl Coordinator {
                 let result = self.reload(&id).await;
 
                 let _ = reply.send(result);
+            }
+            Command::RemovePlugin(id, reply) => {
+                let _ = reply.send(self.remove_plugin(&id).await);
             }
             Command::UploadPackage(upload, reply) => {
                 let _ = reply.send(self.upload_package(upload).await);
@@ -254,7 +257,44 @@ impl Coordinator {
         let (catalog, failures) =
             crate::plugins::Catalog::with_package(root, previous, &id, artifact)?;
         let (_, logs) = self
-            .swap_catalog(catalog, failures, Some((&id, &staged)))
+            .swap_catalog(
+                catalog,
+                failures,
+                Some((&id, PackageChange::Upload(&staged))),
+            )
+            .await?;
+        Ok((response, logs))
+    }
+
+    async fn remove_plugin(&mut self, id: &str) -> Result<ReloadResult, Error> {
+        let not_found = || Error::Invalid(format!("Plugin not found: {id}"));
+        crate::data::DataSpace::plugin(id).map_err(|_| not_found())?;
+        let previous = self.plugins.as_deref().ok_or_else(not_found)?;
+        let root = self.plugin_root.as_deref().ok_or_else(not_found)?;
+        let package_root = previous
+            .catalog
+            .removable_package(id, &previous.skipped)?
+            .to_owned();
+        let (catalog, failures) =
+            crate::plugins::Catalog::without_package(root, previous, &package_root, id)?;
+        let response = match catalog.plugins.get(id) {
+            Some(artifact) => serde_json::json!({
+                "id": id, "removed": false, "reverted": true, "buildId": artifact.build_id,
+            }),
+            None => serde_json::json!({"id": id, "removed": true}),
+        };
+        let (_, logs) = self
+            .swap_catalog(
+                catalog,
+                failures,
+                Some((
+                    id,
+                    PackageChange::Remove {
+                        root: &package_root,
+                        id,
+                    },
+                )),
+            )
             .await?;
         Ok((response, logs))
     }
@@ -263,11 +303,13 @@ impl Coordinator {
         &mut self,
         catalog: crate::plugins::Catalog,
         artifact_failures: std::collections::BTreeMap<String, String>,
-        package: Option<(&str, &StagedPackage)>,
+        package: Option<(&str, PackageChange<'_>)>,
     ) -> Result<ReloadResult, Error> {
         let previous = self.plugins.as_deref();
-        if previous
-            .is_some_and(|old| old.skipped.is_empty() && old.catalog.revision == catalog.revision)
+        if package.is_none()
+            && previous.is_some_and(|old| {
+                old.skipped.is_empty() && old.catalog.revision == catalog.revision
+            })
         {
             return Ok((self.metadata()?, Vec::new()));
         }

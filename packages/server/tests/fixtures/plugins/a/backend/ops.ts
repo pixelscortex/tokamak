@@ -1,4 +1,4 @@
-import { mutation, query, v } from "@tokamak/sdk";
+import { action, createApi, mutation, query, v, type ApiFromModule } from "@tokamak/sdk";
 import { api as b } from "plugin:b/server";
 export const list = query({ handler: (ctx) => ctx.db.query("items").collect() });
 export const both = mutation({
@@ -32,5 +32,13 @@ export const privateWrite = mutation({
   handler: async (ctx) => {
     await ctx.db.insert("items", { source: "private a" });
     return null;
+  },
+});
+
+const self = createApi<{ ops: ApiFromModule<typeof import("./ops")> }>("a");
+export const waitForRemoval = action({
+  handler: async (ctx): Promise<never> => {
+    await ctx.runMutation(self.ops.privateWrite, {});
+    for (;;) await ctx.runQuery(self.ops.list, {});
   },
 });
