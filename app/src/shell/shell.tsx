@@ -102,13 +102,11 @@ export function createShellState(
     ({ connection, chat }) => {
       if (connection.state !== "connected" || !chat) return;
       let opened: Id<"openRequests"> | undefined;
-      onCleanup(
-        connection.client.subscribe(chatOpen.latest, {}, (event) => {
-          if ("error" in event || !event.value || event.value.shown || event.value._id === opened) return;
-          opened = event.value._id;
-          if (navigation.current()?.plugin !== chat.plugin) navigation.openView(chat);
-        }),
-      );
+      return connection.client.subscribe(chatOpen.latest, {}, (event) => {
+        if ("error" in event || !event.value || event.value.shown || event.value._id === opened) return;
+        opened = event.value._id;
+        if (navigation.current()?.route !== chat.route) navigation.openView(chat);
+      });
     },
   );
   const shortcuts = createShortcuts();
