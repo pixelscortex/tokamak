@@ -1,0 +1,85 @@
+.github/workflows/ci.yml
+  s_a14a8457b0f107::t_f423e379bbf7f0 80,140,179
+app/scripts/prepare-host.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 33-34
+  s_a14a8457b0f107::t_0bb6766ce4346d 15-23
+packages/runtime/tools/run-app.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 12,14
+app/src-tauri/build.rs
+  s_a14a8457b0f107::t_0bb6766ce4346d 4-7
+app/scripts/server.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 12
+e2e/chat-sandbox.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 89
+packages/server/README.md
+  s_a14a8457b0f107::t_c97a1b983d946d 431
+  s_a14a8457b0f107::t_f423e379bbf7f0 14,25,96
+wiki/content/docs/hosting.mdx
+  s_a14a8457b0f107::t_f423e379bbf7f0 53-55
+packages/server/tests/plugins.rs
+  s_a14a8457b0f107::t_f423e379bbf7f0 238
+app/moon.yml
+  s_a14a8457b0f107::t_f423e379bbf7f0 25
+e2e/browser.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 33
+packages/server/src/main.rs
+  s_a14a8457b0f107::t_f423e379bbf7f0 183
+  s_a14a8457b0f107::t_0bb6766ce4346d 82-86
+packages/server/tests/schema_indexes.rs
+  s_a14a8457b0f107::t_f423e379bbf7f0 929
+packages/server/Cargo.toml
+  s_a14a8457b0f107::t_f423e379bbf7f0 9
+app/scripts/integration-fixture.ts
+  s_a14a8457b0f107::t_0bb6766ce4346d 22-28
+packages/server/tests/sdk_transport.rs
+  s_a14a8457b0f107::t_f423e379bbf7f0 114,329
+Dockerfile
+  s_a14a8457b0f107::t_f423e379bbf7f0 23,30,37
+wiki/content/docs/index.mdx
+  s_a14a8457b0f107::t_0bb6766ce4346d 11
+e2e/serve-hosted.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 15
+packages/build/tests/browser-assets.mjs
+  s_a14a8457b0f107::t_f423e379bbf7f0 14
+wiki/src/pages/index.tsx
+  s_a14a8457b0f107::t_0bb6766ce4346d 28
+moon.yml
+  s_a14a8457b0f107::t_f423e379bbf7f0 76,94,109
+app/src-tauri/src/server.rs
+  s_a14a8457b0f107::t_f423e379bbf7f0 60
+  s_a14a8457b0f107::t_0bb6766ce4346d 66-67
+app/src-tauri/tauri.conf.json
+  s_a14a8457b0f107::t_f423e379bbf7f0 40
+e2e/run.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 54,177
+packages/runtime/PLUGINS.md
+  s_a14a8457b0f107::t_f423e379bbf7f0 39
+e2e/serve.ts
+  s_a14a8457b0f107::t_f423e379bbf7f0 11
+packages/server/HOW_IT_WORKS.md
+  s_a14a8457b0f107::t_5392997895abf8 24
+.ci/release-macos.sh
+  s_a14a8457b0f107::t_f423e379bbf7f0 21
+packages/build/README.md
+  s_a14a8457b0f107::t_f423e379bbf7f0 58
+packages/server/PLUGINS.md
+  s_a14a8457b0f107::t_f423e379bbf7f0 16-17,25-26
+packages/server/tests/workers.rs
+  s_a14a8457b0f107::t_f423e379bbf7f0 255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6024ae27758eac468eefbf0ac8b217cc6da4f2e5",
+  "prompts": {},
+  "sessions": {
+    "s_a14a8457b0f107": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8bd-f22d-76c1-bc7f-0de5d71e1464",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
