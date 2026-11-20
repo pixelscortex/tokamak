@@ -26,6 +26,8 @@ pub struct Catalog {
     pub plugins: BTreeMap<String, Arc<Artifact>>,
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
+    index: Arc<BTreeMap<String, PathBuf>>,
+    indexed: BTreeSet<String>,
     pub(crate) environment: PathBuf,
     pub(crate) directory: PathBuf,
 }

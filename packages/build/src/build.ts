@@ -6,6 +6,8 @@ import { dirname, resolve } from "node:path";
 import { tokamak } from "./vite";
 
 const args = process.argv.slice(2);
+const reportResult = args[0] === "--result-json";
+if (reportResult) args.shift();
 if (
   args.length > 2 ||
   (args.length === 2 && args[0] !== "--config") ||
@@ -69,4 +71,5 @@ for (const file of files) {
   }
   changed++;
 }
-console.log(`Plugin artifact: ${changed} changed, ${unchanged} unchanged`);
+if (reportResult) console.log(`Tokamak build result: ${JSON.stringify({ outputFolder: directory })}`);
+else console.log(`Plugin artifact: ${changed} changed, ${unchanged} unchanged`);

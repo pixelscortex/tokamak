@@ -58,6 +58,9 @@
         "@types/node": "26.6.6",
       },
     },
+    "packages/cli": {
+      "name": "@tokamak/cli",
+    },
     "packages/runtime": {
       "name": "@tokamak/runtime",
       "dependencies": {
@@ -599,6 +602,8 @@
     "@tokamak/app": ["@tokamak/app@workspace:app"],
 
     "@tokamak/build": ["@tokamak/build@workspace:packages/build"],
+
+    "@tokamak/cli": ["@tokamak/cli@workspace:packages/cli"],
 
     "@tokamak/runtime": ["@tokamak/runtime@workspace:packages/runtime"],
 

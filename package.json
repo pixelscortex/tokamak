@@ -4,6 +4,7 @@
   "workspaces": [
     "app",
     "packages/build",
+    "packages/cli",
     "packages/sdk",
     "packages/runtime",
     "packages/ui",
@@ -18,11 +19,12 @@
     "e2e": "moon run :e2e",
     "app": "moon run app:run",
     "app:dev": "moon run app:run",
+    "tokamak": "bun packages/cli/src/main.ts",
     "plugin:build": "proto run bun -- packages/build/src/build.ts",
     "server:start": "moon run app:server",
     "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop debug",
     "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug",
-    "typecheck": "moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check",
+    "typecheck": "proto run bun -- check --no-script --project packages/cli/tsconfig.json && moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check",
     "e2e:browser": "proto run bun -- e2e/browser.ts"
   },
   "devDependencies": {

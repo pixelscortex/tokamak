@@ -1,0 +1,5 @@
+{
+  "name": "@tokamak/cli",
+  "private": true,
+  "type": "module"
+}

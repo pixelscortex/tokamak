@@ -863,3 +863,110 @@ async fn assert_replayed_plugin_writes(
         "separate mutations reused a seed"
     );
 }
+
+#[tokio::test]
+async fn local_server_skips_missing_and_unbuilt_index_entries_and_prefers_the_index() {
+    let installed = Installation::new();
+    let temporary = tempfile::tempdir().unwrap();
+    let local = temporary.path();
+    let indexed = local.join("indexed");
+    let dist = indexed.join("dist");
+    std::fs::create_dir_all(&dist).unwrap();
+    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        std::fs::copy(installed.0.join("a").join(file), dist.join(file)).unwrap();
+    }
+    let manifest = dist.join("manifest.json");
+    let mut value: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    value["plugin"]["version"] = json!("1.0.1");
+    std::fs::write(manifest, value.to_string()).unwrap();
+    let unbuilt = local.join("unbuilt");
+    std::fs::create_dir(&unbuilt).unwrap();
+    std::fs::write(
+        local.join("plugin-index.json"),
+        json!({ "a": indexed, "missing": local.join("missing"), "unbuilt": unbuilt }).to_string(),
+    )
+    .unwrap();
+    let token = local.join("server.token");
+    std::fs::write(&token, "b".repeat(64)).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let mut process = Process(
+        std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
+            .arg("--local-dir")
+            .arg(local)
+            .arg("--plugins")
+            .arg(&installed.0)
+            .env_remove("TOKAMAK_WEB_DIR")
+            .spawn()
+            .unwrap(),
+    );
+    let ready = local.join("server.json");
+    let started = std::time::Instant::now();
+    while !ready.exists() {
+        assert!(
+            process.0.try_wait().unwrap().is_none(),
+            "server exited before readiness"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "startup timed out"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let identity: Value = serde_json::from_slice(&std::fs::read(ready).unwrap()).unwrap();
+    let base = identity["url"]
+        .as_str()
+        .unwrap()
+        .replace("ws://", "http://");
+    let base = base.trim_end_matches("/ws");
+    let http = reqwest::Client::new();
+    let body = http
+        .get(format!("{base}/plugins"))
+        .bearer_auth("b".repeat(64))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    let catalog: Value = serde_json::from_slice(&body).unwrap();
+    let plugins = catalog["plugins"].as_array().unwrap();
+    assert_eq!(plugins.len(), 2);
+    let indexed = plugins
+        .iter()
+        .find(|plugin| plugin["plugin"]["id"] == "a")
+        .unwrap();
+    let installed = plugins
+        .iter()
+        .find(|plugin| plugin["plugin"]["id"] == "b")
+        .unwrap();
+    assert_eq!(indexed["plugin"]["version"], "1.0.1");
+    assert_eq!(indexed["fromIndex"], true);
+    assert_eq!(installed["fromIndex"], false);
+    // The server can close the connection before writing the shutdown reply.
+    if let Ok(response) = http
+        .post(format!("{base}/shutdown"))
+        .bearer_auth("b".repeat(64))
+        .send()
+        .await
+    {
+        response.error_for_status().unwrap();
+    }
+    let status = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(status) = process.0.try_wait().unwrap() {
+                break status;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(status.success(), "server shutdown failed: {status}");
+    assert!(!local.join("server.json").exists());
+}

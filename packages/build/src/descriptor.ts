@@ -3,8 +3,9 @@ import { readPluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { isServerModule } from "../../sdk/tools/server-files.mjs";
 import ts from "typescript";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
-import type { PluginDefinition } from "@tokamak/sdk";
+import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 
 export function serverDirectory(root: string): string {
   return resolve(root, existsSync(resolve(root, "src/server")) ? "src/server" : "backend");
@@ -86,6 +87,17 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
     value[key] = Object.fromEntries(ids.map((id) => [id, "*"]));
   }
   return value as unknown as PluginDefinition;
+}
+
+export async function readSourcePlugin(root: string): Promise<PluginDefinition> {
+  const descriptor = readDescriptor(root);
+  if (descriptor) return definePlugin(descriptor);
+  const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+  if (typeof manifest.name !== "string") throw new Error("Plugin package.json must name the plugin");
+  return definePlugin({
+    id: manifest.name.replace(/^@/, "").replaceAll("/", "."),
+    version: manifest.version ?? "0.1.0",
+  });
 }
 
 /** The existing backend protocol has three public actions. Derive its provider

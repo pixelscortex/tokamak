@@ -25,11 +25,20 @@ impl Backend {
         javascript: PoolConfig,
         root: &std::path::Path,
     ) -> Result<Self, Error> {
+        Self::start_plugins_with_index(storage, javascript, root, None).await
+    }
+
+    pub async fn start_plugins_with_index(
+        storage: Storage,
+        javascript: PoolConfig,
+        root: &std::path::Path,
+        index: Option<&std::path::Path>,
+    ) -> Result<Self, Error> {
         let pool = Arc::new(Pool::new(javascript).map_err(|e| Error::Invalid(e.to_string()))?);
         let database = Database::open(storage)
             .await
             .map_err(|e| Error::Invalid(e.to_string()))?;
-        let server = Server::load_plugins(database, pool, root).await?;
+        let server = Server::load_plugins_with_index(database, pool, root, index).await?;
         Ok(Self {
             server: Arc::new(server),
         })

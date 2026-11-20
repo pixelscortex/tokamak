@@ -13,7 +13,7 @@ import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
 import { publicFunctions } from "./exports.ts";
 import {
-  readDescriptor,
+  readSourcePlugin,
   serverDirectory,
   deriveInterfaces,
   deriveProviders,
@@ -73,16 +73,7 @@ export function tokamak(
       },
       async buildStart() {
         checkPluginImports(root);
-        const descriptor = options.plugin ?? readDescriptor(root);
-        const manifest = descriptor
-          ? undefined
-          : JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
-        plugin = definePlugin(
-          descriptor ?? {
-            id: String(manifest.name).replace(/^@/, "").replaceAll("/", "."),
-            version: manifest.version ?? "0.1.0",
-          },
-        );
+        plugin = options.plugin ? definePlugin(options.plugin) : await readSourcePlugin(root);
         const server = serverDirectory(root);
         if (existsSync(resolve(root, "plugin.ts"))) {
           plugin = definePlugin({

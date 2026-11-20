@@ -232,9 +232,17 @@ async fn start_backend(
     javascript: PoolConfig,
     plugins: Option<PathBuf>,
     source: Option<String>,
+    local: Option<&Path>,
 ) -> Result<(Backend, String), Box<dyn std::error::Error>> {
     let result = if let Some(root) = plugins {
-        let backend = Backend::start_plugins(Storage::Disk(data), javascript, &root).await?;
+        let index = local.map(|directory| directory.join("plugin-index.json"));
+        let backend = Backend::start_plugins_with_index(
+            Storage::Disk(data),
+            javascript,
+            &root,
+            index.as_deref(),
+        )
+        .await?;
         let hash = backend.server().plugins().await?["revision"]
             .as_str()
             .ok_or("Missing catalog revision")?
@@ -346,7 +354,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let plugin_root = plugins.as_ref().map(std::fs::canonicalize).transpose()?;
     let build_id = build_id()?;
-    let (backend, bundle_hash) = start_backend(data, javascript, plugins, source).await?;
+    let (backend, bundle_hash) =
+        start_backend(data, javascript, plugins, source, local.as_deref()).await?;
     let identity = serde_json::json!({
         "url": format!("ws://{}/ws", listener.local_addr()?),
         "pid": std::process::id(),
