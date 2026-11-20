@@ -1,0 +1,19 @@
+packages/server/src/websocket.rs
+  s_99c048955442cf::t_0ced263531109d 169-197,204,207,212,217,223,231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f2fdc1bbe02a7bb8622cf35529f65d10ea1645d",
+  "prompts": {},
+  "sessions": {
+    "s_99c048955442cf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f95a-ae94-7cf2-9034-28e7842f9b41",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
