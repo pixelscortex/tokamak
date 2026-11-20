@@ -1,0 +1,75 @@
+packages/server/src/plugins/manifest.rs
+  s_3782ade3461600::t_48ad05ab70dc71 126-127
+  s_3782ade3461600::t_003e5345ec5db7 129
+packages/server/src/service/mod.rs
+  s_3782ade3461600::t_17a28814808233 119-122
+packages/server/src/websocket.rs
+  s_3782ade3461600::t_17a28814808233 18,202-204,215-216,272,296-297,333-338,451-478,486,502
+  s_3782ade3461600::t_1408e5822afc80 479-485,487-501,503-504
+packages/server/src/plugins/package.rs
+  s_3782ade3461600::t_45336f8eabc5ac 27-31,62
+  s_3782ade3461600::t_a69b324a3b5589 1-26,32-57,61,63-90,95-124,126-129,133-136,139-150,152-172,182-188,194-196,199,202-213,217-221,225,231-240,248-249,253-261,266-271,274-302
+  s_3782ade3461600::t_b9c6479d641b53 130-132,151,173,176-180
+  s_3782ade3461600::t_f618b9c44ac1cc 58-60,91-94,125,174-175,181,189-193,197-198,200-201,222-224,228,230,241-247,250-252,262-265,272-273
+  s_3782ade3461600::t_0ed6756dcbf5f2 137-138
+  s_3782ade3461600::t_e7275d1f3057d4 214-216
+  s_3782ade3461600::t_97b011c9fd0fd7 226-227,229
+packages/server/src/plugins/catalog.rs
+  s_3782ade3461600::t_b9c6479d641b53 5,18,382,395-397,420,422-431,434
+  s_3782ade3461600::t_48ad05ab70dc71 39,81,85-94,98-104,110-117,127,143,361-362,421,432-433
+  s_3782ade3461600::t_f618b9c44ac1cc 17,95-97,105-109,189,346,360,381,384,387-388
+  s_3782ade3461600::t_d6c61faf525f62 385-386
+  s_3782ade3461600::t_78a9aea0357faf 435-436
+packages/server/Cargo.toml
+  s_3782ade3461600::t_a69b324a3b5589 23
+  s_3782ade3461600::t_192e98b2125b2e 35
+packages/server/tests/fixtures/plugins/b/backend/ops.ts
+  s_3782ade3461600::t_d6c61faf525f62 2,68-71,74
+  s_3782ade3461600::t_1919bd21199c4e 72-73,75-76
+packages/server/src/service/plugin_control.rs
+  s_3782ade3461600::t_17a28814808233 92-94,174,208-211,215,219,224-227,238-245,259,266,278-282
+  s_3782ade3461600::t_45336f8eabc5ac 2,212-214,216-218,220-223,228-237,246-258,283-288
+packages/server/tests/plugins.rs
+  s_3782ade3461600::t_0ed6756dcbf5f2 1487-1491,1496,1513,1568-1591,1593-1594,1599,1637
+  s_3782ade3461600::t_e7275d1f3057d4 1414,1416,1464,1467,1534
+  s_3782ade3461600::t_d6c61faf525f62 1186-1413,1415,1417-1447,1450,1453,1455-1463,1465-1466,1468-1486,1492-1495,1497-1512,1514-1533,1535-1567,1592,1595-1598,1600-1636,1638-1639
+  s_3782ade3461600::t_4d0a76dad92218 1448-1449,1451-1452,1454
+packages/server/src/plugins/mod.rs
+  s_3782ade3461600::t_a69b324a3b5589 75
+  s_3782ade3461600::t_48ad05ab70dc71 34
+packages/server/src/plugins/grants.rs
+  s_3782ade3461600::t_0ed6756dcbf5f2 46-48,80-87,172
+  s_3782ade3461600::t_17a28814808233 29,52-54,103,114,173-174,182,186-188
+packages/server/src/plugins/loading.rs
+  s_3782ade3461600::t_f618b9c44ac1cc 478-482
+  s_3782ade3461600::t_b9c6479d641b53 2,18
+  s_3782ade3461600::t_48ad05ab70dc71 14-17,26-27,37,454-455,473-477,483-484,487
+packages/server/src/service/server.rs
+  s_3782ade3461600::t_17a28814808233 40-52
+Cargo.lock
+  s_157eb2be319aa0::t_15103a830ea259 472,858-866,3458-3469,5329,5352,7126-7131,8195-8213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6df458daad184bb45356449a6fa7a1c2e480b75d",
+  "prompts": {},
+  "sessions": {
+    "s_157eb2be319aa0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f99a-5e8f-7151-8abd-1420140f8f7b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_3782ade3461600": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f99a-bf40-7e21-827e-ee414690e2ab",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
