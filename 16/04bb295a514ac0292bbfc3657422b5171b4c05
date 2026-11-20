@@ -1,0 +1,82 @@
+packages/cli/src/server.ts
+  s_f18b77d03151af::t_a647142055ac61 37-48,57-63,68,72,86
+  s_f18b77d03151af::t_0b5c3e166fe1a1 66,77-85
+packages/cli/src/commands/add.ts
+  s_f18b77d03151af::t_2c5cfc7e6a251d 24
+  s_f18b77d03151af::t_a647142055ac61 25
+packages/server/src/service/server.rs
+  s_f18b77d03151af::t_230aa8667cb8fd 22-34
+packages/server/src/plugins/catalog.rs
+  s_f18b77d03151af::t_230aa8667cb8fd 15,25-26,28-44,46-52,63-67,82-87,89-92,116,137
+  s_f18b77d03151af::t_07ea2f4fd4b11a 60,68-73,75-80,209-256
+  s_f18b77d03151af::t_63153a1ea5d18b 53-59,62
+  s_f18b77d03151af::t_a5448397476884 61,257-258
+packages/server/src/service/plugin_control.rs
+  s_d3722a4b772de5::t_dc47ae71f718fc 131
+  s_f18b77d03151af::t_230aa8667cb8fd 82-84,89-111,129-130,132
+packages/server/src/service/mod.rs
+  s_f18b77d03151af::t_230aa8667cb8fd 115
+packages/server/src/main.rs
+  s_f18b77d03151af::t_2c5cfc7e6a251d 76-81,85,113-117,164
+packages/cli/src/commands/remove.ts
+  s_f18b77d03151af::t_a647142055ac61 15
+  s_f18b77d03151af::t_2c5cfc7e6a251d 14
+app/scripts/integration-fixture.ts
+  s_f18b77d03151af::t_2c5cfc7e6a251d 7-10,15-25
+  s_f18b77d03151af::t_63153a1ea5d18b 11-14
+packages/server/PLUGINS.md
+  s_f18b77d03151af::t_63153a1ea5d18b 26-27,35,80-81,144
+packages/cli/src/main.ts
+  s_f18b77d03151af::t_a647142055ac61 68-72
+packages/server/src/plugins/mod.rs
+  s_f18b77d03151af::t_230aa8667cb8fd 30
+packages/cli/src/commands/reload.ts
+  s_f18b77d03151af::t_a647142055ac61 1,4-5,7-8,14-20,65,67-84,91-94,96-98
+  s_f18b77d03151af::t_63153a1ea5d18b 9-13
+  s_f18b77d03151af::t_0b5c3e166fe1a1 21-59,85-90,95,99-102
+  s_f18b77d03151af::t_4963f084aa42ba 2-3,6,60-64,66,103-104
+packages/cli/tests/cli.test.mjs
+  s_f18b77d03151af::t_b4d73dfb856818 5,96,149,212,241-249,254-268,270,281-305,313-338,341
+  s_f18b77d03151af::t_6c27ea044229c2 269,271-280,339-340
+  s_f18b77d03151af::t_f2b5743076483b 224-240,342-344
+  s_f18b77d03151af::t_2c5cfc7e6a251d 62,77
+  s_f18b77d03151af::t_1c37c0267cf409 213-223
+  s_f18b77d03151af::t_63153a1ea5d18b 250-253,306-312
+packages/server/tests/plugins.rs
+  s_f18b77d03151af::t_2c5cfc7e6a251d 807-825
+packages/server/src/websocket.rs
+  s_f18b77d03151af::t_35a5d909cde114 412-416
+  s_f18b77d03151af::t_230aa8667cb8fd 187-189,405-411,417-424
+packages/cli/src/commands.ts
+  s_f18b77d03151af::t_4963f084aa42ba 6,8
+packages/cli/src/command.ts
+  s_f18b77d03151af::t_a647142055ac61 14
+packages/cli/README.md
+  s_f18b77d03151af::t_63153a1ea5d18b 11-12,18-22,50-52,58-62
+packages/runtime/PLUGINS.md
+  s_f18b77d03151af::t_3321f98ddb624a 40-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1604bb295a514ac0292bbfc3657422b5171b4c05",
+  "prompts": {},
+  "sessions": {
+    "s_d3722a4b772de5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e116-e282-78d3-a14b-24506a8c5e26",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_f18b77d03151af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d7-1115-7640-bacf-784813a31259",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
