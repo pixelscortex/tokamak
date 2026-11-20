@@ -32,6 +32,21 @@ async function localEndpoint() {
   return server.endpoint;
 }
 
+function selectedEndpoint(explicit?: string): Endpoint | undefined {
+  const address = explicit ?? process.env.TOKAMAK_SERVER;
+  if (!address) return;
+  const token = process.env.TOKAMAK_TOKEN;
+  if (!token) throw new ServerRequestError("Set TOKAMAK_TOKEN for the selected server");
+  const url = httpAddress(address);
+  if (url.protocol === "http:" && !loopback(url.hostname))
+    throw new ServerRequestError("Use HTTPS for a shared server");
+  return { url, token };
+}
+
+function tokenRejection(response: Response) {
+  return response.status === 401 ? new ServerRequestError("The server rejected the token") : undefined;
+}
+
 export class ServerRefusal extends CommandError {
   constructor(
     message: string,
@@ -41,7 +56,7 @@ export class ServerRefusal extends CommandError {
   }
 }
 
-async function pluginRequest(path: string, endpoint: Endpoint, body?: object) {
+async function pluginRequest(path: string, endpoint: Endpoint, body?: object, selected = false) {
   const response = await request(
     path,
     endpoint,
@@ -50,6 +65,8 @@ async function pluginRequest(path: string, endpoint: Endpoint, body?: object) {
       : {},
     body ? 30_000 : 5000,
   );
+  const rejected = selected && tokenRejection(response);
+  if (rejected) throw rejected;
   if (body && response.status >= 400 && response.status < 500 && response.status !== 408) {
     const result = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
     throw new ServerRefusal(
@@ -74,21 +91,10 @@ export function serverPost(path: string, body: object, explicit?: string) {
 }
 
 async function serverRequest(path: string, explicit?: string, body?: object): Promise<unknown> {
-  const address = explicit ?? process.env.TOKAMAK_SERVER;
-  if (!address) {
-    const endpoint = await localEndpoint();
-    return pluginRequest(path, endpoint, body).catch((error: Error) => {
-      if (error instanceof ServerRefusal) throw error;
-      throw new CommandError(
-        `Could not read ${path} from the local server: ${error.message}`,
-        "tokamak server start",
-      );
-    });
-  }
+  let endpoint: Endpoint | undefined;
   try {
-    const token = process.env.TOKAMAK_TOKEN;
-    if (!token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
-    return await pluginRequest(path, { url: httpAddress(address), token }, body);
+    endpoint = selectedEndpoint(explicit);
+    if (endpoint) return await pluginRequest(path, endpoint, body, true);
   } catch (error) {
     if (error instanceof ServerRefusal) throw error;
     throw new CommandError(
@@ -96,6 +102,14 @@ async function serverRequest(path: string, explicit?: string, body?: object): Pr
       "tokamak --help",
     );
   }
+  const local = await localEndpoint();
+  return pluginRequest(path, local, body).catch((error: Error) => {
+    if (error instanceof ServerRefusal) throw error;
+    throw new CommandError(
+      `Could not read ${path} from the local server: ${error.message}`,
+      "tokamak server start",
+    );
+  });
 }
 
 const memberOperations = {
@@ -112,18 +126,12 @@ export async function memberRequest(
 ) {
   const next = `tokamak ${operation} --help`;
   try {
-    const address = explicit ?? process.env.TOKAMAK_SERVER;
-    const endpoint = address
-      ? { url: httpAddress(address), token: process.env.TOKAMAK_TOKEN }
-      : await localEndpoint();
-    const { hostname, protocol } = endpoint.url;
-    if (protocol === "http:" && !loopback(hostname))
-      throw new ServerRequestError("Use HTTPS for a shared server");
-    if (!endpoint.token) throw new ServerRequestError("Set TOKAMAK_TOKEN for the selected server");
-    const response = await request(path, { ...endpoint, token: endpoint.token }, init);
+    const endpoint = selectedEndpoint(explicit) ?? (await localEndpoint());
+    const response = await request(path, endpoint, init);
     if (response.status === 403)
       throw new CommandError("Only the owner can manage members", "tokamak members --help");
-    if (response.status === 401) throw new ServerRequestError("The server rejected the token");
+    const rejected = tokenRejection(response);
+    if (rejected) throw rejected;
     if (response.status === 400) {
       // Recognize known responses without displaying arbitrary server text.
       const detail = await response.text();
@@ -147,21 +155,24 @@ export async function memberRequest(
 }
 
 export function sharingEndpoint(explicit: string | undefined, example: string): Endpoint {
-  const address = explicit ?? process.env.TOKAMAK_SERVER;
-  if (!address) throw new CommandError("Set --server or TOKAMAK_SERVER to select a server", example);
-  const token = process.env.TOKAMAK_TOKEN;
-  if (!token) throw new CommandError("Set TOKAMAK_TOKEN for the selected server", example);
-  const url = httpAddress(address);
-  if (url.protocol === "http:" && !loopback(url.hostname))
-    throw new CommandError("Use HTTPS for a shared server", example);
-  return { url, token };
+  try {
+    const endpoint = selectedEndpoint(explicit);
+    if (endpoint) return endpoint;
+    throw new ServerRequestError("Set --server or TOKAMAK_SERVER to select a server");
+  } catch (error) {
+    if (error instanceof ServerRequestError) throw new CommandError(error.message, example);
+    throw error;
+  }
 }
 
-export async function sharingRequest(path: string, endpoint: Endpoint, init: RequestOptions) {
-  const next = `tokamak plugin list --server ${endpoint.url.origin}`;
-  const response = await request(path, endpoint, init, 30_000);
+export async function sharingRequest(path: string, endpoint: Endpoint, init?: RequestOptions) {
+  const version = path === "/version";
+  const response = version
+    ? await request(path, { url: endpoint.url })
+    : await request(path, endpoint, init, 30_000);
   if (response.ok) return json(response);
 
+  const next = `tokamak plugin list --server ${endpoint.url.origin}`;
   const detail = await response.text();
   if (detail) {
     let reason = detail;
@@ -174,7 +185,8 @@ export async function sharingRequest(path: string, endpoint: Endpoint, init: Req
     throw new CommandError(reason, next);
   }
   const checkToken = `Use TOKAMAK_TOKEN with GET ${endpoint.url.origin}/account to check which account it belongs to`;
-  if (response.status === 401) throw new CommandError("The server rejected the token", checkToken);
+  const rejected = tokenRejection(response);
+  if (rejected) throw new CommandError(rejected.message, checkToken);
   if (response.status === 403)
     throw new CommandError("Only the owner of this server can share or remove plugins", checkToken);
   throw new CommandError(`Server returned HTTP ${response.status}`, next);

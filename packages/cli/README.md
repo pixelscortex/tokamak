@@ -27,7 +27,8 @@ files listed in its hashes. The build id is the SHA-256 of the manifest bytes.
 HTTPS link (HTTP is also allowed on loopback). It checks that the CLI and
 server have the same major and minor versions and that the CLI is no newer
 than the server before reading or building the package. Source packages are
-written to a temp folder. Plugins with machine actions cannot be shared yet.
+written to a temp folder. Packages can be at most 50 MiB. Plugins with machine
+actions cannot be shared yet.
 
 `unshare` removes the shared package by id. If a copy from the server's
 `--plugins` folder takes its place, the result reports `reverted: true`.
@@ -62,6 +63,7 @@ their id, version, build id and status. For local discovery the CLI reads
 `TOKAMAK_SERVER_DIR` to use a different app data folder, including for tests.
 For a server at a specific address, set `TOKAMAK_SERVER` and `TOKAMAK_TOKEN`,
 or supply `--server <address>` with `TOKAMAK_TOKEN`. The flag takes precedence.
+Use HTTPS or WSS for a selected server; HTTP and WS are allowed on loopback.
 Local discovery checks the process and compares the authenticated health
 identity to the discovery file. Loopback requests connect directly, ignoring
 proxy settings. Only `tokamak server start` starts a server.

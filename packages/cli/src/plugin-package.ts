@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 
+export const PACKAGE_BYTES = 50 * 1024 * 1024;
+
 export function sha256(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -8,7 +10,7 @@ export function sha256(bytes: Uint8Array) {
 export function packageIdentity(bytes: Uint8Array) {
   // Read only the manifest. The server validates the complete package.
   const manifest = unzipSync(bytes, {
-    filter: ({ name, originalSize }) => name === "manifest.json" && originalSize <= 50 * 1024 * 1024,
+    filter: ({ name, originalSize }) => name === "manifest.json" && originalSize <= PACKAGE_BYTES,
   })["manifest.json"];
   if (!manifest) throw new Error("ZIP package is missing a readable manifest.json");
   const { plugin } = JSON.parse(new TextDecoder().decode(manifest)) as {
