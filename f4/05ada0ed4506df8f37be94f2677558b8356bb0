@@ -1,0 +1,212 @@
+.ci/release-macos.sh
+  s_99c048955442cf::t_263895069020d1 21
+e2e/chat-sandbox.ts
+  s_99c048955442cf::t_263895069020d1 89
+e2e/run.ts
+  s_99c048955442cf::t_263895069020d1 54,177
+app/tests/plugins.test.tsx
+  s_99c048955442cf::t_263895069020d1 340-389
+app/scripts/integration-fixture.ts
+  s_99c048955442cf::t_263895069020d1 22-28
+app/src-tauri/tauri.conf.json
+  s_99c048955442cf::t_263895069020d1 40
+packages/server/src/data/types.rs
+  s_99c048955442cf::t_263895069020d1 16,58-59
+  s_99c048955442cf::t_2d2567900e25e5 60
+packages/build/tests/run.sh
+  s_99c048955442cf::t_d0593302545247 3
+packages/server/Cargo.toml
+  s_99c048955442cf::t_263895069020d1 9
+.ci/README.md
+  s_99c048955442cf::t_263895069020d1 17-18
+packages/server/src/plugins/artifact.rs
+  s_99c048955442cf::t_263895069020d1 5,10,65
+packages/server/src/service/startup.rs
+  s_99c048955442cf::t_263895069020d1 89,95,97,108
+packages/sdk/tools/plugin-boundary.mjs
+  s_99c048955442cf::t_263895069020d1 22,29-35,393-401,433-443,449,533,535-537
+  s_99c048955442cf::t_980ea4b3739991 307-310
+packages/server/src/host/worker/mod.rs
+  s_99c048955442cf::t_263895069020d1 15,44,141,147-188,195-206,214,233,259,275-282
+packages/server/src/host/worker/tests.rs
+  s_99c048955442cf::t_263895069020d1 43,72,104
+packages/server/src/service/plugin_control.rs
+  s_99c048955442cf::t_263895069020d1 65-71,94-96,99-101,106-109,112-128,130-143,146-148,150,165,169-174
+  s_99c048955442cf::t_d0593302545247 72-74
+packages/build/tests/outside.test.mjs
+  s_99c048955442cf::t_7597bfa614ebf1 207-208
+  s_99c048955442cf::t_263895069020d1 2,14,43-135,150-152,181-206,209,213-251
+packages/server/src/actions.rs
+  s_99c048955442cf::t_263895069020d1 12,18,38,82-96,140,185,194,207,224-227,229-236,238-240,246-267
+  s_99c048955442cf::t_e170fc27235cc6 268
+packages/server/src/data/transaction/indexes.rs
+  s_99c048955442cf::t_263895069020d1 3,5,10-11,57-61,63,66-69,71,76-77,79-80,103-177,196,274-281
+  s_99c048955442cf::t_96fc3c8cc4f6f0 282-283
+packages/server/src/plugins/loading.rs
+  s_99c048955442cf::t_263895069020d1 4-5,10,13-29,31-45,47-59,66,76,80-82,84,87-90,92,96-108,110-143,145-154,156-157,159,161-188,190-201,203-219,221-243,245-250,346,348-362,366-367,369-374
+packages/server/src/service/server.rs
+  s_99c048955442cf::t_263895069020d1 15
+packages/server/tests/reload.rs
+  s_99c048955442cf::t_263895069020d1 1-918
+packages/build/tests/browser-assets.mjs
+  s_99c048955442cf::t_d0593302545247 14
+  s_99c048955442cf::t_263895069020d1 127-128,137-138
+wiki/content/docs/index.mdx
+  s_99c048955442cf::t_263895069020d1 11
+packages/engine/src/bridge.rs
+  s_99c048955442cf::t_263895069020d1 78,97-105
+  s_99c048955442cf::t_14fa1c6ba9699a 106
+packages/build/src/contributions.ts
+  s_99c048955442cf::t_263895069020d1 32-46
+Dockerfile
+  s_99c048955442cf::t_263895069020d1 23,30,37
+e2e/serve.ts
+  s_99c048955442cf::t_263895069020d1 11
+packages/build/tests/shared-app.test.mjs
+  s_99c048955442cf::t_263895069020d1 1-43
+packages/server/src/plugins/mod.rs
+  s_99c048955442cf::t_263895069020d1 13,18,41,43-44
+packages/server/src/schema.rs
+  s_99c048955442cf::t_263895069020d1 32,159,164-184,187-189,192-193,198-204
+  s_99c048955442cf::t_12fa1c016bce06 205-206
+packages/server/tests/schema_indexes.rs
+  s_99c048955442cf::t_263895069020d1 81-82,85-92,94-95,99-107,249-254,734,746,755-771,793,803,818-829,845,854-932,935-1200,1228,1248-1252,1259-1260,1264-1265,1267,1272-1274,1285-1294,1300,1307,1356,1360,1408-1410,1415-1416,1850,1863-1912
+  s_99c048955442cf::t_548fb4adbfa6a9 1913
+packages/server/src/main.rs
+  s_99c048955442cf::t_263895069020d1 82-86,183
+.github/workflows/ci.yml
+  s_99c048955442cf::t_263895069020d1 4-5,16-17,19,32,53,87,147,186
+packages/server/src/data/README.md
+  s_99c048955442cf::t_263895069020d1 66-82,92-103,106,129-131,150-151
+packages/build/src/plugin-packages.ts
+  s_99c048955442cf::t_263895069020d1 2-4,7-15,17,19,21-28,44-102,106-108,111-115
+packages/server/src/plugins/dependencies.rs
+  s_99c048955442cf::t_263895069020d1 3-6,12
+packages/runtime/tools/run-app.ts
+  s_99c048955442cf::t_263895069020d1 5,13-14
+packages/build/src/css.ts
+  s_99c048955442cf::t_263895069020d1 18
+packages/build/tests/browser.test.ts
+  s_99c048955442cf::t_263895069020d1 147-148
+packages/server/tests/plugins.rs
+  s_99c048955442cf::t_263895069020d1 244
+packages/sdk/tools/bundle.mjs
+  s_99c048955442cf::t_263895069020d1 5,59,181-182,184,192,198
+packages/server/PLUGINS.md
+  s_99c048955442cf::t_263895069020d1 16-17,25-26,35-36,58,75-93,106-116
+  s_99c048955442cf::t_66fe783f123215 117
+app/src/plugins/vite.ts
+  s_99c048955442cf::t_263895069020d1 1,35-37
+wiki/content/docs/hosting.mdx
+  s_99c048955442cf::t_263895069020d1 53-55
+packages/server/src/service/mod.rs
+  s_99c048955442cf::t_263895069020d1 44,53
+packages/server/README.md
+  s_99c048955442cf::t_263895069020d1 14,25,96,431
+packages/server/src/service/action_coordination.rs
+  s_99c048955442cf::t_263895069020d1 51,59-64,76-81,125-131,133-135
+e2e/serve-hosted.ts
+  s_99c048955442cf::t_263895069020d1 15
+packages/build/tests/descriptor.test.ts
+  s_99c048955442cf::t_263895069020d1 163-166
+packages/server/src/data/transaction.rs
+  s_99c048955442cf::t_263895069020d1 19
+packages/server/tests/sdk_transport.rs
+  s_99c048955442cf::t_263895069020d1 114,329
+wiki/src/pages/index.tsx
+  s_99c048955442cf::t_263895069020d1 28
+app/src/plugins/web-host.ts
+  s_99c048955442cf::t_263895069020d1 37,48-50,117-120
+packages/runtime/js/plugins.ts
+  s_99c048955442cf::t_263895069020d1 9,20,86-87,97,100,130
+app/src/plugins/README.md
+  s_99c048955442cf::t_263895069020d1 23
+packages/engine/src/action.rs
+  s_99c048955442cf::t_263895069020d1 36-38,44-45,48-50,61,84-86
+packages/server/HOW_IT_WORKS.md
+  s_99c048955442cf::t_263895069020d1 24
+packages/server/src/host/worker/process.rs
+  s_99c048955442cf::t_263895069020d1 88-89,92-93,96-113,115-117,122,132,143-144,184-189,324-328,330,335-343,345
+packages/server/src/plugins/catalog.rs
+  s_99c048955442cf::t_263895069020d1 5,8-12,16,21-25,27,29,58,61-63,68-79,82,84-95,97-104,106-108,110-114,121-122,124-129,135-137,139-141
+packages/build/src/vite.ts
+  s_99c048955442cf::t_6d923e54505c40 167-171
+  s_99c048955442cf::t_7597bfa614ebf1 164-166
+  s_99c048955442cf::t_263895069020d1 78
+  s_99c048955442cf::t_06e24e8d2f62db 172
+packages/build/src/public-types.ts
+  s_99c048955442cf::t_980ea4b3739991 12,14-18,41,65
+packages/runtime/PLUGINS.md
+  s_99c048955442cf::t_263895069020d1 20,28-30,37-41,47
+packages/build/src/plugin-boundary.ts
+  s_99c048955442cf::t_263895069020d1 5-6,11,17-28,33-38
+packages/server/tests/workers.rs
+  s_99c048955442cf::t_263895069020d1 200-203,258
+packages/build/tests/shared-window.test.mjs
+  s_99c048955442cf::t_263895069020d1 1,3-62,65-208
+  s_99c048955442cf::t_7597bfa614ebf1 2,63-64
+app/moon.yml
+  s_99c048955442cf::t_263895069020d1 25
+packages/server/src/plugins/grants.rs
+  s_99c048955442cf::t_263895069020d1 10-23,26,30-90,100,103-109,117,122-128,133-146,172,178-191
+e2e/browser/app.spec.ts
+  s_99c048955442cf::t_263895069020d1 10,14,42-50,67-73,84-90,95
+packages/sdk/README.md
+  s_99c048955442cf::t_263895069020d1 86-90
+packages/server/src/data/space.rs
+  s_99c048955442cf::t_263895069020d1 46
+packages/server/tests/data_indexes.rs
+  s_99c048955442cf::t_263895069020d1 187,227,623-640,1409,1411-1413,1415-1419,1424-1426,1428-1432
+packages/server/src/plugins/manifest.rs
+  s_99c048955442cf::t_263895069020d1 104-109
+packages/server/tests/actions.rs
+  s_99c048955442cf::t_263895069020d1 9,316-482,510-512
+e2e/browser.ts
+  s_99c048955442cf::t_263895069020d1 33
+packages/runtime/tools/server-binary.ts
+  s_99c048955442cf::t_263895069020d1 1-25
+packages/runtime/moon.yml
+  s_99c048955442cf::t_263895069020d1 16
+packages/runtime/tests/server-binary.test.ts
+  s_99c048955442cf::t_263895069020d1 1-19
+app/scripts/server.ts
+  s_99c048955442cf::t_263895069020d1 12
+moon.yml
+  s_99c048955442cf::t_263895069020d1 76,94,109
+packages/build/tests/outside-server.test.mjs
+  s_99c048955442cf::t_263895069020d1 27-32,38-40,51-53
+  s_99c048955442cf::t_d0593302545247 76,111-116
+  s_99c048955442cf::t_6d923e54505c40 15-19,101-105
+packages/build/tests/fixtures/outside/src/client/api.tsx
+  s_99c048955442cf::t_263895069020d1 5
+packages/build/src/shared-libraries.mts
+  s_99c048955442cf::t_980ea4b3739991 57-66,76
+  s_99c048955442cf::t_263895069020d1 2-20,22-30,40-42,44-53,55-56,67-75,77-106,108-113,115
+app/src-tauri/build.rs
+  s_99c048955442cf::t_263895069020d1 4-7
+packages/build/README.md
+  s_99c048955442cf::t_263895069020d1 19-22,30-53,62,82,166-170
+  s_99c048955442cf::t_77015af24287c1 133-135
+app/src-tauri/src/server.rs
+  s_99c048955442cf::t_263895069020d1 60,66-67
+packages/build/src/ui-build-config.ts
+  s_99c048955442cf::t_263895069020d1 26
+app/scripts/prepare-host.ts
+  s_99c048955442cf::t_263895069020d1 15-23,33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f405ada0ed4506df8f37be94f2677558b8356bb0",
+  "prompts": {},
+  "sessions": {
+    "s_99c048955442cf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f95a-ae94-7cf2-9034-28e7842f9b41",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
