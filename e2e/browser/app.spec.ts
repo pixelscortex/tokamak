@@ -7,12 +7,11 @@ const connected = (page: Page) =>
 const rail = (page: Page) => page.getByRole("navigation", { name: "Views" });
 const tabs = (page: Page) => page.getByRole("navigation", { name: "Open pages" });
 
-// Chat is installed too and, being first in the catalog, owns "/". These tests open
-// the fixture by its address so chat never mounts (it creates a thread on first use).
+// Chat owns "/". Open the fixture by its address to avoid mounting Chat in the fixture window.
 const fixtureHome = "/p/integration-fixture";
 
 // Each project gets the same server, so assertions use the observed baseline.
-test("live threads, compiler views, regions, revision replacement and error containment", async ({
+test("live threads, compiler views, regions, per-plugin reload and error containment", async ({
   page,
   context,
   request,
@@ -40,6 +39,15 @@ test("live threads, compiler views, regions, revision replacement and error cont
   await expect(secondCount).toHaveText(`Fixture live threads: ${initial + 1}`);
   await expect(second.getByRole("listbox", { name: "Fixture threads" })).toContainText(title);
 
+  const chat = await context.newPage();
+  await chat.goto("/p/chat");
+  const composer = chat.getByRole("textbox", { name: "Message" });
+  await expect(composer).toBeEnabled();
+  const draft = "Draft survives another plugin's reload";
+  await composer.fill(draft);
+  const oldComposer = await composer.elementHandle();
+  const oldFixture = await fixture.elementHandle();
+
   const sentinel = crypto.randomUUID();
   await page.evaluate((value) => {
     (window as unknown as { documentSentinel: string }).documentSentinel = value;
@@ -56,6 +64,13 @@ test("live threads, compiler views, regions, revision replacement and error cont
   await cp(`${process.env.TOKAMAK_FIXTURE_SOURCE}/dist`, `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist`, {
     recursive: true,
   });
+  const manifestPath = `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist/manifest.json`;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  // This link shows that the other window has applied the new catalog.
+  const throwingTitle = `ThrowingView ${crypto.randomUUID()}`;
+  manifest.plugin.contributes.view.find((view: { id: string }) => view.id === "ThrowingView").title =
+    throwingTitle;
+  await writeFile(manifestPath, JSON.stringify(manifest));
   const reload = await request.post("http://127.0.0.1:43123/plugins/integration-fixture/reload", {
     headers: { Authorization: `Bearer ${process.env.VITE_TOKAMAK_TOKEN}` },
   });
@@ -66,12 +81,18 @@ test("live threads, compiler views, regions, revision replacement and error cont
   ).toBe(sentinel);
   await expect(count).toHaveText(`Fixture live threads: ${initial + 1}`);
 
-  await rail(page).getByRole("link", { name: "ThrowingView", exact: true }).click();
+  await expect(rail(chat).getByRole("link", { name: throwingTitle, exact: true })).toBeVisible();
+  await expect(composer).toHaveValue(draft);
+  expect(await oldComposer!.evaluate((element) => element.isConnected)).toBe(true);
+  expect(await oldFixture!.evaluate((element) => element.isConnected)).toBe(false);
+  await chat.close();
+
+  await rail(page).getByRole("link", { name: throwingTitle, exact: true }).click();
   const failure = page.getByRole("alert", { name: "Plugin view error" });
   await expect(failure).toContainText("Deliberate fixture failure");
   await expect(failure.getByRole("button", { name: "Reload" })).toBeVisible();
   await expect(sidebar).toBeHidden();
-  await expect(header.getByRole("heading", { name: "ThrowingView" })).toBeVisible();
+  await expect(header.getByRole("heading", { name: throwingTitle })).toBeVisible();
   await connected(page);
   await second
     .getByRole("complementary", { name: "Sidebar" })

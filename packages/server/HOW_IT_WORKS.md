@@ -21,7 +21,7 @@ It's the same idea as Convex: Convex is "their database + a V8 runtime + live sy
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │ WebSocket (local, token-protected)
 ┌───────────────────────────────▼───────────────────────────────────────┐
-│ server (tokamak, ~40 MB)   ← the owner of everything below            │
+│ server (tokamak-server, ~40 MB)   ← the owner of everything below     │
 │                                                                       │
 │  websocket.rs    receives requests, sends responses + live updates    │
 │  service.rs      the Coordinator: runs queries/mutations ONE AT A     │

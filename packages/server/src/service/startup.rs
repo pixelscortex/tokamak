@@ -86,15 +86,15 @@ impl Server {
         let directory = database
             .directory()
             .unwrap_or(root.parent().unwrap_or(root));
-        let loaded = match crate::plugins::Catalog::read_in_directory(root, None, directory) {
+        let loaded = match crate::plugins::Catalog::read_in_directory(root, directory) {
             Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
             Err(error) => Err(error),
         };
 
         let loaded = match loaded {
-            Ok(loaded) => Box::pin(loaded.record_grants(&database, None))
+            Ok(mut loaded) => Box::pin(loaded.record_startup_grants(&database))
                 .await
-                .map(|()| loaded),
+                .map(|()| Arc::new(loaded)),
             Err(error) => Err(error),
         };
 
@@ -105,6 +105,7 @@ impl Server {
             }
         };
 
+        loaded.publish(None, &Default::default()).await;
         let kinds = loaded.client_kinds();
         Self::start(
             database,

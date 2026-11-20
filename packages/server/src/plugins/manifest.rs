@@ -99,11 +99,12 @@ impl Definition {
 }
 
 impl Manifest {
-    pub(super) fn read(directory: &Path) -> Result<Self, Error> {
-        serde_json::from_reader(std::io::BufReader::new(
-            File::open(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?,
-        ))
-        .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+    pub(super) fn read(directory: &Path) -> Result<(Self, String), Error> {
+        let bytes =
+            std::fs::read(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?;
+        let manifest = serde_json::from_slice(&bytes)
+            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))?;
+        Ok((manifest, format!("{:x}", Sha256::digest(&bytes))))
     }
 }
 

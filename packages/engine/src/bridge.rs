@@ -75,6 +75,7 @@ pub struct OpRegistry(
     BTreeMap<String, Op>,
     pub(crate) Option<Determinism>,
     Vec<String>,
+    tokio_util::sync::CancellationToken,
 );
 
 impl OpRegistry {
@@ -91,6 +92,16 @@ impl OpRegistry {
     /// never enable external effects in the query/mutation engine.
     pub fn set_network_permissions(&mut self, permissions: Vec<String>) {
         self.2 = permissions;
+    }
+
+    /// Bind action execution to the server-selected lifetime of its plugin build.
+    pub fn set_action_lifetime(&mut self, lifetime: tokio_util::sync::CancellationToken) {
+        self.3 = lifetime;
+    }
+
+    /// Returns the token cancelled when the server retires this action's plugin build.
+    pub fn action_lifetime(&self) -> &tokio_util::sync::CancellationToken {
+        &self.3
     }
 
     pub(crate) fn network_permissions(&self) -> Vec<String> {

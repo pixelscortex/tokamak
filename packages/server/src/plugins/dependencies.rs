@@ -1,12 +1,15 @@
 use super::*;
 
-pub(super) fn resolve(plugins: &BTreeMap<String, Arc<Artifact>>) -> Result<Vec<String>, Error> {
+pub(super) fn resolve(
+    plugins: &BTreeMap<String, Arc<Artifact>>,
+    is_skipped: impl Fn(&str) -> bool,
+) -> Result<Vec<String>, Error> {
     for (id, artifact) in plugins {
         let definition = &artifact.manifest.plugin;
 
         for (dependency, range) in definition.dependencies() {
             let Some(installed) = plugins.get(dependency) else {
-                if definition.depends.contains_key(dependency) {
+                if definition.depends.contains_key(dependency) && !is_skipped(dependency) {
                     return Err(invalid(format!(
                         "Missing dependency {dependency} required by {id}"
                     )));

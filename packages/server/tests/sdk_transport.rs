@@ -111,7 +111,7 @@ fn actual_sdk_over_native_sessions_without_a_port() {
 #[test]
 fn headless_binary_two_real_sdk_clients_and_disk_reopen() {
     let result = bun_script("sdk-transport-driver.mjs")
-        .args(["headless", env!("CARGO_BIN_EXE_tokamak")])
+        .args(["headless", env!("CARGO_BIN_EXE_tokamak-server")])
         .output()
         .unwrap();
     assert!(
@@ -326,7 +326,7 @@ fn headless_shutdown_bounds_partial_websocket_upgrade_peer() {
 
 fn shutdown_driver(scenario: &str) {
     let output = bun_script("shutdown-driver.mjs")
-        .args([scenario, env!("CARGO_BIN_EXE_tokamak")])
+        .args([scenario, env!("CARGO_BIN_EXE_tokamak-server")])
         .output()
         .unwrap();
     assert!(

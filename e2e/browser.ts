@@ -30,7 +30,7 @@ try {
     recursive: true,
     filter: (source) => !source.split("/").includes("dist"),
   });
-  run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak", "--jobs", "2"]);
+  run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak-server", "--jobs", "2"]);
   run("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts"]);
   // Adds ACP and a scripted agent; the server then never sees this machine's real agent CLIs.
   const sandbox = await prepareChatSandbox(directory);
