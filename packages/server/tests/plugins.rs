@@ -1183,3 +1183,457 @@ async fn local_server_keeps_an_installed_copy_when_indexed_grants_cannot_be_reco
     assert_eq!(plugins.len(), 2);
     assert!(plugins.iter().all(|plugin| plugin["fromIndex"] == false));
 }
+
+mod package_upload {
+    use super::*;
+    use futures_util::{SinkExt, StreamExt};
+    use server::{
+        Backend,
+        identity::Identities,
+        websocket::{self, HostedWeb, LocalAccess},
+    };
+    use std::{
+        collections::BTreeMap,
+        fs,
+        io::{Cursor, Write},
+        path::Path,
+    };
+    use tokio::{
+        net::{TcpListener, TcpStream},
+        sync::oneshot,
+        task::JoinHandle,
+    };
+    use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
+
+    const OWNER: &str = "0123456789abcdef0123456789abcdef";
+    type Files = BTreeMap<String, Vec<u8>>;
+    type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+    struct SharedServer {
+        backend: Backend,
+        serving: JoinHandle<std::io::Result<()>>,
+        stop: oneshot::Sender<()>,
+        http: String,
+        client: reqwest::Client,
+    }
+
+    impl SharedServer {
+        async fn start(data: &Path, root: &Path) -> Self {
+            fs::write(data.join("index.html"), "test").unwrap();
+            let backend =
+                Backend::start_plugins(Storage::Disk(data.join("store")), Default::default(), root)
+                    .await
+                    .unwrap();
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let web = HostedWeb::configure(Some(data.to_owned()), address).unwrap();
+            let identities =
+                Arc::new(Identities::hosted(data.join("members.json"), OWNER, "Owner").unwrap());
+            let (stop, shutdown) = oneshot::channel();
+            let serving = tokio::spawn(websocket::serve_with_identities(
+                listener,
+                backend.server().clone(),
+                async {
+                    let _ = shutdown.await;
+                },
+                Some(LocalAccess {
+                    token: OWNER.into(),
+                    identity: json!({}),
+                }),
+                web,
+                identities,
+            ));
+            Self {
+                backend,
+                serving,
+                stop,
+                http: format!("http://{address}"),
+                client: reqwest::Client::builder()
+                    .no_proxy()
+                    .timeout(Duration::from_secs(10))
+                    .build()
+                    .unwrap(),
+            }
+        }
+
+        async fn close(self) {
+            self.stop.send(()).unwrap();
+            self.serving.await.unwrap().unwrap();
+            self.backend.close().await.unwrap();
+        }
+
+        async fn socket(&self) -> Socket {
+            tokio_tungstenite::connect_async(format!(
+                "{}/ws?token={OWNER}",
+                self.http.replace("http:", "ws:")
+            ))
+            .await
+            .unwrap()
+            .0
+        }
+
+        async fn upload(&self, token: &str, build: &str, body: Vec<u8>) -> reqwest::Response {
+            self.client
+                .put(format!("{}/plugins/a/package", self.http))
+                .bearer_auth(token)
+                .header("x-tokamak-build-id", build)
+                .body(body)
+                .send()
+                .await
+                .unwrap()
+        }
+
+        async fn get(&self, path: &str) -> Value {
+            response_json(
+                self.client
+                    .get(format!("{}{path}", self.http))
+                    .bearer_auth(OWNER)
+                    .send()
+                    .await
+                    .unwrap()
+                    .error_for_status()
+                    .unwrap(),
+            )
+            .await
+        }
+    }
+
+    async fn response_json(response: reqwest::Response) -> Value {
+        serde_json::from_str(&response.text().await.unwrap()).unwrap()
+    }
+
+    async fn send(socket: &mut Socket, id: u64, kind: &str, name: &str, args: Value) {
+        socket
+            .send(Message::Text(
+                json!({
+                    "type":kind, "id":id, "name":name, "args":args
+                })
+                .to_string()
+                .into(),
+            ))
+            .await
+            .unwrap();
+    }
+
+    async fn result(socket: &mut Socket, id: u64) -> Value {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let message = socket.next().await.unwrap().unwrap();
+                let event: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+                if event["id"] == id {
+                    assert!(event["result"].get("Err").is_none(), "{event}");
+                    return event["result"]["Ok"].clone();
+                }
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn rows(socket: &mut Socket, plugin: &str) -> Value {
+        send(socket, 1, "query", &format!("{plugin}/ops:list"), json!({})).await;
+        result(socket, 1).await
+    }
+
+    fn fixture() -> (Installation, Files) {
+        let installation = Installation::new();
+        let path = installation.0.join("a");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(path.join("manifest.json")).unwrap()).unwrap();
+        let mut files = Files::from([(
+            "manifest.json".into(),
+            fs::read(path.join("manifest.json")).unwrap(),
+        )]);
+        for name in manifest["hashes"].as_object().unwrap().keys() {
+            files.insert(name.clone(), fs::read(path.join(name)).unwrap());
+        }
+        fs::remove_dir_all(path).unwrap();
+        (installation, files)
+    }
+
+    fn change_manifest(files: &mut Files, edit: impl FnOnce(&mut Value)) {
+        let mut manifest = serde_json::from_slice(&files["manifest.json"]).unwrap();
+        edit(&mut manifest);
+        files.insert(
+            "manifest.json".into(),
+            serde_json::to_vec(&manifest).unwrap(),
+        );
+    }
+
+    fn digest(bytes: &[u8]) -> String {
+        format!("{:x}", Sha256::digest(bytes))
+    }
+
+    fn archive(files: &Files) -> (String, Vec<u8>) {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (name, bytes) in files {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(bytes).unwrap();
+        }
+        (
+            digest(&files["manifest.json"]),
+            zip.finish().unwrap().into_inner(),
+        )
+    }
+
+    async fn upload_ok(
+        server: &SharedServer,
+        files: &Files,
+        status: &str,
+        version: &str,
+    ) -> String {
+        let (build, zip) = archive(files);
+        let response = server.upload(OWNER, &build, zip).await;
+        let code = response.status();
+        let value = response_json(response).await;
+        assert_eq!(code, 200, "{value}");
+        assert_eq!(
+            value,
+            json!({"status":status, "id":"a", "version":version, "buildId":build})
+        );
+        build
+    }
+
+    fn revision(catalog: &Value, id: &str) -> Value {
+        catalog["plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|plugin| plugin["plugin"]["id"] == id)
+            .unwrap()["revision"]
+            .clone()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn package_swap_keeps_unrelated_action_and_build_then_recovers_on_restart() {
+        let (installation, mut files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let initial = upload_ok(&server, &files, "installed", "1.0.0").await;
+        assert_eq!(revision(&server.get("/plugins").await, "a"), initial);
+        upload_ok(&server, &files, "unchanged", "1.0.0").await;
+        let health = server
+            .client
+            .get(format!("{}/health", server.http))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response_json(health).await["version"],
+            env!("CARGO_PKG_VERSION")
+        );
+
+        let mut action = server.socket().await;
+        let mut caller = server.socket().await;
+        assert_eq!(rows(&mut caller, "a").await, json!([]));
+        let old_b = revision(&server.get("/plugins").await, "b");
+        send(
+            &mut action,
+            2,
+            "action",
+            "b/ops:waitForSecondRow",
+            json!({}),
+        )
+        .await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while rows(&mut caller, "b").await == json!([]) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let b_bundle = installation.0.join("b/bundle.js");
+        let b_code = fs::read_to_string(&b_bundle)
+            .unwrap()
+            .replace("old action finished", "new action finished");
+        fs::write(&b_bundle, &b_code).unwrap();
+        installation.change("b", |manifest| {
+            manifest["hashes"]["bundle.js"] = json!(digest(b_code.as_bytes()));
+        });
+        let code = std::str::from_utf8(&files["bundle.js"])
+            .unwrap()
+            .replace("private a", "updated a");
+        assert_ne!(code.as_bytes(), files["bundle.js"]);
+        let hash = digest(code.as_bytes());
+        files.insert("bundle.js".into(), code.into_bytes());
+        change_manifest(&mut files, |manifest| {
+            manifest["plugin"]["api"] = json!(env!("CARGO_PKG_VERSION"));
+            manifest["plugin"]["version"] = json!("1.0.1");
+            manifest["hashes"]["bundle.js"] = json!(hash);
+        });
+        let updated = upload_ok(&server, &files, "updated", "1.0.1").await;
+        let catalog = server.get("/plugins").await;
+        assert_eq!(revision(&catalog, "a"), updated);
+        assert_eq!(revision(&catalog, "b"), old_b);
+        send(
+            &mut caller,
+            3,
+            "mutation",
+            "b/ops:add",
+            json!({"fail":false}),
+        )
+        .await;
+        result(&mut caller, 3).await;
+        assert_eq!(result(&mut action, 2).await, "old action finished");
+        send(&mut caller, 4, "mutation", "a/ops:privateWrite", json!({})).await;
+        result(&mut caller, 4).await;
+        assert_eq!(rows(&mut caller, "a").await[0]["source"], "updated a");
+        drop((action, caller));
+        server.close().await;
+
+        assert_restart(data.path(), &installation.0, files, &updated).await;
+    }
+
+    async fn assert_restart(data: &Path, installed: &Path, mut files: Files, updated: &str) {
+        let stored = data.join("plugins");
+        let backup = stored.join(".package-backup-a");
+        fs::rename(stored.join("a"), &backup).unwrap();
+        let interrupted = stored.join(".package-stage-interrupted");
+        fs::create_dir(&interrupted).unwrap();
+        let server = SharedServer::start(data, installed).await;
+        assert!(!backup.exists());
+        assert!(!interrupted.exists());
+        assert_eq!(revision(&server.get("/plugins").await, "a"), updated);
+        assert_eq!(
+            rows(&mut server.socket().await, "a").await[0]["source"],
+            "updated a"
+        );
+        server.close().await;
+
+        change_manifest(&mut files, |manifest| {
+            manifest["plugin"]["api"] = json!("tokamak@0.2.0")
+        });
+        let (_, zip) = archive(&files);
+        let package = stored.join("a");
+        fs::write(package.join("package.zip"), zip).unwrap();
+        fs::write(package.join("dist/manifest.json"), &files["manifest.json"]).unwrap();
+        let server = SharedServer::start(data, installed).await;
+        let catalog = server.get("/plugins").await;
+        assert_eq!(catalog["skipped"]["a"], "needs rebuild");
+        assert_eq!(catalog["plugins"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            rows(&mut server.socket().await, "b")
+                .await
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert!(package.join("package.zip").exists());
+        server.close().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn refused_packages_leave_the_running_and_stored_build_alone() {
+        let (installation, files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let active = upload_ok(&server, &files, "installed", "1.0.0").await;
+        let stored = data.path().join("plugins/a/package.zip");
+        let original = fs::read(&stored).unwrap();
+        let member = response_json(
+            server
+                .client
+                .post(format!("{}/members", server.http))
+                .bearer_auth(OWNER)
+                .body(json!({"name":"Member"}).to_string())
+                .send()
+                .await
+                .unwrap(),
+        )
+        .await;
+        let member = member["token"].as_str().unwrap();
+        let mut socket = server.socket().await;
+        let mut cases = vec![
+            (OWNER, "0".repeat(64), original.clone(), 400, "Build id"),
+            (
+                OWNER,
+                active.clone(),
+                vec![0; 50 * 1024 * 1024 + 1],
+                413,
+                "50 MiB",
+            ),
+            (member, active.clone(), original.clone(), 403, ""),
+            (
+                OWNER,
+                "0".repeat(64),
+                b"not a zip".to_vec(),
+                400,
+                "Invalid ZIP",
+            ),
+        ];
+
+        cases.extend(
+            invalid_packages(&files)
+                .into_iter()
+                .map(|(build, zip, reason)| (OWNER, build, zip, 400, reason)),
+        );
+        for (token, build, zip, status, reason) in cases {
+            let response = server.upload(token, &build, zip).await;
+            assert_eq!(response.status(), status, "{reason}");
+            if !reason.is_empty() {
+                let error = response_json(response).await;
+                assert!(error["error"].as_str().unwrap().contains(reason), "{error}");
+            }
+            assert_eq!(revision(&server.get("/plugins").await, "a"), active);
+            assert_eq!(rows(&mut socket, "a").await, json!([]));
+            assert_eq!(fs::read(&stored).unwrap(), original);
+            assert_eq!(
+                fs::read_dir(data.path().join("plugins")).unwrap().count(),
+                1
+            );
+        }
+        drop(socket);
+        server.close().await;
+    }
+
+    fn invalid_packages(files: &Files) -> Vec<(String, Vec<u8>, &'static str)> {
+        let mut cases = Vec::new();
+        let mut variant = |message, edit: fn(&mut Files)| {
+            let mut files = files.clone();
+            edit(&mut files);
+            let (build, zip) = archive(&files);
+            cases.push((build, zip, message));
+        };
+        variant("hash mismatch", |files| {
+            files.get_mut("bundle.js").unwrap().push(b' ');
+        });
+        variant("Missing package file", |files| {
+            files.remove("bundle.js");
+        });
+        variant("not listed", |files| {
+            files.insert("extra.js".into(), vec![]);
+        });
+        variant("stay inside", |files| {
+            files.insert("../escape".into(), vec![]);
+        });
+        variant("Invalid plugin manifest", |files| {
+            files.insert("manifest.json".into(), b"{".to_vec());
+        });
+        variant("differs from the address", |files| {
+            change_manifest(files, |m| m["plugin"]["id"] = json!("wrong"))
+        });
+        variant("Upgrade the server", |files| {
+            change_manifest(files, |m| m["plugin"]["api"] = json!("tokamak@0.1.99"))
+        });
+        variant("Rebuild with the current CLI", |files| {
+            change_manifest(files, |m| m["plugin"]["api"] = json!("tokamak@0.2.0"))
+        });
+        variant("Missing dependency", |files| {
+            change_manifest(files, |m| m["plugin"]["depends"]["missing"] = json!("*"))
+        });
+        variant(
+            "Plugins with machine actions cannot be shared yet",
+            |files| change_manifest(files, |m| m["plugin"]["runtime"] = json!("worker")),
+        );
+        variant("Could not inspect plugin", |files| {
+            let code = b"throw new Error('candidate could not start');";
+            files.insert("bundle.js".into(), code.to_vec());
+            change_manifest(files, |m| m["hashes"]["bundle.js"] = json!(digest(code)));
+        });
+        cases
+    }
+}

@@ -31,6 +31,7 @@ pub struct Catalog {
     pub(crate) index: Arc<BTreeMap<String, PathBuf>>,
     installed: BTreeMap<String, PathBuf>,
     index_path: Option<PathBuf>,
+    pub(crate) package_root: Option<PathBuf>,
     pub(crate) environment: PathBuf,
     pub(crate) directory: PathBuf,
 }
@@ -71,6 +72,7 @@ mod dependencies;
 mod grants;
 mod loading;
 mod manifest;
+pub(crate) mod package;
 
 pub use assets::Asset;
 use assets::asset;

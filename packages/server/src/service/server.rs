@@ -37,6 +37,19 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
+    pub(crate) async fn upload_package(
+        &self,
+        upload: crate::plugins::package::Upload,
+    ) -> Result<Json, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::UploadPackage(upload, reply))?;
+        let (response, logs) = wait.await.map_err(|_| Error::Closed)??;
+        for log in logs {
+            log.published().await;
+        }
+        Ok(response)
+    }
+
     pub(crate) async fn reload_indexed(
         &self,
         request: crate::plugins::IndexedReload,

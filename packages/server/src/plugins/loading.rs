@@ -1,5 +1,5 @@
 use super::{
-    catalog::{IndexedArtifacts, installed_paths, read_index, read_installed},
+    catalog::{IndexedArtifacts, installed_paths, read_index, read_with_packages},
     *,
 };
 
@@ -11,7 +11,11 @@ impl Loaded {
         pool: &engine::Pool,
         database: &crate::data::Database,
     ) -> Result<Arc<Self>, Error> {
-        let (installed, _) = read_installed(root, None)?;
+        let package_root = database.directory().map(|data| data.join("plugins"));
+        if let Some(path) = &package_root {
+            package::recover(path)?;
+        }
+        let (installed, failures) = read_with_packages(root, None, package_root.as_deref())?;
         let candidates = read_index(index);
         let config = StartupCatalog {
             root,
@@ -19,6 +23,8 @@ impl Loaded {
             pool,
             database,
             index_path: index,
+            package_root,
+            failures,
         };
         let loaded = match config.commit(&installed, &candidates, None).await {
             Ok(loaded) => loaded,
@@ -28,7 +34,7 @@ impl Loaded {
         for (id, folder) in loaded.catalog.index.iter() {
             if installed.contains_key(id) {
                 eprintln!(
-                    "Indexed plugin {id} at {} replaces the copy from --plugins",
+                    "Indexed plugin {id} at {} replaces the installed copy",
                     folder.display()
                 );
             }
@@ -445,6 +451,8 @@ struct StartupCatalog<'a> {
     pool: &'a engine::Pool,
     database: &'a crate::data::Database,
     index_path: Option<&'a Path>,
+    package_root: Option<PathBuf>,
+    failures: BTreeMap<String, String>,
 }
 
 impl StartupCatalog<'_> {
@@ -462,10 +470,21 @@ impl StartupCatalog<'_> {
                 (id.clone(), folder.clone())
             })
             .collect();
-        let mut catalog = Catalog::assemble(self.root, self.directory, plugins, Arc::new(index))?;
+        let mut failures = self.failures.clone();
+        for id in indexed.keys() {
+            failures.remove(id);
+        }
+        let mut catalog = Catalog::assemble_candidate(
+            self.root,
+            self.directory,
+            plugins,
+            Arc::new(index),
+            &failures,
+        )?;
+        catalog.package_root.clone_from(&self.package_root);
         catalog.installed = installed_paths(installed);
         catalog.index_path = self.index_path.map(Path::to_owned);
-        Loaded::load_reusing(catalog, BTreeMap::new(), self.pool, previous).await
+        Loaded::load_reusing(catalog, failures, self.pool, previous).await
     }
 
     async fn commit(

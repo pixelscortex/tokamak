@@ -2,7 +2,7 @@ use super::*;
 
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        let (plugins, _) = read_installed(root, None)?;
+        let (plugins, _) = read_installed(root, None, None, |_| false)?;
         Self::assemble(root, root.parent().unwrap_or(root), plugins, Arc::default())
     }
 
@@ -14,7 +14,8 @@ impl Catalog {
         let directory = old
             .map(|p| p.directory.as_path())
             .unwrap_or(root.parent().unwrap_or(root));
-        let (mut plugins, mut failures) = read_installed(root, previous)?;
+        let package_root = old.and_then(|catalog| catalog.package_root.as_deref());
+        let (mut plugins, mut failures) = read_with_packages(root, previous, package_root)?;
         let index = old.map(|p| Arc::clone(&p.index)).unwrap_or_default();
         let mut installed = installed_paths(&plugins);
         if let Some(previous) = previous {
@@ -35,6 +36,7 @@ impl Catalog {
         let mut catalog = Self::assemble_candidate(root, directory, plugins, index, &failures)?;
         catalog.installed = installed;
         catalog.index_path = old.and_then(|p| p.index_path.clone());
+        catalog.package_root = old.and_then(|p| p.package_root.clone());
         Ok((catalog, failures))
     }
 
@@ -76,7 +78,41 @@ impl Catalog {
         )?;
         catalog.installed.clone_from(&previous.installed);
         catalog.index_path.clone_from(&previous.index_path);
+        catalog.package_root.clone_from(&previous.package_root);
         Ok((catalog, failures))
+    }
+
+    pub(crate) fn with_package(
+        root: &Path,
+        previous: &Loaded,
+        id: &str,
+        artifact: Artifact,
+    ) -> Result<(Self, BTreeMap<String, String>), Error> {
+        let old = &previous.catalog;
+        let mut plugins = old.plugins.clone();
+        for dependency in artifact.manifest.plugin.depends.keys() {
+            if !plugins.contains_key(dependency) {
+                return Err(invalid(format!(
+                    "Missing dependency {dependency} required by {id}"
+                )));
+            }
+        }
+        let source = artifact.source.clone();
+        plugins.insert(id.to_owned(), Arc::new(artifact));
+        let mut skipped = previous.skipped.clone();
+        skipped.remove(id);
+        let mut catalog = Self::assemble_candidate(
+            root,
+            &old.directory,
+            plugins,
+            Arc::clone(&old.index),
+            &skipped,
+        )?;
+        catalog.installed.clone_from(&old.installed);
+        catalog.installed.insert(id.to_owned(), source);
+        catalog.index_path.clone_from(&old.index_path);
+        catalog.package_root.clone_from(&old.package_root);
+        Ok((catalog, skipped))
     }
 
     pub(super) fn assemble(
@@ -88,7 +124,7 @@ impl Catalog {
         Self::assemble_candidate(root, directory, plugins, index, &BTreeMap::new())
     }
 
-    fn assemble_candidate(
+    pub(super) fn assemble_candidate(
         root: &Path,
         directory: &Path,
         plugins: BTreeMap<String, Arc<Artifact>>,
@@ -104,6 +140,7 @@ impl Catalog {
             providers: BTreeMap::new(),
             installed: BTreeMap::new(),
             index_path: None,
+            package_root: None,
             environment: root.parent().unwrap_or(root).join(".env.local"),
             directory: directory.to_owned(),
         };
@@ -149,7 +186,7 @@ impl Catalog {
     }
 
     pub(crate) fn installation_warnings(root: &Path) -> Vec<String> {
-        match installed_directories(root) {
+        match installed_directories(root, false) {
             Ok(directories) => directories
                 .iter()
                 .filter_map(|path| {
@@ -306,7 +343,7 @@ fn read_indexed_build(
 type Artifacts = BTreeMap<String, Arc<Artifact>>;
 type ArtifactFailures = BTreeMap<String, String>;
 
-fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
+fn installed_directories(root: &Path, exclude_packages: bool) -> Result<Vec<PathBuf>, Error> {
     Ok(if let Some(directory) = artifact_directory(root) {
         vec![directory]
     } else {
@@ -320,6 +357,9 @@ fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
             }
 
             let path = entry.path();
+            if exclude_packages && path.join("package.zip").is_file() {
+                continue;
+            }
 
             if let Some(directory) = artifact_directory(&path) {
                 result.push(directory);
@@ -338,14 +378,23 @@ fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
 pub(super) fn read_installed(
     root: &Path,
     previous: Option<&Loaded>,
+    package_root: Option<&Path>,
+    is_shadowed: impl Fn(&str) -> bool,
 ) -> Result<(Artifacts, ArtifactFailures), Error> {
-    let directories = installed_directories(root)?;
+    let exclude_packages = package_root.is_some_and(|path| {
+        path.canonicalize()
+            .is_ok_and(|package_root| root.canonicalize().is_ok_and(|root| root == package_root))
+    });
+    let directories = installed_directories(root, exclude_packages)?;
     let mut plugins = BTreeMap::new();
     let mut skipped = BTreeMap::new();
 
     for directory in directories {
         let build = Manifest::read(&directory)?;
         let id = build.0.plugin.id.clone();
+        if is_shadowed(&id) {
+            continue;
+        }
         if plugins.contains_key(&id) || skipped.contains_key(&id) {
             return Err(invalid(format!(
                 "Duplicate installed plugin identity: {id}"
@@ -366,6 +415,23 @@ pub(super) fn read_installed(
     }
 
     Ok((plugins, skipped))
+}
+
+pub(super) fn read_with_packages(
+    root: &Path,
+    previous: Option<&Loaded>,
+    package_root: Option<&Path>,
+) -> Result<(Artifacts, ArtifactFailures), Error> {
+    let (stored, skipped) = match package_root {
+        Some(directory) => package::read_stored(directory, previous)?,
+        None => (BTreeMap::new(), BTreeMap::new()),
+    };
+    let (mut plugins, mut failures) = read_installed(root, previous, package_root, |id| {
+        stored.contains_key(id) || skipped.contains_key(id)
+    })?;
+    plugins.extend(stored);
+    failures.extend(skipped);
+    Ok((plugins, failures))
 }
 
 pub(super) fn installed_paths(

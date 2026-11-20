@@ -123,10 +123,10 @@ impl Manifest {
         Version::parse(&self.plugin.version)
             .map_err(|e| invalid(format!("Invalid plugin version: {e}")))?;
 
-        let requirement = self
-            .plugin
-            .api
+        let api = &self.plugin.api;
+        let requirement = api
             .strip_prefix("tokamak@")
+            .or_else(|| Version::parse(api).ok().map(|_| api.as_str()))
             .ok_or_else(|| invalid("Host API requirement must start with tokamak@"))?;
 
         let requirement = VersionReq::parse(requirement)

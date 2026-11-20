@@ -15,7 +15,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use std::{
     future::Future,
@@ -199,9 +199,9 @@ fn application_router(adapter: Adapter, web: Option<HostedWeb>) -> Router {
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
         .merge(plugin_routes());
-    if hosted {
-        app = app.route("/health", get(|| async { "ok" }));
-    } else if authenticated {
+    if hosted || !authenticated {
+        app = app.route("/health", get(public_health));
+    } else {
         app = app.route("/health", get(health));
     }
     if hosted || authenticated {
@@ -212,7 +212,8 @@ fn application_router(adapter: Adapter, web: Option<HostedWeb>) -> Router {
     if authenticated {
         app = app
             .route("/shutdown", post(stop))
-            .route("/plugins/{id}/reload", post(reload_plugin));
+            .route("/plugins/{id}/reload", post(reload_plugin))
+            .route("/plugins/{id}/package", put(upload_package));
     }
     if !hosted && authenticated {
         app = app.route("/plugin-index/reload", post(reload_indexed));
@@ -268,7 +269,7 @@ async fn authorize(
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if !(adapter.hosted && request.uri().path() == "/health") {
+    if !((adapter.hosted || adapter.access.is_none()) && path == "/health") {
         let bearer = headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -292,7 +293,8 @@ async fn authorize(
         let path = request.uri().path();
         if (path.starts_with("/members")
             || matches!(path, "/health" | "/shutdown")
-            || path.ends_with("/reload"))
+            || path.ends_with("/reload")
+            || path.ends_with("/package"))
             && user.role != "owner"
         {
             return StatusCode::FORBIDDEN.into_response();
@@ -326,6 +328,12 @@ fn same_http_origin(headers: &HeaderMap, origin: &axum::http::HeaderValue) -> bo
         .and_then(|host| host.to_str().ok())
         .and_then(|host| reqwest::Url::parse(&format!("http://{host}")).ok())
         .is_some_and(|url| origin.as_bytes() == url.origin().ascii_serialization().as_bytes())
+}
+
+async fn public_health() -> Response {
+    plugin_result(Ok(
+        serde_json::json!({"version": env!("CARGO_PKG_VERSION")}),
+    ))
 }
 
 async fn health(State(adapter): State<Adapter>) -> Response {
@@ -440,6 +448,60 @@ async fn plugins(State(adapter): State<Adapter>) -> Response {
 async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
     plugin_result(adapter.server.reload_plugin(id).await)
 }
+async fn upload_package(
+    State(adapter): State<Adapter>,
+    Path(id): Path<String>,
+    request: axum::extract::Request,
+) -> Response {
+    use crate::plugins::package::{PACKAGE_BYTES, Upload};
+    let Some(build_id) = request
+        .headers()
+        .get("x-tokamak-build-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+        .map(str::to_owned)
+    else {
+        return plugin_result(Err(crate::Error::Invalid(
+            "Expected a SHA-256 x-tokamak-build-id header".into(),
+        )));
+    };
+    let bytes = match axum::body::to_bytes(request.into_body(), PACKAGE_BYTES).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            use std::error::Error as _;
+            if error
+                .source()
+                .is_some_and(|source| source.is::<http_body_util::LengthLimitError>())
+            {
+                return (
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    [("content-type", "application/json")],
+                    serde_json::json!({"error": "Package exceeds 50 MiB"}).to_string(),
+                )
+                    .into_response();
+            }
+            return plugin_result(Err(crate::Error::Invalid(
+                "Could not read package body".into(),
+            )));
+        }
+    };
+    plugin_result(
+        adapter
+            .server
+            .upload_package(Upload {
+                id,
+                build_id,
+                bytes,
+            })
+            .await,
+    )
+}
+
 #[derive(serde::Deserialize)]
 struct WindowRevision {
     revision: String,
