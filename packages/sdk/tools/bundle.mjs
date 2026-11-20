@@ -161,16 +161,12 @@ if (import.meta.main) {
 
 async function scanFiles(root) {
   const files = [];
-  const scanner = new Bun.Transpiler({ loader: "ts" });
   for await (const scanned of new Bun.Glob("**/*.ts").scan({
     cwd: root,
     onlyFiles: true,
   })) {
     const file = scanned.split(sep).join("/");
     if (!isServerModule(root, file)) continue;
-    // scan is a real parser, not a regexp. We do not interpret initializer
-    // syntax: exported definitions are recognized by their runtime brand.
-    scanner.scan(await Bun.file(join(root, file)).text());
     files.push(file);
   }
   files.sort();

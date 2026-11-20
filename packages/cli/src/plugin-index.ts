@@ -73,7 +73,8 @@ export async function updateIndex(change: (entries: Map<string, string>) => bool
       } catch (error) {
         if (!["EEXIST", "ENOTEMPTY", "EPERM", "EACCES"].includes(codeOf(error) ?? "")) throw error;
         await reapLock(lock);
-        if (performance.now() >= deadline) throw new Error(`Timed out waiting for plugin index lock: ${lock}`);
+        if (performance.now() >= deadline)
+          throw new Error(`Timed out waiting for plugin index lock: ${lock}`);
         await new Promise((done) => setTimeout(done, 25 + Math.random() * 50));
       }
     }

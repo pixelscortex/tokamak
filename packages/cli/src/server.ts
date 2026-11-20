@@ -19,17 +19,34 @@ function httpAddress(address: string) {
   return url;
 }
 
+function optionalString(value: unknown): value is string | null | undefined {
+  return value === null || value === undefined || typeof value === "string";
+}
+
 function discovery(value: unknown) {
   if (!value || typeof value !== "object") throw new Error("Invalid local server discovery");
   const { pid, url, bundleHash, buildId, pluginRoot } = value as Record<string, unknown>;
   if (
-    typeof pid !== "number" || !processIsAlive(pid) ||
+    typeof pid !== "number" ||
+    !processIsAlive(pid) ||
     typeof url !== "string" ||
-    typeof bundleHash !== "string" || !/^[a-f0-9]{64}$/i.test(bundleHash) ||
-    (buildId != null && typeof buildId !== "string") ||
-    (pluginRoot != null && typeof pluginRoot !== "string")
-  ) throw new Error("Invalid local server identity");
+    typeof bundleHash !== "string" ||
+    !/^[a-f0-9]{64}$/i.test(bundleHash) ||
+    !optionalString(buildId) ||
+    !optionalString(pluginRoot)
+  )
+    throw new Error("Invalid local server identity");
   return { pid, url, bundleHash, buildId: buildId ?? null, pluginRoot: pluginRoot ?? null };
+}
+
+async function readToken(folder: string) {
+  const file = join(folder, "server.token");
+  const metadata = await lstat(file);
+  if (!metadata.isFile() || (process.platform !== "win32" && (metadata.mode & 0o077) !== 0))
+    throw new Error("Local server token must be a private regular file");
+  const token = await readFile(file, "utf8");
+  if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Invalid local server token");
+  return token;
 }
 
 async function localEndpoint() {
@@ -37,16 +54,17 @@ async function localEndpoint() {
   const identity = discovery(JSON.parse(await readFile(join(folder, "server.json"), "utf8")));
   const ws = new URL(identity.url);
   if (
-    ws.protocol !== "ws:" || ws.username || ws.password ||
-    !identity.url.endsWith("/ws") || ws.pathname !== "/ws" || ws.search || ws.hash ||
+    ws.protocol !== "ws:" ||
+    ws.username ||
+    ws.password ||
+    !identity.url.endsWith("/ws") ||
+    ws.pathname !== "/ws" ||
+    ws.search ||
+    ws.hash ||
     !(ws.hostname === "[::1]" || (isIP(ws.hostname) === 4 && ws.hostname.startsWith("127.")))
-  ) throw new Error("Invalid local server discovery address");
-  const file = join(folder, "server.token");
-  const metadata = await lstat(file);
-  if (!metadata.isFile() || (process.platform !== "win32" && (metadata.mode & 0o077) !== 0))
-    throw new Error("Local server token must be a private regular file");
-  const token = await readFile(file, "utf8");
-  if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Invalid local server token");
+  )
+    throw new Error("Invalid local server discovery address");
+  const token = await readToken(folder);
   const endpoint = { url: httpAddress(identity.url), token };
   const health = discovery(await get("/health", endpoint));
   if (JSON.stringify(health) !== JSON.stringify(identity)) throw new Error("Local server identity changed");
@@ -75,11 +93,15 @@ async function get(path: string, endpoint: { url: URL; token: string }): Promise
 export async function serverGet(path: string, explicit?: string): Promise<unknown> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
   if (!address) {
-    try {
-      return await get(path, await localEndpoint());
-    } catch {
+    const endpoint = await localEndpoint().catch(() => {
       throw new CommandError("No local server is running", "tokamak server start");
-    }
+    });
+    return get(path, endpoint).catch((error: Error) => {
+      throw new CommandError(
+        `Could not read ${path} from the local server: ${error.message}`,
+        "tokamak server start",
+      );
+    });
   }
   try {
     const token = process.env.TOKAMAK_TOKEN;

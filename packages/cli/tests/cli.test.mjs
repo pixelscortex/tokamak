@@ -3,51 +3,7 @@ import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
-
-function cli(root, args, extra = {}) {
-  const result = Bun.spawnSync([process.execPath, "run", "--silent", "tokamak", ...args], {
-    cwd: workspace,
-    timeout: 60_000,
-    env: {
-      ...process.env,
-      TOKAMAK_SERVER: undefined,
-      TOKAMAK_TOKEN: undefined,
-      TOKAMAK_SERVER_DIR: join(root, "data"),
-      ...extra,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  return { code: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
-}
-
-test("builds an external plugin and reports its output folder", async () => {
-  await withPlugin((plugin, root) => {
-    const result = cli(root, ["plugin", "build", plugin, "--json"]);
-    expect(result.code, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      ok: true,
-      id: "outside-fixture",
-      outputFolder: join(plugin, "dist"),
-    });
-  });
-}, 120_000);
-
-test("returns structured type errors in both checker formats", async () => {
-  await withPlugin(async (plugin, root) => {
-    await writeFile(join(plugin, "src/server/broken.ts"), "\nexport const broken: string = 42;\n");
-    for (const AI_AGENT of [undefined, "1"]) {
-      const result = cli(root, ["plugin", "build", plugin, "--json"], { AI_AGENT });
-      expect(result.code).not.toBe(0);
-      const { error } = JSON.parse(result.stdout);
-      expect(error.diagnostics).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ file: expect.stringMatching(/broken\.ts$/), line: 2, code: "TS2322" }),
-        ]),
-      );
-    }
-  });
-}, 120_000);
+import { cli } from "./cli-fixture.mjs";
 
 test("adds and removes folders and protects an existing id", async () => {
   await withPlugin(async (plugin, root) => {
@@ -159,6 +115,7 @@ async function withServer(root, check) {
     cwd: root,
     env: { ...process.env, TOKAMAK_WEB_DIR: undefined },
     stdout: "ignore",
+    timeout: 110_000,
     stderr: "pipe",
   });
   let address;
@@ -210,7 +167,7 @@ test("a real local server loads and removes an indexed plugin on restart", async
     run(["build", plugin]);
     await withServer(root, () => {
       expect(run(["list"])).toEqual({ ok: true, plugins: [] });
-      run(["add", plugin]);
+      expect(run(["add", plugin]).precedence).toBe("index");
       expect(run(["list"])).toEqual({ ok: true, plugins: [] });
     });
     await withServer(root, (address, token) => {
@@ -242,6 +199,11 @@ test("rejects empty input and server selection on index commands without leaking
     expect(cli(root, ["plugin", "list", "--help"]).stdout).toContain("--server");
     const list = cli(root, ["plugin", "list", "--server", address, "--json"], { TOKAMAK_TOKEN: "test" });
     expect(list.code).not.toBe(0);
+    for (const malformed of [`--server=${address}`, address]) {
+      const rejected = cli(root, ["plugin", "list", malformed, "--json"]);
+      expect(rejected.code).not.toBe(0);
+      expect(rejected.stdout + rejected.stderr).not.toContain("private-password");
+    }
     expect(list.stdout + list.stderr + add.stdout + add.stderr).not.toContain("private-password");
     expect(Bun.file(join(root, "data", "plugin-index.json")).size).toBe(0);
   });
@@ -265,7 +227,7 @@ test("closed stdout ends quietly", async () => {
     });
     expect(signal).toBeNull();
     expect(code).toBe(0);
-    expect(stderr).not.toMatch(/EPIPE|stack trace|at .*\.ts:/);
+    expect(stderr).toBe("");
   });
 }, 60_000);
 
@@ -278,24 +240,33 @@ test("concurrent adds preserve every update and recover an abandoned lock", asyn
     const expected = Object.fromEntries(
       Array.from({ length: 12 }, (_, i) => [`concurrent-${i}`, join(root, `concurrent-${i}`)]),
     );
-    await Promise.all(Object.entries(expected).map(async ([id, folder]) => {
-      await mkdir(folder);
-      await writeFile(join(folder, "package.json"), JSON.stringify({ name: id }));
-    }));
-    await Promise.all(Object.values(expected).map(async (folder) => {
-      const child = Bun.spawn([process.execPath, "run", "--silent", "tokamak", "plugin", "add", folder, "--json"], {
-        cwd: workspace,
-        env: { ...process.env, TOKAMAK_SERVER_DIR: data },
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 60_000,
-      });
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
-      ]);
-      expect(code, stderr).toBe(0);
-      expect(JSON.parse(stdout).ok).toBe(true);
-    }));
+    await Promise.all(
+      Object.entries(expected).map(async ([id, folder]) => {
+        await mkdir(folder);
+        await writeFile(join(folder, "package.json"), JSON.stringify({ name: id }));
+      }),
+    );
+    await Promise.all(
+      Object.values(expected).map(async (folder) => {
+        const child = Bun.spawn(
+          [process.execPath, "run", "--silent", "tokamak", "plugin", "add", folder, "--json"],
+          {
+            cwd: workspace,
+            env: { ...process.env, TOKAMAK_SERVER_DIR: data },
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 60_000,
+          },
+        );
+        const [code, stdout, stderr] = await Promise.all([
+          child.exited,
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+        ]);
+        expect(code, stderr).toBe(0);
+        expect(JSON.parse(stdout).ok).toBe(true);
+      }),
+    );
     expect(JSON.parse(await readFile(join(data, "plugin-index.json"), "utf8"))).toEqual(expected);
     expect(await Bun.file(join(lock, "2147483647.abandoned")).exists()).toBe(false);
   });
@@ -307,19 +278,39 @@ test("stale discovery sends no token and mismatched health cannot supply a catal
     await mkdir(data);
     await writeFile(join(data, "server.token"), "a".repeat(64), { mode: 0o600 });
     const requests = [];
-    const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
-      requests.push(new URL(request.url).pathname);
-      return Response.json({ plugins: [] });
-    } });
+    const listener = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        requests.push(new URL(request.url).pathname);
+        return Response.json({ plugins: [] });
+      },
+    });
     const address = `http://127.0.0.1:${listener.port}`;
-    const identity = { pid: 2147483647, url: `ws://127.0.0.1:${listener.port}/ws`, bundleHash: "b".repeat(64) };
+    const identity = {
+      pid: 2147483647,
+      url: `ws://127.0.0.1:${listener.port}/ws`,
+      bundleHash: "b".repeat(64),
+    };
     async function list(env = {}) {
       const child = Bun.spawn([process.execPath, "run", "--silent", "tokamak", "plugin", "list", "--json"], {
         cwd: workspace,
-        env: { ...process.env, TOKAMAK_SERVER: undefined, TOKAMAK_TOKEN: undefined, TOKAMAK_SERVER_DIR: data, ...env },
-        stdout: "pipe", stderr: "pipe", timeout: 30_000,
+        env: {
+          ...process.env,
+          TOKAMAK_SERVER: undefined,
+          TOKAMAK_TOKEN: undefined,
+          TOKAMAK_SERVER_DIR: data,
+          ...env,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
       });
-      const [code, stdout] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      const [code, stdout] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
       expect(code).not.toBe(0);
       return JSON.parse(stdout).error;
     }
