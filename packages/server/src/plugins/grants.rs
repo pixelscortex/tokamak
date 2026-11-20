@@ -13,6 +13,37 @@ impl Loaded {
         database: &crate::data::Database,
         previous: Option<&Self>,
     ) -> Result<(), Error> {
+        self.record_grants_for(database, previous, &self.catalog.order)
+            .await
+    }
+
+    pub async fn record_startup_grants(
+        &mut self,
+        database: &crate::data::Database,
+    ) -> Result<(), Error> {
+        // A duplicate in one plugin must not discard another plugin's schema.
+        let mut skipped = BTreeSet::new();
+        for id in &self.catalog.order {
+            match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(id))).await {
+                Err(Error::IndexBackfill(message)) => {
+                    eprintln!("Skipping plugin {id}: {message}");
+                    skipped.insert(id.clone());
+                }
+                result => result?,
+            }
+        }
+        if !skipped.is_empty() {
+            self.remove_skipped(&skipped)?;
+        }
+        Ok(())
+    }
+
+    async fn record_grants_for(
+        &self,
+        database: &crate::data::Database,
+        previous: Option<&Self>,
+        ids: &[String],
+    ) -> Result<(), Error> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
             .table(&Table::new("grants").map_err(|e| invalid(e.to_string()))?)
@@ -25,8 +56,11 @@ impl Loaded {
         let result = async {
             // Schemas and grants commit together for the candidate generation.
             let mut resets = Vec::new();
-            for (id, (descriptor, _)) in &self.inspected {
-                let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
+            for id in ids {
+                let schema = match self.inspected.get(id) {
+                    Some((descriptor, _)) => crate::schema::Schema::parse(&descriptor["schema"])?,
+                    None => crate::schema::Schema::default(),
+                };
                 let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
                 if let Some(reason) =
                     Box::pin(schema.apply(&mut tx, &space, previous.is_none())).await?
@@ -37,7 +71,7 @@ impl Loaded {
 
             let mut granted = Vec::new();
 
-            for id in &self.catalog.order {
+            for id in ids {
                 let definition = &self.catalog.plugins[id].manifest.plugin;
 
                 let old = previous.and_then(|old| old.catalog.plugins.get(id));

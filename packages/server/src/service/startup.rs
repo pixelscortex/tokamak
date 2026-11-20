@@ -92,9 +92,13 @@ impl Server {
         };
 
         let loaded = match loaded {
-            Ok(loaded) => Box::pin(loaded.record_grants(&database, None))
-                .await
-                .map(|()| loaded),
+            Ok(mut loaded) => Box::pin(
+                Arc::get_mut(&mut loaded)
+                    .expect("the startup generation is not published")
+                    .record_startup_grants(&database),
+            )
+            .await
+            .map(|()| loaded),
             Err(error) => Err(error),
         };
 

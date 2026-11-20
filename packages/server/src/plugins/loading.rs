@@ -12,8 +12,6 @@ impl Loaded {
     ) -> Result<Arc<Self>, Error> {
         let mut targets = BTreeMap::new();
 
-        let mut functions = Vec::new();
-
         let mut inspected = BTreeMap::new();
 
         for id in &catalog.order {
@@ -61,37 +59,67 @@ impl Loaded {
                     },
                 );
             }
-
-            functions.extend(client_descriptors(
-                id,
-                &descriptor,
-                artifact.manifest.plugin.maintenance.as_deref(),
-            ));
         }
-        // Keep logical table names scoped by plugin in the aggregate metadata.
-        let schemas: BTreeMap<_, _> = inspected
-            .iter()
-            .map(|(id, (descriptor, _))| (id.clone(), descriptor["schema"].clone()))
-            .collect();
-
-        let descriptor = json!({"schema":schemas,"functions":functions});
-
-        let mut metadata = catalog.metadata();
-        metadata["functions"] = descriptor["functions"].clone();
-        metadata["schema"] = descriptor["schema"].clone();
-
-        let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
-
         validate_maintenance(&catalog, &targets)?;
         let workers = start_workers(&catalog)?;
-        Ok(Arc::new(Self {
+        let mut loaded = Self {
             catalog,
             targets,
-            descriptor,
-            catalog_text,
+            descriptor: Value::Null,
+            catalog_text: String::new(),
             inspected,
             workers,
-        }))
+        };
+        loaded.update_metadata()?;
+        Ok(Arc::new(loaded))
+    }
+
+    pub(super) fn remove_skipped(&mut self, skipped: &BTreeSet<String>) -> Result<(), Error> {
+        self.catalog.plugins.retain(|id, _| !skipped.contains(id));
+        self.catalog.order.retain(|id| !skipped.contains(id));
+        self.catalog.update_metadata()?;
+        self.targets
+            .retain(|_, target| !skipped.contains(&target.owner));
+        self.workers.retain(|id, _| !skipped.contains(id));
+        self.inspected.retain(|id, _| !skipped.contains(id));
+
+        self.update_metadata()
+    }
+
+    fn update_metadata(&mut self) -> Result<(), Error> {
+        // Keep logical table names scoped by plugin in the aggregate metadata.
+        let schemas: BTreeMap<_, _> = self
+            .inspected
+            .iter()
+            .map(|(id, (descriptor, _))| (id, &descriptor["schema"]))
+            .collect();
+        let functions: Vec<_> = self
+            .catalog
+            .order
+            .iter()
+            .filter_map(|id| {
+                self.inspected
+                    .get(id)
+                    .map(|(descriptor, _)| (id, descriptor))
+            })
+            .flat_map(|(id, descriptor)| {
+                client_descriptors(
+                    id,
+                    descriptor,
+                    self.catalog.plugins[id]
+                        .manifest
+                        .plugin
+                        .maintenance
+                        .as_deref(),
+                )
+            })
+            .collect();
+        self.descriptor = json!({"schema":schemas,"functions":functions});
+        let mut metadata = self.catalog.metadata();
+        metadata["functions"] = self.descriptor["functions"].clone();
+        metadata["schema"] = self.descriptor["schema"].clone();
+        self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
+        Ok(())
     }
 
     pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {
