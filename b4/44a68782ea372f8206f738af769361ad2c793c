@@ -1,0 +1,38 @@
+packages/server/src/plugins/grants.rs
+  s_2d256ddfde48ff::t_dfaaead103ca65 46,91,120
+  s_2d256ddfde48ff::t_1d6ce9e8f6ec53 121-122
+  s_2d256ddfde48ff::t_de3fbbbbb9e631 45,47,119,123,125-130
+.ci/README.md
+  s_2d256ddfde48ff::t_e68b72e0c2658f 47-52,58-59,61-72
+packages/server/src/data/mod.rs
+  s_2d256ddfde48ff::t_dfaaead103ca65 54-55,84-87,115,119-120
+  s_2d256ddfde48ff::t_74df4f71775c38 121-122
+.ci/versions.ts
+  s_2d256ddfde48ff::t_5fecfc242ba58f 7-10,12-19,54-55,80-83,85-88,148-152,177-181
+plugins/chat/plugin.ts
+  s_2d256ddfde48ff::t_f13c1fd66b8b12 5
+plugins/acp/src/server/agents/client.ts
+  s_2d256ddfde48ff::t_ff3a0223914adb 13,214
+.ci/versions.test.ts
+  s_2d256ddfde48ff::t_b627baf8312a43 19-21,34-43,62-65,79-92,101,104-105,116-117,120-121,126-130
+plugins/chat/package.json
+  s_2d256ddfde48ff::t_f13c1fd66b8b12 3
+bun.lock
+  s_2d256ddfde48ff::t_a0c07dffca9a80 128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b444a68782ea372f8206f738af769361ad2c793c",
+  "prompts": {},
+  "sessions": {
+    "s_2d256ddfde48ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ecc974d1-dd6b-4f18-8da1-d60cbebe54f0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
