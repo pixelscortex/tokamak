@@ -122,6 +122,13 @@ impl Coordinator {
     }
 
     fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
+        if call
+            .target_build
+            .as_ref()
+            .is_some_and(tokio_util::sync::CancellationToken::is_cancelled)
+        {
+            return Err("Plugin action cancelled by reload".into());
+        }
         match (&self.plugins, &call.generation, &call.owner) {
             (Some(current), Some(generation), Some(owner))
                 if !generation.action_lifetimes[owner].is_cancelled() =>

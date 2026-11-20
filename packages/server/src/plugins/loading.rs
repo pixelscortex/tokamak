@@ -93,7 +93,55 @@ impl Loaded {
             inspected,
             workers,
             action_lifetimes,
+            current: previous.map(|p| p.current.clone()).unwrap_or_default(),
         }))
+    }
+
+    pub(crate) async fn check_workers(&self, changed: &BTreeSet<String>) -> Result<(), Error> {
+        for id in changed {
+            if let Some(worker) = self.workers.get(id) {
+                worker.check_ready().await.map_err(|error| {
+                    let environment = crate::environment::Snapshot::new(Some(self), Some(id));
+                    invalid(format!(
+                        "Plugin {id} worker failed readiness: {}",
+                        environment.redact(error)
+                    ))
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn publish(
+        self: &Arc<Self>,
+        previous: Option<&Self>,
+        changed: &BTreeSet<String>,
+    ) {
+        // Action calls can resolve outside the coordinator. Block them during
+        // retirement so a new worker cannot use the live directory until its
+        // predecessor has stopped.
+        let mut current = self.current.write().await;
+        if let Some(previous) = previous {
+            for id in changed {
+                if let Some(lifetime) = previous.action_lifetimes.get(id) {
+                    lifetime.cancel();
+                }
+            }
+            for id in changed {
+                if let Some(worker) = previous.workers.get(id) {
+                    worker.stop().await;
+                }
+            }
+        }
+        *current = Arc::downgrade(self);
+    }
+
+    pub(crate) async fn current_for(&self, caller: &str) -> Result<Arc<Self>, String> {
+        let current = self.current.read().await;
+        if self.action_lifetimes[caller].is_cancelled() {
+            return Err("Plugin action cancelled by reload".into());
+        }
+        current.upgrade().ok_or_else(|| "server is closed".into())
     }
 
     pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {

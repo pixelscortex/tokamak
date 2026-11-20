@@ -32,7 +32,8 @@ registered in capability-protected local mode:
 
 - `GET /plugins`: live manifest/function metadata and generation revision.
 - `POST /plugins/{id}/reload`: validate and reload the configured installation.
-- `GET /plugins/{id}/assets/{name}`: declared UI files from the verified snapshot.
+- `GET /plugins/{id}/{build-id}/assets/{name}`: declared UI files from that verified build.
+  Use the plugin's `revision` field for its build id. The catalog revision is for paging.
   Never arbitrary files, backend source, capability tokens or generated backend API.
 
 ## Loading and reload contract
@@ -54,8 +55,7 @@ when its last reference retires. Snapshots consume disk rather than retaining al
 artifact bytes or open file descriptors in RAM. HTTP UI downloads stream 64 KiB
 chunks; native/WebSocket UI downloads use UTF-8-safe pages of at most 8 KiB.
 Neither transfer has a total-size ceiling. These are corruption/mixed-build
-checks, not signatures. Manifests are parsed through a buffered reader, with no
-128 KiB manifest limit. Catalog JSON is serialized once per generation and served
+checks, not signatures. The build id hashes the complete manifest, with no 128 KiB manifest limit. Catalog JSON is serialized once per generation and served
 in 8 KiB pages, with no aggregate catalog ceiling. Metadata and evaluated modules
 still require memory proportional to their contents; there is no fixed RSS promise.
 
@@ -72,10 +72,12 @@ fixed heap quota; the former 64 MiB window ceiling does not limit UI bundles.
 
 Reload is serialized with admitted calls: old calls finish their commit/rollback
 first. The full candidate installation resolves and is inspected before one
-generation swap. Failed reload leaves old code, subscriptions and data usable.
-Successful reload dirties all subscriptions; removed or changed-kind queries
-produce explicit subscription errors. The named ID must be present in the old or
-new installation; dependent callers reload together. This is not stateful HMR.
+generation swap. Changed workers must start and import their bundles in temporary
+working directories before the server commits grants and schemas. Failed reload
+leaves old code, workers, subscriptions and data usable. Successful reload
+cancels only actions from retired builds and re-runs existing subscriptions.
+Removed or changed-kind queries produce subscription errors on the same id. The
+named ID must be present in the old or new installation.
 On Unix, unchanged files reuse verified snapshots only when canonical path,
 device/inode, size, mtime and ctime still match. Changed files are rehashed, so an
 unchanged manifest cannot conceal an in-place write or atomic replacement.

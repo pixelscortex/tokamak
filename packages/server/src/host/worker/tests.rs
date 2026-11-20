@@ -73,6 +73,7 @@ async fn deadline_and_dropped_invocation_kill_stuck_worker_then_restart() {
             json!({}),
             local_user_ops(),
             Duration::from_millis(30),
+            None,
         )
         .await
         .unwrap_err();
@@ -104,6 +105,7 @@ async fn cooperative_cancel_keeps_worker_and_missing_bun_is_readable() {
             json!({}),
             local_user_ops(),
             Duration::from_millis(30),
+            None,
         )
         .await
         .unwrap_err();

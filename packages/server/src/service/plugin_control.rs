@@ -131,21 +131,11 @@ impl Coordinator {
             }
         }
 
+        candidate.check_workers(&changed).await?;
         Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
         // All fallible preparation is complete. No requests can observe a
         // partial swap while the coordinator retires the changed builds.
-        if let Some(previous) = &self.plugins {
-            for id in &changed {
-                if let Some(lifetime) = previous.action_lifetimes.get(id) {
-                    lifetime.cancel();
-                }
-            }
-            for id in &changed {
-                if let Some(worker) = previous.workers.get(id) {
-                    worker.stop().await;
-                }
-            }
-        }
+        candidate.publish(self.plugins.as_deref(), &changed).await;
         self.kinds = candidate.client_kinds();
         self.plugins = Some(candidate);
 

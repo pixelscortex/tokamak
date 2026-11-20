@@ -99,6 +99,7 @@ impl OpRegistry {
         self.3 = lifetime;
     }
 
+    /// Returns the token cancelled when the server retires this action's plugin build.
     pub fn action_lifetime(&self) -> &tokio_util::sync::CancellationToken {
         &self.3
     }

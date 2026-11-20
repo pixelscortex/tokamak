@@ -34,7 +34,7 @@ export class WebPluginHost implements PluginModuleHost {
     expandImporters(affected, importers);
     return affected;
   }
-  remove(names: Iterable<string>) {
+  remove(names: Iterable<string>, { keepImports = false } = {}) {
     for (const name of names) {
       const generation = this.generations.get(name);
       if (generation) {
@@ -45,7 +45,9 @@ export class WebPluginHost implements PluginModuleHost {
         for (const url of generation.modules.keys()) this.moduleImports.delete(url);
       }
       this.generations.delete(name);
-      this.imports.delete(name);
+      // A failed fetch may use a retired asset URL. Keep its observed edge so
+      // the next catalog can retire the importer and remount its view.
+      if (!keepImports) this.imports.delete(name);
       this.errors.delete(name);
     }
   }

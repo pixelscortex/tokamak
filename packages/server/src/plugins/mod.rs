@@ -10,7 +10,7 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 pub struct Artifact {
@@ -40,6 +40,7 @@ pub(crate) struct Loaded {
     pub catalog_text: String,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     pub(crate) action_lifetimes: BTreeMap<String, tokio_util::sync::CancellationToken>,
+    current: Arc<tokio::sync::RwLock<Weak<Self>>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 
