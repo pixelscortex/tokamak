@@ -208,6 +208,61 @@ test("a real local server loads and removes an indexed plugin on restart", async
   });
 }, 330_000);
 
+test("a real server installs, runs, and removes a plugin packed by the CLI", async () => {
+  await withPlugin(async (plugin, root) => {
+    const result = cli(root, ["plugin", "pack", plugin, "--json"], {}, root);
+    expect(result.code, result.stderr).toBe(0);
+    const { id, path, buildId } = JSON.parse(result.stdout);
+    expect(id).toBe("outside-fixture");
+    expect(buildId).toMatch(/^[a-f0-9]{64}$/);
+
+    await withServer(root, async (address, token) => {
+      const headers = { Authorization: `Bearer ${token}` };
+      const endpoint = `${address}/plugins/${id}`;
+      const upload = await fetch(`${endpoint}/package`, {
+        method: "PUT",
+        headers: { ...headers, "x-tokamak-build-id": buildId },
+        body: Bun.file(path),
+      });
+      const installed = await upload.json();
+      expect(upload.status, JSON.stringify(installed)).toBe(200);
+      expect(installed).toMatchObject({ status: "installed", id, buildId });
+
+      const catalog = async () => {
+        const response = await fetch(`${address}/plugins`, { headers });
+        expect(response.status).toBe(200);
+        return (await response.json()).plugins;
+      };
+      expect(await catalog()).toEqual([
+        expect.objectContaining({ plugin: expect.objectContaining({ id }), revision: buildId }),
+      ]);
+
+      const socket = new WebSocket(address.replace(/^http:/, "ws:") + "/ws?token=" + token);
+      let transport;
+      try {
+        await new Promise((resolve, reject) => {
+          socket.addEventListener("open", resolve, { once: true });
+          socket.addEventListener("error", reject, { once: true });
+        });
+        transport = new WebSocketTransport(socket);
+        const client = new TokamakClient(transport);
+        const query = () => client.query(createApi(id).notes.list, {});
+        expect(await query()).toEqual([]);
+
+        const remove = await fetch(endpoint, { method: "DELETE", headers });
+        const removed = await remove.json();
+        expect(remove.status, JSON.stringify(removed)).toBe(200);
+        expect(removed).toEqual({ id, removed: true });
+        expect(await catalog()).toEqual([]);
+        await expect(query()).rejects.toThrow(`unknown function: ${id}/notes:list`);
+      } finally {
+        if (transport) transport.close();
+        else socket.close();
+      }
+    });
+  });
+}, 180_000);
+
 test("rejects empty input and server selection on index commands without leaking credentials", async () => {
   await withPlugin((plugin, root) => {
     const empty = cli(root, ["plugin", "build", "", "--json"]);

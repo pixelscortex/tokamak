@@ -18,7 +18,7 @@ test("the server loads the external artifact and queries data written by its mut
           process.platform === "win32" ? "tokamak-server.exe" : "tokamak-server",
         ),
         "--plugins",
-        root,
+        plugin,
         "--data",
         join(root, "store"),
         "--listen",
