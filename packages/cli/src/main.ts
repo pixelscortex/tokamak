@@ -9,13 +9,15 @@ let server: string | undefined;
 const flags: Flags = {};
 let next = "tokamak --help";
 
-function output(data: object, human: string) {
-  if (json) {
-    process.stdout.write(JSON.stringify(data) + "\n");
-    process.stderr.write(human + "\n");
-  } else {
-    process.stdout.write(human + "\n");
-  }
+// A downstream reader may close its pipe before the command writes a result.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error: NodeJS.ErrnoException) => process.exit(error.code === "EPIPE" ? 0 : 1));
+}
+
+function output(data: object, human: string, failed = false) {
+  if (json || failed) process.stderr.write(human + "\n");
+  if (json) process.stdout.write(JSON.stringify(data) + "\n");
+  else if (!failed) process.stdout.write(human + "\n");
 }
 
 try {
@@ -34,6 +36,7 @@ try {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === "--help" || arg === "--json") continue;
+    if (!arg) throw new CommandError("Empty positional argument", next);
     if (!arg.startsWith("-")) {
       positional.push(arg);
       continue;
@@ -41,6 +44,8 @@ try {
     const found = declared.find(
       ([name, flag]) => arg === `--${name}` || (flag.short && arg === `-${flag.short}`),
     );
+    if (arg === "--server" && !command?.usesServer)
+      throw new CommandError("--server is only available on commands that use a server", next);
     const name = arg === "--server" ? "server" : found?.[0];
     if (!name) throw new CommandError(`Unknown flag: ${arg}`, next);
     if (name in flags || (name === "server" && server))
@@ -65,7 +70,7 @@ try {
   if (help && (command || children.length)) {
     const text = command
       ? [
-          `Usage: tokamak ${command.path}${command.args ? (command.args.optional ? ` [${command.args.name}]` : ` <${command.args.name}>`) : ""}${declared.map(([name, flag]) => ` [--${name}${flag.value ? ` <${flag.value}>` : ""}]`).join("")} [--json] [--server <address>] [--help]`,
+          `Usage: tokamak ${command.path}${command.args ? (command.args.optional ? ` [${command.args.name}]` : ` <${command.args.name}>`) : ""}${declared.map(([name, flag]) => ` [--${name}${flag.value ? ` <${flag.value}>` : ""}]`).join("")} [--json]${command.usesServer ? " [--server <address>]" : ""} [--help]`,
           command.summary,
           ...declared.map(
             ([name, flag]) =>
@@ -74,7 +79,7 @@ try {
           `Example: ${command.example}`,
         ].join("\n")
       : [
-          `Usage: tokamak ${group ? group + " " : ""}<command> [--json] [--server <address>] [--help]`,
+          `Usage: tokamak ${group ? group + " " : ""}<command> [--json] [--help]`,
           ...children.map(({ path, summary }) => `  ${path}  ${summary}`),
           `Example: ${children[0]!.example}`,
         ].join("\n");
@@ -94,6 +99,7 @@ try {
   output(
     { ok: false, error: { message, next, ...(diagnostics ? { diagnostics } : {}) } },
     `${message}\nTry: ${next}`,
+    true,
   );
   process.exitCode = 1;
 }
