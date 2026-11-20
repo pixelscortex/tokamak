@@ -9,9 +9,9 @@ if (!["start", "stop", "status"].includes(command) || !["debug", "release"].incl
 }
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const suffix = process.platform === "win32" ? ".exe" : "";
-let binary = resolve(root, `target/${profile}/tokamak${suffix}`);
+let binary = resolve(root, `target/${profile}/tokamak-server${suffix}`);
 if (!existsSync(binary) && ["stop", "status"].includes(command)) {
-  binary = resolve(root, `target/${profile === "debug" ? "release" : "debug"}/tokamak${suffix}`);
+  binary = resolve(root, `target/${profile === "debug" ? "release" : "debug"}/tokamak-server${suffix}`);
 }
 const directory = localDirectory(binary, root);
 if (command === "stop") {

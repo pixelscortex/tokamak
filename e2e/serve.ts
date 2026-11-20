@@ -8,7 +8,7 @@ const root = resolve(import.meta.dirname, "..");
 const directory = await mkdtemp(`${root}/app/.dev/serve-`);
 try {
   const child = spawn(
-    `${root}/target/debug/tokamak`,
+    `${root}/target/debug/tokamak-server`,
     [
       "--local-dir",
       process.env.TOKAMAK_SERVER_DIR!,

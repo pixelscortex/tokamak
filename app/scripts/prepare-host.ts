@@ -12,7 +12,15 @@ function run(command: string, args: string[]) {
 // The dev server loads the whole plugins folder, so every plugin in it must be built.
 for (const plugin of ["chat", "acp"])
   run("proto", ["run", "bun", "--", "packages/build/src/build.ts", `plugins/${plugin}`]);
-run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak", ...(release ? ["--release"] : [])]);
+run("cargo", [
+  "build",
+  "--locked",
+  "-p",
+  "server",
+  "--bin",
+  "tokamak-server",
+  ...(release ? ["--release"] : []),
+]);
 {
   const info = spawnSync("rustc", ["-vV"], { encoding: "utf8" });
   if (info.status !== 0) throw new Error("Cannot determine Rust target");
@@ -22,8 +30,8 @@ run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak", ...(relea
   await mkdir(directory, { recursive: true });
   const suffix = process.platform === "win32" ? ".exe" : "";
   await cp(
-    `${root}target/${release ? "release" : "debug"}/tokamak${suffix}`,
-    `${directory}/tokamak-${target}${suffix}`,
+    `${root}target/${release ? "release" : "debug"}/tokamak-server${suffix}`,
+    `${directory}/tokamak-server-${target}${suffix}`,
   );
   await rm(`${directory}/plugins`, { recursive: true, force: true });
   for (const plugin of await readdir(`${root}plugins`, { withFileTypes: true })) {

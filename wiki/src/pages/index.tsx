@@ -25,7 +25,7 @@ const pillars = [
   },
   {
     title: "One server, thin desktop",
-    body: "One tokamak binary holds the plugins and the data, on embedded SurrealDB. The desktop just connects.",
+    body: "One tokamak-server binary holds the plugins and the data, on embedded SurrealDB. The desktop just connects.",
   },
 ];
 

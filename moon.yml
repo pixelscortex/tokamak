@@ -73,7 +73,7 @@ tasks:
       cache: false
       mutex: "cargo"
   build-release:
-    command: "cargo build --locked --release --package server --bin tokamak --target-dir target"
+    command: "cargo build --locked --release --package server --bin tokamak-server --target-dir target"
     # The server depends on engine, not the UI/app/plugin bundles. Keep an
     # unrelated frontend change from forcing another release link.
     inputs:
@@ -91,7 +91,7 @@ tasks:
       - "!/.moon/cache/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
-    outputs: ["target/release/tokamak"]
+    outputs: ["target/release/tokamak-server"]
     options:
       cache: true
       mutex: "cargo"
@@ -106,7 +106,7 @@ tasks:
       - "-e"
       - >-
         import { stat } from "node:fs/promises";
-        for (const binary of ["tokamak"]) {
+        for (const binary of ["tokamak-server"]) {
           const path = "target/release/" + binary + (process.platform === "win32" ? ".exe" : "");
           const { size } = await stat(path);
           console.log(path + ": " + size + " bytes");
