@@ -11,8 +11,8 @@ impl Coordinator {
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
 
-        if !plugins.skipped.is_empty() {
-            metadata["skipped"] = serde_json::json!(plugins.skipped);
+        if !plugins.skipped_codes.is_empty() {
+            metadata["skipped"] = serde_json::json!(plugins.skipped_codes);
         }
         Ok(metadata)
     }
@@ -335,6 +335,7 @@ impl Coordinator {
             package.map(|(_, staged)| staged),
         ))
         .await?;
+        candidate.snapshot_catalog()?;
         let changed = candidate.changed_plugins(previous);
         let revision_changed =
             previous.is_none_or(|old| old.catalog_revision != candidate.catalog_revision);
