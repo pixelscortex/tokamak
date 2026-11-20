@@ -5,6 +5,7 @@ type LoadedPlugin = { plugin: { id: string; version: string }; fromIndex?: boole
 
 export default {
   path: "plugin list",
+  usesServer: true,
   summary: "List plugins loaded by the running server.",
   example: "tokamak plugin list --json",
   async run(_, { server }) {

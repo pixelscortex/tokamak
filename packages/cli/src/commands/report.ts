@@ -1,11 +1,13 @@
+import { randomBytes } from "node:crypto";
 import { arch, platform, release } from "node:os";
-import { lstat, open, readFile, writeFile } from "node:fs/promises";
+import { lstat, open, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { CommandError, type Command } from "../command";
 import { dataFolder } from "../data";
 import { readIndex } from "../plugin-index";
 import { doctorTable, inspectDevelopment } from "./doctor";
-import { serverGet } from "../server";
+import { localEndpoint, localServerGet } from "../server";
+import { reportSanitizer } from "./report-sanitize";
 
 type Catalog = { plugins: { plugin: { id: string; version: string }; fromIndex?: boolean }[] };
 
@@ -18,44 +20,37 @@ function block(text: string) {
     : "(empty)";
 }
 
+const logLimit = 1024 * 1024;
+
 async function logTail(path: string, count: number) {
-  if (!(await lstat(path)).isFile()) return [];
+  if (!(await lstat(path)).isFile()) return;
   const file = await open(path, "r");
   try {
-    let { size: offset } = await file.stat();
-    const chunks: Buffer[] = [];
-    let newlines = 0;
-    while (offset && newlines <= count) {
-      const size = Math.min(8192, offset);
-      offset -= size;
-      const buffer = Buffer.alloc(size);
-      const { bytesRead } = await file.read(buffer, 0, size, offset);
-      const chunk = buffer.subarray(0, bytesRead);
-      for (const byte of chunk) if (byte === 10) newlines++;
-      chunks.push(chunk);
+    const { size } = await file.stat();
+    const start = Math.max(0, size - logLimit);
+    const buffer = Buffer.alloc(size - start);
+    let filled = 0;
+    while (filled < buffer.length) {
+      const { bytesRead } = await file.read(buffer, filled, buffer.length - filled, start + filled);
+      if (!bytesRead) break;
+      filled += bytesRead;
     }
-    const lines = Buffer.concat(chunks.reverse()).toString("utf8").split(/\r?\n/);
+    const lines = buffer.toString("utf8", 0, filled).split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
-    // The first line may be partial when reading from the middle of the log.
-    if (offset) lines.shift();
-    return redactLog(lines, offset !== 0).slice(-count);
+    // A byte cut can land in a message or even in the middle of a character.
+    if (start > 0) lines.shift();
+    return {
+      lines: lines.slice(-count),
+      notice:
+        start > 0
+          ? "Log tail limited to the last 1 MiB."
+          : lines.length > count
+            ? "Earlier log lines were omitted."
+            : undefined,
+    };
   } finally {
     await file.close();
   }
-}
-
-function redactTokenShapes(text: string) {
-  // Tokamak's local and invite tokens are random 256-bit values in hex.
-  return text.replace(/[a-f0-9]{64,}/gi, "[REDACTED]").replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, "[REDACTED]");
-}
-
-function redactLog(lines: string[], credential = false) {
-  return lines.map((line) => {
-    credential =
-      /authorization|\b(?:bearer|basic)\s+|\btoken\b|tokamak_token|\/join#/i.test(line) ||
-      (credential && /^\s/.test(line));
-    return credential ? "[REDACTED: credential-bearing line]" : redactTokenShapes(line);
-  });
 }
 
 async function readLocalToken(folder: string) {
@@ -68,17 +63,17 @@ async function readLocalToken(folder: string) {
   }
 }
 
-async function loadedPlugins() {
+async function loadedPlugins(
+  server: Awaited<ReturnType<typeof localEndpoint>>,
+  clean: (value: string) => string,
+) {
   try {
-    const { plugins } = (await serverGet("/plugins", undefined, {
-      localOnly: true,
-      timeout: 1000,
-    })) as Catalog;
+    const { plugins } = (await localServerGet("/plugins", server)) as Catalog;
     return block(
       JSON.stringify(
         plugins.map(({ plugin: { id, version }, fromIndex }) => ({
-          id,
-          version,
+          id: clean(id),
+          version: clean(version),
           fromIndex: fromIndex === true,
         })),
         null,
@@ -93,48 +88,83 @@ async function loadedPlugins() {
 async function reportText(folder: string) {
   const [{ rows, server }, index, log, localToken] = await Promise.all([
     inspectDevelopment(),
-    readIndex().then(
-      (entries) => block(redactTokenShapes(JSON.stringify(Object.fromEntries(entries), null, 2))),
-      () => "Could not read the plugin index.",
-    ),
-    logTail(join(folder, "server.log"), 200).then(
-      (lines) => block(lines.join("\n")),
-      () => "No readable server.log.",
-    ),
+    readIndex(folder).catch(() => undefined),
+    logTail(join(folder, "server.log"), 200).catch(() => undefined),
     readLocalToken(folder),
   ]);
+  const clean = reportSanitizer([localToken?.trim(), process.env.TOKAMAK_TOKEN]);
   const offline = "Local server is not running or reachable.";
-  const plugins = server ? await loadedPlugins() : offline;
-  let report = [
+  const plugins = server ? await loadedPlugins(server, clean.value) : offline;
+  return [
     "# Tokamak diagnostic report",
-    "Redaction was applied to remove credential values and token-looking log text.",
+    "This file contains development checks, local server details, loaded plugins, the plugin index, operating system information, and a filtered server log tail. Paths and log text can include project names and other personal details. Redaction was applied to known credentials and credential-looking values. Review the file before sharing it.",
     "## Doctor",
     block(
       doctorTable(
-        rows.map((row) =>
-          row.name === "Local server" ? row : { ...row, detail: redactTokenShapes(row.detail) },
-        ),
+        rows.map((row) => {
+          const detail =
+            row.name === "Local server" && server
+              ? `${clean.value(server.identity.url)} · build id ${clean.buildId(server.identity.buildId)}`
+              : clean.value(row.detail);
+          return row.state === "not ready"
+            ? { ...row, detail, fix: clean.value(row.fix) }
+            : { ...row, detail };
+        }),
       ),
     ),
     "## Local server",
-    server
-      ? block(
-          `Address: ${server.url}\nBuild id: ${server.buildId}\nProcess id: ${server.pid}\nData folder: ${redactTokenShapes(folder)}`,
-        )
-      : offline,
+    block(
+      [
+        `Data folder: ${clean.value(folder)}`,
+        ...(server
+          ? [
+              `Address: ${clean.value(server.identity.url)}`,
+              `Build id: ${clean.buildId(server.identity.buildId)}`,
+              `Process id: ${clean.value(String(server.identity.pid))}`,
+            ]
+          : [offline]),
+      ].join("\n"),
+    ),
     "## Loaded plugins",
     plugins,
     "## Plugin index",
-    index,
+    index
+      ? block(
+          JSON.stringify(
+            Object.fromEntries([...index].map(([id, path]) => [clean.value(id), clean.indexPath(path)])),
+            null,
+            2,
+          ),
+        )
+      : "Could not read the plugin index.",
     "## Operating system",
-    block(`${platform()} ${release()} (${arch()})`),
+    block(clean.value(`${platform()} ${release()} (${arch()})`)),
     "## server.log (last 200 lines)",
-    log,
+    log
+      ? [log.notice, block(log.lines.map(clean.logLine).join("\n"))].filter(Boolean).join("\n\n")
+      : "No readable server.log.",
+    "",
   ].join("\n\n");
-  for (const secret of new Set([localToken?.trim(), process.env.TOKAMAK_TOKEN])) {
-    if (secret) report = report.replaceAll(secret, "[REDACTED]");
+}
+
+const reportHelp = "tokamak report --help";
+const unwritable = "Could not write the report. Choose a writable --out path.";
+
+async function reserveReport(out: string | undefined) {
+  const timestamp = new Date().toISOString().replace(/:/g, "-");
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const suffix = attempt ? `-${randomBytes(4).toString("hex")}` : "";
+    const path = resolve(out ?? `tokamak-report-${timestamp}${suffix}.md`);
+    try {
+      return { path, file: await open(path, "wx", 0o600) };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new CommandError(unwritable, reportHelp);
+      if (out !== undefined) {
+        throw new CommandError("The report file already exists. Choose a different --out path.", reportHelp);
+      }
+    }
   }
-  return report + "\n";
+  throw new CommandError("Could not reserve a default report name. Choose an --out path.", reportHelp);
 }
 
 export default {
@@ -143,17 +173,13 @@ export default {
   example: "tokamak report --out diagnostics.md",
   flags: { out: { value: "path", summary: "Where to write the report." } },
   async run(_, { flags }) {
-    const timestamp = new Date().toISOString().replace(/:/g, "-");
-    const path = resolve(typeof flags.out === "string" ? flags.out : `tokamak-report-${timestamp}.md`);
-    const report = await reportText(dataFolder());
+    const { path, file } = await reserveReport(typeof flags.out === "string" ? flags.out : undefined);
     try {
-      await writeFile(path, report, { flag: "wx", mode: 0o600 });
-    } catch (error) {
-      const message =
-        (error as NodeJS.ErrnoException).code === "EEXIST"
-          ? "The report file already exists. Choose a different --out path."
-          : "Could not write the report. Choose a writable --out path.";
-      throw new CommandError(message, "tokamak report --help");
+      await file.writeFile(await reportText(dataFolder()));
+    } catch {
+      throw new CommandError(unwritable, reportHelp);
+    } finally {
+      await file.close();
     }
     return { data: { path }, text: path };
   },
