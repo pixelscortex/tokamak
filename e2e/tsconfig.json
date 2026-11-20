@@ -7,7 +7,8 @@
     },
     "lib": ["ES2022", "DOM"],
     "skipLibCheck": true,
-    "allowJs": true
+    "allowJs": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "run.ts",
