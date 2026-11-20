@@ -1,0 +1,60 @@
+packages/server/src/websocket.rs
+  s_21707f7f74e5c9::t_a4d70f19098ce3 255
+app/src/plugins/adapter.ts
+  s_21707f7f74e5c9::t_cac87f3fa4c0f5 25
+app/src/shell/session.ts
+  s_21707f7f74e5c9::t_cac87f3fa4c0f5 3,12-16,18,83-85,92-93,111
+  s_21707f7f74e5c9::t_2b40a9cde01735 17
+packages/server/src/plugins/loading.rs
+  s_21707f7f74e5c9::t_a4d70f19098ce3 79,263-272
+packages/runtime/js/plugins.ts
+  s_21707f7f74e5c9::t_cac87f3fa4c0f5 25,37
+app/tests/switching.test.ts
+  s_21707f7f74e5c9::t_9dfaeae59a94b8 53
+  s_21707f7f74e5c9::t_3528702172e973 18
+e2e/browser/shared-plugins.spec.ts
+  s_21707f7f74e5c9::t_3d6dec3654fe9f 50-63
+  s_21707f7f74e5c9::t_9dfaeae59a94b8 1-39,42
+  s_21707f7f74e5c9::t_3569cd457f365d 40-41,43-49,64-76
+app/src/host/compatibility.ts
+  s_21707f7f74e5c9::t_cac87f3fa4c0f5 1-31
+packages/server/src/plugins/mod.rs
+  s_21707f7f74e5c9::t_a4d70f19098ce3 45
+app/src/plugins/views.tsx
+  s_21707f7f74e5c9::t_cac87f3fa4c0f5 31,56,70-83,88-89,97-98,107,169-170,174-191
+  s_21707f7f74e5c9::t_1a4a85ac8dbc91 84,99-100
+packages/server/src/service/plugin_control.rs
+  s_21707f7f74e5c9::t_a4d70f19098ce3 23,44,340
+app/src/shell/frame.tsx
+  s_21707f7f74e5c9::t_cac87f3fa4c0f5 101-104,129-134
+app/src/plugins/web-host.ts
+  s_21707f7f74e5c9::t_89487797a7bf9f 24,123,161-162
+app/tests/compatibility.test.ts
+  s_21707f7f74e5c9::t_4f04f00718ba27 1-14
+app/tests/fixtures/browser.tsx
+  s_21707f7f74e5c9::t_69c0e2667a04e5 13,39,51
+app/tests/plugins.test.tsx
+  s_21707f7f74e5c9::t_c308cd4e42c5e4 23,37,432-468
+app/tests/session.test.ts
+  s_21707f7f74e5c9::t_d01cdaf5795021 16,33,68-72,84-85
+e2e/browser/chat.spec.ts
+  s_21707f7f74e5c9::t_7c38aa2776b420 179-196
+packages/server/tests/plugins.rs
+  s_21707f7f74e5c9::t_02bf8496021f76 1643-1718
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7c53d1674cf906d48b433fceb14aa9ca33e0c03f",
+  "prompts": {},
+  "sessions": {
+    "s_21707f7f74e5c9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1fb15-98d8-7c13-838f-61020cbd385d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
