@@ -10,13 +10,28 @@ import { setTimeout as delay } from "node:timers/promises";
 const workspace = resolve(import.meta.dir, "../../..");
 const directory = await mkdtemp(resolve(tmpdir(), "tokamak-browser-assets-"));
 const sandbox = await prepareAgentEnvironment(directory);
-const fixture = resolve(workspace, "packages/build/tests/fixtures/browser");
+const fixture = resolve(directory, "browser");
 const binary = resolve(workspace, "target/debug/tokamak-server");
-const built = spawnSync("proto", ["run", "bun", "--", "packages/build/src/build.ts", fixture], {
-  cwd: workspace,
-  stdio: "inherit",
-});
-assert.equal(built.status, 0);
+for (const name of ["other", "browser"]) {
+  const path = resolve(directory, name);
+  await cp(resolve(workspace, "packages/build/tests/fixtures", name), path, {
+    recursive: true,
+    filter: (source) => !source.split("/").includes("dist"),
+  });
+  if (name === "browser")
+    await writeFile(
+      resolve(path, "tsconfig.json"),
+      JSON.stringify({
+        extends: resolve(workspace, "app/tsconfig.json"),
+        include: ["src"],
+      }),
+    );
+  const built = spawnSync("proto", ["run", "bun", "--", "packages/build/src/build.ts", path], {
+    cwd: workspace,
+    stdio: "inherit",
+  });
+  assert.equal(built.status, 0);
+}
 await mkdir(resolve(directory, "plugins/browser-fixture"), { recursive: true });
 await cp(resolve(fixture, "dist"), resolve(directory, "plugins/browser-fixture/dist"), { recursive: true });
 

@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { checkTokamakImport } from "./shared-libraries.mts";
 
 const require = createRequire(import.meta.url);
 
@@ -14,6 +15,7 @@ export async function compileCss(path: string): Promise<string> {
     from: path,
     onDependency() {},
     async customCssResolver(id, base) {
+      checkTokamakImport(id, base, "stylesheet");
       const tailwind = id === "tailwindcss" || id.startsWith("tailwindcss/");
       if (!tailwind && id !== "@tokamak/ui/theme.css") return;
       const request = id === "tailwindcss" ? "tailwindcss/index.css" : id;

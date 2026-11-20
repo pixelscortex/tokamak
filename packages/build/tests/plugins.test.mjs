@@ -1,24 +1,24 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, writeFile, stat, cp } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile, stat, cp, realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { uiContributions } from "../src/contributions.ts";
 import { clientSurface } from "../src/client-surface.ts";
-import { PLUGIN_UI_BUILD_ENABLED } from "../src/vite.ts";
+import { build as viteBuild } from "vite";
+import { PLUGIN_UI_BUILD_ENABLED, tokamak } from "../src/vite.ts";
 
 const workspace = resolve(import.meta.dir, "../../..");
 async function scratch(check) {
-  const parent = resolve(workspace, "packages/build/dist");
-  await mkdir(parent, { recursive: true });
-  const root = await mkdtemp(resolve(parent, "plugin-regression-"));
+  const root = await mkdtemp(resolve(await realpath(tmpdir()), "tokamak-plugin-regression-"));
   try {
     await check(root);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 }
-async function source(root, id, code, paths = {}) {
+async function source(root, id, code) {
   const path = resolve(root, id);
   await mkdir(resolve(path, "src/client"), { recursive: true });
   await writeFile(
@@ -29,7 +29,6 @@ async function source(root, id, code, paths = {}) {
     resolve(path, "tsconfig.json"),
     JSON.stringify({
       extends: resolve(workspace, "app/tsconfig.json"),
-      compilerOptions: { paths },
       include: ["src"],
     }),
   );
@@ -71,7 +70,7 @@ test("static contribution discovery preserves brands, aliases and erased exports
     );
     expect(() => uiContributions(path)).toThrow("Invalid UI contribution Bad");
   });
-});
+}, 30_000);
 
 test("compiler-derived slot and component identities survive the DOM port", async () => {
   await scratch(async (root) => {
@@ -89,6 +88,7 @@ test("compiler-derived slot and component identities survive the DOM port", asyn
     const transformed = transform.call({}, code, resolve(owner, "src/client/api.tsx"));
     for (const identity of ["owner.composer.actions", "owner.Input", "owner.Alias"])
       expect(transformed.code).toContain(identity);
+    await viteBuild({ root: owner, configFile: false, plugins: [tokamak({ backend: false })] });
     const mod = await source(
       root,
       "mod",
@@ -99,15 +99,15 @@ test("compiler-derived slot and component identities survive the DOM port", asyn
       export const Frame = wrap(Input, Original => props => <div><Original {...props} /></div>);
       export const Other = replace(Input, props => <p>{props.text}</p>);
     `,
-      { "plugin:owner/client": [resolve(owner, "src/client/api.tsx")] },
     );
+    await viteBuild({ root: mod, configFile: false, plugins: [tokamak({ backend: false })] });
     expect(uiContributions(mod).contributes).toEqual({
       fill: [{ id: "Extra", target: "owner.composer.actions", order: -5, fillId: "extra" }],
       wrap: [{ id: "Frame", target: "owner.Input" }],
       replace: [{ id: "Other", target: "owner.Input" }],
     });
   });
-});
+}, 30_000);
 
 test("a public function component stays hoisted after the surface transform", async () => {
   await scratch(async (root) => {

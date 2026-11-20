@@ -27,10 +27,32 @@ HTML shell is emitted.
 slot/component names still come from the compiler, without executing the client.
 Final file hashes cover JavaScript, source maps, CSS and server output.
 
-Shared imports remain bare: `solid-js`, `solid-js/*`, `@solidjs/web` (including
-subpaths), `@tokamak/sdk` (including subpaths), `@tokamak/ui` (including subpaths),
-`@tokamak/runtime/router`, `@ui-sdk/solid` and `@ui-sdk/core` (including subpaths),
-and compiler-emitted `@plugins/*` module names. Authors use
+The [shared library list](src/shared-libraries.mts) defines which entry points
+the desktop window provides. A plugin can import the authored window entries;
+the compiler and shared dependencies can also reference compiler-only entries.
+Direct `@ui-sdk/*` imports warn because those APIs are unstable; prefer
+`@tokamak/ui`. Server code can use `@tokamak/sdk`; `@tokamak/sdk/web` is types
+only and `@tokamak/ui/theme.css` is stylesheet only. The build checks these
+rules in both the window and server parts, including bundled dependencies.
+
+The window build does not bundle shared libraries. An npm dependency can use
+the app's copy of Solid if it imports a listed entry point as an ES module.
+Deep paths and CommonJS requires of shared libraries fail the build. A dependency
+may still require a compatible version of Solid.
+
+A plugin can declare its own npm dependencies in an optional `package.json`.
+Keep shared libraries out of every dependency section. With dependencies present,
+the build installs them in the plugin folder and bundles what its source imports.
+An existing Bun lockfile is frozen; if it disagrees with the manifest, update
+the lockfile explicitly and try again. Convert other package managers' lockfiles
+to a Bun lockfile before building. Without a lockfile, the first install writes
+one. The build skips installation for a dependency-free manifest and reuses a
+previously verified tree as long as the recorded inputs and install state
+match. Offline, an unchanged install works without the registry; an install
+can use Bun's cache and fails with an install diagnostic if a package is missing.
+Bun runs dependency lifecycle scripts according to its regular trust rules.
+
+Compiler-emitted `@plugins/*` module names also remain bare. Authors use
 `import { Panel } from "plugin:example/client"`. The compiler emits
 `@plugins/example/ui`; the web loader resolves it to the dependency's
 revision-pinned module, including literal dynamic imports. Static imports infer
@@ -38,7 +60,7 @@ required dependencies; literal dynamic imports infer optional dependencies.
 
 The catalog keeps existing manifest fields and adds `revision`, `uiUrl` and
 `stylesheetUrl` per plugin. URLs are `/plugins/<id>/<build-id>/assets/<name>`;
-plugins without UI or CSS have null URLs. Only manifest-declared UI assets from
+plugins without UI or CSS have null URLs. Only manifest-declared window assets and public declarations from
 the current verified snapshot are served. Stale revisions return 404. Successful
 assets use `private, max-age=31536000, immutable` caching and JavaScript uses
 `text/javascript`.
@@ -55,8 +77,8 @@ with the same origin checks. Control routes remain native-only and require
 header authorization in desktop mode.
 
 Run the focused build tests from this directory with `sh tests/run.sh`.
-The browser fixture lives in `tests/fixtures/browser`; its optional cross-plugin
-module need not be installed to build or serve it.
+The browser fixture lives in `tests/fixtures/browser`; its optional dependency
+is built for type checking and need not be installed to serve the fixture.
 After building `target/debug/tokamak-server`, run the real curl/WebSocket checks from the
 repository root with `proto run bun -- packages/build/tests/browser-assets.mjs`.
 They cover loopback, desktop token authentication and a configured origin list.
@@ -106,8 +128,28 @@ paths to the plugin's tsconfig (relative to the plugin root):
 }
 ```
 
-The current authoring build requires sibling public source APIs for type and
-reference metadata; installed artifacts remain independent of that source.
+Each build publishes a single `dist/public.d.ts`. The manifest lists it at
+`entries.types` and hashes it in `hashes`. It contains declarations for the
+plugin's existing public server and window APIs. Public signatures can use
+shared imports allowed in authored code for that part, including types-only
+entries. They cannot expose types from the plugin's own npm packages.
+
+The builder looks for a sibling folder whose `dist/manifest.json` declares the
+dependency's id. A built sibling always wins, even if the local server has a newer copy. The
+build prints where each dependency’s types came from. Duplicate sibling IDs
+fail with both paths. If it finds no built copy, it looks in the running local
+server's catalog using `server.json` and `server.token` in the desktop app's data
+folder. Set `TOKAMAK_SERVER_DIR` to use another data folder. The build copies the
+declarations into `.tokamak/types/` without opening the dependency's source.
+If neither location has the declarations, build or install that plugin first.
+
+Build the starter set in dependency order. Chat must publish its types before
+ACP builds; the repository's `workspace:plugins-check` task does this:
+
+```sh
+proto run bun -- packages/build/src/build.ts plugins/chat
+proto run bun -- packages/build/src/build.ts plugins/acp
+```
 
 ## Building outside the checkout
 
@@ -126,8 +168,8 @@ The build still selects the source files it checks, controls emission and
 generated `plugin:*` paths, and fixes the server libraries and ambient types:
 ES2022 and no ambient type packages for the default runtime; ES2022, DOM and
 Node types from the checkout for the worker runtime. A
-`package.json` is optional with a descriptor; the build does not install
-dependencies. Output goes to the plugin's own `dist/` folder.
+`package.json` is optional with a descriptor. When present, its dependencies
+are installed before bundling. Output goes to the plugin's own `dist/` folder.
 
 To test the external artifact against a real server:
 

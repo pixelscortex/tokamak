@@ -5,6 +5,10 @@ import { CommandError } from "./command";
 import { dataFolder } from "./data";
 import { processIsAlive } from "./process";
 
+const loopback = (host: string) =>
+  host === "localhost" || host === "[::1]" || (isIP(host) === 4 && host.startsWith("127."));
+const noProxy = { proxy: "" };
+
 function httpAddress(address: string) {
   let url: URL;
   try {
@@ -84,6 +88,7 @@ async function request(path: string, endpoint: { url: URL; token: string }, body
   let response: Response;
   try {
     response = await fetch(new URL(path, endpoint.url), {
+      ...(loopback(endpoint.url.hostname) ? noProxy : {}),
       headers: {
         Authorization: `Bearer ${endpoint.token}`,
         ...(body && { "Content-Type": "application/json" }),

@@ -72,7 +72,9 @@ impl Coordinator {
                             .filter(|plugin| {
                                 revision.as_ref().is_none_or(|r| r == &plugin.build_id)
                             })
-                            .and_then(|plugin| plugin.ui_asset(&name))
+                            .and_then(|plugin| {
+                                plugin.ui_asset(&name).or_else(|| plugin.types_asset(&name))
+                            })
                     });
 
                 let _ = reply.send(result);

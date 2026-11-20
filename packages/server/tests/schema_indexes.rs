@@ -218,7 +218,13 @@ impl Installation {
         let target = self.plugins().join(variant.id);
         let _ = std::fs::remove_dir_all(&target);
         std::fs::create_dir(&target).unwrap();
-        for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        for file in [
+            "manifest.json",
+            "bundle.js",
+            "bundle.js.map",
+            "api.ts",
+            "public.d.ts",
+        ] {
             std::fs::copy(dist.join(file), target.join(file)).unwrap();
         }
     }

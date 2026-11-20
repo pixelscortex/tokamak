@@ -74,6 +74,8 @@ pub struct WorkerEntry {
 #[serde(deny_unknown_fields)]
 pub struct Entries {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerEntry>,
     #[serde(default)]
     pub backend: Option<BackendEntry>,
@@ -197,13 +199,17 @@ impl Manifest {
                 .chain(entry.shell.iter())
         });
 
-        for name in backend_paths.chain(ui_paths).chain(
-            self.entries
-                .worker
-                .as_ref()
-                .into_iter()
-                .flat_map(|e| [&e.entry, &e.code, &e.map]),
-        ) {
+        for name in backend_paths
+            .chain(ui_paths)
+            .chain(&self.entries.types)
+            .chain(
+                self.entries
+                    .worker
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|e| [&e.entry, &e.code, &e.map]),
+            )
+        {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

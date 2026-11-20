@@ -89,10 +89,15 @@ export function readDescriptor(root: string): PluginDefinition | undefined {
   return value as unknown as PluginDefinition;
 }
 
-export async function readSourcePlugin(root: string): Promise<PluginDefinition> {
+export async function readSourcePlugin(
+  root: string,
+  prefetched?: Record<string, unknown> | null,
+): Promise<PluginDefinition> {
   const descriptor = readDescriptor(root);
   if (descriptor) return definePlugin(descriptor);
-  const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+  const manifest =
+    prefetched === undefined ? JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) : prefetched;
+  if (!manifest) throw new Error("Expected plugin.ts or package.json");
   if (typeof manifest.name !== "string") throw new Error("Plugin package.json must name the plugin");
   return definePlugin({
     id: manifest.name.replace(/^@/, "").replaceAll("/", "."),
@@ -138,7 +143,7 @@ export function deriveInterfaces(root: string) {
 export function deriveProviders(root: string, plugin: PluginDefinition, functions: string[]): string[] {
   const provides = new Set<string>();
   for (const id of Object.keys(plugin.depends ?? {})) {
-    const entry = resolve(root, "..", id, "src/server/api.ts");
+    const entry = resolve(root, ".tokamak/types", id, "server.d.ts");
     if (!existsSync(entry)) continue;
     const apiPath = resolve(serverDirectory(root), "_generated/api.ts");
     if (!existsSync(apiPath)) continue;

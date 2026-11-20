@@ -1,3 +1,4 @@
+import { windowAliases, windowSharedImports } from "../../../packages/build/src/shared-libraries.mts";
 import type { Plugin } from "vite";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -6,36 +7,13 @@ import { resolve } from "node:path";
 
 const require = createRequire(import.meta.url);
 const prefix = "virtual:tokamak-host/";
-function hostSpecifiers() {
-  const packages = [
-    "solid-js",
-    "@solidjs/web",
-    "@tokamak/sdk",
-    "@tokamak/ui",
-    "@ui-sdk/solid",
-    "@ui-sdk/core",
-  ];
-  return [
-    ...packages.flatMap((name) => {
-      const path = name.startsWith("@tokamak/")
-        ? resolve(import.meta.dirname, `../../../packages/${name.slice(9)}/package.json`)
-        : resolve(import.meta.dirname, "../../node_modules", name, "package.json");
-      const { exports } = JSON.parse(readFileSync(path, "utf8"));
-      if (name === "@solidjs/web") return [name];
-      return Object.keys(exports)
-        .filter((key) => key !== "./web" && !/\.json$|\.css$|\*|^\.\/(lint|kit)$/.test(key))
-        .map((key) => name + (key === "." ? "" : key.slice(1)));
-    }),
-    "@tokamak/runtime/router",
-  ];
-}
 function importMap(imports: Record<string, string>) {
   const json = JSON.stringify({ imports });
   const hash = createHash("sha256").update(json).digest("base64");
   return { json, hash };
 }
 export function pluginModules(): Plugin {
-  const specifiers = hostSpecifiers();
+  const specifiers = windowSharedImports;
   const chunks = new Map<string, string>();
   let production = false;
   return {
@@ -54,7 +32,9 @@ export function pluginModules(): Plugin {
       const specifier = decodeURIComponent(id.slice(prefix.length + 1));
       if (!specifiers.includes(specifier)) throw new Error(`Unknown host module: ${specifier}`);
       const target =
-        specifier === "@tokamak/runtime/router" ? resolve(import.meta.dirname, "router.ts") : specifier;
+        specifier === "@tokamak/runtime/router"
+          ? resolve(import.meta.dirname, "router.ts")
+          : (windowAliases[specifier] ?? specifier);
       return `export * from ${JSON.stringify(target)};`;
     },
     buildStart() {
