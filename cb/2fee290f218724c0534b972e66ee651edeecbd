@@ -1,0 +1,43 @@
+packages/server/src/web.rs
+  s_3782ade3461600::t_fc3a7822dbe199 65
+packages/server/src/plugins/grants.rs
+  s_3782ade3461600::t_8840628a7efd17 29,45-49,51-56,119,178-181,191,193,195
+  s_3782ade3461600::t_4dd918cefaadb6 50
+packages/server/src/plugins/manifest.rs
+  s_3782ade3461600::t_fc3a7822dbe199 107,110-169,174-177,198-199
+  s_3782ade3461600::t_ff65bf89e1eedd 200
+packages/server/src/service/plugin_control.rs
+  s_3782ade3461600::t_8840628a7efd17 257,266,278-279
+packages/server/src/websocket.rs
+  s_3782ade3461600::t_fc3a7822dbe199 201,203-205,273,334
+packages/server/Cargo.toml
+  s_3782ade3461600::t_8840628a7efd17 70
+packages/server/src/plugins/package.rs
+  s_3782ade3461600::t_8840628a7efd17 21,29,33-34,47,63-75,77,82-87,89-94,98,101-108,117-130,135,137-152,154-164,166-171,173-181,201-205,209-210,212,214-215,218,223-230,235,239-275,278-334,346-377,379-393,395-397,399-427,430-452,454-457,459-464,486,492-496,537,539-541,544-546,548-556,561-580
+  s_3782ade3461600::t_53083e44aab82a 172,182-200,206-208
+  s_3782ade3461600::t_dc13e0651d6573 78-81,95-97,99,109-113,153,165,211,276-277,398,453,458,581
+packages/server/src/data/mod.rs
+  s_3782ade3461600::t_09c0bd104c8d46 53,82,84,103,108-116
+packages/server/src/plugins/catalog.rs
+  s_3782ade3461600::t_99d1a9ed24c055 5,54-56,192,307-323,366,395,400,441
+packages/server/src/plugins/loading.rs
+  s_3782ade3461600::t_332a791347289e 14-29
+packages/server/tests/plugins.rs
+  s_3782ade3461600::t_575b8e2243cc28 235-236,759-776,1216,1293-1300,1303-1309,1414,1443,1507-1592,1594,1597-1599,1635-1661,1668,1685-1692,1698-1707,1709,1720,1733-1735,1743-1779,1788-1793
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb2fee290f218724c0534b972e66ee651edeecbd",
+  "prompts": {},
+  "sessions": {
+    "s_3782ade3461600": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f99a-bf40-7e21-827e-ee414690e2ab",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
