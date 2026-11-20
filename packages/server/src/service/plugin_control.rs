@@ -90,7 +90,8 @@ impl Coordinator {
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
         let previous = self.plugins.as_deref();
-        let catalog = crate::plugins::Catalog::read_reusing(root, previous.map(|p| &p.catalog))?;
+        let (catalog, artifact_failures) =
+            crate::plugins::Catalog::read_for_reload(root, previous)?;
 
         if !catalog.plugins.contains_key(id)
             && !previous.is_some_and(|old| {
@@ -107,9 +108,12 @@ impl Coordinator {
         }
 
         let mut candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, previous).await?;
+            crate::plugins::Loaded::load_reusing(catalog, artifact_failures, &self.pool, previous)
+                .await?;
         Box::pin(candidate.record_grants(&self.database, previous)).await?;
         let changed = candidate.changed_plugins(previous);
+        let revision_changed =
+            previous.is_none_or(|old| old.catalog.revision != candidate.catalog.revision);
         // An empty report marks recovery when the previous load had skips.
         let skipped = (previous.is_some_and(|old| !old.skipped.is_empty())
             || !candidate.skipped.is_empty())
@@ -125,23 +129,22 @@ impl Coordinator {
         if let Some(skipped) = skipped {
             catalog["skipped"] = skipped;
         }
-        if changed.is_empty() {
-            return Ok(catalog);
+        if revision_changed || !changed.is_empty() {
+            // Windows fetch a changed catalog even when no builds need to remount.
+            for session in self.sessions.keys().copied().collect::<Vec<_>>() {
+                self.emit(
+                    session,
+                    Event::PluginChanged {
+                        plugins: changed.iter().cloned().collect(),
+                        catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
+                    },
+                );
+            }
         }
-
-        // Use the same bounded ordered stream as data updates. Asset requests
-        // carry the plugin's build id so they cannot mix builds.
-        for session in self.sessions.keys().copied().collect::<Vec<_>>() {
-            self.emit(
-                session,
-                Event::PluginChanged {
-                    plugins: changed.iter().cloned().collect(),
-                    catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
-                },
-            );
+        if !changed.is_empty() {
+            self.invalidate(None);
+            self.refresh().await;
         }
-        self.invalidate(None);
-        self.refresh().await;
         Ok(catalog)
     }
 

@@ -86,7 +86,7 @@ impl Server {
         let directory = database
             .directory()
             .unwrap_or(root.parent().unwrap_or(root));
-        let loaded = match crate::plugins::Catalog::read_in_directory(root, None, directory) {
+        let loaded = match crate::plugins::Catalog::read_in_directory(root, directory) {
             Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
             Err(error) => Err(error),
         };

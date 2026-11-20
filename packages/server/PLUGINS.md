@@ -83,9 +83,14 @@ on the same id. The named ID must be present in the old or new installation.
 A unique index backfill that finds duplicate rows at startup skips that plugin
 and its required dependents. Every reload retries skipped plugins, even if their
 builds are unchanged. The reload result lists any that still fail under
-`skipped`; other changed builds can still go live. Recovered plugins and their
-required dependents rejoin the catalog in the same reload. Changing only an index
-declaration changes the backend bundle hash and therefore the plugin's build id.
+`skipped`, including artifact verification failures that can be traced to a
+known skipped plugin. Verification errors for active or unidentified plugins
+still refuse the reload. A reload also refuses to remove a still-installed active
+plugin that requires a skipped plugin. Recovered plugins and their required
+dependents rejoin the catalog in the same reload. Catalog order and revision
+depend only on the active builds. A change to the catalog revision notifies
+windows even if none of their views need to remount. Changing only an index
+declaration changes the server bundle hash and therefore the plugin's build id.
 On Unix, unchanged files reuse verified snapshots only when canonical path,
 device/inode, size, mtime and ctime still match. Changed files are rehashed, so an
 unchanged manifest cannot conceal an in-place write or atomic replacement.
@@ -97,6 +102,18 @@ iterative graph walk, avoiding native stack depth proportional to plugin count.
 Discovery's `bundleHash` identifies startup; `/plugins` reports the live revision.
 Legacy `Server::descriptor()` is a startup snapshot; use `Server::plugins()` for
 ordered live plugin metadata.
+
+### Known reload limits
+
+- The readiness check starts each changed worker in a temporary working folder
+  and checks that the bundle imports and answers. It catches syntax errors,
+  missing imports, and code that throws during import. A worker can still fail
+  on its first real call if its import sees different files or settings in its
+  real working folder.
+- The readiness check runs the plugin's top-level code. Plugins are trusted,
+  so that code runs without a sandbox. Writes to files or calls to outside
+  services during import can happen even if the reload is refused. Keep side
+  effects out of import time.
 
 ## Calls, data ownership and capabilities
 

@@ -53,10 +53,8 @@ impl Loaded {
             };
             self.skip(id, failure.error.to_string());
             for id in self.catalog.order.clone() {
-                if !self.skipped.contains_key(&id)
-                    && let Some(reason) = self.skipped_dependency(&id)
-                {
-                    self.skip(id, reason);
+                if !self.skipped.contains_key(&id) {
+                    self.skip_if_required_dependency_failed(&id, previous)?;
                 }
             }
             self.prune_skipped()?;
@@ -69,8 +67,7 @@ impl Loaded {
     ) -> Result<(), Error> {
         // Catalog order puts required dependencies before their dependents.
         for id in self.catalog.order.clone() {
-            if let Some(reason) = self.skipped_dependency(&id) {
-                self.skip(id, reason);
+            if self.skip_if_required_dependency_failed(&id, None)? {
                 continue;
             }
             match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(&id))).await

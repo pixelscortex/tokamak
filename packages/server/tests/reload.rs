@@ -386,7 +386,7 @@ async fn invalid_inspected_candidate_keeps_other_pending_change_and_workers() {
         .await
         .unwrap_err()
         .to_string();
-    assert!(error.contains("is not a backend function"), "{error}");
+    assert!(error.contains("is not a server function"), "{error}");
     assert_eq!(server.plugins().await.unwrap(), before);
     invoke(&s, 3, A, json!({}));
     assert_eq!(action_response(&mut s, 3).await.unwrap(), a_pid);
@@ -750,6 +750,169 @@ async fn no_op_reload_preserves_running_actions_and_worker_pids() {
     }
     assert_eq!(worker_pid(&mut session, 5, A).await, a_pid);
     assert_eq!(worker_pid(&mut session, 6, B).await, b_pid);
+    drop(session);
+    server.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn active_dependent_keeps_old_build_when_required_plugin_is_skipped() {
+    let tmp = installation();
+    let root = &tmp.path().join("plugins");
+    for id in ["a", "b"] {
+        install_worker(root, id);
+    }
+    copy_worker(root, "indexed");
+    with_index(root, "indexed", true);
+    let db = Database::open(Storage::Memory).await.unwrap();
+    seed_rows(&db, "indexed", &["dup", "dup"]).await;
+    let server = load_with_database(root, db).await;
+    let before = server.plugins().await.unwrap();
+    assert!(plugin_entry(&before, "indexed").is_null());
+    let mut session = server.connect().await.unwrap();
+    let a_pid = worker_pid(&mut session, 1, A).await;
+    let b_pid = worker_pid(&mut session, 2, B).await;
+    invoke(&session, 3, A, json!({"hold":"survives"}));
+    started(root, "a", "survives").await;
+
+    edit_manifest(root, "a", |m| {
+        m["plugin"]["depends"]["indexed"] = json!("*")
+    });
+    let result = server.reload_plugin("a".into()).await;
+    let after = server.plugins().await.unwrap();
+    release(root, "a", "survives");
+    let action = action_response(&mut session, 3).await;
+    let Err(error) = result else {
+        panic!(
+            "reload accepted; active plugin disappeared: {}, action: {action:?}",
+            plugin_entry(&after, "a").is_null(),
+        );
+    };
+    let error = error.to_string();
+    assert!(
+        error.contains("active plugin a") && error.contains("requires indexed"),
+        "{error}"
+    );
+    assert_eq!(after, before);
+    assert_eq!(action, Ok(json!(a_pid)));
+    assert_eq!(worker_pid(&mut session, 4, A).await, a_pid);
+    assert_eq!(worker_pid(&mut session, 5, B).await, b_pid);
+    drop(session);
+    server.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn invalid_artifact_is_isolated_only_for_an_identified_skipped_plugin() {
+    let tmp = installation();
+    let root = &tmp.path().join("plugins");
+    for id in ["indexed", "dependent"] {
+        copy_worker(root, id);
+    }
+    edit_manifest(root, "dependent", |m| {
+        m["plugin"]["depends"] = json!({"indexed":"*"})
+    });
+    with_index(root, "indexed", true);
+    let db = Database::open(Storage::Memory).await.unwrap();
+    seed_rows(&db, "indexed", &["dup", "dup"]).await;
+    let server = load_with_database(root, db).await;
+
+    std::fs::write(root.join("indexed/worker.js"), "export const partial = ;").unwrap();
+    bump(root, "a");
+    let result = server
+        .reload_plugin("a".into())
+        .await
+        .expect("a bad artifact for a skipped plugin must not block A");
+    let reason = result["skipped"]["indexed"].as_str().unwrap();
+    assert!(
+        reason.contains("Artifact hash mismatch for worker.js"),
+        "{reason}"
+    );
+    assert_eq!(
+        result["skipped"]["dependent"],
+        "requires indexed, which did not load"
+    );
+    let active = server.plugins().await.unwrap();
+    assert_eq!(plugin_entry(&active, "a")["plugin"]["version"], "1.0.1");
+    for id in ["indexed", "dependent"] {
+        assert!(plugin_entry(&active, id).is_null());
+    }
+
+    // The same verification failure for an active plugin is fatal.
+    let bundle = root.join("b/bundle.js");
+    let original = std::fs::read(&bundle).unwrap();
+    std::fs::write(&bundle, "export const partial = ;").unwrap();
+    let error = server
+        .reload_plugin("a".into())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("Artifact hash mismatch for bundle.js"),
+        "{error}"
+    );
+    assert_eq!(server.plugins().await.unwrap(), active);
+    std::fs::write(&bundle, original).unwrap();
+
+    // A directory name alone cannot identify a plugin to skip.
+    std::fs::write(root.join("indexed/manifest.json"), "{").unwrap();
+    let error = server
+        .reload_plugin("a".into())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("Invalid plugin manifest"), "{error}");
+    assert_eq!(server.plugins().await.unwrap(), active);
+    server.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn skipped_only_edit_preserves_active_catalog_and_provider_order() {
+    let tmp = installation();
+    let root = &tmp.path().join("plugins");
+    install_worker(root, "a");
+    edit_manifest(root, "a", |m| m["plugin"]["consumes"] = json!(["example"]));
+    for id in ["c", "d", "z"] {
+        copy_worker(root, id);
+    }
+    for id in ["d", "z"] {
+        edit_manifest(root, id, |m| m["plugin"]["provides"] = json!(["example"]));
+    }
+    edit_manifest(root, "c", |m| m["plugin"]["depends"] = json!({"z":"*"}));
+    with_index(root, "c", true);
+    let db = Database::open(Storage::Memory).await.unwrap();
+    seed_rows(&db, "c", &["dup", "dup"]).await;
+    let server = load_with_database(root, db).await;
+    let before = server.plugins().await.unwrap();
+    let mut session = server.connect().await.unwrap();
+
+    edit_manifest(root, "c", |m| m["plugin"]["depends"] = json!({"d":"*"}));
+    let after = server.reload_plugin("c".into()).await.unwrap();
+    assert_eq!(after["revision"], before["revision"]);
+    assert_eq!(after["plugins"], before["plugins"]);
+    let order: Vec<_> = after["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["plugin"]["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(order, ["b", "a", "d", "z"]);
+
+    invoke(
+        &session,
+        1,
+        A,
+        json!({"hold":"providers", "op":"plugin.providers", "payload":{"interface":"example"}}),
+    );
+    started(root, "a", "providers").await;
+    release(root, "a", "providers");
+    let Event::Response { id: 1, result } = next_event(&mut session).await else {
+        panic!("a skipped-only edit published a catalog change");
+    };
+    assert_eq!(result, Ok(json!(["d", "z"])));
+
+    bump(root, "d");
+    let changed = server.reload_plugin("d".into()).await.unwrap();
+    assert_ne!(changed["revision"], after["revision"]);
+    assert_changed(&mut session, &["d"], &changed).await;
     drop(session);
     server.close().await.unwrap();
 }

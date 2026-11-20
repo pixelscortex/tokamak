@@ -2,11 +2,12 @@ use super::*;
 
 impl Loaded {
     pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Self, Error> {
-        Self::load_reusing(catalog, pool, None).await
+        Self::load_reusing(catalog, BTreeMap::new(), pool, None).await
     }
 
     pub async fn load_reusing(
         catalog: Catalog,
+        artifact_failures: BTreeMap<String, String>,
         pool: &engine::Pool,
         previous: Option<&Self>,
     ) -> Result<Self, Error> {
@@ -21,9 +22,11 @@ impl Loaded {
             action_lifetimes: BTreeMap::new(),
             current: previous.map(|old| old.current.clone()).unwrap_or_default(),
         };
+        for (id, reason) in artifact_failures {
+            loaded.skip(id, reason);
+        }
         for id in loaded.catalog.order.clone() {
-            if let Some(reason) = loaded.skipped_dependency(&id) {
-                loaded.skip(id, reason);
+            if loaded.skip_if_required_dependency_failed(&id, previous)? {
                 continue;
             }
             if let Err(error) = loaded.prepare_plugin(&id, pool, previous).await {
@@ -70,7 +73,7 @@ impl Loaded {
             for name in &artifact.manifest.public_functions {
                 if !kinds.contains_key(name) {
                     return Err(invalid(format!(
-                        "Exported function {name} is not a backend function of {id}"
+                        "Exported function {name} is not a server function of {id}"
                     )));
                 }
             }
@@ -109,11 +112,7 @@ impl Loaded {
             return Ok(());
         }
         let skipped = &self.skipped;
-        self.catalog
-            .plugins
-            .retain(|id, _| !skipped.contains_key(id));
-        self.catalog.order.retain(|id| !skipped.contains_key(id));
-        self.catalog.update_metadata();
+        self.catalog.omit_skipped(skipped)?;
         self.targets
             .retain(|_, target| !skipped.contains_key(&target.owner));
         self.workers.retain(|id, _| !skipped.contains_key(id));
@@ -123,14 +122,28 @@ impl Loaded {
         self.update_metadata()
     }
 
-    pub(super) fn skipped_dependency(&self, id: &str) -> Option<String> {
-        self.catalog.plugins[id]
+    pub(super) fn skip_if_required_dependency_failed(
+        &mut self,
+        id: &str,
+        previous: Option<&Self>,
+    ) -> Result<bool, Error> {
+        let Some(dependency) = self.catalog.plugins[id]
             .manifest
             .plugin
             .depends
             .keys()
             .find(|dependency| self.skipped.contains_key(*dependency))
-            .map(|dependency| format!("requires {dependency}, which did not load"))
+        else {
+            return Ok(false);
+        };
+        let reason = format!("requires {dependency}, which did not load");
+        if previous.is_some_and(|old| old.catalog.plugins.contains_key(id)) {
+            return Err(invalid(format!(
+                "Cannot reload active plugin {id}: {reason}"
+            )));
+        }
+        self.skip(id.to_owned(), reason);
+        Ok(true)
     }
 
     pub(super) fn skip(&mut self, id: String, reason: String) {

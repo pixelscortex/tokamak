@@ -2,24 +2,31 @@ use super::*;
 
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        Self::read_reusing(root, None)
+        Self::read_in_directory(root, root.parent().unwrap_or(root))
     }
 
-    pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
-        Self::read_in_directory(
+    pub(crate) fn read_for_reload(
+        root: &Path,
+        previous: Option<&Loaded>,
+    ) -> Result<(Self, BTreeMap<String, String>), Error> {
+        Self::read_installation(
             root,
             previous,
             previous
-                .map(|p| p.directory.as_path())
+                .map(|p| p.catalog.directory.as_path())
                 .unwrap_or(root.parent().unwrap_or(root)),
         )
     }
 
-    pub(crate) fn read_in_directory(
+    pub(crate) fn read_in_directory(root: &Path, directory: &Path) -> Result<Self, Error> {
+        Self::read_installation(root, None, directory).map(|(catalog, _)| catalog)
+    }
+
+    fn read_installation(
         root: &Path,
-        previous: Option<&Self>,
+        previous: Option<&Loaded>,
         directory: &Path,
-    ) -> Result<Self, Error> {
+    ) -> Result<(Self, BTreeMap<String, String>), Error> {
         let directories = if let Some(directory) = artifact_directory(root) {
             vec![directory]
         } else {
@@ -48,24 +55,31 @@ impl Catalog {
         };
 
         let mut plugins = BTreeMap::new();
+        let mut skipped = BTreeMap::new();
 
         for directory in directories {
             let build = Manifest::read(&directory)?;
-            let old = previous.and_then(|p| p.plugins.get(&build.0.plugin.id));
-            // Even when the manifest is unchanged, verify files whose source
-            // stamp changed so a partial build cannot pass as a no-op.
-            let artifact = Artifact::read_reusing(&directory, build, old.map(AsRef::as_ref))?;
-
-            let id = artifact.manifest.plugin.id.clone();
-
-            if plugins.insert(id.clone(), Arc::new(artifact)).is_some() {
+            let id = build.0.plugin.id.clone();
+            if plugins.contains_key(&id) || skipped.contains_key(&id) {
                 return Err(invalid(format!(
                     "Duplicate installed plugin identity: {id}"
                 )));
             }
+            let old = previous.and_then(|p| p.catalog.plugins.get(&id));
+            // Even when the manifest is unchanged, verify files whose source
+            // stamp changed so a partial build cannot pass as a no-op.
+            match Artifact::read_reusing(&directory, build, old.map(AsRef::as_ref)) {
+                Ok(artifact) => {
+                    plugins.insert(id, Arc::new(artifact));
+                }
+                Err(error) if previous.is_some_and(|p| p.skipped.contains_key(&id)) => {
+                    skipped.insert(id, error.to_string());
+                }
+                Err(error) => return Err(error),
+            }
         }
 
-        let order = resolve(&plugins)?;
+        let order = resolve(&plugins, |id| skipped.contains_key(id))?;
 
         let environment = root.parent().unwrap_or(root).join(".env.local");
         let mut catalog = Self {
@@ -77,10 +91,19 @@ impl Catalog {
             directory: directory.to_owned(),
         };
         catalog.update_metadata();
-        Ok(catalog)
+        Ok((catalog, skipped))
     }
 
-    pub(super) fn update_metadata(&mut self) {
+    pub(super) fn omit_skipped(&mut self, skipped: &BTreeMap<String, String>) -> Result<(), Error> {
+        self.plugins.retain(|id, _| !skipped.contains_key(id));
+        // Even a skipped plugin's dependencies can change DFS order. Rebuild
+        // from the active graph so skipped manifests cannot affect the revision.
+        self.order = resolve(&self.plugins, |_| false)?;
+        self.update_metadata();
+        Ok(())
+    }
+
+    fn update_metadata(&mut self) {
         let mut hash = Sha256::new();
         self.providers.clear();
 
