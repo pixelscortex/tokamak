@@ -1,0 +1,113 @@
+packages/build/src/vite.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 14,104,107-117
+packages/cli/tests/build.test.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-113
+packages/cli/src/commands/list.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 8
+packages/server/tests/plugins.rs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 257,961,972,979-1162
+packages/cli/src/commands/report.ts
+  s_ac82aa658b14e1::t_a77bd8f8729269 23-24,26,29-36,38,40-43,50,143-145,178-179,181-182
+  s_ac82aa658b14e1::t_119d5af27dc03e 3
+  s_ac82aa658b14e1::t_c5a060d311c30f 10,75-76,91-92,95,97-98,100,131,139,141,146
+  s_ac82aa658b14e1::t_8cdc7b4c0845d0 1,150-165,167,176,180
+  s_ac82aa658b14e1::t_03b941c3bfc6ab 9,71
+  s_ac82aa658b14e1::t_a946ef434e3820 44-49,66-69,104-112,116-127,132-138
+  s_ac82aa658b14e1::t_9659cf97156fdb 148-149
+packages/build/tests/outside.test.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 2,14,42-135
+packages/cli/src/main.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 12-45,64,72-73,75-79,97,102,111,115,117,128,130-131
+  s_ac82aa658b14e1::t_03b941c3bfc6ab 121
+packages/cli/README.md
+  s_ac82aa658b14e1::t_caf03cbb9b2075 6-10,19-23,34-36,43-44,47,50-55,58-62,92-94,100
+  s_ac82aa658b14e1::t_a946ef434e3820 56-57,64,73-76,79-82
+  s_ac82aa658b14e1::t_03b941c3bfc6ab 11-12,63
+packages/build/src/check-tools.ts
+  s_ac82aa658b14e1::t_f283cae6688d3f 1-61
+packages/build/tests/browser.test.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 121-122
+packages/cli/src/server.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 7,10-15,23-51,55-56,59-61,68,70-72,80-81,83-86,89-91,118-136,139-140
+  s_ac82aa658b14e1::t_03b941c3bfc6ab 53,114-117
+  s_ac82aa658b14e1::t_188906be497415 1,76-79,82,92-113
+  s_ac82aa658b14e1::t_371c8e04671e0c 69,75
+  s_ac82aa658b14e1::t_673aef306a0c00 52
+packages/cli/tests/cli-fixture.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-19
+packages/cli/src/plugin-index.ts
+  s_ac82aa658b14e1::t_af35dc61cb84e8 9
+  s_ac82aa658b14e1::t_caf03cbb9b2075 2,4,10,27,36-88
+packages/cli/src/command.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 20-22
+packages/server/src/plugins/loading.rs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-4,7-38,73-75,242-245,269-358
+packages/cli/src/commands/remove.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 2,10-13
+packages/server/src/service/startup.rs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 98-99
+packages/sdk/tools/bundle.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 5,59,178-179,181,189,195
+packages/cli/src/commands/report-sanitize.ts
+  s_ac82aa658b14e1::t_a946ef434e3820 10-28,39,65,69-72,75,78-88
+  s_ac82aa658b14e1::t_a77bd8f8729269 4,6
+  s_ac82aa658b14e1::t_c5a060d311c30f 1-3,5,7-9,29-38,40-64,66-68,73-74,76-77,89
+packages/cli/src/commands/add.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-2,4-5,15-22,25-32,34-35,37-38
+  s_ac82aa658b14e1::t_f283cae6688d3f 23
+packages/build/tests/outside-server.test.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 21-26,32-34,45-47,70
+packages/build/src/build.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 2-3,6,10-11,26-43,45-50,52-85,87-96
+packages/build/tests/fixtures/outside/src/client/api.tsx
+  s_ac82aa658b14e1::t_caf03cbb9b2075 5
+packages/cli/src/plugin-build.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-32
+packages/build/src/contributions.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 4,33-40
+packages/cli/src/process.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-9
+packages/server/src/plugins/catalog.rs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 9-21,24,27-28,68,127-129,131-138,140-164,168,170-183,185,188-223,225,227,231
+packages/cli/tests/cli.test.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 6,44-45,55-60,97,118,124,170,187-328
+  s_ac82aa658b14e1::t_6fd8b2548fdb4f 693-699,706-707,715-726,731-733,741-742
+  s_ac82aa658b14e1::t_29531a028f1c9b 412-416,420-425,432-433,435-442
+  s_ac82aa658b14e1::t_98fd951abcfd15 379-389,496
+  s_ac82aa658b14e1::t_b38b57c47c0596 329-330,734-736,739-740,743-758,762,767,777-779,783-788,792-795,798-809
+  s_ac82aa658b14e1::t_a946ef434e3820 334-349,417-419,460-465,482-485,499,513,517,564-570,573-576,580-586,604-634,638-649,652-666,700-705,708-714,727-730,737-738,759-761,763-766,768-776,789-791,796-797
+  s_ac82aa658b14e1::t_62ddbd1dfc1656 595-603,635-637,650-651,667-692
+  s_ac82aa658b14e1::t_03b941c3bfc6ab 333,350-352,355,373,375-378,395,402,453,540-547,549-551,553-563,571-572,577-579,587-594
+  s_ac82aa658b14e1::t_469307e59ffa7d 548,552,780-782
+packages/cli/src/commands/doctor.ts
+  s_ac82aa658b14e1::t_85988b6ff87711 25-26,31,36-38,44-46,69
+  s_ac82aa658b14e1::t_a946ef434e3820 39-43,58,64-68
+  s_ac82aa658b14e1::t_03b941c3bfc6ab 6,78
+  s_ac82aa658b14e1::t_f283cae6688d3f 51-54,57
+packages/cli/src/commands/build.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 4,12-24
+packages/build/README.md
+  s_ac82aa658b14e1::t_caf03cbb9b2075 19-22,124-128
+packages/sdk/tools/plugin-boundary.mjs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 22-28
+packages/build/src/diagnostics.ts
+  s_ac82aa658b14e1::t_caf03cbb9b2075 1-103
+packages/server/src/plugins/grants.rs
+  s_ac82aa658b14e1::t_caf03cbb9b2075 15-30,71-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "989478e0ca42e568419af2215b330ab4f925b355",
+  "prompts": {},
+  "sessions": {
+    "s_ac82aa658b14e1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d7-f26f-7341-a8df-1bd1d745e4cb",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
