@@ -128,8 +128,8 @@ export function tokamak(
           const bundle = resolve(server, "dist/bundle.js");
           const source = await readFile(bundle, "utf8");
           const map = JSON.parse(await readFile(`${bundle}.map`, "utf8"));
-          // SDK maps are relative to the server half’s dist/. Rebase source names when the
-          // unchanged bundle is packaged into app/dist; retain original contents.
+          // Keep source locations for stack traces without shipping the original source.
+          delete map.sourcesContent;
           map.sources = map.sources.map((source: string) =>
             relative(resolve(root, "dist"), resolve(dirname(bundle), source))
               .split(sep)
@@ -146,11 +146,14 @@ export function tokamak(
           this.emitFile({ type: "asset", fileName: "api.ts", source: api });
           if (plugin.runtime === "worker") {
             for (const name of ["worker.js", "worker.js.map", "worker-entry.js"]) {
-              this.emitFile({
-                type: "asset",
-                fileName: name,
-                source: await readFile(resolve(server, "dist", name), "utf8"),
-              });
+              const contents = await readFile(resolve(server, "dist", name), "utf8");
+              let source = contents;
+              if (name.endsWith(".map")) {
+                const map = JSON.parse(contents);
+                delete map.sourcesContent;
+                source = JSON.stringify(map);
+              }
+              this.emitFile({ type: "asset", fileName: name, source });
             }
             entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
           }

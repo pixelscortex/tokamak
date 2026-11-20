@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { chmod, cp, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, toNamespacedPath } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
 import { createApi, TokamakClient, WebSocketTransport } from "../../sdk/src/index";
 import { cli } from "./cli-fixture.mjs";
+import { version as tokamakVersion } from "../package.json";
 
 test("adds and removes folders and protects an existing id", async () => {
   await withPlugin(async (plugin, root) => {
@@ -53,6 +54,7 @@ test("every registered command shares help and JSON output rules", async () => {
     expect(commands.map(({ path }) => path)).toEqual(
       expect.arrayContaining([
         "plugin build",
+        "plugin pack",
         "plugin add",
         "plugin remove",
         "plugin list",
@@ -361,6 +363,25 @@ test("reload tells the user how to add an unknown plugin", async () => {
   });
 });
 
+test("pack reports the source location of a failed build without writing a ZIP", async () => {
+  await withPlugin(async (plugin, root) => {
+    const file = join(plugin, "src/server/broken.ts");
+    await writeFile(file, "\nexport const broken: string = 42;\n");
+    const result = cli(root, ["plugin", "pack", plugin, "--json"], {}, root);
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: false,
+      error: {
+        message: "Plugin build failed",
+        next: "tokamak plugin pack --help",
+        diagnostics: expect.arrayContaining([expect.objectContaining({ file, line: 2 })]),
+      },
+    });
+    expect(result.stderr).toContain(`${file}:2:`);
+    expect(await readdir(root)).toEqual(["plugin"]);
+  });
+});
+
 test("reload applies index additions and removals without a restart", async () => {
   await withPlugin(async (plugin, root) => {
     const run = (...args) => {
@@ -368,12 +389,48 @@ test("reload applies index additions and removals without a restart", async () =
       expect(result.code, result.stderr).toBe(0);
       return JSON.parse(result.stdout);
     };
+    const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+    const dist = join(plugin, "dist");
+    await mkdir(dist);
+    await writeFile(join(dist, "stale.txt"), "An old file left in dist");
+    const pack = (cwd, ...args) => {
+      const result = cli(root, ["plugin", "pack", ...args, "--json"], {}, cwd);
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stderr).toContain("Packed outside-fixture");
+      return JSON.parse(result.stdout);
+    };
+    const packed = pack(root, "plugin");
+    const zip = join(root, "outside-fixture-0.1.0.zip");
+    expect(packed).toEqual({
+      ok: true,
+      path: zip,
+      id: "outside-fixture",
+      version: "0.1.0",
+      buildId: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(pack(plugin).buildId).toBe(packed.buildId);
+    const unzip = (...args) => {
+      const result = Bun.spawnSync(["unzip", ...args]);
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      return result.stdout;
+    };
+    const manifest = unzip("-p", zip, "manifest.json");
+    const { plugin: metadata, hashes } = JSON.parse(manifest.toString());
+    expect(metadata.api).toBe(`tokamak@${tokamakVersion}`);
+    expect(packed.buildId).toBe(digest(manifest));
+    expect(unzip("-Z1", zip).toString().trimEnd().split("\n").sort()).toEqual(
+      ["manifest.json", ...Object.keys(hashes)].sort(),
+    );
+    for (const [name, hash] of Object.entries(hashes)) {
+      const bytes = unzip("-p", zip, name);
+      expect(digest(bytes)).toBe(hash);
+      if (name.endsWith(".map")) expect(JSON.parse(bytes.toString())).not.toHaveProperty("sourcesContent");
+    }
+
     await withServer(root, async () => {
       run("add", plugin);
       expect(run("reload", "outside-fixture")).toMatchObject({
-        plugins: [
-          { id: "outside-fixture", status: "loaded", buildId: expect.stringMatching(/^[a-f0-9]{64}$/) },
-        ],
+        plugins: [{ id: "outside-fixture", status: "loaded", buildId: packed.buildId }],
       });
       expect(run("list").plugins).toEqual([{ id: "outside-fixture", version: "0.1.0", fromIndex: true }]);
       expect(run("reload", "outside-fixture").plugins).toEqual([

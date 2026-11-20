@@ -23,7 +23,7 @@ export function uiBuildConfig(root: string): UserConfig {
         fileName: () => "ui.js",
         cssFileName: "styles",
       },
-      rollupOptions: { output: { codeSplitting: false } },
+      rollupOptions: { output: { codeSplitting: false, sourcemapExcludeSources: true } },
     },
   };
 }

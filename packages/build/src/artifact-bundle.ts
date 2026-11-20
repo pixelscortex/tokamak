@@ -3,6 +3,7 @@ import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 import { uiContributions } from "./contributions.ts";
 import { createHash } from "node:crypto";
 import type { Plugin } from "vite";
+import { tokamakVersion } from "../../tokamak-version";
 
 type GenerateBundle = Extract<NonNullable<Plugin["generateBundle"]>, (...args: never[]) => unknown>;
 
@@ -48,6 +49,7 @@ export function artifactBundle(
         ...(bundle["styles.css"] ? { css: "styles.css" } : {}),
       };
     }
+    metadata.plugin = { ...metadata.plugin, api: `tokamak@${tokamakVersion()}` };
     const hashes = bundleHashes(bundle);
     manifest.source = JSON.stringify({ ...metadata, hashes }, null, 2) + "\n";
   };

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Command } from "../command";
 import { dataFolder } from "../data";
 import { inspectLocalServer } from "../server";
-import { version } from "../../package.json";
+import { tokamakVersion } from "../../../tokamak-version";
 
 const checkout = fileURLToPath(new URL("../../../../", import.meta.url));
 const startServer = "tokamak server start";
@@ -70,7 +70,7 @@ export async function inspectDevelopment() {
   const server = discovery?.responsive ? discovery : undefined;
   const git = gitVersion();
   const rows = [
-    ready("Tokamak CLI", `${version} · ${fileURLToPath(new URL("../main.ts", import.meta.url))}`),
+    ready("Tokamak CLI", `${tokamakVersion()} · ${fileURLToPath(new URL("../main.ts", import.meta.url))}`),
     bun,
     git
       ? ready("git", git)

@@ -5,6 +5,7 @@ Run from a checkout with the pinned Bun:
 ```sh
 proto run bun -- run --silent tokamak --help
 proto run bun -- run --silent tokamak plugin build /path/to/my-plugin --json
+proto run bun -- run --silent tokamak plugin pack /path/to/my-plugin --json
 proto run bun -- run --silent tokamak plugin add /path/to/my-plugin
 proto run bun -- run --silent tokamak plugin list --json
 proto run bun -- run --silent tokamak plugin logs my-plugin --errors --json
@@ -15,7 +16,12 @@ proto run bun -- run --silent tokamak report --out diagnostics.md
 ```
 
 `build` runs the artifact build once, defaults to the current folder, and
-doesn't need a server. `add` reads the plugin's static identity from `plugin.ts`
+doesn't need a server. `pack` also works without a server and defaults to the
+current folder. It builds the plugin and writes `<id>-<version>.zip` in the
+folder where the command was run. The ZIP contains `manifest.json` and the
+files listed in its hashes. The build id is the SHA-256 of the manifest bytes.
+
+`add` reads the plugin's static identity from `plugin.ts`
 (or the build's `package.json` convention), and doesn't build it. `add` and
 `remove` edit the index. Run `tokamak plugin reload [id]` to build and apply indexed plugins, or omit the id to also apply removals. Both commands serialize index updates with an exclusive owner
 file: a dead owner can be removed, and a live owner is never displaced. An
@@ -100,6 +106,7 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 | Command         | Additional result fields                                           |
 | --------------- | ------------------------------------------------------------------ |
 | `plugin build`  | `id`, `outputFolder`                                               |
+| `plugin pack`   | `path` (absolute), `id`, `version`, `buildId`                      |
 | `plugin add`    | `id`, `folder`, `reloadRequired: true`, `precedence: "index"`      |
 | `plugin remove` | `id`, `reloadRequired: true`                                       |
 | `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`                |
