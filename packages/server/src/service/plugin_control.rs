@@ -20,7 +20,7 @@ impl Coordinator {
     pub(super) fn catalog_page(&self, revision: Option<&str>, offset: u64) -> Result<Json, String> {
         let loaded = self.plugins.as_ref().ok_or("No plugin installation")?;
 
-        if revision.is_some_and(|r| r != loaded.catalog.revision) {
+        if revision.is_some_and(|r| r != loaded.catalog_revision) {
             return Err("Plugin generation changed".into());
         }
         // Serialize once per generation, rather than once per page (quadratic
@@ -41,7 +41,7 @@ impl Coordinator {
         }
 
         Ok(
-            serde_json::json!({"revision":loaded.catalog.revision, "text":&text[start..end], "next":end,"done":end == text.len()}),
+            serde_json::json!({"revision":loaded.catalog_revision, "text":&text[start..end], "next":end,"done":end == text.len()}),
         )
     }
 
@@ -337,7 +337,7 @@ impl Coordinator {
         .await?;
         let changed = candidate.changed_plugins(previous);
         let revision_changed =
-            previous.is_none_or(|old| old.catalog.revision != candidate.catalog.revision);
+            previous.is_none_or(|old| old.catalog_revision != candidate.catalog_revision);
         // An empty report marks recovery when the previous load had skips.
         let skipped = (previous.is_some_and(|old| !old.skipped.is_empty())
             || !candidate.skipped.is_empty())

@@ -98,6 +98,10 @@ function Stage(): JSX.Element {
 
 function Footer(): JSX.Element {
   const shell = useShell();
+  const update = () => {
+    const connection = shell.session.connection();
+    return connection.state === "connected" && connection.agentsDisabled;
+  };
   const host = () => {
     const connection = shell.session.connection();
     return connection.state === "connected" ? new URL(connection.endpoint.http).host : undefined;
@@ -122,6 +126,12 @@ function Footer(): JSX.Element {
           </Match>
         </Switch>
       </p>
+      <Show when={update()}>
+        <p role="alert" class="flex items-center gap-2">
+          <StatusIcon status="failed" size={12} label="Agents unavailable" />
+          <span>Update the app</span>
+        </p>
+      </Show>
     </footer>
   );
 }

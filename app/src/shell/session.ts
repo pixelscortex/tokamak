@@ -1,5 +1,6 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
+import { serverCompatibility } from "../host/compatibility";
 import { endpoint } from "../host/endpoint";
 import type { RemoteChat } from "@tokamak/sdk/client";
 import { syncDisplayName } from "../host/identity";
@@ -8,7 +9,13 @@ import { createPluginShell, type PluginRouting, type PluginShell } from "../plug
 
 export type Connection =
   | { state: "connecting" }
-  | { state: "connected"; client: TokamakClient; plugins: PluginShell; endpoint: ServerEndpoint }
+  | {
+      state: "connected";
+      client: TokamakClient;
+      plugins: PluginShell;
+      endpoint: ServerEndpoint;
+      agentsDisabled?: boolean;
+    }
   /** `token`: the server wants a (new) access token before it lets this window in. */
   | { state: "failed"; reason: string; needs?: "token" };
 
@@ -73,13 +80,17 @@ export function createSession(options: SessionOptions): Session {
       });
       if (current !== attempt) return;
       const transport = new WebSocketTransport(socket);
+      const agentsDisabled = (await serverCompatibility(supplied.http)) === "other-line";
+      if (current !== attempt) return;
+      if (socket.readyState !== WebSocket.OPEN) throw new Error("The server closed the connection.");
       const client = new TokamakClient(transport);
       const plugins = createPluginShell(
         client,
         supplied,
         transport,
         options.routing,
-        options.remoteChat?.(supplied),
+        // Chat already supports messages without an agent machine.
+        agentsDisabled ? { hub: supplied.http } : options.remoteChat?.(supplied),
       );
       close = () => {
         plugins.dispose();
@@ -97,7 +108,7 @@ export function createSession(options: SessionOptions): Session {
       await plugins.connect();
       // A socket that closed while the catalog loaded has already reported its failure.
       if (current === attempt && !closed)
-        setConnection({ state: "connected", client, plugins, endpoint: supplied });
+        setConnection({ state: "connected", client, plugins, endpoint: supplied, agentsDisabled });
     } catch (cause) {
       socket.close();
       if (current !== attempt) return;

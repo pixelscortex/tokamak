@@ -1640,6 +1640,82 @@ mod package_upload {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn removing_a_skipped_plugin_notifies_connected_windows() {
+        let (installation, mut files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        change_manifest(&mut files, |manifest| {
+            manifest["plugin"]["api"] = json!("tokamak@999.0.0");
+        });
+        let package = data.path().join("store/packages/a");
+        fs::create_dir_all(package.join("dist")).unwrap();
+        fs::write(package.join("package.zip"), archive(&files).1).unwrap();
+        for (name, bytes) in files {
+            fs::write(package.join("dist").join(name), bytes).unwrap();
+        }
+
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let mut window = server.socket().await;
+        let before = window_catalog(&mut window).await;
+        assert_eq!(before["skipped"]["a"], "needs rebuild");
+        server.remove(OWNER, "a").await.error_for_status().unwrap();
+        let notice = event(&mut window, |event| event["type"] == "pluginchanged").await;
+        let after = window_catalog(&mut window).await;
+        assert_eq!(notice["plugins"], json!([]));
+        assert_eq!(notice["catalog"]["paged"], true);
+        assert_ne!(before["revision"], after["revision"]);
+        assert_eq!(before["plugins"], after["plugins"]);
+        assert!(after.get("skipped").is_none());
+        drop(window);
+        server.close().await;
+    }
+
+    async fn window_catalog(socket: &mut Socket) -> Value {
+        socket
+            .send(Message::Text(
+                json!({"type":"plugins","id":10}).to_string().into(),
+            ))
+            .await
+            .unwrap();
+        let page = result(socket, 10).await;
+        assert_eq!(page["done"], true);
+        serde_json::from_str(page["text"].as_str().unwrap()).unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn version_is_public_only_to_allowed_window_origins() {
+        let installation = Installation::new();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let request = || server.client.get(format!("{}/version", server.http));
+        let allowed = request()
+            .header("origin", &server.http)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), 200);
+        assert_eq!(
+            allowed.headers()["access-control-allow-origin"],
+            server.http
+        );
+        assert_eq!(
+            response_json(allowed).await["version"],
+            env!("CARGO_PKG_VERSION")
+        );
+        let refused = request()
+            .header("origin", "https://disallowed.invalid")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), 403);
+        assert!(
+            !refused
+                .headers()
+                .contains_key("access-control-allow-origin")
+        );
+        server.close().await;
+    }
+
     async fn assert_restart(data: &Path, installed: &Path, mut files: Files, updated: &str) {
         let stored = data.join("store/packages");
         let backup = stored.join(".package-backup-a");

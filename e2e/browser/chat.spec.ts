@@ -176,3 +176,21 @@ test("switching the thread agent keeps each earlier reply labelled with the agen
   await expect(turns.nth(3).getByText(/Tokamak workspace/)).toBeVisible();
   await expect(turns.nth(1)).toHaveAccessibleName("Claude");
 });
+
+test("a server on another release line allows messages but cannot start an agent turn", async ({ page }) => {
+  await page.route("**/version", (route) => route.fulfill({ json: { version: "999.0.0" } }));
+  const agentActions: string[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const request = JSON.parse(String(payload));
+      if (request.type === "action" && /^(chat\/chat:send|acp\/relay:relayTurn)$/.test(request.name))
+        agentActions.push(request.name);
+    }),
+  );
+  await openChat(page);
+  await expect(page.getByRole("alert").getByText("Update the app", { exact: true })).toBeVisible();
+  await newThread(page);
+  await expect(page.getByRole("button", { name: "Message only", exact: true })).toHaveCount(0);
+  await send(page, "A message without an agent");
+  expect(agentActions).toEqual([]);
+});

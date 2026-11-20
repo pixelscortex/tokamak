@@ -20,6 +20,7 @@ import {
   type PluginManifest,
   type PluginModuleHost,
 } from "../../packages/runtime/js/plugins";
+import { appVersion } from "../src/host/compatibility";
 import { adaptCatalog, assetURL } from "../src/plugins/adapter";
 import { createPluginShell } from "../src/plugins/views";
 import { WebPluginHost } from "../src/plugins/web-host";
@@ -33,6 +34,7 @@ export function catalog(revision = "one") {
         plugin: {
           id: "fixture",
           version: revision,
+          api: `tokamak@${appVersion}`,
           contributes: { view: [{ id: "View", route: "/", title: "Fixture" }] },
         },
         logRevision: revision,
@@ -425,5 +427,42 @@ test("a dependency reload recovers an importer whose old dependency fetch got 40
   } finally {
     loader.dispose();
     vi.unstubAllGlobals();
+  }
+});
+
+const [major, minor, patch] = appVersion.split(".").map(Number);
+
+test.each([
+  ["tokamak@999.0.0", "The owner needs to rebuild this plugin"],
+  [`tokamak@${major}.${minor}.${patch! + 1}`, "Update the app to use this plugin"],
+  [null, "The owner needs to rebuild this plugin"],
+])("a blocked plugin (%s) keeps a route without loading its view", async (api, message) => {
+  const root = createRootRoute({ component: Outlet });
+  const router: AnyRouter = createRouter({
+    routeTree: root,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  const active = catalog();
+  active.plugins[0]!.plugin.api = api ?? "";
+  const metadata = api ? active : { ...active, plugins: [], skipped: { fixture: "needs rebuild" } };
+  const imported = vi.spyOn(WebPluginHost.prototype, "importModule");
+  const shell = createPluginShell(
+    {} as TokamakClient,
+    { http: "http://localhost", ws: "ws://localhost", token: null },
+    { plugins: async () => metadata, onPluginsChanged: () => () => {} },
+    { router, root, base: [] },
+  );
+  const target = document.body.appendChild(document.createElement("div"));
+  const dispose = render(() => <RouterProvider router={router} />, target);
+  try {
+    await shell.connect();
+    flush();
+    await router.navigate({ href: "/p/fixture" });
+    await waitFor(() => expect(getByRole(target, "alert").textContent).toContain(message));
+    expect(imported).not.toHaveBeenCalled();
+  } finally {
+    dispose();
+    shell.dispose();
+    imported.mockRestore();
   }
 });

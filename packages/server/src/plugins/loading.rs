@@ -76,6 +76,7 @@ impl Loaded {
             catalog,
             targets: BTreeMap::new(),
             descriptor: Value::Null,
+            catalog_revision: String::new(),
             catalog_text: String::new(),
             inspected: BTreeMap::new(),
             workers: BTreeMap::new(),
@@ -259,6 +260,16 @@ impl Loaded {
         let mut metadata = self.catalog.metadata_with_logs(&self.logs);
         metadata["functions"] = self.descriptor["functions"].clone();
         metadata["schema"] = self.descriptor["schema"].clone();
+        self.catalog_revision.clone_from(&self.catalog.revision);
+        if !self.skipped.is_empty() {
+            metadata["skipped"] = json!(self.skipped);
+            // A skip-only change must also invalidate an in-flight paged read.
+            let mut hash = Sha256::new();
+            hash.update(&self.catalog.revision);
+            hash.update(metadata["skipped"].to_string());
+            self.catalog_revision = format!("{:x}", hash.finalize());
+            metadata["revision"] = json!(self.catalog_revision);
+        }
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }

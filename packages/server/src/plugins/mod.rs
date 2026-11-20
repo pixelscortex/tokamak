@@ -42,6 +42,7 @@ pub(crate) struct Loaded {
     pub catalog: Catalog,
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
+    pub catalog_revision: String,
     pub catalog_text: String,
     pub(crate) logs: BTreeMap<String, crate::plugin_log::Log>,
     pub(crate) skipped: BTreeMap<String, String>,
