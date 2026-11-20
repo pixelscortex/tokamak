@@ -75,7 +75,7 @@ export function tokamak(
       },
       async buildStart() {
         const manifest = await readPluginPackage(root);
-        if (manifest) installPluginPackages(root);
+        if (manifest) await installPluginPackages(root, manifest);
         const descriptor = options.plugin ?? readDescriptor(root);
         if (!descriptor && !manifest) throw new Error("Expected plugin.ts or package.json");
         plugin = definePlugin(
@@ -151,9 +151,7 @@ export function tokamak(
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
         }
         const functions = publicFunctions(root, plugin.exports);
-        const types = publicTypes(root, plugin.id, options);
         entries.types = "public.d.ts";
-        this.emitFile({ type: "asset", fileName: "public.d.ts", source: types });
         if (existsSync(resolve(root, "plugin.ts")))
           plugin = definePlugin({ ...plugin, provides: deriveProviders(root, plugin, functions) });
         this.emitFile({
@@ -161,6 +159,15 @@ export function tokamak(
           fileName: "manifest.json",
           source:
             JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: functions }, null, 2) + "\n",
+        });
+      },
+      buildEnd(error) {
+        if (error) return;
+        // Report boundary failures from the bundle before checking the declarations.
+        this.emitFile({
+          type: "asset",
+          fileName: "public.d.ts",
+          source: publicTypes(root, plugin.id, options),
         });
       },
       generateBundle: {

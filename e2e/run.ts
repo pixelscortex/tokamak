@@ -51,7 +51,7 @@ export async function headless(
   options: { args?: string[]; env?: NodeJS.ProcessEnv; timeout?: number; killed?: boolean } = {},
 ) {
   const child = spawn(
-    resolve("target/debug/tokamak"),
+    resolve("target/debug/tokamak-server"),
     [...(options.args ?? ["--bundle", bundle]), "--data", data, "--listen", "127.0.0.1:0", "--workers", "1"],
     { cwd: repository, env: { ...env, ...sandbox.env, ...options.env }, stdio: ["pipe", "pipe", "pipe"] },
   );
@@ -174,7 +174,7 @@ const sandbox = await prepareAgentEnvironment(root);
 let feature: string | undefined;
 try {
   command([process.execPath, "check", "--no-script", "--project", "e2e/tsconfig.json"]);
-  command(["cargo", "build", "--locked", "--package", "server", "--bin", "tokamak", "--jobs", "2"]);
+  command(["cargo", "build", "--locked", "--package", "server", "--bin", "tokamak-server", "--jobs", "2"]);
   feature = await buildFeature({
     source: resolve("packages/server/tests/fixtures/record/src/server"),
     parent: root,

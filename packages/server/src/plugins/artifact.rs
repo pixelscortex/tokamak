@@ -2,18 +2,17 @@ use super::*;
 
 impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
-        Self::read_reusing(directory, None)
+        Self::read_reusing(directory, Manifest::read(directory)?, None)
     }
 
     pub(super) fn read_reusing(
         directory: &Path,
+        (manifest, build_id): (Manifest, String),
         previous: Option<&Artifact>,
     ) -> Result<Self, Error> {
         let root = directory
             .canonicalize()
             .map_err(|e| invalid(e.to_string()))?;
-
-        let manifest = Manifest::read(&root)?;
 
         let names = manifest.validate()?;
 
@@ -63,6 +62,7 @@ impl Artifact {
 
         Ok(Self {
             manifest,
+            build_id,
             bundle,
             assets,
             provides,

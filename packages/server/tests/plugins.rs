@@ -241,7 +241,7 @@ fn standalone_binary_exposes_only_authenticated_plugin_controls_and_cli() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
-    let binary = env!("CARGO_BIN_EXE_tokamak");
+    let binary = env!("CARGO_BIN_EXE_tokamak-server");
     let mut process = Process(
         std::process::Command::new(binary)
             .arg("--local-dir")

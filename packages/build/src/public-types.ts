@@ -9,9 +9,13 @@ import {
 import { clientEntry, serverDirectory } from "./descriptor.ts";
 import { selectDeclarations, type Names } from "./declaration-surface.ts";
 import { preserveReturnNames } from "./declaration-names.ts";
-import { sharedImports } from "./shared-libraries.mts";
+import { authoredTypeImports } from "./shared-libraries.mts";
 
-const shared = new Set(sharedImports);
+const sharedBySide = {
+  server: new Set(authoredTypeImports("server")),
+  client: new Set(authoredTypeImports("window")),
+};
+const sharedTypeModules = new Set([...sharedBySide.server, ...sharedBySide.client]);
 const quote = JSON.stringify;
 const ambient = (name: string, body: string) => `declare module ${quote(name)} {\n${body}\n}\n`;
 
@@ -34,7 +38,7 @@ function validatePublished(root: string, id: string, text: string) {
     names.map((name) => {
       if (
         (importer === file || importer.startsWith(resolve(root, ".tokamak/types") + sep)) &&
-        !shared.has(name) &&
+        !sharedTypeModules.has(name) &&
         !name.startsWith("plugin:")
       )
         return undefined;
@@ -58,6 +62,7 @@ export function publicTypes(root: string, id: string, targets: { backend?: false
   let output = "";
   for (const side of ["server", "client"] as const) {
     if (side === "server" ? targets.backend === false : targets.ui === false) continue;
+    const shared = sharedBySide[side];
     const entry =
       side === "server"
         ? [resolve(serverDirectory(root), "api.ts"), resolve(root, "api.ts")].find(existsSync)

@@ -20,7 +20,7 @@ The shell gets:
 `plugin`/`entries.ui.code`/`entries.ui.css` catalog and a flat
 `id`/`revision`/`ui`/`stylesheet`/`contributes` form. Server `uiUrl` and
 `stylesheetUrl` take precedence over the artifact filenames. Relative asset names become
-revision paths; absolute URL paths remain intact. Tokens are added only for the
+paths pinned to the plugin's build id; absolute URL paths remain intact. Tokens are added only for the
 configured server origin. The server must permit CORS from the app origin.
 
 Vite emits strict entry chunks re-exporting the installed browser host modules,

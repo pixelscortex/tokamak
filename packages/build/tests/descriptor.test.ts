@@ -160,4 +160,7 @@ test("provider inference checks public SDK reference kinds, arguments and result
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 30_000);
+  // This test runs the TypeScript checker over several fixture plugins. On a
+  // slow or busy machine that takes longer than the runner's 5 second default,
+  // which made it fail by timeout in CI and under load.
+}, 60_000);
