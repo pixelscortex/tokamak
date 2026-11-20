@@ -197,7 +197,10 @@ async fn disable_kills_worker_and_children_and_fails_stuck_calls() {
         .reload_plugin("worker-test".into())
         .await
         .unwrap();
-    assert!(fixture.result().await.1.unwrap_err().contains("worker"));
+    assert_eq!(
+        fixture.result().await.1.unwrap_err(),
+        "Plugin action cancelled by reload"
+    );
     for _ in 0..100 {
         if !alive(pids["worker"].as_u64().unwrap()) && !alive(pids["child"].as_u64().unwrap()) {
             fixture.close().await;
@@ -252,7 +255,7 @@ fn worker_lifecycle(scenario: &str) {
         std::fs::write(plugins.join(name), text).unwrap();
     }
     let mut server = ServerGuard(
-        Command::new(env!("CARGO_BIN_EXE_tokamak"))
+        Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
             .args([
                 "--plugins",
                 directory.path().join("plugins").to_str().unwrap(),

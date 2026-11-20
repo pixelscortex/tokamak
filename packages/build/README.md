@@ -37,7 +37,7 @@ revision-pinned module, including literal dynamic imports. Static imports infer
 required dependencies; literal dynamic imports infer optional dependencies.
 
 The catalog keeps existing manifest fields and adds `revision`, `uiUrl` and
-`stylesheetUrl` per plugin. URLs are `/plugins/<id>/<catalog revision>/assets/<name>`;
+`stylesheetUrl` per plugin. URLs are `/plugins/<id>/<build-id>/assets/<name>`;
 plugins without UI or CSS have null URLs. Only manifest-declared UI assets from
 the current verified snapshot are served. Stale revisions return 404. Successful
 assets use `private, max-age=31536000, immutable` caching and JavaScript uses
@@ -57,7 +57,7 @@ header authorization in desktop mode.
 Run the focused build tests from this directory with `sh tests/run.sh`.
 The browser fixture lives in `tests/fixtures/browser`; its optional cross-plugin
 module need not be installed to build or serve it.
-After building `target/debug/tokamak`, run the real curl/WebSocket checks from the
+After building `target/debug/tokamak-server`, run the real curl/WebSocket checks from the
 repository root with `proto run bun -- packages/build/tests/browser-assets.mjs`.
 They cover loopback, desktop token authentication and a configured origin list.
 

@@ -79,7 +79,11 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
             server::data::DataSpace::plugin(id)?;
             format!("/plugins/{id}/reload")
         }
-        _ => return Err("Expected: tokamak plugin list | tokamak plugin reload <id>".into()),
+        _ => {
+            return Err(
+                "Expected: tokamak-server plugin list | tokamak-server plugin reload <id>".into(),
+            );
+        }
     };
     let body = if args[0] == "list" {
         None
@@ -176,7 +180,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nInvites: tokamak invite <name> | members | revoke <id> --server <https://address> [--token <owner token>] (or TOKAMAK_TOKEN)\nControl: tokamak plugin list | tokamak plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nInvites: tokamak-server invite <name> | members | revoke <id> --server <https://address> [--token <owner token>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }

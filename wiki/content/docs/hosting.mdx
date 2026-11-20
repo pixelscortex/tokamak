@@ -50,9 +50,9 @@ Run these commands on your own machine; they call the server over HTTPS:
 
 ```sh
 export TOKAMAK_TOKEN='<owner token>'
-tokamak invite 'Alice' --server https://tokamak.example.app
-tokamak members --server https://tokamak.example.app
-tokamak revoke '<member id>' --server https://tokamak.example.app
+tokamak-server invite 'Alice' --server https://tokamak.example.app
+tokamak-server members --server https://tokamak.example.app
+tokamak-server revoke '<member id>' --server https://tokamak.example.app
 ```
 
 Alternatively pass `--token '<owner token>'` to each command. `invite` prints only

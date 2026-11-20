@@ -10,7 +10,7 @@ test("the server loads the external artifact and queries data written by its mut
     expect(result.code, result.output).toBe(0);
     const server = Bun.spawn(
       [
-        join(workspace, "target/debug", process.platform === "win32" ? "tokamak.exe" : "tokamak"),
+        join(workspace, "target/debug", process.platform === "win32" ? "tokamak-server.exe" : "tokamak-server"),
         "--plugins",
         root,
         "--data",
