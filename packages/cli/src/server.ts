@@ -145,3 +145,37 @@ export async function memberRequest(
     throw new CommandError(`Could not ${memberOperations[operation]}: ${message}`, next);
   }
 }
+
+export function sharingEndpoint(explicit: string | undefined, example: string): Endpoint {
+  const address = explicit ?? process.env.TOKAMAK_SERVER;
+  if (!address) throw new CommandError("Set --server or TOKAMAK_SERVER to select a server", example);
+  const token = process.env.TOKAMAK_TOKEN;
+  if (!token) throw new CommandError("Set TOKAMAK_TOKEN for the selected server", example);
+  const url = httpAddress(address);
+  if (url.protocol === "http:" && !loopback(url.hostname))
+    throw new CommandError("Use HTTPS for a shared server", example);
+  return { url, token };
+}
+
+export async function sharingRequest(path: string, endpoint: Endpoint, init: RequestOptions) {
+  const next = `tokamak plugin list --server ${endpoint.url.origin}`;
+  const response = await request(path, endpoint, init, 30_000);
+  if (response.ok) return json(response);
+
+  const detail = await response.text();
+  if (detail) {
+    let reason = detail;
+    try {
+      const body = JSON.parse(detail) as { error?: unknown } | null;
+      if (typeof body?.error === "string") reason = body.error;
+    } catch {
+      // A server may also send its reason as plain text.
+    }
+    throw new CommandError(reason, next);
+  }
+  const checkToken = `Use TOKAMAK_TOKEN with GET ${endpoint.url.origin}/account to check which account it belongs to`;
+  if (response.status === 401) throw new CommandError("The server rejected the token", checkToken);
+  if (response.status === 403)
+    throw new CommandError("Only the owner of this server can share or remove plugins", checkToken);
+  throw new CommandError(`Server returned HTTP ${response.status}`, next);
+}

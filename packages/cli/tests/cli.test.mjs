@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { unzipSync, zipSync } from "fflate";
 import { chmod, cp, mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, toNamespacedPath } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -55,6 +56,8 @@ test("every registered command shares help and JSON output rules", async () => {
       expect.arrayContaining([
         "plugin build",
         "plugin pack",
+        "plugin share",
+        "plugin unshare",
         "plugin add",
         "plugin remove",
         "plugin list",
@@ -198,7 +201,10 @@ test("a real local server loads and removes an indexed plugin on restart", async
       expect(run(["list"], { TOKAMAK_SERVER: address, TOKAMAK_TOKEN: token })).toEqual(loaded);
       expect(
         run(["list", "--server", address], { TOKAMAK_SERVER: "http://127.0.0.1:1", TOKAMAK_TOKEN: token }),
-      ).toEqual(loaded);
+      ).toEqual({
+        ok: true,
+        plugins: [{ id: "outside-fixture", version: "0.1.0", buildId: expect.any(String), status: "loaded" }],
+      });
       run(["remove", "outside-fixture"]);
       expect(run(["list"])).toEqual(loaded);
     });
@@ -262,6 +268,187 @@ test("a real server installs, runs, and removes a plugin packed by the CLI", asy
     });
   });
 }, 180_000);
+
+// Let the test serve HTTP while the CLI runs in a separate process.
+async function sharingCli(root, args, token) {
+  const child = Bun.spawn(
+    [process.execPath, join(workspace, "packages/cli/src/main.ts"), "plugin", ...args, "--json"],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        TOKAMAK_SERVER_DIR: join(root, "data"),
+        TOKAMAK_SERVER: undefined,
+        TOKAMAK_TOKEN: token,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { code, data: JSON.parse(stdout), stderr };
+}
+
+test("shares a folder, ZIP and link with a real server, and unshares by id", async () => {
+  await withPlugin(async (plugin, root) => {
+    await withServer(root, async (address, token) => {
+      const id = "outside-fixture";
+      async function run(args, credential = token) {
+        return sharingCli(root, [...args, "--server", address], credential);
+      }
+      async function ok(args) {
+        const result = await run(args);
+        expect(result.code, result.stderr).toBe(0);
+        expect(result.data.ok).toBe(true);
+        return result.data;
+      }
+      const first = await ok(["share", plugin]);
+      expect(first).toMatchObject({
+        id,
+        version: "0.1.0",
+        status: "installed",
+        buildId: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(await ok(["list"])).toEqual({
+        ok: true,
+        plugins: [{ id, version: "0.1.0", status: "loaded", buildId: first.buildId }],
+      });
+      expect((await readdir(root)).filter((name) => name.endsWith(".zip"))).toEqual([]);
+
+      await writeFile(
+        join(plugin, "src/server/shared.ts"),
+        `import { query } from "@tokamak/sdk";
+export const hello = query({ handler: () => "hello" });`,
+      );
+      const updated = await ok(["share", plugin]);
+      expect(updated.status).toBe("updated");
+      expect(updated.buildId).not.toBe(first.buildId);
+      expect(await ok(["share", plugin])).toEqual({ ...updated, status: "unchanged" });
+
+      const packed = cli(root, ["plugin", "pack", plugin, "--json"], {}, root);
+      expect(packed.code, packed.stderr).toBe(0);
+      const { path, buildId } = JSON.parse(packed.stdout);
+      const invite = cli(root, ["invite", "Member", "--server", address, "--json"], { TOKAMAK_TOKEN: token });
+      expect(invite.code, invite.stderr).toBe(0);
+      for (const args of [
+        ["share", path],
+        ["unshare", id],
+      ]) {
+        const denied = await run(args, JSON.parse(invite.stdout).invite);
+        expect(denied.code).not.toBe(0);
+        expect(denied.data.error).toEqual({
+          message: "Only the owner of this server can share or remove plugins",
+          next: expect.stringContaining("TOKAMAK_TOKEN"),
+        });
+      }
+      const unauthorized = await run(["unshare", id], "wrong-token");
+      expect(unauthorized.code).not.toBe(0);
+      expect(unauthorized.data.error.message).toBe("The server rejected the token");
+
+      expect(await ok(["unshare", id])).toEqual({ ok: true, id, removed: true });
+      expect(await ok(["list"])).toEqual({ ok: true, plugins: [] });
+      const unknown = await run(["unshare", id]);
+      expect(unknown.code).not.toBe(0);
+      expect(unknown.data.error).toMatchObject({
+        message: expect.stringContaining(id),
+        next: `tokamak plugin list --server ${address}`,
+      });
+      const installed = { ok: true, id, version: "0.1.0", buildId, status: "installed" };
+      expect(await ok(["share", path])).toEqual(installed);
+      await ok(["unshare", id]);
+
+      const incompatible = join(root, "incompatible.zip");
+      const entries = unzipSync(await readFile(path));
+      const manifest = JSON.parse(new TextDecoder().decode(entries["manifest.json"]));
+      manifest.plugin.api = "tokamak@999.0.0";
+      entries["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest));
+      const rejectedBytes = zipSync(entries);
+      await writeFile(incompatible, rejectedBytes);
+      const refusal = await fetch(`${address}/plugins/${id}/package`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-tokamak-build-id": createHash("sha256").update(entries["manifest.json"]).digest("hex"),
+        },
+        body: rejectedBytes,
+      });
+      expect(refusal.ok).toBe(false);
+      const { error: reason } = await refusal.json();
+      expect(reason).toContain("Rebuild with the current CLI");
+      const rejected = await run(["share", incompatible]);
+      expect(rejected.code).not.toBe(0);
+      expect(rejected.data.error.message).toBe(reason);
+
+      const download = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch: (request) =>
+          new URL(request.url).pathname === "/download"
+            ? new Response(null, { status: 302, headers: { Location: "/package.zip" } })
+            : new Response(Bun.file(path)),
+      });
+      try {
+        expect(await ok(["share", `http://127.0.0.1:${download.port}/download`])).toEqual(installed);
+      } finally {
+        download.stop(true);
+      }
+      const insecure = await run(["share", "http://example.com/package.zip"]);
+      expect(insecure.code).not.toBe(0);
+      expect(insecure.data.error.message).toContain("HTTPS");
+
+      const descriptor = join(plugin, "plugin.ts");
+      await writeFile(
+        descriptor,
+        (await readFile(descriptor, "utf8")).replace("definePlugin({", 'definePlugin({ runtime: "worker",'),
+      );
+      const worker = await run(["share", plugin]);
+      expect(worker.code).not.toBe(0);
+      expect(worker.data.error.message).toBe("Plugins with machine actions cannot be shared yet");
+    });
+  });
+}, 180_000);
+
+test("share requires a server and checks its release before building", async () => {
+  await withPlugin(async (plugin, root) => {
+    const missing = await sharingCli(root, ["share", plugin], "test-token");
+    expect(missing.code).not.toBe(0);
+    expect(missing.data.error.next).toContain("tokamak plugin share ./my-plugin --server");
+
+    const requests = [];
+    const newer = Number(tokamakVersion.split(".")[0]) + 1;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        requests.push([request.method, new URL(request.url).pathname, request.headers.has("Authorization")]);
+        return Response.json({ version: `${newer}.0.0` });
+      },
+    });
+    const dist = join(plugin, "dist");
+    await mkdir(dist);
+    await writeFile(join(dist, "previous-build"), "keep me");
+    try {
+      const mismatch = await sharingCli(
+        root,
+        ["share", plugin, "--server", `http://127.0.0.1:${server.port}`],
+        "test-token",
+      );
+      expect(mismatch.code).not.toBe(0);
+      expect(mismatch.data.error.message).toContain("Upgrade the CLI");
+      expect(requests).toEqual([["GET", "/version", false]]);
+      expect(await readdir(dist)).toEqual(["previous-build"]);
+      expect(await readFile(join(dist, "previous-build"), "utf8")).toBe("keep me");
+      expect(await readdir(root)).toEqual(["plugin"]);
+    } finally {
+      server.stop(true);
+    }
+  });
+});
 
 test("rejects empty input and server selection on index commands without leaking credentials", async () => {
   await withPlugin((plugin, root) => {

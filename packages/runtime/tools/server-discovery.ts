@@ -90,11 +90,16 @@ export async function inspectLocalServer(folder: string) {
   return { identity, responsive: true as const, endpoint };
 }
 
-export async function request(path: string, endpoint: Endpoint, init: RequestOptions = {}, timeout = 5000) {
+export async function request(
+  path: string,
+  endpoint: { url: URL; token?: string },
+  init: RequestOptions = {},
+  timeout = 5000,
+) {
   const destination = new URL(path, endpoint.url);
   if (destination.origin !== endpoint.url.origin) throw new ServerRequestError("Invalid server route");
   const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${endpoint.token}`);
+  if (endpoint.token) headers.set("Authorization", `Bearer ${endpoint.token}`);
   const signal = AbortSignal.timeout(timeout);
   try {
     if (loopback(destination.hostname)) return await direct(destination, headers, signal, init);

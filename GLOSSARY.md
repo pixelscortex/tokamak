@@ -44,6 +44,9 @@ _Avoid_: Refresh, window reload
 One ZIP containing a built plugin’s manifest and the files it lists.
 _Avoid_: Source archive
 
+**Share**:
+Install or update a plugin package on a selected server so it is available in that workspace.
+
 **Build id**:
 The SHA-256 of a built plugin's `manifest.json`. The manifest holds the hash of every other file, so the build id names one exact build. The version is only a label.
 _Avoid_: Revision, hash, version

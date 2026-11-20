@@ -6,7 +6,11 @@ import { Readable } from "node:stream";
 export const loopback = (host: string) =>
   host === "localhost" || host === "[::1]" || (isIP(host) === 4 && host.startsWith("127."));
 
-export type RequestOptions = { method?: string; headers?: Record<string, string>; body?: string };
+export type RequestOptions = {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string | Uint8Array<ArrayBuffer>;
+};
 
 // A fresh socket cannot inherit proxy settings or follow redirects.
 export function direct(url: URL, headers: Headers, signal: AbortSignal, { method, body }: RequestOptions) {

@@ -6,6 +6,8 @@ Run from a checkout with the pinned Bun:
 proto run bun -- run --silent tokamak --help
 proto run bun -- run --silent tokamak plugin build /path/to/my-plugin --json
 proto run bun -- run --silent tokamak plugin pack /path/to/my-plugin --json
+proto run bun -- run --silent tokamak plugin share /path/to/my-plugin --server https://tokamak.example.com
+proto run bun -- run --silent tokamak plugin unshare my-plugin --server https://tokamak.example.com
 proto run bun -- run --silent tokamak plugin add /path/to/my-plugin
 proto run bun -- run --silent tokamak plugin list --json
 proto run bun -- run --silent tokamak plugin logs my-plugin --errors --json
@@ -20,6 +22,17 @@ doesn't need a server. `pack` also works without a server and defaults to the
 current folder. It builds the plugin and writes `<id>-<version>.zip` in the
 folder where the command was run. The ZIP contains `manifest.json` and the
 files listed in its hashes. The build id is the SHA-256 of the manifest bytes.
+
+`share` installs or updates a plugin from a source folder, ZIP package, or
+HTTPS link (HTTP is also allowed on loopback). It checks that the CLI and
+server have the same major and minor versions and that the CLI is no newer
+than the server before reading or building the package. Source packages are
+written to a temp folder. Plugins with machine actions cannot be shared yet.
+
+`unshare` removes the shared package by id. If a copy from the server's
+`--plugins` folder takes its place, the result reports `reverted: true`.
+Both commands require `--server <address>` or `TOKAMAK_SERVER` and an owner
+token in `TOKAMAK_TOKEN`.
 
 `add` reads the plugin's static identity from `plugin.ts`
 (or the build's `package.json` convention), and doesn't build it. `add` and
@@ -42,7 +55,9 @@ sources contain the same id; startup logs which copy it replaces. A missing
 index is empty. Unreadable or malformed indexes are logged and ignored; bad
 entries are logged and skipped, leaving any copy from `--plugins` available.
 
-`list` asks the running local server for its catalog. The CLI discovers it through
+`list` asks the running local server for its catalog by default. With
+`--server <address>`, it shows the selected server's loaded plugins with
+their id, version, build id and status. For local discovery the CLI reads
 `server.json` and authenticates with `server.token` in the app data folder. Set
 `TOKAMAK_SERVER_DIR` to use a different app data folder, including for tests.
 For a server at a specific address, set `TOKAMAK_SERVER` and `TOKAMAK_TOKEN`,
@@ -103,23 +118,25 @@ With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, normal output goes to stdout and errors go to stderr. Exit status is zero on success and
 nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 
-| Command         | Additional result fields                                           |
-| --------------- | ------------------------------------------------------------------ |
-| `plugin build`  | `id`, `outputFolder`                                               |
-| `plugin pack`   | `path` (absolute), `id`, `version`, `buildId`                      |
-| `plugin add`    | `id`, `folder`, `reloadRequired: true`, `precedence: "index"`      |
-| `plugin remove` | `id`, `reloadRequired: true`                                       |
-| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`                |
-| `plugin logs`   | `entries`: matching records, and `skipped`: malformed record count |
-| `invite`        | `invite`: token or join link                                       |
-| `members`       | `members`: active `{ id, name, role }` entries                     |
-| `revoke`        | `revoked`: member id                                               |
-| `server start`  | `address`, `pid`, `buildId`, `reused`                              |
-| `server status` | `running`; when true: `responsive`, `address`, `pid`, `buildId`    |
-| `server stop`   | `stopped`: whether a running server was stopped                    |
-| `doctor`        | `rows`: an array of readiness checks                               |
-| `report`        | `path`: the absolute path of the written report                    |
-| `--help`        | `help`                                                             |
+| Command          | Additional result fields                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| `plugin build`   | `id`, `outputFolder`                                                                                 |
+| `plugin pack`    | `path` (absolute), `id`, `version`, `buildId`                                                        |
+| `plugin share`   | `id`, `version`, `buildId`, `status` (`installed`, `updated`, or `unchanged`)                        |
+| `plugin unshare` | `id`, `removed`; on revert: `reverted: true`, `buildId`                                              |
+| `plugin add`     | `id`, `folder`, `reloadRequired: true`, `precedence: "index"`                                        |
+| `plugin remove`  | `id`, `reloadRequired: true`                                                                         |
+| `plugin list`    | `plugins`: `{ id, version, fromIndex }` entries; with `--server`: `{ id, version, buildId, status }` |
+| `plugin logs`    | `entries`: matching records, and `skipped`: malformed record count                                   |
+| `invite`         | `invite`: token or join link                                                                         |
+| `members`        | `members`: active `{ id, name, role }` entries                                                       |
+| `revoke`         | `revoked`: member id                                                                                 |
+| `server start`   | `address`, `pid`, `buildId`, `reused`                                                                |
+| `server status`  | `running`; when true: `responsive`, `address`, `pid`, `buildId`                                      |
+| `server stop`    | `stopped`: whether a running server was stopped                                                      |
+| `doctor`         | `rows`: an array of readiness checks                                                                 |
+| `report`         | `path`: the absolute path of the written report                                                      |
+| `--help`         | `help`                                                                                               |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
 configuration failures include `error.diagnostics`, an array with a full
