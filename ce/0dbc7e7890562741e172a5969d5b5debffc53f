@@ -1,0 +1,38 @@
+packages/cli/src/commands/remove.ts
+  s_f4bbe8789ef718::t_6887e6e785c605 2,10-13
+packages/cli/tests/cli.test.mjs
+  s_f4bbe8789ef718::t_611753b8bff1fb 249-270
+  s_f4bbe8789ef718::t_f72de119f69e7d 34,50,141,248,271-302
+  s_f4bbe8789ef718::t_c5a64d8fdaa00f 103,247,303-339
+  s_f4bbe8789ef718::t_520866a1b7a141 8,10,88-89,99-102,104,167,230-246
+packages/cli/src/command.ts
+  s_f4bbe8789ef718::t_ce7d7db13762a6 20-22
+packages/cli/src/commands/add.ts
+  s_f4bbe8789ef718::t_6887e6e785c605 4,15-19,21-22,24-25
+packages/cli/src/process.ts
+  s_f4bbe8789ef718::t_6887e6e785c605 1-9
+packages/cli/src/plugin-index.ts
+  s_f4bbe8789ef718::t_6887e6e785c605 2,4,9-10,27,36-87
+packages/cli/src/commands/list.ts
+  s_f4bbe8789ef718::t_ce7d7db13762a6 8
+packages/cli/src/main.ts
+  s_f4bbe8789ef718::t_ce7d7db13762a6 12-20,39,47-48,73,82,102
+packages/cli/src/server.ts
+  s_f4bbe8789ef718::t_39b9667a4debf6 6,9-14,22-34,37-38,40-41,43,50-53,56-57,59,64-68,70-87,90-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce0dbc7e7890562741e172a5969d5b5debffc53f",
+  "prompts": {},
+  "sessions": {
+    "s_f4bbe8789ef718": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8c7-2184-7610-b50e-7b9bdba62bbe",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
