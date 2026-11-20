@@ -31,6 +31,11 @@ test("reports the file and line of a type error in the external server part", as
     await writeFile(join(plugin, "src/server/broken.ts"), "\nexport const broken: string = 42;\n");
     const result = build(plugin);
     expect(result.code).not.toBe(0);
-    expect(result.output).toMatch(/broken\.ts\(2,\d+\): error TS2322/);
+    // The type checker prints `broken.ts(2,14): error TS2322` in a terminal and
+    // `<error file="broken.ts" line="2" ... code="TS2322">` when it detects an AI
+    // agent (the AI_AGENT environment variable). Both name the file and line.
+    expect(result.output).toMatch(
+      /broken\.ts\(2,\d+\): error TS2322|file="broken\.ts" line="2"[^>]*code="TS2322"/,
+    );
   });
 }, 30_000);
