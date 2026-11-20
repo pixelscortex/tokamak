@@ -85,27 +85,41 @@ fn launch(
     Ok((child, group, guardian))
 }
 
-pub(super) fn spawn(
-    runtime: &tokio::runtime::Handle,
+#[cfg(windows)]
+fn launch(
     id: &str,
     bun: &Path,
-    entry: Arc<Asset>,
-    code: Arc<Asset>,
+    entry: &Path,
+    code: &Path,
     cwd: &Path,
     env: &BTreeMap<String, String>,
+) -> Result<
+    (
+        WorkerChild,
+        std::os::windows::io::OwnedHandle,
+        Option<Child>,
+    ),
+    String,
+> {
+    let (child, job) = super::windows::spawn(bun, entry, code, cwd, env)
+        .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
+    Ok((child, job, None))
+}
+
+pub(super) fn spawn(
+    supervisor: &Supervisor,
+    bun: &Path,
+    cwd: &Path,
+    capture_startup: bool,
 ) -> Result<Arc<Process>, String> {
+    let id = &supervisor.id;
+    let runtime = &supervisor.runtime;
+    let (entry, code) = (supervisor.entry.clone(), supervisor.code.clone());
     // Nested QuickJS actions can run on a short-lived runtime. Bind child I/O
     // to the server runtime that owns the long-lived worker instead.
     let _entered = runtime.enter();
-    #[cfg(windows)]
-    let (mut child, containment, mut guardian) = {
-        let (child, job) = super::windows::spawn(bun, entry.path(), code.path(), cwd, env)
-            .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
-        (child, job, None::<Child>)
-    };
-    #[cfg(not(windows))]
     let (mut child, containment, mut guardian) =
-        launch(id, bun, entry.path(), code.path(), cwd, env)?;
+        launch(id, bun, entry.path(), code.path(), cwd, &supervisor.env)?;
     let guardian_input = guardian.as_mut().and_then(|child| child.stdin.take());
     let input = child.stdin.take().ok_or("Worker stdin missing")?;
     let output = child.stdout.take().ok_or("Worker stdout missing")?;
@@ -115,6 +129,7 @@ pub(super) fn spawn(
         commands,
         kill: CancellationToken::new(),
         stopped: CancellationToken::new(),
+        exit_error: OnceLock::new(),
     });
     let running = process.clone();
     let id = id.to_owned();
@@ -125,8 +140,8 @@ pub(super) fn spawn(
         let _snapshots = (entry, code);
         let _guardian_input = guardian_input;
         let label = id.clone();
-        let _stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
-            forward_stderr(label, stderr).await;
+        let mut stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+            forward_stderr(label, stderr, capture_startup).await
         }));
         let (writes, outgoing) = mpsc::channel::<Value>(128);
         let (failed, mut failure) = oneshot::channel();
@@ -165,6 +180,12 @@ pub(super) fn spawn(
         let _ = child.wait().await;
         if let Some(mut guardian) = guardian {
             let _ = guardian.wait().await;
+        }
+        if capture_startup
+            && let Ok(Ok(detail)) =
+                tokio::time::timeout(Duration::from_millis(500), &mut stderr).await
+        {
+            let _ = running.exit_error.set(detail);
         }
         fail_pending_calls(&id, &error, calls);
         running.stopped.cancel();
@@ -300,17 +321,28 @@ async fn read_frame(
     }
 }
 
-async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) {
+async fn forward_stderr(
+    label: String,
+    mut stderr: tokio::process::ChildStderr,
+    capture_startup: bool,
+) -> String {
     let mut chunk = [0u8; 4096];
+    let mut detail = Vec::new();
     while let Ok(n) = stderr.read(&mut chunk).await {
         if n == 0 {
             break;
         }
-        logs::send(format!(
-            "Plugin {label}: {}",
-            String::from_utf8_lossy(&chunk[..n])
-        ));
+        if capture_startup {
+            let room = 8192usize.saturating_sub(detail.len());
+            detail.extend_from_slice(&chunk[..n.min(room)]);
+        } else {
+            logs::send(format!(
+                "Plugin {label}: {}",
+                String::from_utf8_lossy(&chunk[..n])
+            ));
+        }
     }
+    String::from_utf8_lossy(&detail).trim().to_owned()
 }
 
 async fn write_messages(

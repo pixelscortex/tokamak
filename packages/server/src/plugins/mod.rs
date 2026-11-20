@@ -10,11 +10,12 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 pub struct Artifact {
     pub manifest: Manifest,
+    pub(crate) build_id: String,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
     provides: BTreeSet<String>,
@@ -39,6 +40,8 @@ pub(crate) struct Loaded {
     pub catalog_text: String,
     pub(crate) skipped: BTreeMap<String, String>,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
+    pub(crate) action_lifetimes: BTreeMap<String, tokio_util::sync::CancellationToken>,
+    current: Arc<tokio::sync::RwLock<Weak<Self>>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 

@@ -2,11 +2,12 @@ use super::*;
 
 impl Loaded {
     pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Self, Error> {
-        Self::load_reusing(catalog, pool, None).await
+        Self::load_reusing(catalog, BTreeMap::new(), pool, None).await
     }
 
     pub async fn load_reusing(
         catalog: Catalog,
+        artifact_failures: BTreeMap<String, String>,
         pool: &engine::Pool,
         previous: Option<&Self>,
     ) -> Result<Self, Error> {
@@ -18,10 +19,14 @@ impl Loaded {
             inspected: BTreeMap::new(),
             workers: BTreeMap::new(),
             skipped: BTreeMap::new(),
+            action_lifetimes: BTreeMap::new(),
+            current: previous.map(|old| old.current.clone()).unwrap_or_default(),
         };
+        for (id, reason) in artifact_failures {
+            loaded.skip(id, reason);
+        }
         for id in loaded.catalog.order.clone() {
-            if let Some(reason) = loaded.skipped_dependency(&id) {
-                loaded.skip(id, reason);
+            if loaded.skip_if_required_dependency_failed(&id, previous)? {
                 continue;
             }
             if let Err(error) = loaded.prepare_plugin(&id, pool, previous).await {
@@ -46,7 +51,11 @@ impl Loaded {
         previous: Option<&Self>,
     ) -> Result<(), Error> {
         let artifact = &self.catalog.plugins[id];
-        let worker = prepare_worker(&self.catalog, id, artifact)?;
+        let unchanged = previous.filter(|old| self.catalog.same_build(&old.catalog, id));
+        let worker = match unchanged {
+            Some(old) => old.workers.get(id).cloned(),
+            None => prepare_worker(&self.catalog, id, artifact)?,
+        };
         if let Some(bundle) = &artifact.bundle {
             let cached = previous
                 .filter(|old| {
@@ -64,7 +73,7 @@ impl Loaded {
             for name in &artifact.manifest.public_functions {
                 if !kinds.contains_key(name) {
                     return Err(invalid(format!(
-                        "Exported function {name} is not a backend function of {id}"
+                        "Exported function {name} is not a server function of {id}"
                     )));
                 }
             }
@@ -91,6 +100,10 @@ impl Loaded {
         if let Some(worker) = worker {
             self.workers.insert(id.to_owned(), worker);
         }
+        let lifetime = unchanged
+            .map(|old| old.action_lifetimes[id].clone())
+            .unwrap_or_default();
+        self.action_lifetimes.insert(id.to_owned(), lifetime);
         Ok(())
     }
 
@@ -99,26 +112,38 @@ impl Loaded {
             return Ok(());
         }
         let skipped = &self.skipped;
-        self.catalog
-            .plugins
-            .retain(|id, _| !skipped.contains_key(id));
-        self.catalog.order.retain(|id| !skipped.contains_key(id));
-        self.catalog.update_metadata()?;
+        self.catalog.omit_skipped(skipped)?;
         self.targets
             .retain(|_, target| !skipped.contains_key(&target.owner));
         self.workers.retain(|id, _| !skipped.contains_key(id));
+        self.action_lifetimes
+            .retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
         self.update_metadata()
     }
 
-    pub(super) fn skipped_dependency(&self, id: &str) -> Option<String> {
-        self.catalog.plugins[id]
+    pub(super) fn skip_if_required_dependency_failed(
+        &mut self,
+        id: &str,
+        previous: Option<&Self>,
+    ) -> Result<bool, Error> {
+        let Some(dependency) = self.catalog.plugins[id]
             .manifest
             .plugin
             .depends
             .keys()
             .find(|dependency| self.skipped.contains_key(*dependency))
-            .map(|dependency| format!("requires {dependency}, which did not load"))
+        else {
+            return Ok(false);
+        };
+        let reason = format!("requires {dependency}, which did not load");
+        if previous.is_some_and(|old| old.catalog.plugins.contains_key(id)) {
+            return Err(invalid(format!(
+                "Cannot reload active plugin {id}: {reason}"
+            )));
+        }
+        self.skip(id.to_owned(), reason);
+        Ok(true)
     }
 
     pub(super) fn skip(&mut self, id: String, reason: String) {
@@ -160,6 +185,69 @@ impl Loaded {
         metadata["schema"] = self.descriptor["schema"].clone();
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(())
+    }
+
+    pub(super) async fn check_worker(&self, id: &str) -> Result<(), Error> {
+        if let Some(worker) = self.workers.get(id) {
+            worker.check_ready().await.map_err(|error| {
+                let environment = crate::environment::Snapshot::new(Some(self), Some(id));
+                invalid(format!(
+                    "Plugin {id} worker failed readiness: {}",
+                    environment.redact(error)
+                ))
+            })?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn changed_plugins(&self, previous: Option<&Self>) -> BTreeSet<String> {
+        let Some(old) = previous else {
+            return self.catalog.plugins.keys().cloned().collect();
+        };
+        self.catalog
+            .plugins
+            .keys()
+            .chain(
+                old.catalog
+                    .plugins
+                    .keys()
+                    .filter(|id| !self.catalog.plugins.contains_key(*id)),
+            )
+            .filter(|id| !self.catalog.same_build(&old.catalog, id))
+            .cloned()
+            .collect()
+    }
+
+    pub(crate) async fn publish(
+        self: &Arc<Self>,
+        previous: Option<&Self>,
+        changed: &BTreeSet<String>,
+    ) {
+        // Action calls can resolve outside the coordinator. Block them during
+        // retirement so a new worker cannot use the live directory until its
+        // predecessor has stopped.
+        let mut current = self.current.write().await;
+        if let Some(previous) = previous {
+            for id in changed {
+                if let Some(lifetime) = previous.action_lifetimes.get(id) {
+                    lifetime.cancel();
+                }
+            }
+            for id in changed {
+                if let Some(worker) = previous.workers.get(id) {
+                    worker.stop().await;
+                }
+            }
+        }
+        *current = Arc::downgrade(self);
+    }
+
+    pub(crate) async fn current_for(&self, caller: &str) -> Result<Arc<Self>, String> {
+        let current = self.current.read().await;
+        if self.action_lifetimes[caller].is_cancelled() {
+            return Err("Plugin action cancelled by reload".into());
+        }
+        current.upgrade().ok_or_else(|| "server is closed".into())
     }
 
     pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {

@@ -27,17 +27,24 @@ impl Loaded {
         database: &crate::data::Database,
         previous: Option<&Self>,
     ) -> Result<(), Error> {
-        // Repairs can happen without a build change. Try the full installation,
-        // then retry the transaction without any previously skipped plugin
-        // that still fails, preserving one commit for the published reload.
+        // Previously skipped plugins count as new to the active catalog even
+        // when their builds are unchanged. If one still fails, exclude it and
+        // its required dependents, then retry so the reload has one commit.
         loop {
-            let failure =
-                match Box::pin(self.record_grants_for(database, previous, &self.catalog.order))
-                    .await
-                {
-                    Ok(()) => return Ok(()),
-                    Err(failure) => failure,
-                };
+            let ids: Vec<_> = self
+                .catalog
+                .order
+                .iter()
+                .filter(|id| previous.is_none_or(|old| !self.catalog.same_build(&old.catalog, id)))
+                .cloned()
+                .collect();
+            if ids.is_empty() {
+                return Ok(());
+            }
+            let failure = match Box::pin(self.record_grants_for(database, previous, &ids)).await {
+                Ok(()) => return Ok(()),
+                Err(failure) => failure,
+            };
             let Some(id) = failure
                 .plugin
                 .filter(|id| previous.is_some_and(|old| old.skipped.contains_key(id)))
@@ -46,10 +53,8 @@ impl Loaded {
             };
             self.skip(id, failure.error.to_string());
             for id in self.catalog.order.clone() {
-                if !self.skipped.contains_key(&id)
-                    && let Some(reason) = self.skipped_dependency(&id)
-                {
-                    self.skip(id, reason);
+                if !self.skipped.contains_key(&id) {
+                    self.skip_if_required_dependency_failed(&id, previous)?;
                 }
             }
             self.prune_skipped()?;
@@ -62,8 +67,7 @@ impl Loaded {
     ) -> Result<(), Error> {
         // Catalog order puts required dependencies before their dependents.
         for id in self.catalog.order.clone() {
-            if let Some(reason) = self.skipped_dependency(&id) {
-                self.skip(id, reason);
+            if self.skip_if_required_dependency_failed(&id, None)? {
                 continue;
             }
             match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(&id))).await
@@ -123,6 +127,20 @@ impl Loaded {
                     })?
                 {
                     granted.push(grant);
+                }
+            }
+
+            // Skipped schemas are resolved before checking workers, so required
+            // dependents of a failed plugin never run a readiness probe. Any
+            // readiness error rolls back the same transaction as a schema error.
+            if previous.is_some() {
+                for id in ids {
+                    self.check_worker(id)
+                        .await
+                        .map_err(|error| InstallFailure {
+                            plugin: Some(id.clone()),
+                            error,
+                        })?;
                 }
             }
 
