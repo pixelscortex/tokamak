@@ -363,6 +363,91 @@ test("reload tells the user how to add an unknown plugin", async () => {
   });
 });
 
+test("build and pack run Vite hooks from the plugin folder", async () => {
+  await withPlugin(async (plugin, root) => {
+    await mkdir(join(plugin, "node_modules/@tokamak"), { recursive: true });
+    await symlink(join(workspace, "packages/build"), join(plugin, "node_modules/@tokamak/build"), "junction");
+    const id = "a".repeat(240);
+    const descriptor = join(plugin, "plugin.ts");
+    await writeFile(descriptor, (await readFile(descriptor, "utf8")).replace("outside-fixture", id));
+    await writeFile(join(plugin, "local-input.txt"), "read from the plugin folder");
+    await writeFile(
+      join(plugin, "vite.config.ts"),
+      `import { readFileSync } from "node:fs";
+      import { tokamak } from "@tokamak/build/vite";
+      export default { plugins: [tokamak({ ui: false }), {
+        name: "local-input",
+        buildStart() {
+          this.emitFile({ type: "asset", fileName: "local-output.txt", source: readFileSync("local-input.txt") });
+        },
+      }] };`,
+    );
+    for (const command of ["build", "pack"]) {
+      const result = cli(root, ["plugin", command, plugin, "--json"], {}, root);
+      expect(result.code, result.stderr).toBe(0);
+      const value = JSON.parse(result.stdout);
+      expect(value.ok).toBe(true);
+      if (command === "pack") expect(value.path).toBe(join(root, `${id}-0.1.0.zip`));
+      expect(await readFile(join(plugin, "dist/local-output.txt"), "utf8")).toBe(
+        "read from the plugin folder",
+      );
+    }
+  });
+}, 60_000);
+
+test("identical plugins in different temp folders produce identical ZIP bytes and build ids", async () => {
+  await withPlugin(async (first, firstRoot) => {
+    const descriptor = join(first, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("id:", 'runtime: "worker", id:'),
+    );
+    await writeFile(
+      join(first, "src/server/ping.ts"),
+      'import { action } from "@tokamak/sdk"; export const ping = action({ handler: () => 42 });',
+    );
+    await withPlugin(async (second, secondRoot) => {
+      const nested = join(second, "nested", "copy");
+      await mkdir(dirname(nested), { recursive: true });
+      await cp(first, nested, { recursive: true });
+      const pack = (root, folder) => {
+        const result = cli(root, ["plugin", "pack", folder, "--json"], {}, root);
+        expect(result.code, result.stderr).toBe(0);
+        return JSON.parse(result.stdout);
+      };
+      const a = pack(firstRoot, first);
+      const b = pack(secondRoot, nested);
+      expect(b.buildId).toBe(a.buildId);
+      expect((await readFile(a.path)).equals(await readFile(b.path))).toBe(true);
+    });
+  });
+}, 60_000);
+
+test("pack reports the bad descriptor field's line without writing a ZIP", async () => {
+  await withPlugin(async (plugin, root) => {
+    const file = join(plugin, "plugin.ts");
+    for (const [id, version, line, message] of [
+      ["outside-fixture", "1.2.3/odd", 5, "Plugin version must be a semantic version"],
+      ["Invalid/ID", "1.2.3", 4, "Plugin id must be a stable lowercase identifier"],
+    ]) {
+      await writeFile(
+        file,
+        `import { definePlugin } from "@tokamak/sdk";\n\nexport default definePlugin({\n  id: "${id}",\n  version: "${version}",\n});\n`,
+      );
+      const result = cli(root, ["plugin", "pack", plugin, "--json"], {}, root);
+      expect(result.code).not.toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [expect.objectContaining({ file, line, message: expect.stringContaining(message) })],
+        },
+      });
+      expect(result.stderr).toContain(`${file}:${line}:`);
+      expect(await readdir(root)).toEqual(["plugin"]);
+    }
+  });
+});
+
 test("pack reports the source location of a failed build without writing a ZIP", async () => {
   await withPlugin(async (plugin, root) => {
     const file = join(plugin, "src/server/broken.ts");
@@ -384,19 +469,27 @@ test("pack reports the source location of a failed build without writing a ZIP",
 
 test("reload applies index additions and removals without a restart", async () => {
   await withPlugin(async (plugin, root) => {
+    const warning = /direct import "@ui-sdk\/solid".*Prefer @tokamak\/ui/;
+    const windowEntry = join(plugin, "src/client/api.tsx");
+    await writeFile(windowEntry, 'import "@ui-sdk/solid";\n' + (await readFile(windowEntry, "utf8")));
     const run = (...args) => {
       const result = cli(root, ["plugin", ...args, "--json"]);
       expect(result.code, result.stderr).toBe(0);
+      if (args[0] === "reload" && args[1]) expect(result.stderr).toMatch(warning);
       return JSON.parse(result.stdout);
     };
+    const built = cli(root, ["plugin", "build", plugin, "--json"]);
+    expect(built.code, built.stderr).toBe(0);
+    expect(built.stderr).toMatch(warning);
+    expect(JSON.parse(built.stdout).ok).toBe(true);
     const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
     const dist = join(plugin, "dist");
-    await mkdir(dist);
     await writeFile(join(dist, "stale.txt"), "An old file left in dist");
     const pack = (cwd, ...args) => {
       const result = cli(root, ["plugin", "pack", ...args, "--json"], {}, cwd);
       expect(result.code, result.stderr).toBe(0);
       expect(result.stderr).toContain("Packed outside-fixture");
+      expect(result.stderr).toMatch(warning);
       return JSON.parse(result.stdout);
     };
     const packed = pack(root, "plugin");
@@ -424,13 +517,18 @@ test("reload applies index additions and removals without a restart", async () =
     for (const [name, hash] of Object.entries(hashes)) {
       const bytes = unzip("-p", zip, name);
       expect(digest(bytes)).toBe(hash);
-      if (name.endsWith(".map")) expect(JSON.parse(bytes.toString())).not.toHaveProperty("sourcesContent");
+      if (name.endsWith(".map")) {
+        const map = JSON.parse(bytes.toString());
+        expect(map.sourcesContent).toHaveLength(map.sources.length);
+        expect(map.sources.every((source) => !source.startsWith("/") && !source.startsWith(".."))).toBe(true);
+      }
     }
 
     await withServer(root, async () => {
       run("add", plugin);
       expect(run("reload", "outside-fixture")).toMatchObject({
         plugins: [{ id: "outside-fixture", status: "loaded", buildId: packed.buildId }],
+        warnings: [expect.stringMatching(warning)],
       });
       expect(run("list").plugins).toEqual([{ id: "outside-fixture", version: "0.1.0", fromIndex: true }]);
       expect(run("reload", "outside-fixture").plugins).toEqual([
@@ -973,7 +1071,7 @@ test("records worker and embedded plugin output in order and clears only the rel
         expect.objectContaining({
           level: "error",
           source: "server",
-          text: expect.stringMatching(/failure:save.*fixture mutation failed/s),
+          text: expect.stringMatching(/failure:save.*fixture mutation failed.*src\/server\/failure\.ts:15:/s),
         }),
       ]);
       expect(run("logs", "outside-fixture").entries).toContainEqual(
@@ -1014,7 +1112,7 @@ test("records worker and embedded plugin output in order and clears only the rel
         );
       }
       expect((await invoke(address, token, "action", "worker-fixture/flood:malformed")).Err).toMatch(
-        /mapped worker failure[\s\S]*flood\.ts:\d+/,
+        /mapped worker failure[\s\S]*src\/server\/flood\.ts:9:/,
       );
       expect(await invoke(address, token, "action", "worker-fixture/flood:ping")).toEqual({ Ok: 42 });
       const long = (

@@ -14,7 +14,7 @@ export default {
 } satisfies Command;
 
 export async function buildInFolder(folder: string) {
-  const { outputFolder } = await runBuilder(folder, "--result-json");
+  const { outputFolder, warnings } = await runBuilder(folder, "--result-json");
   if (!outputFolder) throw new Error("The build did not report its output folder");
   const id = await readFile(resolve(outputFolder, "manifest.json"), "utf8")
     .then((source) => {
@@ -27,5 +27,5 @@ export async function buildInFolder(folder: string) {
         { message: `Could not read the build manifest: ${error.message}` },
       ]);
     });
-  return { data: { id, outputFolder }, text: `Built ${id}: ${outputFolder}` };
+  return { data: { id, outputFolder }, text: `Built ${id}: ${outputFolder}`, warnings };
 }

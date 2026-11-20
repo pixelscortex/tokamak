@@ -8,7 +8,6 @@ import { acquireLock } from "./plugin-index";
 import type { BuildDiagnostic } from "../../build/src/diagnostics";
 
 const builder = fileURLToPath(new URL("../../build/src/build.ts", import.meta.url));
-const checkout = fileURLToPath(new URL("../../../", import.meta.url));
 const prefix = "Tokamak build result: ";
 
 type BuildResult = { ok: true; outputFolder?: string } | { ok: false; diagnostics: BuildDiagnostic[] };
@@ -19,21 +18,28 @@ export async function runBuilder(
   next = mode === "--result-json" ? "tokamak plugin build --help" : "tokamak plugin add --help",
 ) {
   const processResult = promisify(execFile)(process.execPath, [builder, mode, resolve(folder)], {
-    // Keep Vite’s generated module labels independent of the invocation folder.
-    cwd: checkout,
     maxBuffer: 16 * 1024 * 1024,
   });
   processResult.child.stdin?.end();
-  const { stdout, failed } = await processResult.then(
-    ({ stdout }) => ({ stdout, failed: false }),
-    (error: { stdout?: string }) => ({ stdout: error.stdout ?? "", failed: true }),
+  const { stdout, stderr, failed } = await processResult.then(
+    ({ stdout, stderr }) => ({ stdout, stderr, failed: false }),
+    (error: { stdout?: string; stderr?: string }) => ({
+      stdout: error.stdout ?? "",
+      stderr: error.stderr ?? "",
+      failed: true,
+    }),
   );
+  if (stderr) process.stderr.write(stderr);
   const record = stdout
     .split("\n")
     .reverse()
     .find((line) => line.startsWith(prefix));
   const result: BuildResult | undefined = record ? JSON.parse(record.slice(prefix.length)) : undefined;
-  if (result?.ok && !failed) return result;
+  if (result?.ok && !failed)
+    return {
+      ...result,
+      warnings: [...stderr.matchAll(/^Warning: (.+)$/gm)].map((match) => match[1]!),
+    };
   throw new CommandError(
     mode === "--result-json" ? "Plugin build failed" : "Could not add plugin",
     next,

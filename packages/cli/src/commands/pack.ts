@@ -1,7 +1,7 @@
 import type { Zippable } from "fflate";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { Command } from "../command";
 import { runBuilder, withBuildLock } from "../plugin-build";
 
@@ -36,9 +36,9 @@ async function archive(outputFolder: string) {
 
   const { zipSync } = await import("fflate");
   const path = resolve(`${id}-${version}.zip`);
-  const temporary = `${path}.${randomUUID()}.tmp`;
+  const temporary = resolve(dirname(path), `.tokamak-pack-${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary, zipSync(entries));
+    await writeFile(temporary, zipSync(entries, { mtime: new Date(1980, 0, 1) }));
     await rename(temporary, path);
   } finally {
     await rm(temporary, { force: true });
