@@ -1,0 +1,35 @@
+packages/build/README.md
+  s_608dc5803060fc::t_7b97b9e8437de5 19-22,124-128
+packages/build/src/contributions.ts
+  s_608dc5803060fc::t_7b97b9e8437de5 40-46
+  s_608dc5803060fc::t_45b3469420676f 32-39
+packages/build/tests/outside-server.test.mjs
+  s_608dc5803060fc::t_7b97b9e8437de5 24-26,32-34,45-47
+  s_608dc5803060fc::t_9c441af6d8374d 21-23,70
+packages/build/tests/outside.test.mjs
+  s_608dc5803060fc::t_7b97b9e8437de5 2,14,42-135
+packages/build/tests/browser.test.ts
+  s_608dc5803060fc::t_2631570aacdc47 121-122
+packages/build/tests/fixtures/outside/src/client/api.tsx
+  s_608dc5803060fc::t_3129e24888db0d 5
+packages/sdk/tools/bundle.mjs
+  s_608dc5803060fc::t_288987b26080bc 5,59,182-183,185,193,199
+packages/sdk/tools/plugin-boundary.mjs
+  s_608dc5803060fc::t_552508e34aeeb1 22-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4612b16162a9027f109fd2a20858bcebcdc7a451",
+  "prompts": {},
+  "sessions": {
+    "s_608dc5803060fc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8bd-c5a8-7e83-84b5-cfe54bdabde4",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
