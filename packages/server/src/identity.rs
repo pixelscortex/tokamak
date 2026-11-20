@@ -118,7 +118,7 @@ impl Identities {
     }
 
     pub fn local_members(directory: &std::path::Path, token: &str) -> io::Result<Self> {
-        Self::persistent(directory.join("members.json"), token, User::local())
+        Self::persistent(directory.join("local-members.json"), token, User::local())
     }
 
     fn persistent(path: PathBuf, token: &str, mut user: User) -> io::Result<Self> {
