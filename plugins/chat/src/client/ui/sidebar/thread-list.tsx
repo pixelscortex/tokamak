@@ -1,3 +1,4 @@
+import { AgentMark } from "../agent-mark";
 import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { Id } from "@tokamak/sdk";
@@ -50,7 +51,7 @@ export function ThreadList(props: { chat: ChatState; onNew: () => void }): JSX.E
                   <RowList.Option
                     value={thread()._id}
                     kind={state(thread()) ? "double" : "single"}
-                    lead={<Icon path={agent()?.mark ?? glyphs.chat} />}
+                    lead={<AgentMark agent={agent()} fallback={glyphs.chat} />}
                     trail={
                       <Show when={state(thread())} fallback={age(thread().updatedAt, now())}>
                         {(status) => <StatusIcon status={status()} size={12} label={thread().title} />}
