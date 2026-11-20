@@ -30,7 +30,9 @@ export interface Command {
   run(
     args: string[],
     options: { server?: string; flags: Flags },
-  ): Promise<{ data: object; text: string } | { stream(output: StreamOutput): Promise<void> }>;
+  ): Promise<
+    { data: object; text: string; jsonText?: string } | { stream(output: StreamOutput): Promise<void> }
+  >;
 }
 
 export class CommandError extends Error {

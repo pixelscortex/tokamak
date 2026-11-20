@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { acquireLock as waitForLock, codeOf } from "./lock";
 import { processIsAlive } from "./process";
 import { dataFolder } from "./data";
 
@@ -33,8 +34,6 @@ async function writeIndex(folder: string, entries: ReadonlyMap<string, string>) 
     await rm(scratch, { force: true });
   }
 }
-
-const codeOf = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
 async function removeEmptyLock(lock: string) {
   await rmdir(lock).catch((error: unknown) => {
@@ -75,18 +74,16 @@ export async function acquireLock(folder: string, label: string) {
     // Publish a nonempty lock atomically. A reaper can unlink only the dead
     // owner's uniquely named file, and cannot remove a new owner's directory.
     await writeFile(join(candidate, owner), "", { flag: "wx", mode: 0o600 });
-    const deadline = performance.now() + 15_000;
-    while (!acquired) {
-      try {
-        await rename(candidate, lock);
-        acquired = true;
-      } catch (error) {
+    await waitForLock(
+      () => rename(candidate, lock),
+      15_000,
+      async (error) => {
         if (!["EEXIST", "ENOTEMPTY", "EPERM", "EACCES"].includes(codeOf(error) ?? "")) throw error;
         await reapLock(lock);
-        if (performance.now() >= deadline) throw new Error(`Timed out waiting for lock: ${lock}`);
-        await new Promise((done) => setTimeout(done, 25 + Math.random() * 50));
-      }
-    }
+      },
+      `lock: ${lock}`,
+    );
+    acquired = true;
     return async () => {
       await rm(join(lock, owner), { force: true });
       await removeEmptyLock(lock);

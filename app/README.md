@@ -22,7 +22,7 @@ before changing installations. Discovery and the private token normally live in
 For browser development, use two terminals:
 
 ```sh
-proto run bun -- run server:start
+moon run app:server
 proto run bun -- run --cwd app dev
 ```
 

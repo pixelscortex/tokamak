@@ -2,8 +2,8 @@
 // Dependency types and reference metadata come from built artifacts.
 import ts from "typescript";
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
-import { fetchLocal } from "../../runtime/tools/local-server.ts";
+import { fetchLocal } from "../../runtime/tools/server-discovery.ts";
+import { dataFolder } from "../../runtime/tools/data.ts";
 import {
   existsSync,
   mkdirSync,
@@ -289,19 +289,8 @@ function neighbourTypes(root, id) {
   }
 }
 
-function localDirectory() {
-  if (process.env.TOKAMAK_SERVER_DIR) return process.env.TOKAMAK_SERVER_DIR;
-  const home = homedir();
-  // Match directories::ProjectDirs::data_local_dir, used by the desktop app.
-  if (process.platform === "darwin")
-    return resolve(home, "Library/Application Support/com.pixelscortex.Tokamak");
-  if (process.platform === "win32")
-    return resolve(process.env.LOCALAPPDATA ?? resolve(home, "AppData/Local"), "pixelscortex/Tokamak/data");
-  return resolve(process.env.XDG_DATA_HOME || resolve(home, ".local/share"), "tokamak");
-}
-
 async function localTypes(id) {
-  const directory = localDirectory();
+  const directory = dataFolder();
   try {
     const catalog = await fetchLocal(directory, "/plugins");
     if (!catalog?.ok) return;

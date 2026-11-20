@@ -22,7 +22,7 @@ launcher. Never pass the token in arguments. The launcher now uses the workspace
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
+TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run --silent tokamak plugin list --json
 TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run tokamak plugin add path/to/plugins/notes
 TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run tokamak plugin reload acme.notes
 ```

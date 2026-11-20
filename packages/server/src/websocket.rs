@@ -166,38 +166,7 @@ pub async fn serve_with_identities(
         access: access.clone(),
         origins: allowed_origins(web.as_ref()),
     };
-    let mut app = Router::new()
-        .route("/account", get(whoami).post(rename))
-        .route("/ws", get(upgrade))
-        .merge(plugin_routes());
-    if hosted {
-        app = app
-            .route("/health", get(|| async { "ok" }))
-            .route("/members", get(members).post(invite))
-            .route("/members/{id}/revoke", post(revoke));
-    } else if access.is_some() {
-        app = app.route("/health", get(health));
-    }
-    if access.is_some() {
-        app = app
-            .route("/shutdown", post(stop))
-            .route("/plugins/{id}/reload", post(reload_plugin));
-    }
-    if !hosted && access.is_some() {
-        app = app.route("/plugin-index/reload", post(reload_indexed));
-    }
-    let app = app
-        .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
-        .with_state(adapter);
-    let app = if let Some(web) = web {
-        app.fallback_service(
-            Router::new()
-                .fallback(get(crate::web::shell))
-                .with_state(web),
-        )
-    } else {
-        app
-    };
+    let app = application_router(adapter, web);
     // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
@@ -221,6 +190,45 @@ pub async fn serve_with_identities(
     // handshake, so none can escape this barrier and outlive storage shutdown.
     let _all = connections.acquire_many(CONNECTIONS).await;
     result
+}
+
+fn application_router(adapter: Adapter, web: Option<HostedWeb>) -> Router {
+    let hosted = adapter.hosted;
+    let authenticated = adapter.access.is_some();
+    let mut app = Router::new()
+        .route("/account", get(whoami).post(rename))
+        .route("/ws", get(upgrade))
+        .merge(plugin_routes());
+    if hosted {
+        app = app.route("/health", get(|| async { "ok" }));
+    } else if authenticated {
+        app = app.route("/health", get(health));
+    }
+    if hosted || authenticated {
+        app = app
+            .route("/members", get(members).post(invite))
+            .route("/members/{id}/revoke", post(revoke));
+    }
+    if authenticated {
+        app = app
+            .route("/shutdown", post(stop))
+            .route("/plugins/{id}/reload", post(reload_plugin));
+    }
+    if !hosted && authenticated {
+        app = app.route("/plugin-index/reload", post(reload_indexed));
+    }
+    let app = app
+        .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
+        .with_state(adapter);
+    if let Some(web) = web {
+        app.fallback_service(
+            Router::new()
+                .fallback(get(crate::web::shell))
+                .with_state(web),
+        )
+    } else {
+        app
+    }
 }
 
 #[derive(Default, serde::Deserialize)]
@@ -282,7 +290,9 @@ async fn authorize(
             return response;
         };
         let path = request.uri().path();
-        if (path.starts_with("/members") || path == "/shutdown" || path.ends_with("/reload"))
+        if (path.starts_with("/members")
+            || matches!(path, "/health" | "/shutdown")
+            || path.ends_with("/reload"))
             && user.role != "owner"
         {
             return StatusCode::FORBIDDEN.into_response();
@@ -380,7 +390,12 @@ async fn members(State(adapter): State<Adapter>) -> Response {
 async fn invite(State(adapter): State<Adapter>, body: String) -> Response {
     account_result((|| {
         let input: DisplayName = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-        Ok(serde_json::json!({"token": adapter.identities.invite(&input.name)?}))
+        let token = adapter.identities.invite(&input.name)?;
+        Ok(if adapter.hosted {
+            serde_json::json!({"token": token})
+        } else {
+            serde_json::json!({"token": token, "local": true})
+        })
     })())
 }
 
@@ -520,6 +535,7 @@ async fn upgrade(
 
 async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     let revoked = adapter.identities.cancellation(&user.id);
+    let local_relay = !adapter.hosted && adapter.access.is_some() && user.role == "owner";
     let session = tokio::select! {
         _ = adapter.stopping.cancelled() => return,
         _ = revoked.cancelled() => return,
@@ -527,7 +543,7 @@ async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     };
     tokio::select! {
         _ = revoked.cancelled() => {},
-        _ = connection_session(socket, session, adapter.stopping, !adapter.hosted && adapter.access.is_some()) => {},
+        _ = connection_session(socket, session, adapter.stopping, local_relay) => {},
     }
 }
 

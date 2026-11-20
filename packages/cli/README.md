@@ -41,7 +41,31 @@ For a server at a specific address, set `TOKAMAK_SERVER` and `TOKAMAK_TOKEN`,
 or supply `--server <address>` with `TOKAMAK_TOKEN`. The flag takes precedence.
 Local discovery checks the process and compares the authenticated health
 identity to the discovery file. Loopback requests connect directly, ignoring
-proxy settings. The CLI never starts a server.
+proxy settings. Only `tokamak server start` starts a server.
+
+From a checkout, build the plugins and the server executable:
+
+```sh
+proto run bun -- run tokamak plugin build plugins/chat
+proto run bun -- run tokamak plugin build plugins/acp
+cargo build --locked -p server --bin tokamak-server
+proto run bun -- run tokamak server start
+```
+
+Build each plugin you install in the plugins folder. The CLI and desktop app
+share the data folder, discovery files, and startup lock. Both reuse a running
+server when its server build id and plugins folder match. If they differ, the
+CLI asks you to stop the running server before starting a different one.
+`TOKAMAK_PLUGIN_DIR` selects the plugins folder for both launchers.
+
+Use `tokamak invite <name>`, `tokamak members`, and `tokamak revoke <id>` as
+the owner. A local invite grants access to the local workspace as a member.
+Running agents through the desktop app stays with the owner. A shared server
+invite is a join link. Keep invites private. With `--json`, an invite is
+printed only in the stdout JSON.
+
+`server status` reports `running: true, responsive: false` when discovery
+points to a live process that does not answer its health request.
 
 `plugin logs <id>` streams this installation's log in order. The plugin is
 known if it is indexed, loaded by the running server, or has a local log file.
@@ -78,6 +102,12 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 | `plugin remove` | `id`, `reloadRequired: true`                                       |
 | `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`                |
 | `plugin logs`   | `entries`: matching records, and `skipped`: malformed record count |
+| `invite`        | `invite`: token or join link                                       |
+| `members`       | `members`: active `{ id, name, role }` entries                     |
+| `revoke`        | `revoked`: member id                                               |
+| `server start`  | `address`, `pid`, `buildId`, `reused`                              |
+| `server status` | `running`; when true: `responsive`, `address`, `pid`, `buildId`    |
+| `server stop`   | `stopped`: whether a running server was stopped                    |
 | `--help`        | `help`                                                             |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and

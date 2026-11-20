@@ -89,7 +89,7 @@ test("lookup skips malformed manifests and reports duplicate providers", async (
 
 test("local discovery sends no token for a dead PID and bypasses proxy configuration", async () => {
   await withPlugin(async (consumer, root) => {
-    const { fetchLocal } = await import("../../runtime/tools/local-server.ts");
+    const { fetchLocal } = await import("../../runtime/tools/server-discovery.ts");
     const data = join(root, "data");
     const token = "a".repeat(64);
     let requests = 0;
@@ -126,7 +126,7 @@ test("local discovery sends no token for a dead PID and bypasses proxy configura
       expect(dead).toBeUndefined();
       await put(join(data, "server.json"), JSON.stringify(identity(process.pid)));
       const proxyUrl = `http://127.0.0.1:${proxy.port}`;
-      const runtime = new URL("../../runtime/tools/local-server.ts", import.meta.url).href;
+      const runtime = new URL("../../runtime/tools/server-discovery.ts", import.meta.url).href;
       const child = Bun.spawn(
         [
           process.execPath,

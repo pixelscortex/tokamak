@@ -46,22 +46,24 @@ Set `TOKAMAK_OWNER_NAME` to the owner's initial name (default `Owner`). Existing
 saved connections keep working. Hosted mode still requires this bootstrap token.
 These temporary identities will be replaced by real accounts later.
 
-Run these commands on your own machine; they call the server over HTTPS:
+From a Tokamak checkout, install the workspace dependencies with
+`proto run bun -- install --frozen-lockfile`. Run the CLI on your own machine;
+it calls the shared server over HTTPS. Set the CLI's `TOKAMAK_TOKEN` to the
+service's `TOKAMAK_ACCESS_TOKEN`:
 
 ```sh
+export TOKAMAK_SERVER='https://tokamak.example.app'
 export TOKAMAK_TOKEN='<owner token>'
-tokamak-server invite 'Alice' --server https://tokamak.example.app
-tokamak-server members --server https://tokamak.example.app
-tokamak-server revoke '<member id>' --server https://tokamak.example.app
+proto run bun -- run tokamak invite 'Alice'
+proto run bun -- run tokamak members
+proto run bun -- run tokamak revoke '<member id>'
 ```
 
-Alternatively pass `--token '<owner token>'` to each command. `invite` prints only
-the invite URL, exactly once; save it before closing your terminal. Tokens contain
-256 random bits encoded as URL-safe hex. `members` lists ID, name, role, created
-and revoked timestamps (milliseconds since the epoch), never token hashes or tokens.
+`invite` prints the personal join link once; keep it private.
+`members` lists active members by ID, name, and role.
 Revocation closes that member's open WebSockets and rejects future connections.
 The bootstrap owner cannot be revoked; rotate its environment token instead.
-HTTP is accepted by the CLI only on loopback for local testing.
+The CLI people commands accept plain HTTP only for loopback addresses during local testing.
 
 Members are stored in `members.json` beside the `--data` store directory: the
 image's `/data/store` uses `/data/members.json`. Each row contains
@@ -85,9 +87,9 @@ differs from the server's name. No new sign-in UI is required.
 
 Plugins receive the authenticated caller as `ctx.user` in every query, mutation
 and action, including subscriptions and calls through other plugins. The built-in
-WebSocket query `tokamak:whoami` with `{}` returns the same identity. Desktop/local
-mode uses `{ id: "local", name: "You", role: "owner" }`; `TOKAMAK_OWNER_NAME` can
-override that local name. Chat user messages snapshot `author: { id, name }`;
+WebSocket query `tokamak:whoami` with `{}` returns the same identity. The local server
+initially identifies its owner as `{ id: "local", name: "You", role: "owner" }`; `TOKAMAK_OWNER_NAME` can
+set that initial name. Chat user messages snapshot `author: { id, name }`;
 assistant messages snapshot `askedBy: { id, name }` when the run starts. Old rows
 without these optional fields stay valid, and later renames do not rewrite history.
 

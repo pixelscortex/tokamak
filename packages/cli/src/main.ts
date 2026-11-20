@@ -124,7 +124,7 @@ try {
         write: (text) => write(process.stdout, text, ""),
         notice: (text) => write(process.stderr, text, ""),
       });
-    } else await output({ ok: true, ...result.data }, result.text);
+    } else await output({ ok: true, ...result.data }, json ? (result.jsonText ?? result.text) : result.text);
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
