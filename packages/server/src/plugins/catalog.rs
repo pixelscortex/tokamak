@@ -69,35 +69,43 @@ impl Catalog {
 
         let order = resolve(&plugins)?;
 
+        let environment = root.parent().unwrap_or(root).join(".env.local");
+
+        let mut catalog = Self {
+            order,
+            plugins,
+            revision: String::new(),
+            providers: BTreeMap::new(),
+            environment,
+            directory: directory.to_owned(),
+        };
+        catalog.update_metadata()?;
+        Ok(catalog)
+    }
+
+    pub(super) fn update_metadata(&mut self) -> Result<(), Error> {
         let mut hash = Sha256::new();
 
-        for id in &order {
+        for id in &self.order {
             hash.update(
-                serde_json::to_vec(&plugins[id].manifest).map_err(|e| invalid(e.to_string()))?,
+                serde_json::to_vec(&self.plugins[id].manifest)
+                    .map_err(|e| invalid(e.to_string()))?,
             );
         }
 
-        let mut providers = BTreeMap::<String, Vec<String>>::new();
+        self.providers.clear();
 
-        for id in &order {
-            for interface in &plugins[id].provides {
-                providers
+        for id in &self.order {
+            for interface in &self.plugins[id].provides {
+                self.providers
                     .entry(interface.clone())
                     .or_default()
                     .push(id.clone());
             }
         }
 
-        let environment = root.parent().unwrap_or(root).join(".env.local");
-
-        Ok(Self {
-            order,
-            plugins,
-            revision: format!("{:x}", hash.finalize()),
-            providers,
-            environment,
-            directory: directory.to_owned(),
-        })
+        self.revision = format!("{:x}", hash.finalize());
+        Ok(())
     }
 
     pub fn metadata(&self) -> Value {

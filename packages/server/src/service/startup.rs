@@ -92,9 +92,9 @@ impl Server {
         };
 
         let loaded = match loaded {
-            Ok(loaded) => Box::pin(loaded.record_grants(&database, None))
+            Ok(mut loaded) => Box::pin(loaded.record_startup_grants(&database))
                 .await
-                .map(|()| loaded),
+                .map(|()| Arc::new(loaded)),
             Err(error) => Err(error),
         };
 
