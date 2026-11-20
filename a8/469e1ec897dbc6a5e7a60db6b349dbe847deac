@@ -1,0 +1,88 @@
+packages/server/src/plugins/tests.rs
+  s_96a5584ff9bc22::t_0095273240f055 87-89,126-135
+packages/build/src/artifact-bundle.ts
+  s_96a5584ff9bc22::t_0095273240f055 6,52
+GLOSSARY.md
+  s_96a5584ff9bc22::t_0095273240f055 43-46
+packages/build/src/artifact-sources.ts
+  s_96a5584ff9bc22::t_0095273240f055 1-63
+packages/cli/src/plugin-build.ts
+  s_96a5584ff9bc22::t_0095273240f055 2-3,7,15-20,24-30,32,38-42,45,49-61
+  s_96a5584ff9bc22::t_5568f0bf6f1b86 62
+packages/build/src/descriptor.ts
+  s_96a5584ff9bc22::t_0095273240f055 8-9,27-30,44-45,52,63,65,70,72-79,91-92,97,100-106,114
+packages/cli/src/commands/doctor.ts
+  s_96a5584ff9bc22::t_0095273240f055 8,73
+packages/tokamak-version.ts
+  s_96a5584ff9bc22::t_0095273240f055 1-5
+packages/build/src/ui-build-config.ts
+  s_96a5584ff9bc22::t_0095273240f055 6,27-33
+packages/server/tests/plugins.rs
+  s_96a5584ff9bc22::t_0095273240f055 235-236,759-776,1234,1311-1318,1321-1327,1464,1493,1557-1642,1644,1647-1649,1685-1711,1718,1735-1742,1748-1757,1759,1770,1783-1785,2006-2042,2051-2056
+  s_96a5584ff9bc22::t_b340ee0007e4fc 1844,1929,1971,1983
+packages/cli/src/commands/pack.ts
+  s_96a5584ff9bc22::t_0095273240f055 1-62
+packages/cli/src/commands/reload.ts
+  s_96a5584ff9bc22::t_0095273240f055 29,45-47,179-185,207,226,243
+packages/server/src/data/mod.rs
+  s_96a5584ff9bc22::t_0095273240f055 53,82,84,103,108-116
+packages/server/src/web.rs
+  s_96a5584ff9bc22::t_0095273240f055 65
+packages/build/src/build.ts
+  s_96a5584ff9bc22::t_0095273240f055 27-28
+packages/server/src/plugins/grants.rs
+  s_96a5584ff9bc22::t_0515ba1f7fa56f 29,44,122,182
+  s_96a5584ff9bc22::t_0095273240f055 48-59,181,183-184,194,196,198
+packages/server/src/plugins/package.rs
+  s_96a5584ff9bc22::t_0095273240f055 21,137,149,153-154,167,183-195,197-207,209-219,221-233,237-250,255,257-332,334-335,338,343-350,355,359-454,466-497,499-513,515-547,550-584,606,612-616,657,659-661,664-666,668-676,681-696
+  s_96a5584ff9bc22::t_b340ee0007e4fc 23-26,29-30,34-37,42-43,45-48,53-54,56-63,70-100,102-103,105-120,124-136
+  s_96a5584ff9bc22::t_eab7ea0e907ec5 138-142,697-701
+packages/sdk/src/plugin.ts
+  s_96a5584ff9bc22::t_0095273240f055 42-50,60,77,101,129,143,149,152
+packages/build/src/vite.ts
+  s_96a5584ff9bc22::t_0095273240f055 11,130-132,143-163
+packages/cli/README.md
+  s_96a5584ff9bc22::t_0095273240f055 8,19-24,109
+packages/server/Cargo.toml
+  s_96a5584ff9bc22::t_0095273240f055 70
+packages/cli/src/commands/build.ts
+  s_96a5584ff9bc22::t_0095273240f055 1,4,12,17,30
+packages/cli/src/commands.ts
+  s_96a5584ff9bc22::t_0095273240f055 3,21
+packages/server/src/websocket.rs
+  s_96a5584ff9bc22::t_0095273240f055 201,203-205,274,339
+packages/cli/package.json
+  s_96a5584ff9bc22::t_0095273240f055 5-8
+packages/cli/tests/cli.test.mjs
+  s_96a5584ff9bc22::t_0095273240f055 2,4,8,57,366-469,472-474,478,481-526,530-531,1074,1115,2072
+packages/cli/tests/cli-fixture.mjs
+  s_96a5584ff9bc22::t_0095273240f055 4-6
+packages/server/src/plugins/catalog.rs
+  s_96a5584ff9bc22::t_0095273240f055 5,54-56,268,383-399,442,488,493,534
+  s_96a5584ff9bc22::t_0515ba1f7fa56f 135-136,168,471,474
+packages/server/src/plugins/loading.rs
+  s_96a5584ff9bc22::t_0095273240f055 14-29
+packages/server/src/plugins/manifest.rs
+  s_96a5584ff9bc22::t_0095273240f055 107,110-169,174-177,195-206
+packages/server/src/service/plugin_control.rs
+  s_96a5584ff9bc22::t_0515ba1f7fa56f 263,278,292-293,305
+  s_96a5584ff9bc22::t_0095273240f055 319-320
+bun.lock
+  s_96a5584ff9bc22::t_bd21fc5fe59280 70-72,906-907
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8469e1ec897dbc6a5e7a60db6b349dbe847deac",
+  "prompts": {},
+  "sessions": {
+    "s_96a5584ff9bc22": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1fa91-86af-7a01-ab26-4f90571f77be",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
