@@ -1,5 +1,6 @@
 {
   "name": "tokamak",
+  "version": "0.1.0",
   "private": true,
   "workspaces": [
     "app",
@@ -14,6 +15,8 @@
   "scripts": {
     "build": "moon run app:build",
     "check": "moon run workspace:format-check workspace:lint-ts workspace:lint-rust",
+    "version:check": "proto run bun -- .ci/versions.ts check",
+    "version:set": "proto run bun -- .ci/versions.ts set",
     "test": "moon run :test",
     "e2e": "moon run :e2e",
     "app": "moon run app:run",

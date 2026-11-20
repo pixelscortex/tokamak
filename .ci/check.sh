@@ -5,12 +5,13 @@ set -euo pipefail
 case "$1" in
   lint)
     # Platform-independent checks run once, in one job.
+    proto run bun -- .ci/versions.ts check
     moon run workspace:format-check workspace:lint-ts workspace:lint-rust
     ;;
   ts)
     proto run bun -- run typecheck
     moon run sdk:test build:test runtime:test ui:test chat:test app:test app:web-build
-    proto run bun -- test ./.ci/release.test.ts
+    proto run bun -- test ./.ci/release.test.ts ./.ci/versions.test.ts
     ;;
   rust)
     # Unit tests inside the Rust crates; the slow suites in packages/*/tests are skipped.
