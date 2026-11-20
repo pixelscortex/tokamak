@@ -20,6 +20,7 @@ protocol-codegen = ["dep:ts-rs"]
 [dependencies]
 dotenvy = "0.15.7"
 tempfile = "3.27.0"
+zip = { version = "9.8.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 futures-util = "0.3.34"
 directories = "=6.0.0"
 sha2 = "0.10.9"
@@ -31,6 +32,7 @@ semver = "1.0.28"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
 axum = { version = "0.8.9", default-features = false, features = ["ws", "http1", "tokio", "query"] }
 tower = { version = "0.5.3", default-features = false }
+http-body-util = "0.1"
 # Already used by the embedded engine; its owned cancellation future wakes
 # accepted TCP I/O, including HTTP peers that never finish upgrade headers.
 tokio-util = { version = "0.7.20", default-features = false, features = ["rt"] }
@@ -65,6 +67,7 @@ libc = "0.2"
 windows-sys = { version = "0.61.2", features = [
   "Win32_Foundation",
   "Win32_Security",
+  "Win32_Storage_FileSystem",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
 ] }

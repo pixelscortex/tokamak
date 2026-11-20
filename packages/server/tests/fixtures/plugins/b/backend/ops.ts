@@ -1,4 +1,5 @@
 import {
+  action,
   createApi,
   functionName,
   mutation,
@@ -62,5 +63,14 @@ export const providerList = query({
       (api) => api.ops.list[functionName] === "a/ops:list",
     )!;
     return ctx.use(provider).ops.list({});
+  },
+});
+
+export const waitForSecondRow = action({
+  handler: async (ctx): Promise<string> => {
+    await ctx.runMutation(self.ops.add, { fail: false });
+    for (;;) {
+      if ((await ctx.runQuery(self.ops.list, {})).length >= 2) return "old action finished";
+    }
   },
 });

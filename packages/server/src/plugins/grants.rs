@@ -26,6 +26,7 @@ impl Loaded {
         &mut self,
         database: &crate::data::Database,
         previous: Option<&Self>,
+        package: Option<Arc<package::StagedPackage>>,
     ) -> Result<(), Error> {
         // Previously skipped plugins count as new to the active catalog even
         // when their builds are unchanged. If one still fails, exclude it and
@@ -41,11 +42,21 @@ impl Loaded {
             if ids.is_empty() {
                 return Ok(());
             }
-            let failure =
-                match Box::pin(self.record_grants_for(database, previous, &ids, true)).await {
-                    Ok(()) => return Ok(()),
-                    Err(failure) => failure,
-                };
+            let failure = match Box::pin(self.record_grants_for(
+                database,
+                previous,
+                &ids,
+                true,
+                package.clone(),
+            ))
+            .await
+            {
+                Ok(()) => return Ok(()),
+                Err(failure) => failure,
+            };
+            if package.is_some() {
+                return Err(failure.error);
+            }
             let Some(id) = failure
                 .plugin
                 .filter(|id| previous.is_some_and(|old| old.skipped.contains_key(id)))
@@ -71,8 +82,14 @@ impl Loaded {
             if self.skip_if_required_dependency_failed(&id, None)? {
                 continue;
             }
-            match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(&id), true))
-                .await
+            match Box::pin(self.record_grants_for(
+                database,
+                None,
+                std::slice::from_ref(&id),
+                true,
+                None,
+            ))
+            .await
             {
                 Err(InstallFailure {
                     error: Error::IndexBackfill(message),
@@ -88,7 +105,7 @@ impl Loaded {
         &self,
         database: &crate::data::Database,
     ) -> Result<(), Error> {
-        self.record_grants_for(database, None, &self.catalog.order, false)
+        self.record_grants_for(database, None, &self.catalog.order, false, None)
             .await
             .map_err(|failure| failure.error)
     }
@@ -99,6 +116,7 @@ impl Loaded {
         previous: Option<&Self>,
         ids: &[String],
         commit: bool,
+        package: Option<Arc<package::StagedPackage>>,
     ) -> Result<(), InstallFailure> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
@@ -156,7 +174,12 @@ impl Loaded {
                 }
             }
 
-            Ok((granted, resets))
+            // A rename failure can still roll back the schema transaction.
+            let promotion = match package {
+                Some(package) => Some(package.promote().await?),
+                None => None,
+            };
+            Ok((granted, resets, promotion))
         }
         .await;
 
@@ -164,10 +187,12 @@ impl Loaded {
             Ok(_) if !commit => Box::pin(tx.rollback())
                 .await
                 .map_err(|error| invalid(error.to_string()).into()),
-            Ok((granted, resets)) => {
-                Box::pin(tx.commit())
-                    .await
-                    .map_err(|e| invalid(e.to_string()))?;
+            Ok((granted, resets, promotion)) => {
+                let commit = Box::pin(tx.commit()).await;
+                if let Some(promotion) = promotion {
+                    promotion.finish(commit.is_ok()).await;
+                }
+                commit.map_err(|e| invalid(e.to_string()))?;
 
                 for reason in resets {
                     crate::schema::log_reset(&reason);

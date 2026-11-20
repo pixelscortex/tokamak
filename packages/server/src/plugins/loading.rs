@@ -1,5 +1,5 @@
 use super::{
-    catalog::{IndexedArtifacts, installed_paths, read_index, read_installed},
+    catalog::{IndexedArtifacts, installed_paths, read_index, read_with_packages},
     *,
 };
 
@@ -11,14 +11,30 @@ impl Loaded {
         pool: &engine::Pool,
         database: &crate::data::Database,
     ) -> Result<Arc<Self>, Error> {
-        let (installed, _) = read_installed(root, None)?;
-        let candidates = read_index(index);
+        let data = database.disk_path().map(Path::to_owned);
+        let sources = root.to_owned();
+        let index_file = index.map(Path::to_owned);
+        let (package_root, installed, failures, candidates) = package::blocking(move || {
+            let package_root = data.as_deref().map(package::store_path).transpose()?;
+            if let Some(path) = &package_root {
+                package::check_overlap(path, &sources)?;
+                catalog::check_index_overlap(index_file.as_deref(), path)?;
+                package::recover(path)?;
+            }
+            let (installed, failures) =
+                read_with_packages(&sources, None, package_root.as_deref())?;
+            let candidates = read_index(index_file.as_deref());
+            Ok((package_root, installed, failures, candidates))
+        })
+        .await?;
         let config = StartupCatalog {
             root,
             directory,
             pool,
             database,
             index_path: index,
+            package_root,
+            failures,
         };
         let loaded = match config.commit(&installed, &candidates, None).await {
             Ok(loaded) => loaded,
@@ -28,7 +44,7 @@ impl Loaded {
         for (id, folder) in loaded.catalog.index.iter() {
             if installed.contains_key(id) {
                 eprintln!(
-                    "Indexed plugin {id} at {} replaces the copy from --plugins",
+                    "Indexed plugin {id} at {} replaces the installed copy",
                     folder.display()
                 );
             }
@@ -445,6 +461,8 @@ struct StartupCatalog<'a> {
     pool: &'a engine::Pool,
     database: &'a crate::data::Database,
     index_path: Option<&'a Path>,
+    package_root: Option<PathBuf>,
+    failures: BTreeMap<String, String>,
 }
 
 impl StartupCatalog<'_> {
@@ -462,10 +480,21 @@ impl StartupCatalog<'_> {
                 (id.clone(), folder.clone())
             })
             .collect();
-        let mut catalog = Catalog::assemble(self.root, self.directory, plugins, Arc::new(index))?;
+        let mut failures = self.failures.clone();
+        for id in indexed.keys() {
+            failures.remove(id);
+        }
+        let mut catalog = Catalog::assemble_candidate(
+            self.root,
+            self.directory,
+            plugins,
+            Arc::new(index),
+            &failures,
+        )?;
+        catalog.package_root.clone_from(&self.package_root);
         catalog.installed = installed_paths(installed);
         catalog.index_path = self.index_path.map(Path::to_owned);
-        Loaded::load_reusing(catalog, BTreeMap::new(), self.pool, previous).await
+        Loaded::load_reusing(catalog, failures, self.pool, previous).await
     }
 
     async fn commit(

@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::package::{StagedPackage, Upload};
 
 impl Coordinator {
     pub(super) fn metadata(&self) -> Result<Json, Error> {
@@ -88,6 +89,9 @@ impl Coordinator {
 
                 let _ = reply.send(result);
             }
+            Command::UploadPackage(upload, reply) => {
+                let _ = reply.send(self.upload_package(upload).await);
+            }
             Command::ReloadIndexed(request, reply) => {
                 let _ = reply.send(self.reload_indexed(&request).await);
             }
@@ -167,7 +171,7 @@ impl Coordinator {
             .filter(|id| !catalog.index.contains_key(*id))
             .cloned()
             .collect();
-        let (mut response, logs) = self.swap_catalog(catalog, failures).await?;
+        let (mut response, logs) = self.swap_catalog(catalog, failures, None).await?;
         // Diagnostics run after the swap. Unrelated on-disk errors do not
         // participate in deciding or applying an index removal.
         if !removed.is_empty()
@@ -201,13 +205,65 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        self.swap_catalog(catalog, artifact_failures).await
+        self.swap_catalog(catalog, artifact_failures, None).await
+    }
+
+    async fn upload_package(&mut self, upload: Upload) -> Result<ReloadResult, Error> {
+        let root = self
+            .plugin_root
+            .as_deref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to update".into()))?;
+        let previous = self
+            .plugins
+            .as_deref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to update".into()))?;
+        let directory = previous
+            .catalog
+            .package_root
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("Packages require a server data folder".into()))?;
+        let id = upload.id.clone();
+        crate::data::DataSpace::plugin(&id).map_err(|error| Error::Invalid(error.to_string()))?;
+        let current = previous.catalog.plugins.get(&id);
+        let directory = directory.clone();
+        let old_artifact = current.cloned();
+        let (staged, artifact) = tokio::task::spawn_blocking(move || {
+            StagedPackage::read(&directory, upload, old_artifact.as_deref())
+        })
+        .await
+        .map_err(|error| Error::Invalid(error.to_string()))??;
+        let status = if current.is_some_and(|current| current.build_id == artifact.build_id) {
+            "unchanged"
+        } else if current.is_some() || previous.skipped.contains_key(&id) {
+            "updated"
+        } else {
+            "installed"
+        };
+        let response = serde_json::json!({
+            "status": status, "id": id,
+            "version": artifact.manifest.plugin.version, "buildId": artifact.build_id
+        });
+        if status == "unchanged" {
+            return Ok((response, Vec::new()));
+        }
+        if previous.catalog.index.contains_key(&id) {
+            return Err(Error::Invalid(format!(
+                "Plugin {id} is managed by the local plugin index"
+            )));
+        }
+        let (catalog, failures) =
+            crate::plugins::Catalog::with_package(root, previous, &id, artifact)?;
+        let (_, logs) = self
+            .swap_catalog(catalog, failures, Some((&id, Arc::new(staged))))
+            .await?;
+        Ok((response, logs))
     }
 
     async fn swap_catalog(
         &mut self,
         catalog: crate::plugins::Catalog,
         artifact_failures: std::collections::BTreeMap<String, String>,
+        package: Option<(&str, Arc<StagedPackage>)>,
     ) -> Result<ReloadResult, Error> {
         let previous = self.plugins.as_deref();
         if previous
@@ -219,7 +275,17 @@ impl Coordinator {
         let mut candidate =
             crate::plugins::Loaded::load_reusing(catalog, artifact_failures, &self.pool, previous)
                 .await?;
-        Box::pin(candidate.record_grants(&self.database, previous)).await?;
+        if let Some((id, _)) = &package
+            && let Some(reason) = candidate.skipped.get(*id)
+        {
+            return Err(Error::Invalid(reason.clone()));
+        }
+        Box::pin(candidate.record_grants(
+            &self.database,
+            previous,
+            package.map(|(_, staged)| staged),
+        ))
+        .await?;
         let changed = candidate.changed_plugins(previous);
         let revision_changed =
             previous.is_none_or(|old| old.catalog.revision != candidate.catalog.revision);
