@@ -1,0 +1,101 @@
+packages/cli/tests/cli.test.mjs
+  s_fa91d1b6a7fa1a::t_9dd3f21a341292 353
+  s_fa91d1b6a7fa1a::t_2ec9c55485a59d 619,621-629,631-644
+  s_fa91d1b6a7fa1a::t_6a3acd7fc328d7 469,516,645-698
+  s_fa91d1b6a7fa1a::t_9effc4a2e044e2 99,116-119,121,410,430,442-450,455-456,458-464,466
+  s_fa91d1b6a7fa1a::t_2f96d35266bf95 120,163,360,367,396-409,420-429,457,465,467-468,470,474,485-515,517-561,563,576-581,585-590,593-616,618,620,630
+packages/server/src/plugins/mod.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 41-42
+packages/engine/src/bridge.rs
+  s_fa91d1b6a7fa1a::t_be3a8f67f87be7 19,89,101-103
+packages/server/src/service/invocations.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 46,48,51,62-66
+  s_fa91d1b6a7fa1a::t_3a44b1013cf435 12,42,47,52-61
+  s_fa91d1b6a7fa1a::t_dfc3f0b83f2927 67
+packages/server/src/host.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 184,201
+  s_fa91d1b6a7fa1a::t_3a44b1013cf435 15-16,48,87,97,108,140,148,161-165,212,218,226-231
+packages/sdk/worker/entry.ts
+  s_fa91d1b6a7fa1a::t_00d804bce77563 2-3,33-41,43-45
+  s_fa91d1b6a7fa1a::t_79e0b876be24b0 46-62,99-104
+packages/server/src/service/action_coordination.rs
+  s_fa91d1b6a7fa1a::t_360d8c2b66ae73 146
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 56-59
+  s_fa91d1b6a7fa1a::t_1b404f25d63619 66,79,143-145,147-152
+  s_fa91d1b6a7fa1a::t_09b4343d570a91 153
+packages/cli/src/main.ts
+  s_fa91d1b6a7fa1a::t_9dd3f21a341292 19,22,120-127
+packages/server/src/plugin_log.rs
+  s_fa91d1b6a7fa1a::t_075d5193a37f35 122-123,128-130,246-247
+  s_fa91d1b6a7fa1a::t_2391ab8f59578a 176-179,360-396,408
+  s_fa91d1b6a7fa1a::t_0fc16a831882d7 1-2,4-7,11,17-19,21,23-24,26-50,53-60,63-64,72-93,97,99-102,104-105,107-109,115,117-118,124-125,132-136,139-146,149-156,164-165,195-197,200-204,206,208-231,233-245,248-260,264,266-267,270-273,275-283,286-287,289,293-298,300-303,323,325,336,338,342-343,347-354
+  s_fa91d1b6a7fa1a::t_6a3acd7fc328d7 8-10,14,20,51-52,61-62,65-71,94-96,98,103,106,110-114,116,119-121,126-127,131,138,147-148,157-163,180-194,198-199,288,291-292,304-322,324,326-335,337,339-341,357-359,399-407,409-431,433-439
+  s_fa91d1b6a7fa1a::t_ddad38482a6951 137,166-175,205,207,232,274,290,299
+packages/cli/README.md
+  s_fa91d1b6a7fa1a::t_6a3acd7fc328d7 45-48,50-66,72-79
+app/tests/plugins.test.tsx
+  s_fa91d1b6a7fa1a::t_1b404f25d63619 201
+  s_fa91d1b6a7fa1a::t_785af2b8fef85f 14,38,147-150,200,202-204,246-252,268
+packages/server/src/plugins/manifest.rs
+  s_fa91d1b6a7fa1a::t_8b54f718916b6c 73
+  s_fa91d1b6a7fa1a::t_409991e1597f20 11,46,54,65,84
+packages/server/src/service/subscriptions.rs
+  s_fa91d1b6a7fa1a::t_3a44b1013cf435 95
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 94,96
+  s_fa91d1b6a7fa1a::t_f1daa78479cf15 169
+packages/cli/src/command.ts
+  s_fa91d1b6a7fa1a::t_9dd3f21a341292 15-20,30-31,33
+  s_fa91d1b6a7fa1a::t_de5626086427f7 32
+packages/server/src/host/worker/process.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 92-93,142,210-211,258,285,292-297,302,305,318-355,375
+  s_fa91d1b6a7fa1a::t_075d5193a37f35 140,144,166-173
+  s_fa91d1b6a7fa1a::t_642b42af9b8571 179-187,205,207-209,374,376-383
+packages/server/src/plugins/loading.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 21,23,38-43,49-50,57-58,66,76,78,86-91,133,140,148-149,248,253,255-265,294,313,379-384,386-395,397-401,403-404,407,409-415,417-425
+  s_fa91d1b6a7fa1a::t_3a8e28a6619946 22,385,396,402,405-406,408,416,426
+packages/server/src/actions.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 36,201,218,237
+packages/server/src/host/worker/mod.rs
+  s_fa91d1b6a7fa1a::t_b9ebe8d1c8288a 16,61,117,121-123,150-151
+packages/cli/src/commands/logs.ts
+  s_fa91d1b6a7fa1a::t_9dd3f21a341292 1-2,5-6,10-16,18-57,59-73,75-79,81-84,86-95,100,107-110,112-117,123
+  s_fa91d1b6a7fa1a::t_9d2dffc7096e6a 17,58,74,80,85,111
+app/src/plugins/views.tsx
+  s_fa91d1b6a7fa1a::t_6a7a25c9be3739 137,153-169,222,262,273,281-283,310,312
+app/src/plugins/web-host.ts
+  s_fa91d1b6a7fa1a::t_bb2c34ae807dcd 172-174,185,191,193-194,200-202
+packages/cli/src/plugin-index.ts
+  s_fa91d1b6a7fa1a::t_d47b06bc08596d 9
+packages/runtime/js/plugins.ts
+  s_fa91d1b6a7fa1a::t_55c3c561239cfc 20
+packages/sdk/src/functions.ts
+  s_fa91d1b6a7fa1a::t_ca09b03de8eb5c 223-229
+packages/sdk/tools/worker.mjs
+  s_fa91d1b6a7fa1a::t_b0604a6800e16a 97-107
+packages/server/src/service/command_loop.rs
+  s_fa91d1b6a7fa1a::t_df4909037e247f 34,94,102-109
+packages/server/src/service/mod.rs
+  s_fa91d1b6a7fa1a::t_6a49f7df8e480f 113,115-118
+packages/server/src/service/plugin_control.rs
+  s_fa91d1b6a7fa1a::t_603407c455bb30 9,56-57,93-98,100,102-104,116-124,127,132-135,153-164,180-183,187,191-196,225
+packages/server/src/service/server.rs
+  s_fa91d1b6a7fa1a::t_8df0ac22cc2585 19-23,26-31,33-36
+packages/server/src/websocket.rs
+  s_fa91d1b6a7fa1a::t_db61316fd500b6 419-423,427,430,434
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0db22f9b106777a2bf2fc99d374e3a77bfa81970",
+  "prompts": {},
+  "sessions": {
+    "s_fa91d1b6a7fa1a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d7-568e-7350-93a9-550163c50010",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
