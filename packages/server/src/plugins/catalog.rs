@@ -2,7 +2,7 @@ use super::*;
 
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        let (plugins, _) = read_installed(root, None, |_| false)?;
+        let (plugins, _) = read_installed(root, None, None, |_| false)?;
         Self::assemble(root, root.parent().unwrap_or(root), plugins, Arc::default())
     }
 
@@ -165,11 +165,12 @@ impl Catalog {
             )));
         }
 
-        let fallback = find_package_fallback(root, id).map_err(|error| {
-            invalid(format!(
-                "Cannot restore the --plugins copy of {id}: {error}"
-            ))
-        })?;
+        let fallback =
+            find_package_fallback(root, old.package_root.as_deref(), id).map_err(|error| {
+                invalid(format!(
+                    "Cannot restore the --plugins copy of {id}: {error}"
+                ))
+            })?;
         let mut plugins = old.plugins.clone();
         let mut installed = old.installed.clone();
         plugins.remove(id);
@@ -265,7 +266,7 @@ impl Catalog {
     }
 
     pub(crate) fn installation_warnings(root: &Path) -> Vec<String> {
-        match installed_directories(root) {
+        match installed_directories(root, None, true) {
             Ok(directories) => directories
                 .iter()
                 .filter_map(|path| {
@@ -439,9 +440,17 @@ fn read_indexed_build(
 type Artifacts = BTreeMap<String, Arc<Artifact>>;
 type ArtifactFailures = BTreeMap<String, String>;
 
-fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
+fn installed_directories(
+    root: &Path,
+    package_root: Option<&Path>,
+    require_built: bool,
+) -> Result<Vec<PathBuf>, Error> {
     Ok(if let Some(directory) = artifact_directory(root) {
-        vec![directory]
+        if is_package_directory(&directory, package_root) {
+            Vec::new()
+        } else {
+            vec![directory]
+        }
     } else {
         let mut result = Vec::new();
 
@@ -453,14 +462,21 @@ fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
             }
 
             let path = entry.path();
+            if is_package_directory(&path, package_root) {
+                continue;
+            }
 
-            if let Some(directory) = artifact_directory(&path) {
-                result.push(directory);
-            } else if path.join("package.json").is_file() {
-                return Err(invalid(format!(
-                    "Plugin has not been built: {}",
-                    path.display()
-                )));
+            match artifact_directory(&path) {
+                Some(directory) if !is_package_directory(&directory, package_root) => {
+                    result.push(directory);
+                }
+                None if require_built && path.join("package.json").is_file() => {
+                    return Err(invalid(format!(
+                        "Plugin has not been built: {}",
+                        path.display()
+                    )));
+                }
+                _ => {}
             }
         }
         result.sort();
@@ -468,11 +484,17 @@ fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
     })
 }
 
-fn find_package_fallback(root: &Path, id: &str) -> Result<Option<Artifact>, Error> {
+fn find_package_fallback(
+    root: &Path,
+    package_root: Option<&Path>,
+    id: &str,
+) -> Result<Option<Artifact>, Error> {
     // Match startup's source selection, but load only the build being restored.
     let mut fallback = None;
-    for directory in installed_directories(root)? {
-        let build = Manifest::read(&directory)?;
+    for directory in installed_directories(root, package_root, false)? {
+        let Ok(build) = Manifest::read(&directory) else {
+            continue;
+        };
         if build.0.plugin.id == id {
             if fallback.is_some() {
                 return Err(invalid(format!(
@@ -485,12 +507,21 @@ fn find_package_fallback(root: &Path, id: &str) -> Result<Option<Artifact>, Erro
     Ok(fallback)
 }
 
+fn is_package_directory(directory: &Path, package_root: Option<&Path>) -> bool {
+    package_root.is_some_and(|root| {
+        directory
+            .canonicalize()
+            .is_ok_and(|path| package::starts_with_path(&path, root))
+    })
+}
+
 fn read_installed(
     root: &Path,
     previous: Option<&Loaded>,
+    package_root: Option<&Path>,
     is_shadowed: impl Fn(&str) -> bool,
 ) -> Result<(Artifacts, ArtifactFailures), Error> {
-    let directories = installed_directories(root)?;
+    let directories = installed_directories(root, package_root, true)?;
     let mut plugins = BTreeMap::new();
     let mut skipped = BTreeMap::new();
 
@@ -531,7 +562,7 @@ pub(super) fn read_with_packages(
         Some(directory) => package::read_stored(directory, previous)?,
         None => (BTreeMap::new(), BTreeMap::new()),
     };
-    let (mut plugins, mut failures) = read_installed(root, previous, |id| {
+    let (mut plugins, mut failures) = read_installed(root, previous, package_root, |id| {
         stored.contains_key(id) || skipped.contains_key(id)
     })?;
     plugins.extend(stored);
