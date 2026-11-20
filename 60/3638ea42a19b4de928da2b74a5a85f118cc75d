@@ -1,0 +1,48 @@
+packages/cli/src/server.ts
+  s_ac82aa658b14e1::t_a58a5cc337a795 37-42,51
+packages/cli/tests/cli.test.mjs
+  s_ac82aa658b14e1::t_d89767b961df32 225-227,229-245,247-250,270-271
+  s_ac82aa658b14e1::t_4587be9a619bee 3,260,322,328-329,358
+  s_ac82aa658b14e1::t_220b116e952c9f 272-293,298-321,323-327,330-357,359-362,372-376
+  s_ac82aa658b14e1::t_d55657999462ca 294-297,363-371
+  s_ac82aa658b14e1::t_8a062b0e062c07 7-10,228,246,251-259,261-269
+packages/cli/src/main.ts
+  s_ac82aa658b14e1::t_4587be9a619bee 88
+  s_ac82aa658b14e1::t_a58a5cc337a795 87,89
+packages/cli/package.json
+  s_ac82aa658b14e1::t_a58a5cc337a795 3
+packages/cli/src/commands/report.ts
+  s_ac82aa658b14e1::t_86f05a84253405 1-12,19-38,42-46,48,69-96,98-100,102-103,105-111,119-121,123-160
+  s_ac82aa658b14e1::t_d55657999462ca 13-18,39-41,47,49-68,97,101,104,112-118,122
+packages/cli/src/command.ts
+  s_ac82aa658b14e1::t_d55657999462ca 22-25
+packages/cli/src/commands/doctor.ts
+  s_ac82aa658b14e1::t_a58a5cc337a795 1-4,6-34,39-41,43-44,55-56,62-72,78-96,99-111,113-115,119-129,133-143,150-151
+  s_ac82aa658b14e1::t_4587be9a619bee 5,38,42,57-61,112,148-149
+  s_ac82aa658b14e1::t_d55657999462ca 35-36,45-54,73-77,97-98,116-118,130-132,144-147
+  s_ac82aa658b14e1::t_ec1f05d1dfebbc 37
+packages/cli/README.md
+  s_ac82aa658b14e1::t_d55657999462ca 11-12,50-51,58-71
+  s_ac82aa658b14e1::t_f15c67f9243011 72
+packages/cli/src/commands.ts
+  s_ac82aa658b14e1::t_86f05a84253405 8,10
+  s_ac82aa658b14e1::t_a58a5cc337a795 7,9
+bun.lock
+  s_ac82aa658b14e1::t_a8bd0bf23872ef 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "603638ea42a19b4de928da2b74a5a85f118cc75d",
+  "prompts": {},
+  "sessions": {
+    "s_ac82aa658b14e1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d7-f26f-7341-a8df-1bd1d745e4cb",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
