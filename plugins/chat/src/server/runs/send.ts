@@ -228,6 +228,31 @@ export const session = mutation({
   },
 });
 
+// Record the model and effort the agent reported, so the reply and later agents can name them.
+export const model = mutation({
+  args: {
+    runId: v.id("runs"),
+    token: v.string(),
+    model: v.object({
+      name: v.optional(v.string()),
+      id: v.optional(v.string()),
+      effort: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, { runId, token, model }) => {
+    const run = await turn(ctx, runId, token);
+    const bounded = Object.fromEntries(
+      Object.entries(model).flatMap(([key, value]) =>
+        typeof value === "string" && value.trim()
+          ? [[key, Array.from(value.trim()).slice(0, 200).join("")]]
+          : [],
+      ),
+    ) as { name?: string; id?: string; effort?: string };
+    await ctx.db.patch(run.messageId, { model: bounded });
+    return null;
+  },
+});
+
 const messageStatus = { done: "complete", error: "error", cancelled: "cancelled" } as const;
 
 function unfinishedToolError(outcome: "done" | "error" | "cancelled", error?: string) {
@@ -253,8 +278,15 @@ async function historyTail(
   for await (const message of recentMessages(db, threadId, before)) {
     latest ??= message.createdAt;
     if (message.status !== "complete") continue;
+    const agent = message.role === "assistant" ? agentName(message.agent?.backendId) : undefined;
+    const model = message.role === "assistant" ? modelLabel(message.model) : undefined;
     const record = {
       role: message.role,
+      // Name the agent, model and effort that wrote each reply so a thread that switches
+      // agents or models does not present earlier answers as the current agent's.
+      ...(agent ? { agent } : {}),
+      ...(model ? { model } : {}),
+      ...(message.role === "assistant" && message.model?.effort ? { effort: message.model.effort } : {}),
       content: message.parts
         .map((part) =>
           part.type === "text"
@@ -266,13 +298,29 @@ async function historyTail(
                 : `[tool ${part.toolName}: ${part.model ?? part.error ?? JSON.stringify(part.result ?? null)}]`,
         )
         .join(""),
-      ...(attributed
-        ? { author: message.author ?? message.askedBy ?? { id: "unknown", name: "Unknown" } }
-        : {}),
+      ...(attributed && message.role === "user"
+        ? { author: message.author ?? { id: "unknown", name: "Unknown" } }
+        : attributed && message.askedBy
+          ? { askedBy: message.askedBy }
+          : {}),
     };
     remaining -= threadRecordBytes(record);
     if (remaining < 0) break;
     records.push(record);
   }
   return { records: records.reverse(), latest };
+}
+
+const agentNames: Record<string, string> = { claude: "Claude", codex: "Codex", gemini: "Gemini" };
+
+// "Opus 5.5 (opus)": the display name with the agent's own model ID when they differ.
+function modelLabel(model: { name?: string; id?: string } | undefined) {
+  const name = model?.name ?? model?.id;
+  if (!name) return undefined;
+  return model?.id && model.id !== name ? `${name} (${model.id})` : name;
+}
+
+function agentName(backendId: string | undefined) {
+  if (!backendId) return undefined;
+  return agentNames[backendId] ?? backendId.charAt(0).toUpperCase() + backendId.slice(1);
 }

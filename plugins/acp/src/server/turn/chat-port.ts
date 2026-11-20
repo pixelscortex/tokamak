@@ -6,6 +6,7 @@ export type ChatPort = Pick<
   | "updateRun"
   | "runIsRunning"
   | "saveBackendState"
+  | "setReplyModel"
   | "requestPermission"
   | "permissionState"
   | "claimPermission"

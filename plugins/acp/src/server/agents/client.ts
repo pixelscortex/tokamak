@@ -11,6 +11,7 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import type { JsonObject } from "@tokamak/sdk";
 import { BUILTINS, discover, checkFolder, type Agent } from "./discovery";
+import { sessionModel, type SessionModel } from "./session-model";
 
 export type AgentEvent =
   | { type: "update"; update: JsonObject }
@@ -21,7 +22,7 @@ export interface AgentClient {
     agent: string;
     cwd: string;
     sessionId?: string;
-  }): Promise<{ sessionId: string; restored: boolean }>;
+  }): Promise<{ sessionId: string; restored: boolean; model?: SessionModel }>;
   prompt(input: { agent: string; sessionId: string; text: string }): AsyncIterable<AgentEvent>;
   respond(input: { requestId: string; optionId: string | null }): Promise<void>;
   cancel(input: { agent: string; sessionId: string }): Promise<void>;
@@ -229,15 +230,17 @@ class AgentProcess {
     try {
       const resume = this.capabilities.sessionCapabilities?.resume;
       if (sessionId && (resume || this.capabilities.loadSession)) {
-        await this.connection.agent.request(resume ? "session/resume" : "session/load", {
+        const restored = await this.connection.agent.request(resume ? "session/resume" : "session/load", {
           sessionId,
           cwd,
           mcpServers: [],
         });
-        return { sessionId, restored: true };
+        const model = sessionModel(restored);
+        return { sessionId, restored: true, ...(model ? { model } : {}) };
       }
       const result = await this.connection.agent.request("session/new", { cwd, mcpServers: [] });
-      return { sessionId: result.sessionId, restored: false };
+      const model = sessionModel(result);
+      return { sessionId: result.sessionId, restored: false, ...(model ? { model } : {}) };
     } finally {
       if (sessionId) this.opening.delete(sessionId);
     }
