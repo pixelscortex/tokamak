@@ -1,0 +1,40 @@
+.github/workflows/ci.yml
+  s_37fba9922bcb72::t_9cd94a9d939483 4-5,16-21,23-24,36-37,42-43,59-60,65-66
+.ci/README.md
+  s_37fba9922bcb72::t_9cd94a9d939483 3-4,18-19
+packages/build/src/contributions.ts
+  s_37fba9922bcb72::t_9cd94a9d939483 32-46
+packages/build/tests/browser.test.ts
+  s_37fba9922bcb72::t_9cd94a9d939483 122-123
+packages/build/tests/outside.test.mjs
+  s_37fba9922bcb72::t_9cd94a9d939483 2,14,43-118,123,125,131
+  s_37fba9922bcb72::t_67407cd3b41e78 119-122,124,126-130,132-135
+packages/build/tests/outside-server.test.mjs
+  s_37fba9922bcb72::t_9cd94a9d939483 21-26,32-34,45-47,70
+packages/sdk/tools/bundle.mjs
+  s_37fba9922bcb72::t_9cd94a9d939483 5,59,182-183,185,193,199
+packages/build/tests/descriptor.test.ts
+  s_37fba9922bcb72::t_9cd94a9d939483 152-155
+packages/build/tests/fixtures/outside/src/client/api.tsx
+  s_37fba9922bcb72::t_9cd94a9d939483 5
+packages/sdk/tools/plugin-boundary.mjs
+  s_37fba9922bcb72::t_9cd94a9d939483 23-29
+packages/build/README.md
+  s_37fba9922bcb72::t_9cd94a9d939483 19-22,132-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5279d5d4d53402867e9e168801ea98197279a1b",
+  "prompts": {},
+  "sessions": {
+    "s_37fba9922bcb72": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8c6-419b-7e43-ac5d-3e48baf67113",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
