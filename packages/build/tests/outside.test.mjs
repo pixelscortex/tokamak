@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFile, symlink, writeFile } from "node:fs/promises";
+import { readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { build, withPlugin } from "./outside-fixture.mjs";
 
@@ -11,7 +11,7 @@ async function expectArtifact(plugin) {
   expect(manifest.plugin.contributes.view).toEqual([{ id: "OutsideView", route: "/outside" }]);
   expect(await readFile(join(dist, "bundle.js"), "utf8")).toContain("describe");
   expect(await readFile(join(dist, "ui.js"), "utf8")).toContain("@tokamak/ui");
-  expect(await readFile(join(dist, "styles.css"), "utf8")).toContain(String.raw`.print\:p-3`);
+  expect(await readFile(join(dist, "styles.css"), "utf8")).toContain(".bg-brand");
 }
 
 test("builds a source-only plugin outside the checkout with its view and styles", async () => {
@@ -40,6 +40,99 @@ test("reports the file and line of a type error in the external server part", as
   });
 }, 30_000);
 
+test("reports the file and line of a window type error without publishing", async () => {
+  await withPlugin(async (plugin) => {
+    const path = join(plugin, "src/client/api.tsx");
+    const source = await readFile(path, "utf8");
+    const line = source.split("\n").findIndex((text) => text.includes("<Button>")) + 1;
+    expect(line).toBeGreaterThan(0);
+    await writeFile(path, source.replace("<Button>", '<Button disabled="yes">'));
+    const result = build(plugin);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toMatch(new RegExp(String.raw`api\.tsx[(:]${line}[,:]\d+\)?: error TS2322`));
+    expect(await readdir(plugin)).not.toContain("dist");
+  });
+}, 30_000);
+
+test("builds an external worker action that uses node:path", async () => {
+  await withPlugin(async (plugin) => {
+    const descriptor = join(plugin, "plugin.ts");
+    const source = await readFile(descriptor, "utf8");
+    await writeFile(descriptor, source.replace("definePlugin({", 'definePlugin({ runtime: "worker",'));
+    await writeFile(
+      join(plugin, "src/server/paths.ts"),
+      `
+import { action } from "@tokamak/sdk";
+import { basename } from "node:path";
+export const name = action({ handler: () => basename("/notes/example.txt") });
+`,
+    );
+    await expectArtifact(plugin);
+    expect(await readFile(join(plugin, "dist/worker.js"), "utf8")).toContain("node:path");
+  });
+}, 30_000);
+
+test("an internal server directory link preserves the authored API names", async () => {
+  await withPlugin(async (plugin) => {
+    const server = join(plugin, "src/server");
+    const notes = join(server, "notes.ts");
+    await Bun.write(
+      join(server, "topics/notes.ts"),
+      (await readFile(notes, "utf8")).replace('"./_generated/api"', '"../_generated/api"'),
+    );
+    await unlink(notes);
+    await expectArtifact(plugin);
+    const before = await readFile(join(plugin, "dist/api.ts"), "utf8");
+    await rm(join(server, "_generated"), { recursive: true });
+    const implementation = join(plugin, "src/implementation");
+    await rename(server, implementation);
+    await symlink(implementation, server, "junction");
+    await expectArtifact(plugin);
+    const after = await readFile(join(plugin, "dist/api.ts"), "utf8");
+    expect(after).toBe(before);
+    expect(before).toContain('"notes": ApiFromModule');
+    expect(after).toContain('"notes": ApiFromModule');
+    expect(after).not.toContain('"topics":');
+  });
+}, 30_000);
+
+test("an empty local tsconfig preserves the default server type checks", async () => {
+  await withPlugin(async (plugin) => {
+    const config = join(plugin, "src/server/tsconfig.json");
+    await expectArtifact(plugin);
+    await writeFile(config, "{}");
+    await expectArtifact(plugin);
+
+    const broken = join(plugin, "src/server/broken.ts");
+    await writeFile(
+      broken,
+      `import { JsonValue } from "@tokamak/sdk";
+export const value: JsonValue = "note";
+`,
+    );
+    const configured = build(plugin);
+    await unlink(config);
+    const defaults = build(plugin);
+    for (const result of [defaults, configured]) {
+      expect(result.code).not.toBe(0);
+      expect(result.output).toMatch(/broken\.ts[^\n]*TS1484/);
+    }
+  });
+}, 30_000);
+
+test("a local server config can relax strictness without adding Node globals", async () => {
+  await withPlugin(async (plugin) => {
+    const config = join(plugin, "src/server/tsconfig.json");
+    const source = join(plugin, "src/server/overrides.ts");
+    await writeFile(config, JSON.stringify({ compilerOptions: { strict: false, types: ["node"] } }));
+    await writeFile(source, "export const value: string = null;\n");
+    await expectArtifact(plugin);
+    await writeFile(source, "export const value = process.cwd();\n");
+    const result = build(plugin);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toMatch(/overrides\.ts[^\n]*TS2591/);
+  });
+}, 30_000);
 test("rejects an internal runtime import in the window", async () => {
   await withPlugin(async (plugin) => {
     await writeFile(join(plugin, "src/client/internal.ts"), 'import "@tokamak/runtime";\n');

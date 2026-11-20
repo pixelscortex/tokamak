@@ -1,6 +1,7 @@
 # CI and unsigned release
 
-All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
+All CI runs in GitHub Actions. The three fast jobs run on GitHub's own Linux runners
+for now, because Depot stopped handing out runners; the desktop jobs still use Depot's. `.github/workflows/ci.yml` runs
 three fast jobs on every PR, and `.ci/check.sh` holds their commands:
 
 - `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied). These
@@ -14,7 +15,8 @@ runnable locally: `cargo test --workspace`, `proto run bun -- e2e/run.ts`,
 `proto run bun -- test plugins/acp`.
 
 Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint,
-TypeScript and Rust. `dev` is the integration branch: feature pull requests target
+TypeScript and Rust. Draft pull requests are skipped; the jobs start when a pull
+request is marked ready for review. `dev` is the integration branch: feature pull requests target
 it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
 workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build,

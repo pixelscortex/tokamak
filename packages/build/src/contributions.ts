@@ -29,6 +29,21 @@ export function uiContributions(root: string) {
     sourceMap: false,
     module: ts.ModuleKind.ESNext,
   });
+  // The program also emits in memory to distinguish type-only exports. Check
+  // source diagnostics without applying the emit-only compiler option rules.
+  const diagnostics = [
+    ...program.getSyntacticDiagnostics(),
+    ...program.getGlobalDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+  ];
+  if (diagnostics.length)
+    throw new Error(
+      ts.formatDiagnostics(diagnostics, {
+        getCanonicalFileName: (file) => file,
+        getCurrentDirectory: () => root,
+        getNewLine: () => "\n",
+      }),
+    );
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(entry);
   if (!source) throw new Error(`Missing plugin UI entry ${entry}`);
