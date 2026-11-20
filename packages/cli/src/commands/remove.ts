@@ -11,8 +11,8 @@ export default {
     if (!entries.delete(id!)) throw new Error(`Unknown indexed plugin: ${id}`);
     await writeIndex(entries);
     return {
-      data: { id, restartRequired: true },
-      text: `Removed ${id} from the index. The local server picks this up at its next start.`,
+      data: { id, reloadRequired: true },
+      text: `Removed ${id} from the index. Run tokamak plugin reload to apply it now.`,
     };
   },
 } satisfies Command;

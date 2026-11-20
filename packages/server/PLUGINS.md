@@ -23,7 +23,8 @@ launcher. Never pass the token in arguments. The launcher now uses the workspace
 
 ```sh
 TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin reload acme.notes
+TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run tokamak plugin add path/to/plugins/notes
+TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run tokamak plugin reload acme.notes
 ```
 
 The control CLI validates loopback discovery, uses bearer authentication, disables
@@ -31,6 +32,7 @@ proxies and redirects, and does not replay requests. Control endpoints are only
 registered in capability-protected local mode:
 
 - `GET /plugins`: live manifest/function metadata and generation revision.
+- `POST /plugin-index/reload`: validate and load the selected indexed builds and optionally apply index removals.
 - `POST /plugins/{id}/reload`: validate and reload the configured installation.
 - `GET /plugins/{id}/assets/{name}`: declared UI files from the verified snapshot.
   Never arbitrary files, backend source, capability tokens or generated backend API.
@@ -75,7 +77,8 @@ first. The full candidate installation resolves and is inspected before one
 generation swap. Failed reload leaves old code, subscriptions and data usable.
 Successful reload dirties all subscriptions; removed or changed-kind queries
 produce explicit subscription errors. The named ID must be present in the old or
-new installation; dependent callers reload together. This is not stateful HMR.
+new installation for `/plugins/{id}/reload`. The CLI submits only indexed builds
+that succeeded. Unchanged plugin workers keep running.
 On Unix, unchanged files reuse verified snapshots only when canonical path,
 device/inode, size, mtime and ctime still match. Changed files are rehashed, so an
 unchanged manifest cannot conceal an in-place write or atomic replacement.
@@ -138,7 +141,7 @@ wildcard (see `packages/engine/WEB_APIS.md`). Actions run on a separate worker
 lane and reach data only through `ctx.runQuery` / `ctx.runMutation`, which apply
 the same dependency, interface and export checks as nested calls. Queries and
 mutations cannot call actions or `fetch`, so they gain no external effects that
-could repeat during transaction retries. Reload cancels old-generation actions.
+could repeat during transaction retries. Reload cancels actions belonging to changed or removed plugin builds.
 An action result is one wire response under the same inclusive 1 MiB limit: an
 oversized result fails only that call. No Node/Bun runtime, plugin grant prompt,
 marketplace, signing, Wasm or untrusted sandbox ships here.

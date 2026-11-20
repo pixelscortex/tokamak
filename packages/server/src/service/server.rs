@@ -19,6 +19,19 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
+    pub(crate) async fn reload_indexed(
+        &self,
+        ids: Vec<String>,
+        remove_missing: bool,
+    ) -> Result<Json, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(
+            &self.commands,
+            Command::ReloadIndexed(ids, remove_missing, reply),
+        )?;
+        wait.await.map_err(|_| Error::Closed)?
+    }
+
     pub async fn plugin_asset(
         &self,
         id: String,

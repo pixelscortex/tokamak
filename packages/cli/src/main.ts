@@ -65,7 +65,11 @@ try {
   if (error instanceof CommandError) next = error.next;
   const diagnostics = error instanceof CommandError ? error.diagnostics : undefined;
   output(
-    { ok: false, error: { message, next, ...(diagnostics ? { diagnostics } : {}) } },
+    {
+      ok: false,
+      error: { message, next, ...(diagnostics ? { diagnostics } : {}) },
+      ...(error instanceof CommandError ? error.data : undefined),
+    },
     `${message}\nTry: ${next}`,
   );
   process.exitCode = 1;

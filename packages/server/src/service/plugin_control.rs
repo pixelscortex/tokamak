@@ -79,11 +79,36 @@ impl Coordinator {
 
                 let _ = reply.send(result);
             }
+            Command::ReloadIndexed(ids, remove_missing, reply) => {
+                let _ = reply.send(self.reload_indexed(&ids, remove_missing).await);
+            }
             _ => unreachable!("application commands have their own admission path"),
         }
     }
 
-    pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+    async fn reload_indexed(
+        &mut self,
+        ids: &[String],
+        remove_missing: bool,
+    ) -> Result<Json, Error> {
+        let root = self
+            .plugin_root
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let previous = self
+            .plugins
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let catalog = crate::plugins::Catalog::read_indexed_reload(
+            root,
+            &previous.catalog,
+            ids,
+            remove_missing,
+        )?;
+        self.swap_catalog(catalog).await
+    }
+
+    async fn reload(&mut self, id: &str) -> Result<Json, Error> {
         let root = self
             .plugin_root
             .as_ref()
@@ -101,6 +126,10 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
+        self.swap_catalog(catalog).await
+    }
+
+    async fn swap_catalog(&mut self, catalog: crate::plugins::Catalog) -> Result<Json, Error> {
         if self
             .plugins
             .as_ref()

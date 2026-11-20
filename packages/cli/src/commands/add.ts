@@ -21,8 +21,8 @@ export default {
       await writeIndex(entries);
     }
     return {
-      data: { id, folder, restartRequired: true },
-      text: `Indexed ${id} at ${folder}. The local server picks this up at its next start.`,
+      data: { id, folder, reloadRequired: true },
+      text: `Indexed ${id} at ${folder}. Run tokamak plugin reload ${id} to apply it now.`,
     };
   },
 } satisfies Command;
