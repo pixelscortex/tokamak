@@ -4,10 +4,10 @@ import { dirname, resolve } from "node:path";
 import { compileCss } from "./css.ts";
 import { clientEntry } from "./descriptor.ts";
 
-export const hostModule = (id: string) =>
-  /^(solid-js(?:$|\/)|@solidjs\/web(?:$|\/)|@tokamak\/(?:sdk(?:$|\/)|ui(?:$|\/)|runtime\/router$)|@ui-sdk\/(?:solid|core)(?:$|\/)|@plugins\/)/.test(
-    id,
-  );
+import { windowSharedImports } from "./shared-libraries.mts";
+
+const windowImports = new Set(windowSharedImports);
+export const hostModule = (id: string) => windowImports.has(id) || id.startsWith("@plugins/");
 
 export function uiBuildConfig(root: string): UserConfig {
   return {

@@ -25,10 +25,18 @@ HTML shell is emitted.
 slot/component names still come from the compiler, without executing the client.
 Final file hashes cover JavaScript, source maps, CSS and server output.
 
-Shared imports remain bare: `solid-js`, `solid-js/*`, `@solidjs/web` (including
-subpaths), `@tokamak/sdk` (including subpaths), `@tokamak/ui` (including subpaths),
-`@tokamak/runtime/router`, `@ui-sdk/solid` and `@ui-sdk/core` (including subpaths),
-and compiler-emitted `@plugins/*` module names. Authors use
+Window imports from the [shared library list](src/shared-libraries.mts) remain bare
+and resolve to the desktop app's copies. This includes Solid, the SDK, the UI
+kit and the router. Other `@tokamak/*` paths are rejected in both the window
+and server parts. Direct `@ui-sdk/*` imports warn because those APIs are unstable;
+prefer `@tokamak/ui`.
+
+If a plugin has a `package.json`, the build runs Bun install in the plugin's
+folder and bundles its own npm dependencies. Keep shared libraries out of
+every dependency section. An npm dependency that uses Solid in the window
+gets the app's copy and may require a compatible version.
+
+Compiler-emitted `@plugins/*` module names also remain bare. Authors use
 `import { Panel } from "plugin:example/client"`. The compiler emits
 `@plugins/example/ui`; the web loader resolves it to the dependency's
 revision-pinned module, including literal dynamic imports. Static imports infer
@@ -120,8 +128,8 @@ part in `src/server` and the window part in `src/client`. The build supplies
 TypeScript defaults and resolves shared library types and the Tailwind and
 Tokamak theme styles from the checkout. A `tsconfig.json` in the plugin folder
 or in the relevant source folder can override the compiler defaults. A
-`package.json` is optional with a descriptor; the build does not install
-dependencies. Output goes to the plugin's own `dist/` folder.
+`package.json` is optional with a descriptor. When present, its dependencies
+are installed before bundling. Output goes to the plugin's own `dist/` folder.
 
 To test the external artifact against a real server:
 

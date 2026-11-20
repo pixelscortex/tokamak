@@ -39,3 +39,66 @@ test("reports the file and line of a type error in the external server part", as
     );
   });
 }, 30_000);
+
+test("rejects an internal runtime import in the window", async () => {
+  await withPlugin(async (plugin) => {
+    await writeFile(join(plugin, "src/client/internal.ts"), 'import "@tokamak/runtime";\n');
+    const result = build(plugin);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toMatch(/"@tokamak\/runtime".*Allowed paths:.*@tokamak\/runtime\/router/);
+  });
+}, 30_000);
+
+test("rejects an internal runtime import in the server part", async () => {
+  await withPlugin(async (plugin) => {
+    await writeFile(join(plugin, "src/server/internal.ts"), 'import "@tokamak/runtime";\n');
+    const result = build(plugin);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toMatch(/"@tokamak\/runtime".*Allowed paths:.*@tokamak\/runtime\/router/);
+  });
+}, 30_000);
+
+test("builds with a warning for a direct UI SDK import", async () => {
+  await withPlugin(async (plugin) => {
+    const path = join(plugin, "src/client/api.tsx");
+    await writeFile(path, 'import "@ui-sdk/solid";\n' + (await readFile(path, "utf8")));
+    const result = build(plugin);
+    expect(result.code, result.output).toBe(0);
+    expect(result.output).toMatch(/Warning:.*"@ui-sdk\/solid".*@tokamak\/ui/);
+    expect(await readFile(join(plugin, "dist/ui.js"), "utf8")).toContain("@ui-sdk/solid");
+  });
+}, 30_000);
+
+test("rejects shared packages in every dependency section", async () => {
+  await withPlugin(async (plugin) => {
+    for (const section of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
+      await writeFile(
+        join(plugin, "package.json"),
+        JSON.stringify({ name: "outside-fixture", [section]: { "solid-js": "2.0.0" } }),
+      );
+      const result = build(plugin);
+      expect(result.code).not.toBe(0);
+      expect(result.output).toMatch(new RegExp(`package.json.*${section}.*"solid-js".*shared`));
+    }
+  });
+}, 30_000);
+
+test("installs and bundles the plugin's own npm package outside the checkout", async () => {
+  await withPlugin(async (plugin) => {
+    await writeFile(
+      join(plugin, "package.json"),
+      JSON.stringify({ name: "outside-fixture", dependencies: { "escape-string-regexp": "5.0.0" } }),
+    );
+    const path = join(plugin, "src/client/api.tsx");
+    const original = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      'import escape from "escape-string-regexp";\n' + original.replace("Notes", '{escape("Notes.")}'),
+    );
+    const result = build(plugin);
+    expect(result.code, result.output).toBe(0);
+    const output = await readFile(join(plugin, "dist/ui.js"), "utf8");
+    expect(output).toContain("Expected a string");
+    expect(output).not.toContain('from "escape-string-regexp"');
+  });
+}, 90_000);

@@ -1,5 +1,14 @@
 {
-  "extends": "../../../../tsconfig.json",
-  "compilerOptions": { "types": [], "skipLibCheck": true },
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noEmit": true,
+    "types": [],
+    "skipLibCheck": true
+  },
   "include": ["**/*.ts"]
 }

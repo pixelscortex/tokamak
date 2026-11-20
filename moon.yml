@@ -1,6 +1,6 @@
-# Workspace-only operations; language tasks belong to the individual projects.
+# Workspace tooling also exposes the app libraries to local plugin editors and tests.
 language: "unknown"
-layer: "configuration"
+layer: "tool"
 workspace:
   inheritedTasks:
     include: []
