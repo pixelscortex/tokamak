@@ -15,6 +15,7 @@ vi.mock("../src/plugins/views", () => ({
 import { createSession } from "../src/shell/session";
 
 class FakeSocket extends EventTarget {
+  static OPEN = 1;
   static all: FakeSocket[] = [];
   readyState = 0;
   bufferedAmount = 0;
@@ -49,6 +50,7 @@ afterEach(() => {
 
 test("switching servers back and forth keeps one socket and retires the old plugin UI", async () => {
   vi.stubGlobal("WebSocket", FakeSocket);
+  vi.stubGlobal("fetch", async () => Response.json({ version: "0.1.0" }));
   await createRoot(async (dispose) => {
     const [server, setServer] = createSignal("a");
     let current = "a";

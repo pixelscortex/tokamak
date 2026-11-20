@@ -252,7 +252,7 @@ async fn authorize(
         .and_then(|suffix| suffix.split_once('/'))
         .is_some_and(|(_, action)| action == "window-error");
     let browser_route = window_report
-        || path == "/account"
+        || matches!(path, "/account" | "/version")
         || request.uri().path() == "/ws"
         || request.uri().path() == "/plugins"
         || (request.uri().path().starts_with("/plugins/")

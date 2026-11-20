@@ -176,3 +176,24 @@ test("switching the thread agent keeps each earlier reply labelled with the agen
   await expect(turns.nth(3).getByText(/Tokamak workspace/)).toBeVisible();
   await expect(turns.nth(1)).toHaveAccessibleName("Claude");
 });
+
+for (const [server, message] of [
+  ["999.0.0", "Update the app"],
+  ["0.0.0", "This server needs an update"],
+] as const) {
+  test(`server ${server} shows only the version notice`, async ({ page }) => {
+    await page.route("**/version", (route) => route.fulfill({ json: { version: server } }));
+    await page.goto("/p/chat");
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: message, exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+    await expect(page.getByText("The owner needs to rebuild this plugin")).toHaveCount(0);
+  });
+}
+
+test("a failed version probe leaves chat available", async ({ page }) => {
+  await page.route("**/version", (route) => route.abort());
+  await openChat(page);
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  await expect(page.getByText("Update the app", { exact: true })).toHaveCount(0);
+});

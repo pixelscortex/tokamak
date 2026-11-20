@@ -21,6 +21,7 @@ export class WebPluginHost implements PluginModuleHost {
   constructor(
     private endpoint: ServerEndpoint,
     private manifests: () => readonly PluginManifest[],
+    private blocked?: (id: string) => string | undefined,
   ) {}
   affected(names: readonly string[]) {
     const affected = new Set(names);
@@ -119,7 +120,7 @@ export class WebPluginHost implements PluginModuleHost {
         dependencies.add(dependency);
         this.imports.set(name, dependencies);
         const manifest = this.manifests().find((p) => p.plugin.id === id);
-        if (!manifest?.entries.ui) {
+        if (!manifest?.entries.ui || this.blocked?.(id!)) {
           // A dynamic import of an absent plugin is optional: leave it to reject
           // when called, so the importer's own fallback runs.
           if (entry.d >= 0) continue;
@@ -157,6 +158,8 @@ export class WebPluginHost implements PluginModuleHost {
     document.head.append(link);
   }
   async importModule(name: string, manifest: PluginManifest): Promise<ModuleExports> {
+    const notice = this.blocked?.(manifest.plugin.id);
+    if (notice) throw new Error(notice);
     const generation = this.generation(name);
     try {
       const url = await this.prepare(name, manifest.entries.ui!.code, []);

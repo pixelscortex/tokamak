@@ -36,7 +36,7 @@ impl Loaded {
             package_root,
             failures,
         };
-        let loaded = match config.commit(&installed, &candidates, None).await {
+        let mut loaded = match config.commit(&installed, &candidates, None).await {
             Ok(loaded) => loaded,
             Err(error) if candidates.is_empty() => return Err(error),
             Err(_) => config.recover(&installed, candidates).await?,
@@ -49,6 +49,7 @@ impl Loaded {
                 );
             }
         }
+        loaded.snapshot_catalog()?;
         Ok(Arc::new(loaded))
     }
 
@@ -76,7 +77,9 @@ impl Loaded {
             catalog,
             targets: BTreeMap::new(),
             descriptor: Value::Null,
+            catalog_revision: String::new(),
             catalog_text: String::new(),
+            skipped_codes: BTreeMap::new(),
             inspected: BTreeMap::new(),
             workers: BTreeMap::new(),
             skipped: BTreeMap::new(),
@@ -98,7 +101,7 @@ impl Loaded {
             }
         }
         if loaded.skipped.is_empty() {
-            loaded.update_metadata()?;
+            loaded.update_descriptor();
         } else {
             loaded.prune_skipped()?;
         }
@@ -195,7 +198,8 @@ impl Loaded {
         self.action_lifetimes
             .retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
-        self.update_metadata()
+        self.update_descriptor();
+        Ok(())
     }
 
     pub(super) fn skip_if_required_dependency_failed(
@@ -227,7 +231,7 @@ impl Loaded {
         self.skipped.insert(id, reason);
     }
 
-    fn update_metadata(&mut self) -> Result<(), Error> {
+    fn update_descriptor(&mut self) {
         // Keep logical table names scoped by plugin in the aggregate metadata.
         let schemas: BTreeMap<_, _> = self
             .inspected
@@ -256,9 +260,34 @@ impl Loaded {
             })
             .collect();
         self.descriptor = json!({"schema":schemas,"functions":functions});
+    }
+
+    pub(crate) fn snapshot_catalog(&mut self) -> Result<(), Error> {
+        self.skipped_codes = self
+            .skipped
+            .iter()
+            .map(|(id, reason)| {
+                let code = if reason == "needs rebuild" {
+                    "needs-rebuild"
+                } else {
+                    "failed-to-load"
+                };
+                (id.clone(), code)
+            })
+            .collect();
         let mut metadata = self.catalog.metadata_with_logs(&self.logs);
         metadata["functions"] = self.descriptor["functions"].clone();
         metadata["schema"] = self.descriptor["schema"].clone();
+        self.catalog_revision.clone_from(&self.catalog.revision);
+        if !self.skipped_codes.is_empty() {
+            metadata["skipped"] = json!(self.skipped_codes);
+            // A skip-only change must also invalidate an in-flight paged read.
+            let mut hash = Sha256::new();
+            hash.update(&self.catalog.revision);
+            hash.update(metadata["skipped"].to_string());
+            self.catalog_revision = format!("{:x}", hash.finalize());
+            metadata["revision"] = json!(self.catalog_revision);
+        }
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }

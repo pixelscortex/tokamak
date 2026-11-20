@@ -1,5 +1,6 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
+import { serverVersionNotice } from "../host/compatibility";
 import { endpoint } from "../host/endpoint";
 import type { RemoteChat } from "@tokamak/sdk/client";
 import { syncDisplayName } from "../host/identity";
@@ -8,7 +9,13 @@ import { createPluginShell, type PluginRouting, type PluginShell } from "../plug
 
 export type Connection =
   | { state: "connecting" }
-  | { state: "connected"; client: TokamakClient; plugins: PluginShell; endpoint: ServerEndpoint }
+  | { state: "incompatible"; endpoint: ServerEndpoint; notice: string }
+  | {
+      state: "connected";
+      client: TokamakClient;
+      plugins: PluginShell;
+      endpoint: ServerEndpoint;
+    }
   /** `token`: the server wants a (new) access token before it lets this window in. */
   | { state: "failed"; reason: string; needs?: "token" };
 
@@ -72,6 +79,14 @@ export function createSession(options: SessionOptions): Session {
         });
       });
       if (current !== attempt) return;
+      const notice = await serverVersionNotice(supplied.http);
+      if (current !== attempt) return;
+      if (socket.readyState !== WebSocket.OPEN) throw new Error("The server closed the connection.");
+      if (notice) {
+        socket.close();
+        setConnection({ state: "incompatible", endpoint: supplied, notice });
+        return;
+      }
       const transport = new WebSocketTransport(socket);
       const client = new TokamakClient(transport);
       const plugins = createPluginShell(

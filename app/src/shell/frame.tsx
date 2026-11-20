@@ -8,7 +8,7 @@ import { useShell } from "./context";
 import { Palette } from "./palette";
 import { Rail } from "./rail";
 import { isShellPage } from "./pages";
-import { Connecting, Unreachable } from "./states";
+import { Connecting, Notice, Unreachable } from "./states";
 import { ServerSwitcher } from "./switcher";
 import { TopStrip } from "./top-strip";
 
@@ -64,6 +64,10 @@ function Stage(): JSX.Element {
   const headerFilled = useRegionFilled("header");
   const pageTitle = usePageTitleValue();
   const connection = shell.session.connection;
+  const versionNotice = () => {
+    const state = connection();
+    return state.state === "incompatible" ? state.notice : undefined;
+  };
   return (
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md surface-stage">
       <header aria-label="Page header" class="flex h-12 shrink-0 items-center gap-2 ps-4 pe-2">
@@ -86,6 +90,15 @@ function Stage(): JSX.Element {
               return <Unreachable reason={state().reason} needs={state().needs} />;
             }}
           </Match>
+          <Match when={versionNotice()}>
+            {(title) => (
+              <Notice
+                mark={<StatusIcon status="failed" label="Incompatible server" />}
+                title={title()}
+                role="alert"
+              />
+            )}
+          </Match>
           <Match when={connection().state === "connected"}>
             <Outlet />
           </Match>
@@ -100,7 +113,9 @@ function Footer(): JSX.Element {
   const shell = useShell();
   const host = () => {
     const connection = shell.session.connection();
-    return connection.state === "connected" ? new URL(connection.endpoint.http).host : undefined;
+    return connection.state === "connected" || connection.state === "incompatible"
+      ? new URL(connection.endpoint.http).host
+      : undefined;
   };
   return (
     <footer class="flex h-8 shrink-0 items-center gap-4 px-4 text-label text-ink-3">

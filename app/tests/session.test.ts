@@ -13,6 +13,7 @@ vi.mock("../src/plugins/views", () => ({
 import { createSession } from "../src/shell/session";
 
 class FakeSocket extends EventTarget {
+  static OPEN = 1;
   static last: FakeSocket;
   readyState = 1;
   bufferedAmount = 0;
@@ -29,6 +30,7 @@ class FakeSocket extends EventTarget {
 
 test("a socket that closes while the catalog loads stays failed", async () => {
   vi.stubGlobal("WebSocket", FakeSocket);
+  vi.stubGlobal("fetch", async () => Response.json({ version: "0.1.0" }));
   try {
     await createRoot(async (dispose) => {
       const session = createSession({
@@ -63,7 +65,11 @@ test("a socket that closes while the catalog loads stays failed", async () => {
 test("connect sends the saved display name before loading plugins", async () => {
   vi.stubGlobal("WebSocket", FakeSocket);
   const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-    Response.json({ id: "alice", name: "Alice", role: "member" }),
+    Response.json(
+      String(_input).endsWith("/version")
+        ? { version: "0.1.0" }
+        : { id: "alice", name: "Alice", role: "member" },
+    ),
   );
   vi.stubGlobal("fetch", request);
   try {
@@ -75,8 +81,8 @@ test("connect sends the saved display name before loading plugins", async () => 
       });
       await waitFor(() => expect(String(FakeSocket.last.url)).toContain("example.test"));
       FakeSocket.last.dispatchEvent(new Event("open"));
-      await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-      expect(request.mock.calls[1]![1]).toMatchObject({
+      await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+      expect(request.mock.calls[2]![1]).toMatchObject({
         method: "POST",
         body: JSON.stringify({ name: "Alicia" }),
       });

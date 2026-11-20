@@ -10,6 +10,7 @@ import {
   Outlet,
 } from "@tanstack/solid-router";
 import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
+import { appVersion } from "../../src/host/compatibility";
 import { createPluginShell } from "../../src/plugins/views";
 
 const result = document.getElementById("result")!;
@@ -35,6 +36,7 @@ function catalog(revision = "one", dependency = revision): JsonValue {
         plugin: {
           id: "fixture",
           version: revision,
+          api: `tokamak@${appVersion}`,
           contributes: { view: [{ id: "View", route: "/", title: "Fixture" }] },
         },
         entries: {
@@ -46,7 +48,7 @@ function catalog(revision = "one", dependency = revision): JsonValue {
         hashes: {},
       },
       {
-        plugin: { id: "fixture-dependency", version: dependency },
+        plugin: { id: "fixture-dependency", version: dependency, api: `tokamak@${appVersion}` },
         entries: { ui: { code: `/plugins/fixture-dependency/${dependency}/assets/ui.js`, css: "" } },
         hashes: {},
       },

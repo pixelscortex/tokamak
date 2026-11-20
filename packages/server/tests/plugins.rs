@@ -1255,11 +1255,19 @@ mod package_upload {
 
     impl SharedServer {
         async fn start(data: &Path, root: &Path) -> Self {
+            Self::start_with_index(data, root, None).await
+        }
+
+        async fn start_with_index(data: &Path, root: &Path, index: Option<&Path>) -> Self {
             fs::write(data.join("index.html"), "test").unwrap();
-            let backend =
-                Backend::start_plugins(Storage::Disk(data.join("store")), Default::default(), root)
-                    .await
-                    .unwrap();
+            let backend = Backend::start_plugins_with_index(
+                Storage::Disk(data.join("store")),
+                Default::default(),
+                root,
+                index,
+            )
+            .await
+            .unwrap();
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
             let web = HostedWeb::configure(Some(data.to_owned()), address).unwrap();
@@ -1640,6 +1648,131 @@ mod package_upload {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn removing_a_skipped_plugin_notifies_connected_windows() {
+        let (installation, mut files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        change_manifest(&mut files, |manifest| {
+            manifest["plugin"]["api"] = json!("tokamak@999.0.0");
+        });
+        let package = data.path().join("store/packages/a");
+        fs::create_dir_all(package.join("dist")).unwrap();
+        fs::write(package.join("package.zip"), archive(&files).1).unwrap();
+        for (name, bytes) in files {
+            fs::write(package.join("dist").join(name), bytes).unwrap();
+        }
+
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let mut window = server.socket().await;
+        let before = window_catalog(&mut window).await;
+        assert_eq!(before["skipped"]["a"], "needs-rebuild");
+        server.remove(OWNER, "a").await.error_for_status().unwrap();
+        let notice = event(&mut window, |event| event["type"] == "pluginchanged").await;
+        let after = window_catalog(&mut window).await;
+        assert_eq!(notice["plugins"], json!([]));
+        assert_eq!(notice["catalog"]["paged"], true);
+        assert_ne!(before["revision"], after["revision"]);
+        assert_eq!(before["plugins"], after["plugins"]);
+        assert!(after.get("skipped").is_none());
+        drop(window);
+        server.close().await;
+    }
+
+    async fn window_catalog(socket: &mut Socket) -> Value {
+        socket
+            .send(Message::Text(
+                json!({"type":"plugins","id":10}).to_string().into(),
+            ))
+            .await
+            .unwrap();
+        let page = result(socket, 10).await;
+        assert_eq!(page["done"], true);
+        serde_json::from_str(page["text"].as_str().unwrap()).unwrap()
+    }
+
+    async fn member_catalogs(server: &SharedServer) -> (Value, Value) {
+        let invite = server
+            .client
+            .post(format!("{}/members", server.http))
+            .bearer_auth(OWNER)
+            .body(json!({"name": "Member"}).to_string())
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        let invite = response_json(invite).await;
+        let token = invite["token"].as_str().unwrap();
+        let mut window = tokio_tungstenite::connect_async(format!(
+            "{}/ws?token={token}",
+            server.http.replace("http:", "ws:")
+        ))
+        .await
+        .unwrap()
+        .0;
+        let http = server
+            .client
+            .get(format!("{}/plugins", server.http))
+            .bearer_auth(token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        (response_json(http).await, window_catalog(&mut window).await)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_failed_indexed_plugin_is_in_both_member_catalogs() {
+        let installation = Installation::new();
+        let data = tempfile::tempdir().unwrap();
+        let artifact = index_test_artifact(data.path(), &installation, "indexed", "indexed", |m| {
+            m["plugin"]["depends"] = json!({"unavailable":"*"});
+        });
+        let index = data.path().join("plugin-index.json");
+        fs::write(&index, json!({"indexed": artifact}).to_string()).unwrap();
+        let server =
+            SharedServer::start_with_index(data.path(), &installation.0, Some(&index)).await;
+        let (http, paged) = member_catalogs(&server).await;
+        assert_eq!(paged["skipped"], json!({"indexed": "failed-to-load"}));
+        assert_eq!(http["skipped"], paged["skipped"]);
+        server.close().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn version_is_public_only_to_allowed_window_origins() {
+        let installation = Installation::new();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let request = || server.client.get(format!("{}/version", server.http));
+        let allowed = request()
+            .header("origin", &server.http)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), 200);
+        assert_eq!(
+            allowed.headers()["access-control-allow-origin"],
+            server.http
+        );
+        assert_eq!(
+            response_json(allowed).await["version"],
+            env!("CARGO_PKG_VERSION")
+        );
+        let refused = request()
+            .header("origin", "https://disallowed.invalid")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), 403);
+        assert!(
+            !refused
+                .headers()
+                .contains_key("access-control-allow-origin")
+        );
+        server.close().await;
+    }
+
     async fn assert_restart(data: &Path, installed: &Path, mut files: Files, updated: &str) {
         let stored = data.join("store/packages");
         let backup = stored.join(".package-backup-a");
@@ -1668,7 +1801,7 @@ mod package_upload {
         fs::write(package.join("dist/manifest.json"), &files["manifest.json"]).unwrap();
         let server = SharedServer::start(data, installed).await;
         let catalog = server.get("/plugins").await;
-        assert_eq!(catalog["skipped"]["a"], "needs rebuild");
+        assert_eq!(catalog["skipped"]["a"], "needs-rebuild");
         assert_eq!(catalog["plugins"].as_array().unwrap().len(), 1);
         assert_eq!(
             rows(&mut server.socket().await, "b")
@@ -1697,13 +1830,9 @@ mod package_upload {
         fs::write(backup.join("dist/manifest.json"), "{").unwrap();
         fs::write(current.join("dist/bundle.js"), "damaged").unwrap();
         let server = SharedServer::start(data.path(), &installation.0).await;
-        let catalog = server.get("/plugins").await;
-        assert!(
-            catalog["skipped"]["a"]
-                .as_str()
-                .unwrap()
-                .contains("hash mismatch")
-        );
+        let (http, paged) = member_catalogs(&server).await;
+        assert_eq!(http["skipped"], json!({"a": "failed-to-load"}));
+        assert_eq!(paged["skipped"], http["skipped"]);
         assert_eq!(rows(&mut server.socket().await, "b").await, json!([]));
         assert!(backup.exists());
         server.close().await;

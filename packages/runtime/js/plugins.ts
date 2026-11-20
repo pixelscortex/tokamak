@@ -22,6 +22,7 @@ export interface PluginManifest {
   plugin: {
     id: string;
     version: string;
+    api?: string;
     depends?: Readonly<Record<string, string>>;
     contributes?: Partial<
       Record<ContributionKind, readonly { id: string; [key: string]: string | number }[]>
@@ -33,6 +34,7 @@ export interface PluginManifest {
 export interface PluginCatalog {
   revision: string;
   plugins: readonly PluginManifest[];
+  skipped?: Readonly<Record<string, string>>;
 }
 export interface PluginAssets {
   plugins(): Promise<JsonValue>;

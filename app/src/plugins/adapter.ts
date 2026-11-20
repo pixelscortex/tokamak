@@ -22,6 +22,7 @@ export function adaptCatalog(value: JsonValue): PluginCatalog {
     throw new Error("Invalid plugin catalog");
   return {
     revision: raw.revision,
+    skipped: raw.skipped,
     plugins: raw.plugins.map((item) => {
       const p = item as PluginManifest & {
         id?: string;
