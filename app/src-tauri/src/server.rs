@@ -57,14 +57,14 @@ fn binary() -> Result<PathBuf> {
         for profile in ["debug", "release"] {
             let path = root
                 .join(profile)
-                .join(format!("tokamak{}", std::env::consts::EXE_SUFFIX));
+                .join(format!("tokamak-server{}", std::env::consts::EXE_SUFFIX));
             if path.is_file() {
                 return Ok(path);
             }
         }
     }
-    let path =
-        std::env::current_exe()?.with_file_name(format!("tokamak{}", std::env::consts::EXE_SUFFIX));
+    let path = std::env::current_exe()?
+        .with_file_name(format!("tokamak-server{}", std::env::consts::EXE_SUFFIX));
     if !path.is_file() {
         return Err("Tokamak server binary is missing; run the app preparation script".into());
     }

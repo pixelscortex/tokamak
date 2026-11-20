@@ -13,8 +13,8 @@ and typed API references. Do not author the artifact manifest by hand.
 
 ```sh
 proto run bun -- packages/build/src/build.ts path/to/plugins/notes
-cargo build --locked -p server --bin tokamak --jobs 2
-target/debug/tokamak --plugins path/to/plugins --local-dir path/to/private-server
+cargo build --locked -p server --bin tokamak-server --jobs 2
+target/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
 ```
 
 The local directory requires the same private `server.token` as the desktop
@@ -22,8 +22,8 @@ launcher. Never pass the token in arguments. The launcher now uses the workspace
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak plugin list
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak plugin reload acme.notes
+TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
+TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin reload acme.notes
 ```
 
 The control CLI validates loopback discovery, uses bearer authentication, disables

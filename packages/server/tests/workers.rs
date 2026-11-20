@@ -252,7 +252,7 @@ fn worker_lifecycle(scenario: &str) {
         std::fs::write(plugins.join(name), text).unwrap();
     }
     let mut server = ServerGuard(
-        Command::new(env!("CARGO_BIN_EXE_tokamak"))
+        Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
             .args([
                 "--plugins",
                 directory.path().join("plugins").to_str().unwrap(),
