@@ -1,0 +1,50 @@
+packages/server/src/data/space.rs
+  s_bbf6cad0845d21::t_77d47a5140e731 46
+packages/server/src/plugins/grants.rs
+  s_bbf6cad0845d21::t_c74c0e2e39b64b 60-62
+  s_bbf6cad0845d21::t_3dc6bf9259e82c 15-45,59,63,74
+packages/server/src/data/types.rs
+  s_bbf6cad0845d21::t_77d47a5140e731 16,58-59
+  s_bbf6cad0845d21::t_10a0e68f135a55 60
+packages/server/src/data/transaction/indexes.rs
+  s_bbf6cad0845d21::t_77d47a5140e731 3,5,10-11,57-61,63,66-69,71,76-77,79-80,106-155,166-177,196,280
+  s_bbf6cad0845d21::t_d2093ae1128db5 103-105,156-165,274-279,281-283
+packages/server/tests/schema_indexes.rs
+  s_bbf6cad0845d21::t_1bceb6e20c3805 81-82,85-87,90-92,94-95,99-100,102,105-107,722,734,743-759,781,791,806-812,814-817,833,842-844,847-853,856-864,866-867,874-880,883-889,892-906,909-928,930-941,943-944,946-969,997,1017-1021,1028,1032-1033,1035,1040-1042,1053-1062,1068,1101,1128,1176-1178,1183-1184
+  s_bbf6cad0845d21::t_c74c0e2e39b64b 854-855,868-873
+  s_bbf6cad0845d21::t_5d6629834e2490 88-89,101,103-104,813,865,881-882,890-891,907-908,929,942,945
+packages/sdk/README.md
+  s_bbf6cad0845d21::t_0ac391ab7f1407 86-89
+packages/server/src/data/README.md
+  s_bbf6cad0845d21::t_caf2d75cb8103f 66-79,91,114-116,135-136
+packages/server/src/data/transaction.rs
+  s_bbf6cad0845d21::t_cdbfa6912d7559 19
+packages/server/src/plugins/catalog.rs
+  s_bbf6cad0845d21::t_6cf1a59e8ba337 72-86,89,91-92,96,98-100,107-108
+packages/server/src/plugins/loading.rs
+  s_bbf6cad0845d21::t_4b6e410f8828f5 65,68-69,72-122
+packages/server/src/schema.rs
+  s_bbf6cad0845d21::t_c21c748b9270f7 32,159,164-184,187-189,192-193,198-206
+packages/server/src/service/mod.rs
+  s_bbf6cad0845d21::t_43edcd19be88c3 44,53
+packages/server/src/service/startup.rs
+  s_bbf6cad0845d21::t_8f03042f90d9e4 95-101
+packages/server/tests/data_indexes.rs
+  s_bbf6cad0845d21::t_52df8166660ad9 187,227,623-640,1409,1411-1413,1415-1419,1424-1426,1428-1432
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26e9ecb81dedaa9701f4be0ffea2352be48b7d1d",
+  "prompts": {},
+  "sessions": {
+    "s_bbf6cad0845d21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8bd-801c-7bd3-82e6-334284ddaab2",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
