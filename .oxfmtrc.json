@@ -12,6 +12,7 @@
     "**/node_modules/**",
     "**/target/**",
     "**/vendor/**",
+    ".agents/**",
     "packages/engine/tests/fixtures/*.js",
     "packages/engine/tests/fixtures/*.js.map",
     "**/bun.lock",
