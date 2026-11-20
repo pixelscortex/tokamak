@@ -50,13 +50,11 @@ impl Catalog {
         let mut plugins = BTreeMap::new();
 
         for directory in directories {
-            // Read identity first to find reusable verified snapshots. The full
-            // read still verifies changed files, detecting incomplete builds.
-            let identity = Manifest::read(&directory)?;
-
-            let old = previous.and_then(|p| p.plugins.get(&identity.plugin.id));
-
-            let artifact = Artifact::read_reusing(&directory, old.map(AsRef::as_ref))?;
+            let build = Manifest::read(&directory)?;
+            let old = previous.and_then(|p| p.plugins.get(&build.0.plugin.id));
+            // Even when the manifest is unchanged, verify files whose source
+            // stamp changed so a partial build cannot pass as a no-op.
+            let artifact = Artifact::read_reusing(&directory, build, old.map(AsRef::as_ref))?;
 
             let id = artifact.manifest.plugin.id.clone();
 
@@ -72,9 +70,7 @@ impl Catalog {
         let mut hash = Sha256::new();
 
         for id in &order {
-            hash.update(
-                serde_json::to_vec(&plugins[id].manifest).map_err(|e| invalid(e.to_string()))?,
-            );
+            hash.update(plugins[id].build_id.as_bytes());
         }
 
         let mut providers = BTreeMap::<String, Vec<String>>::new();
@@ -102,11 +98,13 @@ impl Catalog {
 
     pub fn metadata(&self) -> Value {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
-            let manifest = &self.plugins[id].manifest;
+            let artifact = &self.plugins[id];
+            let manifest = &artifact.manifest;
+            let build_id = &artifact.build_id;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
-            value["revision"] = json!(self.revision);
-            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{}/assets/{}", self.revision, ui.code)).into();
-            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{}/assets/{css}", self.revision)).into();
+            value["revision"] = json!(build_id);
+            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{build_id}/assets/{}", ui.code)).into();
+            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{build_id}/assets/{css}")).into();
             value
         }).collect::<Vec<_>>()})
     }

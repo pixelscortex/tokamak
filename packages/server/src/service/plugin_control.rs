@@ -62,16 +62,13 @@ impl Coordinator {
                     .as_ref()
                     .ok_or_else(|| Error::Invalid("No plugin installation".into()))
                     .map(|loaded| {
-                        if revision
-                            .as_ref()
-                            .is_some_and(|r| r != &loaded.catalog.revision)
-                        {
-                            return None;
-                        }
                         loaded
                             .catalog
                             .plugins
                             .get(&id)
+                            .filter(|plugin| {
+                                revision.as_ref().is_none_or(|r| r == &plugin.build_id)
+                            })
                             .and_then(|plugin| plugin.ui_asset(&name))
                     });
 
@@ -104,55 +101,57 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
+        if self
+            .plugins
+            .as_ref()
+            .is_some_and(|old| old.catalog.revision == catalog.revision)
+        {
+            return self.metadata();
+        }
+
         let candidate =
             crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
                 .await?;
-        // Each generation gets a fresh action lane; build it before the swap so
-        // a pool failure leaves the current generation fully intact.
-        let action_pool = Arc::new(
-            Pool::new_actions(PoolConfig {
-                limits: self.pool.limits().clone(),
-                ..PoolConfig::default()
-            })
-            .map_err(|e| Error::Invalid(e.to_string()))?,
-        );
-        Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
-        // This command follows every previously accepted invocation's complete
-        // commit/rollback. Nothing below can fail before the generation swap.
-        // Cancel old-generation actions so a reload cannot leave revoked network
-        // grants running in old worlds; the old pool tears down detached.
-        self.action_pool.cancel_actions();
-        if let Some(previous) = &self.plugins {
-            for worker in previous.workers.values() {
-                worker.stop().await;
-            }
-        }
-        self.action_pool = action_pool;
-        self.kinds = candidate.client_kinds();
-
         let mut changed = std::collections::BTreeSet::new();
-
         if let Some(previous) = &self.plugins {
             for (id, artifact) in &previous.catalog.plugins {
-                if candidate.catalog.plugins.get(id).is_none_or(|next| {
-                    serde_json::to_value(&artifact.manifest).ok()
-                        != serde_json::to_value(&next.manifest).ok()
-                }) {
+                if candidate
+                    .catalog
+                    .plugins
+                    .get(id)
+                    .is_none_or(|next| artifact.build_id != next.build_id)
+                {
                     changed.insert(id.clone());
                 }
             }
-
             for id in candidate.catalog.plugins.keys() {
                 if !previous.catalog.plugins.contains_key(id) {
                     changed.insert(id.clone());
                 }
             }
         }
+
+        Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
+        // All fallible preparation is complete. No requests can observe a
+        // partial swap while the coordinator retires the changed builds.
+        if let Some(previous) = &self.plugins {
+            for id in &changed {
+                if let Some(lifetime) = previous.action_lifetimes.get(id) {
+                    lifetime.cancel();
+                }
+            }
+            for id in &changed {
+                if let Some(worker) = previous.workers.get(id) {
+                    worker.stop().await;
+                }
+            }
+        }
+        self.kinds = candidate.client_kinds();
         self.plugins = Some(candidate);
 
         let catalog = self.metadata()?;
-        // Use the same bounded ordered stream as data updates. A stale asset
-        // request carries its catalog revision and cannot mix generations.
+        // Use the same bounded ordered stream as data updates. Asset requests
+        // carry the plugin's build id so they cannot mix builds.
         for session in self.sessions.keys().copied().collect::<Vec<_>>() {
             self.emit(
                 session,
@@ -179,16 +178,16 @@ impl Coordinator {
         let result = (|| {
             let loaded = self.plugins.as_ref().ok_or("No plugin installation")?;
 
-            if loaded.catalog.revision != revision {
-                return Err("Plugin generation changed".to_owned());
-            }
-
-            let bytes = loaded
+            let plugin = loaded
                 .catalog
                 .plugins
                 .get(&plugin)
-                .and_then(|p| p.ui_asset(&name))
-                .ok_or("Unknown plugin UI asset")?;
+                .ok_or("Unknown plugin")?;
+            if plugin.build_id != revision {
+                return Err("Plugin build changed".to_owned());
+            }
+
+            let bytes = plugin.ui_asset(&name).ok_or("Unknown plugin UI asset")?;
             bytes.page(offset).map_err(|e| e.to_string())
         })();
         self.respond(session, id, result);
