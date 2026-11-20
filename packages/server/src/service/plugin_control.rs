@@ -260,7 +260,7 @@ impl Coordinator {
             .swap_catalog(
                 catalog,
                 failures,
-                Some((&id, PackageChange::Upload(&staged))),
+                Some((&id, PackageChange::Upload(Arc::new(staged)))),
             )
             .await?;
         Ok((response, logs))
@@ -275,8 +275,7 @@ impl Coordinator {
             .catalog
             .removable_package(id, &previous.skipped)?
             .to_owned();
-        let (catalog, failures) =
-            crate::plugins::Catalog::without_package(root, previous, &package_root, id)?;
+        let (catalog, failures) = crate::plugins::Catalog::without_package(root, previous, id)?;
         let response = match catalog.plugins.get(id) {
             Some(artifact) => serde_json::json!({
                 "id": id, "removed": false, "reverted": true, "buildId": artifact.build_id,
@@ -290,8 +289,8 @@ impl Coordinator {
                 Some((
                     id,
                     PackageChange::Remove {
-                        root: &package_root,
-                        id,
+                        root: package_root,
+                        id: id.to_owned(),
                     },
                 )),
             )
@@ -303,7 +302,7 @@ impl Coordinator {
         &mut self,
         catalog: crate::plugins::Catalog,
         artifact_failures: std::collections::BTreeMap<String, String>,
-        package: Option<(&str, PackageChange<'_>)>,
+        package: Option<(&str, PackageChange)>,
     ) -> Result<ReloadResult, Error> {
         let previous = self.plugins.as_deref();
         if package.is_none()
@@ -317,8 +316,8 @@ impl Coordinator {
         let mut candidate =
             crate::plugins::Loaded::load_reusing(catalog, artifact_failures, &self.pool, previous)
                 .await?;
-        if let Some((id, _)) = package
-            && let Some(reason) = candidate.skipped.get(id)
+        if let Some((id, _)) = &package
+            && let Some(reason) = candidate.skipped.get(*id)
         {
             return Err(Error::Invalid(reason.clone()));
         }

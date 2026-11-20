@@ -40,6 +40,10 @@ _Avoid_: Hot swap, refresh, redeploy
 The window drops a plugin's views and mounts them again from the new code. The window itself stays open, and nothing inside the views is kept.
 _Avoid_: Refresh, window reload
 
+**Package**:
+One ZIP containing a built plugin’s manifest and the files it lists.
+_Avoid_: Source archive
+
 **Build id**:
 The SHA-256 of a built plugin's `manifest.json`. The manifest holds the hash of every other file, so the build id names one exact build. The version is only a label.
 _Avoid_: Revision, hash, version

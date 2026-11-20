@@ -26,7 +26,7 @@ impl Loaded {
         &mut self,
         database: &crate::data::Database,
         previous: Option<&Self>,
-        package: Option<package::PackageChange<'_>>,
+        package: Option<package::PackageChange>,
     ) -> Result<(), Error> {
         // Previously skipped plugins count as new to the active catalog even
         // when their builds are unchanged. If one still fails, exclude it and
@@ -41,17 +41,22 @@ impl Loaded {
                 .collect();
             if ids.is_empty() {
                 if let Some(package) = package {
-                    package.apply()?.commit();
+                    package.apply().await?.finish(true).await;
                 }
                 return Ok(());
             }
-            let failure =
-                match Box::pin(self.record_grants_for(database, previous, &ids, true, package))
-                    .await
-                {
-                    Ok(()) => return Ok(()),
-                    Err(failure) => failure,
-                };
+            let failure = match Box::pin(self.record_grants_for(
+                database,
+                previous,
+                &ids,
+                true,
+                package.clone(),
+            ))
+            .await
+            {
+                Ok(()) => return Ok(()),
+                Err(failure) => failure,
+            };
             if package.is_some() {
                 return Err(failure.error);
             }
@@ -114,7 +119,7 @@ impl Loaded {
         previous: Option<&Self>,
         ids: &[String],
         commit: bool,
-        package: Option<package::PackageChange<'_>>,
+        package: Option<package::PackageChange>,
     ) -> Result<(), InstallFailure> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
@@ -173,7 +178,10 @@ impl Loaded {
             }
 
             // A rename failure can still roll back the schema transaction.
-            let promotion = package.map(package::PackageChange::apply).transpose()?;
+            let promotion = match package {
+                Some(package) => Some(package.apply().await?),
+                None => None,
+            };
             Ok((granted, resets, promotion))
         }
         .await;
@@ -183,12 +191,11 @@ impl Loaded {
                 .await
                 .map_err(|error| invalid(error.to_string()).into()),
             Ok((granted, resets, promotion)) => {
-                Box::pin(tx.commit())
-                    .await
-                    .map_err(|e| invalid(e.to_string()))?;
+                let commit = Box::pin(tx.commit()).await;
                 if let Some(promotion) = promotion {
-                    promotion.commit();
+                    promotion.finish(commit.is_ok()).await;
                 }
+                commit.map_err(|e| invalid(e.to_string()))?;
 
                 for reason in resets {
                     crate::schema::log_reset(&reason);

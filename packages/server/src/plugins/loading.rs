@@ -11,12 +11,22 @@ impl Loaded {
         pool: &engine::Pool,
         database: &crate::data::Database,
     ) -> Result<Arc<Self>, Error> {
-        let package_root = database.directory().map(|data| data.join("plugins"));
-        if let Some(path) = &package_root {
-            package::recover(path)?;
-        }
-        let (installed, failures) = read_with_packages(root, None, package_root.as_deref())?;
-        let candidates = read_index(index);
+        let data = database.disk_path().map(Path::to_owned);
+        let sources = root.to_owned();
+        let index_file = index.map(Path::to_owned);
+        let (package_root, installed, failures, candidates) = package::blocking(move || {
+            let package_root = data.as_deref().map(package::store_path).transpose()?;
+            if let Some(path) = &package_root {
+                package::check_overlap(path, &sources)?;
+                catalog::check_index_overlap(index_file.as_deref(), path)?;
+                package::recover(path)?;
+            }
+            let (installed, failures) =
+                read_with_packages(&sources, None, package_root.as_deref())?;
+            let candidates = read_index(index_file.as_deref());
+            Ok((package_root, installed, failures, candidates))
+        })
+        .await?;
         let config = StartupCatalog {
             root,
             directory,

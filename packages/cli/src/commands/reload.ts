@@ -26,6 +26,7 @@ type Report = {
   skipped: Record<string, string>;
   removalError?: string;
   warnings: Set<string>;
+  buildWarnings: Set<string>;
 };
 
 const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
@@ -41,8 +42,9 @@ function failed(
   return { id, buildId, status, error: { message: messageOf(cause), ...(diagnostics && { diagnostics }) } };
 }
 
-async function build(id: string, folder: string): Promise<Build> {
-  const { data } = await buildInFolder(folder);
+async function build(report: Report, id: string, folder: string): Promise<Build> {
+  const { data, warnings } = await buildInFolder(folder);
+  for (const warning of warnings) report.buildWarnings.add(warning);
   if (data.id !== id) throw new Error(`Build produced plugin ${data.id}, expected ${id}`);
   const bytes = await readFile(join(data.outputFolder, "manifest.json"));
   return {
@@ -174,7 +176,13 @@ async function runReload(id: string | undefined, server?: string) {
   if (id !== undefined && !index.has(id))
     throw new CommandError(`Unknown indexed plugin: ${id}`, "tokamak plugin add");
   const selected = id === undefined ? [...index] : [[id, index.get(id)!] as const];
-  const report: Report = { results: new Map(), removed: new Set(), skipped: {}, warnings: new Set() };
+  const report: Report = {
+    results: new Map(),
+    removed: new Set(),
+    skipped: {},
+    warnings: new Set(),
+    buildWarnings: new Set(),
+  };
   const releases = new Map<string, () => Promise<void>>();
   const builds: Build[] = [];
   const sources: { id: string; folder: string; depends: string[] }[] = [];
@@ -196,7 +204,7 @@ async function runReload(id: string | undefined, server?: string) {
     // Providers must publish their types before selected dependents build.
     for (const { id: plugin, folder } of dependencyOrder(sources)) {
       try {
-        builds.push(await build(plugin, folder));
+        builds.push(await build(report, plugin, folder));
       } catch (error) {
         report.results.set(plugin, failed(plugin, null, "build-failed", error));
       }
@@ -215,7 +223,7 @@ function reportOutput(report: Report, selected: string[]) {
   const plugins = selected.map((id) => report.results.get(id)!);
   const removed = [...report.removed];
   const skipped = Object.fromEntries(Object.entries(report.skipped).filter(([id]) => !selected.includes(id)));
-  const warnings = [...report.warnings];
+  const warnings = [...new Set([...report.buildWarnings, ...report.warnings])];
   const data = { plugins, removed, skipped, ...(warnings.length && { warnings }) };
   const lines = [
     ...plugins.map(({ id, status, error }) =>
@@ -232,7 +240,7 @@ function reportOutput(report: Report, selected: string[]) {
     ),
     ...removed.map((id) => `Removed ${id} from the running index`),
     ...Object.entries(skipped).map(([id, reason]) => `Skipped ${id}: ${reason}`),
-    ...warnings.map((warning) => `Warning: ${warning}`),
+    ...[...report.warnings].map((warning) => `Warning: ${warning}`),
   ];
   if (report.removalError) lines.push(`Could not confirm index removals: ${report.removalError}`);
   const text = lines.join("\n") || "No indexed plugins to reload.";

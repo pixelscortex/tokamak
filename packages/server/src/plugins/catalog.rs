@@ -2,7 +2,7 @@ use super::*;
 
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        let (plugins, _) = read_installed(root, None, None, |_| false)?;
+        let (plugins, _) = read_installed(root, None, |_| false)?;
         Self::assemble(root, root.parent().unwrap_or(root), plugins, Arc::default())
     }
 
@@ -51,6 +51,9 @@ impl Catalog {
             .as_deref()
             .ok_or_else(|| invalid("Server has no local plugin index"))?;
         let entries = index_entries(path)?;
+        if let Some(store) = &previous.package_root {
+            check_index_sources(&entries, store)?;
+        }
         let mut plugins = previous.plugins.clone();
         let mut index = (*previous.index).clone();
         if request.remove_missing {
@@ -129,8 +132,8 @@ impl Catalog {
         if let Some(root) = self.package_root.as_deref() {
             let package = root.join(id);
             let stored = match source {
-                Some(source) => same_directory(source, &package.join("dist")),
-                None => skipped.contains_key(id) && package.join("package.zip").is_file(),
+                Some(source) => *source == package.join("dist"),
+                None => skipped.contains_key(id) && package::removal_path(root, id).is_ok(),
             };
             if stored {
                 return Ok(root);
@@ -147,7 +150,6 @@ impl Catalog {
     pub(crate) fn without_package(
         root: &Path,
         previous: &Loaded,
-        package_root: &Path,
         id: &str,
     ) -> Result<(Self, BTreeMap<String, String>), Error> {
         let old = &previous.catalog;
@@ -163,7 +165,7 @@ impl Catalog {
             )));
         }
 
-        let fallback = find_package_fallback(root, package_root, id).map_err(|error| {
+        let fallback = find_package_fallback(root, id).map_err(|error| {
             invalid(format!(
                 "Cannot restore the --plugins copy of {id}: {error}"
             ))
@@ -263,7 +265,7 @@ impl Catalog {
     }
 
     pub(crate) fn installation_warnings(root: &Path) -> Vec<String> {
-        match installed_directories(root, false) {
+        match installed_directories(root) {
             Ok(directories) => directories
                 .iter()
                 .filter_map(|path| {
@@ -378,6 +380,23 @@ pub(super) fn read_index(path: Option<&Path>) -> IndexedArtifacts {
         .collect()
 }
 
+pub(super) fn check_index_overlap(index: Option<&Path>, store: &Path) -> Result<(), Error> {
+    // The existing loader reports malformed indexes and falls back to installed plugins.
+    if let Some(entries) = index.and_then(|path| index_entries(path).ok()) {
+        check_index_sources(&entries, store)?;
+    }
+    Ok(())
+}
+
+fn check_index_sources(entries: &BTreeMap<String, Value>, store: &Path) -> Result<(), Error> {
+    for folder in entries.values().filter_map(Value::as_str).map(Path::new) {
+        if folder.is_absolute() {
+            package::check_overlap(store, folder)?;
+        }
+    }
+    Ok(())
+}
+
 fn index_entries(path: &Path) -> Result<BTreeMap<String, Value>, Error> {
     let source = match std::fs::read(path) {
         Ok(source) => source,
@@ -420,7 +439,7 @@ fn read_indexed_build(
 type Artifacts = BTreeMap<String, Arc<Artifact>>;
 type ArtifactFailures = BTreeMap<String, String>;
 
-fn installed_directories(root: &Path, exclude_packages: bool) -> Result<Vec<PathBuf>, Error> {
+fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
     Ok(if let Some(directory) = artifact_directory(root) {
         vec![directory]
     } else {
@@ -434,9 +453,6 @@ fn installed_directories(root: &Path, exclude_packages: bool) -> Result<Vec<Path
             }
 
             let path = entry.path();
-            if exclude_packages && path.join("package.zip").is_file() {
-                continue;
-            }
 
             if let Some(directory) = artifact_directory(&path) {
                 result.push(directory);
@@ -452,14 +468,10 @@ fn installed_directories(root: &Path, exclude_packages: bool) -> Result<Vec<Path
     })
 }
 
-fn find_package_fallback(
-    root: &Path,
-    package_root: &Path,
-    id: &str,
-) -> Result<Option<Artifact>, Error> {
+fn find_package_fallback(root: &Path, id: &str) -> Result<Option<Artifact>, Error> {
     // Match startup's source selection, but load only the build being restored.
     let mut fallback = None;
-    for directory in installed_directories(root, same_directory(root, package_root))? {
+    for directory in installed_directories(root)? {
         let build = Manifest::read(&directory)?;
         if build.0.plugin.id == id {
             if fallback.is_some() {
@@ -473,21 +485,12 @@ fn find_package_fallback(
     Ok(fallback)
 }
 
-fn same_directory(left: &Path, right: &Path) -> bool {
-    left == right
-        || left
-            .canonicalize()
-            .is_ok_and(|left| right.canonicalize().is_ok_and(|right| left == right))
-}
-
-pub(super) fn read_installed(
+fn read_installed(
     root: &Path,
     previous: Option<&Loaded>,
-    package_root: Option<&Path>,
     is_shadowed: impl Fn(&str) -> bool,
 ) -> Result<(Artifacts, ArtifactFailures), Error> {
-    let exclude_packages = package_root.is_some_and(|path| same_directory(root, path));
-    let directories = installed_directories(root, exclude_packages)?;
+    let directories = installed_directories(root)?;
     let mut plugins = BTreeMap::new();
     let mut skipped = BTreeMap::new();
 
@@ -528,7 +531,7 @@ pub(super) fn read_with_packages(
         Some(directory) => package::read_stored(directory, previous)?,
         None => (BTreeMap::new(), BTreeMap::new()),
     };
-    let (mut plugins, mut failures) = read_installed(root, previous, package_root, |id| {
+    let (mut plugins, mut failures) = read_installed(root, previous, |id| {
         stored.contains_key(id) || skipped.contains_key(id)
     })?;
     plugins.extend(stored);
