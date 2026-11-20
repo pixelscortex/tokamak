@@ -1,0 +1,112 @@
+packages/cli/tests/cli.test.mjs
+  s_f18b77d03151af::t_d7b0ae515b12bd 592,635,718-751
+  s_f18b77d03151af::t_9846ab57c71918 100,141,445-456,571-591,593-602,604-634,637,639,641-643,752-755
+app/tests/plugins.test.tsx
+  s_f18b77d03151af::t_1f589d8d10cd84 340-389
+packages/engine/src/bridge.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 102
+packages/server/src/service/plugin_control.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 15,137-139,142-144,149,152-159,164-165,167-178,182-200,202
+  s_f18b77d03151af::t_289a0c006f2050 13-14,104-105,125,131
+packages/server/src/host/worker/mod.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 15,44,141,147-188,195-206,214,233,259,275-282
+packages/server/src/plugins/mod.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 13,45,47-48
+packages/runtime/js/plugins.ts
+  s_f18b77d03151af::t_1f589d8d10cd84 9,130
+packages/server/src/service/mod.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 44,53
+packages/sdk/README.md
+  s_f18b77d03151af::t_1f589d8d10cd84 86-90
+packages/server/src/plugins/catalog.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 27-28,99-104,108-110,112,114-121,123-125,127-132,139-140,142-147,292-294,297-298,303-306,310,312,325,327-328,332,337-347,363,395,397,401,404,407,409
+  s_f18b77d03151af::t_f415dadd12c33d 5-6,9-14,17-19,22,24-26,29-31,35,37-38,43,45-46,55,69-76,79,88-89,91-98,105-107,111,348,350-351,362,364-394,396,398-400,402-403,405-406,408,410-421
+packages/server/src/plugins/grants.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 10-23,26,30-44,46-73,75-84,91-93,96,100,102,112,115-121,129,134-140,145-158,166,187,193-206
+  s_f18b77d03151af::t_89c8abc3ab54cd 45,74
+packages/runtime/tools/server-binary.ts
+  s_f18b77d03151af::t_1f589d8d10cd84 1-25
+packages/build/tests/browser-assets.mjs
+  s_f18b77d03151af::t_1f589d8d10cd84 112-113,122-123
+packages/server/src/data/transaction.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 19
+packages/server/src/plugins/loading.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 40-41,46,49-65,67-81,83-95,102,107,112,116-118,120,123-126,128,132-144,146-148,150-190,192-199,201-216,218-224,226-237,239-255,257-279,281-286,382,384-398,402-403,405-410,506,509
+  s_f18b77d03151af::t_b98283f63daec3 14,36,429,441,449-451,460,472,496,503-505
+packages/server/src/data/types.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 16,58-59
+  s_f18b77d03151af::t_30cce7825b61d6 60
+packages/server/src/host/worker/tests.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 43,72,104
+packages/server/src/service/server.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 15
+packages/server/src/service/startup.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 108
+packages/server/src/data/README.md
+  s_f18b77d03151af::t_1f589d8d10cd84 66-82,92-103,106,129-131,150-151
+app/src/plugins/web-host.ts
+  s_f18b77d03151af::t_1f589d8d10cd84 37,48-50
+packages/server/tests/data_indexes.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 187,227,623-640,1409,1411-1413,1415-1419,1424-1426,1428-1432
+packages/cli/src/commands/reload.ts
+  s_f18b77d03151af::t_d7b0ae515b12bd 58
+  s_f18b77d03151af::t_562c99498529e5 17,71-91,94,102,104-107,155-156
+packages/server/src/plugins/dependencies.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 3-6,12
+packages/server/tests/schema_indexes.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 81-82,85-92,94-95,99-107,243-248,728,740,749-765,787,797,812-823,839,848-926,929-1194,1222,1242-1246,1253-1254,1258-1259,1261,1266-1268,1279-1288,1294,1350,1354,1402-1404,1409-1410,1844,1857-1906
+  s_f18b77d03151af::t_16afb00e2d4e12 1907
+packages/runtime/moon.yml
+  s_f18b77d03151af::t_1f589d8d10cd84 16
+packages/cli/README.md
+  s_f18b77d03151af::t_d7b0ae515b12bd 11,48-50,53-54,60-67
+  s_f18b77d03151af::t_1139dc77d1b7fa 68
+packages/server/PLUGINS.md
+  s_f18b77d03151af::t_1f589d8d10cd84 37-38,60,77-95,108-118
+  s_f18b77d03151af::t_dc253d7a2baa55 119
+packages/server/src/actions.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 12,18,82-96,140,185,194,207,224-225,229-236,238-240,246-267
+  s_f18b77d03151af::t_8a0df66210a88f 268
+packages/server/src/schema.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 32,159,164-184,187-189,192-193,198-204
+  s_f18b77d03151af::t_c29c9fc751209d 205-206
+packages/server/src/service/action_coordination.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 125-131
+packages/server/src/host/worker/process.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 88-89,92-93,96-113,115-117,122,132,143-144,184-189,324-328,330,335-343,345
+packages/runtime/tools/run-app.ts
+  s_f18b77d03151af::t_1f589d8d10cd84 5,13-14
+packages/runtime/tests/server-binary.test.ts
+  s_f18b77d03151af::t_1f589d8d10cd84 1-19
+packages/server/src/data/space.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 46
+packages/server/tests/reload.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 1-918
+packages/server/src/data/transaction/indexes.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 3,5,10-11,57-61,63,66-69,71,76-77,79-80,103-177,196,274-281
+  s_f18b77d03151af::t_640646091178af 282-283
+packages/server/tests/workers.rs
+  s_f18b77d03151af::t_1f589d8d10cd84 200-203
+packages/cli/src/main.ts
+  s_f18b77d03151af::t_4b7966fcc8366b 128-132
+packages/cli/src/server.ts
+  s_f18b77d03151af::t_e2510cc05517c8 74-81,99-104
+packages/server/src/websocket.rs
+  s_f18b77d03151af::t_1bb133c58c503c 391-396
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1ed6b4c37fde0c5b2eb32b0eef101b2f43b2b15",
+  "prompts": {},
+  "sessions": {
+    "s_f18b77d03151af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d7-1115-7640-bacf-784813a31259",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
