@@ -15,6 +15,7 @@ import {
   pluginTsconfig,
 } from "./plugin-boundary.mjs";
 import ts from "typescript";
+import { BuildError, sdkDiagnosticPrefix } from "../../build/src/diagnostics.ts";
 
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 
@@ -55,11 +56,11 @@ function apiType(modules, files) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace, worker = false) {
+export async function bundleFeature(folder, namespace, worker = false, preparedTypes = false) {
   const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
-  checkPluginImports(pluginRoot);
+  await checkPluginImports(pluginRoot, undefined, [], !preparedTypes);
   const files = await scanFiles(root);
   // An explicit empty product backend is valid; a missing root still fails.
   const organized = isServerRoot(root);
@@ -79,13 +80,23 @@ export async function bundleFeature(folder, namespace, worker = false) {
   // Temporary entry/config live together and are always removed. They must
   // never be mistaken for author modules on the next build.
   const temporary = await mkdtemp(join(generated, "build-"));
+  const diagnostics = [];
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
     let source = featureSource(root, files, modules, hasSchema);
     let workerPlugins = [];
     if (worker) {
-      const result = await workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot });
+      const result = await workerSources({
+        root,
+        files,
+        modules,
+        hasSchema,
+        sdkRoot,
+        header,
+        pluginRoot,
+        diagnostics,
+      });
       source = result.source;
       workerPlugins = result.plugins;
     }
@@ -104,7 +115,7 @@ export async function bundleFeature(folder, namespace, worker = false) {
       env: "disable",
       allowUnresolved: [],
       plugins: [
-        bunPluginBoundary(pluginRoot),
+        bunPluginBoundary(pluginRoot, diagnostics),
         ...workerPlugins,
         {
           name: "stable-feature-entry",
@@ -135,28 +146,36 @@ export async function bundleFeature(folder, namespace, worker = false) {
       bundle: join(root, "dist/bundle.js"),
       api: join(generated, "api.ts"),
     };
+  } catch (error) {
+    if (diagnostics.length) throw new BuildError(diagnostics, { cause: error });
+    throw error;
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
 }
 
 if (import.meta.main) {
+  const args = process.argv.slice(2);
+  const preparedTypes = args.at(-1) === "--prepared-types";
+  if (preparedTypes) args.pop();
   if (
-    process.argv.length !== 3 &&
-    !(
-      [5, 6].includes(process.argv.length) &&
-      process.argv[3] === "--plugin" &&
-      (process.argv.length === 5 || process.argv[5] === "--worker")
-    )
+    args.length !== 1 &&
+    !([3, 4].includes(args.length) && args[1] === "--plugin" && (args.length === 3 || args[3] === "--worker"))
   ) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
   // from either the repository root or the feature's own moon configuration.
-  const feature = resolve(sdkRoot, "../..", process.argv[2]);
+  const feature = resolve(sdkRoot, "../..", args[0]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker");
+  try {
+    await bundleFeature(feature, args[2], args[3] === "--worker", preparedTypes);
+  } catch (error) {
+    if (preparedTypes && error instanceof BuildError)
+      console.error(sdkDiagnosticPrefix + JSON.stringify(error.diagnostics));
+    throw error;
+  }
 }
 
 async function scanFiles(root) {
@@ -183,6 +202,19 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
     { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
   );
   const paths = pluginCompilerOptions(featurePluginRoot(root), inherited?.options ?? {}).paths;
+  const consoleTypes = join(temporary, "console.d.ts");
+  if (!worker) {
+    await Bun.write(
+      consoleTypes,
+      `interface Console {
+      log(...args: unknown[]): void;
+      info(...args: unknown[]): void;
+      warn(...args: unknown[]): void;
+      error(...args: unknown[]): void;
+      debug(...args: unknown[]): void;
+    }\ndeclare var console: Console;\n`,
+    );
+  }
   await Bun.write(
     config,
     JSON.stringify({
@@ -194,7 +226,12 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
         noEmit: true,
         ...(worker ? { typeRoots: [join(sdkRoot, "../../node_modules/@types")] } : {}),
       },
-      files: [entry, join(generated, "api.ts"), ...files.map((file) => join(root, file))],
+      files: [
+        entry,
+        join(generated, "api.ts"),
+        ...(worker ? [] : [consoleTypes]),
+        ...files.map((file) => join(root, file)),
+      ],
       include: [],
       exclude: [],
     }),
@@ -203,7 +240,8 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
     stdout: "inherit",
     stderr: "inherit",
   });
-  if (check.exitCode !== 0) throw new Error("Feature type check failed (only ES2022 globals are allowed)");
+  if (check.exitCode !== 0)
+    throw new Error("Feature type check failed (only supported server globals are allowed)");
 }
 
 function featureSource(root, files, modules, hasSchema) {

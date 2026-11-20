@@ -1,4 +1,6 @@
 // Stdout belongs exclusively to the worker protocol, including during imports.
+import { realpathSync, writeSync } from "node:fs";
+import { SourceMap } from "node:module";
 import { format } from "node:util";
 import { pathToFileURL } from "node:url";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
@@ -12,15 +14,52 @@ const pending = new Map<
   { call: number; resolve(value: JsonValue): void; reject(error: Error): void }
 >();
 let next = 0;
+const stdoutReady = new Int32Array(new SharedArrayBuffer(4));
 function send(message: object) {
-  const line = JSON.stringify(message) + "\n";
-  if (Buffer.byteLength(line) > LIMIT) throw new Error("Worker message exceeds 1 MiB limit");
-  if (!process.stdout.write(line) && process.stdout.writableLength > 4 * LIMIT)
-    throw new Error("Worker output queue exceeds 4 MiB limit");
+  const line = Buffer.from(JSON.stringify(message) + "\n");
+  if (line.length > LIMIT) throw new Error("Worker message exceeds 1 MiB limit");
+  // Block the worker on a full pipe. The server drains it independently, and
+  // writing all frames this way keeps console output ahead of invocation replies.
+  for (let offset = 0; offset < line.length;) {
+    try {
+      offset += writeSync(1, line, offset, line.length - offset);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EAGAIN" && code !== "EWOULDBLOCK" && code !== "EINTR") throw error;
+      Atomics.wait(stdoutReady, 0, 0, 1);
+    }
+  }
 }
+function boundedText(text: string, limit: number) {
+  const bytes = Buffer.from(text);
+  if (bytes.length <= limit) return bytes.toString();
+  const marker = " [truncated]";
+  let end = limit - marker.length;
+  while ((bytes[end]! & 0xc0) === 0x80) end--;
+  return bytes.subarray(0, end).toString() + marker;
+}
+
 for (const level of ["log", "info", "warn", "error", "debug"] as const)
-  console[level] = (...args: unknown[]) => send({ type: "log", level, text: format(...args).slice(0, 8192) });
-const { functions } = (await import(pathToFileURL(process.argv[2]!).href)) as { functions: FunctionRegistry };
+  console[level] = (...args: unknown[]) =>
+    send({ type: "log", level, text: boundedText(format(...args), 8192) });
+const workerPath = realpathSync(process.argv[2]!);
+const { functions, workerSourceMap } = (await import(pathToFileURL(workerPath).href)) as {
+  functions: FunctionRegistry;
+  workerSourceMap?: ConstructorParameters<typeof SourceMap>[0];
+};
+const sourceMap = workerSourceMap && new SourceMap(workerSourceMap);
+
+function mapFrame(frame: string) {
+  return frame.replace(/(.+):(\d+):(\d+)(\)?$)/, (match, prefix: string, line, column, tail) => {
+    if (!sourceMap || !prefix.endsWith(workerPath)) return match;
+    const entry = sourceMap.findEntry(Number(line) - 1, Number(column) - 1);
+    if (!("originalSource" in entry)) return match;
+    return (
+      prefix.slice(0, -workerPath.length) +
+      `${entry.originalSource}:${entry.originalLine + 1}:${entry.originalColumn + 1}${tail}`
+    );
+  });
+}
 
 function retire(id: number) {
   calls.delete(id);
@@ -57,7 +96,12 @@ async function invoke(id: number, name: string, args: JsonValue) {
     const value = await invokeFunction(functions, { name, args }, host);
     send({ type: "result", id, value });
   } catch (error) {
-    send({ type: "result", id, error: error instanceof Error ? error.message : String(error) });
+    const message = error instanceof Error ? error.message : String(error);
+    const stack =
+      error instanceof Error && typeof error.stack === "string"
+        ? error.stack.split("\n", 33).slice(1).map(mapFrame).join("\n")
+        : "";
+    send({ type: "result", id, error: boundedText(stack ? `${message}\n${stack}` : message, 16 * 1024) });
   } finally {
     retire(id);
   }

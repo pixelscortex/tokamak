@@ -4,7 +4,16 @@ import ts from "typescript";
 import { dirname, join, sep } from "node:path";
 import { bunPluginBoundary, pluginCompilerOptions } from "./plugin-boundary.mjs";
 
-export async function workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot }) {
+export async function workerSources({
+  root,
+  files,
+  modules,
+  hasSchema,
+  sdkRoot,
+  header,
+  pluginRoot,
+  diagnostics,
+}) {
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
@@ -76,7 +85,7 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
       outdir: join(root, "dist"),
       naming: name,
       plugins: [
-        bunPluginBoundary(pluginRoot),
+        bunPluginBoundary(pluginRoot, diagnostics),
         {
           name: "worker-source",
           setup(build) {
@@ -94,6 +103,17 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
       ],
     });
     if (!result.success) throw new AggregateError(result.logs, "Worker bundle failed");
+    // The server executes a verified snapshot under a different filename.
+    // Keep the separate map asset and expose it to the worker for stack mapping.
+    if (sourcemap === "external") {
+      const script = join(root, "dist", name);
+      const map = await Bun.file(script + ".map").json();
+      delete map.sourcesContent;
+      await Bun.write(
+        script,
+        (await Bun.file(script).text()) + `\nexport const workerSourceMap = ${JSON.stringify(map)};\n`,
+      );
+    }
   }
   const source =
     header +

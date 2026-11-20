@@ -29,9 +29,7 @@ struct Index {
 // The schema is produced by plugin code, so its size is untrusted. Installing
 // it runs natively under the catalog gate, outside the JS execution budget, and
 // every installed index is maintained on every later write to its table. These
-// caps bound that work before any transaction is opened. They limit one
-// schema; indexes retained from removed declarations are not counted until
-// dropping indexes exists.
+// caps bound the declarations before any transaction is opened.
 const MAX_TABLES: usize = 256;
 const MAX_INDEXES_PER_TABLE: usize = 32;
 const MAX_INDEX_FIELDS: usize = 16;
@@ -158,30 +156,52 @@ impl Schema {
         tx: &mut Transaction,
         space: &DataSpace,
     ) -> Result<Option<String>, Error> {
+        let mut declared = BTreeMap::new();
         for (name, definition) in &self.tables {
             let table = space
                 .table(&Table::new(name).map_err(|e| invalid(e.to_string()))?)
                 .map_err(|e| invalid(e.to_string()))?;
+            declared.insert(table, (name, definition));
+        }
+
+        let names = declared
+            .iter()
+            .map(|(table, (_, definition))| {
+                (
+                    table.as_str(),
+                    definition
+                        .indexes
+                        .iter()
+                        .map(|index| index.name.as_str())
+                        .collect(),
+                )
+            })
+            .collect();
+        Box::pin(tx.drop_undeclared_indexes(space, &names))
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+
+        for (table, (name, definition)) in &declared {
             for index in &definition.indexes {
                 let fields = index.fields.iter().map(String::as_str).collect::<Vec<_>>();
-                let context = |reason: &str| {
-                    format!(
-                        "Plugin {} schema index {name}.{}: {reason}",
-                        space.owner().unwrap_or("<legacy>"),
-                        index.name
-                    )
-                };
-                let conflict =
-                    Box::pin(tx.try_define_index(&table, &index.name, &fields, index.unique))
-                        .await
-                        .map_err(|e| invalid(context(&e.to_string())))?;
-                if let Some(reason) = conflict {
-                    return Ok(Some(context(reason)));
-                }
+                Box::pin(tx.define_index(table, &index.name, &fields, index.unique))
+                    .await
+                    .map_err(|error| index_error(space, name, &index.name, error))?;
             }
         }
+        // Index edits never request a reset. Keep the startup reset path for
+        // schema incompatibilities that cannot be applied to the stored data.
         Ok(None)
     }
+}
+
+fn index_error(space: &DataSpace, table: &str, index: &str, error: crate::data::Error) -> Error {
+    let plugin = space.owner().unwrap_or("<legacy>");
+    let message = format!("Plugin {plugin} schema index {table}.{index}: {error}");
+    if matches!(error, crate::data::Error::BackfillUniqueViolation { .. }) {
+        return Error::IndexBackfill(message);
+    }
+    invalid(message)
 }
 
 pub(crate) fn log_reset(reason: &str) {

@@ -1,123 +1,18 @@
-import { lstat, readFile } from "node:fs/promises";
-import { isIP } from "node:net";
-import { join } from "node:path";
+import {
+  ConnectionError,
+  type Endpoint,
+  httpAddress,
+  inspectLocalServer,
+  json,
+  loopback,
+  request,
+  type RequestOptions,
+  ServerRequestError,
+} from "../../runtime/tools/server-discovery";
 import { CommandError } from "./command";
 import { dataFolder } from "./data";
-import { processIsAlive } from "./process";
 
-function httpAddress(address: string) {
-  let url: URL;
-  try {
-    url = new URL(address.includes("://") ? address : `http://${address}`);
-  } catch {
-    throw new ServerRequestError("Invalid server address");
-  }
-  if (url.protocol === "ws:") url.protocol = "http:";
-  if (url.protocol === "wss:") url.protocol = "https:";
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
-    throw new ServerRequestError("Expected an HTTP or HTTPS server address without credentials");
-  return url;
-}
-
-function optionalString(value: unknown): value is string | null | undefined {
-  return value === null || value === undefined || typeof value === "string";
-}
-
-function discovery(value: unknown) {
-  if (!value || typeof value !== "object") throw new Error("Invalid local server discovery");
-  const { pid, url, bundleHash, buildId, pluginRoot } = value as Record<string, unknown>;
-  if (
-    typeof pid !== "number" ||
-    !Number.isInteger(pid) ||
-    pid < 1 ||
-    pid > 0x7fffffff ||
-    typeof url !== "string" ||
-    typeof bundleHash !== "string" ||
-    !/^[a-f0-9]{64}$/i.test(bundleHash) ||
-    !optionalString(buildId) ||
-    !optionalString(pluginRoot)
-  )
-    throw new Error("Invalid local server identity");
-  return { pid, url, bundleHash, buildId: buildId ?? null, pluginRoot: pluginRoot ?? null };
-}
-
-export async function readToken(folder: string) {
-  const file = join(folder, "server.token");
-  const metadata = await lstat(file);
-  if (!metadata.isFile() || (process.platform !== "win32" && (metadata.mode & 0o077) !== 0))
-    throw new Error("Local server token must be a private regular file");
-  const token = await readFile(file, "utf8");
-  if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Invalid local server token");
-  return token;
-}
-
-type Endpoint = { url: URL; token: string; direct?: boolean };
-
-class ServerRequestError extends Error {}
-class ConnectionError extends ServerRequestError {}
-const noProxy = { proxy: "" };
-
-export async function inspectLocalServer(folder: string) {
-  const source = await readFile(join(folder, "server.json"), "utf8").catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return undefined;
-    throw error;
-  });
-  if (source === undefined) return;
-  const identity = discovery(JSON.parse(source));
-  const ws = new URL(identity.url);
-  if (
-    ws.protocol !== "ws:" ||
-    ws.username ||
-    ws.password ||
-    !identity.url.endsWith("/ws") ||
-    ws.pathname !== "/ws" ||
-    ws.search ||
-    ws.hash ||
-    !(ws.hostname === "[::1]" || (isIP(ws.hostname) === 4 && ws.hostname.startsWith("127.")))
-  )
-    throw new Error("Invalid local server discovery address");
-  if (!processIsAlive(identity.pid)) return;
-  const token = await readToken(folder);
-  const endpoint = { url: httpAddress(identity.url), token, direct: true };
-  try {
-    const health = discovery(await get("/health", endpoint));
-    if (JSON.stringify(health) !== JSON.stringify(identity)) throw new Error("Local server identity changed");
-  } catch (error) {
-    if (!(error instanceof ConnectionError)) throw error;
-    return processIsAlive(identity.pid) ? { identity, responsive: false as const } : undefined;
-  }
-  return { identity, responsive: true as const, endpoint };
-}
-
-async function request(path: string, endpoint: Endpoint, init: RequestInit = {}) {
-  const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${endpoint.token}`);
-  try {
-    return await fetch(new URL(path, endpoint.url), {
-      ...init,
-      ...(endpoint.direct ? noProxy : {}),
-      headers,
-      signal: AbortSignal.timeout(5000),
-      redirect: "error",
-    });
-  } catch {
-    throw new ConnectionError("Could not connect to the server");
-  }
-}
-
-async function json(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    throw new ServerRequestError("Server returned invalid JSON");
-  }
-}
-
-async function get(path: string, endpoint: Endpoint) {
-  const response = await request(path, endpoint);
-  if (!response.ok) throw new ServerRequestError(`Server returned HTTP ${response.status}`);
-  return json(response);
-}
+export { inspectLocalServer, readToken } from "../../runtime/tools/server-discovery";
 
 export async function requestShutdown(endpoint: Endpoint) {
   try {
@@ -137,11 +32,49 @@ async function localEndpoint() {
   return server.endpoint;
 }
 
-export async function serverGet(path: string, explicit?: string): Promise<unknown> {
+export class ServerRefusal extends CommandError {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message, "tokamak plugin list");
+  }
+}
+
+async function pluginRequest(path: string, endpoint: Endpoint, body?: object) {
+  const response = await request(
+    path,
+    endpoint,
+    body
+      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+      : {},
+    body ? 30_000 : 5000,
+  );
+  if (body && response.status >= 400 && response.status < 500 && response.status !== 408) {
+    const result = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
+    throw new ServerRefusal(
+      typeof result?.error === "string" ? result.error : `Server refused reload (HTTP ${response.status})`,
+      result?.code,
+    );
+  }
+  if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
+  return json(response);
+}
+
+export function serverGet(path: string, explicit?: string) {
+  return serverRequest(path, explicit);
+}
+
+export function serverPost(path: string, body: object, explicit?: string) {
+  return serverRequest(path, explicit, body);
+}
+
+async function serverRequest(path: string, explicit?: string, body?: object): Promise<unknown> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
   if (!address) {
     const endpoint = await localEndpoint();
-    return get(path, endpoint).catch((error: Error) => {
+    return pluginRequest(path, endpoint, body).catch((error: Error) => {
+      if (error instanceof ServerRefusal) throw error;
       throw new CommandError(
         `Could not read ${path} from the local server: ${error.message}`,
         "tokamak server start",
@@ -150,9 +83,10 @@ export async function serverGet(path: string, explicit?: string): Promise<unknow
   }
   try {
     const token = process.env.TOKAMAK_TOKEN;
-    if (!token) throw new ServerRequestError("Set TOKAMAK_TOKEN for the selected server");
-    return await get(path, { url: httpAddress(address), token });
+    if (!token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
+    return await pluginRequest(path, { url: httpAddress(address), token }, body);
   } catch (error) {
+    if (error instanceof ServerRefusal) throw error;
     throw new CommandError(
       `Could not read ${path} from the selected server: ${error instanceof Error ? error.message : "Request failed"}`,
       "tokamak --help",
@@ -170,7 +104,7 @@ export async function memberRequest(
   operation: keyof typeof memberOperations,
   path: string,
   explicit?: string,
-  init?: RequestInit,
+  init?: RequestOptions,
 ) {
   const next = `tokamak ${operation} --help`;
   try {
@@ -179,14 +113,7 @@ export async function memberRequest(
       ? { url: httpAddress(address), token: process.env.TOKAMAK_TOKEN }
       : await localEndpoint();
     const { hostname, protocol } = endpoint.url;
-    if (
-      protocol === "http:" &&
-      !(
-        hostname === "localhost" ||
-        hostname === "[::1]" ||
-        (isIP(hostname) === 4 && hostname.startsWith("127."))
-      )
-    )
+    if (protocol === "http:" && !loopback(hostname))
       throw new ServerRequestError("Use HTTPS for a shared server");
     if (!endpoint.token) throw new ServerRequestError("Set TOKAMAK_TOKEN for the selected server");
     const response = await request(path, { ...endpoint, token: endpoint.token }, init);

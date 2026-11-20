@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { serverBinaryCandidates } from "../../../runtime/tools/server-binary";
 import { CommandError, type Command } from "../command";
 import { dataFolder } from "../data";
 import { ensure, localServerEnv, stop } from "../local-server";
@@ -13,8 +14,10 @@ const buildCommand = "cargo build --locked -p server --bin tokamak-server";
 
 function serverBinary() {
   const target = resolve(root, process.env.CARGO_TARGET_DIR ?? "target");
-  const name = process.platform === "win32" ? "tokamak-server.exe" : "tokamak-server";
-  const binary = ["debug", "release"].map((profile) => resolve(target, profile, name)).find(existsSync);
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  const binary = ["debug", "release"]
+    .flatMap((profile) => serverBinaryCandidates("start", profile, suffix, target))
+    .find(existsSync);
   if (!binary) throw new CommandError("Local server executable is missing", buildCommand);
   return binary;
 }

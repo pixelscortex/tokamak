@@ -63,14 +63,23 @@ keys schemas by plugin ID, keeping logical table names separate. The legacy
 single-bundle loader applies the same registry in its selected DataSpace.
 Field descriptions travel as metadata; writes do not enforce them (TKM-92).
 
-Repeated identical declarations are no-ops even after rows exist. New indexes
-on nonempty tables and changes to an existing index definition are incompatible.
-At startup, the loader clears the affected plugin's rows and indexes (including
-undeclared tables in its namespace) and installs the new schema in the same
-transaction. Legacy bundles without a namespace can only reset their declared,
-unnamespaced tables. Other plugins, kernel metadata, and identity files are not
-part of the reset. A live reload reports the incompatibility without resetting
-anything. Removed declarations alone still leave their indexes in storage.
+Repeated identical declarations are no-ops. At startup and reload, the server
+fills new indexes from stored rows, replaces changed definitions under the same
+name, and deletes undeclared indexes, including those on undeclared tables in
+the plugin's namespace. Legacy bundles without a namespace only remove indexes
+on their declared, unnamespaced tables. These changes preserve rows and do not
+trigger a schema reset.
+
+The server completes index changes in the schema transaction before publishing
+the new plugin version. Colliding writes receive a retryable conflict. Failed
+loads discard partial changes, leaving the old indexes and rows in place. A
+unique backfill that encounters duplicates reports the index and conflicting
+value. A failed reload of an active plugin leaves the old version installed.
+At startup the server skips the affected plugin and anything that requires it,
+including transitive dependents. Optional dependencies do not cause skips. Each
+reload retries skipped plugins, so a repair to stored rows takes effect even
+without a new build. The reload result reports any remaining skips and reasons
+under `skipped`.
 
 `db.query` retains `{table, where, order, limit}`. Indexed requests additionally
 carry `index: {name, eq: [{field, value}], range: [{field, operator, value}]}` and
@@ -80,9 +89,21 @@ Native query execution validates catalog existence and field order even for a
 zero limit. Indexed limits saturate at the native `u32::MAX` scan ceiling.
 Unindexed queries retain their JSON equality and creation-time ordering.
 
+### Known limits
+
+- A reload runs on the server's single command loop. While backfill runs, other
+  requests wait and are answered after the reload finishes. They are delayed,
+  not lost.
+- At startup each plugin's schema, indexes, and grants commit in its own
+  transaction. A fatal error in a later plugin leaves earlier plugins' changes
+  committed. Each plugin's transaction is all-or-nothing, and index changes do
+  not touch rows.
+- Large tables can make loading slow because the transaction holds index writes
+  in memory.
+
 ## Rust indexes
 
-Define indexes inside a write transaction before inserting table rows:
+Define indexes inside a write transaction:
 
 ```rust,ignore
 transaction.define_index(&messages, "by_channel_time", &["channel", "time"], false).await?;
@@ -105,7 +126,9 @@ sentinel, distinct from null. Regexes, closures, record IDs and other non-JSON-l
 values return `Error::Invalid` and poison the transaction at query execution.
 An unknown index or invalid bound also poisons the transaction, including
 limit-zero queries; all operands are validated before any empty-query shortcut. Index definitions are idempotent only when their fields and uniqueness
-match. New definitions on tables with rows are rejected: no backfill is run.
+match. A new or changed definition indexes all existing rows inside the write
+transaction under the exclusive catalog gate. A duplicate during backfill
+returns `Error::BackfillUniqueViolation { index, value }`.
 All document mutations maintain every table index in the same transaction.
 Every mutation (insert, keyed insert, patch, replace, delete and index definition)
 is guarded before doing work: an error, panic or cancellation before successful
@@ -124,8 +147,8 @@ A process-local catalog gate keeps definitions stable through a writer's
 outcome. Ordinary writers hold shared guards; index definitions require an
 exclusive guard and a snapshot that predates no committed writes. Conflicts
 return the same typed retryable storage error instead of waiting on another
-call-owned transaction. This protects empty-table definitions from concurrent
-inserts without making independent record inserts conflict. Read-only snapshots
+call-owned transaction. This protects index definitions and backfills from concurrent
+writes without making independent record inserts conflict. Read-only snapshots
 need no guard. A cancelled commit caller cannot release the gate early or advance
 an epoch ahead of storage publication. Rollback discards catalog, index and record
 writes without advancing epochs.

@@ -1,21 +1,20 @@
 import { test, expect, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
-import { cp, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 
 const connected = (page: Page) =>
   expect(page.getByRole("status", { name: "Connection status" })).toHaveText("127.0.0.1:43123");
 const rail = (page: Page) => page.getByRole("navigation", { name: "Views" });
 const tabs = (page: Page) => page.getByRole("navigation", { name: "Open pages" });
 
-// Chat is installed too and, being first in the catalog, owns "/". These tests open
-// the fixture by its address so chat never mounts (it creates a thread on first use).
+// Chat owns "/". Open the fixture by its address to avoid mounting Chat in the fixture window.
 const fixtureHome = "/p/integration-fixture";
 
 // Each project gets the same server, so assertions use the observed baseline.
-test("live threads, compiler views, regions, revision replacement and error containment", async ({
+test("live threads, compiler views, regions, per-plugin reload and error containment", async ({
   page,
   context,
-  request,
 }) => {
   await page.goto(fixtureHome);
   await connected(page);
@@ -40,38 +39,72 @@ test("live threads, compiler views, regions, revision replacement and error cont
   await expect(secondCount).toHaveText(`Fixture live threads: ${initial + 1}`);
   await expect(second.getByRole("listbox", { name: "Fixture threads" })).toContainText(title);
 
+  const chat = await context.newPage();
+  await chat.goto("/p/chat");
+  const composer = chat.getByRole("textbox", { name: "Message" });
+  await expect(composer).toBeEnabled();
+  const draft = "Draft survives another plugin's reload";
+  await composer.fill(draft);
+  const oldComposer = await composer.elementHandle();
+  const oldFixture = await fixture.elementHandle();
+
   const sentinel = crypto.randomUUID();
   await page.evaluate((value) => {
     (window as unknown as { documentSentinel: string }).documentSentinel = value;
   }, sentinel);
   const source = `${process.env.TOKAMAK_FIXTURE_SOURCE}/src/client/api.tsx`;
   const revision = `Fixture revision ${crypto.randomUUID()}`;
-  await writeFile(source, (await readFile(source, "utf8")).replace(/Fixture revision [^<]+/, revision));
-  const built = spawnSync(
-    "proto",
-    ["run", "bun", "--", "packages/build/src/build.ts", process.env.TOKAMAK_FIXTURE_SOURCE!],
-    { stdio: "inherit" },
+  // The new contribution name proves the other window applied the catalog.
+  const throwingTitle = `ThrowingView${crypto.randomUUID().replaceAll("-", "")}`;
+  await writeFile(
+    source,
+    (await readFile(source, "utf8"))
+      .replace(/Fixture revision [^<]+/, revision)
+      .replace(/export const ThrowingView\w* = view/, `export const ${throwingTitle} = view`),
   );
-  expect(built.status).toBe(0);
-  await cp(`${process.env.TOKAMAK_FIXTURE_SOURCE}/dist`, `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist`, {
-    recursive: true,
+  const reload = spawnSync("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts", "--reload"], {
+    encoding: "utf8",
   });
-  const reload = await request.post("http://127.0.0.1:43123/plugins/integration-fixture/reload", {
-    headers: { Authorization: `Bearer ${process.env.VITE_TOKAMAK_TOKEN}` },
-  });
-  expect(reload.ok()).toBe(true);
+  expect(reload.status, reload.stderr + reload.stdout).toBe(0);
   await expect(fixture.getByRole("heading", { name: revision, exact: true })).toBeVisible();
   expect(
     await page.evaluate(() => (window as unknown as { documentSentinel: string }).documentSentinel),
   ).toBe(sentinel);
   await expect(count).toHaveText(`Fixture live threads: ${initial + 1}`);
 
-  await rail(page).getByRole("link", { name: "ThrowingView", exact: true }).click();
+  await expect(rail(chat).getByRole("link", { name: throwingTitle, exact: true })).toBeVisible();
+  await expect(composer).toHaveValue(draft);
+  expect(await oldComposer!.evaluate((element) => element.isConnected)).toBe(true);
+  expect(await oldFixture!.evaluate((element) => element.isConnected)).toBe(false);
+  await chat.close();
+
+  await rail(page).getByRole("link", { name: throwingTitle, exact: true }).click();
   const failure = page.getByRole("alert", { name: "Plugin view error" });
   await expect(failure).toContainText("Deliberate fixture failure");
+  await expect(failure).toContainText("tokamak plugin logs integration-fixture");
+  const pluginLog = join(process.env.TOKAMAK_PLUGIN_LOG_DIR!, "integration-fixture.log");
+  await expect
+    .poll(async () => {
+      const log = await readFile(pluginLog, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return "";
+        throw error;
+      });
+      return log
+        .split("\n")
+        .slice(0, -1)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+    })
+    .toContainEqual(
+      expect.objectContaining({
+        source: "window",
+        level: "error",
+        text: expect.stringContaining("Deliberate fixture failure"),
+      }),
+    );
   await expect(failure.getByRole("button", { name: "Reload" })).toBeVisible();
   await expect(sidebar).toBeHidden();
-  await expect(header.getByRole("heading", { name: "ThrowingView" })).toBeVisible();
+  await expect(header.getByRole("heading", { name: throwingTitle })).toBeVisible();
   await connected(page);
   await second
     .getByRole("complementary", { name: "Sidebar" })

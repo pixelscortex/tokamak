@@ -3,6 +3,8 @@ import build from "./commands/build";
 import add from "./commands/add";
 import remove from "./commands/remove";
 import list from "./commands/list";
+import logs from "./commands/logs";
+import reload from "./commands/reload";
 import members from "./commands/members";
 import invite from "./commands/invite";
 import revoke from "./commands/revoke";
@@ -10,4 +12,4 @@ import { serverStart, serverStop, serverStatus } from "./commands/server";
 
 const peopleAndServer = [members, invite, revoke, serverStart, serverStop, serverStatus];
 
-export const commands: readonly Command[] = [build, add, remove, list, ...peopleAndServer];
+export const commands: readonly Command[] = [build, add, remove, list, reload, logs, ...peopleAndServer];

@@ -13,6 +13,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     Database(anyhow::Error),
     UniqueViolation { index: String },
+    BackfillUniqueViolation { index: String, value: String },
     Startup(String),
     Invalid(&'static str),
     ReadOnly,
@@ -53,6 +54,9 @@ impl fmt::Display for Error {
             Self::Database(error) => error.fmt(f),
             Self::UniqueViolation { index } => {
                 write!(f, "unique index `{index}` already contains that value")
+            }
+            Self::BackfillUniqueViolation { index, value } => {
+                write!(f, "unique index `{index}` already contains {value}")
             }
             Self::Startup(message) => f.write_str(message),
             Self::Invalid(message) => f.write_str(message),

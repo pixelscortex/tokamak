@@ -73,31 +73,16 @@ fn capability(directory: &Path) -> Result<String, Box<dyn std::error::Error>> {
 }
 
 async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    let path = match args.as_slice() {
-        [command] if command == "list" => "/plugins".to_owned(),
-        [command, id] if command == "reload" => {
-            server::data::DataSpace::plugin(id)?;
-            format!("/plugins/{id}/reload")
-        }
-        _ => {
-            return Err(
-                "Expected: tokamak-server plugin list | tokamak-server plugin reload <id>".into(),
-            );
-        }
-    };
-    let body = if args[0] == "list" {
-        None
-    } else {
-        Some(serde_json::json!({}))
-    };
-    println!("{}", local_request(&path, body).await?);
+    if args != ["list"] {
+        return Err(
+            "Expected: tokamak-server plugin list. For reload, run tokamak plugin reload.".into(),
+        );
+    }
+    println!("{}", local_request("/plugins").await?);
     Ok(())
 }
 
-async fn local_request(
-    path: &str,
-    body: Option<serde_json::Value>,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+async fn local_request(path: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let directory = local_directory()?;
     let identity: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("server.json"))?)?;
@@ -125,15 +110,11 @@ async fn local_request(
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(30))
         .build()?;
-    let request = if let Some(body) = body {
-        client
-            .post(url)
-            .header("content-type", "application/json")
-            .body(body.to_string())
-    } else {
-        client.get(url)
-    };
-    let response = request.bearer_auth(capability(&directory)?).send().await?;
+    let response = client
+        .get(url)
+        .bearer_auth(capability(&directory)?)
+        .send()
+        .await?;
     let status = response.status();
     let body = response.text().await?;
     if !status.is_success() {
@@ -176,7 +157,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nControl: tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]"
             );
             return Ok(None);
         }

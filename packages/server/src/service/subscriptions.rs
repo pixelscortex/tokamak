@@ -91,6 +91,9 @@ impl Coordinator {
 
             if sub.last.as_ref() != Some(&call.result) {
                 sub.last = Some(call.result.clone()); // serde_json structural equality; no hash dependency.
+                if let Err(error) = &call.result {
+                    self.log_function_failure(&name, error, call.nested_failure);
+                }
                 self.emit(
                     owner,
                     Event::Subscription {
@@ -163,6 +166,7 @@ impl Coordinator {
                 ),
                 reads: ReadSet::new(),
                 conflict: false,
+                nested_failure: None,
             }
         }
     }

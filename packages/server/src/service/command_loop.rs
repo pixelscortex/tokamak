@@ -31,6 +31,7 @@ impl Coordinator {
                         }
                     }
                     self.stop_actions().await;
+                    self.flush_plugin_logs().await;
 
                     let result = Box::pin(self.database.close())
                         .await
@@ -90,11 +91,20 @@ impl Coordinator {
         // Last-handle drop is also graceful: no invocation is abandoned at an
         // await point by a disappearing client/server handle.
         self.stop_actions().await;
+        self.flush_plugin_logs().await;
 
         let result = Box::pin(self.database.close())
             .await
             .map_err(|e| Error::Invalid(e.to_string()));
         self.closed.send_replace(Some(result));
+    }
+
+    async fn flush_plugin_logs(&self) {
+        if let Some(loaded) = &self.plugins {
+            for log in loaded.logs.values() {
+                log.flush().await;
+            }
+        }
     }
 
     async fn maintain_plugins(&mut self) {

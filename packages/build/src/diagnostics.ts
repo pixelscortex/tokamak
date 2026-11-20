@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type ts from "typescript";
+import ts from "typescript";
 
 export interface BuildDiagnostic {
   message: string;
@@ -10,7 +11,10 @@ export interface BuildDiagnostic {
 }
 
 export class BuildError extends Error {
-  constructor(readonly diagnostics: BuildDiagnostic[]) {
+  constructor(
+    readonly diagnostics: BuildDiagnostic[],
+    options?: ErrorOptions,
+  ) {
     super(
       diagnostics
         .map(
@@ -18,8 +22,32 @@ export class BuildError extends Error {
             `${file ? `${file}(${line},${column}): ` : ""}${code ? `error ${code}: ` : ""}${message}`,
         )
         .join("\n"),
+      options,
     );
   }
+}
+
+export const sdkDiagnosticPrefix = "Tokamak SDK diagnostics: ";
+
+export function sourceLocation(file: string, text: string, offset: number) {
+  const lines = text.slice(0, offset).split(/\r\n|\n|\r/);
+  return { file: resolve(file), line: lines.length, column: lines.at(-1)!.length + 1 };
+}
+
+export function locateImportError(error: unknown, importer: string, specifier: string) {
+  if (!(error instanceof BuildError)) return error;
+  const file = importer.split("?")[0]!;
+  let loc = { file: resolve(file), line: 1, column: 1 };
+  try {
+    const text = readFileSync(file, "utf8");
+    const imported = ts
+      .preProcessFile(text, true, true)
+      .importedFiles.find(({ fileName }) => fileName === specifier);
+    if (imported) loc = sourceLocation(file, text, imported.pos);
+  } catch {
+    // A virtual or generated importer may not exist on disk.
+  }
+  return new BuildError(error.diagnostics.map((diagnostic) => ({ ...loc, ...diagnostic })));
 }
 
 export function typescriptDiagnostics(
@@ -52,6 +80,14 @@ const unescapeXml = (value: string) =>
   value.replace(/&(amp|lt|gt|quot|apos);/g, (_, key) => xmlEntities[key]!);
 
 export function checkerDiagnostics(output: string, cwd: string): BuildDiagnostic[] {
+  const record = output
+    .split("\n")
+    .reverse()
+    .find((line) => line.startsWith(sdkDiagnosticPrefix));
+  if (record) {
+    const diagnostics: unknown = JSON.parse(record.slice(sdkDiagnosticPrefix.length));
+    if (Array.isArray(diagnostics)) return diagnostics;
+  }
   const tagged = /<error\b([^>]*)>([\s\S]*?)<\/error>/g;
   const blocks = [...output.matchAll(tagged)];
   if (blocks.length) {

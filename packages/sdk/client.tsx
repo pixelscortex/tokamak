@@ -27,20 +27,32 @@ export interface SlotDefinition<P extends object> {
 export function defineSlot<P extends object>(name: string): SlotDefinition<P> {
   return { name };
 }
+// Named so declaration emit can preserve the brand of a plugin's exported extension.
+export type ExtensionComponent<
+  P extends object,
+  Kind extends "fill" | "wrap" | "replace",
+> = (Kind extends "wrap" ? (original: Component<P>) => Component<P> : Component<P>) & {
+  [contributionBrand]: Kind;
+  target: Kind extends "fill" ? string : Component<P>;
+} & (Kind extends "fill" ? { options: { order?: number; id?: string } } : unknown);
+
 export function fill<P extends object>(
   slot: SlotDefinition<P>,
   options: { order?: number; id?: string },
   component: Component<P>,
-) {
+): ExtensionComponent<P, "fill"> {
   return Object.assign(component, { [contributionBrand]: "fill" as const, options, target: slot.name });
 }
 export function wrap<P extends object>(
   target: Component<P>,
   wrapper: (Original: Component<P>) => Component<P>,
-) {
+): ExtensionComponent<P, "wrap"> {
   return Object.assign(wrapper, { [contributionBrand]: "wrap" as const, target });
 }
-export function replace<P extends object>(target: Component<P>, replacement: Component<P>) {
+export function replace<P extends object>(
+  target: Component<P>,
+  replacement: Component<P>,
+): ExtensionComponent<P, "replace"> {
   return Object.assign(replacement, { [contributionBrand]: "replace" as const, target });
 }
 

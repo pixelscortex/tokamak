@@ -2,18 +2,17 @@ use super::*;
 
 impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
-        Self::read_reusing(directory, None)
+        Self::read_reusing(directory, Manifest::read(directory)?, None)
     }
 
     pub(super) fn read_reusing(
         directory: &Path,
+        (manifest, build_id): (Manifest, String),
         previous: Option<&Artifact>,
     ) -> Result<Self, Error> {
         let root = directory
             .canonicalize()
             .map_err(|e| invalid(e.to_string()))?;
-
-        let manifest = Manifest::read(&root)?;
 
         let names = manifest.validate()?;
 
@@ -63,12 +62,20 @@ impl Artifact {
 
         Ok(Self {
             manifest,
+            build_id,
+            source: root,
             bundle,
             assets,
             provides,
             consumes,
             permissions,
         })
+    }
+
+    pub fn types_asset(&self, name: &str) -> Option<Arc<Asset>> {
+        (self.manifest.entries.types.as_deref() == Some(name))
+            .then(|| self.assets.get(name).cloned())
+            .flatten()
     }
 
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,

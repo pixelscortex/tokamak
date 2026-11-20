@@ -6,6 +6,7 @@ use server::{
     Event, Server,
     data::{Database, Storage},
 };
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     io::{BufRead, BufReader, Write},
@@ -312,7 +313,173 @@ fn oversized_action_result_fails_only_its_own_call() {
     acceptance("oversize");
 }
 
-// TKM-44 hot reload x TKM-45 action lane: reloading must cancel the running
+fn edit_manifest(root: &std::path::Path, id: &str, edit: impl FnOnce(&mut Value)) {
+    let path = root.join(id).join("manifest.json");
+    let mut manifest = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    edit(&mut manifest);
+    std::fs::write(path, manifest.to_string()).unwrap();
+}
+
+fn install_reload_workers(root: &std::path::Path) {
+    // Use the real worker transport with a fixture that lets the test release
+    // each running action explicitly and returns the worker's process ID.
+    let entry = r#"
+        import { createInterface } from "node:readline";
+        import { existsSync, writeFileSync } from "node:fs";
+        const send = (frame) => console.log(JSON.stringify(frame));
+        for await (const line of createInterface({input: process.stdin})) {
+          const frame = JSON.parse(line);
+          if (frame.type === "invoke") {
+            const {id, args} = frame;
+            if (!args.wait) send({type: "result", id, value: process.pid});
+            else {
+              writeFileSync("started", "");
+              const timer = setInterval(() => {
+                if (!existsSync("release")) return;
+                clearInterval(timer);
+                send({type: "op", call: id, id, name: "action.runQuery", payload: {name: "b/ops:callerQuery", args: {}}});
+              }, 10);
+            }
+          } else if (frame.type === "opResult") {
+            const {id, error} = frame;
+            send(error ? {type: "result", id, error} : {type: "result", id, value: process.pid});
+          }
+        }
+    "#;
+    for id in ["a", "b"] {
+        edit_manifest(root, id, |manifest| {
+            manifest["plugin"]["runtime"] = json!("worker");
+            manifest["entries"]["worker"] =
+                json!({"entry":"worker-entry.js","code":"worker.js","map":"worker.js.map"});
+            manifest["entries"]["ui"] = json!({"code":"ui.js","map":"ui.js.map","css":"ui.css"});
+            for (name, contents) in [
+                ("worker-entry.js", entry),
+                ("worker.js", ""),
+                ("worker.js.map", "{}"),
+                ("ui.js", ""),
+                ("ui.js.map", "{}"),
+                ("ui.css", ""),
+            ] {
+                std::fs::write(root.join(id).join(name), contents).unwrap();
+                manifest["hashes"][name] = json!(format!("{:x}", Sha256::digest(contents)));
+            }
+        });
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reload_preserves_unchanged_workers_actions_and_assets() {
+    let installation = Installation::new();
+    let root = &installation.0;
+    install_reload_workers(root);
+    tokio::time::timeout(Duration::from_secs(20), async {
+        let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+        let database = Database::open(Storage::Memory).await.unwrap();
+        let server = Server::load_plugins(database, pool, root).await.unwrap();
+        let mut a = server.connect().await.unwrap();
+        let mut b = server.connect().await.unwrap();
+        let invoke = |session: &server::Session, id, name, wait| {
+            session
+                .sender()
+                .request(
+                    serde_json::from_value(
+                        json!({"type":"action", "id":id, "name":name, "args":{"wait":wait}}),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        };
+        let a_name = "a/ops:sleep";
+        let b_name = "b/ops:callerAction";
+        invoke(&a, 1, a_name, false);
+        invoke(&b, 1, b_name, false);
+        let a_pid = action_response(&mut a, 1).await.unwrap();
+        let b_pid = action_response(&mut b, 1).await.unwrap();
+        invoke(&a, 2, a_name, true);
+        invoke(&b, 2, b_name, true);
+        let data = root.parent().unwrap().join("plugin-data");
+        while !data.join("a/started").is_file() || !data.join("b/started").is_file() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let before = server.plugins().await.unwrap();
+        assert_eq!(server.reload_plugin("a".into()).await.unwrap(), before);
+        // A valid artifact with a refused grant fails after candidate inspection.
+        edit_manifest(root, "a", |m| {
+            m["plugin"]["permissions"] = json!(["net:example.com"])
+        });
+        assert!(server.reload_plugin("a".into()).await.is_err());
+        assert_eq!(server.plugins().await.unwrap(), before);
+        invoke(&a, 3, a_name, false);
+        invoke(&b, 3, b_name, false);
+        assert_eq!(action_response(&mut a, 3).await.unwrap(), a_pid);
+        assert_eq!(action_response(&mut b, 3).await.unwrap(), b_pid);
+
+        edit_manifest(root, "a", |m| m["plugin"]["version"] = json!("1.0.1"));
+        let after = server.reload_plugin("a".into()).await.unwrap();
+        assert_eq!(
+            action_response(&mut a, 2).await.unwrap_err(),
+            "Plugin action cancelled by reload"
+        );
+        invoke(&a, 4, a_name, false);
+        assert_ne!(action_response(&mut a, 4).await.unwrap(), a_pid);
+        std::fs::write(data.join("b/release"), "").unwrap();
+        assert_eq!(action_response(&mut b, 2).await.unwrap(), b_pid);
+        invoke(&b, 4, b_name, false);
+        assert_eq!(action_response(&mut b, 4).await.unwrap(), b_pid);
+        assert_reload_asset_addresses(&server, &before, &after).await;
+        drop((a, b));
+        server.close().await.unwrap();
+    })
+    .await
+    .expect("reload/action interaction timeout");
+}
+
+async fn assert_reload_asset_addresses(server: &Server, before: &Value, after: &Value) {
+    let manifest = |catalog: &Value, id: &str| {
+        catalog["plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|plugin| plugin["plugin"]["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    for field in ["uiUrl", "stylesheetUrl"] {
+        assert_eq!(manifest(after, "b")[field], manifest(before, "b")[field]);
+        assert_ne!(manifest(after, "a")[field], manifest(before, "a")[field]);
+    }
+    let revision = manifest(before, "b")["revision"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        server
+            .plugin_asset_at("b".into(), "ui.js".into(), Some(revision))
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+async fn action_response(session: &mut server::Session, expected: u64) -> Result<Value, String> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match session.recv().await.unwrap().unwrap() {
+                Event::Response { id, result } => {
+                    assert_eq!(id, expected);
+                    return result;
+                }
+                Event::PluginChanged { .. } => {}
+                event => panic!("unexpected event: {event:?}"),
+            }
+        }
+    })
+    .await
+    .expect("action caller must receive a response")
+}
+
+// Reload must cancel the running
 // old-generation action (its grants may be revoked), deliver its failure on
 // the same session, announce the new generation, and leave a working lane.
 #[test]
@@ -340,6 +507,9 @@ fn reload_cancels_running_action_and_keeps_the_lane_usable() {
                 session.sender().request(action(1, 20_000)).unwrap();
                 // Let the action reach a worker before the generation swap.
                 tokio::time::sleep(Duration::from_millis(200)).await;
+                edit_manifest(&installation.0, "a", |m| {
+                    m["plugin"]["version"] = json!("1.0.1")
+                });
                 server.reload_plugin("a".into()).await.unwrap();
                 let (mut changed, mut cancelled) = (false, None);
                 while !changed || cancelled.is_none() {

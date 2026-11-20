@@ -34,7 +34,7 @@ export class WebPluginHost implements PluginModuleHost {
     expandImporters(affected, importers);
     return affected;
   }
-  remove(names: Iterable<string>) {
+  remove(names: Iterable<string>, { keepImports = false } = {}) {
     for (const name of names) {
       const generation = this.generations.get(name);
       if (generation) {
@@ -45,7 +45,9 @@ export class WebPluginHost implements PluginModuleHost {
         for (const url of generation.modules.keys()) this.moduleImports.delete(url);
       }
       this.generations.delete(name);
-      this.imports.delete(name);
+      // A failed fetch may use a retired asset URL. Keep its observed edge so
+      // the next catalog can retire the importer and remount its view.
+      if (!keepImports) this.imports.delete(name);
       this.errors.delete(name);
     }
   }
@@ -112,6 +114,10 @@ export class WebPluginHost implements PluginModuleHost {
       let target = entry.n;
       if (target.startsWith("@plugins/")) {
         const [, id, ...rest] = target.split("/");
+        const dependency = moduleName(id!);
+        const dependencies = this.imports.get(name) ?? new Set();
+        dependencies.add(dependency);
+        this.imports.set(name, dependencies);
         const manifest = this.manifests().find((p) => p.plugin.id === id);
         if (!manifest?.entries.ui) {
           // A dynamic import of an absent plugin is optional: leave it to reject
@@ -120,10 +126,6 @@ export class WebPluginHost implements PluginModuleHost {
           throw new Error(`${name}: missing UI dependency ${target}`);
         }
         this.attachStyles(manifest, this.generation(moduleName(id!)));
-        const dependency = moduleName(id!);
-        const dependencies = this.imports.get(name) ?? new Set();
-        dependencies.add(dependency);
-        this.imports.set(name, dependencies);
         const suffix = rest.join("/");
         const path = ["", "ui", "client", "src/client/api", "src/client/api.ts"].includes(suffix)
           ? manifest.entries.ui.code
@@ -168,6 +170,43 @@ export class WebPluginHost implements PluginModuleHost {
       if (!generation.retired) this.notifyError(name, cause);
       throw cause;
     }
+  }
+  logRevision(id: string) {
+    return this.manifests().find((manifest) => manifest.plugin.id === id)?.logRevision;
+  }
+  errorOwner(filename: string, cause: unknown): string | undefined {
+    const pluginForUrl = (url: string) => {
+      for (const manifest of this.manifests()) {
+        const id = manifest.plugin.id;
+        if (this.generations.get(moduleName(id))?.urls.has(url)) return id;
+      }
+    };
+    // Browser stack frames carry the actual blob module URLs. Leave errors
+    // without a known module unattributed, even if a plugin view is open.
+    if (cause instanceof Error) {
+      for (const frame of cause.stack?.split("\n").reverse() ?? []) {
+        const url = frame.match(/blob:[^\s)]+?(?::\d+:\d+)(?=[\s)]|$)/)?.[0].replace(/:\d+:\d+$/, "");
+        const owner = url && pluginForUrl(url);
+        if (owner) return owner;
+      }
+    }
+    return pluginForUrl(filename);
+  }
+  reportError(id: string, revision: string | undefined, text: string) {
+    if (!this.endpoint.token || !revision) return;
+    const bytes = new Uint8Array(8192);
+    const { written } = new TextEncoder().encodeInto(text, bytes);
+    const body = new TextDecoder().decode(bytes.subarray(0, written));
+    // Use the same signed-in browser access as plugin assets. A text body
+    // keeps cross-origin desktop requests on the simple-request path.
+    const url = new URL(assetURL(this.endpoint, `/plugins/${encodeURIComponent(id)}/window-error`));
+    url.searchParams.set("revision", revision);
+    void fetch(url.href, {
+      method: "POST",
+      body,
+    }).catch(() => {
+      // Reporting is best effort if the window has lost its connection.
+    });
   }
   notifyError(name: string, cause: unknown) {
     const error = new Error(`${name}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });

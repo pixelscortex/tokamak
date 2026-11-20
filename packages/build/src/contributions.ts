@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import { readPluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
+import { pluginSlots, readPluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { clientEntry } from "./descriptor.ts";
 import { BuildError, typescriptDiagnostics } from "./diagnostics.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
@@ -64,7 +64,7 @@ export function uiContributions(root: string) {
     if (!kindType.isStringLiteral() || !(kindType.value in fields)) fail();
     const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
     const values = ["fill", "wrap", "replace"].includes(kind)
-      ? extensionOptions(declaration, kind, checker, fail)
+      ? extensionOptions(root, declaration, kind, checker, fail)
       : contributionOptions(declaration, fields[kind], optional[kind] ?? [], checker, fail);
     if (kind === "view") validateRoute(String(values.route!), fail);
     if (values.icon !== undefined) validateIcon(String(values.icon), fail);
@@ -231,6 +231,7 @@ function literalProperty(property: ts.ObjectLiteralElementLike, fail: () => neve
 }
 
 function extensionOptions(
+  root: string,
   declaration: ts.Declaration,
   kind: string,
   checker: ts.TypeChecker,
@@ -273,14 +274,10 @@ function extensionOptions(
   if (kind === "fill") {
     const d = symbol.valueDeclaration;
     const slot = d && ts.isVariableDeclaration(d) && d.initializer;
-    if (
-      !slot ||
-      !ts.isCallExpression(slot) ||
-      !slot.arguments[0] ||
-      !ts.isStringLiteralLike(slot.arguments[0])
-    )
-      return fail();
-    values.target = `${owner}.${slot.arguments[0].text}`;
+    const name = slot && ts.isCallExpression(slot) && slot.arguments[0];
+    const slotName = name && ts.isStringLiteralLike(name) ? name.text : pluginSlots(root, owner)[exported];
+    if (typeof slotName !== "string") return fail();
+    values.target = `${owner}.${slotName}`;
     const options = unwrap(init.arguments[1]);
     if (!options || !ts.isObjectLiteralExpression(options)) return fail();
     for (const p of options.properties) {

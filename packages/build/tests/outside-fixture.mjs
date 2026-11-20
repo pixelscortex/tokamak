@@ -15,9 +15,10 @@ export async function withPlugin(check) {
   }
 }
 
-export function build(plugin) {
+export function build(plugin, env = {}) {
   const result = Bun.spawnSync([process.execPath, "packages/build/src/build.ts", plugin], {
     cwd: workspace,
+    env: { ...process.env, TOKAMAK_SERVER_DIR: join(plugin, ".test-server"), ...env },
     stdout: "pipe",
     stderr: "pipe",
   });

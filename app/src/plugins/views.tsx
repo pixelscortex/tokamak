@@ -66,6 +66,7 @@ export function createPluginShell(
   return createRoot((dispose) => {
     stop = dispose;
     const host: WebPluginHost = new WebPluginHost(endpoint, () => loader.metadata().plugins);
+    watchUnhandledPluginErrors(host);
     const loader: PluginLoader = createPluginLoader(host, serverAssets(endpoint, source));
     const navigation = routerFacade(routing.router);
     const views = createMemo(() =>
@@ -126,27 +127,69 @@ export function createPluginShell(
   });
 }
 
+function watchUnhandledPluginErrors(host: WebPluginHost) {
+  const unhandled = (event: ErrorEvent | PromiseRejectionEvent) => {
+    const cause = "reason" in event ? event.reason : event.error;
+    const plugin = host.errorOwner("filename" in event ? event.filename : "", cause);
+    if (plugin)
+      host.reportError(
+        plugin,
+        host.logRevision(plugin),
+        describe(cause ?? ("message" in event ? event.message : "Unhandled rejection")),
+      );
+  };
+  window.addEventListener("error", unhandled);
+  window.addEventListener("unhandledrejection", unhandled);
+  onCleanup(() => {
+    window.removeEventListener("error", unhandled);
+    window.removeEventListener("unhandledrejection", unhandled);
+  });
+}
+
 export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
   const key = () => `${props.view.plugin}:${props.view.id}:${props.shell.loader.version(props.view.plugin)}`;
   return (
     <Show keyed when={key()}>
-      {(_key) => (
-        <Errored
-          fallback={(cause) => (
-            <ViewFailure
-              view={props.view}
-              cause={cause()}
-              reload={() => props.shell.loader.reload(props.view.plugin)}
-            />
-          )}
-        >
-          <LoadedView {...props} />
-        </Errored>
-      )}
+      {(_key) => {
+        const revision = props.shell.host.logRevision(props.view.plugin);
+        return (
+          <Errored
+            fallback={(cause) => (
+              <ViewFailure
+                view={props.view}
+                cause={cause()}
+                report={(text) => props.shell.host.reportError(props.view.plugin, revision, text)}
+                reload={() => props.shell.loader.reload(props.view.plugin)}
+              />
+            )}
+          >
+            <LoadedView {...props} revision={revision} />
+          </Errored>
+        );
+      }}
     </Show>
   );
 }
-function ViewFailure(props: { view: PluginView; cause: unknown; reload(): void }) {
+function ViewFailure(props: {
+  view: PluginView;
+  cause: unknown;
+  reload(): void;
+  report(text: string): void;
+}) {
+  const command = () => `tokamak plugin logs ${props.view.plugin}`;
+  createEffect(
+    () => describe(props.cause),
+    (text) => props.report(text),
+  );
+  const [copyStatus, setCopyStatus] = createSignal("");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command());
+      setCopyStatus("Copied plugin log command.");
+    } catch {
+      setCopyStatus("Could not copy plugin log command.");
+    }
+  };
   return (
     <div
       role="alert"
@@ -165,13 +208,18 @@ function ViewFailure(props: { view: PluginView; cause: unknown; reload(): void }
       <Button variant="primary" onClick={() => props.reload()}>
         Reload
       </Button>
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <code class="text-data break-all">{command()}</code>
+        <Button onClick={() => void copy()}>Copy plugin log command</Button>
+        <span role="status">{copyStatus()}</span>
+      </div>
     </div>
   );
 }
 function describe(cause: unknown): string {
   return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
 }
-function LoadedView(props: { shell: PluginShell; view: PluginView }) {
+function LoadedView(props: { shell: PluginShell; view: PluginView; revision?: string }) {
   const [module, setModule] = createSignal<ModuleExports>();
   const [failure, setFailure] = createSignal<{ cause: unknown }>();
   let alive = true;
@@ -211,6 +259,7 @@ function LoadedView(props: { shell: PluginShell; view: PluginView }) {
           <OwnedView
             shell={props.shell}
             plugin={props.view.plugin}
+            revision={props.revision}
             component={component as Component<Record<string, unknown>>}
           />
         );
@@ -221,6 +270,7 @@ function LoadedView(props: { shell: PluginShell; view: PluginView }) {
 function OwnedView(props: {
   shell: PluginShell;
   plugin: string;
+  revision?: string;
   component: Component<Record<string, unknown>>;
 }) {
   let dispose = () => {};
@@ -228,6 +278,9 @@ function OwnedView(props: {
   return createRoot((stop): JSX.Element => {
     dispose = stop;
     onCleanup(props.shell.host.own(props.plugin, stop));
+    const revision = props.revision;
+    const reportCallbackError = (cause: unknown) =>
+      props.shell.host.reportError(props.plugin, revision, describe(cause));
     const shortcuts = new Map<string, Set<() => void>>();
     const registerShortcut = (key: string, handler: () => void) => {
       const handlers = shortcuts.get(key) ?? new Set();
@@ -254,9 +307,9 @@ function OwnedView(props: {
       event.preventDefault();
       for (const handler of handlers) {
         try {
-          handler();
+          void Promise.resolve(handler()).catch(reportCallbackError);
         } catch (cause) {
-          props.shell.host.notifyError(`@plugins/${props.plugin}/ui`, cause);
+          reportCallbackError(cause);
         }
       }
     };

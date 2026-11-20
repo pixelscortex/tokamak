@@ -31,7 +31,13 @@ impl Installation {
         for id in ["a", "b"] {
             let target = path.join(id);
             std::fs::create_dir(&target).unwrap();
-            for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+            for file in [
+                "manifest.json",
+                "bundle.js",
+                "bundle.js.map",
+                "api.ts",
+                "public.d.ts",
+            ] {
                 std::fs::copy(source.join(id).join("dist").join(file), target.join(file)).unwrap();
             }
         }
@@ -62,7 +68,7 @@ fn built() -> PathBuf {
     static ROOT: OnceLock<PathBuf> = OnceLock::new();
     ROOT.get_or_init(|| {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for id in ["a", "b"] {
+        for id in ["b", "a"] {
             let output = std::process::Command::new("proto")
                 .args([
                     "run",
@@ -804,20 +810,25 @@ fn assert_authenticated_plugin_controls(base: &str, binary: &str, local: &std::p
                 404,
                 "backend source must never be a client asset"
             );
-            for command in [vec!["plugin", "list"], vec!["plugin", "reload", "b"]] {
-                let output = std::process::Command::new(binary)
-                    .args(command)
-                    .env("TOKAMAK_SERVER_DIR", local)
-                    .output()
-                    .unwrap();
-                assert!(
-                    output.status.success(),
-                    "{}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
-                assert_eq!(metadata["plugins"].as_array().unwrap().len(), 2);
-            }
+            let output = std::process::Command::new(binary)
+                .args(["plugin", "list"])
+                .env("TOKAMAK_SERVER_DIR", local)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(metadata["plugins"].as_array().unwrap().len(), 2);
+            let old_command = std::process::Command::new(binary)
+                .args(["plugin", "reload", "b"])
+                .env("TOKAMAK_SERVER_DIR", local)
+                .output()
+                .unwrap();
+            assert!(!old_command.status.success());
+            assert!(String::from_utf8_lossy(&old_command.stderr).contains("tokamak plugin reload"));
             // Shutdown may close the HTTP acknowledgement while stopping sockets.
             let _ = client
                 .post(format!("{base}/shutdown"))
@@ -872,7 +883,13 @@ async fn local_server_skips_missing_and_unbuilt_index_entries_and_prefers_the_in
     let indexed = local.join("indexed");
     let dist = indexed.join("dist");
     std::fs::create_dir_all(&dist).unwrap();
-    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+    for file in [
+        "manifest.json",
+        "bundle.js",
+        "bundle.js.map",
+        "api.ts",
+        "public.d.ts",
+    ] {
         std::fs::copy(installed.0.join("a").join(file), dist.join(file)).unwrap();
     }
     let manifest = dist.join("manifest.json");
@@ -1047,7 +1064,13 @@ fn index_test_artifact(
     let folder = local.join(folder);
     let dist = folder.join("dist");
     std::fs::create_dir_all(&dist).unwrap();
-    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+    for file in [
+        "manifest.json",
+        "bundle.js",
+        "bundle.js.map",
+        "api.ts",
+        "public.d.ts",
+    ] {
         std::fs::copy(installed.0.join("a").join(file), dist.join(file)).unwrap();
     }
     let manifest = dist.join("manifest.json");
