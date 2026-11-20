@@ -451,7 +451,13 @@ fn with_index(root: &Path, id: &str, unique: bool) {
 
 fn copy_worker(root: &Path, id: &str) {
     std::fs::create_dir(root.join(id)).unwrap();
-    for name in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+    for name in [
+        "manifest.json",
+        "bundle.js",
+        "bundle.js.map",
+        "api.ts",
+        "public.d.ts",
+    ] {
         std::fs::copy(root.join("b").join(name), root.join(id).join(name)).unwrap();
     }
     edit_manifest(root, id, |m| m["plugin"]["id"] = json!(id));
