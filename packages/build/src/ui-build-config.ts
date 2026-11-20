@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { compileCss } from "./css.ts";
 import { clientEntry } from "./descriptor.ts";
+import { artifactSourcePath } from "./artifact-sources.ts";
 
 import { windowSharedImports } from "./shared-libraries.mts";
 
@@ -23,7 +24,13 @@ export function uiBuildConfig(root: string): UserConfig {
         fileName: () => "ui.js",
         cssFileName: "styles",
       },
-      rollupOptions: { output: { codeSplitting: false } },
+      rolldownOptions: {
+        experimental: { attachDebugInfo: "none" },
+        output: {
+          codeSplitting: false,
+          sourcemapPathTransform: (source, map) => artifactSourcePath(root, dirname(map), source),
+        },
+      },
     },
   };
 }

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { pluginBoundary } from "./plugin-boundary.ts";
 import { artifactBundle } from "./artifact-bundle.ts";
+import { artifactSourceMap, withoutBunPathComments } from "./artifact-sources.ts";
 import solid from "@solidjs/vite-plugin";
 import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
@@ -126,15 +127,9 @@ export function tokamak(
           // in QuickJS. Keep that source authoritative instead of importing user
           // schema modules into the build host or duplicating them in manifests.
           const bundle = resolve(server, "dist/bundle.js");
-          const source = await readFile(bundle, "utf8");
-          const map = JSON.parse(await readFile(`${bundle}.map`, "utf8"));
-          // SDK maps are relative to the server half’s dist/. Rebase source names when the
-          // unchanged bundle is packaged into app/dist; retain original contents.
-          map.sources = map.sources.map((source: string) =>
-            relative(resolve(root, "dist"), resolve(dirname(bundle), source))
-              .split(sep)
-              .join("/"),
-          );
+          const source = withoutBunPathComments(await readFile(bundle, "utf8"));
+          const mapFile = `${bundle}.map`;
+          const map = artifactSourceMap(root, mapFile, await readFile(mapFile, "utf8"));
           this.emitFile({ type: "asset", fileName: "bundle.js", source });
           this.emitFile({ type: "asset", fileName: "bundle.js.map", source: JSON.stringify(map) });
           // References are source-aware, matching the existing SDK contract.
@@ -145,13 +140,27 @@ export function tokamak(
           );
           this.emitFile({ type: "asset", fileName: "api.ts", source: api });
           if (plugin.runtime === "worker") {
-            for (const name of ["worker.js", "worker.js.map", "worker-entry.js"]) {
-              this.emitFile({
-                type: "asset",
-                fileName: name,
-                source: await readFile(resolve(server, "dist", name), "utf8"),
-              });
-            }
+            const workerMapFile = resolve(server, "dist/worker.js.map");
+            const workerMap = artifactSourceMap(root, workerMapFile, await readFile(workerMapFile, "utf8"));
+            const { sourcesContent: _sources, ...runtimeMap } = workerMap;
+            const worker = await readFile(resolve(server, "dist/worker.js"), "utf8");
+            const mapStart = worker.lastIndexOf("\nexport const workerSourceMap = ");
+            if (mapStart < 0) throw new Error("Missing runtime source map for the plugin worker");
+            this.emitFile({
+              type: "asset",
+              fileName: "worker.js",
+              source: `${withoutBunPathComments(worker.slice(0, mapStart))}\nexport const workerSourceMap = ${JSON.stringify(runtimeMap)};\n`,
+            });
+            this.emitFile({
+              type: "asset",
+              fileName: "worker.js.map",
+              source: JSON.stringify(workerMap),
+            });
+            this.emitFile({
+              type: "asset",
+              fileName: "worker-entry.js",
+              source: withoutBunPathComments(await readFile(resolve(server, "dist/worker-entry.js"), "utf8")),
+            });
             entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
           }
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };

@@ -24,6 +24,8 @@ const config =
       ? resolve(root, "vite.config.ts")
       : false;
 async function run() {
+  // CLI builds give authored Vite hooks their plugin's working directory.
+  if (mode) process.chdir(root);
   let directory: string | undefined;
   function verifyOutput(output: string) {
     if (mode && output !== resolve(realpathSync(root), "dist") && output !== resolve(root, "dist"))

@@ -39,6 +39,15 @@ function versionSyntax(version: string): boolean {
   );
 }
 
+export class PluginDefinitionError extends Error {
+  constructor(
+    readonly field: keyof PluginDefinition,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export function definePlugin(
   authored: Omit<PluginDefinition, "depends" | "optional"> & {
     readonly depends?: PluginDefinition["depends"] | readonly string[];
@@ -48,7 +57,7 @@ export function definePlugin(
   for (const key of ["depends", "optional"] as const) {
     const ids = authored[key];
     if (Array.isArray(ids) && (ids.some((id) => typeof id !== "string") || new Set(ids).size !== ids.length))
-      throw new Error(`Invalid plugin ${key} requirements`);
+      throw new PluginDefinitionError(key, `Invalid plugin ${key} requirements`);
   }
   let definition: PluginDefinition = {
     ...authored,
@@ -65,7 +74,7 @@ export function definePlugin(
     typeof definition.id !== "string" ||
     !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(definition.id)
   ) {
-    throw new Error("Plugin id must be a stable lowercase identifier");
+    throw new PluginDefinitionError("id", "Plugin id must be a stable lowercase identifier");
   }
   const fields = [
     "id",
@@ -89,7 +98,7 @@ export function definePlugin(
     throw new Error("Unsupported plugin descriptor field");
   }
   if (typeof definition.version !== "string" || !versionSyntax(definition.version)) {
-    throw new Error("Plugin version must be a semantic version");
+    throw new PluginDefinitionError("version", "Plugin version must be a semantic version");
   }
   validateRequirements(definition);
   validateLists(definition);
@@ -117,7 +126,7 @@ function validateRequirements(definition: PluginDefinition) {
           !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) || typeof range !== "string" || !range,
       )
     ) {
-      throw new Error(`Invalid plugin ${key} requirements`);
+      throw new PluginDefinitionError(key, `Invalid plugin ${key} requirements`);
     }
   }
 }
@@ -131,16 +140,16 @@ function validateLists(definition: PluginDefinition) {
         list.some((value) => typeof value !== "string" || !value) ||
         new Set(list).size !== list.length)
     )
-      throw new Error(`Invalid plugin ${key}`);
+      throw new PluginDefinitionError(key, `Invalid plugin ${key}`);
   }
 }
 
 function validateMetadata(definition: PluginDefinition) {
   if (definition.runtime !== undefined && definition.runtime !== "worker")
-    throw new Error("Invalid plugin runtime");
+    throw new PluginDefinitionError("runtime", "Invalid plugin runtime");
   for (const field of ["name", "description", "maintenance"] as const)
     if (definition[field] !== undefined && typeof definition[field] !== "string")
-      throw new Error(`Invalid plugin ${field}`);
+      throw new PluginDefinitionError(field, `Invalid plugin ${field}`);
   if (
     definition.api !== undefined &&
     (typeof definition.api !== "string" || !definition.api.startsWith("tokamak@"))

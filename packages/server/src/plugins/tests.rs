@@ -84,6 +84,9 @@ fn resolves_dependencies_optional_providers_and_private_assets() {
 }
 #[test]
 fn rejects_missing_incompatible_conflicting_cyclic_and_duplicate_plugins() {
+    let server = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+    let newer_patch = Version::new(server.major, server.minor, server.patch + 1);
+    let other_line = Version::new(server.major, server.minor + 1, 0);
     for (a, b, expected) in [
         (
             json!({"id":"a","version":"1.0.0","depends":{"missing":"*"}}),
@@ -117,6 +120,16 @@ fn rejects_missing_incompatible_conflicting_cyclic_and_duplicate_plugins() {
         ),
         (
             json!({"id":"a","version":"1.0.0","api":"tokamak@^9"}),
+            json!({"id":"b","version":"1.0.0"}),
+            "Incompatible host API",
+        ),
+        (
+            json!({"id":"a","version":"1.0.0","api":format!("tokamak@{newer_patch}")}),
+            json!({"id":"b","version":"1.0.0"}),
+            "Incompatible host API",
+        ),
+        (
+            json!({"id":"a","version":"1.0.0","api":format!("tokamak@{other_line}")}),
             json!({"id":"b","version":"1.0.0"}),
             "Incompatible host API",
         ),
