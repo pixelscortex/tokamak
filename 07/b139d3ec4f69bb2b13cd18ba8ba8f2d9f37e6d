@@ -1,0 +1,25 @@
+packages/cli/tests/discovery.test.mjs
+  s_99c048955442cf::t_cd2b4406552905 1-80
+packages/cli/src/server.ts
+  s_99c048955442cf::t_ff0b8bc9014755 4,78-83
+packages/runtime/tools/direct-http.ts
+  s_99c048955442cf::t_01300e2ca5ee2c 1-32
+packages/runtime/tools/local-server.ts
+  s_99c048955442cf::t_1511babbb5cb5c 6,56-58,102,126,192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "07b139d3ec4f69bb2b13cd18ba8ba8f2d9f37e6d",
+  "prompts": {},
+  "sessions": {
+    "s_99c048955442cf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f95a-ae94-7cf2-9034-28e7842f9b41",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
