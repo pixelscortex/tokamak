@@ -1,0 +1,21 @@
+packages/cli/src/commands/pack.ts
+  s_157eb2be319aa0::t_a3074efcc97a97 1,37
+packages/cli/tests/cli.test.mjs
+  s_157eb2be319aa0::t_a3074efcc97a97 1974
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55e7ac9439ab9eb922aaff6fc9da08febc37e0ea",
+  "prompts": {},
+  "sessions": {
+    "s_157eb2be319aa0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f99a-5e8f-7151-8abd-1420140f8f7b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
