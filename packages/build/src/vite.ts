@@ -110,6 +110,7 @@ export function tokamak(
               "--plugin",
               plugin.id,
               ...(plugin.runtime === "worker" ? ["--worker"] : []),
+              "--prepared-types",
             ],
             { stdio: "inherit" },
           );

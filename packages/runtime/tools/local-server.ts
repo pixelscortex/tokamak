@@ -2,9 +2,17 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { link, lstat, mkdir, open, readFile, rm, realpath, writeFile } from "node:fs/promises";
+import { request } from "node:http";
+import { Readable } from "node:stream";
 import { resolve } from "node:path";
 
-export type Identity = { pid: number; url: string; bundleHash: string; pluginRoot?: string };
+export type Identity = {
+  pid: number;
+  url: string;
+  bundleHash: string;
+  pluginRoot?: string | null;
+  buildId?: string | null;
+};
 
 export function localDirectory(binary: string, cwd = process.cwd()): string {
   const result = spawnSync(binary, ["--local-path"], {
@@ -46,6 +54,59 @@ function endpoint(identity: Identity, path: string): URL {
   return url;
 }
 
+// A one-use HTTP connection cannot inherit an environment proxy or follow a redirect.
+function direct(url: URL, capability: string, timeout: number, method = "GET"): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const outgoing = request(
+      url,
+      {
+        agent: false,
+        method,
+        signal: AbortSignal.timeout(timeout),
+        headers: { authorization: `Bearer ${capability}` },
+      },
+      (incoming) => {
+        const code = incoming.statusCode ?? 500;
+        const bodyless = code === 204 || code === 205 || code === 304;
+        if (bodyless) incoming.resume();
+        resolve(
+          new Response(bodyless ? null : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>), {
+            status: code,
+          }),
+        );
+      },
+    );
+    outgoing.on("error", reject);
+    outgoing.end();
+  });
+}
+
+function identityFields(identity: Identity) {
+  return (
+    identity &&
+    Number.isSafeInteger(identity.pid) &&
+    identity.pid > 0 &&
+    identity.pid <= 0x7fff_ffff &&
+    typeof identity.url === "string" &&
+    typeof identity.bundleHash === "string" &&
+    /^[a-f0-9]{64}$/i.test(identity.bundleHash) &&
+    (identity.pluginRoot === null ||
+      identity.pluginRoot === undefined ||
+      typeof identity.pluginRoot === "string") &&
+    (identity.buildId === null || identity.buildId === undefined || typeof identity.buildId === "string")
+  );
+}
+
+function alive(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
+}
+
 export async function status(directory: string): Promise<Identity | undefined> {
   let identity: Identity;
   try {
@@ -54,25 +115,25 @@ export async function status(directory: string): Promise<Identity | undefined> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  if (!Number.isSafeInteger(identity.pid) || identity.pid <= 0 || !/^[a-f0-9]{64}$/.test(identity.bundleHash))
-    throw new Error("Invalid local server discovery");
+  if (!identityFields(identity)) throw new Error("Invalid local server discovery");
   const url = endpoint(identity, "/health");
+  if (!alive(identity.pid)) return;
   const capability = await token(directory);
   let response: Response;
   try {
-    response = await fetch(url, {
-      headers: { authorization: `Bearer ${capability}` },
-      signal: AbortSignal.timeout(1000),
-    });
+    response = await direct(url, capability, 1000);
   } catch {
     return;
   }
   if (!response.ok) throw new Error(`Local server health refused (${response.status})`);
   const actual = (await response.json()) as Identity;
   if (
+    !identityFields(actual) ||
     actual.pid !== identity.pid ||
     actual.url !== identity.url ||
-    actual.bundleHash !== identity.bundleHash
+    actual.bundleHash !== identity.bundleHash ||
+    (actual.pluginRoot ?? null) !== (identity.pluginRoot ?? null) ||
+    (actual.buildId ?? null) !== (identity.buildId ?? null)
   ) {
     throw new Error("Local server identity does not match discovery");
   }
@@ -84,11 +145,7 @@ export async function status(directory: string): Promise<Identity | undefined> {
 export async function fetchLocal(directory: string, path: string): Promise<Response | undefined> {
   const identity = await status(directory);
   if (!identity) return;
-  return fetch(endpoint(identity, path), {
-    headers: { authorization: `Bearer ${await token(directory)}` },
-    redirect: "error",
-    signal: AbortSignal.timeout(3000),
-  });
+  return direct(endpoint(identity, path), await token(directory), 3000);
 }
 
 async function wait(): Promise<void> {
@@ -154,11 +211,7 @@ export async function stop(directory: string): Promise<void> {
   const capability = await token(directory);
   let response: Response | undefined;
   try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${capability}` },
-      signal: AbortSignal.timeout(5000),
-    });
+    response = await direct(url, capability, 5000, "POST");
   } catch {
     // Cancellation closes accepted HTTP I/O as well as WebSockets. A lost
     // acknowledgement is not proof of shutdown: still await the readiness

@@ -7,6 +7,9 @@ import { fetchLocal } from "../../runtime/tools/local-server.ts";
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -243,21 +246,39 @@ function pluginImport(id) {
   return match;
 }
 
+function typesHash(manifest, id) {
+  if (manifest?.plugin?.id !== id || manifest?.entries?.types !== "public.d.ts") return;
+  const hash = manifest?.hashes?.["public.d.ts"];
+  if (typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash)) return hash;
+}
+
 function neighbourTypes(root, id) {
   const parent = dirname(root);
+  const claims = [];
   for (const name of readdirSync(parent).sort()) {
-    const dist = resolve(parent, name, "dist");
+    const folder = resolve(parent, name);
+    if (folder === root) continue;
     try {
-      const manifest = JSON.parse(readFileSync(resolve(dist, "manifest.json"), "utf8"));
-      if (manifest.plugin?.id === id && manifest.entries?.types === "public.d.ts") {
-        const bytes = readFileSync(resolve(dist, "public.d.ts"));
-        if (createHash("sha256").update(bytes).digest("hex") === manifest.hashes?.["public.d.ts"])
-          return bytes.toString("utf8");
-      }
+      const manifest = JSON.parse(readFileSync(resolve(folder, "dist/manifest.json"), "utf8"));
+      const hash = typesHash(manifest, id);
+      if (hash) claims.push({ folder, hash });
     } catch (error) {
-      if (!["ENOENT", "ENOTDIR", "EACCES"].includes(error.code) && !(error instanceof SyntaxError))
+      if (!["ENOENT", "ENOTDIR", "EACCES", "EISDIR"].includes(error.code) && !(error instanceof SyntaxError))
         throw error;
     }
+  }
+  if (claims.length > 1)
+    throw new Error(
+      `Multiple built neighbours claim plugin "${id}": ${claims.map(({ folder }) => folder).join(", ")}`,
+    );
+  const claim = claims[0];
+  if (!claim) return;
+  try {
+    const bytes = readFileSync(resolve(claim.folder, "dist/public.d.ts"));
+    if (createHash("sha256").update(bytes).digest("hex") === claim.hash)
+      return { types: bytes.toString("utf8"), from: claim.folder };
+  } catch (error) {
+    if (!["ENOENT", "ENOTDIR", "EACCES", "EISDIR"].includes(error.code)) throw error;
   }
 }
 
@@ -278,10 +299,17 @@ async function localTypes(id) {
     const catalog = await fetchLocal(directory, "/plugins");
     if (!catalog?.ok) return;
     const { plugins, revision } = await catalog.json();
-    const manifest = plugins.find((entry) => entry.plugin.id === id);
-    if (manifest?.entries.types !== "public.d.ts" || !/^[0-9a-f]{64}$/.test(revision)) return;
+    const hash = typesHash(
+      plugins.find((entry) => entry?.plugin?.id === id),
+      id,
+    );
+    if (!hash || !/^[0-9a-f]{64}$/.test(revision)) return;
     const resource = await fetchLocal(directory, `/plugins/${id}/${revision}/assets/public.d.ts`);
-    if (resource?.ok) return resource.text();
+    if (resource?.ok) {
+      const bytes = Buffer.from(await resource.arrayBuffer());
+      if (createHash("sha256").update(bytes).digest("hex") === hash)
+        return { types: bytes.toString("utf8"), from: "the local server" };
+    }
   } catch {
     // Discovery can disappear between reading the identity and fetching the file.
   }
@@ -293,37 +321,64 @@ export function pluginSlots(root, id) {
   return JSON.parse(/^\/\/ Slots: (.*)$/m.exec(readFileSync(file, "utf8"))?.[1] ?? "{}");
 }
 
+function publishDependencyTypes(root, loaded) {
+  const target = generated(root);
+  if (!loaded.size && !existsSync(target)) return;
+  mkdirSync(dirname(target), { recursive: true });
+  const temp = mkdtempSync(resolve(dirname(target), "types-stage-"));
+  const next = resolve(temp, "next");
+  const previous = resolve(temp, "previous");
+  try {
+    mkdirSync(next);
+    for (const [id, { types, sides }] of loaded) {
+      const directory = resolve(next, id);
+      mkdirSync(directory);
+      writeFileSync(resolve(directory, "public.d.ts"), types);
+      for (const [side, declarations] of sides) {
+        writeFileSync(resolve(directory, `${side}-types.d.ts`), declarations);
+        writeFileSync(
+          resolve(directory, `${side}.d.ts`),
+          `/// <reference path="./${side}-types.d.ts" />\nexport * from "plugin-types:${id}/${side}/public";\n`,
+        );
+      }
+    }
+    if (existsSync(target)) renameSync(target, previous);
+    try {
+      renameSync(next, target);
+    } catch (error) {
+      if (existsSync(previous)) renameSync(previous, target);
+      throw error;
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+}
+
 async function declarePlugin(root, id, loaded, requireSide = true) {
   const [, dependency, side = "server"] = pluginImport(id);
-  const directory = resolve(generated(root), dependency);
   if (!loaded.has(dependency)) {
-    const types = neighbourTypes(root, dependency) ?? (await localTypes(dependency));
-    if (types === undefined) throw new Error(`Plugin import ${id}: build or install "${dependency}" first.`);
-    loaded.set(dependency, types);
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(resolve(directory, "public.d.ts"), types);
-    for (const imported of ts.preProcessFile(types, true, true).importedFiles) {
-      if (imported.fileName.startsWith("plugin:") && pluginImport(imported.fileName)[1] !== dependency)
-        await declarePlugin(root, imported.fileName, loaded);
-    }
+    const artifact = neighbourTypes(root, dependency) ?? (await localTypes(dependency));
+    if (!artifact) throw new Error(`Plugin import ${id}: build or install "${dependency}" first.`);
+    console.info(`Plugin types for ${dependency}: ${artifact.from}`);
+    loaded.set(dependency, { types: artifact.types, sides: new Map() });
   }
-  const types = loaded.get(dependency);
-  if (!types.includes(`declare module "plugin:${dependency}/${side}"`)) {
+  const { types, sides } = loaded.get(dependency);
+  if (sides.has(side)) return;
+  const sections = types.split(/^\/\/ Tokamak public (server|client) declarations\r?\n/m);
+  const index = sections.indexOf(side);
+  if (index < 0) {
     if (!requireSide) return;
     throw new Error(`Plugin import ${id}: "${dependency}" has no public ${side} API`);
   }
-  const sections = types.split(/^\/\/ Tokamak public (server|client) declarations\r?\n/m);
-  const index = sections.indexOf(side);
-  if (index < 0) throw new Error(`Invalid public declarations for ${dependency}`);
-  writeFileSync(resolve(directory, `${side}-types.d.ts`), sections[index + 1]);
-  writeFileSync(
-    resolve(directory, `${side}.d.ts`),
-    `/// <reference path="./${side}-types.d.ts" />\nexport * from "plugin-types:${dependency}/${side}/public";\n`,
-  );
+  const declarations = sections[index + 1];
+  sides.set(side, declarations);
+  for (const imported of ts.preProcessFile(declarations, true, true).importedFiles) {
+    if (imported.fileName.startsWith("plugin:")) await declarePlugin(root, imported.fileName, loaded);
+  }
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export async function checkPluginImports(root, warn = () => {}, dependencies = []) {
+export async function checkPluginImports(root, warn = () => {}, dependencies = [], prepareTypes = true) {
   root = resolve(root);
   const imports = new Set();
   const warned = new Set();
@@ -417,9 +472,17 @@ export async function checkPluginImports(root, warn = () => {}, dependencies = [
     }
   }
   walk(root);
+  if (!prepareTypes) return;
   const loaded = new Map();
-  for (const id of imports) await declarePlugin(root, id, loaded);
-  for (const id of dependencies) await declarePlugin(root, `plugin:${id}`, loaded, false);
+  try {
+    for (const id of imports) await declarePlugin(root, id, loaded);
+    for (const id of dependencies)
+      if (!loaded.has(id)) await declarePlugin(root, `plugin:${id}`, loaded, false);
+  } catch (error) {
+    publishDependencyTypes(root, new Map());
+    throw error;
+  }
+  publishDependencyTypes(root, loaded);
 }
 
 export function bunPluginReferences(root) {

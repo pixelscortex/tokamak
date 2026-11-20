@@ -119,7 +119,9 @@ from the shared library list, but cannot expose types from a plugin's own npm
 packages.
 
 The builder looks for a sibling folder whose `dist/manifest.json` declares the
-dependency's id. If it finds no built copy, it looks in the running local
+dependency's id. A built sibling always wins, even if the local server has a newer copy. The
+build prints where each dependency’s types came from. Duplicate sibling IDs
+fail with both paths. If it finds no built copy, it looks in the running local
 server's catalog using `server.json` and `server.token` in the desktop app's data
 folder. Set `TOKAMAK_SERVER_DIR` to use another data folder. The build copies the
 declarations into `.tokamak/types/` without opening the dependency's source.
