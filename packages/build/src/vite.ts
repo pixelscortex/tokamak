@@ -12,6 +12,7 @@ import solid from "@solidjs/vite-plugin";
 import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
 import { installPluginPackages, readPluginPackage } from "./plugin-packages.ts";
+import { publicTypes } from "./public-types.ts";
 import { publicFunctions } from "./exports.ts";
 import {
   readDescriptor,
@@ -75,7 +76,6 @@ export function tokamak(
       async buildStart() {
         const manifest = await readPluginPackage(root);
         if (manifest) await installPluginPackages(root, manifest);
-        checkPluginImports(root, console.warn);
         const descriptor = options.plugin ?? readDescriptor(root);
         if (!descriptor && !manifest) throw new Error("Expected plugin.ts or package.json");
         plugin = definePlugin(
@@ -84,6 +84,7 @@ export function tokamak(
             version: manifest.version ?? "0.1.0",
           },
         );
+        await checkPluginImports(root, console.warn, Object.keys(plugin.depends ?? {}));
         const server = serverDirectory(root);
         if (existsSync(resolve(root, "plugin.ts"))) {
           plugin = definePlugin({
@@ -109,6 +110,7 @@ export function tokamak(
               "--plugin",
               plugin.id,
               ...(plugin.runtime === "worker" ? ["--worker"] : []),
+              "--prepared-types",
             ],
             { stdio: "inherit" },
           );
@@ -149,6 +151,7 @@ export function tokamak(
           entries.backend = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
         }
         const functions = publicFunctions(root, plugin.exports);
+        entries.types = "public.d.ts";
         if (existsSync(resolve(root, "plugin.ts")))
           plugin = definePlugin({ ...plugin, provides: deriveProviders(root, plugin, functions) });
         this.emitFile({
@@ -156,6 +159,15 @@ export function tokamak(
           fileName: "manifest.json",
           source:
             JSON.stringify({ formatVersion: 1, plugin, entries, publicFunctions: functions }, null, 2) + "\n",
+        });
+      },
+      buildEnd(error) {
+        if (error) return;
+        // Report boundary failures from the bundle before checking the declarations.
+        this.emitFile({
+          type: "asset",
+          fileName: "public.d.ts",
+          source: publicTypes(root, plugin.id, options),
         });
       },
       generateBundle: {

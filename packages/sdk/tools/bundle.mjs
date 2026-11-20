@@ -55,11 +55,11 @@ function apiType(modules, files) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace, worker = false) {
+export async function bundleFeature(folder, namespace, worker = false, preparedTypes = false) {
   const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
-  checkPluginImports(pluginRoot);
+  await checkPluginImports(pluginRoot, undefined, [], !preparedTypes);
   const files = await scanFiles(root);
   // An explicit empty product backend is valid; a missing root still fails.
   const organized = isServerRoot(root);
@@ -141,22 +141,21 @@ export async function bundleFeature(folder, namespace, worker = false) {
 }
 
 if (import.meta.main) {
+  const args = process.argv.slice(2);
+  const preparedTypes = args.at(-1) === "--prepared-types";
+  if (preparedTypes) args.pop();
   if (
-    process.argv.length !== 3 &&
-    !(
-      [5, 6].includes(process.argv.length) &&
-      process.argv[3] === "--plugin" &&
-      (process.argv.length === 5 || process.argv[5] === "--worker")
-    )
+    args.length !== 1 &&
+    !([3, 4].includes(args.length) && args[1] === "--plugin" && (args.length === 3 || args[3] === "--worker"))
   ) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
   // from either the repository root or the feature's own moon configuration.
-  const feature = resolve(sdkRoot, "../..", process.argv[2]);
+  const feature = resolve(sdkRoot, "../..", args[0]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker");
+  await bundleFeature(feature, args[2], args[3] === "--worker", preparedTypes);
 }
 
 async function scanFiles(root) {

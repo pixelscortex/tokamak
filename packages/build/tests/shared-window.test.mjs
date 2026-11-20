@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { build, withPlugin } from "./outside-fixture.mjs";
 
@@ -59,7 +60,8 @@ test("an ES module dependency uses the canonical Solid import", async () => {
       },
       "./index.js",
     );
-    await Bun.write(join(plugin, entry), 'export { makeSignal } from "bridge";');
+    await rename(join(plugin, entry), join(plugin, "src/client/main.tsx"));
+    await Bun.write(join(plugin, "src/client/main.tsx"), 'export { makeSignal } from "bridge";');
     const result = build(plugin);
     expect(result.code, result.output).toBe(0);
     const output = await Bun.file(join(plugin, "dist/ui.js")).text();

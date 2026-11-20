@@ -54,6 +54,16 @@ export const windowSharedImports = [...authoredWindowEntries, ...compilerWindow]
 export const sharedImports = [...windowSharedImports, ...buildOnly];
 type ImportPart = "window" | "server" | "stylesheet";
 
+function importEntries(part: ImportPart, authored: boolean) {
+  if (part === "server") return serverEntries;
+  if (part === "stylesheet") return stylesheetEntries;
+  return authored ? authoredWindowEntries : windowSharedImports;
+}
+
+export function authoredTypeImports(part: "window" | "server") {
+  return [...importEntries(part, true), ...typeEntries];
+}
+
 export function checkTokamakImport(
   id: string,
   file: string,
@@ -63,14 +73,7 @@ export function checkTokamakImport(
   authored = false,
 ) {
   if (!resolved.startsWith("@tokamak/") && !sharedPackages.has(packageName(resolved))) return;
-  const entries =
-    part === "server"
-      ? serverEntries
-      : part === "stylesheet"
-        ? stylesheetEntries
-        : authored
-          ? authoredWindowEntries
-          : windowSharedImports;
+  const entries = importEntries(part, authored);
   const allowed = [
     ...entries.filter((path) => !id.startsWith("@tokamak/") || path.startsWith("@tokamak/")),
     ...(part === "stylesheet" ? [] : typeEntries),

@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
@@ -10,7 +12,11 @@ test("the server loads the external artifact and queries data written by its mut
     expect(result.code, result.output).toBe(0);
     const server = Bun.spawn(
       [
-        join(workspace, "target/debug", process.platform === "win32" ? "tokamak-server.exe" : "tokamak-server"),
+        join(
+          workspace,
+          "target/debug",
+          process.platform === "win32" ? "tokamak-server.exe" : "tokamak-server",
+        ),
         "--plugins",
         root,
         "--data",
@@ -68,3 +74,64 @@ test("the server loads the external artifact and queries data written by its mut
     }
   });
 }, 60_000);
+
+test("a plugin finds a dependency's public types on the running local server", async () => {
+  await withPlugin(async (provider, root) => {
+    await writeFile(join(provider, "src/server/api.ts"), 'export { list } from "./notes";');
+    const published = build(provider);
+    expect(published.code, published.output).toBe(0);
+    const plugins = join(root, "installed");
+    const local = join(root, "local");
+    const consumer = join(root, "consumer");
+    await mkdir(plugins);
+    await mkdir(local);
+    await mkdir(join(consumer, "src/server"), { recursive: true });
+    await rename(join(provider, "dist"), join(plugins, "outside-fixture"));
+    await writeFile(join(local, "server.token"), randomBytes(32).toString("hex"), { mode: 0o600 });
+    await writeFile(
+      join(consumer, "plugin.ts"),
+      'import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "consumer", version: "1.0.0", depends: ["outside-fixture"] });',
+    );
+    await writeFile(
+      join(consumer, "src/server/read.ts"),
+      'import { action } from "@tokamak/sdk"; import { api } from "plugin:outside-fixture/server"; export const read = action({ handler: ctx => ctx.use(api).list({}) });',
+    );
+    const server = Bun.spawn(
+      [
+        join(
+          workspace,
+          "target/debug",
+          process.platform === "win32" ? "tokamak-server.exe" : "tokamak-server",
+        ),
+        "--plugins",
+        plugins,
+        "--local-dir",
+        local,
+      ],
+      {
+        cwd: root,
+        env: process.platform === "win32" ? { SystemRoot: process.env.SystemRoot } : {},
+        stdout: "ignore",
+        stderr: "inherit",
+      },
+    );
+    try {
+      const deadline = Date.now() + 15_000;
+      while (!(await Bun.file(join(local, "server.json")).exists())) {
+        if (server.exitCode !== null) throw new Error(`Server exited with code ${server.exitCode}`);
+        if (Date.now() >= deadline) throw new Error("Server startup timed out");
+        await Bun.sleep(25);
+      }
+      const result = build(consumer, { TOKAMAK_SERVER_DIR: local });
+      expect(result.code, result.output).toBe(0);
+      const declarations = await readFile(
+        join(consumer, ".tokamak/types/outside-fixture/public.d.ts"),
+        "utf8",
+      );
+      expect(declarations).toBe(await readFile(join(plugins, "outside-fixture/public.d.ts"), "utf8"));
+    } finally {
+      server.kill();
+      await server.exited;
+    }
+  });
+}, 90_000);

@@ -204,7 +204,8 @@ test("installs and bundles the plugin's own local npm package outside the checko
   await withPlugin(async (plugin, root) => {
     await localNpmPackage(root, "note", "bundled local npm note");
     await useLocalNpmPackage(plugin, "note");
-    const path = join(plugin, "src/client/api.tsx");
+    const path = join(plugin, "src/client/main.tsx");
+    await rename(join(plugin, "src/client/api.tsx"), path);
     await writeFile(path, 'export { note } from "local-note";');
     const result = build(plugin);
     expect(result.code, result.output).toBe(0);
