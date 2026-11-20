@@ -1,32 +1,76 @@
-import { agents, type AgentClient } from "../agents/client";
+import { agents, type AgentClient, type AgentEvent } from "../agents/client";
+import { sessionModel, type SessionModel } from "../agents/session-model";
 import type { ActionSignal, Id } from "@tokamak/sdk";
 import type { ChatPort } from "./chat-port";
 
 import { turnBuffer } from "./turn-buffer";
 import { readAcpTurn } from "./acp-turn";
 
-// Keep the most recent history within the byte budget, without splitting Unicode.
-export function historyPrefix(history: { role: string; content: string }[]): string {
-  const text = history.map((message) => `${message.role}: ${message.content}`).join("\n\n");
+const HISTORY_BYTES = 32 * 1024;
+
+type HistoryRecord = { role: string; agent?: string; model?: string; effort?: string; content: string };
+
+// "assistant (Claude, model Opus 5.5 (opus), effort High)"
+function speaker(message: HistoryRecord) {
+  const about = [
+    message.agent,
+    message.model && `model ${message.model}`,
+    message.effort && `effort ${message.effort}`,
+  ].filter(Boolean);
+  return about.length ? `${message.role} (${about.join(", ")})` : message.role;
+}
+
+// Keep the most recent whole messages within the byte budget, so every kept reply
+// keeps its "role (agent, model, effort):" label. Only a single newest message
+// larger than the budget is cut, from its start, without splitting Unicode.
+export function historyPrefix(history: HistoryRecord[]): string {
+  const lines = history.map((message) => `${speaker(message)}: ${message.content}`);
+  const kept: string[] = [];
+  let bytes = 0;
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const size = Buffer.byteLength(lines[index]!, "utf8") + (kept.length ? 2 : 0);
+    if (bytes + size > HISTORY_BYTES) {
+      if (!kept.length) kept.push(tail(lines[index]!, HISTORY_BYTES));
+      break;
+    }
+    bytes += size;
+    kept.push(lines[index]!);
+  }
+  return kept.reverse().join("\n\n");
+}
+
+function tail(text: string, budget: number) {
   const characters = Array.from(text);
   let start = characters.length;
-  let bytes = 0;
   while (start > 0) {
-    const character = characters[start - 1]!;
-    const point = character.codePointAt(0)!;
+    const point = characters[start - 1]!.codePointAt(0)!;
     const size = point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
-    if (bytes + size > 32 * 1024) break;
-    bytes += size;
+    if (size > budget) break;
+    budget -= size;
     start--;
   }
   return characters.slice(start).join("");
+}
+
+// Pass events through, noting model or effort changes the agent reports mid-turn.
+async function* watchModel(
+  events: AsyncIterable<AgentEvent>,
+  changed: (model: SessionModel) => Promise<void>,
+): AsyncIterable<AgentEvent> {
+  for await (const event of events) {
+    if (event.type === "update" && event.update.sessionUpdate === "config_option_update") {
+      const next = sessionModel(event.update);
+      if (next) await changed(next);
+    }
+    yield event;
+  }
 }
 
 type Started = {
   runId: Id<"runs">;
   token: string;
   messageId: Id<"messages">;
-  history: { role: string; content: string }[];
+  history: HistoryRecord[];
 };
 type Backend = { agent: string; cwd: string; sessionId?: string };
 
@@ -83,11 +127,27 @@ export async function acpSend(
       settings: { cwd: backend.cwd },
       state: { sessionId: opened.sessionId },
     });
+    // Recording the model is best effort: an older hub without it must not fail the turn.
+    let model = opened.model;
+    const recordModel = (next: SessionModel) =>
+      chat.setReplyModel({ runId, token, model: next }).catch(() => null);
+    if (model) await recordModel(model);
     const prefix = prompt !== undefined || opened.restored ? "" : historyPrefix(started.history.slice(0, -1));
     const text =
       prompt ??
-      (prefix ? `Previous conversation:\n${prefix}\n\nuser: ${args.text.trim()}` : args.text.trim());
-    const events = client.prompt({ agent: backend.agent, sessionId: opened.sessionId, text });
+      (prefix
+        ? `Previous conversation (each assistant reply names the agent, model and effort that wrote it; replies naming another agent or model were not written by you as you are now):\n${prefix}\n\nuser: ${args.text.trim()}`
+        : args.text.trim());
+    const events = watchModel(
+      client.prompt({ agent: backend.agent, sessionId: opened.sessionId, text }),
+      async (update) => {
+        // An update may carry only some options; keep what it does not mention.
+        const next = { ...model, ...update };
+        if (JSON.stringify(next) === JSON.stringify(model)) return;
+        model = next;
+        await recordModel(next);
+      },
+    );
     const stopReason = await readAcpTurn(chat, backend.agent, runId, token, buffer, events, client);
     finished = true;
     if (stopReason === "refusal") return await finish("error", "Agent refused");

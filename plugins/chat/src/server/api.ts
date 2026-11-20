@@ -7,6 +7,7 @@ export {
   update as updateRun,
   running as runIsRunning,
   session as saveBackendState,
+  model as setReplyModel,
 } from "./runs/send";
 export {
   request as requestPermission,

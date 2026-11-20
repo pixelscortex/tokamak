@@ -75,7 +75,13 @@ export function AgentTurn(props: {
         <Header
           lead={<Icon path={props.agent?.mark ?? glyphs.chat} class="text-ink" />}
           name={name()}
-          fact={timeOfDay(props.message.createdAt)}
+          fact={[
+            props.message.model?.name ?? props.message.model?.id,
+            props.message.model?.effort && `${props.message.model.effort} effort`,
+            timeOfDay(props.message.createdAt),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
         <Show when={turn().texts.length}>
           <div class="flex flex-col gap-3">

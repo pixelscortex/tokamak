@@ -28,6 +28,10 @@ export default defineSchema({
     // the reply keeps its label after the thread switches agents. Absent on user
     // messages and on rows written before this field existed.
     agent: v.optional(v.object({ plugin: v.string(), backendId: v.string() })),
+    // The model and effort the agent reported for this reply, when it reports them.
+    model: v.optional(
+      v.object({ name: v.optional(v.string()), id: v.optional(v.string()), effort: v.optional(v.string()) }),
+    ),
     createdAt: v.number(),
   }).index("by_threadId_createdAt", ["threadId", "createdAt"]),
   runs: defineTable({

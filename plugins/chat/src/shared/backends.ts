@@ -1,5 +1,13 @@
 import type { FunctionReference, Id, JsonValue } from "@tokamak/sdk";
 export type BackendOption = { id: string; title: string; folder?: boolean };
+/** One earlier message; assistant records name the agent, model and effort that wrote them. */
+export type HistoryRecord = {
+  role: string;
+  agent?: string;
+  model?: string;
+  effort?: string;
+  content: string;
+};
 export type TurnArgs = {
   runId: Id<"runs">;
   token: string;
@@ -7,7 +15,7 @@ export type TurnArgs = {
   threadId: Id<"threads">;
   backendId: string;
   text: string;
-  history: { role: string; content: string }[];
+  history: HistoryRecord[];
   settings: JsonValue;
   state?: JsonValue;
 };

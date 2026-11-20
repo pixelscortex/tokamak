@@ -27,7 +27,15 @@ export const turn = action({
     threadId: v.id("threads"),
     backendId: v.string(),
     text: v.string(),
-    history: v.array(v.object({ role: v.string(), content: v.string() })),
+    history: v.array(
+      v.object({
+        role: v.string(),
+        agent: v.optional(v.string()),
+        model: v.optional(v.string()),
+        effort: v.optional(v.string()),
+        content: v.string(),
+      }),
+    ),
     settings: v.any(),
     state: v.optional(v.any()),
   },

@@ -71,6 +71,8 @@ export const relayTurn = action({
           return call((client) => client.mutation(chat.updateRun, update), true);
         },
         runIsRunning: (args) => call((client) => client.query(chat.runIsRunning, args)),
+        // Not a write that extends the relay deadline; a hub without it just refuses.
+        setReplyModel: (args) => call((client) => client.mutation(chat.setReplyModel, args)),
         requestPermission: (args) => call((client) => client.mutation(chat.requestPermission, args), true),
         permissionState: (args) => call((client) => client.query(chat.permissionState, args)),
         claimPermission: (args) => call((client) => client.mutation(chat.claimPermission, args), true),
