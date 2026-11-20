@@ -1,0 +1,50 @@
+packages/server/src/plugins/catalog.rs
+  s_41043d0f7459bd::t_9db8c043d7f3f7 97-103,106
+  s_41043d0f7459bd::t_567ceca31b98e4 5,8-12,16,21-25,27,29,58,62-63,68-79,82,94
+  s_233050c3c9f3e6::t_96ca4d9dcb5936 95-96
+packages/server/src/plugins/dependencies.rs
+  s_41043d0f7459bd::t_def84229c8729c 3-6,12
+packages/server/src/service/startup.rs
+  s_41043d0f7459bd::t_2e224fe214e9d7 89
+packages/server/src/plugins/grants.rs
+  s_41043d0f7459bd::t_a14ed46f8b40fd 56-57,70
+packages/server/src/service/plugin_control.rs
+  s_41043d0f7459bd::t_4b1fb5197f0e51 111-112
+  s_41043d0f7459bd::t_758e1e9143274e 93-94
+  s_41043d0f7459bd::t_9769b7f5ed922a 115-116,132-142,144-146
+packages/server/tests/reload.rs
+  s_41043d0f7459bd::t_9e60046143783e 389
+  s_233050c3c9f3e6::t_df9ae8bb5ebea9 756-918
+packages/server/PLUGINS.md
+  s_41043d0f7459bd::t_9d71fe9625da8e 86-93,106-116
+  s_41043d0f7459bd::t_adf8666a1a3da1 117
+packages/server/src/plugins/loading.rs
+  s_41043d0f7459bd::t_b3004b255fb29a 29,125-130,136-140,144-146
+  s_41043d0f7459bd::t_7a33a3659300a2 76,115
+  s_41043d0f7459bd::t_7cdf1fb7017262 5,10,25-27
+  s_41043d0f7459bd::t_f3e3fc96cb1fd4 141-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea02aa9588d24c45cebc51cc9b88f0e38b308ed4",
+  "prompts": {},
+  "sessions": {
+    "s_233050c3c9f3e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f912-bbf0-7ed1-ac3a-c822d7b077c4",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_41043d0f7459bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8f5-553e-75a0-9193-800eaf6c5ea3",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
