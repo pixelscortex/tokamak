@@ -1,0 +1,100 @@
+packages/server/src/websocket.rs
+  s_fa91d1b6a7fa1a::t_39c7b6683a55f7 427
+  s_fa91d1b6a7fa1a::t_115eeacbbf647d 12,172,235-241,247-249,404-412,419-426,428-430
+packages/server/src/plugins/loading.rs
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 38-39,41-42
+  s_fa91d1b6a7fa1a::t_16130ddeec18f4 40
+packages/cli/tests/cli.test.mjs
+  s_fa91d1b6a7fa1a::t_39c7b6683a55f7 285-350
+  s_fa91d1b6a7fa1a::t_4402ec7dc87012 224-244,265,269,352
+  s_fa91d1b6a7fa1a::t_7180e0d8f6df0a 2,272
+  s_fa91d1b6a7fa1a::t_422618aa0380c9 153,160,245-264,266-268,270-271,273-284,351,353
+packages/server/src/service/mod.rs
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 113,201
+  s_fa91d1b6a7fa1a::t_39c7b6683a55f7 179
+packages/server/src/service/action_coordination.rs
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 58-61,78
+  s_fa91d1b6a7fa1a::t_2815bc28cd0732 65,82
+packages/server/src/service/startup.rs
+  s_fa91d1b6a7fa1a::t_39c7b6683a55f7 174
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 203-209,212
+  s_fa91d1b6a7fa1a::t_feaeac8995ba63 202
+packages/server/src/host.rs
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 94,113-116,177-178,194-195,217
+  s_fa91d1b6a7fa1a::t_d47e6bdc65adf9 233-256
+e2e/browser/app.spec.ts
+  s_fa91d1b6a7fa1a::t_bd46eb31d2dacb 3,73-93
+packages/cli/src/commands.ts
+  s_fa91d1b6a7fa1a::t_f9569b2c90bc2a 6,8
+packages/server/src/host/worker/logs.rs
+  s_fa91d1b6a7fa1a::t_62811f7d55f44a 52
+packages/server/src/plugin_log.rs
+  s_fa91d1b6a7fa1a::t_8bda4448ae7986 55,68-73
+  s_fa91d1b6a7fa1a::t_62811f7d55f44a 1-47,51-54,56-63,67,74-90
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 91-94,96-101
+  s_fa91d1b6a7fa1a::t_1268ef35141b1f 48-50,64-66
+  s_fa91d1b6a7fa1a::t_aed9d81f8552ad 95
+app/src/plugins/web-host.ts
+  s_fa91d1b6a7fa1a::t_48df2230f41ebd 184
+  s_fa91d1b6a7fa1a::t_f45af558196a96 172-183,185-204
+packages/engine/src/engine.rs
+  s_fa91d1b6a7fa1a::t_72187ca95c746d 74-85,123-125
+packages/server/src/host/worker/mod.rs
+  s_fa91d1b6a7fa1a::t_62811f7d55f44a 4
+packages/server/src/host/worker/process.rs
+  s_fa91d1b6a7fa1a::t_72187ca95c746d 171,277-294,297
+  s_fa91d1b6a7fa1a::t_8bda4448ae7986 138-139,143,196,241,270,296,298-305
+  s_fa91d1b6a7fa1a::t_05acb61757a113 295
+e2e/browser.ts
+  s_fa91d1b6a7fa1a::t_bd46eb31d2dacb 12
+packages/server/src/service/plugin_control.rs
+  s_fa91d1b6a7fa1a::t_39c7b6683a55f7 57-59,93-119,155-156,178-179
+  s_fa91d1b6a7fa1a::t_3a2008db99220b 56,196-200
+packages/cli/README.md
+  s_fa91d1b6a7fa1a::t_39c7b6683a55f7 50-52
+  s_fa91d1b6a7fa1a::t_db1a8ed036a1e7 10,39-49,53,64
+packages/engine/src/bridge.rs
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 19-20,80,88-101,103-105,112-120,125-127,338-351,376
+  s_fa91d1b6a7fa1a::t_0f7de3b6cbfdc8 102,106-111,121-124
+packages/cli/src/commands/logs.ts
+  s_fa91d1b6a7fa1a::t_f9569b2c90bc2a 1-17,19-39,41-45
+  s_fa91d1b6a7fa1a::t_62811f7d55f44a 18
+  s_fa91d1b6a7fa1a::t_62d10faf033f67 40
+packages/server/src/actions.rs
+  s_fa91d1b6a7fa1a::t_c09886735a3c1f 36,201,214,236
+  s_fa91d1b6a7fa1a::t_10b0ebf5193349 218,237
+app/tests/plugins.test.tsx
+  s_fa91d1b6a7fa1a::t_91980837745db5 209,267
+  s_fa91d1b6a7fa1a::t_a7eaee0a6ebcc2 4,208,210,213,245-254,256-257
+  s_fa91d1b6a7fa1a::t_0aa490a9050ab5 141,145-146
+  s_fa91d1b6a7fa1a::t_48df2230f41ebd 142-144
+  s_fa91d1b6a7fa1a::t_19650237dc5d08 255
+packages/engine/src/action.rs
+  s_fa91d1b6a7fa1a::t_72187ca95c746d 57
+app/src/plugins/views.tsx
+  s_fa91d1b6a7fa1a::t_2468d095965446 69-83,154,165-184,203-207
+packages/sdk/tools/bundle.mjs
+  s_fa91d1b6a7fa1a::t_108e23d63ce684 190-202,214-219,228-229
+packages/sdk/worker/entry.ts
+  s_fa91d1b6a7fa1a::t_bd2aab3c760f30 2,16,18-30
+packages/server/src/lib.rs
+  s_fa91d1b6a7fa1a::t_1f73bd43bc7243 15
+packages/server/src/service/server.rs
+  s_fa91d1b6a7fa1a::t_6165b3a4125040 22-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "499c2e15fd8af02dc0aaafa5c11a3d03796849ca",
+  "prompts": {},
+  "sessions": {
+    "s_fa91d1b6a7fa1a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d7-568e-7350-93a9-550163c50010",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
