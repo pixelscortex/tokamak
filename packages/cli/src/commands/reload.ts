@@ -14,7 +14,7 @@ type Result = {
   error?: { message: string; diagnostics?: object[] };
 };
 type Catalog = {
-  plugins: { plugin: { id: string }; revision: string }[];
+  plugins: { plugin: { id: string }; revision: string; fromIndex?: boolean }[];
   unchanged?: string[];
   removed?: string[];
   skipped?: Record<string, string>;
@@ -55,7 +55,7 @@ function applyAnswer(report: Report, builds: Build[], answer: Catalog, reconcile
   report.skipped = answer.skipped ?? {};
   for (const id of answer.removed ?? []) report.removed.add(id);
   for (const { id, buildId } of builds) {
-    const skipped = report.skipped[id];
+    const skipped = Object.hasOwn(report.skipped, id) ? report.skipped[id] : undefined;
     if (skipped || running.get(id) !== buildId) {
       report.results.set(
         id,
@@ -68,8 +68,30 @@ function applyAnswer(report: Report, builds: Build[], answer: Catalog, reconcile
   }
 }
 
+async function runningCatalog(server?: string): Promise<Catalog> {
+  const answer = (await serverGet("/plugins", server)) as Catalog;
+  if (!Array.isArray(answer?.plugins)) throw new Error("Server returned an invalid catalog");
+  return answer;
+}
+
+function indexedIds(catalog: Catalog) {
+  return catalog.plugins.filter(({ fromIndex }) => fromIndex).map(({ plugin }) => plugin.id);
+}
+
+async function reconcileRemovals(report: Report, before: Catalog | undefined, after: Catalog) {
+  const index = await readIndex();
+  const current = new Set(indexedIds(after));
+  if ([...current].some((id) => !index.has(id))) {
+    report.removalError = "The server did not apply every index removal";
+  }
+  for (const id of before ? indexedIds(before) : []) {
+    if (!current.has(id) && !index.has(id)) report.removed.add(id);
+  }
+}
+
 async function submit(report: Report, builds: Build[], removeMissing: boolean, server?: string) {
   const payload = { builds: builds.map(({ id, buildId }) => ({ id, buildId })), removeMissing };
+  const before = removeMissing ? await runningCatalog(server).catch(() => undefined) : undefined;
   let answer: Catalog;
   try {
     answer = (await serverPost("/plugin-index/reload", payload, server)) as Catalog;
@@ -77,9 +99,12 @@ async function submit(report: Report, builds: Build[], removeMissing: boolean, s
   } catch (error) {
     if (error instanceof ServerRefusal) throw error;
     try {
-      const running = (await serverGet("/plugins", server)) as Catalog;
+      const running = await runningCatalog(server);
       applyAnswer(report, builds, running, true);
-      if (removeMissing) report.removalError = uncertain;
+      if (removeMissing)
+        await reconcileRemovals(report, before, running).catch(() => {
+          report.removalError = uncertain;
+        });
     } catch {
       for (const { id, buildId } of builds) report.results.set(id, failed(id, buildId, "unknown", uncertain));
       if (removeMissing) report.removalError = uncertain;
@@ -127,7 +152,8 @@ async function applyBuilds(report: Report, builds: Build[], all: boolean, server
   try {
     await submit(report, builds, all, server);
   } catch (error) {
-    if (!all) {
+    if (!all || (error instanceof ServerRefusal && error.code === "index-backfill")) {
+      if (all && !builds.length) report.removalError = messageOf(error);
       for (const { id, buildId } of builds) report.results.set(id, failed(id, buildId, "load-failed", error));
       return;
     }

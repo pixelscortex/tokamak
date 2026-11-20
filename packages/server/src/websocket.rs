@@ -388,6 +388,12 @@ async fn revoke(State(adapter): State<Adapter>, Path(id): Path<String>) -> Respo
 fn plugin_result(result: Result<serde_json::Value, crate::Error>) -> Response {
     match result {
         Ok(value) => ([("content-type", "application/json")], value.to_string()).into_response(),
+        Err(crate::Error::IndexBackfill(message)) => (
+            StatusCode::BAD_REQUEST,
+            [("content-type", "application/json")],
+            serde_json::json!({"error":message, "code":"index-backfill"}).to_string(),
+        )
+            .into_response(),
         Err(error) => (
             StatusCode::BAD_REQUEST,
             [("content-type", "application/json")],

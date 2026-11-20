@@ -125,7 +125,11 @@ try {
   if (error instanceof CommandError) next = error.next;
   const diagnostics = error instanceof CommandError ? error.diagnostics : undefined;
   await output(
-    { ...(error instanceof CommandError ? error.data : undefined), ok: false, error: { message, next, ...(diagnostics ? { diagnostics } : {}) } },
+    {
+      ...(error instanceof CommandError ? error.data : undefined),
+      ok: false,
+      error: { message, next, ...(diagnostics ? { diagnostics } : {}) },
+    },
     [message, ...diagnosticText(diagnostics ?? []), `Try: ${next}`].join("\n"),
     true,
   );

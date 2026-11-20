@@ -12,7 +12,7 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
-    /// Replaces the complete installation generation, including dependent callers.
+    /// Swaps changed builds and retries plugins that were skipped.
     pub async fn reload_plugin(&self, id: String) -> Result<Json, Error> {
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::Reload(id, reply))?;

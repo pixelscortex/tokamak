@@ -9,11 +9,13 @@ use engine::{Limits, OpRegistry, Pool, PoolConfig};
 use serde_json::Value as Json;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
 
 pub(crate) struct NestedCall {
     pub user: crate::identity::User,
     pub generation: Option<Arc<Loaded>>,
     pub owner: Option<String>,
+    pub target_build: Option<CancellationToken>,
     pub name: String,
     pub args: Json,
     pub kind: FunctionKind,
@@ -77,15 +79,21 @@ fn register_providers(
     loaded: Arc<Loaded>,
     owner: String,
 ) -> Result<(), engine::Error> {
-    ops.register_sync("plugin.providers", move |payload| {
-        let interface = payload["interface"]
-            .as_str()
-            .ok_or("providers requires an interface")?;
-        loaded
-            .catalog
-            .providers(&owner, interface)
-            .map(|ids| serde_json::json!(ids))
-            .map_err(|e| e.to_string())
+    ops.register_async("plugin.providers", move |payload| {
+        let loaded = loaded.clone();
+        let owner = owner.clone();
+        async move {
+            let interface = payload["interface"]
+                .as_str()
+                .ok_or("providers requires an interface")?;
+            loaded
+                .current_for(&owner)
+                .await?
+                .catalog
+                .providers(&owner, interface)
+                .map(|ids| serde_json::json!(ids))
+                .map_err(|e| e.to_string())
+        }
     })
 }
 
@@ -129,6 +137,7 @@ fn register_nested_calls(
                         user,
                         generation,
                         owner,
+                        target_build: None,
                         name,
                         args,
                         kind,
@@ -173,6 +182,7 @@ fn register_plugin_call(
                 .get("args")
                 .ok_or("plugin call requires args")?
                 .clone();
+            let loaded = loaded.current_for(&owner).await?;
             let target = loaded.action_target(&owner, name, &path)?;
             if target.kind != FunctionKind::Action {
                 let (reply, wait) = oneshot::channel();
@@ -181,6 +191,7 @@ fn register_plugin_call(
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
                         user,
+                        target_build: Some(loaded.action_lifetimes[&target.owner].clone()),
                         generation: Some(loaded),
                         owner: Some(owner),
                         name: name.into(),
@@ -193,6 +204,7 @@ fn register_plugin_call(
                     .await
                     .map_err(|_| "server closed before plugin call completed".to_owned())?;
             }
+            let caller = loaded.action_lifetimes[&owner].clone();
             path.push(name.into());
             let environment = Arc::new(crate::environment::Snapshot::new(
                 Some(&loaded),
@@ -209,34 +221,48 @@ fn register_plugin_call(
                 user,
             )
             .map_err(|e| e.to_string())?;
-            if ops.action_lifetime().is_cancelled() {
+            let target_lifetime = ops.action_lifetime().clone();
+            if target_lifetime.is_cancelled() {
                 return Err("Plugin action cancelled by reload".into());
             }
             if let Some(worker) = worker {
-                return worker
-                    .invoke(target.local_name, args, ops)
-                    .await
-                    .map_err(|e| environment.redact(e));
+                let result = worker
+                    .invoke_nested(target.local_name, args, ops, caller)
+                    .await;
+                return if target_lifetime.is_cancelled() {
+                    Err("Plugin action cancelled by reload".into())
+                } else {
+                    result.map_err(|e| environment.redact(e))
+                };
             }
-            // A separate, invocation-owned lane avoids recursive waits on the
-            // bounded root action pool. Dropping it cancels the child on reload.
-            let pool = Pool::new_actions(PoolConfig {
-                workers: 1,
-                queue_capacity: 1,
-                limits,
-            })
-            .map_err(|e| e.to_string())?;
-            let pending = pool
-                .submit(
-                    target.bundle,
-                    "invoke",
-                    serde_json::json!({"name": target.local_name, "args": args}),
-                    ops,
-                )
-                .map_err(|e| e.to_string())?;
-            pending.await.map_err(|e| environment.redact(e.to_string()))
+            invoke_quickjs_action(target.bundle, target.local_name, args, ops, limits)
+                .await
+                .map_err(|e| environment.redact(e.to_string()))
         }
     })?;
 
     Ok(())
+}
+
+// A separate, invocation-owned lane avoids recursive waits on the bounded
+// root action pool. Dropping it on reload also retires the child's JS world.
+async fn invoke_quickjs_action(
+    bundle: Arc<engine::Bundle>,
+    name: String,
+    args: Json,
+    ops: Arc<OpRegistry>,
+    limits: Limits,
+) -> Result<Json, engine::Error> {
+    let pool = Pool::new_actions(PoolConfig {
+        workers: 1,
+        queue_capacity: 1,
+        limits,
+    })?;
+    pool.submit(
+        bundle,
+        "invoke",
+        serde_json::json!({"name": name, "args": args}),
+        ops,
+    )?
+    .await
 }

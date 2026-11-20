@@ -97,7 +97,7 @@ test("every registered command shares help and JSON output rules", async () => {
   });
 }, 120_000);
 
-async function withServer(root, check) {
+async function withServer(root, check, { killed = false } = {}) {
   const data = join(root, "data");
   const plugins = join(root, "installed");
   await mkdir(plugins, { recursive: true });
@@ -138,7 +138,7 @@ async function withServer(root, check) {
     await check(address, token, server);
   } finally {
     try {
-      if (address && server.exitCode === null && server.signalCode === null) {
+      if (address && !killed) {
         // The server can close the connection before writing the shutdown reply.
         const response = await fetch(`${address}/shutdown`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -442,6 +442,18 @@ test("reload updates an existing connection and preserves old code on build or l
           ],
         });
         expect(await read()).toBe("edited");
+        run("add", peer);
+        const refusedBatch = cli(root, ["plugin", "reload", "--json"]);
+        expect(refusedBatch.code).not.toBe(0);
+        expect(JSON.parse(refusedBatch.stdout).plugins).toEqual([
+          expect.objectContaining({
+            id: "outside-fixture",
+            status: "load-failed",
+            error: { message: expect.stringContaining("duplicate") },
+          }),
+          expect.objectContaining({ id: "reload-peer", status: "load-failed" }),
+        ]);
+        expect(run("list").plugins.map(({ id }) => id)).toEqual(["outside-fixture"]);
 
         await writeFile(join(plugin, "src/server/broken.ts"), "\nexport const broken: string = 42;\n");
         const broken = cli(root, ["plugin", "reload", "outside-fixture", "--json"]);
@@ -556,75 +568,79 @@ for (const scenario of ["race", "timeout", "death"]) {
       const original = await readFile(notes, "utf8");
       const edit = (n) =>
         writeFile(notes, original + `\nexport const marker = query({ handler: () => ${n} });`);
-      await withServer(root, async (address, token, server) => {
-        const arrived = Promise.withResolvers();
-        const release = Promise.withResolvers();
-        let applied;
-        const proxy = Bun.serve({
-          hostname: "127.0.0.1",
-          port: 0,
-          idleTimeout: 0,
-          async fetch(req, self) {
-            const path = new URL(req.url).pathname;
-            if (req.method === "GET") return fetch(address + path, { headers: req.headers });
-            const body = await req.text();
+      await withServer(
+        root,
+        async (address, token, server) => {
+          const arrived = Promise.withResolvers();
+          const release = Promise.withResolvers();
+          let applied;
+          const proxy = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            idleTimeout: 0,
+            async fetch(req, self) {
+              const path = new URL(req.url).pathname;
+              if (req.method === "GET") return fetch(address + path, { headers: req.headers });
+              const body = await req.text();
+              if (scenario === "race") {
+                arrived.resolve(JSON.parse(body).builds[0].buildId);
+                await release.promise;
+              }
+              const res = await fetch(address + path, { method: "POST", headers: req.headers, body });
+              applied = (await res.clone().json()).plugins?.[0]?.revision;
+              if (scenario === "timeout") await release.promise;
+              if (scenario === "death") {
+                server.kill("SIGKILL");
+                await server.exited;
+                self.stop(true);
+              }
+              return res;
+            },
+          });
+          try {
+            await edit(1);
+            const first = spawnReload(root, token, proxy.url.origin);
             if (scenario === "race") {
-              arrived.resolve(JSON.parse(body).builds[0].buildId);
-              await release.promise;
+              const firstId = await Promise.race([
+                arrived.promise,
+                first.then((result) => {
+                  throw new Error(JSON.stringify(result));
+                }),
+              ]);
+              await edit(2);
+              const second = spawnReload(root, token);
+              expect(
+                await Promise.race([second.then(() => "completed"), Bun.sleep(500).then(() => "waiting")]),
+              ).toBe("waiting");
+              expect(
+                new Bun.CryptoHasher("sha256")
+                  .update(await readFile(join(folder, "dist/manifest.json")))
+                  .digest("hex"),
+              ).toBe(firstId);
+              release.resolve();
+              const [firstCode, firstResult] = await first;
+              const [secondCode, secondResult] = await second;
+              expect(firstCode).toBe(0);
+              expect(secondCode).toBe(0);
+              expect(firstResult.plugins[0]).toMatchObject({ buildId: firstId, status: "loaded" });
+              expect(secondResult.plugins[0].buildId).not.toBe(firstId);
+            } else {
+              const [code, result, stderr] = await first;
+              expect(applied).toMatch(/^[a-f0-9]{64}$/);
+              expect(code === 0).toBe(scenario === "timeout");
+              expect(result.plugins[0]).toMatchObject({
+                buildId: applied,
+                status: scenario === "timeout" ? "loaded" : "unknown",
+              });
+              if (scenario === "death") expect(stderr).toContain("tokamak plugin list");
             }
-            const res = await fetch(address + path, { method: "POST", headers: req.headers, body });
-            applied = (await res.clone().json()).plugins?.[0]?.revision;
-            if (scenario === "timeout") await release.promise;
-            if (scenario === "death") {
-              server.kill("SIGKILL");
-              await server.exited;
-              self.stop(true);
-            }
-            return res;
-          },
-        });
-        try {
-          await edit(1);
-          const first = spawnReload(root, token, proxy.url.origin);
-          if (scenario === "race") {
-            const firstId = await Promise.race([
-              arrived.promise,
-              first.then((result) => {
-                throw new Error(JSON.stringify(result));
-              }),
-            ]);
-            await edit(2);
-            const second = spawnReload(root, token);
-            expect(
-              await Promise.race([second.then(() => "completed"), Bun.sleep(500).then(() => "waiting")]),
-            ).toBe("waiting");
-            expect(
-              new Bun.CryptoHasher("sha256")
-                .update(await readFile(join(folder, "dist/manifest.json")))
-                .digest("hex"),
-            ).toBe(firstId);
+          } finally {
             release.resolve();
-            const [firstCode, firstResult] = await first;
-            const [secondCode, secondResult] = await second;
-            expect(firstCode).toBe(0);
-            expect(secondCode).toBe(0);
-            expect(firstResult.plugins[0]).toMatchObject({ buildId: firstId, status: "loaded" });
-            expect(secondResult.plugins[0].buildId).not.toBe(firstId);
-          } else {
-            const [code, result, stderr] = await first;
-            expect(applied).toMatch(/^[a-f0-9]{64}$/);
-            expect(code === 0).toBe(scenario === "timeout");
-            expect(result.plugins[0]).toMatchObject({
-              buildId: applied,
-              status: scenario === "timeout" ? "loaded" : "unknown",
-            });
-            if (scenario === "death") expect(stderr).toContain("tokamak plugin list");
+            proxy.stop(true);
           }
-        } finally {
-          release.resolve();
-          proxy.stop(true);
-        }
-      });
+        },
+        { killed: scenario === "death" },
+      );
     });
   }, 180_000);
 }
@@ -696,6 +712,44 @@ test("reload refuses a worker that throws during import and keeps the old worker
       } finally {
         transport.close();
       }
+    });
+  });
+}, 180_000);
+
+test("reload reports skipped plugins separately unless the command asked for them", async () => {
+  await withPlugin(async (folder, root) => {
+    const broken = join(root, "broken");
+    await cp(folder, broken, { recursive: true });
+    const descriptor = join(broken, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("outside-fixture", "skipped-plugin"),
+    );
+    const notes = join(broken, "src/server/notes.ts");
+    await writeFile(notes, (await readFile(notes, "utf8")) + '\nthrow new Error("still skipped");');
+    for (const path of [folder, broken]) {
+      expect(cli(root, ["plugin", "build", path]).code).toBe(0);
+      expect(cli(root, ["plugin", "add", path]).code).toBe(0);
+    }
+    await withServer(root, () => {
+      const other = cli(root, ["plugin", "reload", "outside-fixture", "--json"]);
+      expect(other.code, other.stderr).toBe(0);
+      expect(JSON.parse(other.stdout)).toMatchObject({
+        plugins: [{ id: "outside-fixture", status: "unchanged" }],
+        skipped: { "skipped-plugin": expect.stringContaining("still skipped") },
+      });
+      const selected = cli(root, ["plugin", "reload", "skipped-plugin", "--json"]);
+      expect(selected.code).not.toBe(0);
+      expect(JSON.parse(selected.stdout)).toMatchObject({
+        plugins: [
+          {
+            id: "skipped-plugin",
+            status: "load-failed",
+            error: { message: expect.stringContaining("still skipped") },
+          },
+        ],
+        skipped: {},
+      });
     });
   });
 }, 180_000);

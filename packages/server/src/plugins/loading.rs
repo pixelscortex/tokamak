@@ -11,7 +11,7 @@ impl Loaded {
         pool: &engine::Pool,
         database: &crate::data::Database,
     ) -> Result<Arc<Self>, Error> {
-        let installed = read_installed(root, None)?;
+        let (installed, _) = read_installed(root, None)?;
         let candidates = read_index(index);
         let config = StartupCatalog {
             root,
@@ -33,105 +33,257 @@ impl Loaded {
                 );
             }
         }
-        Ok(loaded)
+        Ok(Arc::new(loaded))
     }
 
     #[cfg(test)]
-    pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Arc<Self>, Error> {
-        Self::load_reusing(catalog, pool, None).await
+    pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Self, Error> {
+        Self::load_reusing(catalog, BTreeMap::new(), pool, None).await
     }
 
     pub async fn load_reusing(
         catalog: Catalog,
+        artifact_failures: BTreeMap<String, String>,
         pool: &engine::Pool,
         previous: Option<&Self>,
-    ) -> Result<Arc<Self>, Error> {
-        let mut targets = BTreeMap::new();
-
-        let mut functions = Vec::new();
-
-        let mut inspected = BTreeMap::new();
-
-        for id in &catalog.order {
-            let artifact = &catalog.plugins[id];
-
-            let Some(bundle) = &artifact.bundle else {
+    ) -> Result<Self, Error> {
+        let mut loaded = Self {
+            catalog,
+            targets: BTreeMap::new(),
+            descriptor: Value::Null,
+            catalog_text: String::new(),
+            inspected: BTreeMap::new(),
+            workers: BTreeMap::new(),
+            skipped: BTreeMap::new(),
+            action_lifetimes: BTreeMap::new(),
+            current: previous.map(|old| old.current.clone()).unwrap_or_default(),
+        };
+        for (id, reason) in artifact_failures {
+            loaded.skip(id, reason);
+        }
+        for id in loaded.catalog.order.clone() {
+            if loaded.skip_if_required_dependency_failed(&id, previous)? {
                 continue;
-            };
+            }
+            if let Err(error) = loaded.prepare_plugin(&id, pool, previous).await {
+                if !previous.is_some_and(|old| old.skipped.contains_key(&id)) {
+                    return Err(error);
+                }
+                loaded.skip(id, error.to_string());
+            }
+        }
+        if loaded.skipped.is_empty() {
+            loaded.update_metadata()?;
+        } else {
+            loaded.prune_skipped()?;
+        }
+        Ok(loaded)
+    }
 
+    async fn prepare_plugin(
+        &mut self,
+        id: &str,
+        pool: &engine::Pool,
+        previous: Option<&Self>,
+    ) -> Result<(), Error> {
+        let artifact = &self.catalog.plugins[id];
+        let unchanged = previous.filter(|old| self.catalog.same_build(&old.catalog, id));
+        let worker = match unchanged {
+            Some(old) => old.workers.get(id).cloned(),
+            None => prepare_worker(&self.catalog, id, artifact)?,
+        };
+        if let Some(bundle) = &artifact.bundle {
             let cached = previous
                 .filter(|old| {
                     old.catalog
                         .plugins
                         .get(id)
                         .and_then(|p| p.bundle.as_ref())
-                        .is_some_and(|b| Arc::ptr_eq(b, bundle))
+                        .is_some_and(|old| Arc::ptr_eq(old, bundle))
                 })
                 .and_then(|old| old.inspected.get(id));
-
             let (descriptor, kinds) = match cached {
                 Some(value) => value.clone(),
-                None => crate::service::inspect(pool, bundle.clone())
-                    .await
-                    .map_err(|error| invalid(format!("Could not inspect plugin {id}: {error}")))?,
+                None => crate::service::inspect(pool, bundle.clone()).await?,
             };
-            inspected.insert(id.clone(), (descriptor.clone(), kinds.clone()));
-
             for name in &artifact.manifest.public_functions {
                 if !kinds.contains_key(name) {
                     return Err(invalid(format!(
-                        "Exported function {name} is not a backend function of {id}"
+                        "Exported function {name} is not a server function of {id}"
                     )));
                 }
             }
-
-            for (local_name, kind) in kinds {
+            validate_maintenance(artifact, Some(&kinds))?;
+            let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+            for (local_name, kind) in &kinds {
                 let name = format!("{id}/{local_name}");
-                targets.insert(
+                self.targets.insert(
                     name,
                     Target {
-                        owner: id.clone(),
-                        local_name,
-                        mutation: kind == crate::service::FunctionKind::Mutation,
-                        kind,
+                        owner: id.to_owned(),
+                        local_name: local_name.clone(),
+                        mutation: *kind == crate::service::FunctionKind::Mutation,
+                        kind: *kind,
                         bundle: bundle.clone(),
-                        space: DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?,
+                        space: space.clone(),
                     },
                 );
             }
-
-            functions.extend(client_descriptors(
-                id,
-                &descriptor,
-                artifact.manifest.plugin.maintenance.as_deref(),
-            ));
+            self.inspected.insert(id.to_owned(), (descriptor, kinds));
+        } else {
+            validate_maintenance(artifact, None)?;
         }
+        if let Some(worker) = worker {
+            self.workers.insert(id.to_owned(), worker);
+        }
+        let lifetime = unchanged
+            .map(|old| old.action_lifetimes[id].clone())
+            .unwrap_or_default();
+        self.action_lifetimes.insert(id.to_owned(), lifetime);
+        Ok(())
+    }
+
+    pub(super) fn prune_skipped(&mut self) -> Result<(), Error> {
+        if self.skipped.is_empty() {
+            return Ok(());
+        }
+        let skipped = &self.skipped;
+        self.catalog.omit_skipped(skipped)?;
+        self.targets
+            .retain(|_, target| !skipped.contains_key(&target.owner));
+        self.workers.retain(|id, _| !skipped.contains_key(id));
+        self.action_lifetimes
+            .retain(|id, _| !skipped.contains_key(id));
+        self.inspected.retain(|id, _| !skipped.contains_key(id));
+        self.update_metadata()
+    }
+
+    pub(super) fn skip_if_required_dependency_failed(
+        &mut self,
+        id: &str,
+        previous: Option<&Self>,
+    ) -> Result<bool, Error> {
+        let Some(dependency) = self.catalog.plugins[id]
+            .manifest
+            .plugin
+            .depends
+            .keys()
+            .find(|dependency| self.skipped.contains_key(*dependency))
+        else {
+            return Ok(false);
+        };
+        let reason = format!("requires {dependency}, which did not load");
+        if previous.is_some_and(|old| old.catalog.plugins.contains_key(id)) {
+            return Err(invalid(format!(
+                "Cannot reload active plugin {id}: {reason}"
+            )));
+        }
+        self.skip(id.to_owned(), reason);
+        Ok(true)
+    }
+
+    pub(super) fn skip(&mut self, id: String, reason: String) {
+        eprintln!("Skipping plugin {id}: {reason}");
+        self.skipped.insert(id, reason);
+    }
+
+    fn update_metadata(&mut self) -> Result<(), Error> {
         // Keep logical table names scoped by plugin in the aggregate metadata.
-        let schemas: BTreeMap<_, _> = inspected
+        let schemas: BTreeMap<_, _> = self
+            .inspected
             .iter()
-            .map(|(id, (descriptor, _))| (id.clone(), descriptor["schema"].clone()))
+            .map(|(id, (descriptor, _))| (id, &descriptor["schema"]))
             .collect();
+        let functions: Vec<_> = self
+            .catalog
+            .order
+            .iter()
+            .filter_map(|id| {
+                self.inspected
+                    .get(id)
+                    .map(|(descriptor, _)| (id, descriptor))
+            })
+            .flat_map(|(id, descriptor)| {
+                client_descriptors(
+                    id,
+                    descriptor,
+                    self.catalog.plugins[id]
+                        .manifest
+                        .plugin
+                        .maintenance
+                        .as_deref(),
+                )
+            })
+            .collect();
+        self.descriptor = json!({"schema":schemas,"functions":functions});
+        let mut metadata = self.catalog.metadata();
+        metadata["functions"] = self.descriptor["functions"].clone();
+        metadata["schema"] = self.descriptor["schema"].clone();
+        self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
+        Ok(())
+    }
 
-        let descriptor = json!({"schema":schemas,"functions":functions});
+    pub(super) async fn check_worker(&self, id: &str) -> Result<(), Error> {
+        if let Some(worker) = self.workers.get(id) {
+            worker.check_ready().await.map_err(|error| {
+                let environment = crate::environment::Snapshot::new(Some(self), Some(id));
+                invalid(format!(
+                    "Plugin {id} worker failed readiness: {}",
+                    environment.redact(error)
+                ))
+            })?;
+        }
+        Ok(())
+    }
 
-        let mut metadata = catalog.metadata();
-        metadata["functions"] = descriptor["functions"].clone();
-        metadata["schema"] = descriptor["schema"].clone();
+    pub(crate) fn changed_plugins(&self, previous: Option<&Self>) -> BTreeSet<String> {
+        let Some(old) = previous else {
+            return self.catalog.plugins.keys().cloned().collect();
+        };
+        self.catalog
+            .plugins
+            .keys()
+            .chain(
+                old.catalog
+                    .plugins
+                    .keys()
+                    .filter(|id| !self.catalog.plugins.contains_key(*id)),
+            )
+            .filter(|id| !self.catalog.same_build(&old.catalog, id))
+            .cloned()
+            .collect()
+    }
 
-        let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
+    pub(crate) async fn publish(
+        self: &Arc<Self>,
+        previous: Option<&Self>,
+        changed: &BTreeSet<String>,
+    ) {
+        // Action calls can resolve outside the coordinator. Block them during
+        // retirement so a new worker cannot use the live directory until its
+        // predecessor has stopped.
+        let mut current = self.current.write().await;
+        if let Some(previous) = previous {
+            for id in changed {
+                if let Some(lifetime) = previous.action_lifetimes.get(id) {
+                    lifetime.cancel();
+                }
+            }
+            for id in changed {
+                if let Some(worker) = previous.workers.get(id) {
+                    worker.stop().await;
+                }
+            }
+        }
+        *current = Arc::downgrade(self);
+    }
 
-        validate_maintenance(&catalog, &targets)?;
-        let workers = start_workers(&catalog, previous)?;
-        let action_lifetimes = action_lifetimes(&catalog, previous);
-        Ok(Arc::new(Self {
-            catalog,
-            targets,
-            descriptor,
-            catalog_text,
-            inspected,
-            workers,
-            action_lifetimes,
-        }))
+    pub(crate) async fn current_for(&self, caller: &str) -> Result<Arc<Self>, String> {
+        let current = self.current.read().await;
+        if self.action_lifetimes[caller].is_cancelled() {
+            return Err("Plugin action cancelled by reload".into());
+        }
+        current.upgrade().ok_or_else(|| "server is closed".into())
     }
 
     pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {
@@ -227,75 +379,35 @@ fn client_descriptors(id: &str, descriptor: &Value, maintenance: Option<&str>) -
         .collect()
 }
 
-fn same_build(catalog: &Catalog, previous: &Catalog, id: &str) -> bool {
-    previous
-        .plugins
-        .get(id)
-        .is_some_and(|old| old.build_id == catalog.plugins[id].build_id)
-}
-
-fn action_lifetimes(
+fn prepare_worker(
     catalog: &Catalog,
-    previous: Option<&Loaded>,
-) -> BTreeMap<String, tokio_util::sync::CancellationToken> {
-    catalog
-        .plugins
-        .keys()
-        .map(|id| {
-            let lifetime = previous
-                .filter(|old| same_build(catalog, &old.catalog, id))
-                .map(|old| old.action_lifetimes[id].clone())
-                .unwrap_or_default();
-            (id.clone(), lifetime)
-        })
-        .collect()
-}
-
-fn start_workers(
-    catalog: &Catalog,
-    previous: Option<&Loaded>,
-) -> Result<BTreeMap<String, Arc<crate::host::worker::Supervisor>>, Error> {
-    let mut workers = BTreeMap::new();
-    for (id, artifact) in &catalog.plugins {
-        if let Some(worker) = previous
-            .filter(|old| same_build(catalog, &old.catalog, id))
-            .and_then(|old| old.workers.get(id))
-        {
-            workers.insert(id.clone(), worker.clone());
-        } else if let Some(entry) = &artifact.manifest.entries.worker {
-            workers.insert(
-                id.clone(),
-                crate::host::worker::Supervisor::new(
-                    id.clone(),
-                    artifact.assets[&entry.entry].clone(),
-                    artifact.assets[&entry.code].clone(),
-                    catalog.directory.join("plugin-data").join(id),
-                    &catalog.environment,
-                    &artifact.manifest.plugin.permissions,
-                )
-                .map_err(|error| {
-                    invalid(format!("Could not set up worker for plugin {id}: {error}"))
-                })?,
-            );
-        }
-    }
-
-    Ok(workers)
+    id: &str,
+    artifact: &Artifact,
+) -> Result<Option<Arc<crate::host::worker::Supervisor>>, Error> {
+    let Some(entry) = &artifact.manifest.entries.worker else {
+        return Ok(None);
+    };
+    crate::host::worker::Supervisor::new(
+        id.to_owned(),
+        artifact.assets[&entry.entry].clone(),
+        artifact.assets[&entry.code].clone(),
+        catalog.directory.join("plugin-data").join(id),
+        &catalog.environment,
+        &artifact.manifest.plugin.permissions,
+    )
+    .map(Some)
 }
 
 fn validate_maintenance(
-    catalog: &Catalog,
-    targets: &BTreeMap<String, Target>,
+    artifact: &Artifact,
+    kinds: Option<&BTreeMap<String, crate::service::FunctionKind>>,
 ) -> Result<(), Error> {
-    for (id, artifact) in &catalog.plugins {
-        if let Some(name) = &artifact.manifest.plugin.maintenance
-            && (artifact.manifest.public_functions.contains(name)
-                || targets
-                    .get(&format!("{id}/{name}"))
-                    .is_none_or(|target| target.kind != crate::service::FunctionKind::Mutation))
-        {
-            return Err(invalid("Maintenance entry must name a private mutation"));
-        }
+    if let Some(name) = &artifact.manifest.plugin.maintenance
+        && (artifact.manifest.public_functions.contains(name)
+            || kinds.and_then(|kinds| kinds.get(name))
+                != Some(&crate::service::FunctionKind::Mutation))
+    {
+        return Err(invalid("Maintenance entry must name a private mutation"));
     }
     Ok(())
 }
@@ -314,7 +426,7 @@ impl StartupCatalog<'_> {
         installed: &BTreeMap<String, Arc<Artifact>>,
         indexed: &IndexedArtifacts,
         previous: Option<&Loaded>,
-    ) -> Result<Arc<Loaded>, Error> {
+    ) -> Result<Loaded, Error> {
         let mut plugins = installed.clone();
         let index = indexed
             .iter()
@@ -326,7 +438,7 @@ impl StartupCatalog<'_> {
         let mut catalog = Catalog::assemble(self.root, self.directory, plugins, Arc::new(index))?;
         catalog.installed = installed_paths(installed);
         catalog.index_path = self.index_path.map(Path::to_owned);
-        Loaded::load_reusing(catalog, self.pool, previous).await
+        Loaded::load_reusing(catalog, BTreeMap::new(), self.pool, previous).await
     }
 
     async fn commit(
@@ -334,9 +446,9 @@ impl StartupCatalog<'_> {
         installed: &BTreeMap<String, Arc<Artifact>>,
         indexed: &IndexedArtifacts,
         previous: Option<&Loaded>,
-    ) -> Result<Arc<Loaded>, Error> {
-        let loaded = self.load(installed, indexed, previous).await?;
-        Box::pin(loaded.record_grants(self.database, None)).await?;
+    ) -> Result<Loaded, Error> {
+        let mut loaded = self.load(installed, indexed, previous).await?;
+        Box::pin(loaded.record_startup_grants(self.database)).await?;
         Ok(loaded)
     }
 
@@ -345,7 +457,7 @@ impl StartupCatalog<'_> {
         installed: &BTreeMap<String, Arc<Artifact>>,
         indexed: &IndexedArtifacts,
         previous: &Loaded,
-    ) -> Result<Arc<Loaded>, Error> {
+    ) -> Result<Loaded, Error> {
         let loaded = self.load(installed, indexed, Some(previous)).await?;
         // Run the same schema and grant checks as startup without publishing a
         // partially accepted generation or making persistent changes.
@@ -357,7 +469,7 @@ impl StartupCatalog<'_> {
         &self,
         installed: &BTreeMap<String, Arc<Artifact>>,
         mut pending: IndexedArtifacts,
-    ) -> Result<Arc<Loaded>, Error> {
+    ) -> Result<Loaded, Error> {
         let mut accepted = BTreeMap::new();
         let mut loaded = self.load(installed, &accepted, None).await?;
         let mut failures = BTreeMap::new();
@@ -381,14 +493,19 @@ impl StartupCatalog<'_> {
                 break;
             }
         }
+        let mut loaded = self.commit(installed, &accepted, Some(&loaded)).await?;
         for (id, (folder, _)) in pending {
             if let Some(error) = failures.get(&id) {
                 eprintln!(
                     "Skipping indexed plugin {id} at {}: {error}",
                     folder.display()
                 );
+                if !loaded.catalog.plugins.contains_key(&id) {
+                    Arc::make_mut(&mut loaded.catalog.index).insert(id.clone(), folder);
+                    loaded.skipped.insert(id, error.to_string());
+                }
             }
         }
-        self.commit(installed, &accepted, Some(&loaded)).await
+        Ok(loaded)
     }
 }

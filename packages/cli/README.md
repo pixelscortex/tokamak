@@ -8,6 +8,7 @@ proto run bun -- run --silent tokamak plugin build /path/to/my-plugin --json
 proto run bun -- run --silent tokamak plugin add /path/to/my-plugin
 proto run bun -- run --silent tokamak plugin list --json
 proto run bun -- run --silent tokamak plugin remove my-plugin
+proto run bun -- run --silent tokamak plugin reload my-plugin --json
 ```
 
 `build` runs the artifact build once, defaults to the current folder, and
@@ -44,17 +45,26 @@ With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, normal output goes to stdout and errors go to stderr. Exit status is zero on success and
 nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 
-| Command         | Additional result fields                                       |
-| --------------- | -------------------------------------------------------------- |
-| `plugin build`  | `id`, `outputFolder`                                           |
+| Command         | Additional result fields                                      |
+| --------------- | ------------------------------------------------------------- |
+| `plugin build`  | `id`, `outputFolder`                                          |
 | `plugin add`    | `id`, `folder`, `reloadRequired: true`, `precedence: "index"` |
 | `plugin remove` | `id`, `reloadRequired: true`                                  |
-| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`            |
-| `--help`        | `help`                                                         |
+| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`           |
+| `--help`        | `help`                                                        |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
 configuration failures include `error.diagnostics`, an array with a full
 `message` and, when available, `file` (absolute), `line`, `column`, and `code`.
+
+Reload returns `plugins`, `removed` (ids removed from the running index), and
+`skipped` (a map of unrequested plugin ids to reasons). Each plugin result has
+`id`, `buildId` (SHA-256 of the built manifest, or null when no build was made),
+and `status`: `loaded`, `unchanged`, `build-failed`, `load-failed`, or
+`unknown`. Failed or uncertain entries carry `error.message` and may include
+`error.diagnostics`. The CLI locks each source folder through build and
+submission. If a reload reply is lost, it asks the server which build is
+running; when that cannot be confirmed, run `tokamak plugin list`.
 
 To add a command, create a file under `src/commands/` that satisfies `Command`,
 then register it in `src/commands.ts`. The entry point handles flags, help,

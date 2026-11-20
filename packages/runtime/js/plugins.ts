@@ -6,7 +6,7 @@ export type ModuleExports = Readonly<Record<string, unknown>>;
 export interface PluginModuleHost {
   importModule?(name: string, manifest: PluginManifest, revision: string): Promise<ModuleExports>;
   affected(names: readonly string[]): Set<string>;
-  remove(names: Iterable<string>): void;
+  remove(names: Iterable<string>, options?: { keepImports?: boolean }): void;
   evaluate(name: string, code: string): void;
   dependencies(name: string): readonly string[];
   has(name: string): boolean;
@@ -127,7 +127,7 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
       return exports;
     } catch (error) {
       if (generation === version(id)) {
-        registry.remove([moduleName(id)]);
+        registry.remove([moduleName(id)], { keepImports: true });
         pending.delete(id);
       }
       throw error;

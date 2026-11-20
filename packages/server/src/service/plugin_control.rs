@@ -10,6 +10,9 @@ impl Coordinator {
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
 
+        if !plugins.skipped.is_empty() {
+            metadata["skipped"] = serde_json::json!(plugins.skipped);
+        }
         Ok(metadata)
     }
 
@@ -98,8 +101,8 @@ impl Coordinator {
             .plugins
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
-        let catalog =
-            crate::plugins::Catalog::read_indexed_reload(root, &previous.catalog, request)?;
+        let (catalog, failures) =
+            crate::plugins::Catalog::read_indexed_reload(root, previous, request)?;
         let unchanged: Vec<_> = request
             .builds
             .iter()
@@ -119,97 +122,84 @@ impl Coordinator {
             .filter(|id| !catalog.index.contains_key(*id))
             .cloned()
             .collect();
-        let mut response = self.swap_catalog(catalog).await?;
+        let mut response = self.swap_catalog(catalog, failures).await?;
         response["removed"] = serde_json::json!(removed);
         response["unchanged"] = serde_json::json!(unchanged);
         Ok(response)
     }
 
-    async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+    pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
         let root = self
             .plugin_root
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
-        let catalog =
-            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
+        let previous = self.plugins.as_deref();
+        let (catalog, artifact_failures) =
+            crate::plugins::Catalog::read_for_reload(root, previous)?;
 
         if !catalog.plugins.contains_key(id)
-            && !self
-                .plugins
-                .as_ref()
-                .is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
+            && !previous.is_some_and(|old| {
+                old.catalog.plugins.contains_key(id) || old.skipped.contains_key(id)
+            })
         {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        self.swap_catalog(catalog).await
+        self.swap_catalog(catalog, artifact_failures).await
     }
 
-    async fn swap_catalog(&mut self, catalog: crate::plugins::Catalog) -> Result<Json, Error> {
-        if self
-            .plugins
-            .as_ref()
-            .is_some_and(|old| old.catalog.revision == catalog.revision)
+    async fn swap_catalog(
+        &mut self,
+        catalog: crate::plugins::Catalog,
+        artifact_failures: std::collections::BTreeMap<String, String>,
+    ) -> Result<Json, Error> {
+        let previous = self.plugins.as_deref();
+        if previous
+            .is_some_and(|old| old.skipped.is_empty() && old.catalog.revision == catalog.revision)
         {
             return self.metadata();
         }
 
-        let candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
+        let mut candidate =
+            crate::plugins::Loaded::load_reusing(catalog, artifact_failures, &self.pool, previous)
                 .await?;
-        let mut changed = std::collections::BTreeSet::new();
-        if let Some(previous) = &self.plugins {
-            for (id, artifact) in &previous.catalog.plugins {
-                if candidate
-                    .catalog
-                    .plugins
-                    .get(id)
-                    .is_none_or(|next| artifact.build_id != next.build_id)
-                {
-                    changed.insert(id.clone());
-                }
-            }
-            for id in candidate.catalog.plugins.keys() {
-                if !previous.catalog.plugins.contains_key(id) {
-                    changed.insert(id.clone());
-                }
-            }
-        }
-
-        Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
-        // All fallible preparation is complete. No requests can observe a
-        // partial swap while the coordinator retires the changed builds.
-        if let Some(previous) = &self.plugins {
-            for id in &changed {
-                if let Some(lifetime) = previous.action_lifetimes.get(id) {
-                    lifetime.cancel();
-                }
-            }
-            for id in &changed {
-                if let Some(worker) = previous.workers.get(id) {
-                    worker.stop().await;
-                }
-            }
-        }
+        Box::pin(candidate.record_grants(&self.database, previous)).await?;
+        let changed = candidate.changed_plugins(previous);
+        let revision_changed =
+            previous.is_none_or(|old| old.catalog.revision != candidate.catalog.revision);
+        // An empty report marks recovery when the previous load had skips.
+        let skipped = (previous.is_some_and(|old| !old.skipped.is_empty())
+            || !candidate.skipped.is_empty())
+        .then(|| serde_json::json!(candidate.skipped));
+        let candidate = Arc::new(candidate);
+        // Backfill and readiness have both passed for the remaining candidates.
+        // Retire only builds that differ in the catalog we will publish.
+        candidate.publish(previous, &changed).await;
         self.kinds = candidate.client_kinds();
         self.plugins = Some(candidate);
 
-        let catalog = self.metadata()?;
-        // Use the same bounded ordered stream as data updates. Asset requests
-        // carry the plugin's build id so they cannot mix builds.
-        for session in self.sessions.keys().copied().collect::<Vec<_>>() {
-            self.emit(
-                session,
-                Event::PluginChanged {
-                    plugins: changed.iter().cloned().collect(),
-                    catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
-                },
-            );
+        let mut catalog = self.metadata()?;
+        if let Some(skipped) = skipped {
+            catalog["skipped"] = skipped;
         }
-        self.invalidate(None);
-        self.refresh().await;
-        self.metadata()
+        if revision_changed || !changed.is_empty() {
+            // Windows fetch a changed catalog even when no builds need to remount.
+            for session in self.sessions.keys().copied().collect::<Vec<_>>() {
+                self.emit(
+                    session,
+                    Event::PluginChanged {
+                        plugins: changed.iter().cloned().collect(),
+                        catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
+                    },
+                );
+            }
+        }
+        if !changed.is_empty() {
+            self.invalidate(None);
+            self.refresh().await;
+        }
+        Ok(catalog)
     }
 
     pub(super) fn asset_page(

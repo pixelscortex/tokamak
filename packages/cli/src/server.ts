@@ -71,7 +71,14 @@ async function localEndpoint() {
   return endpoint;
 }
 
-export class ServerRefusal extends CommandError {}
+export class ServerRefusal extends CommandError {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message, "tokamak plugin list");
+  }
+}
 
 async function request(path: string, endpoint: { url: URL; token: string }, body?: object): Promise<unknown> {
   let response: Response;
@@ -89,9 +96,12 @@ async function request(path: string, endpoint: { url: URL; token: string }, body
   } catch {
     throw new Error("Could not connect to the server");
   }
-  if (body && response.status === 400) {
-    const result = (await response.json()) as { error?: string };
-    if (typeof result?.error === "string") throw new ServerRefusal(result.error, "tokamak plugin list");
+  if (body && response.status >= 400 && response.status < 500 && response.status !== 408) {
+    const result = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
+    throw new ServerRefusal(
+      typeof result?.error === "string" ? result.error : `Server refused reload (HTTP ${response.status})`,
+      result?.code,
+    );
   }
   if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
   try {
