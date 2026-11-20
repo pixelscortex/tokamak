@@ -61,6 +61,10 @@ async function pluginRequest(path: string, endpoint: Endpoint, body?: object) {
   return json(response);
 }
 
+export function serverGetAt(path: string, endpoint: Endpoint) {
+  return pluginRequest(path, endpoint);
+}
+
 export function serverGet(path: string, explicit?: string) {
   return serverRequest(path, explicit);
 }

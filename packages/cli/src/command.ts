@@ -31,7 +31,8 @@ export interface Command {
     args: string[],
     options: { server?: string; flags: Flags },
   ): Promise<
-    { data: object; text: string; jsonText?: string } | { stream(output: StreamOutput): Promise<void> }
+    | { data: object; text: string; jsonText?: string; error?: { message: string; next: string } }
+    | { stream(output: StreamOutput): Promise<void> }
   >;
 }
 

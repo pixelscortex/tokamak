@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { readSourcePlugin } from "../../../build/src/descriptor";
 import { CommandError, type Command } from "../command";
 import { acquireLock, readIndex } from "../plugin-index";
 import { ServerRefusal, serverGet, serverPost } from "../server";
@@ -185,7 +184,9 @@ async function runReload(id: string | undefined, server?: string) {
       try {
         const canonical = await realpath(folder);
         if (!releases.has(canonical)) releases.set(canonical, await acquireLock(canonical, ".tokamak-build"));
-        const descriptor = await readSourcePlugin(canonical).catch(() => undefined);
+        const descriptor = await import("../../../build/src/descriptor")
+          .then(({ readSourcePlugin }) => readSourcePlugin(canonical))
+          .catch(() => undefined);
         // The builder reports malformed descriptors with source diagnostics.
         sources.push({ id: plugin, folder: canonical, depends: Object.keys(descriptor?.depends ?? {}) });
       } catch (error) {

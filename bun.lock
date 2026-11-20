@@ -66,6 +66,7 @@
     },
     "packages/cli": {
       "name": "@tokamak/cli",
+      "version": "0.1.0",
     },
     "packages/runtime": {
       "name": "@tokamak/runtime",

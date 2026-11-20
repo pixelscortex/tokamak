@@ -1,6 +1,5 @@
 import { access, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { readSourcePlugin } from "../../../build/src/descriptor";
 import { CommandError, type Command } from "../command";
 import { runBuilder } from "../plugin-build";
 import { updateIndex } from "../plugin-index";
@@ -21,6 +20,7 @@ export default {
       },
     );
     if (hasConfig) await runBuilder(folder, "--check-index");
+    const { readSourcePlugin } = await import("../../../build/src/descriptor");
     const { id } = await readSourcePlugin(folder);
     await updateIndex((entries) => {
       const existing = entries.get(id);

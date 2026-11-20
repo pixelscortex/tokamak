@@ -10,6 +10,19 @@ import invite from "./commands/invite";
 import revoke from "./commands/revoke";
 import { serverStart, serverStop, serverStatus } from "./commands/server";
 
+import doctor from "./commands/doctor";
+import report from "./commands/report";
+
 const peopleAndServer = [members, invite, revoke, serverStart, serverStop, serverStatus];
 
-export const commands: readonly Command[] = [build, add, remove, list, reload, logs, ...peopleAndServer];
+export const commands: readonly Command[] = [
+  build,
+  add,
+  remove,
+  list,
+  reload,
+  logs,
+  ...peopleAndServer,
+  doctor,
+  report,
+];

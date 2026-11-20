@@ -10,6 +10,8 @@ proto run bun -- run --silent tokamak plugin list --json
 proto run bun -- run --silent tokamak plugin logs my-plugin --errors --json
 proto run bun -- run --silent tokamak plugin remove my-plugin
 proto run bun -- run --silent tokamak plugin reload my-plugin --json
+proto run bun -- run --silent tokamak doctor --json
+proto run bun -- run --silent tokamak report --out diagnostics.md
 ```
 
 `build` runs the artifact build once, defaults to the current folder, and
@@ -108,6 +110,8 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 | `server start`  | `address`, `pid`, `buildId`, `reused`                              |
 | `server status` | `running`; when true: `responsive`, `address`, `pid`, `buildId`    |
 | `server stop`   | `stopped`: whether a running server was stopped                    |
+| `doctor`        | `rows`: an array of readiness checks                               |
+| `report`        | `path`: the absolute path of the written report                    |
 | `--help`        | `help`                                                             |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
@@ -125,6 +129,26 @@ and `status`: `loaded`, `unchanged`, `build-failed`, `load-failed`, or
 submission. Any unrelated installed manifest errors found after a removal are
 listed under `warnings` without failing the command. If a reload reply is lost, it asks the server which build is
 running; when that cannot be confirmed, run `tokamak plugin list`.
+
+`doctor` checks the CLI, the running Bun against the checkout's pin, git, the plugin
+build tools and the local server, in that order. Each row contains `name`,
+`state` (`"ready"` or `"not ready"`), and `detail`. A row that is not ready
+also contains one `fix` (a command or a URL). When any row is not ready,
+the command exits 1 and returns `{ ok: false, error: { message, next }, rows }`
+with all five rows.
+
+`report` writes a Markdown file with the doctor table, local server details
+and loaded plugins, the plugin index, the OS and architecture, and up to
+200 lines from at most the last 1 MiB of `server.log`. It omits unrecognized
+log lines and index paths outside the home folder, shortens home paths to `~`,
+and redacts known credentials and credential-looking values. Review the file
+before sharing it. It works with the local
+server stopped. The file is named `tokamak-report-<date-time>.md` in the current
+folder unless you supply `--out <path>`. The command prints the path, never
+overwrites a file and uploads nothing. A default name collision gets a unique
+suffix. Both commands check the local server in the app data folder; they
+reject `--server` and ignore `TOKAMAK_SERVER`. Discovered local connections never
+use an HTTP proxy.
 
 To add a command, create a file under `src/commands/` that satisfies `Command`,
 then register it in `src/commands.ts`. The entry point handles flags, help,

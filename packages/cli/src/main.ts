@@ -124,7 +124,15 @@ try {
         write: (text) => write(process.stdout, text, ""),
         notice: (text) => write(process.stderr, text, ""),
       });
-    } else await output({ ok: true, ...result.data }, json ? (result.jsonText ?? result.text) : result.text);
+    } else {
+      const { data, error, text, jsonText } = result;
+      await output(
+        { ...data, ok: !error, ...(error && { error }) },
+        json ? (jsonText ?? text) : text,
+        Boolean(error),
+      );
+      if (error) process.exitCode = 1;
+    }
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
