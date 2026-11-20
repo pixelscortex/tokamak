@@ -177,20 +177,23 @@ test("switching the thread agent keeps each earlier reply labelled with the agen
   await expect(turns.nth(1)).toHaveAccessibleName("Claude");
 });
 
-test("a server on another release line allows messages but cannot start an agent turn", async ({ page }) => {
-  await page.route("**/version", (route) => route.fulfill({ json: { version: "999.0.0" } }));
-  const agentActions: string[] = [];
-  page.on("websocket", (socket) =>
-    socket.on("framesent", ({ payload }) => {
-      const request = JSON.parse(String(payload));
-      if (request.type === "action" && /^(chat\/chat:send|acp\/relay:relayTurn)$/.test(request.name))
-        agentActions.push(request.name);
-    }),
-  );
+for (const [server, message] of [
+  ["999.0.0", "Update the app"],
+  ["0.0.0", "This server needs an update"],
+] as const) {
+  test(`server ${server} shows only the version notice`, async ({ page }) => {
+    await page.route("**/version", (route) => route.fulfill({ json: { version: server } }));
+    await page.goto("/p/chat");
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: message, exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+    await expect(page.getByText("The owner needs to rebuild this plugin")).toHaveCount(0);
+  });
+}
+
+test("a failed version probe leaves chat available", async ({ page }) => {
+  await page.route("**/version", (route) => route.abort());
   await openChat(page);
-  await expect(page.getByRole("alert").getByText("Update the app", { exact: true })).toBeVisible();
-  await newThread(page);
-  await expect(page.getByRole("button", { name: "Message only", exact: true })).toHaveCount(0);
-  await send(page, "A message without an agent");
-  expect(agentActions).toEqual([]);
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  await expect(page.getByText("Update the app", { exact: true })).toHaveCount(0);
 });

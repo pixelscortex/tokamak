@@ -26,7 +26,7 @@ export default definePlugin({ id: "${id}", version: "1.0.0" });`,
     await writeFile(
       join(source, "src/client/api.tsx"),
       `import { view } from "@tokamak/sdk/client";
-export const SharedView = view({ route: "/" }, () => <p>Shared plugin is running</p>);`,
+export const SharedView = view({ route: "/detail" }, () => <p>Shared plugin is running</p>);`,
     );
     const { stdout } = await promisify(execFile)("proto", [
       "run",
@@ -62,12 +62,20 @@ export const SharedView = view({ route: "/" }, () => <p>Shared plugin is running
 
     await sharedWindow.getByRole("link", { name: "SharedView", exact: true }).click();
     const sharedView = sharedWindow.getByText("Shared plugin is running");
+    await expect(sharedWindow).toHaveURL(/\/p\/browser-shared\/detail$/);
     await expect(sharedView).toBeVisible();
     const removal = await request.delete(url, { headers });
     expect(removal.ok(), await removal.text()).toBe(true);
     installed = false;
     await expect(shared).toHaveCount(0);
     await expect(sharedView).toHaveCount(0);
+    await expect(sharedWindow).toHaveURL(/\/p\/chat$/);
+    await expect(sharedWindow.getByRole("textbox", { name: "Message" })).toBeVisible();
+    await expect(sharedWindow.getByRole("navigation", { name: "Open pages" })).toBeVisible();
+    const rail = sharedWindow.getByRole("navigation", { name: "Views" });
+    await expect(rail).toBeVisible();
+    await rail.getByRole("link", { name: "FixtureView", exact: true }).click();
+    await expect(sharedWindow.getByRole("region", { name: "Integration fixture" })).toBeVisible();
     expect(await original.evaluate((node) => node.isConnected)).toBe(true);
   } finally {
     if (installed) await request.delete(url, { headers });

@@ -65,6 +65,7 @@ export function ServerSwitcher(props: { compact?: boolean }): JSX.Element {
   const current = servers.current;
   const live = (): Status => {
     const state = shell.session.connection().state;
+    if (state === "incompatible") return "connected";
     return state === "connected" ? "connected" : state === "connecting" ? "connecting" : "failed";
   };
   const [probes, setProbes] = createSignal<Readonly<Record<string, Status>>>({}, { ownedWrite: true });

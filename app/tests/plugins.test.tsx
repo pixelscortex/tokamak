@@ -444,7 +444,7 @@ test.each([
   });
   const active = catalog();
   active.plugins[0]!.plugin.api = api ?? "";
-  const metadata = api ? active : { ...active, plugins: [], skipped: { fixture: "needs rebuild" } };
+  const metadata = api ? active : { ...active, plugins: [], skipped: { fixture: "needs-rebuild" } };
   const imported = vi.spyOn(WebPluginHost.prototype, "importModule");
   const shell = createPluginShell(
     {} as TokamakClient,
@@ -457,7 +457,7 @@ test.each([
   try {
     await shell.connect();
     flush();
-    await router.navigate({ href: "/p/fixture" });
+    await router.navigate({ href: api ? "/p/fixture" : "/p/fixture/detail/history" });
     await waitFor(() => expect(getByRole(target, "alert").textContent).toContain(message));
     expect(imported).not.toHaveBeenCalled();
   } finally {

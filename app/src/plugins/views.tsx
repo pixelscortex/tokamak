@@ -40,6 +40,7 @@ export interface PluginView {
   /** A single-colour 24 × 24 SVG path from the view's options, if it named one. */
   icon?: string;
   generation: number;
+  descendants?: boolean;
 }
 export interface PluginRouting {
   router: AnyRouter;
@@ -76,7 +77,8 @@ export function createPluginShell(
           messages.set(plugin.id, fit === "app-too-old" ? "Update the app to use this plugin" : rebuild);
       }
       for (const [id, reason] of Object.entries(catalog.skipped ?? {})) {
-        if (reason === "needs rebuild") messages.set(id, rebuild);
+        const notice = skippedNotice(reason);
+        if (notice) messages.set(id, notice);
       }
       return messages;
     });
@@ -95,7 +97,9 @@ export function createPluginShell(
         generation: loader.version(c.plugin),
       })),
       ...Object.entries(loader.metadata().skipped ?? {}).flatMap(([id, reason]): PluginView[] =>
-        reason === "needs rebuild" ? [{ id, plugin: id, route: `/p/${id}`, title: id, generation: 0 }] : [],
+        skippedNotice(reason)
+          ? [{ id, plugin: id, route: `/p/${id}`, title: id, generation: 0, descendants: true }]
+          : [],
       ),
     ]);
     const shell: PluginShell = {
@@ -109,41 +113,60 @@ export function createPluginShell(
       connect: () => loader.connect(),
       dispose: () => stop(),
     };
-    const routeCache = new Map<string, AnyRoute>();
-    createEffect(views, (current) => {
-      const paths = new Set<string>();
-      const routes = current.flatMap((view) => {
-        if (paths.has(view.route)) return [];
-        paths.add(view.route);
-        const identity = `${view.plugin}:${view.id}:${view.route}`;
-        let route = routeCache.get(identity);
+    updateRoutes(shell, routing);
+    return shell;
+  });
+}
+
+function updateRoutes(shell: PluginShell, { router, root, base }: PluginRouting) {
+  const cache = new Map<string, AnyRoute>();
+  let installed = new Map<string, AnyRoute>();
+  let change = 0;
+  const apply = (routes: Map<string, AnyRoute>) => {
+    installed = routes;
+    root.addChildren([...base, ...routes.values()]);
+    // The pinned Router RC only rebuilds on root identity changes.
+    router.setRoutes(router.buildRouteTree());
+    void router.invalidate();
+  };
+  createEffect(shell.views, (views) => {
+    const current = ++change;
+    const routes = new Map<string, AnyRoute>();
+    const used = new Set<string>();
+    for (const view of views) {
+      const path = view.route
+        .replace(/:([A-Za-z][A-Za-z0-9_]*)/g, "$$$1")
+        .replace(/\*[A-Za-z][A-Za-z0-9_]*/g, "$");
+      for (const candidate of view.descendants ? [path, `${path}/$`] : [path]) {
+        if (routes.has(candidate)) continue;
+        const identity = `${view.plugin}:${view.id}:${candidate}`;
+        used.add(identity);
+        let route = cache.get(identity);
         if (!route) {
           route = createRoute({
-            getParentRoute: () => routing.root,
-            path: view.route
-              .replace(/:([A-Za-z][A-Za-z0-9_]*)/g, "$$$1")
-              .replace(/\*[A-Za-z][A-Za-z0-9_]*/g, "$"),
+            getParentRoute: () => root,
+            path: candidate,
             component: () => <PluginViews shell={shell} view={view} />,
           });
-          routeCache.set(identity, route);
+          cache.set(identity, route);
         }
-        return [route];
+        routes.set(candidate, route);
+      }
+    }
+    for (const identity of cache.keys()) if (!used.has(identity)) cache.delete(identity);
+    const active = router.state.matches.at(-1)?.routeId;
+    const removed = [...installed].some(([path, route]) => route.id === active && !routes.has(path));
+    if (removed) {
+      // The router still reads the old match until navigation settles.
+      void router.navigate({ href: "/", replace: true }).then(() => {
+        if (change === current) apply(routes);
       });
-      const identities = new Set(current.map((view) => `${view.plugin}:${view.id}:${view.route}`));
-      for (const id of routeCache.keys()) if (!identities.has(id)) routeCache.delete(id);
-      routing.root.addChildren([...routing.base, ...routes]);
-      // The pinned Router RC only rebuilds on root identity changes.
-      routing.router.setRoutes(routing.router.buildRouteTree());
-      void routing.router.invalidate();
-    });
-    onCleanup(() => {
-      loader.dispose();
-      routing.root.addChildren([...routing.base]);
-      // The pinned Router RC only rebuilds on root identity changes.
-      routing.router.setRoutes(routing.router.buildRouteTree());
-      void routing.router.invalidate();
-    });
-    return shell;
+    } else apply(routes);
+  });
+  onCleanup(() => {
+    change++;
+    shell.loader.dispose();
+    apply(new Map());
   });
 }
 
@@ -167,6 +190,10 @@ function watchUnhandledPluginErrors(host: WebPluginHost) {
 }
 
 const rebuild = "The owner needs to rebuild this plugin";
+function skippedNotice(reason: string) {
+  if (reason === "needs-rebuild") return rebuild;
+  if (reason === "failed-to-load") return "This plugin failed to load";
+}
 
 export function PluginViews(props: { shell: PluginShell; view: PluginView }) {
   const key = () => `${props.view.plugin}:${props.view.id}:${props.shell.loader.version(props.view.plugin)}`;
