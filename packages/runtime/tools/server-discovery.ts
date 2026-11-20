@@ -1,14 +1,11 @@
 /** Authenticated local discovery shared by the CLI and plugin builder. */
 import { lstat, readFile } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { direct, loopback, type RequestOptions } from "./direct-http";
+export type { RequestOptions } from "./direct-http";
+export { loopback } from "./direct-http";
 import { processIsAlive } from "./process";
-
-export const loopback = (host: string) =>
-  host === "localhost" || host === "[::1]" || (isIP(host) === 4 && host.startsWith("127."));
 
 export function httpAddress(address: string) {
   let url: URL;
@@ -93,8 +90,6 @@ export async function inspectLocalServer(folder: string) {
   return { identity, responsive: true as const, endpoint };
 }
 
-export type RequestOptions = { method?: string; headers?: Record<string, string>; body?: string };
-
 export async function request(path: string, endpoint: Endpoint, init: RequestOptions = {}, timeout = 5000) {
   const destination = new URL(path, endpoint.url);
   if (destination.origin !== endpoint.url.origin) throw new ServerRequestError("Invalid server route");
@@ -112,29 +107,6 @@ export async function request(path: string, endpoint: Endpoint, init: RequestOpt
   } catch {
     throw new ConnectionError("Could not connect to the server");
   }
-}
-
-// A fresh socket cannot inherit proxy settings or follow redirects.
-function direct(url: URL, headers: Headers, signal: AbortSignal, { method, body }: RequestOptions) {
-  return new Promise<Response>((resolve, reject) => {
-    const send = url.protocol === "https:" ? httpsRequest : httpRequest;
-    const outgoing = send(
-      url,
-      { agent: false, method, headers: Object.fromEntries(headers), signal },
-      (incoming) => {
-        const status = incoming.statusCode ?? 500;
-        const bodyless = status === 204 || status === 205 || status === 304;
-        if (bodyless) incoming.resume();
-        resolve(
-          new Response(bodyless ? null : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>), {
-            status,
-          }),
-        );
-      },
-    );
-    outgoing.on("error", reject);
-    outgoing.end(body);
-  });
 }
 
 export async function json(response: Response): Promise<unknown> {
