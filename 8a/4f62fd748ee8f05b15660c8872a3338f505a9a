@@ -1,0 +1,44 @@
+app/package.json
+  s_2d256ddfde48ff::t_d2335e7343fbde 3
+bun.lock
+  s_2d256ddfde48ff::t_608d4704cf87d3 19,64,151
+wiki/package.json
+  s_2d256ddfde48ff::t_4b683ca0864f67 3
+.ci/versions.ts
+  s_2d256ddfde48ff::t_a80f8a9555305e 58-61,65-68,87-88,90,92,159-162,172
+  s_2d256ddfde48ff::t_4054f09389a513 30-33
+  s_2d256ddfde48ff::t_7bf9e9dfe1dcdf 199-200,202-203
+  s_2d256ddfde48ff::t_624df7e6e46f81 117-134,184-186,188,197-198,201,204
+  s_2d256ddfde48ff::t_0a9c857bd094c7 21,193
+  s_2d256ddfde48ff::t_555d0036e7380d 1-20,22-29,34-57,62-64,69-86,89,91,93,95-97,104-116,135-158,163-171,173-183,187,189-192,194-196,205-210
+  s_2d256ddfde48ff::t_1fbaf3618e2c87 94,98-103
+.ci/versions.test.ts
+  s_2d256ddfde48ff::t_1fbaf3618e2c87 23-27,94-96
+  s_2d256ddfde48ff::t_4ec5baa76417a1 1-22,28-93,97-107
+.ci/README.md
+  s_2d256ddfde48ff::t_6f27c99ef89cfb 53-56,61-62
+  s_2d256ddfde48ff::t_b29d65d441a30b 42-52,57-60,63
+  s_2d256ddfde48ff::t_9613b4341fa50a 64
+package.json
+  s_2d256ddfde48ff::t_d2335e7343fbde 3,18-19
+.ci/check.sh
+  s_2d256ddfde48ff::t_b29d65d441a30b 8,14
+packages/runtime/package.json
+  s_2d256ddfde48ff::t_d2335e7343fbde 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a4f62fd748ee8f05b15660c8872a3338f505a9a",
+  "prompts": {},
+  "sessions": {
+    "s_2d256ddfde48ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ecc974d1-dd6b-4f18-8da1-d60cbebe54f0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
