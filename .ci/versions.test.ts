@@ -16,6 +16,9 @@ function write(root: string, file: string, text: string) {
 
 const json = (value: object) => `${JSON.stringify(value, null, 2)}\n`;
 
+const descriptor = (id: string, version: string) =>
+  `import { definePlugin } from "@tokamak/sdk";\nexport default definePlugin({\n  id: "${id}",\n  version: "${version}",\n  depends: { other: "^1.0.0" },\n});\n`;
+
 /** A small copy of the repository layout: Bun workspaces, a plugin, Cargo members and Tauri. */
 function fixture(version = "0.1.0") {
   const root = mkdtempSync(join(tmpdir(), "versions-"));
@@ -28,9 +31,16 @@ function fixture(version = "0.1.0") {
   write(root, "app/package.json", json({ name: "@tokamak/app", version, private: true }));
   write(root, "packages/sdk/package.json", json({ name: "@tokamak/sdk", version, private: true }));
   write(root, "packages/bare/package.json", json({ name: "@tokamak/bare", private: true }));
-  // Plugin versions are their own; the check must not touch them.
-  write(root, "plugins/chat/package.json", json({ name: "chat", version: "0.3.0" }));
-  write(root, "plugins/chat/plugin.ts", 'export default { id: "chat", version: "0.3.0" };\n');
+  // Plugins in this repo follow the version; a nested dependency range is not a version.
+  write(root, "plugins/chat/package.json", json({ name: "chat", version }));
+  write(root, "plugins/chat/plugin.ts", descriptor("chat", version));
+  // A test fixture plugin is not a workspace package; its version is a test input.
+  write(
+    root,
+    "packages/server/tests/fixtures/record/package.json",
+    json({ name: "record", version: "1.0.0" }),
+  );
+  write(root, "packages/server/tests/fixtures/record/plugin.ts", descriptor("record", "1.0.0"));
   write(
     root,
     "Cargo.toml",
@@ -49,8 +59,10 @@ function fixture(version = "0.1.0") {
 test("a repository with one version passes", () => {
   const root = fixture();
   expect(drift(root)).toEqual([]);
-  expect(report(root)).toEqual({ ok: true, lines: ["All 5 owned versions are 0.1.0."] });
-  expect(places(root).map((place) => place.file)).not.toContain("plugins/chat/package.json");
+  expect(report(root)).toEqual({ ok: true, lines: ["All 7 owned versions are 0.1.0."] });
+  const files = places(root).map((place) => place.file);
+  expect(files).toContain("plugins/chat/plugin.ts");
+  expect(files.filter((file) => file.includes("fixtures"))).toEqual([]);
 });
 
 test("a drifted package fails with its file and value named", () => {
@@ -64,6 +76,20 @@ test("a drifted package fails with its file and value named", () => {
   expect(lines).toHaveLength(4);
 });
 
+test("a drifted plugin fails for its package.json and its plugin.ts", () => {
+  const root = fixture();
+  write(root, "plugins/chat/package.json", json({ name: "chat", version: "0.3.0" }));
+  write(root, "plugins/chat/plugin.ts", descriptor("chat", "0.3.0"));
+  expect(report(root).lines).toEqual([
+    "Versions differ from the root package.json (0.1.0):",
+    "  plugins/chat/package.json: version is 0.3.0",
+    "  plugins/chat/plugin.ts: plugin version is 0.3.0",
+    "Run `proto run bun -- run version:set <version>` to write one version everywhere.",
+  ]);
+  write(root, "plugins/chat/plugin.ts", 'export default definePlugin({ id: "chat" });\n');
+  expect(report(root).lines).toContain("  plugins/chat/plugin.ts: plugin version is missing");
+});
+
 test("a package that arrives later is discovered and checked", () => {
   const root = fixture();
   write(root, "packages/cli/package.json", json({ name: "@tokamak/cli", version: "0.1.0" }));
@@ -72,10 +98,11 @@ test("a package that arrives later is discovered and checked", () => {
   expect(drift(root).map((place) => place.file)).toEqual(["packages/cli/package.json"]);
 });
 
-test("set fixes a drifted fixture and leaves plugin versions alone", () => {
+test("set fixes a drifted fixture, plugins included, and leaves fixture plugins alone", () => {
   const root = fixture();
   write(root, "packages/sdk/package.json", json({ name: "@tokamak/sdk", version: "0.2.0" }));
-  expect(set(root, "0.1.0")).toEqual(["packages/sdk/package.json"]);
+  write(root, "plugins/chat/plugin.ts", descriptor("chat", "0.3.0"));
+  expect(set(root, "0.1.0")).toEqual(["packages/sdk/package.json", "plugins/chat/plugin.ts"]);
   expect(drift(root)).toEqual([]);
 
   const changed = set(root, "0.4.0");
@@ -86,15 +113,21 @@ test("set fixes a drifted fixture and leaves plugin versions alone", () => {
       "app/src-tauri/tauri.conf.json",
       "package.json",
       "packages/sdk/package.json",
+      "plugins/chat/package.json",
+      "plugins/chat/plugin.ts",
     ].sort(),
   );
-  expect(report(root).lines).toEqual(["All 5 owned versions are 0.4.0."]);
-  // Only the version line moved; the dependency's `version` key and the plugin did not.
+  expect(report(root).lines).toEqual(["All 7 owned versions are 0.4.0."]);
+  // Only version lines moved: not a dependency's `version` key, not a `depends` range.
   expect(readFileSync(join(root, "Cargo.toml"), "utf8")).toContain('version = "0.4.0"\nedition = "2024"');
   expect(readFileSync(join(root, "packages/server/Cargo.toml"), "utf8")).toContain(
     'semver = { version = "1" }',
   );
-  expect(JSON.parse(readFileSync(join(root, "plugins/chat/package.json"), "utf8")).version).toBe("0.3.0");
+  expect(readFileSync(join(root, "plugins/chat/plugin.ts"), "utf8")).toBe(descriptor("chat", "0.4.0"));
+  expect(readFileSync(join(root, "plugins/chat/plugin.ts"), "utf8")).toContain('other: "^1.0.0"');
+  expect(readFileSync(join(root, "packages/server/tests/fixtures/record/plugin.ts"), "utf8")).toBe(
+    descriptor("record", "1.0.0"),
+  );
   expect(JSON.parse(readFileSync(join(root, "packages/bare/package.json"), "utf8")).version).toBeUndefined();
 });
 

@@ -44,24 +44,32 @@ release consumers, but these workflows do not invoke it.
 
 Everything we own carries one version, the `version` field of the root
 `package.json`. That covers every Bun workspace package that declares a version, the
-Cargo workspace version (every crate inherits it with `version.workspace = true`)
-and `app/src-tauri/tauri.conf.json`, which names the desktop bundle
-(`Tokamak_<version>_x64-setup.exe`). The server's crate version is also the host API
-version that plugins require through `api` (default `tokamak@^0.1`).
+plugins in this repo (`plugins/*`: their `package.json` and the `version` in
+`plugin.ts`), the Cargo workspace version (every crate inherits it with
+`version.workspace = true`) and `app/src-tauri/tauri.conf.json`, which names the
+desktop bundle (`Tokamak_<version>_x64-setup.exe`). The server's crate version is also
+the host API version that plugins require through `api` (default `tokamak@^0.1`). ACP
+sends its plugin version to agents as `clientInfo`.
 
 Change it everywhere in one step with `proto run bun -- run version:set 0.2.0`; it
 rewrites those files and then the lockfiles (`bun install`, `cargo update --workspace`).
 The `lint` job runs the check (`.ci/versions.ts check`, also `proto run bun -- run
 version:check`), which fails and lists each file and value that differs. It finds the
-places itself, so a new package is covered once it joins a workspace; a package with
-no `version` field is allowed.
+places itself, so a new package or plugin is covered once it joins a workspace; a
+`package.json` with no `version` field is allowed.
 
-Plugin versions are deliberately left out: `plugins/*` and any package with a
-`plugin.ts`. The server keys each plugin's capability grant by `<id>@<version>` and
-refuses to start when a stored grant for that key lists other permissions. Moving
-`chat` from 0.3.0 back to 0.1.0 reuses a key that data folders which ran chat 0.1.0
-hold with three permissions, so those servers would not start. Change a
-plugin's version only upward, on its own.
+Test fixture plugins (`packages/*/tests/fixtures`, `app/tests/fixtures`) are not
+workspace packages and keep their own versions. Tests bump them on purpose to exercise
+grants and dependency ranges.
+
+A plugin's version is also the key of its capability grant (`<id>@<version>`) in the
+data folder. The server refuses to start when a stored grant for that key lists other
+permissions. Moving `chat` from 0.3.0 to 0.1.0 has this effect once: a data folder that
+ran the old chat 0.1.0 (2026-11-15/16, with the OpenRouter permissions) holds a
+`chat@0.1.0` grant with three permissions, and the server stops with
+`Permissions changed for chat@0.1.0; bump its version before granting. The data folder
+<path> already granted ...`. To clear it, stop the server and delete the data folder the
+message names; this erases all of its data. Data folders created later start normally.
 
 ## Windows desktop
 

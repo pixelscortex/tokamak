@@ -4,18 +4,19 @@
 //   proto run bun -- .ci/versions.ts set 0.2.0    writes the version everywhere, then the lockfiles
 //
 // The places are discovered, not listed: the root package.json, every Bun workspace
-// package that declares a version, the Cargo workspace version and every member crate,
-// and each member crate's tauri.conf.json. A package added later is covered as soon as
-// it joins a workspace.
+// package that declares a version, the `version` in the plugin.ts of every workspace
+// package that has one (plugins/chat, plugins/acp), the Cargo workspace version and
+// every member crate, and each member crate's tauri.conf.json. A package added later is
+// covered as soon as it joins a workspace.
 //
-// Plugin versions are deliberately left out. A plugin's version is part of the key of
-// its capability grant (`<id>@<version>` in packages/server/src/plugins/grants.rs), and
-// a server refuses to start when a stored grant for that key lists other permissions.
-// Moving a plugin to a version it had before (chat 0.3.0 -> 0.1.0, for example) reuses
-// such an old key, so plugin versions change only on purpose, one plugin at a time.
-// That covers every workspace package under plugins/ and every package with a
-// plugin.ts, whose package.json version is the plugin's fallback version
-// (packages/build/src/vite.ts).
+// Test fixture plugins (packages/*/tests/fixtures, app/tests/fixtures) are not workspace
+// packages, so they are not covered. Their versions are test inputs: tests write the
+// same `1.0.0` inline and bump a version on purpose to exercise grants and dependency
+// ranges, so they must not follow the product version.
+//
+// A plugin's version is also the key of its capability grant (`<id>@<version>`,
+// packages/server/src/plugins/grants.rs). A data folder holding a grant row for a key
+// with other permissions makes the server refuse to start; see .ci/README.md "Versions".
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -50,10 +51,8 @@ function expand(root: string, patterns: string[], marker: string): string[] {
   return [...directories].sort();
 }
 
-/** True for a workspace package that is a plugin; its version is the plugin's own. */
-export function isPlugin(root: string, directory: string): boolean {
-  return directory.split("/")[0] === "plugins" || existsSync(join(root, directory, "plugin.ts"));
-}
+// The descriptor's own `version: "..."` line, indented once inside definePlugin({ ... }).
+const descriptorVersion = /^( {2}version:\s*")([^"]*)(",?)$/m;
 
 /** A TOML `version` value; `{ workspace = true }` counts as inherited. */
 function tomlVersion(value: unknown): { value: string | undefined; inherited: boolean } {
@@ -77,9 +76,16 @@ export function places(root: string): Place[] {
   const found: Place[] = [{ file: "package.json", version: source(root), field: "version", optional: false }];
   const manifest = readJson(join(root, "package.json"));
   for (const directory of expand(root, manifest.workspaces ?? [], "package.json")) {
-    if (isPlugin(root, directory)) continue;
     const file = `${directory}/package.json`;
+    const descriptor = `${directory}/plugin.ts`;
+    const plugin = existsSync(join(root, descriptor));
+    // A plugin's package.json version is the build's fallback (packages/build/src/vite.ts),
+    // so a plugin may leave it out; when present it must match too.
     found.push({ file, version: readJson(join(root, file)).version, field: "version", optional: true });
+    if (plugin) {
+      const match = readFileSync(join(root, descriptor), "utf8").match(descriptorVersion);
+      found.push({ file: descriptor, version: match?.[2], field: "plugin version", optional: false });
+    }
   }
 
   const cargo = join(root, "Cargo.toml");
@@ -139,6 +145,11 @@ function replaceJson(text: string, version: string): string {
   return next;
 }
 
+function replaceDescriptor(text: string, version: string): string {
+  if (!descriptorVersion.test(text)) throw new Error("no `version` line in definePlugin");
+  return text.replace(descriptorVersion, `$1${version}$3`);
+}
+
 function replaceToml(text: string, section: string, version: string): string {
   const lines = text.split("\n");
   let inside = false;
@@ -163,7 +174,11 @@ export function set(root: string, version: string): string[] {
     const path = join(root, place.file);
     const text = readFileSync(path, "utf8");
     const section = place.field.match(/^\[(.+)\]/)?.[1];
-    const next = section ? replaceToml(text, section, version) : replaceJson(text, version);
+    const next = section
+      ? replaceToml(text, section, version)
+      : place.file.endsWith(".ts")
+        ? replaceDescriptor(text, version)
+        : replaceJson(text, version);
     if (next !== text) {
       writeFileSync(path, next);
       changed.push(place.file);
