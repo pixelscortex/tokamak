@@ -1,1 +1,1 @@
-export { describe, turn, configure } from "./backend";
+export { describe, turn, configure, canonicalFolders } from "./backend";

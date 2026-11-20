@@ -1,3 +1,5 @@
+import { realpathSync, statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { localChatPort } from "./turn/chat-port";
 import { action, v, type JsonValue } from "@tokamak/sdk";
 import { agents } from "./agents/client";
@@ -48,5 +50,22 @@ export const turn = action({
       agents,
       ctx.signal,
     );
+  },
+});
+
+// Canonicalization is for folder equality only; configuring an agent still uses checkFolder.
+export const canonicalFolders = action({
+  args: { folders: v.array(v.string()) },
+  handler: ({ user }, { folders }) => {
+    if (user.id !== "local") throw new Error("Folders are only available on the local server");
+    return folders.map((folder) => {
+      if (!isAbsolute(folder)) return null;
+      try {
+        const path = realpathSync(folder);
+        return statSync(path).isDirectory() ? path : null;
+      } catch {
+        return null;
+      }
+    });
   },
 });

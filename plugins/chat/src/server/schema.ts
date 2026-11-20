@@ -7,10 +7,25 @@ import { backend } from "./backends/backend";
 export default defineSchema({
   threads: defineTable({
     backend: v.optional(backend),
+    starterFolder: v.optional(v.string()),
     title: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_updatedAt", ["updatedAt"]),
+  openRequests: defineTable({
+    userId: v.string(),
+    threadId: v.id("threads"),
+    expiresAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
+  openReceipts: defineTable({
+    userId: v.string(),
+    requestId: v.id("openRequests"),
+    expiresAt: v.number(),
+  })
+    .index("by_requestId", ["requestId"])
+    .index("by_expiresAt", ["expiresAt"]),
   messages: defineTable({
     threadId: v.id("threads"),
     role: v.union(v.literal("user"), v.literal("assistant")),

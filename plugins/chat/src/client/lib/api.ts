@@ -16,6 +16,7 @@ export const api = createApi<{
       null
     >;
   };
+  open: Pick<ApiFromModule<typeof import("../../server/open")>, "latest" | "shown">;
   messages: ApiFromModule<typeof import("../../server/messages/messages")>;
   permissions: Pick<ApiFromModule<typeof import("../../server/permissions/permissions")>, "answer">;
   runs: {

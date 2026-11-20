@@ -73,11 +73,12 @@ export function AgentPicker(props: {
       return;
     }
     if (!option) return;
-    void save({ plugin: option.plugin, backendId: option.id }, agent()?.folder || lastFolder).then(
-      (failure) => {
-        if (failure && failure !== "busy") props.chat.setError(failure);
-      },
-    );
+    void save(
+      { plugin: option.plugin, backendId: option.id },
+      agent()?.folder || props.chat.thread()?.starterFolder || lastFolder,
+    ).then((failure) => {
+      if (failure && failure !== "busy") props.chat.setError(failure);
+    });
   }
 
   async function submitFolder() {

@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Outlet, type AnyRouter } from "@tanstack/solid-router";
 import { RegionProvider, ShortcutContext, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
+import { createApi, type FunctionReference, type Id } from "@tokamak/sdk";
 import { Button, icons } from "@tokamak/ui";
 import { checkAccess, reach } from "../host/reach";
 import { createServers, defaultServers, thisMac, type Servers } from "../host/servers";
@@ -15,6 +16,10 @@ import { shellPageList, shellPages } from "./pages";
 import { createSession, type Session } from "./session";
 import { createShortcuts, shortcutName } from "./shortcuts";
 import { createTheme } from "./theme";
+
+const chatOpen = createApi<{
+  open: { latest: FunctionReference<"query", {}, { _id: Id<"openRequests">; expiresAt: number } | null> };
+}>("chat").open;
 
 export interface ShellProps {
   routing: PluginRouting;
@@ -88,6 +93,31 @@ export function createShellState(
     return [...shellPageList, ...(connection.state === "connected" ? connection.plugins.views() : [])];
   };
   const navigation = createNavigation(router, views, () => session.connection().state === "connected");
+  createEffect(
+    () => {
+      const connection = session.connection();
+      const chat = views().find((view) => view.route === "/p/chat");
+      const path = navigation.pathname();
+      return { connection, chat, connecting: path === shellPages.connect.route || path === "/join" };
+    },
+    ({ connection, chat, connecting }) => {
+      if (connection.state !== "connected" || !chat || connecting) return;
+      let opened: Id<"openRequests"> | undefined;
+      return connection.client.subscribe(chatOpen.latest, {}, (event) => {
+        if (
+          "error" in event ||
+          !event.value ||
+          event.value.expiresAt <= Date.now() ||
+          event.value._id === opened
+        )
+          return;
+        const path = navigation.pathname();
+        if (path === shellPages.connect.route || path === "/join") return;
+        opened = event.value._id;
+        if (navigation.current()?.route !== chat.route) navigation.openView(chat);
+      });
+    },
+  );
   const shortcuts = createShortcuts();
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [serverMenuOpen, setServerMenuOpen] = createSignal(false);

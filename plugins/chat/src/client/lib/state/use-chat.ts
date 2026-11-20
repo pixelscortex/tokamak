@@ -16,6 +16,7 @@ let lastThread: Id<"threads"> | undefined;
 
 export function useChat(client: TokamakClient, remote?: RemoteChat) {
   const threads = useQuery(client, api.threads.list, () => ({}));
+  const openRequest = useQuery(client, api.open.latest, () => ({}));
   const running = useQuery(client, api.runs.running, () => ({}));
   const [userId, setUserId] = createSignal<string | undefined>(remote ? undefined : "local", {
     ownedWrite: true,
@@ -87,6 +88,21 @@ export function useChat(client: TokamakClient, remote?: RemoteChat) {
     if ((!selected || !list.some((thread) => thread._id === selected)) && !untrack(creating))
       open(list[0]?._id);
   });
+
+  createEffect(
+    () => [openRequest.data(), threads.data(), creating()] as const,
+    ([request, list, busy]) => {
+      if (
+        !request ||
+        request.expiresAt <= Date.now() ||
+        busy ||
+        !list?.some((item) => item._id === request.threadId)
+      )
+        return;
+      open(request.threadId);
+      void client.mutation(api.open.shown, { requestId: request._id }).catch(() => {});
+    },
+  );
 
   if (!remote) useRunRecovery(client, () => Boolean(running.data()?.length), setError);
 

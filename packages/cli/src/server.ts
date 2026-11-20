@@ -49,7 +49,7 @@ async function readToken(folder: string) {
   return token;
 }
 
-async function localEndpoint() {
+async function localEndpoint(expectedOrigin?: string) {
   const folder = dataFolder();
   const identity = discovery(JSON.parse(await readFile(join(folder, "server.json"), "utf8")));
   const ws = new URL(identity.url);
@@ -64,8 +64,10 @@ async function localEndpoint() {
     !(ws.hostname === "[::1]" || (isIP(ws.hostname) === 4 && ws.hostname.startsWith("127.")))
   )
     throw new Error("Invalid local server discovery address");
+  const url = httpAddress(identity.url);
+  if (expectedOrigin && expectedOrigin !== url.origin) throw new Error("Not the local server");
   const token = await readToken(folder);
-  const endpoint = { url: httpAddress(identity.url), token };
+  const endpoint = { url, token, local: true };
   const health = discovery(await get("/health", endpoint));
   if (JSON.stringify(health) !== JSON.stringify(identity)) throw new Error("Local server identity changed");
   return endpoint;
@@ -90,15 +92,25 @@ async function get(path: string, endpoint: { url: URL; token: string }): Promise
   }
 }
 
-export async function serverGet(path: string, explicit?: string): Promise<unknown> {
+export async function matchesLocalServer(url: URL) {
+  if (!(url.hostname === "[::1]" || (isIP(url.hostname) === 4 && url.hostname.startsWith("127."))))
+    return false;
+  return Boolean(await localEndpoint(url.origin).catch(() => null));
+}
+
+export async function withServerEndpoint<T>(
+  explicit: string | undefined,
+  operation: string,
+  use: (endpoint: { url: URL; token: string; local?: boolean }) => Promise<T>,
+): Promise<T> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
   if (!address) {
     const endpoint = await localEndpoint().catch(() => {
       throw new CommandError("No local server is running", "tokamak server start");
     });
-    return get(path, endpoint).catch((error: Error) => {
+    return use(endpoint).catch((error: unknown) => {
       throw new CommandError(
-        `Could not read ${path} from the local server: ${error.message}`,
+        `Could not ${operation} from the local server: ${error instanceof Error ? error.message : "Request failed"}`,
         "tokamak server start",
       );
     });
@@ -106,11 +118,15 @@ export async function serverGet(path: string, explicit?: string): Promise<unknow
   try {
     const token = process.env.TOKAMAK_TOKEN;
     if (!token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
-    return await get(path, { url: httpAddress(address), token });
+    return await use({ url: httpAddress(address), token });
   } catch (error) {
     throw new CommandError(
-      `Could not read ${path} from the selected server: ${error instanceof Error ? error.message : "Request failed"}`,
+      `Could not ${operation} from the selected server: ${error instanceof Error ? error.message : "Request failed"}`,
       "tokamak --help",
     );
   }
+}
+
+export function serverGet(path: string, explicit?: string): Promise<unknown> {
+  return withServerEndpoint(explicit, `read ${path}`, (endpoint) => get(path, endpoint));
 }
