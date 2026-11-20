@@ -1,0 +1,83 @@
+packages/build/tests/public-types.test.mjs
+  s_bcfbb5acb3b4fa::t_e56fd1ff851dbf 1,3,5-35,63
+  s_bcfbb5acb3b4fa::t_589dd59ba0baba 2,4,36-62,64-85
+packages/build/src/public-types.ts
+  s_bcfbb5acb3b4fa::t_120da6ccf723fd 1-19,27-31,33-37,49-72,79-80,86,106-112,117-124,126,147-150,152-158,160-162
+  s_bcfbb5acb3b4fa::t_7740bea781671e 20-25,32,43-48,73-78,81-85,88-105,114,129-144
+  s_bcfbb5acb3b4fa::t_2222086547e314 26,38-42,87,113,115-116,125,127-128,145-146,151,159
+packages/server/tests/schema_indexes.rs
+  s_bcfbb5acb3b4fa::t_5bdc7cf77e8ef2 217-223
+packages/build/src/vite.ts
+  s_bcfbb5acb3b4fa::t_120da6ccf723fd 15,87,153-155
+packages/sdk/tools/plugin-boundary.mjs
+  s_bcfbb5acb3b4fa::t_120da6ccf723fd 174
+  s_bcfbb5acb3b4fa::t_7740bea781671e 101-103,216-226,229,240-301
+  s_bcfbb5acb3b4fa::t_176d2de3f06a59 2,4-6,208,212-215,302-318,320-321,326,328,340,343,420-422
+packages/build/tests/outside-fixture.mjs
+  s_bcfbb5acb3b4fa::t_065b448c2964c9 18,21
+packages/server/tests/plugins.rs
+  s_bcfbb5acb3b4fa::t_5bdc7cf77e8ef2 34-40
+  s_bcfbb5acb3b4fa::t_18a7b95dcc903b 71
+packages/build/tests/outside-server.test.mjs
+  s_bcfbb5acb3b4fa::t_065b448c2964c9 2-3,65-106
+  s_bcfbb5acb3b4fa::t_ef4145b3392c91 107-116
+packages/server/tests/build-actions.mjs
+  s_bcfbb5acb3b4fa::t_18a7b95dcc903b 32-35
+  s_bcfbb5acb3b4fa::t_5bdc7cf77e8ef2 186
+  s_bcfbb5acb3b4fa::t_237995ff065ea6 17,22-27
+packages/server/tests/build-worker.mjs
+  s_bcfbb5acb3b4fa::t_5bdc7cf77e8ef2 32
+packages/build/tests/plugins.test.mjs
+  s_bcfbb5acb3b4fa::t_7740bea781671e 2-3,9-10,14,91,103
+  s_bcfbb5acb3b4fa::t_5bdc7cf77e8ef2 21,73,110
+moon.yml
+  s_bcfbb5acb3b4fa::t_e6e105e3ae1192 49
+packages/build/README.md
+  s_bcfbb5acb3b4fa::t_912ab41603af42 47,64-65,115-134
+packages/build/src/contributions.ts
+  s_bcfbb5acb3b4fa::t_73775b7a114037 2,58,225,268-271
+packages/build/src/descriptor.ts
+  s_bcfbb5acb3b4fa::t_31c687ab697b95 129
+packages/build/tests/boundary.test.mjs
+  s_bcfbb5acb3b4fa::t_5c3a0e423d654f 2-3,8,118-119,159,214
+packages/build/tests/browser-assets.mjs
+  s_bcfbb5acb3b4fa::t_65faae119a6ff3 13,15-34
+packages/build/tests/browser.test.ts
+  s_bcfbb5acb3b4fa::t_56b6f4c9402890 3-4,9-32,34-76,80,82-89,109,114,149
+packages/build/tests/descriptor.test.ts
+  s_bcfbb5acb3b4fa::t_d2c08aa179425b 2,7-8,90,118-126,163
+packages/build/tests/fixtures/other/plugin.ts
+  s_bcfbb5acb3b4fa::t_40f27c8cc52430 1-3
+packages/build/tests/run.sh
+  s_bcfbb5acb3b4fa::t_84028f5417850e 3
+packages/runtime/tools/local-server.ts
+  s_bcfbb5acb3b4fa::t_4e1a868892d340 82-93
+packages/sdk/client.tsx
+  s_bcfbb5acb3b4fa::t_a804d57ba5bf4f 30-38,43,49,52-55
+packages/sdk/tools/bundle.mjs
+  s_bcfbb5acb3b4fa::t_64e1a8e672a5d6 62
+packages/server/src/plugins/artifact.rs
+  s_bcfbb5acb3b4fa::t_bc630ee2bbd125 74-79
+packages/server/src/plugins/manifest.rs
+  s_bcfbb5acb3b4fa::t_78b48f708e5d2a 76-77,201-211
+packages/server/src/service/plugin_control.rs
+  s_bcfbb5acb3b4fa::t_d9cb4a55c0e6d7 71-73
+packages/server/src/websocket.rs
+  s_bcfbb5acb3b4fa::t_ce8ab8a9a7f59b 416-417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3b4fde2d5785f6d76830320b280e3b3990ff2d9",
+  "prompts": {},
+  "sessions": {
+    "s_bcfbb5acb3b4fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d3-187e-7281-83e5-2cc941e0d445",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
