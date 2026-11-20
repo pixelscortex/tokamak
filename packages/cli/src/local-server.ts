@@ -1,21 +1,20 @@
 /** Local process ownership only; the server owns storage and shutdown. */
-import { createHash, randomBytes } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
-import { link, lstat, mkdir, open, readFile, rm, realpath, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
+import { link, lstat, mkdir, open, readFile, rm, rmdir, writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
 import { resolve } from "node:path";
 
-export type Identity = { pid: number; url: string; bundleHash: string; pluginRoot?: string };
+// Bun fetch uses an empty proxy override to connect directly to loopback.
+const direct = { proxy: "" };
 
-export function localDirectory(binary: string, cwd = process.cwd()): string {
-  const result = spawnSync(binary, ["--local-path"], {
-    cwd,
-    encoding: "utf8",
-    windowsHide: process.platform === "win32",
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error("Cannot discover local server directory");
-  return resolve(cwd, result.stdout.trim());
-}
+type Identity = {
+  pid: number;
+  url: string;
+  bundleHash: string;
+  buildId?: string;
+  pluginRoot?: string;
+};
 
 async function token(directory: string): Promise<string> {
   const path = resolve(directory, "server.token");
@@ -32,7 +31,7 @@ function endpoint(identity: Identity, path: string): URL {
   const url = new URL(identity.url);
   if (
     url.protocol !== "ws:" ||
-    !["127.0.0.1", "[::1]"].includes(url.hostname) ||
+    !(url.hostname === "[::1]" || (isIP(url.hostname) === 4 && url.hostname.startsWith("127."))) ||
     url.username ||
     url.password ||
     url.pathname !== "/ws" ||
@@ -54,7 +53,12 @@ export async function status(directory: string): Promise<Identity | undefined> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  if (!Number.isSafeInteger(identity.pid) || identity.pid <= 0 || !/^[a-f0-9]{64}$/.test(identity.bundleHash))
+  if (
+    !Number.isSafeInteger(identity.pid) ||
+    identity.pid <= 0 ||
+    identity.pid > 0xffffffff ||
+    !/^[a-f0-9]{64}$/i.test(identity.bundleHash)
+  )
     throw new Error("Invalid local server discovery");
   const url = endpoint(identity, "/health");
   const capability = await token(directory);
@@ -62,17 +66,23 @@ export async function status(directory: string): Promise<Identity | undefined> {
   try {
     response = await fetch(url, {
       headers: { authorization: `Bearer ${capability}` },
-      signal: AbortSignal.timeout(1000),
+      signal: AbortSignal.timeout(5000),
+      redirect: "error",
+      ...direct,
     });
-  } catch {
-    return;
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
+    if ([failure.code, failure.cause?.code].includes("ECONNREFUSED")) return;
+    throw error;
   }
   if (!response.ok) throw new Error(`Local server health refused (${response.status})`);
   const actual = (await response.json()) as Identity;
   if (
     actual.pid !== identity.pid ||
     actual.url !== identity.url ||
-    actual.bundleHash !== identity.bundleHash
+    actual.bundleHash !== identity.bundleHash ||
+    (actual.buildId ?? null) !== (identity.buildId ?? null) ||
+    (actual.pluginRoot ?? null) !== (identity.pluginRoot ?? null)
   ) {
     throw new Error("Local server identity does not match discovery");
   }
@@ -85,33 +95,25 @@ async function wait(): Promise<void> {
 
 export async function ensure(
   binary: string,
-  bundle: string,
+  plugins: string,
+  buildId: string,
   directory: string,
-  mode: "bundle" | "plugins" = "bundle",
-): Promise<Identity> {
-  const pluginRoot = mode === "plugins" ? await realpath(bundle) : undefined;
-  const hash =
-    mode === "bundle"
-      ? createHash("sha256")
-          .update(await readFile(bundle))
-          .digest("hex")
-      : undefined;
+): Promise<{ identity: Identity; reused: boolean }> {
   function compatible(identity: Identity): Identity {
-    if (mode === "plugins" ? identity.pluginRoot !== pluginRoot : identity.bundleHash !== hash) {
-      throw new Error(
-        "Local server has a different backend bundle or plugin installation; run `bun run server:stop` first",
-      );
+    // Keep this in step with the desktop's reuse_decision.
+    if (identity.pluginRoot !== plugins || identity.buildId !== buildId) {
+      throw new Error("Local server is running with a different build or plugins folder; stop it first");
     }
     return identity;
   }
   const running = await status(directory);
-  if (running) return compatible(running);
+  if (running) return { identity: compatible(running), reused: true };
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const lock = resolve(directory, "server-start.lock");
   // Serialize launchers, not the actual server. A crashed launcher's stale lock
   // produces an explicit error; never kill a PID or silently steal ownership.
   let owner = false;
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + 60_000;
   while (!owner && Date.now() < deadline) {
     try {
       await mkdir(lock, { mode: 0o700 });
@@ -119,25 +121,26 @@ export async function ensure(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const running = await status(directory);
-      if (running) return compatible(running);
+      if (running) return { identity: compatible(running), reused: true };
       await wait();
     }
   }
   if (!owner) throw new Error("Local server startup lock is busy or stale; inspect server-start.lock");
   try {
     const running = await status(directory);
-    if (running) return compatible(running);
+    if (running) return { identity: compatible(running), reused: true };
     await createToken(directory);
     await token(directory);
-    return compatible(await startServer(binary, bundle, directory, mode, deadline));
+    const identity = await startServer(binary, plugins, directory, Date.now() + 60_000);
+    return { identity: compatible(identity), reused: false };
   } finally {
-    await rm(lock, { recursive: true, force: true });
+    await rmdir(lock);
   }
 }
 
-export async function stop(directory: string): Promise<void> {
+export async function stop(directory: string): Promise<boolean> {
   const running = await status(directory);
-  if (!running) return;
+  if (!running) return false;
   const url = endpoint(running, "/shutdown");
   const capability = await token(directory);
   let response: Response | undefined;
@@ -146,6 +149,8 @@ export async function stop(directory: string): Promise<void> {
       method: "POST",
       headers: { authorization: `Bearer ${capability}` },
       signal: AbortSignal.timeout(5000),
+      redirect: "error",
+      ...direct,
     });
   } catch {
     // Cancellation closes accepted HTTP I/O as well as WebSockets. A lost
@@ -158,7 +163,7 @@ export async function stop(directory: string): Promise<void> {
     try {
       await lstat(resolve(directory, "server.json"));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
       throw error;
     }
     await wait();
@@ -182,21 +187,17 @@ async function createToken(directory: string) {
 
 async function startServer(
   binary: string,
-  bundle: string,
+  plugins: string,
   directory: string,
-  mode: "bundle" | "plugins",
   deadline: number,
 ): Promise<Identity> {
   const log = await open(resolve(directory, "server.log"), "a", 0o600);
-  const child = spawn(
-    binary,
-    ["--local-dir", directory, mode === "plugins" ? "--plugins" : "--bundle", bundle],
-    {
-      detached: true,
-      stdio: ["ignore", log.fd, log.fd],
-      windowsHide: process.platform === "win32",
-    },
-  );
+  const child = spawn(binary, ["--local-dir", directory, "--plugins", plugins], {
+    detached: true,
+    env: { ...process.env, TOKAMAK_WEB_DIR: undefined },
+    stdio: ["ignore", log.fd, log.fd],
+    windowsHide: process.platform === "win32",
+  });
   let failure: Error | undefined;
   child.on("error", (error) => {
     failure = error;
@@ -205,7 +206,7 @@ async function startServer(
   await log.close();
   while (Date.now() < deadline) {
     const ready = await status(directory);
-    if (ready) return ready;
+    if (ready && ready.pid === child.pid) return ready;
     if (failure) throw failure;
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error("Local server exited before readiness; inspect server.log");

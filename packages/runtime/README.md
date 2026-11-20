@@ -14,6 +14,6 @@ module host implementation. The next loader agent must connect server-provided
 ES modules while preserving shared runtime identities and generation disposal.
 The app skeleton does not instantiate this loader.
 
-`tools/local-server.ts` and `tools/run-app.ts` retain independent local server
-start, status, and stop operations. They do not launch a desktop client.
+Use the [Tokamak CLI](../cli/README.md) to start, inspect, and stop a local
+server without launching the desktop app.
 The app's disposable development server is separate; see `app/README.md`.

@@ -162,8 +162,8 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     let mut javascript = PoolConfig::default();
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
-        if matches!(flag.as_str(), "invite" | "members" | "revoke") {
-            server::identity::command(&flag, args.collect()).await?;
+        if flag == "revoke" {
+            server::identity::revoke(args.collect()).await?;
             return Ok(None);
         }
         if flag == "plugin" {
@@ -180,7 +180,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nInvites: tokamak-server invite <name> | members | revoke <id> --server <https://address> [--token <owner token>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nMembers: tokamak-server revoke <id> --server <https://address> [--token <owner token>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -338,15 +338,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         hosted_token
     };
-    let identities = Arc::new(server::identity::Identities::configure(
-        &data,
-        token.as_deref(),
-        hosted,
-    )?);
     // Keep ownership until AFTER ready-file removal. The database lock alone
     // releases during close(): a replacement could otherwise publish readiness
     // in that gap and have this process remove the replacement's descriptor.
     let _local_owner = local.as_deref().map(local_ownership).transpose()?;
+    let identities = Arc::new(if let (Some(directory), Some(token)) = (&local, &token) {
+        server::identity::Identities::local_members(directory, token)?
+    } else {
+        server::identity::Identities::configure(&data, token.as_deref(), hosted)?
+    });
     // Bind first: an unavailable address must not open storage or JS workers.
     let listener = tokio::net::TcpListener::bind(listen).await?;
     // Install fallible signal setup before owning any live datastore.

@@ -172,12 +172,14 @@ pub async fn serve_with_identities(
         .route("/plugins", get(plugins))
         .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
     if hosted {
-        app = app
-            .route("/health", get(|| async { "ok" }))
-            .route("/members", get(members).post(invite))
-            .route("/members/{id}/revoke", post(revoke));
+        app = app.route("/health", get(|| async { "ok" }));
     } else if access.is_some() {
         app = app.route("/health", get(health));
+    }
+    if hosted || access.is_some() {
+        app = app
+            .route("/members", get(members).post(invite))
+            .route("/members/{id}/revoke", post(revoke));
     }
     if access.is_some() {
         app = app
@@ -369,7 +371,12 @@ async fn members(State(adapter): State<Adapter>) -> Response {
 async fn invite(State(adapter): State<Adapter>, body: String) -> Response {
     account_result((|| {
         let input: DisplayName = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-        Ok(serde_json::json!({"token": adapter.identities.invite(&input.name)?}))
+        let token = adapter.identities.invite(&input.name)?;
+        Ok(if adapter.hosted {
+            serde_json::json!({"token": token})
+        } else {
+            serde_json::json!({"token": token, "local": true})
+        })
     })())
 }
 
@@ -465,6 +472,7 @@ async fn upgrade(
 
 async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     let revoked = adapter.identities.cancellation(&user.id);
+    let local_relay = !adapter.hosted && adapter.access.is_some() && user.role == "owner";
     let session = tokio::select! {
         _ = adapter.stopping.cancelled() => return,
         _ = revoked.cancelled() => return,
@@ -472,7 +480,7 @@ async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     };
     tokio::select! {
         _ = revoked.cancelled() => {},
-        _ = connection_session(socket, session, adapter.stopping, !adapter.hosted && adapter.access.is_some()) => {},
+        _ = connection_session(socket, session, adapter.stopping, local_relay) => {},
     }
 }
 

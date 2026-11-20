@@ -1,12 +1,8 @@
 use std::time::Duration;
 
-pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn revoke(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let mut args = args.into_iter();
-    let subject = if command == "members" {
-        None
-    } else {
-        Some(args.next().ok_or("Missing name or member id")?)
-    };
+    let id = args.next().ok_or("Missing member id")?;
     let mut address = None;
     let mut token = std::env::var("TOKAMAK_TOKEN").ok();
     while let Some(flag) = args.next() {
@@ -18,31 +14,17 @@ pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std
         }
     }
     let mut url = server_url(&address.ok_or("--server is required")?)?;
-    let origin = url.origin().ascii_serialization();
     url.set_path("/members");
-    if command == "revoke" {
-        url.path_segments_mut()
-            .map_err(|_| "Invalid server URL")?
-            .push(subject.as_deref().expect("member id"))
-            .push("revoke");
-    }
+    url.path_segments_mut()
+        .map_err(|_| "Invalid server URL")?
+        .push(&id)
+        .push("revoke");
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(30))
         .build()?;
-    let request = if command == "members" {
-        client.get(url)
-    } else {
-        client.post(url)
-    };
-    let request = if command == "invite" {
-        request
-            .header("content-type", "application/json")
-            .body(serde_json::json!({"name":subject}).to_string())
-    } else {
-        request
-    };
-    let response = request
+    let response = client
+        .post(url)
         .bearer_auth(token.ok_or("--token or TOKAMAK_TOKEN is required")?)
         .send()
         .await?;
@@ -51,27 +33,7 @@ pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std
     if !status.is_success() {
         return Err(format!("Command refused ({status}): {text}").into());
     }
-    let value: serde_json::Value = serde_json::from_str(&text)?;
-    if command == "invite" {
-        println!(
-            "{origin}/join#{}",
-            value["token"].as_str().ok_or("Missing invite token")?
-        );
-    } else if command == "members" {
-        println!("id\tname\trole\tcreated\trevoked");
-        for member in value.as_array().ok_or("Invalid members response")? {
-            println!(
-                "{}\t{}\t{}\t{}\t{}",
-                member["id"].as_str().unwrap_or_default(),
-                member["name"].as_str().unwrap_or_default(),
-                member["role"].as_str().unwrap_or_default(),
-                member["created_at"],
-                member["revoked_at"]
-            );
-        }
-    } else {
-        println!("Revoked {}", subject.expect("member id"));
-    }
+    println!("Revoked {id}");
     Ok(())
 }
 

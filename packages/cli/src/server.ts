@@ -34,22 +34,49 @@ async function localEndpoint() {
   return { url: httpAddress(address), token };
 }
 
-export async function serverGet(path: string, explicit?: string): Promise<unknown> {
+export async function serverRequest(
+  path: string,
+  explicit?: string,
+  request: RequestInit = {},
+  ownerOnly = false,
+): Promise<{ body: unknown; origin: string }> {
   const address = explicit ?? process.env.TOKAMAK_SERVER;
   const next = address ? "tokamak --help" : "tokamak server start";
   try {
     const endpoint = address
       ? { url: httpAddress(address), token: process.env.TOKAMAK_TOKEN }
       : await localEndpoint();
+    const { protocol, hostname } = endpoint.url;
+    if (
+      ownerOnly &&
+      protocol === "http:" &&
+      !(
+        hostname === "localhost" ||
+        hostname === "[::1]" ||
+        (isIP(hostname) === 4 && hostname.startsWith("127."))
+      )
+    )
+      throw new Error("Use HTTPS for a shared server");
     if (!endpoint.token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
+    const headers = new Headers(request.headers);
+    headers.set("Authorization", `Bearer ${endpoint.token}`);
+    const direct = address ? {} : { proxy: "" };
     const response = await fetch(new URL(path, endpoint.url), {
-      headers: { Authorization: `Bearer ${endpoint.token}` },
+      ...request,
+      ...direct,
+      headers,
       signal: AbortSignal.timeout(5000),
       redirect: "error",
     });
-    if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
-    return await response.json();
+    if (ownerOnly && response.status === 403)
+      throw new CommandError("Only the owner can manage members", "tokamak members --help");
+    if (!response.ok) {
+      const detail = ownerOnly && response.status === 400 ? await response.text() : "";
+      throw new Error(detail || `Server returned HTTP ${response.status}`);
+    }
+    return { body: await response.json(), origin: endpoint.url.origin };
   } catch (error) {
+    if (error instanceof CommandError) throw error;
     if (!address && (error as NodeJS.ErrnoException).code === "ENOENT")
       throw new CommandError("No local server is running", next);
     throw new CommandError(
@@ -57,4 +84,8 @@ export async function serverGet(path: string, explicit?: string): Promise<unknow
       next,
     );
   }
+}
+
+export async function serverGet(path: string, explicit?: string): Promise<unknown> {
+  return (await serverRequest(path, explicit)).body;
 }

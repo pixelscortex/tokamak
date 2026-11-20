@@ -33,7 +33,19 @@ and entries without a build are logged and skipped.
 `TOKAMAK_SERVER_DIR` to use a different app data folder, including for tests.
 For a server at a specific address, set `TOKAMAK_SERVER` and `TOKAMAK_TOKEN`,
 or supply `--server <address>` with `TOKAMAK_TOKEN`. The flag takes precedence.
-The CLI never starts a server.
+The CLI only starts a server when you run `tokamak server start`.
+
+From a checkout, build the executable with
+`cargo build --locked -p server --bin tokamak-server`, then run
+`proto run bun -- run tokamak server start`. The CLI and desktop app share the
+data folder, discovery files, and startup lock. Both reuse a running server
+when its build id and plugins folder match. If they differ, the CLI asks you
+to stop the running server before starting a different one.
+`TOKAMAK_PLUGIN_DIR` selects the plugins folder for both launchers.
+
+Use `tokamak invite <name>`, `tokamak members`, and `tokamak revoke <id>` as
+the owner of a local or shared server. An invite is a personal token on a
+local server and a join link on a shared server. Keep it private.
 
 With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, human text goes to stdout. Exit status is zero on success and
@@ -45,6 +57,12 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 | `plugin add`    | `id`, `folder`, `restartRequired: true`             |
 | `plugin remove` | `id`, `restartRequired: true`                       |
 | `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }` |
+| `invite`        | `invite`: token or join link                        |
+| `members`       | `members`: an array of active `{ id, name, role }`  |
+| `revoke`        | `revoked`: member id                                |
+| `server start`  | `address`, `pid`, `buildId`, `reused`               |
+| `server status` | `running`; when true: `address`, `pid`, `buildId`   |
+| `server stop`   | `stopped`: whether a running server was stopped     |
 | `--help`        | `help`                                              |
 
 Failures return `{ ok: false, error: { message, next } }`. Build failures with

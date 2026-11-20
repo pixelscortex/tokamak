@@ -6,7 +6,7 @@ use subtle::ConstantTimeEq;
 use tokio_util::sync::CancellationToken;
 
 mod cli;
-pub use cli::command;
+pub use cli::revoke;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct User {
@@ -106,21 +106,36 @@ impl Identities {
     }
 
     pub fn hosted(path: PathBuf, token: &str, owner_name: &str) -> io::Result<Self> {
+        Self::persistent(
+            path,
+            token,
+            User {
+                id: "owner".into(),
+                name: owner_name.into(),
+                role: "owner".into(),
+            },
+        )
+    }
+
+    pub fn local_members(directory: &std::path::Path, token: &str) -> io::Result<Self> {
+        Self::persistent(directory.join("members.json"), token, User::local())
+    }
+
+    fn persistent(path: PathBuf, token: &str, mut user: User) -> io::Result<Self> {
         let mut members: Vec<Member> = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice(&bytes)?,
             Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
             Err(error) => return Err(error),
         };
-        if let Some(owner) = members.iter_mut().find(|m| m.user.id == "owner") {
+        if let Some(owner) = members.iter_mut().find(|m| m.user.id == user.id) {
             owner.token_hash = hash(token);
             owner.revoked_at = None;
         } else {
+            if user.id == "owner" {
+                user.name = name(&user.name).map_err(io::Error::other)?;
+            }
             members.push(Member {
-                user: User {
-                    id: "owner".into(),
-                    name: name(owner_name).map_err(io::Error::other)?,
-                    role: "owner".into(),
-                },
+                user,
                 token_hash: hash(token),
                 created_at: now(),
                 revoked_at: None,

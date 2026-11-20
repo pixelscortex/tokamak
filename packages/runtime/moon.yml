@@ -2,9 +2,7 @@ language: "rust"
 layer: "library"
 tasks:
   ts-check:
-    script: >-
-      proto run bun -- check --no-script --project tsconfig.json &&
-      proto run bun -- check --no-script --project tools/tsconfig.json
+    command: "proto run bun -- check --no-script --project tsconfig.json"
     options:
       cache: false
   check:

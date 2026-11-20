@@ -21,9 +21,9 @@
     "app:dev": "moon run app:run",
     "tokamak": "bun packages/cli/src/main.ts",
     "plugin:build": "proto run bun -- packages/build/src/build.ts",
-    "server:start": "moon run app:server",
-    "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop debug",
-    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug",
+    "server:start": "bun run tokamak server start",
+    "server:stop": "bun run tokamak server stop",
+    "server:status": "bun run tokamak server status",
     "typecheck": "proto run bun -- check --no-script --project packages/cli/tsconfig.json && moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check",
     "e2e:browser": "proto run bun -- e2e/browser.ts"
   },
