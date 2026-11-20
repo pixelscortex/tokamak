@@ -10,10 +10,10 @@ let next = "tokamak --help";
 
 function output(data: object, human: string) {
   if (json) {
-    console.log(JSON.stringify(data));
-    console.error(human);
+    process.stdout.write(JSON.stringify(data) + "\n");
+    process.stderr.write(human + "\n");
   } else {
-    console.log(human);
+    process.stdout.write(human + "\n");
   }
 }
 
