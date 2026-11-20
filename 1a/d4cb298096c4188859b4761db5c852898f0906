@@ -1,0 +1,19 @@
+packages/cli/src/commands/reload.ts
+  s_99c048955442cf::t_f876ac7da4418b 4,121,123,181,188-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ad4cb298096c4188859b4761db5c852898f0906",
+  "prompts": {},
+  "sessions": {
+    "s_99c048955442cf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f95a-ae94-7cf2-9034-28e7842f9b41",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
