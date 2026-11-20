@@ -810,20 +810,25 @@ fn assert_authenticated_plugin_controls(base: &str, binary: &str, local: &std::p
                 404,
                 "backend source must never be a client asset"
             );
-            for command in [vec!["plugin", "list"], vec!["plugin", "reload", "b"]] {
-                let output = std::process::Command::new(binary)
-                    .args(command)
-                    .env("TOKAMAK_SERVER_DIR", local)
-                    .output()
-                    .unwrap();
-                assert!(
-                    output.status.success(),
-                    "{}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
-                assert_eq!(metadata["plugins"].as_array().unwrap().len(), 2);
-            }
+            let output = std::process::Command::new(binary)
+                .args(["plugin", "list"])
+                .env("TOKAMAK_SERVER_DIR", local)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(metadata["plugins"].as_array().unwrap().len(), 2);
+            let old_command = std::process::Command::new(binary)
+                .args(["plugin", "reload", "b"])
+                .env("TOKAMAK_SERVER_DIR", local)
+                .output()
+                .unwrap();
+            assert!(!old_command.status.success());
+            assert!(String::from_utf8_lossy(&old_command.stderr).contains("tokamak plugin reload"));
             // Shutdown may close the HTTP acknowledgement while stopping sockets.
             let _ = client
                 .post(format!("{base}/shutdown"))

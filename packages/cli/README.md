@@ -8,13 +8,13 @@ proto run bun -- run --silent tokamak plugin build /path/to/my-plugin --json
 proto run bun -- run --silent tokamak plugin add /path/to/my-plugin
 proto run bun -- run --silent tokamak plugin list --json
 proto run bun -- run --silent tokamak plugin remove my-plugin
+proto run bun -- run --silent tokamak plugin reload my-plugin --json
 ```
 
 `build` runs the artifact build once, defaults to the current folder, and
 doesn't need a server. `add` reads the plugin's static identity from `plugin.ts`
 (or the build's `package.json` convention), and doesn't build it. `add` and
-`remove` only edit the index; the local server picks up membership changes on
-its next start. Both commands serialize index updates with an exclusive owner
+`remove` edit the index. Run `tokamak plugin reload [id]` to build and apply indexed plugins, or omit the id to also apply removals. Both commands serialize index updates with an exclusive owner
 file: a dead owner can be removed, and a live owner is never displaced. An
 update that cannot get the lock within 15 seconds fails. Indexed builds must use
 `<folder>/dist`; both build and add reject a Vite configuration that changes
@@ -46,19 +46,29 @@ With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, normal output goes to stdout and errors go to stderr. Exit status is zero on success and
 nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 
-| Command         | Additional result fields                                       |
-| --------------- | -------------------------------------------------------------- |
-| `plugin build`  | `id`, `outputFolder`                                           |
-| `plugin add`    | `id`, `folder`, `restartRequired: true`, `precedence: "index"` |
-| `plugin remove` | `id`, `restartRequired: true`                                  |
-| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`            |
-| `--help`        | `help`                                                         |
+| Command         | Additional result fields                                      |
+| --------------- | ------------------------------------------------------------- |
+| `plugin build`  | `id`, `outputFolder`                                          |
+| `plugin add`    | `id`, `folder`, `reloadRequired: true`, `precedence: "index"` |
+| `plugin remove` | `id`, `reloadRequired: true`                                  |
+| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`           |
+| `--help`        | `help`                                                        |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
 configuration failures include `error.diagnostics`, an array with a full
 `message` and, when available, `file` (absolute), `line`, `column`, and `code`.
 Import failures can point to a bundled dependency. Lockfile disagreements point
 to the lockfile.
+
+Reload returns `plugins`, `removed` (ids removed from the running index), and
+`skipped` (a map of unrequested plugin ids to reasons). Each plugin result has
+`id`, `buildId` (SHA-256 of the built manifest, or null when no build was made),
+and `status`: `loaded`, `unchanged`, `build-failed`, `load-failed`, or
+`unknown`. Failed or uncertain entries carry `error.message` and may include
+`error.diagnostics`. The CLI locks each source folder through build and
+submission. Any unrelated installed manifest errors found after a removal are
+listed under `warnings` without failing the command. If a reload reply is lost, it asks the server which build is
+running; when that cannot be confirmed, run `tokamak plugin list`.
 
 To add a command, create a file under `src/commands/` that satisfies `Command`,
 then register it in `src/commands.ts`. The entry point handles flags, help,

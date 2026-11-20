@@ -78,3 +78,17 @@ pub use manifest::*;
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndexedBuild {
+    pub id: String,
+    pub build_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IndexedReload {
+    pub builds: Vec<IndexedBuild>,
+    pub remove_missing: bool,
+}

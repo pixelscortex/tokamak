@@ -10,6 +10,9 @@ impl Coordinator {
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
 
+        if !plugins.skipped.is_empty() {
+            metadata["skipped"] = serde_json::json!(plugins.skipped);
+        }
         Ok(metadata)
     }
 
@@ -81,8 +84,60 @@ impl Coordinator {
 
                 let _ = reply.send(result);
             }
+            Command::ReloadIndexed(request, reply) => {
+                let _ = reply.send(self.reload_indexed(&request).await);
+            }
             _ => unreachable!("application commands have their own admission path"),
         }
+    }
+
+    async fn reload_indexed(
+        &mut self,
+        request: &crate::plugins::IndexedReload,
+    ) -> Result<Json, Error> {
+        let root = self
+            .plugin_root
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let previous = self
+            .plugins
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let (catalog, failures) =
+            crate::plugins::Catalog::read_indexed_reload(root, previous, request)?;
+        let unchanged: Vec<_> = request
+            .builds
+            .iter()
+            .filter(|build| {
+                previous
+                    .catalog
+                    .plugins
+                    .get(&build.id)
+                    .is_some_and(|artifact| artifact.build_id == build.build_id)
+            })
+            .map(|build| build.id.clone())
+            .collect();
+        let removed: Vec<_> = previous
+            .catalog
+            .index
+            .keys()
+            .filter(|id| !catalog.index.contains_key(*id))
+            .cloned()
+            .collect();
+        let mut response = self.swap_catalog(catalog, failures).await?;
+        // Diagnostics run after the swap. Unrelated on-disk errors do not
+        // participate in deciding or applying an index removal.
+        if !removed.is_empty()
+            && let Some(root) = &self.plugin_root
+        {
+            let warnings = crate::plugins::Catalog::installation_warnings(root);
+            if !warnings.is_empty() {
+                response["warnings"] = serde_json::json!(warnings);
+            }
+        }
+        response["removed"] = serde_json::json!(removed);
+        response["unchanged"] = serde_json::json!(unchanged);
+        Ok(response)
     }
 
     pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
@@ -103,6 +158,15 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
+        self.swap_catalog(catalog, artifact_failures).await
+    }
+
+    async fn swap_catalog(
+        &mut self,
+        catalog: crate::plugins::Catalog,
+        artifact_failures: std::collections::BTreeMap<String, String>,
+    ) -> Result<Json, Error> {
+        let previous = self.plugins.as_deref();
         if previous
             .is_some_and(|old| old.skipped.is_empty() && old.catalog.revision == catalog.revision)
         {

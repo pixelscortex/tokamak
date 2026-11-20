@@ -23,7 +23,8 @@ launcher. Never pass the token in arguments. The launcher now uses the workspace
 
 ```sh
 TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin reload acme.notes
+TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run tokamak plugin add path/to/plugins/notes
+TOKAMAK_SERVER_DIR=path/to/private-server proto run bun -- run tokamak plugin reload acme.notes
 ```
 
 The control CLI validates loopback discovery, uses bearer authentication, disables
@@ -31,6 +32,7 @@ proxies and redirects, and does not replay requests. Control endpoints are only
 registered in capability-protected local mode:
 
 - `GET /plugins`: live manifest/function metadata and generation revision.
+- `POST /plugin-index/reload`: validate and load the selected indexed builds and optionally apply index removals.
 - `POST /plugins/{id}/reload`: validate and reload the configured installation.
 - `GET /plugins/{id}/{build-id}/assets/{name}`: declared UI files from that verified build.
   Use the plugin's `revision` field for its build id. The catalog revision is for paging.
@@ -165,7 +167,7 @@ wildcard (see `packages/engine/WEB_APIS.md`). Actions run on a separate worker
 lane and reach data only through `ctx.runQuery` / `ctx.runMutation`, which apply
 the same dependency, interface and export checks as nested calls. Queries and
 mutations cannot call actions or `fetch`, so they gain no external effects that
-could repeat during transaction retries. Reload cancels old-generation actions.
+could repeat during transaction retries. Reload cancels actions belonging to changed or removed plugin builds.
 An action result is one wire response under the same inclusive 1 MiB limit: an
 oversized result fails only that call. No Node/Bun runtime, plugin grant prompt,
 marketplace, signing, Wasm or untrusted sandbox ships here.

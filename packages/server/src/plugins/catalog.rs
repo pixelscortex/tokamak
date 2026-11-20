@@ -38,6 +38,47 @@ impl Catalog {
         Ok((catalog, failures))
     }
 
+    pub(crate) fn read_indexed_reload(
+        root: &Path,
+        loaded: &Loaded,
+        request: &IndexedReload,
+    ) -> Result<(Self, BTreeMap<String, String>), Error> {
+        let previous = &loaded.catalog;
+        let path = previous
+            .index_path
+            .as_deref()
+            .ok_or_else(|| invalid("Server has no local plugin index"))?;
+        let entries = index_entries(path)?;
+        let mut plugins = previous.plugins.clone();
+        let mut index = (*previous.index).clone();
+        if request.remove_missing {
+            apply_removals(previous, &entries, &mut index, &mut plugins)?;
+        }
+        for IndexedBuild { id, build_id } in &request.builds {
+            let folder = entries
+                .get(id)
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid(format!("Plugin is not indexed: {id}")))?;
+            let old = previous.plugins.get(id).map(AsRef::as_ref);
+            plugins.insert(
+                id.clone(),
+                read_indexed_build(id, Path::new(folder), old, Some(build_id))?,
+            );
+            index.insert(id.clone(), PathBuf::from(folder));
+        }
+        let failures = retry_skipped(loaded, request, &index, &mut plugins);
+        let mut catalog = Self::assemble_candidate(
+            root,
+            &previous.directory,
+            plugins,
+            Arc::new(index),
+            &failures,
+        )?;
+        catalog.installed.clone_from(&previous.installed);
+        catalog.index_path.clone_from(&previous.index_path);
+        Ok((catalog, failures))
+    }
+
     pub(super) fn assemble(
         root: &Path,
         directory: &Path,
@@ -105,6 +146,20 @@ impl Catalog {
                 .get(id)
                 .is_some_and(|old| old.build_id == artifact.build_id)
         })
+    }
+
+    pub(crate) fn installation_warnings(root: &Path) -> Vec<String> {
+        match installed_directories(root) {
+            Ok(directories) => directories
+                .iter()
+                .filter_map(|path| {
+                    Manifest::read(path)
+                        .err()
+                        .map(|error| format!("{}: {error}", path.display()))
+                })
+                .collect(),
+            Err(error) => vec![error.to_string()],
+        }
     }
 
     pub fn metadata(&self) -> Value {
@@ -320,4 +375,64 @@ pub(super) fn installed_paths(
         .iter()
         .map(|(id, artifact)| (id.clone(), artifact.source.clone()))
         .collect()
+}
+
+fn retry_skipped(
+    loaded: &Loaded,
+    request: &IndexedReload,
+    index: &BTreeMap<String, PathBuf>,
+    plugins: &mut Artifacts,
+) -> ArtifactFailures {
+    let mut failures = BTreeMap::new();
+    for (id, reason) in &loaded.skipped {
+        if request.builds.iter().any(|build| build.id == *id) || plugins.contains_key(id) {
+            continue;
+        }
+        let artifact = if let Some(folder) = index.get(id) {
+            read_indexed(id, folder, None)
+        } else if let Some(source) = loaded.catalog.installed.get(id) {
+            Artifact::read(source).map(Arc::new)
+        } else {
+            if !loaded.catalog.index.contains_key(id) {
+                failures.insert(id.clone(), reason.clone());
+            }
+            continue;
+        };
+        match artifact {
+            Ok(artifact) if artifact.manifest.plugin.id == *id => {
+                plugins.insert(id.clone(), artifact);
+            }
+            Ok(_) => {
+                failures.insert(id.clone(), "Plugin identity changed".into());
+            }
+            Err(error) => {
+                failures.insert(id.clone(), error.to_string());
+            }
+        }
+    }
+    failures
+}
+
+fn apply_removals(
+    previous: &Catalog,
+    entries: &BTreeMap<String, Value>,
+    index: &mut BTreeMap<String, PathBuf>,
+    plugins: &mut Artifacts,
+) -> Result<(), Error> {
+    for id in previous
+        .index
+        .keys()
+        .filter(|id| !entries.contains_key(*id))
+    {
+        index.remove(id);
+        plugins.remove(id);
+        if let Some(source) = previous.installed.get(id) {
+            let fallback = Artifact::read(source)?;
+            if fallback.manifest.plugin.id != *id {
+                return Err(invalid(format!("Installed copy of {id} changed identity")));
+            }
+            plugins.insert(id.clone(), Arc::new(fallback));
+        }
+    }
+    Ok(())
 }
