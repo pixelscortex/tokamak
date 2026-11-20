@@ -148,6 +148,20 @@ impl Catalog {
         })
     }
 
+    pub(crate) fn installation_warnings(root: &Path) -> Vec<String> {
+        match installed_directories(root) {
+            Ok(directories) => directories
+                .iter()
+                .filter_map(|path| {
+                    Manifest::read(path)
+                        .err()
+                        .map(|error| format!("{}: {error}", path.display()))
+                })
+                .collect(),
+            Err(error) => vec![error.to_string()],
+        }
+    }
+
     pub fn metadata(&self) -> Value {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
             let artifact = &self.plugins[id];
@@ -292,11 +306,8 @@ fn read_indexed_build(
 type Artifacts = BTreeMap<String, Arc<Artifact>>;
 type ArtifactFailures = BTreeMap<String, String>;
 
-pub(super) fn read_installed(
-    root: &Path,
-    previous: Option<&Loaded>,
-) -> Result<(Artifacts, ArtifactFailures), Error> {
-    let directories = if let Some(directory) = artifact_directory(root) {
+fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
+    Ok(if let Some(directory) = artifact_directory(root) {
         vec![directory]
     } else {
         let mut result = Vec::new();
@@ -321,8 +332,14 @@ pub(super) fn read_installed(
         }
         result.sort();
         result
-    };
+    })
+}
 
+pub(super) fn read_installed(
+    root: &Path,
+    previous: Option<&Loaded>,
+) -> Result<(Artifacts, ArtifactFailures), Error> {
+    let directories = installed_directories(root)?;
     let mut plugins = BTreeMap::new();
     let mut skipped = BTreeMap::new();
 

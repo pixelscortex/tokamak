@@ -123,6 +123,16 @@ impl Coordinator {
             .cloned()
             .collect();
         let mut response = self.swap_catalog(catalog, failures).await?;
+        // Diagnostics run after the swap. Unrelated on-disk errors do not
+        // participate in deciding or applying an index removal.
+        if !removed.is_empty()
+            && let Some(root) = &self.plugin_root
+        {
+            let warnings = crate::plugins::Catalog::installation_warnings(root);
+            if !warnings.is_empty() {
+                response["warnings"] = serde_json::json!(warnings);
+            }
+        }
         response["removed"] = serde_json::json!(removed);
         response["unchanged"] = serde_json::json!(unchanged);
         Ok(response)

@@ -18,12 +18,14 @@ type Catalog = {
   unchanged?: string[];
   removed?: string[];
   skipped?: Record<string, string>;
+  warnings?: string[];
 };
 type Report = {
   results: Map<string, Result>;
   removed: Set<string>;
   skipped: Record<string, string>;
   removalError?: string;
+  warnings: Set<string>;
 };
 
 const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
@@ -54,6 +56,7 @@ function applyAnswer(report: Report, builds: Build[], answer: Catalog, reconcile
   const running = new Map(answer.plugins.map(({ plugin, revision }) => [plugin.id, revision]));
   report.skipped = answer.skipped ?? {};
   for (const id of answer.removed ?? []) report.removed.add(id);
+  for (const warning of answer.warnings ?? []) report.warnings.add(warning);
   for (const { id, buildId } of builds) {
     const skipped = Object.hasOwn(report.skipped, id) ? report.skipped[id] : undefined;
     if (skipped || running.get(id) !== buildId) {
@@ -171,7 +174,7 @@ async function runReload(id: string | undefined, server?: string) {
   if (id !== undefined && !index.has(id))
     throw new CommandError(`Unknown indexed plugin: ${id}`, "tokamak plugin add");
   const selected = id === undefined ? [...index] : [[id, index.get(id)!] as const];
-  const report: Report = { results: new Map(), removed: new Set(), skipped: {} };
+  const report: Report = { results: new Map(), removed: new Set(), skipped: {}, warnings: new Set() };
   const releases = new Map<string, () => Promise<void>>();
   const builds: Build[] = [];
   try {
@@ -199,7 +202,8 @@ function reportOutput(report: Report, selected: string[]) {
   const plugins = selected.map((id) => report.results.get(id)!);
   const removed = [...report.removed];
   const skipped = Object.fromEntries(Object.entries(report.skipped).filter(([id]) => !selected.includes(id)));
-  const data = { plugins, removed, skipped };
+  const warnings = [...report.warnings];
+  const data = { plugins, removed, skipped, ...(warnings.length && { warnings }) };
   const lines = [
     ...plugins.map(({ id, status, error }) =>
       error
@@ -215,6 +219,7 @@ function reportOutput(report: Report, selected: string[]) {
     ),
     ...removed.map((id) => `Removed ${id} from the running index`),
     ...Object.entries(skipped).map(([id, reason]) => `Skipped ${id}: ${reason}`),
+    ...warnings.map((warning) => `Warning: ${warning}`),
   ];
   if (report.removalError) lines.push(`Could not confirm index removals: ${report.removalError}`);
   const text = lines.join("\n") || "No indexed plugins to reload.";

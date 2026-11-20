@@ -63,7 +63,8 @@ Reload returns `plugins`, `removed` (ids removed from the running index), and
 and `status`: `loaded`, `unchanged`, `build-failed`, `load-failed`, or
 `unknown`. Failed or uncertain entries carry `error.message` and may include
 `error.diagnostics`. The CLI locks each source folder through build and
-submission. If a reload reply is lost, it asks the server which build is
+submission. Any unrelated installed manifest errors found after a removal are
+listed under `warnings` without failing the command. If a reload reply is lost, it asks the server which build is
 running; when that cannot be confirmed, run `tokamak plugin list`.
 
 To add a command, create a file under `src/commands/` that satisfies `Command`,

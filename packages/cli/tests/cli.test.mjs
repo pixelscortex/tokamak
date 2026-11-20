@@ -364,7 +364,11 @@ test("reload applies index additions and removals without a restart", async () =
       await mkdir(unrelated, { recursive: true });
       await writeFile(join(unrelated, "manifest.json"), "{}");
       run("remove", "outside-fixture");
-      expect(run("reload")).toMatchObject({ plugins: [], removed: ["outside-fixture"] });
+      expect(run("reload")).toMatchObject({
+        plugins: [],
+        removed: ["outside-fixture"],
+        warnings: [expect.stringContaining("unrelated")],
+      });
       expect(run("list").plugins).toEqual([]);
     });
   });
