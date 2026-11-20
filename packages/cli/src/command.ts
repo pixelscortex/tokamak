@@ -12,6 +12,12 @@ export interface Flag {
 /** The flags a command received: a switch is `true`, a flag with a value holds that value. */
 export type Flags = Record<string, string | true>;
 
+export interface StreamOutput {
+  json: boolean;
+  write(text: string): Promise<void>;
+  notice(text: string): Promise<void>;
+}
+
 export interface Command {
   path: string;
   summary: string;
@@ -24,7 +30,10 @@ export interface Command {
   run(
     args: string[],
     options: { server?: string; flags: Flags },
-  ): Promise<{ data: object; text: string; error?: { message: string; next: string } }>;
+  ): Promise<
+    | { data: object; text: string; jsonText?: string; error?: { message: string; next: string } }
+    | { stream(output: StreamOutput): Promise<void> }
+  >;
 }
 
 export class CommandError extends Error {
@@ -32,6 +41,7 @@ export class CommandError extends Error {
     message: string,
     readonly next: string,
     readonly diagnostics?: object[],
+    readonly data?: object,
   ) {
     super(message);
   }

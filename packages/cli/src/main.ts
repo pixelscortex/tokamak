@@ -16,10 +16,10 @@ function endOnStreamError(error: unknown): never {
 
 for (const stream of [process.stdout, process.stderr]) stream.on("error", endOnStreamError);
 
-function write(stream: NodeJS.WriteStream, text: string) {
+function write(stream: NodeJS.WriteStream, text: string, newline = "\n") {
   return new Promise<void>((done) => {
     try {
-      stream.write(text + "\n", (error) => {
+      stream.write(text + newline, (error) => {
         if (error) endOnStreamError(error);
         done();
       });
@@ -117,16 +117,33 @@ try {
     if (!command) throw new CommandError(group ? "Unknown or incomplete command" : "Missing command", next);
     if (command.args && !command.args.optional && !args.length)
       throw new CommandError(`Missing argument: ${command.args.name}`, next);
-    const { data, text, error } = await command.run(args, { server, flags });
-    await output(error ? { ...data, ok: false, error } : { ok: true, ...data }, text, Boolean(error));
-    if (error) process.exitCode = 1;
+    const result = await command.run(args, { server, flags });
+    if ("stream" in result) {
+      await result.stream({
+        json,
+        write: (text) => write(process.stdout, text, ""),
+        notice: (text) => write(process.stderr, text, ""),
+      });
+    } else {
+      const { data, error, text, jsonText } = result;
+      await output(
+        { ...data, ok: !error, ...(error && { error }) },
+        json ? (jsonText ?? text) : text,
+        Boolean(error),
+      );
+      if (error) process.exitCode = 1;
+    }
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof CommandError) next = error.next;
   const diagnostics = error instanceof CommandError ? error.diagnostics : undefined;
   await output(
-    { ok: false, error: { message, next, ...(diagnostics ? { diagnostics } : {}) } },
+    {
+      ...(error instanceof CommandError ? error.data : undefined),
+      ok: false,
+      error: { message, next, ...(diagnostics ? { diagnostics } : {}) },
+    },
     [message, ...diagnosticText(diagnostics ?? []), `Try: ${next}`].join("\n"),
     true,
   );

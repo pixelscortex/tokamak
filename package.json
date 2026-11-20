@@ -21,19 +21,25 @@
     "app:dev": "moon run app:run",
     "tokamak": "bun packages/cli/src/main.ts",
     "plugin:build": "proto run bun -- packages/build/src/build.ts",
-    "server:start": "moon run app:server",
-    "server:stop": "proto run bun -- packages/runtime/tools/run-app.ts stop debug",
-    "server:status": "proto run bun -- packages/runtime/tools/run-app.ts status debug",
+    "server:start": "bun run tokamak server start",
+    "server:stop": "bun run tokamak server stop",
+    "server:status": "bun run tokamak server status",
     "typecheck": "proto run bun -- check --no-script --project packages/cli/tsconfig.json && moon run sdk:check build:check runtime:ts-check ui:check app:check workspace:plugins-check workspace:e2e-check workspace:wiki-check",
     "e2e:browser": "proto run bun -- e2e/browser.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
+    "@solidjs/web": "2.0.0",
+    "@tokamak/runtime": "workspace:*",
+    "@tokamak/sdk": "workspace:*",
+    "@tokamak/ui": "workspace:*",
     "@types/json-schema": "7.0.15",
     "@types/node": "26.6.6",
+    "@ui-sdk/solid": "0.1.0-beta.6",
     "jscpd": "5.4.3",
     "oxfmt": "0.78.0",
     "oxlint": "1.93.0",
+    "solid-js": "2.0.0",
     "vite": "8.3.6"
   },
   "overrides": {

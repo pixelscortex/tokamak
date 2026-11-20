@@ -49,7 +49,7 @@ impl Logs {
         }
     }
 }
-pub(super) fn send(line: String) {
+pub(crate) fn send(line: String) {
     static LOGS: OnceLock<Logs> = OnceLock::new();
     LOGS.get_or_init(|| Logs::new(std::io::stderr())).send(line);
 }

@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Command } from "../command";
-import { localEndpoint } from "../server";
+import { dataFolder } from "../data";
+import { inspectLocalServer } from "../server";
 import { version } from "../../package.json";
 
 const checkout = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -61,11 +62,12 @@ async function buildCheck() {
 }
 
 export async function inspectDevelopment() {
-  const [bun, build, server] = await Promise.all([
+  const [bun, build, discovery] = await Promise.all([
     bunCheck(),
     buildCheck(),
-    localEndpoint().catch(() => undefined),
+    inspectLocalServer(dataFolder()).catch(() => undefined),
   ]);
+  const server = discovery?.responsive ? discovery : undefined;
   const git = gitVersion();
   const rows = [
     ready("Tokamak CLI", `${version} · ${fileURLToPath(new URL("../main.ts", import.meta.url))}`),

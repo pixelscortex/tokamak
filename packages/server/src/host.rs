@@ -12,6 +12,8 @@ pub(crate) use crate::data::ReadSet;
 
 type SharedTransaction = Arc<Mutex<Option<Transaction>>>;
 type Failure = Arc<std::sync::Mutex<Option<String>>>;
+pub(crate) type NestedFailure = (crate::plugin_log::Log, String, String);
+type DeferredFailure = Arc<std::sync::Mutex<Option<NestedFailure>>>;
 
 #[derive(Default)]
 struct Observations {
@@ -43,6 +45,7 @@ pub(crate) struct Call {
     pub result: Result<Json, String>,
     pub reads: ReadSet,
     pub conflict: bool,
+    pub nested_failure: Option<NestedFailure>,
 }
 
 pub(crate) struct Invocation<'a> {
@@ -81,6 +84,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
                 conflict: e.is_retryable_conflict(),
                 result: Err(e.to_string()),
                 reads: ReadSet::new(),
+                nested_failure: None,
             };
         }
     };
@@ -90,6 +94,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
     let observations = Arc::new(Mutex::new(Observations::default()));
 
     let failure: Failure = Arc::default();
+    let deferred: DeferredFailure = Arc::default();
 
     let ops = operations(
         shared.clone(),
@@ -100,6 +105,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         graph,
         CallContext {
             determinism: Some(determinism),
+            deferred: deferred.clone(),
             user,
         },
     );
@@ -131,6 +137,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         result,
         reads: std::mem::take(&mut observed.reads),
         conflict: observed.conflict,
+        nested_failure: deferred.lock().expect("deferred failure lock").take(),
     }
 }
 
@@ -138,6 +145,7 @@ type Graph = Option<(Arc<crate::plugins::Loaded>, String, Vec<String>)>;
 
 struct CallContext {
     determinism: Option<Determinism>,
+    deferred: DeferredFailure,
     user: crate::identity::User,
 }
 
@@ -150,7 +158,11 @@ fn operations(
     graph: Graph,
     context: CallContext,
 ) -> Arc<OpRegistry> {
-    let CallContext { user, determinism } = context;
+    let CallContext {
+        user,
+        determinism,
+        deferred,
+    } = context;
     let mut ops = OpRegistry::new();
     let caller_user = user.clone();
     ops.register_sync("user.current", move |_| Ok(json!(caller_user)))
@@ -169,28 +181,8 @@ fn operations(
     );
 
     if let Some((plugins, owner, path)) = graph {
-        let catalog = plugins.clone();
-
-        let caller = owner.clone();
-
-        let failed = failure.clone();
-        ops.register_sync("plugin.providers", move |payload| {
-            let result = text(&payload, "interface")
-                .map_err(|e| e.to_string())
-                .and_then(|interface| {
-                    catalog
-                        .catalog
-                        .providers(&caller, interface)
-                        .map_err(|e| e.to_string())
-                })
-                .map(|ids| json!(ids));
-
-            if let Err(error) = &result {
-                *failed.lock().expect("failure lock") = Some(error.clone());
-            }
-            result
-        })
-        .expect("unique operation");
+        plugins.logs[&owner].console(&mut ops);
+        register_providers(&mut ops, plugins.clone(), owner.clone(), failure.clone());
         ops.register_module("plugin.call", move |payload| {
             let resolved = (|| {
                 if failure.lock().expect("failure lock").is_some() {
@@ -206,6 +198,8 @@ fn operations(
                 let mut child_path = path.clone();
                 child_path.push(name.into());
 
+                let log = plugins.logs[&target.owner].clone();
+                let log_name = target.local_name.clone();
                 let child_ops = operations(
                     shared.clone(),
                     observations.clone(),
@@ -215,11 +209,13 @@ fn operations(
                     Some((plugins.clone(), target.owner, child_path)),
                     CallContext {
                         determinism: None,
+                        deferred: deferred.clone(),
                         user: user.clone(),
                     },
                 );
 
                 let failed = failure.clone();
+                let deferred = deferred.clone();
 
                 Ok(ModuleCall::new(
                     target.bundle,
@@ -227,6 +223,12 @@ fn operations(
                     json!({"name":target.local_name,"args":args}),
                     child_ops,
                     move |error| {
+                        // A parent can observe the same error as it unwinds.
+                        // Keep the original function and report only on publication.
+                        deferred
+                            .lock()
+                            .expect("deferred failure lock")
+                            .get_or_insert_with(|| (log.clone(), log_name.clone(), error.clone()));
                         *failed.lock().expect("failure lock") = Some(error);
                     },
                 ))
@@ -240,6 +242,30 @@ fn operations(
         .expect("unique operation");
     }
     Arc::new(ops)
+}
+
+fn register_providers(
+    ops: &mut OpRegistry,
+    plugins: Arc<crate::plugins::Loaded>,
+    owner: String,
+    failure: Failure,
+) {
+    ops.register_sync("plugin.providers", move |payload| {
+        let result = text(&payload, "interface")
+            .map_err(|e| e.to_string())
+            .and_then(|interface| {
+                plugins
+                    .catalog
+                    .providers(&owner, interface)
+                    .map_err(|e| e.to_string())
+            })
+            .map(|ids| json!(ids));
+        if let Err(error) = &result {
+            *failure.lock().expect("failure lock") = Some(error.clone());
+        }
+        result
+    })
+    .expect("unique operation");
 }
 
 mod database_operations;

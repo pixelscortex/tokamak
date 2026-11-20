@@ -16,6 +16,8 @@ use std::{
     time::Instant,
 };
 
+type Console = dyn Fn(&str, &str) + Send + Sync;
+
 type OpResult = Result<Json, String>;
 
 type OpFuture = Pin<Box<dyn Future<Output = OpResult> + Send>>;
@@ -75,11 +77,47 @@ pub struct OpRegistry(
     BTreeMap<String, Op>,
     pub(crate) Option<Determinism>,
     Vec<String>,
+    tokio_util::sync::CancellationToken,
+    Option<Arc<Console>>,
 );
 
 impl OpRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Installs a host-provided sink for this module's console.
+    pub fn set_console(&mut self, sink: impl Fn(&str, &str) + Send + Sync + 'static) {
+        self.4 = Some(Arc::new(sink));
+    }
+
+    pub(crate) fn install_console<'js>(
+        &self,
+        ctx: &Ctx<'js>,
+        global: &str,
+    ) -> rquickjs::Result<bool> {
+        let Some(sink) = self.4.clone() else {
+            return Ok(false);
+        };
+        let emit = Function::new(ctx.clone(), move |level: String, text: String| {
+            sink(&level, &text)
+        })?;
+        let factory: Function = ctx.eval(
+            r#"emit => {
+            const format = value => {
+                if (typeof value === "string") return value;
+                if (value instanceof Error) return String(value);
+                try { return JSON.stringify(value) ?? String(value); }
+                catch { return String(value); }
+            };
+            return Object.fromEntries(["log", "info", "warn", "error", "debug"].map(
+                level => [level, (...args) => emit(level, args.map(format).join(" "))]
+            ));
+        }"#,
+        )?;
+        ctx.globals()
+            .set(global, factory.call::<_, Object>((emit,))?)?;
+        Ok(true)
     }
 
     /// Opt into replayable time and randomness for a query or mutation.
@@ -91,6 +129,16 @@ impl OpRegistry {
     /// never enable external effects in the query/mutation engine.
     pub fn set_network_permissions(&mut self, permissions: Vec<String>) {
         self.2 = permissions;
+    }
+
+    /// Bind action execution to the server-selected lifetime of its plugin build.
+    pub fn set_action_lifetime(&mut self, lifetime: tokio_util::sync::CancellationToken) {
+        self.3 = lifetime;
+    }
+
+    /// Returns the token cancelled when the server retires this action's plugin build.
+    pub fn action_lifetime(&self) -> &tokio_util::sync::CancellationToken {
+        &self.3
     }
 
     pub(crate) fn network_permissions(&self) -> Vec<String> {
@@ -292,15 +340,20 @@ async fn invoke_module<'js>(
     let source = child.map(|inputs| inputs.module_source(&call.bundle.source));
     let result = async {
         check(&ctx, &lease.active, lease.deadline)?;
-        let module = Module::declare(
-            ctx.clone(),
-            name.as_str(),
-            source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
-        )
-        .map_err(|error| {
-            let error = crate::engine::js_error_named(&ctx, error, &call.bundle, true, &name);
-            Exception::throw_message(&ctx, &error.to_string())
-        })?;
+        let console = format!("__tokamakConsole{number}");
+        let source = source.as_deref().unwrap_or(&call.bundle.source);
+        let decorated;
+        let source = if call.ops.install_console(&ctx, &console)? {
+            decorated = format!("const console = globalThis.{console};{source}");
+            &decorated
+        } else {
+            source
+        };
+        let module =
+            Module::declare(ctx.clone(), name.as_str(), source.as_bytes()).map_err(|error| {
+                let error = crate::engine::js_error_named(&ctx, error, &call.bundle, true, &name);
+                Exception::throw_message(&ctx, &error.to_string())
+            })?;
         let (module, evaluated) = module.eval()?;
         evaluated.into_future::<()>().await?;
         check(&ctx, &lease.active, lease.deadline)?;
@@ -325,6 +378,7 @@ async fn invoke_module<'js>(
         encode(&ctx, result)
     }
     .await;
+    let _ = ctx.globals().remove(format!("__tokamakConsole{number}"));
     match result {
         Ok(value) => {
             call.finish(None);

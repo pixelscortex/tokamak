@@ -6,10 +6,13 @@ impl Coordinator {
             Error::Invalid("Server uses a legacy bundle, not a plugin installation".into())
         })?;
 
-        let mut metadata = plugins.catalog.metadata();
+        let mut metadata = plugins.catalog.metadata_with_logs(&plugins.logs);
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
 
+        if !plugins.skipped.is_empty() {
+            metadata["skipped"] = serde_json::json!(plugins.skipped);
+        }
         Ok(metadata)
     }
 
@@ -53,6 +56,10 @@ impl Coordinator {
                 let _ = reply.send(());
             }
             Command::RunFunction(call) => self.run_function(call).await,
+            Command::WindowError(id, revision, text, reply) => {
+                let result = self.record_window_error(id, &revision, &text);
+                let _ = reply.send(result);
+            }
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
@@ -62,17 +69,16 @@ impl Coordinator {
                     .as_ref()
                     .ok_or_else(|| Error::Invalid("No plugin installation".into()))
                     .map(|loaded| {
-                        if revision
-                            .as_ref()
-                            .is_some_and(|r| r != &loaded.catalog.revision)
-                        {
-                            return None;
-                        }
                         loaded
                             .catalog
                             .plugins
                             .get(&id)
-                            .and_then(|plugin| plugin.ui_asset(&name))
+                            .filter(|plugin| {
+                                revision.as_ref().is_none_or(|r| r == &plugin.build_id)
+                            })
+                            .and_then(|plugin| {
+                                plugin.ui_asset(&name).or_else(|| plugin.types_asset(&name))
+                            })
                     });
 
                 let _ = reply.send(result);
@@ -82,89 +88,178 @@ impl Coordinator {
 
                 let _ = reply.send(result);
             }
+            Command::ReloadIndexed(request, reply) => {
+                let _ = reply.send(self.reload_indexed(&request).await);
+            }
             _ => unreachable!("application commands have their own admission path"),
         }
     }
 
-    pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+    fn record_window_error(
+        &mut self,
+        id: String,
+        revision: &str,
+        text: &str,
+    ) -> Result<bool, Error> {
+        use std::time::{Duration, Instant};
+        let Some(log) = self.plugins.as_ref().and_then(|p| p.logs.get(&id)) else {
+            return Ok(false);
+        };
+        if log.revision() != revision {
+            return Err(Error::Invalid("Stale plugin log revision".into()));
+        }
+        // Keep a runaway view from filling the disk with repeated reports.
+        let (start, count) = self
+            .window_reports
+            .entry(id.clone())
+            .or_insert_with(|| (Instant::now(), 0));
+        if start.elapsed() >= Duration::from_secs(10) {
+            *start = Instant::now();
+            *count = 0;
+        }
+        if *count >= 8 {
+            if *count == 8 {
+                log.record(
+                    "window",
+                    "warn",
+                    "dropped",
+                    "window report rate limit reached; further reports dropped",
+                );
+                *count += 1;
+            }
+            return Err(Error::Overloaded);
+        }
+        log.record("window", "error", "exception", text);
+        *count += 1;
+        Ok(true)
+    }
+
+    async fn reload_indexed(
+        &mut self,
+        request: &crate::plugins::IndexedReload,
+    ) -> Result<ReloadResult, Error> {
+        let root = self
+            .plugin_root
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let previous = self
+            .plugins
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
+        let (catalog, failures) =
+            crate::plugins::Catalog::read_indexed_reload(root, previous, request)?;
+        let unchanged: Vec<_> = request
+            .builds
+            .iter()
+            .filter(|build| {
+                previous
+                    .catalog
+                    .plugins
+                    .get(&build.id)
+                    .is_some_and(|artifact| artifact.build_id == build.build_id)
+            })
+            .map(|build| build.id.clone())
+            .collect();
+        let removed: Vec<_> = previous
+            .catalog
+            .index
+            .keys()
+            .filter(|id| !catalog.index.contains_key(*id))
+            .cloned()
+            .collect();
+        let (mut response, logs) = self.swap_catalog(catalog, failures).await?;
+        // Diagnostics run after the swap. Unrelated on-disk errors do not
+        // participate in deciding or applying an index removal.
+        if !removed.is_empty()
+            && let Some(root) = &self.plugin_root
+        {
+            let warnings = crate::plugins::Catalog::installation_warnings(root);
+            if !warnings.is_empty() {
+                response["warnings"] = serde_json::json!(warnings);
+            }
+        }
+        response["removed"] = serde_json::json!(removed);
+        response["unchanged"] = serde_json::json!(unchanged);
+        Ok((response, logs))
+    }
+
+    pub(super) async fn reload(&mut self, id: &str) -> Result<ReloadResult, Error> {
         let root = self
             .plugin_root
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
-        let catalog =
-            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
+        let previous = self.plugins.as_deref();
+        let (catalog, artifact_failures) =
+            crate::plugins::Catalog::read_for_reload(root, previous)?;
 
         if !catalog.plugins.contains_key(id)
-            && !self
-                .plugins
-                .as_ref()
-                .is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
+            && !previous.is_some_and(|old| {
+                old.catalog.plugins.contains_key(id) || old.skipped.contains_key(id)
+            })
         {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        let candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
+        self.swap_catalog(catalog, artifact_failures).await
+    }
+
+    async fn swap_catalog(
+        &mut self,
+        catalog: crate::plugins::Catalog,
+        artifact_failures: std::collections::BTreeMap<String, String>,
+    ) -> Result<ReloadResult, Error> {
+        let previous = self.plugins.as_deref();
+        if previous
+            .is_some_and(|old| old.skipped.is_empty() && old.catalog.revision == catalog.revision)
+        {
+            return Ok((self.metadata()?, Vec::new()));
+        }
+
+        let mut candidate =
+            crate::plugins::Loaded::load_reusing(catalog, artifact_failures, &self.pool, previous)
                 .await?;
-        // Each generation gets a fresh action lane; build it before the swap so
-        // a pool failure leaves the current generation fully intact.
-        let action_pool = Arc::new(
-            Pool::new_actions(PoolConfig {
-                limits: self.pool.limits().clone(),
-                ..PoolConfig::default()
-            })
-            .map_err(|e| Error::Invalid(e.to_string()))?,
-        );
-        Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
-        // This command follows every previously accepted invocation's complete
-        // commit/rollback. Nothing below can fail before the generation swap.
-        // Cancel old-generation actions so a reload cannot leave revoked network
-        // grants running in old worlds; the old pool tears down detached.
-        self.action_pool.cancel_actions();
-        if let Some(previous) = &self.plugins {
-            for worker in previous.workers.values() {
-                worker.stop().await;
-            }
-        }
-        self.action_pool = action_pool;
+        Box::pin(candidate.record_grants(&self.database, previous)).await?;
+        let changed = candidate.changed_plugins(previous);
+        let revision_changed =
+            previous.is_none_or(|old| old.catalog.revision != candidate.catalog.revision);
+        // An empty report marks recovery when the previous load had skips.
+        let skipped = (previous.is_some_and(|old| !old.skipped.is_empty())
+            || !candidate.skipped.is_empty())
+        .then(|| serde_json::json!(candidate.skipped));
+        let candidate = Arc::new(candidate);
+        // Backfill and readiness have both passed for the remaining candidates.
+        // Retire only builds that differ in the catalog we will publish.
+        candidate.publish(previous, &changed).await;
+        let logs = changed
+            .iter()
+            .filter_map(|id| candidate.logs.get(id).cloned())
+            .collect();
+        self.window_reports.retain(|id, _| !changed.contains(id));
         self.kinds = candidate.client_kinds();
-
-        let mut changed = std::collections::BTreeSet::new();
-
-        if let Some(previous) = &self.plugins {
-            for (id, artifact) in &previous.catalog.plugins {
-                if candidate.catalog.plugins.get(id).is_none_or(|next| {
-                    serde_json::to_value(&artifact.manifest).ok()
-                        != serde_json::to_value(&next.manifest).ok()
-                }) {
-                    changed.insert(id.clone());
-                }
-            }
-
-            for id in candidate.catalog.plugins.keys() {
-                if !previous.catalog.plugins.contains_key(id) {
-                    changed.insert(id.clone());
-                }
-            }
-        }
         self.plugins = Some(candidate);
 
-        let catalog = self.metadata()?;
-        // Use the same bounded ordered stream as data updates. A stale asset
-        // request carries its catalog revision and cannot mix generations.
-        for session in self.sessions.keys().copied().collect::<Vec<_>>() {
-            self.emit(
-                session,
-                Event::PluginChanged {
-                    plugins: changed.iter().cloned().collect(),
-                    catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
-                },
-            );
+        let mut catalog = self.metadata()?;
+        if let Some(skipped) = skipped {
+            catalog["skipped"] = skipped;
         }
-        self.invalidate(None);
-        self.refresh().await;
-        self.metadata()
+        if revision_changed || !changed.is_empty() {
+            // Windows fetch a changed catalog even when no builds need to remount.
+            for session in self.sessions.keys().copied().collect::<Vec<_>>() {
+                self.emit(
+                    session,
+                    Event::PluginChanged {
+                        plugins: changed.iter().cloned().collect(),
+                        catalog: serde_json::json!({"revision": catalog["revision"], "paged": true}),
+                    },
+                );
+            }
+        }
+        if !changed.is_empty() {
+            self.invalidate(None);
+            self.refresh().await;
+        }
+        Ok((catalog, logs))
     }
 
     pub(super) fn asset_page(
@@ -179,16 +274,16 @@ impl Coordinator {
         let result = (|| {
             let loaded = self.plugins.as_ref().ok_or("No plugin installation")?;
 
-            if loaded.catalog.revision != revision {
-                return Err("Plugin generation changed".to_owned());
-            }
-
-            let bytes = loaded
+            let plugin = loaded
                 .catalog
                 .plugins
                 .get(&plugin)
-                .and_then(|p| p.ui_asset(&name))
-                .ok_or("Unknown plugin UI asset")?;
+                .ok_or("Unknown plugin")?;
+            if plugin.build_id != revision {
+                return Err("Plugin build changed".to_owned());
+            }
+
+            let bytes = plugin.ui_asset(&name).ok_or("Unknown plugin UI asset")?;
             bytes.page(offset).map_err(|e| e.to_string())
         })();
         self.respond(session, id, result);

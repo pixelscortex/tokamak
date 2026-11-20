@@ -184,7 +184,7 @@ backends!(
 
 // Contract 5: identical redefinition is a no-op (even once rows exist), a
 // different definition under the same name and a definition on a populated
-// table are explicit errors that poison the call. Invalid index reads (unknown
+// table backfill existing rows. Invalid index reads (unknown
 // name, wrong field order, double bounds, ranges without an index) are errors
 // rather than silently degrading into an unindexed or partial scan.
 async fn index_definitions(disk: bool) {
@@ -224,7 +224,7 @@ async fn index_definitions(disk: bool) {
         .unwrap();
     tx.commit().await.unwrap();
 
-    assert_definition_conflicts(&db, &posts).await;
+    assert_definition_backfill(&db, &posts).await;
     assert_invalid_definitions_and_reads(&db, &posts).await;
     let mut tx = db.read_only().await.unwrap();
     assert_eq!(
@@ -620,11 +620,24 @@ async fn indexes_survive_reopen() {
     tx.define_index(&notes, "by_slug", &["slug"], true)
         .await
         .unwrap();
-    assert!(matches!(
-        tx.define_index(&notes, "by_slug", &["slug"], false).await,
-        Err(Error::Invalid(_))
-    ));
-    drop(tx);
+    tx.define_index(&notes, "by_slug", &["slug"], false)
+        .await
+        .unwrap();
+    let new = tx
+        .insert(&notes, fields(&[("slug", text("s1"))]))
+        .await
+        .unwrap();
+    let matches = tx
+        .query(&notes)
+        .with_index("by_slug")
+        .eq("slug", "s1")
+        .collect()
+        .await
+        .unwrap();
+    assert_eq!(matches.len(), 2);
+    assert!(matches.iter().any(|row| row.id == inserted[0].1));
+    assert!(matches.iter().any(|row| row.id == new));
+    tx.rollback().await.unwrap();
 
     assert_new_indexes_after_reopen(&db, &notes, &pending).await;
     db.close().await.unwrap();
@@ -1393,51 +1406,30 @@ async fn assert_unprefixed_ranges(
     );
 }
 
-async fn assert_definition_conflicts(db: &Database, posts: &Table) {
-    let conflicting: [(&str, &[&str], bool); 4] = [
-        ("by_author_time", &["author"], false),
-        ("by_author_time", &["time", "author"], false),
-        ("by_author_time", &["author", "time"], true),
-        ("by_author_time", &["author", "time", "extra"], false),
-    ];
-    for (name, columns, unique) in conflicting {
-        let mut tx = db.begin().await.unwrap();
-        tx.insert(&table("scratch"), Object::new()).await.unwrap();
-        let error = tx
-            .define_index(posts, name, columns, unique)
-            .await
-            .unwrap_err();
-        assert!(
-            matches!(error, Error::Invalid(_)),
-            "{columns:?} {unique}: {error:?}"
-        );
-        assert!(!error.is_retryable_conflict());
-        // Poisoned: the earlier successful insert cannot be saved.
-        assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
-    }
-
-    // A new definition on a table that already has rows is rejected with an
-    // explicit backfill error; running it would leave existing rows unindexed.
+async fn assert_definition_backfill(db: &Database, posts: &Table) {
     let mut tx = db.begin().await.unwrap();
-    let error = tx
-        .define_index(posts, "by_time", &["time"], false)
+    let count = tx.query(posts).collect().await.unwrap().len();
+    assert!(count > 0);
+    tx.define_index(posts, "by_time", &["time"], false)
         .await
-        .unwrap_err();
-    assert!(
-        matches!(&error, Error::Invalid(message) if message.contains("backfill")),
-        "{error:?}"
-    );
-    assert!(matches!(tx.commit().await, Err(Error::FailedTransaction)));
-    let mut tx = db.begin().await.unwrap();
-    assert!(
+        .unwrap();
+    tx.define_index(posts, "by_time", &["author"], false)
+        .await
+        .unwrap();
+    assert_eq!(
         tx.query(posts)
             .with_index("by_time")
             .collect()
             .await
-            .is_err(),
-        "a rejected definition must not exist afterwards"
+            .unwrap()
+            .len(),
+        count
     );
-    drop(tx);
+    let mut writer = db.begin().await.unwrap();
+    let conflict = writer.insert(posts, Object::new()).await.unwrap_err();
+    assert!(conflict.is_retryable_conflict(), "{conflict}");
+    writer.rollback().await.unwrap();
+    tx.rollback().await.unwrap();
 }
 
 async fn assert_invalid_definitions_and_reads(db: &Database, posts: &Table) {

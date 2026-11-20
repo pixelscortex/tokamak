@@ -85,48 +85,61 @@ fn launch(
     Ok((child, group, guardian))
 }
 
-pub(super) fn spawn(
-    runtime: &tokio::runtime::Handle,
+#[cfg(windows)]
+fn launch(
     id: &str,
     bun: &Path,
-    entry: Arc<Asset>,
-    code: Arc<Asset>,
+    entry: &Path,
+    code: &Path,
     cwd: &Path,
     env: &BTreeMap<String, String>,
+) -> Result<
+    (
+        WorkerChild,
+        std::os::windows::io::OwnedHandle,
+        Option<Child>,
+    ),
+    String,
+> {
+    let (child, job) = super::windows::spawn(bun, entry, code, cwd, env)
+        .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
+    Ok((child, job, None))
+}
+
+pub(super) fn spawn(
+    supervisor: &Supervisor,
+    bun: &Path,
+    cwd: &Path,
+    capture_startup: bool,
 ) -> Result<Arc<Process>, String> {
+    let id = &supervisor.id;
+    let runtime = &supervisor.runtime;
+    let (entry, code) = (supervisor.entry.clone(), supervisor.code.clone());
     // Nested QuickJS actions can run on a short-lived runtime. Bind child I/O
     // to the server runtime that owns the long-lived worker instead.
     let _entered = runtime.enter();
-    #[cfg(windows)]
-    let (mut child, containment, mut guardian) = {
-        let (child, job) = super::windows::spawn(bun, entry.path(), code.path(), cwd, env)
-            .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
-        (child, job, None::<Child>)
-    };
-    #[cfg(not(windows))]
     let (mut child, containment, mut guardian) =
-        launch(id, bun, entry.path(), code.path(), cwd, env)?;
+        launch(id, bun, entry.path(), code.path(), cwd, &supervisor.env)?;
     let guardian_input = guardian.as_mut().and_then(|child| child.stdin.take());
     let input = child.stdin.take().ok_or("Worker stdin missing")?;
     let output = child.stdout.take().ok_or("Worker stdout missing")?;
     let stderr = child.stderr.take().ok_or("Worker stderr missing")?;
     let (commands, receive) = mpsc::channel(128);
-    let process = Arc::new(Process {
-        commands,
-        kill: CancellationToken::new(),
-        stopped: CancellationToken::new(),
-    });
+    let process = Arc::new(Process::new(commands));
     let running = process.clone();
     let id = id.to_owned();
     let finished = process.stopped.clone().drop_guard();
+    let log = (!capture_startup)
+        .then(|| supervisor.log.get().cloned())
+        .flatten();
     runtime.spawn(async move {
         let _finished = finished;
         // Keep the verified snapshots alive through exit; never reopen build output.
         let _snapshots = (entry, code);
         let _guardian_input = guardian_input;
         let label = id.clone();
-        let _stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
-            forward_stderr(label, stderr).await;
+        let mut stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+            forward_stderr(label, stderr, capture_startup).await
         }));
         let (writes, outgoing) = mpsc::channel::<Value>(128);
         let (failed, mut failure) = oneshot::channel();
@@ -135,10 +148,13 @@ pub(super) fn spawn(
             let _ = failed.send(result.err().unwrap_or_else(|| "Worker stdin closed".into()));
         }));
         let mut calls = BTreeMap::new();
+        let mut output = BufReader::new(output);
+        let mut frame = Vec::new();
+        let mut malformed_log = false;
         let supervise = run(
-            &id,
+            (&id, log.as_ref()),
             &mut child,
-            output,
+            (&mut output, &mut frame, &mut malformed_log),
             receive,
             Control {
                 input: &writes,
@@ -160,17 +176,46 @@ pub(super) fn spawn(
         .unwrap_or_else(|| "Worker stopped".into());
         let _ = writes.try_send(json!({"type":"shutdown"}));
         drop(containment);
-        #[cfg(not(windows))]
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-        if let Some(mut guardian) = guardian {
-            let _ = guardian.wait().await;
+        reap(child, guardian).await;
+        drain_logs(
+            (&id, log.as_ref()),
+            &mut output,
+            &mut frame,
+            &mut malformed_log,
+        )
+        .await;
+        if capture_startup
+            && let Ok(Ok(detail)) =
+                tokio::time::timeout(Duration::from_millis(500), &mut stderr).await
+        {
+            let _ = running.exit_error.set(detail);
         }
         fail_pending_calls(&id, &error, calls);
         running.stopped.cancel();
     });
     Ok(process)
 }
+
+impl Process {
+    fn new(commands: mpsc::Sender<Command>) -> Self {
+        Self {
+            commands,
+            kill: CancellationToken::new(),
+            stopped: CancellationToken::new(),
+            exit_error: OnceLock::new(),
+        }
+    }
+}
+
+async fn reap(mut child: WorkerChild, guardian: Option<Child>) {
+    #[cfg(not(windows))]
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    if let Some(mut guardian) = guardian {
+        let _ = guardian.wait().await;
+    }
+}
+
 fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
     if oversized(&value)? {
         return Err("Worker message exceeds 1 MiB limit".into());
@@ -188,9 +233,13 @@ struct Control<'a> {
     kill: &'a CancellationToken,
 }
 async fn run(
-    id: &str,
+    (id, log): (&str, Option<&crate::plugin_log::Log>),
     child: &mut WorkerChild,
-    output: tokio::process::ChildStdout,
+    (output, frame, malformed_log): (
+        &mut BufReader<tokio::process::ChildStdout>,
+        &mut Vec<u8>,
+        &mut bool,
+    ),
     mut commands: mpsc::Receiver<Command>,
     control: Control<'_>,
     calls: &mut BTreeMap<u64, Call>,
@@ -200,8 +249,6 @@ async fn run(
         failure,
         kill,
     } = control;
-    let mut output = BufReader::new(output);
-    let mut frame = Vec::new();
     let mut ops = JoinSet::new();
     loop {
         let deadline = calls.values().filter_map(|call| call.cancel_at).min();
@@ -237,9 +284,9 @@ async fn run(
                 },
                 None => return Err("worker owner closed".into()),
             },
-            line = read_frame(&mut output, &mut frame) => {
+            line = read_frame(output, frame) => {
                 let line = line?.ok_or("stdout closed")?;
-                let message: Value = serde_json::from_slice(&line).map_err(|_| "Invalid worker JSON")?;
+                let Some(message) = worker_message(id, &line, malformed_log)? else { continue };
                 match message["type"].as_str() {
                     Some("result") => {
                         let id = message["id"].as_u64().ok_or("Invalid worker call id")?;
@@ -266,13 +313,79 @@ async fn run(
                             (call_id, op, result)
                         });
                     }
-                    Some("log") => logs::send(format!("Plugin {id} [{}]: {}", message["level"].as_str().unwrap_or("info"), message["text"].as_str().unwrap_or(""))),
+                    Some("log") => store_log(id, log, &message),
                     _ => return Err("Invalid worker message".into()),
                 }
             }
         }
     }
 }
+async fn drain_logs(
+    (id, log): (&str, Option<&crate::plugin_log::Log>),
+    output: &mut (impl AsyncBufRead + Unpin),
+    frame: &mut Vec<u8>,
+    malformed_log: &mut bool,
+) {
+    // A reload or process exit can win the select with complete log frames
+    // still in the pipe. Drain them before a reload clears the log.
+    let drained = tokio::time::timeout(GRACE, async {
+        while let Some(bytes) = read_frame(output, frame).await? {
+            if let Ok(Some(message)) = worker_message(id, &bytes, malformed_log)
+                && message["type"] == "log"
+            {
+                store_log(id, log, &message);
+            }
+        }
+        Ok::<(), String>(())
+    })
+    .await;
+    match drained {
+        Ok(Ok(())) => (),
+        Ok(Err(error)) => logs::send(format!("Plugin {id} worker: {error}")),
+        Err(_) => logs::send(format!("Plugin {id} worker: timeout draining plugin log")),
+    }
+}
+
+const LOG_PREFIX: &[u8] = br#"{"type":"log""#;
+const OVERLONG_LOG: &[u8] = br#"{"type":"log","oversized":"#;
+
+fn worker_message(id: &str, bytes: &[u8], diagnosed: &mut bool) -> Result<Option<Value>, String> {
+    let decoded = serde_json::from_slice::<Value>(bytes);
+    match decoded {
+        Ok(message)
+            if message["type"] != "log"
+                || (message["level"].is_string() && message["text"].is_string()) =>
+        {
+            Ok(Some(message))
+        }
+        Ok(_) => {
+            malformed_log(id, diagnosed);
+            Ok(None)
+        }
+        Err(_) if bytes.starts_with(LOG_PREFIX) => {
+            malformed_log(id, diagnosed);
+            Ok(None)
+        }
+        Err(_) => Err("Invalid worker JSON".into()),
+    }
+}
+
+fn malformed_log(id: &str, diagnosed: &mut bool) {
+    if !std::mem::replace(diagnosed, true) {
+        logs::send(format!("Plugin {id} worker: dropped malformed log frame"));
+    }
+}
+
+fn store_log(id: &str, log: Option<&crate::plugin_log::Log>, message: &Value) {
+    let level = crate::plugin_log::console_level(message["level"].as_str().unwrap_or("info"));
+    let text = message["text"].as_str().unwrap_or("");
+    if let Some(log) = log {
+        log.record("server", level, "console", text);
+    } else {
+        logs::send(format!("Plugin {id} [{level}]: {text}"));
+    }
+}
+
 // fill_buf is cancellation-safe. Keep the partial frame across select branches.
 async fn read_frame(
     output: &mut (impl AsyncBufRead + Unpin),
@@ -289,10 +402,17 @@ async fn read_frame(
         }
         let end = bytes.iter().position(|b| *b == b'\n');
         let count = end.map_or(bytes.len(), |n| n + 1);
-        if frame.len() + count > FRAME {
-            return Err("Worker message exceeds 1 MiB limit".into());
+        if frame == OVERLONG_LOG {
+            // Discard the rest of an oversized log frame without growing the buffer.
+        } else if frame.len() + count > FRAME {
+            if !frame.starts_with(LOG_PREFIX) {
+                return Err("Worker message exceeds 1 MiB limit".into());
+            }
+            frame.clear();
+            frame.extend_from_slice(OVERLONG_LOG);
+        } else {
+            frame.extend_from_slice(&bytes[..count]);
         }
-        frame.extend_from_slice(&bytes[..count]);
         output.consume(count);
         if end.is_some() {
             return Ok(Some(std::mem::take(frame)));
@@ -300,17 +420,28 @@ async fn read_frame(
     }
 }
 
-async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) {
+async fn forward_stderr(
+    label: String,
+    mut stderr: tokio::process::ChildStderr,
+    capture_startup: bool,
+) -> String {
     let mut chunk = [0u8; 4096];
+    let mut detail = Vec::new();
     while let Ok(n) = stderr.read(&mut chunk).await {
         if n == 0 {
             break;
         }
-        logs::send(format!(
-            "Plugin {label}: {}",
-            String::from_utf8_lossy(&chunk[..n])
-        ));
+        if capture_startup {
+            let room = 8192usize.saturating_sub(detail.len());
+            detail.extend_from_slice(&chunk[..n.min(room)]);
+        } else {
+            logs::send(format!(
+                "Plugin {label}: {}",
+                String::from_utf8_lossy(&chunk[..n])
+            ));
+        }
     }
+    String::from_utf8_lossy(&detail).trim().to_owned()
 }
 
 async fn write_messages(

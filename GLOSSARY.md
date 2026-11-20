@@ -17,7 +17,7 @@ A server that several people connect to. Its workspace lives only there.
 _Avoid_: Hub, remote, cloud server
 
 **Local server**:
-The server that the desktop app runs on a person's own computer. Its workspace has that person as its only member.
+The server that runs on a person's own computer. The desktop app or CLI can start it. The owner can invite members to its workspace.
 _Avoid_: This Mac, desktop server, embedded server
 
 **Machine**:
@@ -49,7 +49,7 @@ The plugins every server needs to be usable, `chat` and `acp` today. CI packs th
 _Avoid_: Built-in plugins, core plugins, bundled plugins
 
 **Plugin log**:
-One file per plugin in the computer's temp folder. It holds what the plugin's newest code printed and the errors it threw, on the server and in the window. A reload of that plugin empties it.
+One file per plugin in the computer's temp folder. It holds what the active build printed and the errors it threw, on the server and in the window. A successful reload replaces the log only for plugins whose build changes.
 _Avoid_: Server log, console, output
 
 **Skill file**:

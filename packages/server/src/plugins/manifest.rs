@@ -8,7 +8,7 @@ fn hub() -> String {
     "hub".into()
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
     pub id: String,
@@ -43,7 +43,7 @@ pub struct Definition {
     pub exports: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BackendEntry {
     pub code: String,
@@ -51,7 +51,7 @@ pub struct BackendEntry {
     pub api: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UiEntry {
     pub code: String,
@@ -62,7 +62,7 @@ pub struct UiEntry {
     pub shell: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerEntry {
     pub entry: String,
@@ -70,9 +70,11 @@ pub struct WorkerEntry {
     pub map: String,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entries {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerEntry>,
     #[serde(default)]
@@ -81,7 +83,7 @@ pub struct Entries {
     pub ui: Option<UiEntry>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Manifest {
     pub format_version: u32,
@@ -99,11 +101,12 @@ impl Definition {
 }
 
 impl Manifest {
-    pub(super) fn read(directory: &Path) -> Result<Self, Error> {
-        serde_json::from_reader(std::io::BufReader::new(
-            File::open(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?,
-        ))
-        .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+    pub(super) fn read(directory: &Path) -> Result<(Self, String), Error> {
+        let bytes =
+            std::fs::read(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?;
+        let manifest = serde_json::from_slice(&bytes)
+            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))?;
+        Ok((manifest, format!("{:x}", Sha256::digest(&bytes))))
     }
 }
 
@@ -196,13 +199,17 @@ impl Manifest {
                 .chain(entry.shell.iter())
         });
 
-        for name in backend_paths.chain(ui_paths).chain(
-            self.entries
-                .worker
-                .as_ref()
-                .into_iter()
-                .flat_map(|e| [&e.entry, &e.code, &e.map]),
-        ) {
+        for name in backend_paths
+            .chain(ui_paths)
+            .chain(&self.entries.types)
+            .chain(
+                self.entries
+                    .worker
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|e| [&e.entry, &e.code, &e.map]),
+            )
+        {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

@@ -9,7 +9,7 @@ use crate::{
 use axum::{
     Extension, Router,
     extract::{
-        Path, Query, State, WebSocketUpgrade,
+        DefaultBodyLimit, Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::{HeaderMap, StatusCode},
@@ -169,20 +169,24 @@ pub async fn serve_with_identities(
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
-        .route("/plugins", get(plugins))
-        .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
+        .merge(plugin_routes());
     if hosted {
-        app = app
-            .route("/health", get(|| async { "ok" }))
-            .route("/members", get(members).post(invite))
-            .route("/members/{id}/revoke", post(revoke));
+        app = app.route("/health", get(|| async { "ok" }));
     } else if access.is_some() {
         app = app.route("/health", get(health));
+    }
+    if hosted || access.is_some() {
+        app = app
+            .route("/members", get(members).post(invite))
+            .route("/members/{id}/revoke", post(revoke));
     }
     if access.is_some() {
         app = app
             .route("/shutdown", post(stop))
             .route("/plugins/{id}/reload", post(reload_plugin));
+    }
+    if !hosted && access.is_some() {
+        app = app.route("/plugin-index/reload", post(reload_indexed));
     }
     let app = app
         .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
@@ -233,12 +237,21 @@ async fn authorize(
     mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let browser_route = request.uri().path() == "/account"
+    let path = request.uri().path();
+    let window_report = path
+        .strip_prefix("/plugins/")
+        .and_then(|suffix| suffix.split_once('/'))
+        .is_some_and(|(_, action)| action == "window-error");
+    let browser_route = window_report
+        || path == "/account"
         || request.uri().path() == "/ws"
         || request.uri().path() == "/plugins"
         || (request.uri().path().starts_with("/plugins/")
             && request.uri().path().contains("/assets/"));
     let origin = headers.get("origin");
+    if window_report && adapter.access.is_none() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
     if let Some(origin) = origin
         && (!browser_route
             || !(adapter
@@ -271,7 +284,9 @@ async fn authorize(
             return response;
         };
         let path = request.uri().path();
-        if (path.starts_with("/members") || path == "/shutdown" || path.ends_with("/reload"))
+        if (path.starts_with("/members")
+            || matches!(path, "/health" | "/shutdown")
+            || path.ends_with("/reload"))
             && user.role != "owner"
         {
             return StatusCode::FORBIDDEN.into_response();
@@ -369,7 +384,12 @@ async fn members(State(adapter): State<Adapter>) -> Response {
 async fn invite(State(adapter): State<Adapter>, body: String) -> Response {
     account_result((|| {
         let input: DisplayName = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-        Ok(serde_json::json!({"token": adapter.identities.invite(&input.name)?}))
+        let token = adapter.identities.invite(&input.name)?;
+        Ok(if adapter.hosted {
+            serde_json::json!({"token": token})
+        } else {
+            serde_json::json!({"token": token, "local": true})
+        })
     })())
 }
 
@@ -385,6 +405,12 @@ async fn revoke(State(adapter): State<Adapter>, Path(id): Path<String>) -> Respo
 fn plugin_result(result: Result<serde_json::Value, crate::Error>) -> Response {
     match result {
         Ok(value) => ([("content-type", "application/json")], value.to_string()).into_response(),
+        Err(crate::Error::IndexBackfill(message)) => (
+            StatusCode::BAD_REQUEST,
+            [("content-type", "application/json")],
+            serde_json::json!({"error":message, "code":"index-backfill"}).to_string(),
+        )
+            .into_response(),
         Err(error) => (
             StatusCode::BAD_REQUEST,
             [("content-type", "application/json")],
@@ -393,12 +419,48 @@ fn plugin_result(result: Result<serde_json::Value, crate::Error>) -> Response {
             .into_response(),
     }
 }
+fn plugin_routes() -> Router<Adapter> {
+    Router::new()
+        .route("/plugins", get(plugins))
+        .route(
+            "/plugins/{id}/window-error",
+            post(window_error).layer(DefaultBodyLimit::max(crate::plugin_log::WINDOW_TEXT_BYTES)),
+        )
+        .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset))
+}
 async fn plugins(State(adapter): State<Adapter>) -> Response {
     plugin_result(adapter.server.plugins().await)
 }
 async fn reload_plugin(State(adapter): State<Adapter>, Path(id): Path<String>) -> Response {
     plugin_result(adapter.server.reload_plugin(id).await)
 }
+#[derive(serde::Deserialize)]
+struct WindowRevision {
+    revision: String,
+}
+
+async fn window_error(
+    State(adapter): State<Adapter>,
+    Path(id): Path<String>,
+    Query(report): Query<WindowRevision>,
+    text: String,
+) -> StatusCode {
+    match adapter.server.window_error(id, report.revision, text).await {
+        Ok(true) => StatusCode::NO_CONTENT,
+        Ok(false) => StatusCode::NOT_FOUND,
+        Err(crate::Error::Overloaded) => StatusCode::TOO_MANY_REQUESTS,
+        Err(crate::Error::Invalid(_)) => StatusCode::CONFLICT,
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE,
+    }
+}
+async fn reload_indexed(State(adapter): State<Adapter>, body: String) -> Response {
+    let input: crate::plugins::IndexedReload = match serde_json::from_str(&body) {
+        Ok(input) => input,
+        Err(error) => return plugin_result(Err(crate::Error::Invalid(error.to_string()))),
+    };
+    plugin_result(adapter.server.reload_indexed(input).await)
+}
+
 async fn plugin_asset(
     State(adapter): State<Adapter>,
     Path((id, revision, name)): Path<(String, String, String)>,
@@ -413,6 +475,8 @@ async fn plugin_asset(
                 "text/javascript"
             } else if name.ends_with(".css") {
                 "text/css"
+            } else if name.ends_with(".d.ts") {
+                "text/plain; charset=utf-8"
             } else if name.ends_with(".html") {
                 "text/html"
             } else {
@@ -465,6 +529,7 @@ async fn upgrade(
 
 async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     let revoked = adapter.identities.cancellation(&user.id);
+    let local_relay = !adapter.hosted && adapter.access.is_some() && user.role == "owner";
     let session = tokio::select! {
         _ = adapter.stopping.cancelled() => return,
         _ = revoked.cancelled() => return,
@@ -472,7 +537,7 @@ async fn connection(socket: WebSocket, adapter: Adapter, user: User) {
     };
     tokio::select! {
         _ = revoked.cancelled() => {},
-        _ = connection_session(socket, session, adapter.stopping, !adapter.hosted && adapter.access.is_some()) => {},
+        _ = connection_session(socket, session, adapter.stopping, local_relay) => {},
     }
 }
 

@@ -71,6 +71,18 @@ impl QuickJsContext {
     }
 }
 
+pub(crate) fn install_surfaces<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    ops: &OpRegistry,
+    web_ops: Arc<OpRegistry>,
+    invocation: &Invocation,
+    actions: bool,
+) -> rquickjs::Result<()> {
+    ops.install_console(ctx, "console")?;
+    let host = bridge::install_ops(ctx, web_ops, invocation)?;
+    crate::web::install(ctx, host, actions)
+}
+
 /// The backend engine has configuration, not shared mutable invocation state.
 /// Invoke it on a Tokio executor with time enabled (the pool supplies one).
 pub struct QuickJsEngine {
@@ -108,11 +120,9 @@ impl Engine for QuickJsEngine {
         world
             .context
             .with(|ctx| {
-                let host = bridge::install_ops(&ctx, web_ops, &web_invocation)
-                    .map_err(|e| js_error(&ctx, e, bundle, false))?;
-                // Bundled action dependencies may construct encoders during module
-                // inspection. Pure APIs are shared; external effects stay disabled.
-                crate::web::install(&ctx, host, false).map_err(|e| js_error(&ctx, e, bundle, false))
+                // Bundles may construct encoders during inspection, with external effects disabled.
+                install_surfaces(&ctx, &ops, web_ops, &web_invocation, false)
+                    .map_err(|e| js_error(&ctx, e, bundle, false))
             })
             .await?;
         let namespace = timed(

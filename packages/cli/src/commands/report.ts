@@ -6,7 +6,7 @@ import { CommandError, type Command } from "../command";
 import { dataFolder } from "../data";
 import { readIndex } from "../plugin-index";
 import { doctorTable, inspectDevelopment } from "./doctor";
-import { localEndpoint, localServerGet } from "../server";
+import { serverGetAt } from "../server";
 import { reportSanitizer } from "./report-sanitize";
 
 type Catalog = { plugins: { plugin: { id: string; version: string }; fromIndex?: boolean }[] };
@@ -64,11 +64,11 @@ async function readLocalToken(folder: string) {
 }
 
 async function loadedPlugins(
-  server: Awaited<ReturnType<typeof localEndpoint>>,
+  server: NonNullable<Awaited<ReturnType<typeof inspectDevelopment>>["server"]>,
   clean: (value: string) => string,
 ) {
   try {
-    const { plugins } = (await localServerGet("/plugins", server)) as Catalog;
+    const { plugins } = (await serverGetAt("/plugins", server.endpoint)) as Catalog;
     return block(
       JSON.stringify(
         plugins.map(({ plugin: { id, version }, fromIndex }) => ({

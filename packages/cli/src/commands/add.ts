@@ -34,8 +34,8 @@ export default {
       return true;
     });
     return {
-      data: { id, folder, restartRequired: true, precedence: "index" },
-      text: `Indexed ${id} at ${folder}. The local server picks this up at its next start. The indexed build takes precedence over any ${id} from --plugins.`,
+      data: { id, folder, reloadRequired: true, precedence: "index" },
+      text: `Indexed ${id} at ${folder}. Run tokamak plugin reload ${id} to apply it now. The indexed build takes precedence over any ${id} from --plugins.`,
     };
   },
 } satisfies Command;
