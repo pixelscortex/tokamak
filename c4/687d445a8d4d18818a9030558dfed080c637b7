@@ -1,0 +1,40 @@
+packages/cli/tests/cli.test.mjs
+  s_157eb2be319aa0::t_4f73cf4bcf4875 368-450,472-474,478,481-484,492,520-524
+  s_157eb2be319aa0::t_f2f77dc61b7fad 366-367,531,1074,1115
+packages/build/src/artifact-sources.ts
+  s_157eb2be319aa0::t_bb299ae35d5767 1-63
+packages/build/src/build.ts
+  s_157eb2be319aa0::t_bbd9b4df95864b 27-28
+packages/build/src/descriptor.ts
+  s_157eb2be319aa0::t_b1dbaa9afaefe0 8-9,27-30,44-45,52,63,65,70,72-79,91-92,97,100-106,114
+packages/build/src/ui-build-config.ts
+  s_157eb2be319aa0::t_1619197170d47b 6,27-33
+packages/build/src/vite.ts
+  s_157eb2be319aa0::t_b4f3c6afd7afda 11,130-132,143-163
+packages/cli/src/commands/build.ts
+  s_157eb2be319aa0::t_921c98bdf70b7d 17,30
+packages/cli/src/commands/pack.ts
+  s_157eb2be319aa0::t_68fb884735d617 4,39,41
+packages/cli/src/commands/reload.ts
+  s_157eb2be319aa0::t_fa0e30d21da40e 29,45-47,179-185,207,226,243
+packages/cli/src/plugin-build.ts
+  s_157eb2be319aa0::t_fc01cf246460f5 24-30,32,38-42
+packages/sdk/src/plugin.ts
+  s_157eb2be319aa0::t_883c20730f862b 42-50,60,77,101,129,143,149,152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c4687d445a8d4d18818a9030558dfed080c637b7",
+  "prompts": {},
+  "sessions": {
+    "s_157eb2be319aa0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f99a-5e8f-7151-8abd-1420140f8f7b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
