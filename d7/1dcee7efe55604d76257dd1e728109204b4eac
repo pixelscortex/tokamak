@@ -1,0 +1,99 @@
+.agents/skills/to-tickets/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-105
+skills-lock.json
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 4-31,46-66,81-87,102-122
+.agents/skills/pr/CREDITS.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-3
+.agents/skills/tdd/tests.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-77
+.agents/skills/ask-matt/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-5
+.agents/skills/diagnosing-bugs/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-138
+.agents/skills/code-review/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-89
+.agents/skills/implement-spec/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-42
+.agents/skills/pr/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-170
+.agents/skills/code-review/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-3
+.agents/skills/retro/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-44
+.agents/skills/implement/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-17
+.agents/skills/codebase-design/DESIGN-IT-TWICE.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-44
+.agents/skills/pr/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-3
+.agents/skills/codebase-design/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-3
+.agents/skills/tdd/mocking.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-59
+.agents/skills/codebase-design/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-114
+.agents/skills/ask-matt/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-97
+.agents/skills/diagnosing-bugs/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-3
+.agents/skills/tdd/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-3
+.agents/skills/to-spec/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-75
+.agents/skills/to-tickets/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-5
+.agents/skills/ask-matt/PHASE-BOUNDARIES.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-55
+.agents/skills/implement-spec/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-5
+.agents/skills/retro/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-5
+.agents/skills/diagnosing-bugs/scripts/hitl-loop.template.sh
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-44
+.agents/skills/codebase-design/DEEPENING.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-37
+.agents/skills/to-spec/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-5
+.agents/skills/implement/agents/openai.yaml
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-5
+.agents/skills/tdd/SKILL.md
+  s_4ccc9a2575a981::t_a7f3cca3923ca1 1-38
+.claude/skills/ask-matt
+  s_4ccc9a2575a981::t_4f7694ded45d51 1
+.claude/skills/code-review
+  s_4ccc9a2575a981::t_f6544fb86931fc 1
+.claude/skills/codebase-design
+  s_4ccc9a2575a981::t_411cd745769cec 1
+.claude/skills/diagnosing-bugs
+  s_4ccc9a2575a981::t_8557ed2d75b53d 1
+.claude/skills/implement
+  s_4ccc9a2575a981::t_0ed0691ff28b37 1
+.claude/skills/implement-spec
+  s_4ccc9a2575a981::t_814139bc301284 1
+.claude/skills/pr
+  s_4ccc9a2575a981::t_7de50f838e5780 1
+.claude/skills/retro
+  s_4ccc9a2575a981::t_5096b40cf51fad 1
+.claude/skills/tdd
+  s_4ccc9a2575a981::t_4ae1719445ff8a 1
+.claude/skills/to-spec
+  s_4ccc9a2575a981::t_377356e5b9269b 1
+.claude/skills/to-tickets
+  s_4ccc9a2575a981::t_2232a26a7f72fc 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d71dcee7efe55604d76257dd1e728109204b4eac",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
