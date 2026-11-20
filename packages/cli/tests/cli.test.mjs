@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { chmod, cp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, toNamespacedPath } from "node:path";
 import { randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
 
@@ -322,7 +322,7 @@ test("the CLI starts one desktop-compatible local server and stops it", async ()
         pid,
         url: address,
         buildId: build.stdout.toString().trim(),
-        pluginRoot: await realpath(plugins),
+        pluginRoot: toNamespacedPath(await realpath(plugins)),
       });
       expect(buildId).toBe(discovery.buildId);
       expect(run("stop")).toEqual({ ok: true, stopped: true });

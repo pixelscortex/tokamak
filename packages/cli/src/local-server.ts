@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { link, lstat, mkdir, open, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
-import { resolve } from "node:path";
+import { resolve, toNamespacedPath } from "node:path";
 
 // Bun fetch uses an empty proxy override to connect directly to loopback.
 const direct = { proxy: "" };
@@ -100,8 +100,12 @@ export async function ensure(
   directory: string,
 ): Promise<{ identity: Identity; reused: boolean }> {
   function compatible(identity: Identity): Identity {
-    // Keep this in step with the desktop's reuse_decision.
-    if (identity.pluginRoot !== plugins || identity.buildId !== buildId) {
+    // Rust canonicalizes Windows paths to their extended-length form.
+    if (
+      !identity.pluginRoot ||
+      toNamespacedPath(identity.pluginRoot) !== toNamespacedPath(plugins) ||
+      identity.buildId !== buildId
+    ) {
       throw new Error("Local server is running with a different build or plugins folder; stop it first");
     }
     return identity;
