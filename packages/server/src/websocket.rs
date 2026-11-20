@@ -413,6 +413,8 @@ async fn plugin_asset(
                 "text/javascript"
             } else if name.ends_with(".css") {
                 "text/css"
+            } else if name.ends_with(".d.ts") {
+                "text/plain; charset=utf-8"
             } else if name.ends_with(".html") {
                 "text/html"
             } else {

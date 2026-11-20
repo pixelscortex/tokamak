@@ -29,6 +29,7 @@ try {
     "bundle.js",
     "bundle.js.map",
     "api.ts",
+    "public.d.ts",
     "worker-entry.js",
     "worker.js",
     "worker.js.map",

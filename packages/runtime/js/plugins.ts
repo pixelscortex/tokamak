@@ -6,7 +6,7 @@ export type ModuleExports = Readonly<Record<string, unknown>>;
 export interface PluginModuleHost {
   importModule?(name: string, manifest: PluginManifest, revision: string): Promise<ModuleExports>;
   affected(names: readonly string[]): Set<string>;
-  remove(names: Iterable<string>): void;
+  remove(names: Iterable<string>, options?: { keepImports?: boolean }): void;
   evaluate(name: string, code: string): void;
   dependencies(name: string): readonly string[];
   has(name: string): boolean;
@@ -17,6 +17,7 @@ export interface PluginModuleHost {
 }
 
 export interface PluginManifest {
+  revision?: string;
   plugin: {
     id: string;
     version: string;
@@ -71,18 +72,6 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
 
   function invalidate(ids: readonly string[], next = metadata()) {
     const affected = registry.affected(ids.map(moduleName));
-    // Include not-yet-evaluated importers using the static dependency graph.
-    const importers = new Map<string, Set<string>>();
-    for (const p of [...metadata().plugins, ...next.plugins]) {
-      for (const id of Object.keys(p.plugin.depends ?? {})) {
-        const dependency = moduleName(id);
-        let names = importers.get(dependency);
-        if (!names) importers.set(dependency, (names = new Set()));
-        names.add(moduleName(p.plugin.id));
-      }
-    }
-    expandImporters(affected, importers);
-    for (const id of pending.keys()) affected.add(moduleName(id));
     const updated = { ...versions() };
     const css = { ...styles() };
     for (const name of affected) {
@@ -92,10 +81,10 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
       pending.delete(id);
       loaded.delete(id);
     }
-    setVersions(updated);
-    setStyles(css);
     registry.remove(affected);
     setMetadata(next);
+    setVersions(updated);
+    setStyles(css);
   }
 
   async function load(id: string, stack: readonly string[] = []): Promise<ModuleExports> {
@@ -105,11 +94,10 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
     if (pending.has(id)) return pending.get(id)!;
     const p = manifest(id);
     if (!p?.entries.ui) throw new Error(`Plugin has no UI module: ${id}`);
-    const revision = metadata().revision;
+    const revision = p.revision ?? metadata().revision;
     const generation = version(id);
     const live = () => {
-      if (disposed || generation !== version(id) || revision !== metadata().revision)
-        throw new Error(`Retired plugin generation: ${id}`);
+      if (disposed || generation !== version(id)) throw new Error(`Retired plugin generation: ${id}`);
     };
     const task = (async () => {
       if (registry.importModule) return registry.importModule(moduleName(id), p, revision);
@@ -139,7 +127,7 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
       return exports;
     } catch (error) {
       if (generation === version(id)) {
-        registry.remove([moduleName(id)]);
+        registry.remove([moduleName(id)], { keepImports: true });
         pending.delete(id);
       }
       throw error;

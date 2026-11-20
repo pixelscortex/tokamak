@@ -41,6 +41,7 @@ pub enum Error {
     Overloaded,
     SlowConsumer,
     Invalid(String),
+    IndexBackfill(String),
 }
 
 impl fmt::Display for Error {
@@ -49,7 +50,7 @@ impl fmt::Display for Error {
             Self::Closed => f.write_str("server/session is closed"),
             Self::Overloaded => f.write_str("server capacity exceeded; request was not admitted"),
             Self::SlowConsumer => f.write_str("session disconnected: output queue filled; reconnect and resubscribe (mutation outcomes may be unknown)"),
-            Self::Invalid(message) => f.write_str(message),
+            Self::Invalid(message) | Self::IndexBackfill(message) => f.write_str(message),
         }
     }
 }

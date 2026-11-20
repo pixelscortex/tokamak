@@ -4,7 +4,16 @@ import ts from "typescript";
 import { dirname, join, sep } from "node:path";
 import { bunPluginBoundary, pluginCompilerOptions } from "./plugin-boundary.mjs";
 
-export async function workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot }) {
+export async function workerSources({
+  root,
+  files,
+  modules,
+  hasSchema,
+  sdkRoot,
+  header,
+  pluginRoot,
+  diagnostics,
+}) {
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
@@ -76,7 +85,7 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
       outdir: join(root, "dist"),
       naming: name,
       plugins: [
-        bunPluginBoundary(pluginRoot),
+        bunPluginBoundary(pluginRoot, diagnostics),
         {
           name: "worker-source",
           setup(build) {

@@ -2,23 +2,40 @@ use super::*;
 
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        Self::read_reusing(root, None)
+        let (plugins, _) = read_installed(root, None)?;
+        Self::assemble(root, root.parent().unwrap_or(root), plugins, Arc::default())
     }
 
-    pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
-        let directory = previous
+    pub(crate) fn read_for_reload(
+        root: &Path,
+        previous: Option<&Loaded>,
+    ) -> Result<(Self, BTreeMap<String, String>), Error> {
+        let old = previous.map(|p| &p.catalog);
+        let directory = old
             .map(|p| p.directory.as_path())
             .unwrap_or(root.parent().unwrap_or(root));
-        let mut plugins = read_installed(root, previous)?;
-        let index = previous.map(|p| Arc::clone(&p.index)).unwrap_or_default();
-        for (id, folder) in index.iter() {
-            let old = previous.and_then(|p| p.plugins.get(id));
-            plugins.insert(
-                id.clone(),
-                read_indexed(id, folder, old.map(AsRef::as_ref))?,
-            );
+        let (mut plugins, mut failures) = read_installed(root, previous)?;
+        let index = old.map(|p| Arc::clone(&p.index)).unwrap_or_default();
+        let mut installed = installed_paths(&plugins);
+        if let Some(previous) = previous {
+            for id in index.keys() {
+                if let Some(artifact) = previous.catalog.plugins.get(id) {
+                    plugins.insert(id.clone(), Arc::clone(artifact));
+                    failures.remove(id);
+                } else if let Some(reason) = previous.skipped.get(id) {
+                    failures.insert(id.clone(), reason.clone());
+                }
+            }
+            for id in failures.keys() {
+                if let Some(source) = previous.catalog.installed.get(id) {
+                    installed.insert(id.clone(), source.clone());
+                }
+            }
         }
-        Self::assemble(root, directory, plugins, index)
+        let mut catalog = Self::assemble_candidate(root, directory, plugins, index, &failures)?;
+        catalog.installed = installed;
+        catalog.index_path = old.and_then(|p| p.index_path.clone());
+        Ok((catalog, failures))
     }
 
     pub(super) fn assemble(
@@ -27,48 +44,79 @@ impl Catalog {
         plugins: BTreeMap<String, Arc<Artifact>>,
         index: Arc<BTreeMap<String, PathBuf>>,
     ) -> Result<Self, Error> {
-        let order = resolve(&plugins)?;
+        Self::assemble_candidate(root, directory, plugins, index, &BTreeMap::new())
+    }
 
+    fn assemble_candidate(
+        root: &Path,
+        directory: &Path,
+        plugins: BTreeMap<String, Arc<Artifact>>,
+        index: Arc<BTreeMap<String, PathBuf>>,
+        failures: &BTreeMap<String, String>,
+    ) -> Result<Self, Error> {
+        let order = resolve(&plugins, |id| failures.contains_key(id))?;
+        let mut catalog = Self {
+            order,
+            plugins,
+            index,
+            revision: String::new(),
+            providers: BTreeMap::new(),
+            installed: BTreeMap::new(),
+            index_path: None,
+            environment: root.parent().unwrap_or(root).join(".env.local"),
+            directory: directory.to_owned(),
+        };
+        catalog.update_metadata();
+        Ok(catalog)
+    }
+
+    pub(super) fn omit_skipped(&mut self, skipped: &BTreeMap<String, String>) -> Result<(), Error> {
+        self.plugins.retain(|id, _| !skipped.contains_key(id));
+        // Even a skipped plugin's dependencies can change DFS order. Rebuild
+        // from the active graph so skipped manifests cannot affect the revision.
+        self.order = resolve(&self.plugins, |_| false)?;
+        self.update_metadata();
+        Ok(())
+    }
+
+    fn update_metadata(&mut self) {
         let mut hash = Sha256::new();
+        self.providers.clear();
 
-        for id in &order {
-            hash.update(
-                serde_json::to_vec(&plugins[id].manifest).map_err(|e| invalid(e.to_string()))?,
-            );
-        }
-
-        let mut providers = BTreeMap::<String, Vec<String>>::new();
-
-        for id in &order {
-            for interface in &plugins[id].provides {
-                providers
+        for id in &self.order {
+            let artifact = &self.plugins[id];
+            hash.update(artifact.build_id.as_bytes());
+            hash.update([u8::from(self.index.contains_key(id))]);
+            for interface in &artifact.provides {
+                self.providers
                     .entry(interface.clone())
                     .or_default()
                     .push(id.clone());
             }
         }
 
-        let environment = root.parent().unwrap_or(root).join(".env.local");
+        self.revision = format!("{:x}", hash.finalize());
+    }
 
-        Ok(Self {
-            order,
-            plugins,
-            revision: format!("{:x}", hash.finalize()),
-            providers,
-            index,
-            environment,
-            directory: directory.to_owned(),
+    pub(super) fn same_build(&self, previous: &Self, id: &str) -> bool {
+        self.plugins.get(id).is_some_and(|artifact| {
+            previous
+                .plugins
+                .get(id)
+                .is_some_and(|old| old.build_id == artifact.build_id)
         })
     }
 
     pub fn metadata(&self) -> Value {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
-            let manifest = &self.plugins[id].manifest;
+            let artifact = &self.plugins[id];
+            let manifest = &artifact.manifest;
+            let build_id = &artifact.build_id;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
             value["fromIndex"] = json!(self.index.contains_key(id));
-            value["revision"] = json!(self.revision);
-            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{}/assets/{}", self.revision, ui.code)).into();
-            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{}/assets/{css}", self.revision)).into();
+            value["revision"] = json!(build_id);
+            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{build_id}/assets/{}", ui.code)).into();
+            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{build_id}/assets/{css}")).into();
             value
         }).collect::<Vec<_>>()})
     }
@@ -171,11 +219,26 @@ fn index_entries(path: &Path) -> Result<BTreeMap<String, Value>, Error> {
 }
 
 fn read_indexed(id: &str, folder: &Path, old: Option<&Artifact>) -> Result<Arc<Artifact>, Error> {
+    read_indexed_build(id, folder, old, None)
+}
+
+fn read_indexed_build(
+    id: &str,
+    folder: &Path,
+    old: Option<&Artifact>,
+    expected: Option<&str>,
+) -> Result<Arc<Artifact>, Error> {
     if !folder.is_absolute() {
         return Err(invalid("Expected an absolute source folder"));
     }
     let dist = folder.join("dist");
-    let artifact = Artifact::read_reusing(&dist, old)?;
+    let manifest = Manifest::read(&dist)?;
+    if expected.is_some_and(|build_id| build_id != manifest.1) {
+        return Err(invalid(format!(
+            "{id}: the build changed after this reload started; run the command again"
+        )));
+    }
+    let artifact = Artifact::read_reusing(&dist, manifest, old)?;
     if artifact.manifest.plugin.id != id {
         return Err(invalid(format!(
             "Build has plugin identity {}",
@@ -185,20 +248,24 @@ fn read_indexed(id: &str, folder: &Path, old: Option<&Artifact>) -> Result<Arc<A
     Ok(Arc::new(artifact))
 }
 
-pub(super) fn read_installed(
-    root: &Path,
-    previous: Option<&Catalog>,
-) -> Result<BTreeMap<String, Arc<Artifact>>, Error> {
-    let directories = if let Some(directory) = artifact_directory(root) {
+type Artifacts = BTreeMap<String, Arc<Artifact>>;
+type ArtifactFailures = BTreeMap<String, String>;
+
+fn installed_directories(root: &Path) -> Result<Vec<PathBuf>, Error> {
+    Ok(if let Some(directory) = artifact_directory(root) {
         vec![directory]
     } else {
         let mut result = Vec::new();
-        for entry in std::fs::read_dir(root).map_err(|error| invalid(error.to_string()))? {
-            let entry = entry.map_err(|error| invalid(error.to_string()))?;
+
+        for entry in std::fs::read_dir(root).map_err(|e| invalid(e.to_string()))? {
+            let entry = entry.map_err(|e| invalid(e.to_string()))?;
+
             if entry.file_name().to_string_lossy().starts_with('.') {
                 continue;
             }
+
             let path = entry.path();
+
             if let Some(directory) = artifact_directory(&path) {
                 result.push(directory);
             } else if path.join("package.json").is_file() {
@@ -210,23 +277,47 @@ pub(super) fn read_installed(
         }
         result.sort();
         result
-    };
+    })
+}
+
+pub(super) fn read_installed(
+    root: &Path,
+    previous: Option<&Loaded>,
+) -> Result<(Artifacts, ArtifactFailures), Error> {
+    let directories = installed_directories(root)?;
     let mut plugins = BTreeMap::new();
+    let mut skipped = BTreeMap::new();
+
     for directory in directories {
-        let id = Manifest::read(&directory)?.plugin.id;
-        let old = previous.and_then(|p| p.plugins.get(&id));
-        let artifact = Artifact::read_reusing(&directory, old.map(AsRef::as_ref))?;
-        if artifact.manifest.plugin.id != id {
-            return Err(invalid(format!(
-                "Plugin identity changed while reading {}",
-                directory.display()
-            )));
-        }
-        if plugins.insert(id.clone(), Arc::new(artifact)).is_some() {
+        let build = Manifest::read(&directory)?;
+        let id = build.0.plugin.id.clone();
+        if plugins.contains_key(&id) || skipped.contains_key(&id) {
             return Err(invalid(format!(
                 "Duplicate installed plugin identity: {id}"
             )));
         }
+        let old = previous.and_then(|p| p.catalog.plugins.get(&id));
+        // Even when the manifest is unchanged, verify files whose source
+        // stamp changed so a partial build cannot pass as a no-op.
+        match Artifact::read_reusing(&directory, build, old.map(AsRef::as_ref)) {
+            Ok(artifact) => {
+                plugins.insert(id, Arc::new(artifact));
+            }
+            Err(error) if previous.is_some_and(|p| p.skipped.contains_key(&id)) => {
+                skipped.insert(id, error.to_string());
+            }
+            Err(error) => return Err(error),
+        }
     }
-    Ok(plugins)
+
+    Ok((plugins, skipped))
+}
+
+pub(super) fn installed_paths(
+    plugins: &BTreeMap<String, Arc<Artifact>>,
+) -> BTreeMap<String, PathBuf> {
+    plugins
+        .iter()
+        .map(|(id, artifact)| (id.clone(), artifact.source.clone()))
+        .collect()
 }

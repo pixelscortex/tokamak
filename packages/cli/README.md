@@ -39,7 +39,8 @@ entries are logged and skipped, leaving any copy from `--plugins` available.
 For a server at a specific address, set `TOKAMAK_SERVER` and `TOKAMAK_TOKEN`,
 or supply `--server <address>` with `TOKAMAK_TOKEN`. The flag takes precedence.
 Local discovery checks the process and compares the authenticated health
-identity to the discovery file. The CLI never starts a server.
+identity to the discovery file. Loopback requests connect directly, ignoring
+proxy settings. The CLI never starts a server.
 
 With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, normal output goes to stdout and errors go to stderr. Exit status is zero on success and
@@ -56,6 +57,8 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
 configuration failures include `error.diagnostics`, an array with a full
 `message` and, when available, `file` (absolute), `line`, `column`, and `code`.
+Import failures can point to a bundled dependency. Lockfile disagreements point
+to the lockfile.
 
 To add a command, create a file under `src/commands/` that satisfies `Command`,
 then register it in `src/commands.ts`. The entry point handles flags, help,

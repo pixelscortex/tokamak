@@ -43,7 +43,7 @@ impl DataSpace {
     pub fn owner(&self) -> Option<&str> {
         self.plugin.as_deref()
     }
-    pub(super) fn can_reset_table(&self, physical: &str, declared: &BTreeSet<&str>) -> bool {
+    pub(super) fn owns_schema_table(&self, physical: &str, declared: &BTreeSet<&str>) -> bool {
         if let Some(plugin) = self.owner() {
             return plugin != "tokamak.host" && physical.starts_with(&self.prefix);
         }

@@ -74,6 +74,8 @@ pub struct WorkerEntry {
 #[serde(deny_unknown_fields)]
 pub struct Entries {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerEntry>,
     #[serde(default)]
     pub backend: Option<BackendEntry>,
@@ -99,11 +101,12 @@ impl Definition {
 }
 
 impl Manifest {
-    pub(super) fn read(directory: &Path) -> Result<Self, Error> {
-        serde_json::from_reader(std::io::BufReader::new(
-            File::open(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?,
-        ))
-        .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+    pub(super) fn read(directory: &Path) -> Result<(Self, String), Error> {
+        let bytes =
+            std::fs::read(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?;
+        let manifest = serde_json::from_slice(&bytes)
+            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))?;
+        Ok((manifest, format!("{:x}", Sha256::digest(&bytes))))
     }
 }
 
@@ -196,13 +199,17 @@ impl Manifest {
                 .chain(entry.shell.iter())
         });
 
-        for name in backend_paths.chain(ui_paths).chain(
-            self.entries
-                .worker
-                .as_ref()
-                .into_iter()
-                .flat_map(|e| [&e.entry, &e.code, &e.map]),
-        ) {
+        for name in backend_paths
+            .chain(ui_paths)
+            .chain(&self.entries.types)
+            .chain(
+                self.entries
+                    .worker
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|e| [&e.entry, &e.code, &e.map]),
+            )
+        {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

@@ -105,6 +105,7 @@ impl Server {
             }
         };
 
+        loaded.publish(None, &Default::default()).await;
         let kinds = loaded.client_kinds();
         Self::start(
             database,
