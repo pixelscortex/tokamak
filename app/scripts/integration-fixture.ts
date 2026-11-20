@@ -19,9 +19,13 @@ for (const plugin of [
   await cp(resolve(root, plugin, "dist"), `${directory}/${id}/dist`, { recursive: true });
 }
 if (process.argv.includes("--reload")) {
-  const result = spawnSync(`${root}/target/debug/tokamak`, ["plugin", "reload", "integration-fixture"], {
-    stdio: "inherit",
-  });
+  const result = spawnSync(
+    `${root}/target/debug/tokamak-server`,
+    ["plugin", "reload", "integration-fixture"],
+    {
+      stdio: "inherit",
+    },
+  );
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 }

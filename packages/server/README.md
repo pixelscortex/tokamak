@@ -11,7 +11,7 @@ The desktop now uses this standalone server over authenticated loopback
 WebSocket, not an embedded Backend. `bun run app` starts/reuses it.
 `bun run server:status` and `bun run server:stop` do not build anything.
 
-`tokamak --local-dir <directory> --bundle <path>` opens `<directory>/store`,
+`tokamak-server --local-dir <directory> --bundle <path>` opens `<directory>/store`,
 reads a private 64-hex-character `server.token`, binds an ephemeral loopback
 port and publishes `server.json` after backend startup. Capability-protected
 `/health`, `/shutdown` and `/ws` reject browser Origins. Discovery includes
@@ -22,7 +22,7 @@ An OS-held `server-owner.lock` spans startup through final discovery cleanup.
 It is released by the OS on process failure; do not delete the lock file to
 try to steal ownership. This closes the datastore-close/readiness-removal race.
 
-`tokamak --local-path` discovers the standard application directory without
+`tokamak-server --local-path` discovers the standard application directory without
 opening storage. Desktop and server retain the existing application store.
 Normal desktop exit/crash does not stop the server. There is no automatic
 reconnect, mutation replay, crash supervisor or account-level remote access.
@@ -93,7 +93,7 @@ subscription, error, teardown and application code. No implicit retry/reconnect.
 ```sh
 moon run sdk:bundle -- packages/server/demo/feature
 moon run server:check server:build
-./target/debug/tokamak --data ./tokamak.db --listen 127.0.0.1:3000 \
+./target/debug/tokamak-server --data ./tokamak.db --listen 127.0.0.1:3000 \
   --bundle packages/server/demo/feature/dist/bundle.js --workers 2
 # In another terminal (two SDK clients, add/list/live update):
 proto run bun -- packages/server/demo/client.ts ws://127.0.0.1:3000/ws
@@ -428,7 +428,7 @@ reachable through a runtime path argument. No root profile or moon task changed.
 
 | Executable                                                                             |      Bytes | Difference from empty host |
 | -------------------------------------------------------------------------------------- | ---------: | -------------------------: |
-| Inherited empty `tokamak` baseline (`moon run :size`)                                  |    286,080 |                          — |
+| Inherited empty server baseline (`moon run :size`)                                     |    286,080 |                          — |
 | Minimal public-SDK consumer, both engines and transaction/query path                   | 38,359,216 |                +38,073,136 |
 | Initial data-API consumer, both engines and all CRUD/query paths plus probe assertions | 38,425,488 |                +38,139,408 |
 | Owned-transaction/static-callback consumer, both engines and CRUD/query paths          | 38,392,400 |                +38,106,320 |

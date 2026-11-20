@@ -1298,7 +1298,7 @@ async fn local_startup_log(installation: &Installation) -> String {
     let token = "a".repeat(64);
     std::fs::write(&token_path, &token).unwrap();
     std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_tokamak"))
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
         .arg("--local-dir")
         .arg(&installation.root)
         .arg("--plugins")
