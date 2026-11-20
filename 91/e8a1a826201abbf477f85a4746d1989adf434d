@@ -1,0 +1,46 @@
+packages/runtime/tools/local-server.ts
+  s_bcfbb5acb3b4fa::t_a9e7c7ced3e685 5-6,9-13,15,57-72,76,78-84,86-92,95,98-109,118,120,124,131,134-136,148,214
+  s_bcfbb5acb3b4fa::t_75c02776d49698 14,73-75,77,85,93-94,96-97
+packages/sdk/tools/bundle.mjs
+  s_bcfbb5acb3b4fa::t_f12cf544ace10c 58,144-146,155,158
+  s_bcfbb5acb3b4fa::t_0fefbc3880669f 62,148-149
+packages/build/src/vite.ts
+  s_bcfbb5acb3b4fa::t_f12cf544ace10c 113
+packages/build/tests/type-lookup.test.mjs
+  s_bcfbb5acb3b4fa::t_e66005eff4d7e4 75-84,86-88
+  s_bcfbb5acb3b4fa::t_83925180519b27 89-106,108-114,116-134,136-148,150,152-155,157-207
+  s_bcfbb5acb3b4fa::t_794a0c0c85df33 1-29,31-40,42-74
+  s_bcfbb5acb3b4fa::t_de8adcf567147d 30,41,85,107,115,135,149,151,156
+packages/build/README.md
+  s_bcfbb5acb3b4fa::t_f12cf544ace10c 122-124
+packages/sdk/tools/plugin-boundary.mjs
+  s_bcfbb5acb3b4fa::t_211cb925f11212 10-12,324-356,365-369,373-377,381,475,477-485
+  s_bcfbb5acb3b4fa::t_f12cf544ace10c 249-254,257,259-260,262-264,266,270-271,273-282,302-303,305-306,308-312,360-363
+  s_bcfbb5acb3b4fa::t_5f68c3f1e397db 272,304
+packages/build/src/declaration-names.ts
+  s_bcfbb5acb3b4fa::t_5257602f1c34fc 1-69
+packages/build/src/declaration-surface.ts
+  s_bcfbb5acb3b4fa::t_d56d48d9c43ba6 1-153
+packages/build/src/public-types.ts
+  s_bcfbb5acb3b4fa::t_11ba863d5f4052 4-8,10-11,18-56,83-84,99-107,117,119-122,161-171,185,188-189,211,217-218,226
+packages/build/tests/public-types.test.mjs
+  s_bcfbb5acb3b4fa::t_7938b87ebc9e47 86-249
+packages/build/tests/run.sh
+  s_bcfbb5acb3b4fa::t_ac7cccf5a0f22f 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91e8a1a826201abbf477f85a4746d1989adf434d",
+  "prompts": {},
+  "sessions": {
+    "s_bcfbb5acb3b4fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8d3-187e-7281-83e5-2cc941e0d445",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
