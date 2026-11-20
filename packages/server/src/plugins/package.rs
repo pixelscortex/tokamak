@@ -35,7 +35,7 @@ pub(super) struct Removal(Option<StagedRemoval>);
 
 struct StagedRemoval {
     root: PathBuf,
-    staging: tempfile::TempDir,
+    archive: Vec<u8>,
     current: PathBuf,
 }
 
@@ -56,7 +56,8 @@ impl AppliedPackageChange {
             Self::Uploaded(promotion) => promotion.finish(committed).await,
             Self::Removed(mut removal) => {
                 if let Some(staged) = removal.0.take()
-                    && let Err(error) = blocking(move || staged.finish(committed)).await
+                    && !committed
+                    && let Err(error) = blocking(move || staged.restore()).await
                 {
                     eprintln!("Could not finalize plugin package removal: {error}");
                 }
@@ -69,7 +70,7 @@ impl Drop for Removal {
     fn drop(&mut self) {
         if let Some(staged) = self.0.take() {
             let rollback = move || {
-                if let Err(error) = staged.finish(false) {
+                if let Err(error) = staged.restore() {
                     eprintln!("Could not restore removed plugin package: {error}");
                 }
             };
@@ -89,34 +90,55 @@ impl StagedRemoval {
         if node_exists(&root.join(format!("{BACKUP}{id}")))? {
             return Err(invalid("A previous package backup needs recovery"));
         }
+        // Keep the archive available until the database commits. Recursive
+        // deletion can fail after unlinking some of the original files.
+        let mut archive = Vec::new();
+        let mut reader =
+            io(File::open(current.join("package.zip")))?.take(PACKAGE_BYTES as u64 + 1);
+        io(reader.read_to_end(&mut archive))?;
+        if archive.len() > PACKAGE_BYTES {
+            return Err(invalid("Stored package exceeds 50 MiB"));
+        }
+        read_zip(Cursor::new(&archive), None)?;
+
         let staging = io(tempfile::Builder::new().prefix(STAGING).tempdir_in(&root))?;
-        rename(&current, &staging.path().join("removed"))?;
+        let removed = staging.path().join("removed");
+        rename(&current, &removed)?;
+        if let Err(error) = sync_directory(staging.path()).and_then(|()| sync_directory(&root)) {
+            rename(&removed, &current)?;
+            return Err(error);
+        }
         let staged = Self {
             root,
-            staging,
+            archive,
             current,
         };
-        if let Err(error) =
-            sync_directory(staged.staging.path()).and_then(|()| sync_directory(&staged.root))
-        {
-            staged.finish(false)?;
-            return Err(error);
+        // Startup ignores this directory if the process stops during deletion.
+        if let Err(error) = fs::remove_dir_all(staging.keep()) {
+            return match staged.restore() {
+                Ok(()) => Err(invalid(format!("Could not delete stored package: {error}"))),
+                Err(rollback) => Err(invalid(format!(
+                    "Could not delete stored package: {error}; could not restore it: {rollback}"
+                ))),
+            };
         }
         Ok(Removal(Some(staged)))
     }
 
-    fn finish(self, committed: bool) -> Result<(), Error> {
-        // Recheck the store before either rolling back or recursively cleaning up.
-        let staging = self.staging.keep();
+    fn restore(self) -> Result<(), Error> {
         require_store(&self.root)?;
-        require_directory(&staging)?;
-        if !committed {
-            if node_exists(&self.current)? {
-                return Err(invalid("Cannot restore a package over an existing path"));
-            }
-            rename(&staging.join("removed"), &self.current)?;
+        if node_exists(&self.current)? {
+            return Err(invalid("Cannot restore a package over an existing path"));
         }
-        io(remove_directory(&staging))?;
+        let staging = io(tempfile::Builder::new()
+            .prefix(STAGING)
+            .tempdir_in(&self.root))?;
+        let dist = staging.path().join("dist");
+        io(fs::create_dir(&dist))?;
+        read_zip(Cursor::new(&self.archive), Some(&dist))?;
+        io(fs::write(staging.path().join("package.zip"), self.archive))?;
+        sync_tree(staging.path())?;
+        rename(staging.path(), &self.current)?;
         sync_directory(&self.root)
     }
 }
@@ -300,12 +322,12 @@ pub(super) fn check_overlap(store: &Path, source: &Path) -> Result<(), Error> {
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn starts_with_path(path: &Path, prefix: &Path) -> bool {
+pub(super) fn starts_with_path(path: &Path, prefix: &Path) -> bool {
     path.starts_with(prefix)
 }
 
 #[cfg(any(windows, target_os = "macos"))]
-fn starts_with_path(path: &Path, prefix: &Path) -> bool {
+pub(super) fn starts_with_path(path: &Path, prefix: &Path) -> bool {
     // A source can name a differently cased path before the store exists.
     let mut path = path.components();
     prefix.components().all(|expected| {

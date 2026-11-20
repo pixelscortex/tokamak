@@ -269,13 +269,21 @@ impl Coordinator {
     async fn remove_plugin(&mut self, id: &str) -> Result<ReloadResult, Error> {
         let not_found = || Error::Invalid(format!("Plugin not found: {id}"));
         crate::data::DataSpace::plugin(id).map_err(|_| not_found())?;
-        let previous = self.plugins.as_deref().ok_or_else(not_found)?;
-        let root = self.plugin_root.as_deref().ok_or_else(not_found)?;
-        let package_root = previous
-            .catalog
-            .removable_package(id, &previous.skipped)?
-            .to_owned();
-        let (catalog, failures) = crate::plugins::Catalog::without_package(root, previous, id)?;
+        let previous = self.plugins.clone().ok_or_else(not_found)?;
+        let root = self.plugin_root.clone().ok_or_else(not_found)?;
+        let remove_id = id.to_owned();
+        let (catalog, failures, package_root) = tokio::task::spawn_blocking(move || {
+            let id = &remove_id;
+            let package_root = previous
+                .catalog
+                .removable_package(id, &previous.skipped)?
+                .to_owned();
+            let (catalog, failures) =
+                crate::plugins::Catalog::without_package(&root, &previous, id)?;
+            Ok::<_, Error>((catalog, failures, package_root))
+        })
+        .await
+        .map_err(|error| Error::Invalid(error.to_string()))??;
         let response = match catalog.plugins.get(id) {
             Some(artifact) => serde_json::json!({
                 "id": id, "removed": false, "reverted": true, "buildId": artifact.build_id,

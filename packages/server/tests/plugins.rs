@@ -1790,6 +1790,111 @@ mod package_upload {
         server.close().await;
     }
 
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn failed_package_deletion_keeps_the_running_and_stored_build() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (installation, files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let build = upload_ok(&server, &files, "installed", "1.0.0").await;
+        let package = data.path().join("store/packages/a");
+        let dist = package.join("dist");
+        let dir = fs::File::open(&dist).unwrap();
+        let zip = fs::read(package.join("package.zip")).unwrap();
+        let permissions = dir.metadata().unwrap().permissions();
+        dir.set_permissions(fs::Permissions::from_mode(0o555))
+            .unwrap();
+        // Privileged test runners can still write through these permissions.
+        if fs::write(dist.join("probe"), []).is_ok() {
+            fs::remove_file(dist.join("probe")).unwrap();
+            dir.set_permissions(permissions).unwrap();
+            server.close().await;
+            return;
+        }
+        let refused = server.remove(OWNER, "a").await;
+        dir.set_permissions(permissions).unwrap();
+        assert_eq!(refused.status(), 400);
+        let error = response_json(refused).await;
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("Permission denied"),
+            "{error}"
+        );
+        assert_eq!(revision(&server.get("/plugins").await, "a"), build);
+        assert_eq!(rows(&mut server.socket().await, "a").await, json!([]));
+        assert_eq!(fs::read(package.join("package.zip")).unwrap(), zip);
+        assert_eq!(package_files(&dist), files);
+        server.close().await;
+
+        let restarted = SharedServer::start(data.path(), &installation.0).await;
+        assert_eq!(revision(&restarted.get("/plugins").await, "a"), build);
+        restarted.close().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn removal_ignores_an_unrelated_broken_manifest() {
+        let (installation, files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        upload_ok(&server, &files, "installed", "1.0.0").await;
+        let original_b = revision(&server.get("/plugins").await, "b");
+        fs::write(installation.0.join("b/manifest.json"), "{").unwrap();
+
+        let removed = server.remove(OWNER, "a").await.error_for_status().unwrap();
+        assert_eq!(
+            response_json(removed).await,
+            json!({"id":"a", "removed":true})
+        );
+        let catalog = server.get("/plugins").await;
+        assert_eq!(catalog["plugins"].as_array().unwrap().len(), 1);
+        assert_eq!(revision(&catalog, "b"), original_b);
+        assert_eq!(rows(&mut server.socket().await, "b").await, json!([]));
+        server.close().await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn package_store_aliases_are_neither_installed_copies_nor_fallbacks() {
+        use std::os::unix::fs::symlink;
+
+        let (installation, files) = fixture();
+        let data = tempfile::tempdir().unwrap();
+        let server = SharedServer::start(data.path(), &installation.0).await;
+        let build = upload_ok(&server, &files, "installed", "1.0.0").await;
+        server.close().await;
+
+        let store = data.path().join("store/packages");
+        symlink(store.join("a/dist"), installation.0.join("alias")).unwrap();
+        let ignored = store.join(".ignored");
+        fs::create_dir(&ignored).unwrap();
+        fs::write(ignored.join("manifest.json"), "{").unwrap();
+        symlink(ignored, installation.0.join("ignored")).unwrap();
+
+        let restarted = SharedServer::start(data.path(), &installation.0).await;
+        assert_eq!(revision(&restarted.get("/plugins").await, "a"), build);
+        let removed = restarted
+            .remove(OWNER, "a")
+            .await
+            .error_for_status()
+            .unwrap();
+        assert_eq!(
+            response_json(removed).await,
+            json!({"id":"a", "removed":true})
+        );
+        assert!(!store.join("a").exists());
+        restarted.close().await;
+
+        let restarted = SharedServer::start(data.path(), &installation.0).await;
+        let catalog = restarted.get("/plugins").await;
+        assert_eq!(catalog["plugins"].as_array().unwrap().len(), 1);
+        assert_eq!(catalog["plugins"][0]["plugin"]["id"], "b");
+        restarted.close().await;
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn removing_a_shared_plugin_preserves_rows_and_another_plugins_action() {
         let (installation, files) = fixture();
