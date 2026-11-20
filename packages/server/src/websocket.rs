@@ -198,10 +198,11 @@ fn application_router(adapter: Adapter, web: Option<HostedWeb>) -> Router {
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
+        .route("/version", get(version))
         .merge(plugin_routes());
-    if hosted || !authenticated {
-        app = app.route("/health", get(public_health));
-    } else {
+    if hosted {
+        app = app.route("/health", get(|| async { "ok" }));
+    } else if authenticated {
         app = app.route("/health", get(health));
     }
     if hosted || authenticated {
@@ -269,7 +270,7 @@ async fn authorize(
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if !((adapter.hosted || adapter.access.is_none()) && path == "/health") {
+    if path != "/version" && !(adapter.hosted && path == "/health") {
         let bearer = headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -330,7 +331,7 @@ fn same_http_origin(headers: &HeaderMap, origin: &axum::http::HeaderValue) -> bo
         .is_some_and(|url| origin.as_bytes() == url.origin().ascii_serialization().as_bytes())
 }
 
-async fn public_health() -> Response {
+async fn version() -> Response {
     plugin_result(Ok(
         serde_json::json!({"version": env!("CARGO_PKG_VERSION")}),
     ))

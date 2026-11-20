@@ -104,14 +104,77 @@ impl Manifest {
     pub(super) fn read(directory: &Path) -> Result<(Self, String), Error> {
         let bytes =
             std::fs::read(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?;
-        let manifest = serde_json::from_slice(&bytes)
-            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))?;
+        let manifest = Self::parse(&bytes)?;
         Ok((manifest, format!("{:x}", Sha256::digest(&bytes))))
+    }
+
+    fn parse(bytes: &[u8]) -> Result<Self, Error> {
+        // Typed fields detect duplicates, but maps and embedded JSON do not.
+        serde_json::from_slice::<UniqueKeys>(bytes)
+            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))?;
+        serde_json::from_slice(bytes).map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+    }
+}
+
+struct UniqueKeys;
+
+impl<'de> Deserialize<'de> for UniqueKeys {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(Self)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for UniqueKeys {
+    type Value = Self;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("JSON without duplicate object keys")
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self, A::Error> {
+        let mut keys = BTreeSet::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key.clone()) {
+                return Err(serde::de::Error::custom(format!(
+                    "duplicate object key {key:?}"
+                )));
+            }
+            map.next_value::<Self>()?;
+        }
+        Ok(self)
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut sequence: A) -> Result<Self, A::Error> {
+        while sequence.next_element::<Self>()?.is_some() {}
+        Ok(self)
+    }
+
+    fn visit_unit<E: serde::de::Error>(self) -> Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self, E> {
+        Ok(self)
     }
 }
 
 impl Manifest {
     pub(super) fn validate(&self) -> Result<BTreeSet<&String>, Error> {
+        self.validate_structure(true)
+    }
+
+    pub(super) fn validate_structure(&self, check_host: bool) -> Result<BTreeSet<&String>, Error> {
         if self.format_version != 1 {
             return Err(invalid("Unsupported plugin artifact version"));
         }
@@ -132,8 +195,9 @@ impl Manifest {
         let requirement = VersionReq::parse(requirement)
             .map_err(|e| invalid(format!("Invalid host API range: {e}")))?;
 
-        if !requirement
-            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).expect("package version"))
+        if check_host
+            && !requirement
+                .matches(&Version::parse(env!("CARGO_PKG_VERSION")).expect("package version"))
         {
             return Err(invalid(format!(
                 "Incompatible host API for {}",

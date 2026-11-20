@@ -62,7 +62,7 @@ pub(crate) async fn shell(State(web): State<HostedWeb>, uri: Uri) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     }
     // Reserve API namespaces even when their exact route does not exist.
-    if matches!(relative.components().next(), Some(Component::Normal(name)) if matches!(name.to_str(), Some("ws" | "plugins" | "health" | "shutdown" | "members" | "account")))
+    if matches!(relative.components().next(), Some(Component::Normal(name)) if matches!(name.to_str(), Some("ws" | "plugins" | "version" | "health" | "shutdown" | "members" | "account")))
     {
         return StatusCode::NOT_FOUND.into_response();
     }

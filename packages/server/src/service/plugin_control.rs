@@ -254,7 +254,7 @@ impl Coordinator {
         let (catalog, failures) =
             crate::plugins::Catalog::with_package(root, previous, &id, artifact)?;
         let (_, logs) = self
-            .swap_catalog(catalog, failures, Some((&id, &staged)))
+            .swap_catalog(catalog, failures, Some((&id, Arc::new(staged))))
             .await?;
         Ok((response, logs))
     }
@@ -263,7 +263,7 @@ impl Coordinator {
         &mut self,
         catalog: crate::plugins::Catalog,
         artifact_failures: std::collections::BTreeMap<String, String>,
-        package: Option<(&str, &StagedPackage)>,
+        package: Option<(&str, Arc<StagedPackage>)>,
     ) -> Result<ReloadResult, Error> {
         let previous = self.plugins.as_deref();
         if previous
@@ -275,8 +275,8 @@ impl Coordinator {
         let mut candidate =
             crate::plugins::Loaded::load_reusing(catalog, artifact_failures, &self.pool, previous)
                 .await?;
-        if let Some((id, _)) = package
-            && let Some(reason) = candidate.skipped.get(id)
+        if let Some((id, _)) = &package
+            && let Some(reason) = candidate.skipped.get(*id)
         {
             return Err(Error::Invalid(reason.clone()));
         }
