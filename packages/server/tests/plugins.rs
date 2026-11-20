@@ -886,36 +886,8 @@ async fn local_server_skips_missing_and_unbuilt_index_entries_and_prefers_the_in
         json!({ "a": indexed, "missing": local.join("missing"), "unbuilt": unbuilt }).to_string(),
     )
     .unwrap();
-    let token = local.join("server.token");
-    std::fs::write(&token, "b".repeat(64)).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
-    }
-    let mut process = Process(
-        std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
-            .arg("--local-dir")
-            .arg(local)
-            .arg("--plugins")
-            .arg(&installed.0)
-            .env_remove("TOKAMAK_WEB_DIR")
-            .spawn()
-            .unwrap(),
-    );
+    let mut process = start_index_test_server(local, &installed.0).await;
     let ready = local.join("server.json");
-    let started = std::time::Instant::now();
-    while !ready.exists() {
-        assert!(
-            process.0.try_wait().unwrap().is_none(),
-            "server exited before readiness"
-        );
-        assert!(
-            started.elapsed() < Duration::from_secs(20),
-            "startup timed out"
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
     let identity: Value = serde_json::from_slice(&std::fs::read(ready).unwrap()).unwrap();
     let base = identity["url"]
         .as_str()
@@ -969,4 +941,37 @@ async fn local_server_skips_missing_and_unbuilt_index_entries_and_prefers_the_in
     .unwrap();
     assert!(status.success(), "server shutdown failed: {status}");
     assert!(!local.join("server.json").exists());
+}
+
+async fn start_index_test_server(local: &std::path::Path, installed: &std::path::Path) -> Process {
+    let token = local.join("server.token");
+    std::fs::write(&token, "b".repeat(64)).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let mut process = Process(
+        std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
+            .arg("--local-dir")
+            .arg(local)
+            .arg("--plugins")
+            .arg(installed)
+            .env_remove("TOKAMAK_WEB_DIR")
+            .spawn()
+            .unwrap(),
+    );
+    let started = std::time::Instant::now();
+    while !local.join("server.json").exists() {
+        assert!(
+            process.0.try_wait().unwrap().is_none(),
+            "server exited before readiness"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "startup timed out"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    process
 }

@@ -65,26 +65,7 @@ impl Catalog {
             }
         }
 
-        let mut indexed = BTreeSet::new();
-        for (id, folder) in index.iter() {
-            let dist = folder.join("dist");
-            if !dist.join("manifest.json").is_file() {
-                eprintln!(
-                    "Skipping indexed plugin {id}: no build at {}",
-                    dist.display()
-                );
-                continue;
-            }
-            let actual = Manifest::read(&dist)?.plugin.id;
-            if actual != *id {
-                return Err(invalid(format!(
-                    "Indexed plugin {id} has plugin identity {actual} in {}",
-                    dist.display()
-                )));
-            }
-            sources.insert(id.clone(), dist);
-            indexed.insert(id.clone());
-        }
+        let indexed = select_indexed_sources(&index, &mut sources)?;
 
         let mut plugins = BTreeMap::new();
         for (id, directory) in sources {
@@ -221,4 +202,32 @@ fn read_index(path: Option<&Path>) -> Result<BTreeMap<String, PathBuf>, Error> {
         }
     }
     Ok(entries)
+}
+
+fn select_indexed_sources(
+    index: &BTreeMap<String, PathBuf>,
+    sources: &mut BTreeMap<String, PathBuf>,
+) -> Result<BTreeSet<String>, Error> {
+    let mut indexed = BTreeSet::new();
+    for (id, folder) in index {
+        let dist = folder.join("dist");
+        if !dist.join("manifest.json").is_file() {
+            eprintln!(
+                "Skipping indexed plugin {id}: no build at {}",
+                dist.display()
+            );
+            continue;
+        }
+        let actual = Manifest::read(&dist)?.plugin.id;
+        if actual != *id {
+            return Err(invalid(format!(
+                "Indexed plugin {id} has plugin identity {actual} in {}",
+                dist.display()
+            )));
+        }
+        sources.insert(id.clone(), dist);
+        indexed.insert(id.clone());
+    }
+
+    Ok(indexed)
 }
