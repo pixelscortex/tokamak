@@ -6,80 +6,27 @@ impl Catalog {
     }
 
     pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
-        Self::read_in_directory(
-            root,
-            previous,
-            previous
-                .map(|p| p.directory.as_path())
-                .unwrap_or(root.parent().unwrap_or(root)),
-            None,
-        )
+        let directory = previous
+            .map(|p| p.directory.as_path())
+            .unwrap_or(root.parent().unwrap_or(root));
+        let mut plugins = read_installed(root, previous)?;
+        let index = previous.map(|p| Arc::clone(&p.index)).unwrap_or_default();
+        for (id, folder) in index.iter() {
+            let old = previous.and_then(|p| p.plugins.get(id));
+            plugins.insert(
+                id.clone(),
+                read_indexed(id, folder, old.map(AsRef::as_ref))?,
+            );
+        }
+        Self::assemble(root, directory, plugins, index)
     }
 
-    pub(crate) fn read_in_directory(
+    pub(super) fn assemble(
         root: &Path,
-        previous: Option<&Self>,
         directory: &Path,
-        index_path: Option<&Path>,
+        plugins: BTreeMap<String, Arc<Artifact>>,
+        index: Arc<BTreeMap<String, PathBuf>>,
     ) -> Result<Self, Error> {
-        let directories = if let Some(directory) = artifact_directory(root) {
-            vec![directory]
-        } else {
-            let mut result = Vec::new();
-
-            for entry in std::fs::read_dir(root).map_err(|e| invalid(e.to_string()))? {
-                let entry = entry.map_err(|e| invalid(e.to_string()))?;
-
-                if entry.file_name().to_string_lossy().starts_with('.') {
-                    continue;
-                }
-
-                let path = entry.path();
-
-                if let Some(directory) = artifact_directory(&path) {
-                    result.push(directory);
-                } else if path.join("package.json").is_file() {
-                    return Err(invalid(format!(
-                        "Plugin has not been built: {}",
-                        path.display()
-                    )));
-                }
-            }
-            result.sort();
-            result
-        };
-
-        // Keep index membership fixed for this server lifetime, even across a
-        // reload through the server's existing plugin controls.
-        let index = match previous {
-            Some(catalog) => Arc::clone(&catalog.index),
-            None => Arc::new(read_index(index_path)?),
-        };
-        let mut sources = BTreeMap::new();
-        for directory in directories {
-            let id = Manifest::read(&directory)?.plugin.id;
-            if sources.insert(id.clone(), directory).is_some() {
-                return Err(invalid(format!(
-                    "Duplicate installed plugin identity: {id}"
-                )));
-            }
-        }
-
-        let indexed = select_indexed_sources(&index, &mut sources)?;
-
-        let mut plugins = BTreeMap::new();
-        for (id, directory) in sources {
-            let old = previous.and_then(|p| p.plugins.get(&id));
-            let artifact = Artifact::read_reusing(&directory, old.map(AsRef::as_ref))?;
-            if artifact.manifest.plugin.id != id {
-                return Err(invalid(format!(
-                    "Plugin identity changed while reading {}",
-                    directory.display()
-                )));
-            }
-            plugins.insert(id, Arc::new(artifact));
-        }
-
         let order = resolve(&plugins)?;
 
         let mut hash = Sha256::new();
@@ -109,7 +56,6 @@ impl Catalog {
             revision: format!("{:x}", hash.finalize()),
             providers,
             index,
-            indexed,
             environment,
             directory: directory.to_owned(),
         })
@@ -119,7 +65,7 @@ impl Catalog {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
             let manifest = &self.plugins[id].manifest;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
-            value["fromIndex"] = json!(self.indexed.contains(id));
+            value["fromIndex"] = json!(self.index.contains_key(id));
             value["revision"] = json!(self.revision);
             value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{}/assets/{}", self.revision, ui.code)).into();
             value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{}/assets/{css}", self.revision)).into();
@@ -178,56 +124,109 @@ fn artifact_directory(root: &Path) -> Option<PathBuf> {
     }
 }
 
-fn read_index(path: Option<&Path>) -> Result<BTreeMap<String, PathBuf>, Error> {
+pub(super) type IndexedArtifacts = BTreeMap<String, (PathBuf, Arc<Artifact>)>;
+
+pub(super) fn read_index(path: Option<&Path>) -> IndexedArtifacts {
     let Some(path) = path else {
-        return Ok(BTreeMap::new());
+        return BTreeMap::new();
     };
+    let entries = match index_entries(path) {
+        Ok(entries) => entries,
+        Err(error) => {
+            eprintln!("Warning: ignoring plugin index {}: {error}", path.display());
+            return BTreeMap::new();
+        }
+    };
+    entries
+        .into_iter()
+        .filter_map(|(id, value)| {
+            let folder = Path::new(value.as_str().unwrap_or_default());
+            let result = if value.is_string() {
+                read_indexed(&id, folder, None)
+            } else {
+                Err(invalid("Expected an absolute source folder string"))
+            };
+            match result {
+                Ok(artifact) => Some((id, (folder.to_owned(), artifact))),
+                Err(error) => {
+                    let source = value
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| value.to_string());
+                    eprintln!("Skipping indexed plugin {id} at {source}: {error}");
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
+fn index_entries(path: &Path) -> Result<BTreeMap<String, Value>, Error> {
     let source = match std::fs::read(path) {
         Ok(source) => source,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
-        Err(error) => {
-            return Err(invalid(format!(
-                "Cannot read plugin index {}: {error}",
-                path.display()
-            )));
-        }
+        Err(error) => return Err(invalid(error.to_string())),
     };
-    let entries: BTreeMap<String, PathBuf> = serde_json::from_slice(&source)
-        .map_err(|error| invalid(format!("Invalid plugin index {}: {error}", path.display())))?;
-    for (id, folder) in &entries {
-        if !folder.is_absolute() {
-            return Err(invalid(format!(
-                "Indexed plugin {id} needs an absolute source folder"
-            )));
-        }
-    }
-    Ok(entries)
+    serde_json::from_slice(&source).map_err(|error| invalid(error.to_string()))
 }
 
-fn select_indexed_sources(
-    index: &BTreeMap<String, PathBuf>,
-    sources: &mut BTreeMap<String, PathBuf>,
-) -> Result<BTreeSet<String>, Error> {
-    let mut indexed = BTreeSet::new();
-    for (id, folder) in index {
-        let dist = folder.join("dist");
-        if !dist.join("manifest.json").is_file() {
-            eprintln!(
-                "Skipping indexed plugin {id}: no build at {}",
-                dist.display()
-            );
-            continue;
+fn read_indexed(id: &str, folder: &Path, old: Option<&Artifact>) -> Result<Arc<Artifact>, Error> {
+    if !folder.is_absolute() {
+        return Err(invalid("Expected an absolute source folder"));
+    }
+    let dist = folder.join("dist");
+    let artifact = Artifact::read_reusing(&dist, old)?;
+    if artifact.manifest.plugin.id != id {
+        return Err(invalid(format!(
+            "Build has plugin identity {}",
+            artifact.manifest.plugin.id
+        )));
+    }
+    Ok(Arc::new(artifact))
+}
+
+pub(super) fn read_installed(
+    root: &Path,
+    previous: Option<&Catalog>,
+) -> Result<BTreeMap<String, Arc<Artifact>>, Error> {
+    let directories = if let Some(directory) = artifact_directory(root) {
+        vec![directory]
+    } else {
+        let mut result = Vec::new();
+        for entry in std::fs::read_dir(root).map_err(|error| invalid(error.to_string()))? {
+            let entry = entry.map_err(|error| invalid(error.to_string()))?;
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            if let Some(directory) = artifact_directory(&path) {
+                result.push(directory);
+            } else if path.join("package.json").is_file() {
+                return Err(invalid(format!(
+                    "Plugin has not been built: {}",
+                    path.display()
+                )));
+            }
         }
-        let actual = Manifest::read(&dist)?.plugin.id;
-        if actual != *id {
+        result.sort();
+        result
+    };
+    let mut plugins = BTreeMap::new();
+    for directory in directories {
+        let id = Manifest::read(&directory)?.plugin.id;
+        let old = previous.and_then(|p| p.plugins.get(&id));
+        let artifact = Artifact::read_reusing(&directory, old.map(AsRef::as_ref))?;
+        if artifact.manifest.plugin.id != id {
             return Err(invalid(format!(
-                "Indexed plugin {id} has plugin identity {actual} in {}",
-                dist.display()
+                "Plugin identity changed while reading {}",
+                directory.display()
             )));
         }
-        sources.insert(id.clone(), dist);
-        indexed.insert(id.clone());
+        if plugins.insert(id.clone(), Arc::new(artifact)).is_some() {
+            return Err(invalid(format!(
+                "Duplicate installed plugin identity: {id}"
+            )));
+        }
     }
-
-    Ok(indexed)
+    Ok(plugins)
 }

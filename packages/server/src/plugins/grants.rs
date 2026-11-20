@@ -13,6 +13,22 @@ impl Loaded {
         database: &crate::data::Database,
         previous: Option<&Self>,
     ) -> Result<(), Error> {
+        self.apply_grants(database, previous, true).await
+    }
+
+    pub(super) async fn check_startup_grants(
+        &self,
+        database: &crate::data::Database,
+    ) -> Result<(), Error> {
+        self.apply_grants(database, None, false).await
+    }
+
+    async fn apply_grants(
+        &self,
+        database: &crate::data::Database,
+        previous: Option<&Self>,
+        commit: bool,
+    ) -> Result<(), Error> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
             .table(&Table::new("grants").map_err(|e| invalid(e.to_string()))?)
@@ -52,6 +68,9 @@ impl Loaded {
         .await;
 
         match result {
+            Ok(_) if !commit => Box::pin(tx.rollback())
+                .await
+                .map_err(|error| invalid(error.to_string())),
             Ok((granted, resets)) => {
                 Box::pin(tx.commit())
                     .await

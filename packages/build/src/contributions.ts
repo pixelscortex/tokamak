@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import { readPluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { clientEntry } from "./descriptor.ts";
+import { BuildError, typescriptDiagnostics } from "./diagnostics.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
  * 6.0.3 is the newest JS API release; 7.x has no JS API. Upgrading belongs to
  * a separate tooling change, not the plugin wire-format implementation. */
@@ -29,6 +30,14 @@ export function uiContributions(root: string) {
     sourceMap: false,
     module: ts.ModuleKind.ESNext,
   });
+  // The program also emits in memory to distinguish type-only exports. Check
+  // source diagnostics without applying the emit-only compiler option rules.
+  const diagnostics = [
+    ...program.getSyntacticDiagnostics(),
+    ...program.getGlobalDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+  ];
+  if (diagnostics.length) throw new BuildError(typescriptDiagnostics(diagnostics, root));
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(entry);
   if (!source) throw new Error(`Missing plugin UI entry ${entry}`);

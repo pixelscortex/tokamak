@@ -11,6 +11,7 @@ import { artifactBundle } from "./artifact-bundle.ts";
 import solid from "@solidjs/vite-plugin";
 import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
+import { BuildError, checkerDiagnostics } from "./diagnostics.ts";
 import { publicFunctions } from "./exports.ts";
 import {
   readSourcePlugin,
@@ -100,10 +101,20 @@ export function tokamak(
               plugin.id,
               ...(plugin.runtime === "worker" ? ["--worker"] : []),
             ],
-            { stdio: "inherit" },
+            { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
           );
           if (bundled.error) throw bundled.error;
-          if (bundled.status !== 0) throw new Error("SDK backend bundling failed");
+          process.stdout.write(bundled.stdout);
+          process.stderr.write(bundled.stderr);
+          if (bundled.status !== 0) {
+            const diagnostics = checkerDiagnostics(
+              bundled.stdout + "\n" + bundled.stderr,
+              realpathSync(server),
+            );
+            throw new BuildError(
+              diagnostics.length ? diagnostics : [{ message: "SDK server part bundling failed" }],
+            );
+          }
           // The bundle's describe() carries the schema/index registry evaluated
           // in QuickJS. Keep that source authoritative instead of importing user
           // schema modules into the build host or duplicating them in manifests.
