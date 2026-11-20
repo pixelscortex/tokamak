@@ -8,6 +8,8 @@ proto run bun -- run tokamak plugin build /path/to/my-plugin --json
 proto run bun -- run tokamak plugin add /path/to/my-plugin
 proto run bun -- run tokamak plugin list --json
 proto run bun -- run tokamak plugin remove my-plugin
+proto run bun -- run tokamak doctor --json
+proto run bun -- run tokamak report --out diagnostics.md
 ```
 
 `build` runs the artifact build once, defaults to the current folder, and
@@ -45,11 +47,28 @@ nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 | `plugin add`    | `id`, `folder`, `restartRequired: true`             |
 | `plugin remove` | `id`, `restartRequired: true`                       |
 | `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }` |
+| `doctor`        | `rows`: an array of readiness checks                |
+| `report`        | `path`: the absolute path of the written report     |
 | `--help`        | `help`                                              |
 
 Failures return `{ ok: false, error: { message, next } }`. Build failures with
 TypeScript locations also return `error.diagnostics`, an array of
 `{ file, line, column, code, message }`.
+
+`doctor` checks the CLI, the checkout's pinned Bun via proto, git, the plugin
+build tools and the local server, in that order. Each row contains `name`,
+`state` (`"ready"` or `"not ready"`), and `detail`. A row that is not ready
+also contains one `fix` (a command or a URL). When any row is not ready,
+the command exits 1 and returns `{ ok: false, error: { message, next }, rows }`
+with all five rows.
+
+`report` writes a Markdown file with the doctor table, local server details
+and loaded plugins, the plugin index, the OS and architecture, and up to
+200 lines of `server.log` with credentials redacted. It works with the local
+server stopped. The file is named `tokamak-report-<date-time>.md` in the current
+folder unless you supply `--out <path>`. The command prints the path, never
+overwrites a file and uploads nothing. Both commands check the local server
+in the app data folder, ignoring any selected server address.
 
 To add a command, create a file under `src/commands/` that satisfies `Command`,
 then register it in `src/commands.ts`. The entry point handles flags, help,

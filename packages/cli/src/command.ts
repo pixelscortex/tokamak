@@ -19,7 +19,10 @@ export interface Command {
   args?: { name: string; optional?: boolean };
   /** Flags only this command accepts. `--json`, `--server` and `--help` work on every command. */
   flags?: Record<string, Flag>;
-  run(args: string[], options: { server?: string; flags: Flags }): Promise<{ data: object; text: string }>;
+  run(
+    args: string[],
+    options: { server?: string; flags: Flags },
+  ): Promise<{ data: object; text: string; error?: { message: string; next: string } }>;
 }
 
 export class CommandError extends Error {

@@ -34,8 +34,12 @@ async function localEndpoint() {
   return { url: httpAddress(address), token };
 }
 
-export async function serverGet(path: string, explicit?: string): Promise<unknown> {
-  const address = explicit ?? process.env.TOKAMAK_SERVER;
+export async function serverGet(
+  path: string,
+  explicit?: string,
+  { localOnly = false, timeout = 5000 } = {},
+): Promise<unknown> {
+  const address = localOnly ? undefined : (explicit ?? process.env.TOKAMAK_SERVER);
   const next = address ? "tokamak --help" : "tokamak server start";
   try {
     const endpoint = address
@@ -44,7 +48,7 @@ export async function serverGet(path: string, explicit?: string): Promise<unknow
     if (!endpoint.token) throw new Error("Set TOKAMAK_TOKEN for the selected server");
     const response = await fetch(new URL(path, endpoint.url), {
       headers: { Authorization: `Bearer ${endpoint.token}` },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(timeout),
       redirect: "error",
     });
     if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);

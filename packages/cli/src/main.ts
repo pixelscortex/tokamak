@@ -84,8 +84,9 @@ try {
       throw new CommandError(group ? `Unknown or incomplete command: ${group}` : "Missing command", next);
     if (command.args && !command.args.optional && !args.length)
       throw new CommandError(`Missing argument: ${command.args.name}`, next);
-    const { data, text } = await command.run(args, { server, flags });
-    output({ ok: true, ...data }, text);
+    const { data, text, error } = await command.run(args, { server, flags });
+    output(error ? { ...data, ok: false, error } : { ok: true, ...data }, text);
+    if (error) process.exitCode = 1;
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

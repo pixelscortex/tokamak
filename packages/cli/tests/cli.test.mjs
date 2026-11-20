@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { withPlugin, workspace } from "../../build/tests/outside-fixture.mjs";
 
-function cli(root, args, extra = {}) {
-  const result = Bun.spawnSync([process.execPath, "run", "tokamak", ...args], {
-    cwd: workspace,
+function cli(root, args, extra = {}, cwd) {
+  const entry = cwd ? [join(workspace, "packages/cli/src/main.ts")] : ["run", "tokamak"];
+  const result = Bun.spawnSync([process.execPath, ...entry, ...args], {
+    cwd: cwd ?? workspace,
     env: {
       ...process.env,
       TOKAMAK_SERVER: undefined,
@@ -218,6 +219,158 @@ test("a real local server loads and removes an indexed plugin on restart", async
     });
     await withServer(root, () => {
       expect(run(["list"])).toEqual({ ok: true, plugins: [] });
+    });
+  });
+}, 120_000);
+
+test("doctor shows all five checks when the local server is not running", async () => {
+  await withPlugin((_, root) => {
+    const result = cli(root, ["doctor", "--json"], {}, root);
+    expect(result.code).toBe(1);
+    const { ok, error, rows } = JSON.parse(result.stdout);
+    expect(ok).toBe(false);
+    expect(error.next).toBe("tokamak server start");
+    expect(rows.map(({ name }) => name)).toEqual([
+      "Tokamak CLI",
+      "Bun",
+      "git",
+      "Build tools",
+      "Local server",
+    ]);
+    expect(rows.at(-1)).toEqual({
+      name: "Local server",
+      state: "not ready",
+      detail: "Local server is not running or reachable.",
+      fix: "tokamak server start",
+    });
+    const human = cli(root, ["doctor"], {}, root);
+    expect(human.code).toBe(1);
+    expect(human.stdout).toContain("Check");
+    expect(human.stdout).toMatch(/Local server\s+not ready/);
+    expect(result.stderr).toBe(human.stdout);
+  });
+}, 45_000);
+
+test("report works without a local server and refuses to replace an existing file", async () => {
+  await withPlugin(async (_, root) => {
+    const result = cli(root, ["report"], {}, root);
+    expect(result.code, result.stdout).toBe(0);
+    const path = result.stdout.trim();
+    expect(path).toMatch(/tokamak-report-.*\.md$/);
+    expect(dirname(path)).toBe(root);
+    const report = await readFile(path, "utf8");
+    expect(report).toContain("Local server is not running");
+    const duplicate = cli(root, ["report", "--out", path, "--json"], {}, root);
+    expect(duplicate.code).toBe(1);
+    expect(JSON.parse(duplicate.stdout)).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining("already exists"), next: "tokamak report --help" },
+    });
+    expect(await readFile(path, "utf8")).toBe(report);
+  });
+}, 45_000);
+
+test("doctor reports missing git and pinned Bun without installing them", async () => {
+  await withPlugin((_, root) => {
+    // Start the CLI with the already running Bun executable; hide both git and
+    // proto from PATH so the doctor cannot resolve the checkout's pinned Bun.
+    const result = cli(root, ["doctor", "--json"], { PATH: root }, root);
+    expect(result.code).toBe(1);
+    const { rows } = JSON.parse(result.stdout);
+    expect(rows.find(({ name }) => name === "git")).toMatchObject({
+      state: "not ready",
+      fix: "https://git-scm.com/downloads",
+    });
+    expect(rows.find(({ name }) => name === "Bun")).toMatchObject({
+      state: "not ready",
+      detail: expect.stringContaining("Pinned Bun"),
+      fix: "https://moonrepo.dev/proto",
+    });
+  });
+}, 45_000);
+
+test("doctor is ready and report captures a real local server with credentials redacted", async () => {
+  await withPlugin(async (plugin, root) => {
+    for (const args of [
+      ["plugin", "build", plugin],
+      ["plugin", "add", plugin],
+    ]) {
+      const result = cli(root, args, {}, root);
+      expect(result.code, result.stdout).toBe(0);
+    }
+    await withServer(root, async (address, localToken) => {
+      const data = join(root, "data");
+      const { url, pid, buildId } = JSON.parse(await readFile(join(data, "server.json"), "utf8"));
+      expect(url).toBe(address.replace(/^http:/, "ws:") + "/ws");
+      const doctor = cli(root, ["doctor", "--json"], { TOKAMAK_SERVER: "http://127.0.0.1:1" }, root);
+      expect(doctor.code, doctor.stderr).toBe(0);
+      const { ok, rows } = JSON.parse(doctor.stdout);
+      expect(ok).toBe(true);
+      expect(rows).toHaveLength(5);
+      for (const row of rows) {
+        expect(row).toEqual({ name: expect.any(String), state: "ready", detail: expect.any(String) });
+      }
+      expect(rows.at(-1).detail).toContain(buildId);
+      expect(rows.at(-1).detail).toContain(url);
+
+      const invite = randomBytes(32).toString("hex");
+      const envToken = "test-environment-secret-value";
+      const authorization = "CustomScheme opaque-value abc";
+      await writeFile(join(data, "invite.txt"), `${address}/join#${invite}`);
+      const fullLog = [
+        "before-the-tail",
+        ...Array.from({ length: 193 }, (_, i) => `line ${i + 1}: ${"ordinary log data ".repeat(6)}`),
+        `copied local credential: ${localToken}`,
+        `copied invitation: ${await readFile(join(data, "invite.txt"), "utf8")}`,
+        `unlabeled invitation credential: ${invite}`,
+        `copied environment credential: ${envToken}`,
+        `"Authorization": "${authorization}"`,
+        "Authorization:",
+        "  custom-folded-credential",
+      ].join("\n");
+      await writeFile(join(data, "server.log"), fullLog + "\n");
+
+      const result = cli(
+        root,
+        ["report", "--out", "diagnostics.md", "--json"],
+        { TOKAMAK_TOKEN: envToken, TOKAMAK_SERVER: "http://127.0.0.1:1" },
+        root,
+      );
+      const path = join(root, "diagnostics.md");
+      expect(result.code, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({ ok: true, path });
+      expect(result.stderr.trim()).toBe(path);
+      const report = await readFile(path, "utf8");
+      for (const detail of [
+        "## Doctor",
+        "Check          State",
+        `Address: ${url}`,
+        `Build id: ${buildId}`,
+        `Process id: ${pid}`,
+        `Data folder: ${data}`,
+        '"id": "outside-fixture"',
+        '"version": "0.1.0"',
+        '"fromIndex": true',
+        `"outside-fixture": ${JSON.stringify(plugin)}`,
+        "## Operating system",
+        process.arch,
+        "line 1:",
+        "line 193:",
+        "Redaction was applied",
+      ]) {
+        expect(report).toContain(detail);
+      }
+      for (const excluded of [
+        localToken,
+        invite,
+        envToken,
+        authorization,
+        "opaque-value",
+        "custom-folded-credential",
+        "before-the-tail",
+      ]) {
+        expect(report).not.toContain(excluded);
+      }
     });
   });
 }, 120_000);
