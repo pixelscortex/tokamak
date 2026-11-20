@@ -112,6 +112,10 @@ export class WebPluginHost implements PluginModuleHost {
       let target = entry.n;
       if (target.startsWith("@plugins/")) {
         const [, id, ...rest] = target.split("/");
+        const dependency = moduleName(id!);
+        const dependencies = this.imports.get(name) ?? new Set();
+        dependencies.add(dependency);
+        this.imports.set(name, dependencies);
         const manifest = this.manifests().find((p) => p.plugin.id === id);
         if (!manifest?.entries.ui) {
           // A dynamic import of an absent plugin is optional: leave it to reject
@@ -120,10 +124,6 @@ export class WebPluginHost implements PluginModuleHost {
           throw new Error(`${name}: missing UI dependency ${target}`);
         }
         this.attachStyles(manifest, this.generation(moduleName(id!)));
-        const dependency = moduleName(id!);
-        const dependencies = this.imports.get(name) ?? new Set();
-        dependencies.add(dependency);
-        this.imports.set(name, dependencies);
         const suffix = rest.join("/");
         const path = ["", "ui", "client", "src/client/api", "src/client/api.ts"].includes(suffix)
           ? manifest.entries.ui.code

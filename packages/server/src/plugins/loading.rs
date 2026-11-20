@@ -83,7 +83,8 @@ impl Loaded {
         let catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
 
         validate_maintenance(&catalog, &targets)?;
-        let workers = start_workers(&catalog)?;
+        let workers = start_workers(&catalog, previous)?;
+        let action_lifetimes = action_lifetimes(&catalog, previous);
         Ok(Arc::new(Self {
             catalog,
             targets,
@@ -91,6 +92,7 @@ impl Loaded {
             catalog_text,
             inspected,
             workers,
+            action_lifetimes,
         }))
     }
 
@@ -187,12 +189,42 @@ fn client_descriptors(id: &str, descriptor: &Value, maintenance: Option<&str>) -
         .collect()
 }
 
+fn same_build(catalog: &Catalog, previous: &Catalog, id: &str) -> bool {
+    previous
+        .plugins
+        .get(id)
+        .is_some_and(|old| old.build_id == catalog.plugins[id].build_id)
+}
+
+fn action_lifetimes(
+    catalog: &Catalog,
+    previous: Option<&Loaded>,
+) -> BTreeMap<String, tokio_util::sync::CancellationToken> {
+    catalog
+        .plugins
+        .keys()
+        .map(|id| {
+            let lifetime = previous
+                .filter(|old| same_build(catalog, &old.catalog, id))
+                .map(|old| old.action_lifetimes[id].clone())
+                .unwrap_or_default();
+            (id.clone(), lifetime)
+        })
+        .collect()
+}
+
 fn start_workers(
     catalog: &Catalog,
+    previous: Option<&Loaded>,
 ) -> Result<BTreeMap<String, Arc<crate::host::worker::Supervisor>>, Error> {
     let mut workers = BTreeMap::new();
     for (id, artifact) in &catalog.plugins {
-        if let Some(entry) = &artifact.manifest.entries.worker {
+        if let Some(worker) = previous
+            .filter(|old| same_build(catalog, &old.catalog, id))
+            .and_then(|old| old.workers.get(id))
+        {
+            workers.insert(id.clone(), worker.clone());
+        } else if let Some(entry) = &artifact.manifest.entries.worker {
             workers.insert(
                 id.clone(),
                 crate::host::worker::Supervisor::new(

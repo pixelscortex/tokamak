@@ -15,6 +15,7 @@ use std::{
 
 pub struct Artifact {
     pub manifest: Manifest,
+    pub(crate) build_id: String,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
     provides: BTreeSet<String>,
@@ -40,6 +41,7 @@ pub(crate) struct Loaded {
     pub descriptor: Value,
     pub catalog_text: String,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
+    pub(crate) action_lifetimes: BTreeMap<String, tokio_util::sync::CancellationToken>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 

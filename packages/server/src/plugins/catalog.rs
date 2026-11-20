@@ -57,7 +57,7 @@ impl Catalog {
         };
         let mut sources = BTreeMap::new();
         for directory in directories {
-            let id = Manifest::read(&directory)?.plugin.id;
+            let id = Manifest::read(&directory)?.0.plugin.id;
             if sources.insert(id.clone(), directory).is_some() {
                 return Err(invalid(format!(
                     "Duplicate installed plugin identity: {id}"
@@ -70,7 +70,11 @@ impl Catalog {
         let mut plugins = BTreeMap::new();
         for (id, directory) in sources {
             let old = previous.and_then(|p| p.plugins.get(&id));
-            let artifact = Artifact::read_reusing(&directory, old.map(AsRef::as_ref))?;
+            let artifact = Artifact::read_reusing(
+                &directory,
+                Manifest::read(&directory)?,
+                old.map(AsRef::as_ref),
+            )?;
             if artifact.manifest.plugin.id != id {
                 return Err(invalid(format!(
                     "Plugin identity changed while reading {}",
@@ -85,9 +89,7 @@ impl Catalog {
         let mut hash = Sha256::new();
 
         for id in &order {
-            hash.update(
-                serde_json::to_vec(&plugins[id].manifest).map_err(|e| invalid(e.to_string()))?,
-            );
+            hash.update(plugins[id].build_id.as_bytes());
         }
 
         let mut providers = BTreeMap::<String, Vec<String>>::new();
@@ -117,12 +119,14 @@ impl Catalog {
 
     pub fn metadata(&self) -> Value {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
-            let manifest = &self.plugins[id].manifest;
+            let artifact = &self.plugins[id];
+            let manifest = &artifact.manifest;
+            let build_id = &artifact.build_id;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
             value["fromIndex"] = json!(self.indexed.contains(id));
-            value["revision"] = json!(self.revision);
-            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{}/assets/{}", self.revision, ui.code)).into();
-            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{}/assets/{css}", self.revision)).into();
+            value["revision"] = json!(build_id);
+            value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{build_id}/assets/{}", ui.code)).into();
+            value["stylesheetUrl"] = manifest.entries.ui.as_ref().and_then(|ui| ui.css.as_ref()).map(|css| format!("/plugins/{id}/{build_id}/assets/{css}")).into();
             value
         }).collect::<Vec<_>>()})
     }
@@ -218,7 +222,7 @@ fn select_indexed_sources(
             );
             continue;
         }
-        let actual = Manifest::read(&dist)?.plugin.id;
+        let actual = Manifest::read(&dist)?.0.plugin.id;
         if actual != *id {
             return Err(invalid(format!(
                 "Indexed plugin {id} has plugin identity {actual} in {}",

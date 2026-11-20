@@ -33,6 +33,7 @@ pub(crate) fn operations(
     let caller_user = user.clone();
     ops.register_sync("user.current", move |_| Ok(serde_json::json!(caller_user)))?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
+        ops.set_action_lifetime(loaded.action_lifetimes[owner].clone());
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
                 .manifest
@@ -208,6 +209,9 @@ fn register_plugin_call(
                 user,
             )
             .map_err(|e| e.to_string())?;
+            if ops.action_lifetime().is_cancelled() {
+                return Err("Plugin action cancelled by reload".into());
+            }
             if let Some(worker) = worker {
                 return worker
                     .invoke(target.local_name, args, ops)
