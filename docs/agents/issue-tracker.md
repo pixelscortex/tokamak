@@ -31,6 +31,10 @@ No AI attribution in titles, descriptions or comments.
 
 Create a Linear issue in team TKM, attached to the relevant project when there is one.
 
+## Build work
+
+Used by `/to-spec`, `/to-tickets`, `/implement` and `/implement-spec`. The label `ready-for-agent` exists on team TKM: it marks a spec or ticket that is fully specified, so an agent can build it without more questions. `/to-spec` and `/to-tickets` add it to what they create. Build tickets never carry a `wayfinder:*` label; those are for decisions.
+
 ## When a skill says "fetch the relevant ticket"
 
 Read it as in **Read an issue** above, plus its comments.
