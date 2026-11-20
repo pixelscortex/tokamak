@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
+import { readSourcePlugin } from "../../../build/src/descriptor";
 import { CommandError, type Command } from "../command";
 import { acquireLock, readIndex } from "../plugin-index";
 import { ServerRefusal, serverGet, serverPost } from "../server";
@@ -117,9 +118,9 @@ async function submit(report: Report, builds: Build[], removeMissing: boolean, s
   applyAnswer(report, builds, answer, false);
 }
 
-function dependencyOrder(builds: Build[]) {
+function dependencyOrder<T extends { id: string; depends: string[] }>(builds: T[]) {
   const pending = new Map(builds.map((build) => [build.id, build]));
-  const ordered: Build[] = [];
+  const ordered: T[] = [];
   while (pending.size) {
     const ready = [...pending.values()].filter(({ depends }) => depends.every((id) => !pending.has(id)));
     if (!ready.length) return [...ordered, ...pending.values()];
@@ -177,13 +178,24 @@ async function runReload(id: string | undefined, server?: string) {
   const report: Report = { results: new Map(), removed: new Set(), skipped: {}, warnings: new Set() };
   const releases = new Map<string, () => Promise<void>>();
   const builds: Build[] = [];
+  const sources: { id: string; folder: string; depends: string[] }[] = [];
   try {
     // Take locks in folder order so overlapping reloads cannot deadlock.
     for (const [plugin, folder] of [...selected].sort((a, b) => a[1].localeCompare(b[1]))) {
       try {
         const canonical = await realpath(folder);
         if (!releases.has(canonical)) releases.set(canonical, await acquireLock(canonical, ".tokamak-build"));
-        builds.push(await build(plugin, canonical));
+        const descriptor = await readSourcePlugin(canonical).catch(() => undefined);
+        // The builder reports malformed descriptors with source diagnostics.
+        sources.push({ id: plugin, folder: canonical, depends: Object.keys(descriptor?.depends ?? {}) });
+      } catch (error) {
+        report.results.set(plugin, failed(plugin, null, "build-failed", error));
+      }
+    }
+    // Providers must publish their types before selected dependents build.
+    for (const { id: plugin, folder } of dependencyOrder(sources)) {
+      try {
+        builds.push(await build(plugin, folder));
       } catch (error) {
         report.results.set(plugin, failed(plugin, null, "build-failed", error));
       }
