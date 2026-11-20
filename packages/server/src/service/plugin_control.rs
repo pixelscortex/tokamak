@@ -6,7 +6,7 @@ impl Coordinator {
             Error::Invalid("Server uses a legacy bundle, not a plugin installation".into())
         })?;
 
-        let mut metadata = plugins.catalog.metadata();
+        let mut metadata = plugins.catalog.metadata_with_logs(&plugins.logs);
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
 
@@ -56,6 +56,10 @@ impl Coordinator {
                 let _ = reply.send(());
             }
             Command::RunFunction(call) => self.run_function(call).await,
+            Command::WindowError(id, revision, text, reply) => {
+                let result = self.record_window_error(id, &revision, &text);
+                let _ = reply.send(result);
+            }
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
@@ -91,10 +95,49 @@ impl Coordinator {
         }
     }
 
+    fn record_window_error(
+        &mut self,
+        id: String,
+        revision: &str,
+        text: &str,
+    ) -> Result<bool, Error> {
+        use std::time::{Duration, Instant};
+        let Some(log) = self.plugins.as_ref().and_then(|p| p.logs.get(&id)) else {
+            return Ok(false);
+        };
+        if log.revision() != revision {
+            return Err(Error::Invalid("Stale plugin log revision".into()));
+        }
+        // Keep a runaway view from filling the disk with repeated reports.
+        let (start, count) = self
+            .window_reports
+            .entry(id.clone())
+            .or_insert_with(|| (Instant::now(), 0));
+        if start.elapsed() >= Duration::from_secs(10) {
+            *start = Instant::now();
+            *count = 0;
+        }
+        if *count >= 8 {
+            if *count == 8 {
+                log.record(
+                    "window",
+                    "warn",
+                    "dropped",
+                    "window report rate limit reached; further reports dropped",
+                );
+                *count += 1;
+            }
+            return Err(Error::Overloaded);
+        }
+        log.record("window", "error", "exception", text);
+        *count += 1;
+        Ok(true)
+    }
+
     async fn reload_indexed(
         &mut self,
         request: &crate::plugins::IndexedReload,
-    ) -> Result<Json, Error> {
+    ) -> Result<ReloadResult, Error> {
         let root = self
             .plugin_root
             .as_ref()
@@ -124,7 +167,7 @@ impl Coordinator {
             .filter(|id| !catalog.index.contains_key(*id))
             .cloned()
             .collect();
-        let mut response = self.swap_catalog(catalog, failures).await?;
+        let (mut response, logs) = self.swap_catalog(catalog, failures).await?;
         // Diagnostics run after the swap. Unrelated on-disk errors do not
         // participate in deciding or applying an index removal.
         if !removed.is_empty()
@@ -137,10 +180,10 @@ impl Coordinator {
         }
         response["removed"] = serde_json::json!(removed);
         response["unchanged"] = serde_json::json!(unchanged);
-        Ok(response)
+        Ok((response, logs))
     }
 
-    pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+    pub(super) async fn reload(&mut self, id: &str) -> Result<ReloadResult, Error> {
         let root = self
             .plugin_root
             .as_ref()
@@ -165,12 +208,12 @@ impl Coordinator {
         &mut self,
         catalog: crate::plugins::Catalog,
         artifact_failures: std::collections::BTreeMap<String, String>,
-    ) -> Result<Json, Error> {
+    ) -> Result<ReloadResult, Error> {
         let previous = self.plugins.as_deref();
         if previous
             .is_some_and(|old| old.skipped.is_empty() && old.catalog.revision == catalog.revision)
         {
-            return self.metadata();
+            return Ok((self.metadata()?, Vec::new()));
         }
 
         let mut candidate =
@@ -188,6 +231,11 @@ impl Coordinator {
         // Backfill and readiness have both passed for the remaining candidates.
         // Retire only builds that differ in the catalog we will publish.
         candidate.publish(previous, &changed).await;
+        let logs = changed
+            .iter()
+            .filter_map(|id| candidate.logs.get(id).cloned())
+            .collect();
+        self.window_reports.retain(|id, _| !changed.contains(id));
         self.kinds = candidate.client_kinds();
         self.plugins = Some(candidate);
 
@@ -211,7 +259,7 @@ impl Coordinator {
             self.invalidate(None);
             self.refresh().await;
         }
-        Ok(catalog)
+        Ok((catalog, logs))
     }
 
     pub(super) fn asset_page(

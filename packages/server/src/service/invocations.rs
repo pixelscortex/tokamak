@@ -9,6 +9,7 @@ impl Coordinator {
         user: crate::identity::User,
     ) -> Result<Json, String> {
         let mut result = Err("mutation conflict retry limit exceeded".into());
+        let mut nested_failure = None;
 
         let determinism = engine::Determinism::default();
 
@@ -38,9 +39,30 @@ impl Coordinator {
             }
 
             result = call.result;
+            nested_failure = call.nested_failure;
             break;
         }
 
+        if let Err(error) = &result {
+            self.log_function_failure(name, error, nested_failure);
+        }
         result
+    }
+
+    pub(super) fn log_function_failure(
+        &self,
+        name: &str,
+        error: &str,
+        nested: Option<host::NestedFailure>,
+    ) {
+        if let Some((log, name, error)) = nested {
+            log.failure(&name, &error);
+            return;
+        }
+        if let Some(loaded) = &self.plugins
+            && let Some(target) = loaded.targets.get(name)
+        {
+            loaded.logs[&target.owner].failure(name, error);
+        }
     }
 }

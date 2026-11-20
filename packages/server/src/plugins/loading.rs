@@ -47,7 +47,16 @@ impl Loaded {
         pool: &engine::Pool,
         previous: Option<&Self>,
     ) -> Result<Self, Error> {
+        let folder = crate::plugin_log::directory(
+            catalog
+                .index_path
+                .as_deref()
+                .and_then(Path::parent)
+                .unwrap_or(&catalog.directory),
+        );
+        let logs = catalog.logs(previous, &folder);
         let mut loaded = Self {
+            logs,
             catalog,
             targets: BTreeMap::new(),
             descriptor: Value::Null,
@@ -90,10 +99,16 @@ impl Loaded {
         let unchanged = previous.filter(|old| self.catalog.same_build(&old.catalog, id));
         let worker = match unchanged {
             Some(old) => old.workers.get(id).cloned(),
-            None => prepare_worker(&self.catalog, id, artifact)?,
+            None => {
+                let worker = prepare_worker(&self.catalog, id, artifact)?;
+                if let Some(worker) = &worker {
+                    worker.attach_log(self.logs[id].clone());
+                }
+                worker
+            }
         };
         if let Some(bundle) = &artifact.bundle {
-            let cached = previous
+            let cached = unchanged
                 .filter(|old| {
                     old.catalog
                         .plugins
@@ -104,7 +119,15 @@ impl Loaded {
                 .and_then(|old| old.inspected.get(id));
             let (descriptor, kinds) = match cached {
                 Some(value) => value.clone(),
-                None => crate::service::inspect(pool, bundle.clone()).await?,
+                None => {
+                    let mut ops = engine::OpRegistry::new();
+                    self.logs[id].console(&mut ops);
+                    crate::service::inspect_with_ops(pool, bundle.clone(), ops)
+                        .await
+                        .map_err(|error| {
+                            invalid(format!("Could not inspect plugin {id}: {error}"))
+                        })?
+                }
             };
             for name in &artifact.manifest.public_functions {
                 if !kinds.contains_key(name) {
@@ -152,6 +175,7 @@ impl Loaded {
         self.targets
             .retain(|_, target| !skipped.contains_key(&target.owner));
         self.workers.retain(|id, _| !skipped.contains_key(id));
+        self.logs.retain(|id, _| !skipped.contains_key(id));
         self.action_lifetimes
             .retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
@@ -216,7 +240,7 @@ impl Loaded {
             })
             .collect();
         self.descriptor = json!({"schema":schemas,"functions":functions});
-        let mut metadata = self.catalog.metadata();
+        let mut metadata = self.catalog.metadata_with_logs(&self.logs);
         metadata["functions"] = self.descriptor["functions"].clone();
         metadata["schema"] = self.descriptor["schema"].clone();
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
@@ -274,6 +298,9 @@ impl Loaded {
                     worker.stop().await;
                 }
             }
+        }
+        for log in changed.iter().filter_map(|id| self.logs.get(id)) {
+            log.publish();
         }
         *current = Arc::downgrade(self);
     }
@@ -507,5 +534,40 @@ impl StartupCatalog<'_> {
             }
         }
         Ok(loaded)
+    }
+}
+
+impl Catalog {
+    fn logs(
+        &self,
+        previous: Option<&Loaded>,
+        folder: &Path,
+    ) -> BTreeMap<String, crate::plugin_log::Log> {
+        self.plugins
+            .keys()
+            .map(|id| {
+                let old_log = previous.and_then(|old| old.logs.get(id));
+                let log = match old_log {
+                    Some(log) if previous.is_some_and(|old| self.same_build(&old.catalog, id)) => {
+                        log.clone()
+                    }
+                    _ => crate::plugin_log::Log::staged(folder, id, old_log),
+                };
+                (id.clone(), log)
+            })
+            .collect()
+    }
+
+    pub(crate) fn metadata_with_logs(
+        &self,
+        logs: &BTreeMap<String, crate::plugin_log::Log>,
+    ) -> Value {
+        let mut metadata = self.metadata();
+        if let Some(plugins) = metadata["plugins"].as_array_mut() {
+            for (item, id) in plugins.iter_mut().zip(&self.order) {
+                item["logRevision"] = json!(logs[id].revision());
+            }
+        }
+        metadata
     }
 }

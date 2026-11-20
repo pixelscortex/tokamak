@@ -62,8 +62,7 @@ impl Engine for ActionEngine {
             _ = self.shutdown.cancelled() => Err(Error::Closed),
             result = world.context().async_with(async |ctx| {
                 let run = async {
-                    let web_host = bridge::install_ops(&ctx, web_ops, &invocation)?;
-                    web::install(&ctx, web_host, true)?;
+                    crate::engine::install_surfaces(&ctx, &ops, web_ops, &invocation, true)?;
                     let module = Module::declare(ctx.clone(),source_map::BUNDLE_NAME,bundle.source.as_bytes())
                         .map_err(|e| js_error_named(&ctx,e,bundle,true,source_map::BUNDLE_NAME))
                         .map_err(|e|rquickjs::Exception::throw_message(&ctx,&e.to_string()))?;

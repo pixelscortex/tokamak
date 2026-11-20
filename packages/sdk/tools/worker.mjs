@@ -103,6 +103,17 @@ export async function workerSources({
       ],
     });
     if (!result.success) throw new AggregateError(result.logs, "Worker bundle failed");
+    // The server executes a verified snapshot under a different filename.
+    // Keep the separate map asset and expose it to the worker for stack mapping.
+    if (sourcemap === "external") {
+      const script = join(root, "dist", name);
+      const map = await Bun.file(script + ".map").json();
+      delete map.sourcesContent;
+      await Bun.write(
+        script,
+        (await Bun.file(script).text()) + `\nexport const workerSourceMap = ${JSON.stringify(map)};\n`,
+      );
+    }
   }
   const source =
     header +

@@ -12,6 +12,7 @@ pub mod data;
 mod environment;
 mod host;
 pub mod identity;
+mod plugin_log;
 pub mod plugins;
 pub mod protocol;
 mod schema;

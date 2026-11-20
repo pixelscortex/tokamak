@@ -427,7 +427,21 @@ async fn query_missing_on_reload_errors_and_recovers_on_same_subscription() {
         "Subscription query is not registered in this plugin generation"
     );
     std::fs::rename(root.join(".saved-a"), root.join("a")).unwrap();
-    assert_eq!(server.reload_plugin("a".into()).await.unwrap(), before);
+    let restored = server.reload_plugin("a".into()).await.unwrap();
+    let mut expected = before;
+    for (actual, expected) in restored["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(expected["plugins"].as_array_mut().unwrap())
+    {
+        if actual["plugin"]["id"] == "a" {
+            assert!(actual["logRevision"].is_string());
+            assert_ne!(actual["logRevision"], expected["logRevision"]);
+            expected["logRevision"] = actual["logRevision"].clone();
+        }
+    }
+    assert_eq!(restored, expected);
     assert_eq!(subscription(&mut s).await.unwrap(), json!([]));
     drop(s);
     server.close().await.unwrap();

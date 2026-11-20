@@ -16,6 +16,24 @@ impl Server {
     pub async fn reload_plugin(&self, id: String) -> Result<Json, Error> {
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::Reload(id, reply))?;
+        let (metadata, logs) = wait.await.map_err(|_| Error::Closed)??;
+        for log in logs {
+            log.published().await;
+        }
+        Ok(metadata)
+    }
+
+    pub(crate) async fn window_error(
+        &self,
+        id: String,
+        revision: String,
+        text: String,
+    ) -> Result<bool, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(
+            &self.commands,
+            Command::WindowError(id, revision, text, reply),
+        )?;
         wait.await.map_err(|_| Error::Closed)?
     }
 
@@ -25,7 +43,11 @@ impl Server {
     ) -> Result<Json, Error> {
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::ReloadIndexed(request, reply))?;
-        wait.await.map_err(|_| Error::Closed)?
+        let (metadata, logs) = wait.await.map_err(|_| Error::Closed)??;
+        for log in logs {
+            log.published().await;
+        }
+        Ok(metadata)
     }
 
     pub async fn plugin_asset(

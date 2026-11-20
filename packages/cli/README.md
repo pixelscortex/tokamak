@@ -7,6 +7,7 @@ proto run bun -- run --silent tokamak --help
 proto run bun -- run --silent tokamak plugin build /path/to/my-plugin --json
 proto run bun -- run --silent tokamak plugin add /path/to/my-plugin
 proto run bun -- run --silent tokamak plugin list --json
+proto run bun -- run --silent tokamak plugin logs my-plugin --errors --json
 proto run bun -- run --silent tokamak plugin remove my-plugin
 proto run bun -- run --silent tokamak plugin reload my-plugin --json
 ```
@@ -42,17 +43,42 @@ Local discovery checks the process and compares the authenticated health
 identity to the discovery file. Loopback requests connect directly, ignoring
 proxy settings. The CLI never starts a server.
 
+`plugin logs <id>` streams this installation's log in order. The plugin is
+known if it is indexed, loaded by the running server, or has a local log file.
+`--errors` shows only entries with level `error`. Malformed records are skipped
+and counted. Use the CLI on the machine that runs the server to read its files.
+
+Logs live at `<OS temp>/tokamak/logs/<key>/<id>.log`. The key is the first 16
+hex digits of SHA-256 of the canonical app data folder path (the storage folder
+for a server without an app data folder). Set `TOKAMAK_PLUGIN_LOG_DIR` to
+override the entire log folder for both the server and CLI; tests should use a
+folder they own.
+
+Each JSON Lines record has `time` (Unix epoch milliseconds), `source`
+(`server` or `window`), `level` (`log`, `info`, `warn`, `error`, or `debug`),
+`kind` (`console`, `exception`, `validation`, `cancellation`, or `dropped`),
+and `text`. Function errors include the function name and available stack.
+A successful reload replaces the log for each changed build, starting with
+its load output. Unchanged plugins and refused reloads keep their logs. A log
+stops accepting records after 10 MiB or when its writer falls behind. One marker
+records the drop, and the next successful replacement starts a fresh file.
+
+Window reports are limited to 8,192 UTF-8 bytes and eight reports per plugin
+per 10 seconds, with one marker per period for excess reports. Reports from a
+previous plugin revision are discarded.
+
 With `--json`, stdout contains one JSON value and human text goes to stderr.
 Without it, normal output goes to stdout and errors go to stderr. Exit status is zero on success and
 nonzero on failure. The CLI never prompts. Success has `ok: true` and:
 
-| Command         | Additional result fields                                      |
-| --------------- | ------------------------------------------------------------- |
-| `plugin build`  | `id`, `outputFolder`                                          |
-| `plugin add`    | `id`, `folder`, `reloadRequired: true`, `precedence: "index"` |
-| `plugin remove` | `id`, `reloadRequired: true`                                  |
-| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`           |
-| `--help`        | `help`                                                        |
+| Command         | Additional result fields                                           |
+| --------------- | ------------------------------------------------------------------ |
+| `plugin build`  | `id`, `outputFolder`                                               |
+| `plugin add`    | `id`, `folder`, `reloadRequired: true`, `precedence: "index"`      |
+| `plugin remove` | `id`, `reloadRequired: true`                                       |
+| `plugin list`   | `plugins`: an array of `{ id, version, fromIndex }`                |
+| `plugin logs`   | `entries`: matching records, and `skipped`: malformed record count |
+| `--help`        | `help`                                                             |
 
 Failures return `{ ok: false, error: { message, next } }`. Artifact build and
 configuration failures include `error.diagnostics`, an array with a full

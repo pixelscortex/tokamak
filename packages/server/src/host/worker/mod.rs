@@ -1,6 +1,7 @@
 //! Generic process actions. Database authority stays in invocation-bound ops.
 mod discovery;
 mod logs;
+pub(crate) use logs::send as server_line;
 mod process;
 #[cfg(windows)]
 mod windows;
@@ -58,6 +59,7 @@ pub(crate) struct Supervisor {
     closed: CancellationToken,
     runtime: tokio::runtime::Handle,
     bun: Option<PathBuf>,
+    log: OnceLock<crate::plugin_log::Log>,
 }
 impl Supervisor {
     pub(crate) fn new(
@@ -113,8 +115,12 @@ impl Supervisor {
             next: AtomicU64::new(0),
             closed: CancellationToken::new(),
             runtime: tokio::runtime::Handle::current(),
+            log: OnceLock::new(),
             bun: discovery::resolve("bun", &discovery::search_paths()),
         }))
+    }
+    pub(crate) fn attach_log(&self, log: crate::plugin_log::Log) {
+        let _ = self.log.set(log);
     }
     async fn process(&self) -> Result<Arc<Process>, String> {
         let mut state = self.state.lock().await;
@@ -168,7 +174,9 @@ impl Supervisor {
                 .map_err(|_| "worker closed before readiness check")?;
             match tokio::time::timeout(Duration::from_secs(10), wait).await {
                 Ok(Ok(Ok(_))) => Ok(()),
-                Ok(Ok(Err(error))) if error == "Unknown worker action: " => Ok(()),
+                Ok(Ok(Err(error))) if error.lines().next() == Some("Unknown worker action: ") => {
+                    Ok(())
+                }
                 Ok(Ok(Err(error))) => Err(error),
                 Ok(Err(_)) => Err("worker exited before readiness check".into()),
                 Err(_) => Err("worker readiness check timed out".into()),

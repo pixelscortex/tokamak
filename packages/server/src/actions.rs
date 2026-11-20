@@ -35,6 +35,7 @@ pub(crate) fn operations(
     let caller_user = user.clone();
     ops.register_sync("user.current", move |_| Ok(serde_json::json!(caller_user)))?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
+        loaded.logs[owner].console(&mut ops);
         ops.set_action_lifetime(loaded.action_lifetimes[owner].clone());
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
@@ -210,6 +211,7 @@ fn register_plugin_call(
                 Some(&loaded),
                 Some(&target.owner),
             ));
+            let log = loaded.logs[&target.owner].clone();
             let worker = loaded.workers.get(&target.owner).cloned();
             let ops = operations(
                 commands,
@@ -222,22 +224,23 @@ fn register_plugin_call(
             )
             .map_err(|e| e.to_string())?;
             let target_lifetime = ops.action_lifetime().clone();
-            if target_lifetime.is_cancelled() {
-                return Err("Plugin action cancelled by reload".into());
-            }
-            if let Some(worker) = worker {
+            let result = if target_lifetime.is_cancelled() {
+                Err("Plugin action cancelled by reload".into())
+            } else if let Some(worker) = worker {
                 let result = worker
                     .invoke_nested(target.local_name, args, ops, caller)
                     .await;
-                return if target_lifetime.is_cancelled() {
+                if target_lifetime.is_cancelled() {
                     Err("Plugin action cancelled by reload".into())
                 } else {
                     result.map_err(|e| environment.redact(e))
-                };
-            }
-            invoke_quickjs_action(target.bundle, target.local_name, args, ops, limits)
-                .await
-                .map_err(|e| environment.redact(e.to_string()))
+                }
+            } else {
+                invoke_quickjs_action(target.bundle, target.local_name, args, ops, limits)
+                    .await
+                    .map_err(|e| environment.redact(e.to_string()))
+            };
+            result.inspect_err(|error| log.failure(name, error))
         }
     })?;
 
