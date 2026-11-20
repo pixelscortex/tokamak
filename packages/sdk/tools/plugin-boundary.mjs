@@ -19,7 +19,13 @@ const inside = (root, file) => {
   const local = relative(root, file);
   return local === "" || (!isAbsolute(local) && local !== ".." && !local.startsWith(".." + sep));
 };
-const canonical = (file) => (existsSync(file) ? realpathSync(file) : resolve(file));
+function canonical(file) {
+  file = resolve(file);
+  if (existsSync(file)) return realpathSync(file);
+  // Generated sources may not exist yet, but their ancestors can be symlinks.
+  const parent = dirname(file);
+  return parent === file ? file : resolve(canonical(parent), basename(file));
+}
 const server = (root) => resolve(root, existsSync(resolve(root, "src/server")) ? "src/server" : "backend");
 const generated = (root) => resolve(root, ".tokamak/types");
 // The SDK is the host contract every plugin builds against. A workspace may

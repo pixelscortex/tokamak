@@ -15,7 +15,6 @@ use std::{
 
 pub struct Artifact {
     pub manifest: Manifest,
-    pub(crate) build_id: String,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
     provides: BTreeSet<String>,
@@ -27,8 +26,7 @@ pub struct Catalog {
     pub plugins: BTreeMap<String, Arc<Artifact>>,
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
-    index_path: Option<PathBuf>,
-    indexed: BTreeSet<String>,
+    index: Arc<BTreeMap<String, PathBuf>>,
     pub(crate) environment: PathBuf,
     pub(crate) directory: PathBuf,
 }
@@ -41,7 +39,6 @@ pub(crate) struct Loaded {
     pub descriptor: Value,
     pub catalog_text: String,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
-    pub(crate) action_lifetimes: BTreeMap<String, tokio_util::sync::CancellationToken>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
 

@@ -1,6 +1,41 @@
-use super::*;
+use super::{
+    catalog::{IndexedArtifacts, read_index, read_installed},
+    *,
+};
 
 impl Loaded {
+    pub async fn startup(
+        root: &Path,
+        directory: &Path,
+        index: Option<&Path>,
+        pool: &engine::Pool,
+        database: &crate::data::Database,
+    ) -> Result<Arc<Self>, Error> {
+        let installed = read_installed(root, None)?;
+        let candidates = read_index(index);
+        let config = StartupCatalog {
+            root,
+            directory,
+            pool,
+            database,
+        };
+        let loaded = match config.commit(&installed, &candidates, None).await {
+            Ok(loaded) => loaded,
+            Err(error) if candidates.is_empty() => return Err(error),
+            Err(_) => config.recover(&installed, candidates).await?,
+        };
+        for (id, folder) in loaded.catalog.index.iter() {
+            if installed.contains_key(id) {
+                eprintln!(
+                    "Indexed plugin {id} at {} replaces the copy from --plugins",
+                    folder.display()
+                );
+            }
+        }
+        Ok(loaded)
+    }
+
+    #[cfg(test)]
     pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Arc<Self>, Error> {
         Self::load_reusing(catalog, pool, None).await
     }
@@ -35,7 +70,9 @@ impl Loaded {
 
             let (descriptor, kinds) = match cached {
                 Some(value) => value.clone(),
-                None => crate::service::inspect(pool, bundle.clone()).await?,
+                None => crate::service::inspect(pool, bundle.clone())
+                    .await
+                    .map_err(|error| invalid(format!("Could not inspect plugin {id}: {error}")))?,
             };
             inspected.insert(id.clone(), (descriptor.clone(), kinds.clone()));
 
@@ -234,7 +271,10 @@ fn start_workers(
                     catalog.directory.join("plugin-data").join(id),
                     &catalog.environment,
                     &artifact.manifest.plugin.permissions,
-                )?,
+                )
+                .map_err(|error| {
+                    invalid(format!("Could not set up worker for plugin {id}: {error}"))
+                })?,
             );
         }
     }
@@ -257,4 +297,94 @@ fn validate_maintenance(
         }
     }
     Ok(())
+}
+
+struct StartupCatalog<'a> {
+    root: &'a Path,
+    directory: &'a Path,
+    pool: &'a engine::Pool,
+    database: &'a crate::data::Database,
+}
+
+impl StartupCatalog<'_> {
+    async fn load(
+        &self,
+        installed: &BTreeMap<String, Arc<Artifact>>,
+        indexed: &IndexedArtifacts,
+        previous: Option<&Loaded>,
+    ) -> Result<Arc<Loaded>, Error> {
+        let mut plugins = installed.clone();
+        let index = indexed
+            .iter()
+            .map(|(id, (folder, artifact))| {
+                plugins.insert(id.clone(), Arc::clone(artifact));
+                (id.clone(), folder.clone())
+            })
+            .collect();
+        let catalog = Catalog::assemble(self.root, self.directory, plugins, Arc::new(index))?;
+        Loaded::load_reusing(catalog, self.pool, previous).await
+    }
+
+    async fn commit(
+        &self,
+        installed: &BTreeMap<String, Arc<Artifact>>,
+        indexed: &IndexedArtifacts,
+        previous: Option<&Loaded>,
+    ) -> Result<Arc<Loaded>, Error> {
+        let loaded = self.load(installed, indexed, previous).await?;
+        Box::pin(loaded.record_grants(self.database, None)).await?;
+        Ok(loaded)
+    }
+
+    async fn trial(
+        &self,
+        installed: &BTreeMap<String, Arc<Artifact>>,
+        indexed: &IndexedArtifacts,
+        previous: &Loaded,
+    ) -> Result<Arc<Loaded>, Error> {
+        let loaded = self.load(installed, indexed, Some(previous)).await?;
+        // Run the same schema and grant checks as startup without publishing a
+        // partially accepted generation or making persistent changes.
+        Box::pin(loaded.check_startup_grants(self.database)).await?;
+        Ok(loaded)
+    }
+
+    async fn recover(
+        &self,
+        installed: &BTreeMap<String, Arc<Artifact>>,
+        mut pending: IndexedArtifacts,
+    ) -> Result<Arc<Loaded>, Error> {
+        let mut accepted = BTreeMap::new();
+        let mut loaded = self.load(installed, &accepted, None).await?;
+        let mut failures = BTreeMap::new();
+        // Retry failed candidates after a successful pass: a dependency may
+        // have been accepted later in the order. Keep each installed fallback
+        // until its replacement has passed the complete loading pipeline.
+        loop {
+            let remaining = pending.len();
+            for (id, entry) in std::mem::take(&mut pending) {
+                accepted.insert(id.clone(), entry.clone());
+                match self.trial(installed, &accepted, &loaded).await {
+                    Ok(next) => loaded = next,
+                    Err(error) => {
+                        accepted.remove(&id);
+                        pending.insert(id.clone(), entry);
+                        failures.insert(id, error);
+                    }
+                }
+            }
+            if pending.is_empty() || pending.len() == remaining {
+                break;
+            }
+        }
+        for (id, (folder, _)) in pending {
+            if let Some(error) = failures.get(&id) {
+                eprintln!(
+                    "Skipping indexed plugin {id} at {}: {error}",
+                    folder.display()
+                );
+            }
+        }
+        self.commit(installed, &accepted, Some(&loaded)).await
+    }
 }

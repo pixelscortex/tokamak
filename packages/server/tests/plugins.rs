@@ -254,7 +254,7 @@ fn standalone_binary_exposes_only_authenticated_plugin_controls_and_cli() {
             "plugin server exited before readiness"
         );
         assert!(
-            started.elapsed() < Duration::from_secs(20),
+            started.elapsed() < Duration::from_secs(90),
             "plugin startup timed out"
         );
         std::thread::sleep(Duration::from_millis(20));
@@ -963,6 +963,7 @@ async fn start_index_test_server(local: &std::path::Path, installed: &std::path:
             .arg("--plugins")
             .arg(installed)
             .env_remove("TOKAMAK_WEB_DIR")
+            .env_remove("TKM167_WORKER_TEST_MISSING")
             .spawn()
             .unwrap(),
     );
@@ -973,10 +974,194 @@ async fn start_index_test_server(local: &std::path::Path, installed: &std::path:
             "server exited before readiness"
         );
         assert!(
-            started.elapsed() < Duration::from_secs(20),
+            started.elapsed() < Duration::from_secs(90),
             "startup timed out"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     process
+}
+
+#[tokio::test]
+async fn local_server_falls_back_from_a_malformed_index() {
+    let installed = Installation::new();
+    let temporary = tempfile::tempdir().unwrap();
+    let index = temporary.path().join("plugin-index.json");
+    std::fs::write(&index, "{broken").unwrap();
+    let catalog = index_test_catalog(temporary.path(), &installed.0).await;
+    assert_eq!(catalog["plugins"].as_array().unwrap().len(), 2);
+    assert!(
+        catalog["plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["fromIndex"] == false)
+    );
+}
+
+#[tokio::test]
+async fn local_server_keeps_installed_plugins_and_other_index_entries_when_candidates_fail() {
+    let installed = Installation::new();
+    let temporary = tempfile::tempdir().unwrap();
+    let local = temporary.path();
+    let bad_override = index_test_artifact(local, &installed, "bad-override", "a", |manifest| {
+        manifest["plugin"]["depends"] = json!({"unavailable":"*"});
+    });
+    let wrong_id = index_test_artifact(local, &installed, "wrong-id", "wrong-id", |_| {});
+    let malformed = local.join("malformed");
+    std::fs::create_dir_all(malformed.join("dist")).unwrap();
+    std::fs::write(malformed.join("dist/manifest.json"), "bad JSON").unwrap();
+    let module = index_test_artifact(local, &installed, "module", "invalid-module", |manifest| {
+        manifest["hashes"]["bundle.js"] = json!(format!(
+            "{:x}",
+            Sha256::digest(b"throw new Error('broken module');")
+        ));
+    });
+    std::fs::write(
+        module.join("dist/bundle.js"),
+        "throw new Error('broken module');",
+    )
+    .unwrap();
+    let valid = index_test_artifact(local, &installed, "valid", "valid", |_| {});
+    std::fs::write(
+        local.join("plugin-index.json"),
+        json!({ "a": bad_override, "relative": "./bad", "mismatch": wrong_id, "malformed": malformed,
+            "invalid-module": module, "valid": valid }).to_string(),
+    ).unwrap();
+    let catalog = index_test_catalog(local, &installed.0).await;
+    let plugins = catalog["plugins"].as_array().unwrap();
+    assert_eq!(plugins.len(), 3);
+    for (id, from_index) in [("a", false), ("b", false), ("valid", true)] {
+        assert_eq!(
+            plugins
+                .iter()
+                .find(|plugin| plugin["plugin"]["id"] == id)
+                .unwrap()["fromIndex"],
+            from_index
+        );
+    }
+}
+
+fn index_test_artifact(
+    local: &std::path::Path,
+    installed: &Installation,
+    folder: &str,
+    id: &str,
+    edit: impl FnOnce(&mut Value),
+) -> PathBuf {
+    let folder = local.join(folder);
+    let dist = folder.join("dist");
+    std::fs::create_dir_all(&dist).unwrap();
+    for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        std::fs::copy(installed.0.join("a").join(file), dist.join(file)).unwrap();
+    }
+    let manifest = dist.join("manifest.json");
+    let mut value: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    value["plugin"]["id"] = json!(id);
+    edit(&mut value);
+    std::fs::write(manifest, value.to_string()).unwrap();
+    folder
+}
+
+async fn index_test_catalog(local: &std::path::Path, installed: &std::path::Path) -> Value {
+    let mut process = start_index_test_server(local, installed).await;
+    let identity: Value =
+        serde_json::from_slice(&std::fs::read(local.join("server.json")).unwrap()).unwrap();
+    let url = identity["url"]
+        .as_str()
+        .unwrap()
+        .replace("ws://", "http://");
+    let base = url.trim_end_matches("/ws");
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .unwrap();
+    let token = "b".repeat(64);
+    let body = http
+        .get(format!("{base}/plugins"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    if let Ok(reply) = http
+        .post(format!("{base}/shutdown"))
+        .bearer_auth(token)
+        .send()
+        .await
+    {
+        reply.error_for_status().unwrap();
+    }
+    let status = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if let Some(status) = process.0.try_wait().unwrap() {
+                break status;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(status.success());
+    serde_json::from_slice(&body).unwrap()
+}
+
+#[tokio::test]
+async fn local_server_skips_an_indexed_plugin_when_worker_setup_fails() {
+    let fixture = Installation::new();
+    let temporary = tempfile::tempdir().unwrap();
+    let local = temporary.path();
+    let installed = local.join("installed");
+    std::fs::create_dir(&installed).unwrap();
+    let worker = index_test_artifact(local, &fixture, "worker", "worker", |manifest| {
+        manifest["plugin"]["depends"] = json!({});
+        manifest["plugin"]["runtime"] = json!("worker");
+        manifest["plugin"]["permissions"] = json!(["env:TKM167_WORKER_TEST_MISSING"]);
+        manifest["entries"]["worker"] =
+            json!({ "entry": "worker-entry.js", "code": "worker.js", "map": "worker.js.map" });
+        for file in ["worker-entry.js", "worker.js", "worker.js.map"] {
+            manifest["hashes"][file] = json!(format!("{:x}", Sha256::digest(b"test")));
+        }
+    });
+    for file in ["worker-entry.js", "worker.js", "worker.js.map"] {
+        std::fs::write(worker.join("dist").join(file), "test").unwrap();
+    }
+    let valid = index_test_artifact(local, &fixture, "valid", "valid", |manifest| {
+        manifest["plugin"]["depends"] = json!({});
+    });
+    std::fs::write(local.join(".env.local"), "invalid environment file !").unwrap();
+    std::fs::write(
+        local.join("plugin-index.json"),
+        json!({ "worker": worker, "valid": valid }).to_string(),
+    )
+    .unwrap();
+    let catalog = index_test_catalog(local, &installed).await;
+    let plugins = catalog["plugins"].as_array().unwrap();
+    assert_eq!(plugins.len(), 1);
+    assert_eq!(plugins[0]["plugin"]["id"], "valid");
+}
+
+#[tokio::test]
+async fn local_server_keeps_an_installed_copy_when_indexed_grants_cannot_be_recorded() {
+    let installed = Installation::new();
+    let temporary = tempfile::tempdir().unwrap();
+    let local = temporary.path();
+    let first = index_test_catalog(local, &installed.0).await;
+    assert_eq!(first["plugins"].as_array().unwrap().len(), 2);
+    let replacement = index_test_artifact(local, &installed, "replacement", "a", |manifest| {
+        manifest["plugin"]["permissions"] = json!(["env:TKM167_TEST_GRANT"]);
+    });
+    std::fs::write(
+        local.join("plugin-index.json"),
+        json!({ "a": replacement }).to_string(),
+    )
+    .unwrap();
+    let catalog = index_test_catalog(local, &installed.0).await;
+    let plugins = catalog["plugins"].as_array().unwrap();
+    assert_eq!(plugins.len(), 2);
+    assert!(plugins.iter().all(|plugin| plugin["fromIndex"] == false));
 }

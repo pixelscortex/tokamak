@@ -114,11 +114,12 @@ test("a view may name an icon as a literal or a const path; anything else fails 
     for (const [options, prefix] of [
       [`{ route: "/fixture", icon: "<svg/>" }`, ""],
       [`{ route: "/fixture", icon: mark }`, `let mark = String(Date.now());\n`],
-      [`{ route: "/fixture", title: "Fixture" }`, ""],
     ]) {
       await withOptions(options!, prefix);
       await expect(contributes()).rejects.toThrow("static literal options");
     }
+    await withOptions(`{ route: "/fixture", title: "Fixture" }`);
+    await expect(contributes()).rejects.toThrow(/view\.tsx\(\d+,\d+\): error TS2353/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

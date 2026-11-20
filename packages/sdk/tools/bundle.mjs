@@ -2,7 +2,7 @@
 // Bun's parser scans module exports without executing feature code on the build
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
-import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,7 +56,7 @@ function apiType(modules, files) {
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
 export async function bundleFeature(folder, namespace, worker = false) {
-  const root = await realpath(folder);
+  const root = resolve(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
   checkPluginImports(pluginRoot);
@@ -161,16 +161,12 @@ if (import.meta.main) {
 
 async function scanFiles(root) {
   const files = [];
-  const scanner = new Bun.Transpiler({ loader: "ts" });
   for await (const scanned of new Bun.Glob("**/*.ts").scan({
     cwd: root,
     onlyFiles: true,
   })) {
     const file = scanned.split(sep).join("/");
     if (!isServerModule(root, file)) continue;
-    // scan is a real parser, not a regexp. We do not interpret initializer
-    // syntax: exported definitions are recognized by their runtime brand.
-    scanner.scan(await Bun.file(join(root, file)).text());
     files.push(file);
   }
   files.sort();
@@ -179,10 +175,10 @@ async function scanFiles(root) {
 
 async function checkFeature(root, temporary, generated, files, entry, worker) {
   const config = join(temporary, "tsconfig.json");
-  const parentConfig =
-    pluginTsconfig(featurePluginRoot(root), root) ?? join(sdkRoot, "../..", "tsconfig.json");
+  const defaults = join(sdkRoot, "../..", "tsconfig.json");
+  const local = pluginTsconfig(featurePluginRoot(root), root);
   const inherited = ts.getParsedCommandLineOfConfigFile(
-    parentConfig,
+    local ?? defaults,
     {},
     { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
   );
@@ -190,13 +186,13 @@ async function checkFeature(root, temporary, generated, files, entry, worker) {
   await Bun.write(
     config,
     JSON.stringify({
-      extends: parentConfig,
+      extends: local ? [defaults, local] : defaults,
       compilerOptions: {
         lib: worker ? ["ES2022", "DOM"] : ["ES2022"],
         types: worker ? ["node"] : [],
         paths,
         noEmit: true,
-        strict: true,
+        ...(worker ? { typeRoots: [join(sdkRoot, "../../node_modules/@types")] } : {}),
       },
       files: [entry, join(generated, "api.ts"), ...files.map((file) => join(root, file))],
       include: [],
