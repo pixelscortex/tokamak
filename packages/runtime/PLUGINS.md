@@ -36,7 +36,7 @@ and reload/invalidation. The app's `WebPluginHost` fetches modules and rewrites
 cross-plugin and relative imports to revision-owned blobs. Host SDK/Solid
 contexts are shared through one import map; no eval is needed. Reload revokes
 blobs, removes stylesheets and disposes view/query owners, including affected
-importers. Publish complete builds before requesting `tokamak plugin reload <id>`;
+importers. Publish complete builds before requesting `tokamak-server plugin reload <id>`;
 there is no automatic file watcher. Retired revisions reject stale assets.
 
 `createPluginShell` and `PluginViews` in `app/src/plugins/views.tsx` expose a

@@ -11,7 +11,7 @@ const workspace = resolve(import.meta.dir, "../../..");
 const directory = await mkdtemp(resolve(tmpdir(), "tokamak-browser-assets-"));
 const sandbox = await prepareAgentEnvironment(directory);
 const fixture = resolve(workspace, "packages/build/tests/fixtures/browser");
-const binary = resolve(workspace, "target/debug/tokamak");
+const binary = resolve(workspace, "target/debug/tokamak-server");
 const built = spawnSync("proto", ["run", "bun", "--", "packages/build/src/build.ts", fixture], {
   cwd: workspace,
   stdio: "inherit",

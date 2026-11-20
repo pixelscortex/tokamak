@@ -37,7 +37,7 @@
     "active": true,
     "targets": ["app"],
     "icon": [],
-    "externalBin": ["dist/tokamak"],
+    "externalBin": ["dist/tokamak-server"],
     "resources": {
       "dist/plugins/": "plugins/"
     }

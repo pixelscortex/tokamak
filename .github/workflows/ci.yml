@@ -84,7 +84,7 @@ jobs:
       - name: Smoke check server build identity
         shell: bash
         run: |
-          id=$(./target/release/tokamak --build-id)
+          id=$(./target/release/tokamak-server --build-id)
           if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]]; then
             printf '%s\n' 'Server did not print a 64-character build identity' >&2
             exit 1
@@ -144,7 +144,7 @@ jobs:
       - name: Smoke check server build identity
         shell: pwsh
         run: |
-          $id = & ./target/release/tokamak.exe --build-id
+          $id = & ./target/release/tokamak-server.exe --build-id
           if ($LASTEXITCODE -ne 0 -or $id -cnotmatch '^[0-9a-f]{64}$') {
             throw 'Server did not print a 64-character build identity'
           }
@@ -183,7 +183,7 @@ jobs:
       - run: |
           moon run workspace:build-release
           mkdir -p .ci-results
-          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak
+          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak-server
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: server-linux-${{ matrix.arch }}
