@@ -1,6 +1,8 @@
 name: CI
 on:
   pull_request:
+    # ready_for_review starts the checks when a draft is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main, dev]
   merge_group:
@@ -14,8 +16,11 @@ jobs:
   # The three fast checks run on GitHub's own runners. They ran on Depot until
   # Depot stopped handing out runners (jobs sat queued for hours). Depot's
   # machines are faster and carry the Rust compile cache, so move these back
-  # (runs-on: ubuntu-24.04, and drop SCCACHE_GHA_ENABLED) once it is healthy.
+  # (runs-on: depot-ubuntu-24.04, and drop SCCACHE_GHA_ENABLED) once it is healthy.
+  # Draft pull requests are not checked: work in progress is tested locally, and
+  # the checks run once a pull request is marked ready for review.
   typescript:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -28,6 +33,7 @@ jobs:
       - run: moon run workspace:ci-ts --summary detailed
   lint:
     # Formatting and lint for TypeScript and Rust. Platform independent, so it runs once.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -50,6 +56,7 @@ jobs:
   rust:
     # Unit tests inside the Rust crates. Integration, end-to-end and browser
     # suites are not run in CI for now; they stay runnable locally.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
