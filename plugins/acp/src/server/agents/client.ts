@@ -10,6 +10,7 @@ import {
   type RequestPermissionResponse,
 } from "@agentclientprotocol/sdk/unstable";
 import type { JsonObject } from "@tokamak/sdk";
+import plugin from "../../../plugin";
 import { BUILTINS, discover, checkFolder, type Agent } from "./discovery";
 
 export type AgentEvent =
@@ -210,7 +211,7 @@ class AgentProcess {
       const result = await this.connection.agent.request("initialize", {
         protocolVersion: 1,
         clientCapabilities: {},
-        clientInfo: { name: "Tokamak", version: "0.1.0" },
+        clientInfo: { name: "Tokamak", version: plugin.version },
       });
       if (result.protocolVersion !== 1) throw new Error("ACP agent does not support protocol v1");
       this.capabilities = result.agentCapabilities ?? {};

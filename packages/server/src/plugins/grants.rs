@@ -42,7 +42,9 @@ impl Loaded {
 
                 let old = previous.and_then(|old| old.catalog.plugins.get(id));
 
-                if let Some(grant) = stage_grant(&mut tx, &table, id, definition, old).await? {
+                if let Some(grant) =
+                    stage_grant(&mut tx, &table, id, definition, old, database.store()).await?
+                {
                     granted.push(grant);
                 }
             }
@@ -86,6 +88,7 @@ async fn stage_grant(
     id: &str,
     definition: &Definition,
     previous: Option<&Arc<Artifact>>,
+    store: Option<&std::path::Path>,
 ) -> Result<Option<Grant>, Error> {
     let mut permissions = definition.permissions.clone();
     permissions.sort();
@@ -113,9 +116,18 @@ async fn stage_grant(
 
     if let Some(record) = existing.map(|row| row.into_json()) {
         if record["permissions"] != json!(permissions) {
+            // Name the data folder and the way out: the grant row lives only there.
+            let folder = store.map_or_else(
+                || "This server's data folder".to_owned(),
+                |path| format!("The data folder {}", path.display()),
+            );
             return Err(invalid(format!(
-                "Permissions changed for {id}@{}; bump its version before granting",
-                definition.version
+                "Permissions changed for {id}@{version}; bump its version before granting. \
+                 {folder} already granted {id}@{version} other permissions \
+                 ({granted}). To keep this version, stop the server and delete that folder; \
+                 this erases all of its data and clears this error.",
+                version = definition.version,
+                granted = record["permissions"],
             )));
         }
 

@@ -51,6 +51,8 @@ pub struct ChangeEvent {
 pub struct Database {
     state: Lifecycle,
     directory: Option<PathBuf>,
+    /// The `--data` path itself, named in errors that only deleting it clears.
+    store: Option<PathBuf>,
 }
 
 // Shutdown is an owned future, not a detached task. Retaining it across cancelled
@@ -79,6 +81,10 @@ impl Database {
     }
 
     async fn open_owned(storage: Storage) -> Result<Self> {
+        let store = match &storage {
+            Storage::Memory => None,
+            Storage::Disk(path) => Some(path.clone()),
+        };
         let directory = match &storage {
             Storage::Memory => None,
             Storage::Disk(path) => Some(
@@ -106,7 +112,12 @@ impl Database {
         Ok(Self {
             state: Lifecycle::Open(Arc::new(DatabaseState { storage, changes })),
             directory,
+            store,
         })
+    }
+
+    pub(crate) fn store(&self) -> Option<&std::path::Path> {
+        self.store.as_deref()
     }
 
     pub(crate) fn directory(&self) -> Option<&std::path::Path> {
