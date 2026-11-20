@@ -1,0 +1,130 @@
+AGENTS.md
+  s_cb59f386958a65::t_c2fec8de46eb34 1-11
+docs/agents/domain.md
+  s_cb59f386958a65::t_c2fec8de46eb34 1-51
+.oxfmtrc.json
+  s_4ccc9a2575a981::t_168a11fb864e42 15
+docs/agents/issue-tracker.md
+  s_cb59f386958a65::t_c9c18cf1758edf 40
+  s_cb59f386958a65::t_c2fec8de46eb34 1-39,41-47
+GLOSSARY.md
+  s_28125ddc7799fc::t_8f0cb208f98f15 22,35-41
+  s_b191b4aaf82c80::t_ba61ccbbc89b88 43-50
+  s_319ce083a4a874::t_024641484220db 42,51-57
+  s_5efc9f4aa5c2fb::t_d3342124467b3c 23-34
+  s_9de5ec2e2e7263::t_5fbd50d12b27a9 1-21
+.agents/skills/ui-sdk/SKILL.md
+  s_2297d4366353cf::t_dfa9114a6e2c95 1-56
+.agents/skills/ui-sdk/references/agent-ready.md
+  s_2297d4366353cf::t_9e0fafe9ac47de 1-136
+.agents/skills/ui-sdk/references/build-interface.md
+  s_2297d4366353cf::t_7433b03fa4f3fb 1-187
+.agents/skills/ui-sdk/references/create-component.md
+  s_2297d4366353cf::t_83285e11bf89a3 1-88
+.agents/skills/ui-sdk/references/patterns.md
+  s_2297d4366353cf::t_8ee72b7c33ad13 1-246
+.agents/skills/ui-sdk/references/styles.md
+  s_2297d4366353cf::t_238af1154ccff3 1-66
+.agents/skills/ui-sdk/references/testing.md
+  s_2297d4366353cf::t_911390cee4f1fc 1-172
+.agents/skills/ui-sdk/references/web-components.md
+  s_2297d4366353cf::t_55743e251b2ed4 1-78
+.claude/skills/ui-sdk
+  s_2297d4366353cf::t_ac08cdeb8102c6 1
+.agents/skills/rust-best-practices/SKILL.md
+  s_4ccc9a2575a981::t_121b393f849d85 1-94
+.agents/skills/rust-best-practices/references/chapter_01.md
+  s_4ccc9a2575a981::t_6102e42f2fedad 1-657
+.agents/skills/rust-best-practices/references/chapter_02.md
+  s_4ccc9a2575a981::t_6538bee897003e 1-117
+.agents/skills/rust-best-practices/references/chapter_03.md
+  s_4ccc9a2575a981::t_80c7fdcbc087d7 1-211
+.agents/skills/rust-best-practices/references/chapter_04.md
+  s_4ccc9a2575a981::t_57f750be28cebd 1-181
+.agents/skills/rust-best-practices/references/chapter_05.md
+  s_4ccc9a2575a981::t_34a2da62c9bc92 1-390
+.agents/skills/rust-best-practices/references/chapter_06.md
+  s_4ccc9a2575a981::t_4062cba348e31a 1-161
+.agents/skills/rust-best-practices/references/chapter_07.md
+  s_4ccc9a2575a981::t_cee586e1ce09fb 1-222
+.agents/skills/rust-best-practices/references/chapter_08.md
+  s_4ccc9a2575a981::t_a2723290597ac6 1-252
+.agents/skills/rust-best-practices/references/chapter_09.md
+  s_4ccc9a2575a981::t_374a7c7c2f9bf4 1-256
+.claude/skills/rust-best-practices
+  s_4ccc9a2575a981::t_3368146d77b17f 1
+skills-lock.json
+  s_4ccc9a2575a981::t_e08402f08c3720 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3441677de67213114d6a7ecce5bd4e5674e7377c",
+  "prompts": {},
+  "sessions": {
+    "s_2297d4366353cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "669d9373-e3b7-448a-ab93-dc5f522af7e0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_28125ddc7799fc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59be003d-56db-4198-a930-4dbe5b6b1cc0",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_319ce083a4a874": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11eb02ef-92b6-450b-979d-9e0c666ca8fb",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_5efc9f4aa5c2fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "55e48a68-ce06-430f-9d04-37149161e37c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_9de5ec2e2e7263": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2ea797f6-ea3a-42d0-a4e4-e1df9cf6f511",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_b191b4aaf82c80": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9237615-b6d4-40c4-8c57-550e7c18161c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_cb59f386958a65": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e411548b-fb4c-4e5b-a376-3aacd4ced9f3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
