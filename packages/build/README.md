@@ -27,10 +27,32 @@ HTML shell is emitted.
 slot/component names still come from the compiler, without executing the client.
 Final file hashes cover JavaScript, source maps, CSS and server output.
 
-Shared imports remain bare: `solid-js`, `solid-js/*`, `@solidjs/web` (including
-subpaths), `@tokamak/sdk` (including subpaths), `@tokamak/ui` (including subpaths),
-`@tokamak/runtime/router`, `@ui-sdk/solid` and `@ui-sdk/core` (including subpaths),
-and compiler-emitted `@plugins/*` module names. Authors use
+The [shared library list](src/shared-libraries.mts) defines which entry points
+the desktop window provides. A plugin can import the authored window entries;
+the compiler and shared dependencies can also reference compiler-only entries.
+Direct `@ui-sdk/*` imports warn because those APIs are unstable; prefer
+`@tokamak/ui`. Server code can use `@tokamak/sdk`; `@tokamak/sdk/web` is types
+only and `@tokamak/ui/theme.css` is stylesheet only. The build checks these
+rules in both the window and server parts, including bundled dependencies.
+
+The window build does not bundle shared libraries. An npm dependency can use
+the app's copy of Solid if it imports a listed entry point as an ES module.
+Deep paths and CommonJS requires of shared libraries fail the build. A dependency
+may still require a compatible version of Solid.
+
+A plugin can declare its own npm dependencies in an optional `package.json`.
+Keep shared libraries out of every dependency section. With dependencies present,
+the build installs them in the plugin folder and bundles what its source imports.
+An existing Bun lockfile is frozen; if it disagrees with the manifest, update
+the lockfile explicitly and try again. Convert other package managers' lockfiles
+to a Bun lockfile before building. Without a lockfile, the first install writes
+one. The build skips installation for a dependency-free manifest and reuses a
+previously verified tree as long as the recorded inputs and install state
+match. Offline, an unchanged install works without the registry; an install
+can use Bun's cache and fails with an install diagnostic if a package is missing.
+Bun runs dependency lifecycle scripts according to its regular trust rules.
+
+Compiler-emitted `@plugins/*` module names also remain bare. Authors use
 `import { Panel } from "plugin:example/client"`. The compiler emits
 `@plugins/example/ui`; the web loader resolves it to the dependency's
 revision-pinned module, including literal dynamic imports. Static imports infer
@@ -126,8 +148,8 @@ The build still selects the source files it checks, controls emission and
 generated `plugin:*` paths, and fixes the server libraries and ambient types:
 ES2022 and no ambient type packages for the default runtime; ES2022, DOM and
 Node types from the checkout for the worker runtime. A
-`package.json` is optional with a descriptor; the build does not install
-dependencies. Output goes to the plugin's own `dist/` folder.
+`package.json` is optional with a descriptor. When present, its dependencies
+are installed before bundling. Output goes to the plugin's own `dist/` folder.
 
 To test the external artifact against a real server:
 

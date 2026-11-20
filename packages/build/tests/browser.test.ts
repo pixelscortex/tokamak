@@ -29,13 +29,12 @@ test("browser plugin emits DOM ESM with host imports, contributions and qualifie
   expect(metadata.hashes["ui.js"]).toMatch(/^[a-f0-9]{64}$/);
   for (const id of [
     "solid-js",
-    "solid-js/store",
+    "solid-js/refresh",
     "@solidjs/web",
     "@tokamak/sdk",
     "@tokamak/sdk/solid",
     "@tokamak/sdk/client",
     "@tokamak/ui",
-    "@tokamak/ui/button",
     "@tokamak/runtime/router",
     "@ui-sdk/solid/button",
     "@ui-sdk/core/button",
@@ -43,6 +42,8 @@ test("browser plugin emits DOM ESM with host imports, contributions and qualifie
     "@plugins/other/ui",
   ])
     expect(hostModule(id)).toBe(true);
+  for (const id of ["solid-js/store", "@tokamak/ui/button", "@tokamak/runtime", "@tokamak/runtime/plugins"])
+    expect(hostModule(id)).toBe(false);
 }, 30000);
 
 test("static plugin imports infer dependencies and styles remain optional", async () => {

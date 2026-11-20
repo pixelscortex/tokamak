@@ -27,11 +27,17 @@
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
+    "@solidjs/web": "2.0.0",
+    "@tokamak/runtime": "workspace:*",
+    "@tokamak/sdk": "workspace:*",
+    "@tokamak/ui": "workspace:*",
     "@types/json-schema": "7.0.15",
     "@types/node": "26.6.6",
+    "@ui-sdk/solid": "0.1.0-beta.6",
     "jscpd": "5.4.3",
     "oxfmt": "0.78.0",
     "oxlint": "1.93.0",
+    "solid-js": "2.0.0",
     "vite": "8.3.6"
   },
   "overrides": {

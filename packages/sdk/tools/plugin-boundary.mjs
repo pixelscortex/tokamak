@@ -13,6 +13,7 @@ import {
 import { isBuiltin } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { isServerModule, isServerRoot } from "./server-files.mjs";
+import { checkTokamakImport, resolvedPackage, sharedImports } from "../../build/src/shared-libraries.mts";
 
 const specifier = /^plugin:([^/]+)(?:\/(server|client))?$/;
 const inside = (root, file) => {
@@ -61,25 +62,9 @@ function sharedTypePaths() {
   if (checkoutPaths) return checkoutPaths;
   checkoutPaths = {};
   const importer = resolve(checkoutWindow, "src/styles.ts");
-  for (const name of [
-    "@tokamak/sdk",
-    "@tokamak/ui",
-    "@tokamak/runtime",
-    "solid-js",
-    "@solidjs/web",
-    "@ui-sdk/solid",
-    "@ui-sdk/core",
-  ]) {
-    const manifest = [checkoutWindow, dirname(checkoutWindow)]
-      .map((folder) => resolve(folder, "node_modules", name, "package.json"))
-      .find(existsSync);
-    if (!manifest) continue;
-    const exports = JSON.parse(readFileSync(manifest, "utf8")).exports;
-    for (const key of [".", ...Object.keys(exports ?? {}).filter((key) => key.startsWith("./"))]) {
-      const id = key === "." ? name : name + key.slice(1);
-      const target = ts.resolveModuleName(id, importer, moduleDefaults, ts.sys).resolvedModule;
-      if (target) checkoutPaths[id] = [target.resolvedFileName];
-    }
+  for (const id of sharedImports) {
+    const target = ts.resolveModuleName(id, importer, moduleDefaults, ts.sys).resolvedModule;
+    if (target) checkoutPaths[id] = [target.resolvedFileName];
   }
   return checkoutPaths;
 }
@@ -295,13 +280,26 @@ function declarePlugin(root, id, declared) {
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export function checkPluginImports(root) {
+export function checkPluginImports(root, warn = () => {}) {
   root = resolve(root);
   const declared = new Set();
+  const warned = new Set();
   function checkFile(path) {
     const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
     const options = configuration(path).options;
-    function check(id) {
+    const part =
+      inside(canonical(server(root)), canonical(path)) ||
+      (!existsSync(server(root)) &&
+        !existsSync(resolve(root, "src/client")) &&
+        !existsSync(resolve(root, "src/main.tsx")))
+        ? "server"
+        : "window";
+    function check(id, typeOnly = false) {
+      checkTokamakImport(id, path, part, typeOnly, id, true);
+      if (id.startsWith("@ui-sdk/") && !warned.has(id)) {
+        warned.add(id);
+        warn(`Warning: direct import ${JSON.stringify(id)} in ${path} is unstable. Prefer @tokamak/ui.`);
+      }
       if (id.startsWith("plugin:")) {
         try {
           declarePlugin(root, id, declared);
@@ -333,14 +331,23 @@ export function checkPluginImports(root) {
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
         node.moduleSpecifier &&
         ts.isStringLiteralLike(node.moduleSpecifier)
-      )
-        check(node.moduleSpecifier.text);
+      ) {
+        const clause = ts.isImportDeclaration(node) ? node.importClause : node.exportClause;
+        const bindings = ts.isImportDeclaration(node) ? node.importClause?.namedBindings : node.exportClause;
+        const typeOnly =
+          clause?.isTypeOnly ||
+          node.isTypeOnly ||
+          (!clause?.name &&
+            bindings?.elements?.length > 0 &&
+            bindings.elements.every((item) => item.isTypeOnly));
+        check(node.moduleSpecifier.text, typeOnly);
+      }
       if (
         ts.isImportTypeNode(node) &&
         ts.isLiteralTypeNode(node.argument) &&
         ts.isStringLiteralLike(node.argument.literal)
       )
-        check(node.argument.literal.text);
+        check(node.argument.literal.text, true);
       if (
         ts.isImportEqualsDeclaration(node) &&
         ts.isExternalModuleReference(node.moduleReference) &&
@@ -413,7 +420,11 @@ export function bunPluginBoundary(root) {
       bunPluginReferences(root).setup(build);
       build.onResolve({ filter: /.*/, namespace: "file" }, ({ path, importer }) => {
         if (!importer || !isAbsolute(importer) || isBuiltin(path)) return;
+        checkTokamakImport(path, importer, "server");
         const target = Bun.resolveSync(path, dirname(importer));
+        const owner = resolvedPackage(target);
+        if (owner?.startsWith("@tokamak/") && owner !== resolvedPackage(importer))
+          checkTokamakImport(path, importer, "server", false, owner);
         const bare = !path.startsWith(".") && !isAbsolute(path);
         // Bun resolves workspace symlinks to their real location. A bare import
         // must also resolve via node_modules, not a tsconfig source alias.
