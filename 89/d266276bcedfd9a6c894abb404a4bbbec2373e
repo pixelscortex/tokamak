@@ -1,0 +1,25 @@
+packages/runtime/moon.yml
+  s_4ccc9a2575a981::t_98cbda7e36715f 16
+packages/runtime/tests/server-binary.test.ts
+  s_4ccc9a2575a981::t_9b88b101ada58c 1-19
+packages/runtime/tools/run-app.ts
+  s_4ccc9a2575a981::t_0b7e508dc91c94 5,13-14
+packages/runtime/tools/server-binary.ts
+  s_4ccc9a2575a981::t_18c0b6cf0589ca 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89d266276bcedfd9a6c894abb404a4bbbec2373e",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
