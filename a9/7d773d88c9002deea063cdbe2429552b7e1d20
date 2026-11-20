@@ -1,0 +1,19 @@
+packages/cli/src/main.ts
+  s_f4bbe8789ef718::t_758e189db1cc20 13-14,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a97d773d88c9002deea063cdbe2429552b7e1d20",
+  "prompts": {},
+  "sessions": {
+    "s_f4bbe8789ef718": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f8c7-2184-7610-b50e-7b9bdba62bbe",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
