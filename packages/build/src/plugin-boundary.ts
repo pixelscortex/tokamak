@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 import { assertPluginResolution, pluginReferenceSource } from "../../sdk/tools/plugin-boundary.mjs";
 
 import { checkTokamakImport, resolvedPackage, windowExternal } from "./shared-libraries.mts";
+import { BuildError, locateImportError } from "./diagnostics";
 
 export function pluginBoundary(root: () => string): Plugin {
   return {
@@ -15,36 +16,43 @@ export function pluginBoundary(root: () => string): Plugin {
         return `\0tokamak-reference:${id}`;
       }
       if (id.startsWith("@plugins/")) return { id, external: true };
-      if (importer) {
-        checkTokamakImport(id, importer, "window");
-        const external = windowExternal(id, importer);
-        if (external) {
-          if (options.kind === "require-call")
-            throw new Error(
-              `${importer} uses require for ${JSON.stringify(id)}. Use an ES module build of this dependency.`,
-            );
-          return { id: external, external: true };
-        }
-      }
-      if (importer?.startsWith("\0")) return;
-      const resolved = await this.resolve(id, importer, { skipSelf: true });
-      if (resolved && !resolved.external && isAbsolute(resolved.id)) {
-        const target = resolved.id.split("?")[0]!;
+      try {
         if (importer) {
-          windowExternal(id, importer, target);
-          const owner = resolvedPackage(target);
-          if (owner?.startsWith("@tokamak/") && owner !== resolvedPackage(importer))
-            checkTokamakImport(id, importer, "window", false, owner);
+          checkTokamakImport(id, importer, "window");
+          const external = windowExternal(id, importer);
+          if (external) {
+            if (options.kind === "require-call")
+              throw new BuildError([
+                {
+                  code: "PLUGIN_SHARED_REQUIRE",
+                  message: `${importer} uses require for ${JSON.stringify(id)}. Use an ES module build of this dependency.`,
+                },
+              ]);
+            return { id: external, external: true };
+          }
         }
-        assertPluginResolution(
-          root(),
-          importer?.split("?")[0] ?? root(),
-          id,
-          target,
-          !id.startsWith(".") && !isAbsolute(id) && /\/node_modules\//.test(resolved.id),
-        );
+        if (importer?.startsWith("\0")) return;
+        const resolved = await this.resolve(id, importer, { skipSelf: true });
+        if (resolved && !resolved.external && isAbsolute(resolved.id)) {
+          const target = resolved.id.split("?")[0]!;
+          if (importer) {
+            windowExternal(id, importer, target);
+            const owner = resolvedPackage(target);
+            if (owner?.startsWith("@tokamak/") && owner !== resolvedPackage(importer))
+              checkTokamakImport(id, importer, "window", false, owner);
+          }
+          assertPluginResolution(
+            root(),
+            importer?.split("?")[0] ?? root(),
+            id,
+            target,
+            !id.startsWith(".") && !isAbsolute(id) && /\/node_modules\//.test(resolved.id),
+          );
+        }
+        return resolved;
+      } catch (error) {
+        throw importer ? locateImportError(error, importer, id) : error;
       }
-      return resolved;
     },
     load(id) {
       if (id.startsWith("\0tokamak-reference:"))

@@ -2,9 +2,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { link, lstat, mkdir, open, readFile, rm, realpath, writeFile } from "node:fs/promises";
-import { request } from "node:http";
-import { Readable } from "node:stream";
 import { resolve } from "node:path";
+import { direct } from "./direct-http";
 
 export type Identity = {
   pid: number;
@@ -54,30 +53,9 @@ function endpoint(identity: Identity, path: string): URL {
   return url;
 }
 
-// A one-use HTTP connection cannot inherit an environment proxy or follow a redirect.
-function direct(url: URL, capability: string, timeout: number, method = "GET"): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const outgoing = request(
-      url,
-      {
-        agent: false,
-        method,
-        signal: AbortSignal.timeout(timeout),
-        headers: { authorization: `Bearer ${capability}` },
-      },
-      (incoming) => {
-        const code = incoming.statusCode ?? 500;
-        const bodyless = code === 204 || code === 205 || code === 304;
-        if (bodyless) incoming.resume();
-        resolve(
-          new Response(bodyless ? null : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>), {
-            status: code,
-          }),
-        );
-      },
-    );
-    outgoing.on("error", reject);
-    outgoing.end();
+function localRequest(url: URL, capability: string, timeout: number, method = "GET") {
+  return direct(url, new Headers({ authorization: `Bearer ${capability}` }), AbortSignal.timeout(timeout), {
+    method,
   });
 }
 
@@ -121,7 +99,7 @@ export async function status(directory: string): Promise<Identity | undefined> {
   const capability = await token(directory);
   let response: Response;
   try {
-    response = await direct(url, capability, 1000);
+    response = await localRequest(url, capability, 1000);
   } catch {
     return;
   }
@@ -145,7 +123,7 @@ export async function status(directory: string): Promise<Identity | undefined> {
 export async function fetchLocal(directory: string, path: string): Promise<Response | undefined> {
   const identity = await status(directory);
   if (!identity) return;
-  return direct(endpoint(identity, path), await token(directory), 3000);
+  return localRequest(endpoint(identity, path), await token(directory), 3000);
 }
 
 async function wait(): Promise<void> {
@@ -211,7 +189,7 @@ export async function stop(directory: string): Promise<void> {
   const capability = await token(directory);
   let response: Response | undefined;
   try {
-    response = await direct(url, capability, 5000, "POST");
+    response = await localRequest(url, capability, 5000, "POST");
   } catch {
     // Cancellation closes accepted HTTP I/O as well as WebSockets. A lost
     // acknowledgement is not proof of shutdown: still await the readiness

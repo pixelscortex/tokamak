@@ -16,6 +16,7 @@ use std::{
 pub struct Artifact {
     pub manifest: Manifest,
     pub(crate) build_id: String,
+    source: PathBuf,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
     provides: BTreeSet<String>,
@@ -27,6 +28,9 @@ pub struct Catalog {
     pub plugins: BTreeMap<String, Arc<Artifact>>,
     pub revision: String,
     providers: BTreeMap<String, Vec<String>>,
+    pub(crate) index: Arc<BTreeMap<String, PathBuf>>,
+    installed: BTreeMap<String, PathBuf>,
+    index_path: Option<PathBuf>,
     pub(crate) environment: PathBuf,
     pub(crate) directory: PathBuf,
 }

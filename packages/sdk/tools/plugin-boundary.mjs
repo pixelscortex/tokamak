@@ -20,6 +20,7 @@ import { isBuiltin } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { isServerModule, isServerRoot } from "./server-files.mjs";
 import { checkTokamakImport, resolvedPackage, sharedImports } from "../../build/src/shared-libraries.mts";
+import { BuildError, locateImportError, sourceLocation } from "../../build/src/diagnostics.ts";
 
 const specifier = /^plugin:([^/]+)(?:\/(server|client))?$/;
 const inside = (root, file) => {
@@ -359,11 +360,18 @@ function publishDependencyTypes(root, loaded) {
   }
 }
 
-async function declarePlugin(root, id, loaded, requireSide = true) {
+async function declarePlugin(root, id, loaded, loc, requireSide = true) {
   const [, dependency, side = "server"] = pluginImport(id);
   if (!loaded.has(dependency)) {
     const artifact = neighbourTypes(root, dependency) ?? (await localTypes(dependency));
-    if (!artifact) throw new Error(`Plugin import ${id}: build or install "${dependency}" first.`);
+    if (!artifact)
+      throw new BuildError([
+        {
+          ...loc,
+          code: "PLUGIN_TYPES_MISSING",
+          message: `Plugin import ${id}: build or install "${dependency}" first.`,
+        },
+      ]);
     console.info(`Plugin types for ${dependency}: ${artifact.from}`);
     loaded.set(dependency, { types: artifact.types, sides: new Map() });
   }
@@ -373,19 +381,25 @@ async function declarePlugin(root, id, loaded, requireSide = true) {
   const index = sections.indexOf(side);
   if (index < 0) {
     if (!requireSide) return;
-    throw new Error(`Plugin import ${id}: "${dependency}" has no public ${side} API`);
+    throw new BuildError([
+      {
+        ...loc,
+        code: "PLUGIN_TYPES_MISSING",
+        message: `Plugin import ${id}: "${dependency}" has no public ${side} API`,
+      },
+    ]);
   }
   const declarations = sections[index + 1];
   sides.set(side, declarations);
   for (const imported of ts.preProcessFile(declarations, true, true).importedFiles) {
-    if (imported.fileName.startsWith("plugin:")) await declarePlugin(root, imported.fileName, loaded);
+    if (imported.fileName.startsWith("plugin:")) await declarePlugin(root, imported.fileName, loaded, loc);
   }
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
 export async function checkPluginImports(root, warn = () => {}, dependencies = [], prepareTypes = true) {
   root = resolve(root);
-  const imports = new Set();
+  const imports = new Map();
   const warned = new Set();
   function checkFile(path) {
     const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
@@ -397,14 +411,20 @@ export async function checkPluginImports(root, warn = () => {}, dependencies = [
         !existsSync(resolve(root, "src/main.tsx")))
         ? "server"
         : "window";
-    function check(id, typeOnly = false) {
-      checkTokamakImport(id, path, part, typeOnly, id, true);
+    function check(id, start, typeOnly = false) {
+      try {
+        checkTokamakImport(id, path, part, typeOnly, id, true);
+      } catch (error) {
+        if (!(error instanceof BuildError)) throw error;
+        const loc = sourceLocation(path, source.text, start);
+        throw new BuildError(error.diagnostics.map((diagnostic) => ({ ...loc, ...diagnostic })));
+      }
       if (id.startsWith("@ui-sdk/") && !warned.has(id)) {
         warned.add(id);
         warn(`Warning: direct import ${JSON.stringify(id)} in ${path} is unstable. Prefer @tokamak/ui.`);
       }
       if (id.startsWith("plugin:")) {
-        imports.add(id);
+        if (!imports.has(id)) imports.set(id, sourceLocation(path, source.text, start));
         return;
       }
       if (id.startsWith("@plugins/") || id.startsWith("plugin-types:")) throw diagnostic(path, id);
@@ -439,28 +459,28 @@ export async function checkPluginImports(root, warn = () => {}, dependencies = [
           (!clause?.name &&
             bindings?.elements?.length > 0 &&
             bindings.elements.every((item) => item.isTypeOnly));
-        check(node.moduleSpecifier.text, typeOnly);
+        check(node.moduleSpecifier.text, node.moduleSpecifier.getStart(source), typeOnly);
       }
       if (
         ts.isImportTypeNode(node) &&
         ts.isLiteralTypeNode(node.argument) &&
         ts.isStringLiteralLike(node.argument.literal)
       )
-        check(node.argument.literal.text, true);
+        check(node.argument.literal.text, node.argument.literal.getStart(source), true);
       if (
         ts.isImportEqualsDeclaration(node) &&
         ts.isExternalModuleReference(node.moduleReference) &&
         node.moduleReference.expression &&
         ts.isStringLiteralLike(node.moduleReference.expression)
       )
-        check(node.moduleReference.expression.text);
+        check(node.moduleReference.expression.text, node.moduleReference.expression.getStart(source));
       if (
         ts.isCallExpression(node) &&
         (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
           (ts.isIdentifier(node.expression) && node.expression.text === "require"))
       ) {
         const arg = node.arguments[0];
-        if (arg && ts.isStringLiteralLike(arg)) check(arg.text);
+        if (arg && ts.isStringLiteralLike(arg)) check(arg.text, arg.getStart(source));
         else
           throw new Error(
             `Dynamic plugin imports require a string literal: ${path}. Computed imports cannot be checked against the plugin boundary.`,
@@ -469,7 +489,7 @@ export async function checkPluginImports(root, warn = () => {}, dependencies = [
       ts.forEachChild(node, visit);
     }
     visit(source);
-    for (const ref of source.referencedFiles) check(ref.fileName);
+    for (const ref of source.referencedFiles) check(ref.fileName, ref.pos);
   }
   const visited = new Set();
   function walk(dir) {
@@ -496,9 +516,10 @@ export async function checkPluginImports(root, warn = () => {}, dependencies = [
   if (!prepareTypes) return;
   const loaded = new Map();
   try {
-    for (const id of imports) await declarePlugin(root, id, loaded);
+    for (const [id, loc] of imports) await declarePlugin(root, id, loaded, loc);
+    const descriptor = { file: resolve(root, "plugin.ts"), line: 1, column: 1 };
     for (const id of dependencies)
-      if (!loaded.has(id)) await declarePlugin(root, `plugin:${id}`, loaded, false);
+      if (!loaded.has(id)) await declarePlugin(root, `plugin:${id}`, loaded, descriptor, false);
   } catch (error) {
     publishDependencyTypes(root, new Map());
     throw error;
@@ -523,32 +544,38 @@ export function bunPluginReferences(root) {
   };
 }
 
-export function bunPluginBoundary(root) {
+export function bunPluginBoundary(root, diagnostics = []) {
   return {
     name: "plugin-import-boundary",
     setup(build) {
       bunPluginReferences(root).setup(build);
       build.onResolve({ filter: /.*/, namespace: "file" }, ({ path, importer }) => {
         if (!importer || !isAbsolute(importer) || isBuiltin(path)) return;
-        checkTokamakImport(path, importer, "server");
-        const target = Bun.resolveSync(path, dirname(importer));
-        const owner = resolvedPackage(target);
-        if (owner?.startsWith("@tokamak/") && owner !== resolvedPackage(importer))
-          checkTokamakImport(path, importer, "server", false, owner);
-        const bare = !path.startsWith(".") && !isAbsolute(path);
-        // Bun resolves workspace symlinks to their real location. A bare import
-        // must also resolve via node_modules, not a tsconfig source alias.
-        assertPluginResolution(
-          root,
-          importer,
-          path,
-          target,
-          bare &&
-            Boolean(
-              ts.resolveModuleName(path, importer, configuration(importer).options, ts.sys).resolvedModule
-                ?.isExternalLibraryImport,
-            ),
-        );
+        try {
+          checkTokamakImport(path, importer, "server");
+          const target = Bun.resolveSync(path, dirname(importer));
+          const owner = resolvedPackage(target);
+          if (owner?.startsWith("@tokamak/") && owner !== resolvedPackage(importer))
+            checkTokamakImport(path, importer, "server", false, owner);
+          const bare = !path.startsWith(".") && !isAbsolute(path);
+          // Bun resolves workspace symlinks to their real location. A bare import
+          // must also resolve via node_modules, not a tsconfig source alias.
+          assertPluginResolution(
+            root,
+            importer,
+            path,
+            target,
+            bare &&
+              Boolean(
+                ts.resolveModuleName(path, importer, configuration(importer).options, ts.sys).resolvedModule
+                  ?.isExternalLibraryImport,
+              ),
+          );
+        } catch (error) {
+          const located = locateImportError(error, importer, path);
+          if (located instanceof BuildError) diagnostics.push(...located.diagnostics);
+          throw located;
+        }
       });
     },
   };

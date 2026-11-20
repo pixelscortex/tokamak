@@ -41,10 +41,11 @@ impl Loaded {
             if ids.is_empty() {
                 return Ok(());
             }
-            let failure = match Box::pin(self.record_grants_for(database, previous, &ids)).await {
-                Ok(()) => return Ok(()),
-                Err(failure) => failure,
-            };
+            let failure =
+                match Box::pin(self.record_grants_for(database, previous, &ids, true)).await {
+                    Ok(()) => return Ok(()),
+                    Err(failure) => failure,
+                };
             let Some(id) = failure
                 .plugin
                 .filter(|id| previous.is_some_and(|old| old.skipped.contains_key(id)))
@@ -70,7 +71,8 @@ impl Loaded {
             if self.skip_if_required_dependency_failed(&id, None)? {
                 continue;
             }
-            match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(&id))).await
+            match Box::pin(self.record_grants_for(database, None, std::slice::from_ref(&id), true))
+                .await
             {
                 Err(InstallFailure {
                     error: Error::IndexBackfill(message),
@@ -82,11 +84,21 @@ impl Loaded {
         self.prune_skipped()
     }
 
+    pub(super) async fn check_startup_grants(
+        &self,
+        database: &crate::data::Database,
+    ) -> Result<(), Error> {
+        self.record_grants_for(database, None, &self.catalog.order, false)
+            .await
+            .map_err(|failure| failure.error)
+    }
+
     async fn record_grants_for(
         &self,
         database: &crate::data::Database,
         previous: Option<&Self>,
         ids: &[String],
+        commit: bool,
     ) -> Result<(), InstallFailure> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
@@ -149,6 +161,9 @@ impl Loaded {
         .await;
 
         match result {
+            Ok(_) if !commit => Box::pin(tx.rollback())
+                .await
+                .map_err(|error| invalid(error.to_string()).into()),
             Ok((granted, resets)) => {
                 Box::pin(tx.commit())
                     .await

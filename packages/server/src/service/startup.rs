@@ -79,24 +79,24 @@ impl Server {
 
     /// All static manifests resolve before any plugin module is evaluated.
     pub async fn load_plugins(
+        database: Database,
+        pool: Arc<Pool>,
+        root: &std::path::Path,
+    ) -> Result<Self, Error> {
+        Self::load_plugins_with_index(database, pool, root, None).await
+    }
+
+    pub(crate) async fn load_plugins_with_index(
         mut database: Database,
         pool: Arc<Pool>,
         root: &std::path::Path,
+        index: Option<&std::path::Path>,
     ) -> Result<Self, Error> {
         let directory = database
             .directory()
             .unwrap_or(root.parent().unwrap_or(root));
-        let loaded = match crate::plugins::Catalog::read_in_directory(root, directory) {
-            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
-            Err(error) => Err(error),
-        };
-
-        let loaded = match loaded {
-            Ok(mut loaded) => Box::pin(loaded.record_startup_grants(&database))
-                .await
-                .map(|()| Arc::new(loaded)),
-            Err(error) => Err(error),
-        };
+        let loaded =
+            crate::plugins::Loaded::startup(root, directory, index, &pool, &database).await;
 
         let loaded = match loaded {
             Ok(loaded) => loaded,

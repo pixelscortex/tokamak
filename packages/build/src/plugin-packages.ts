@@ -3,6 +3,7 @@ import { readFile, mkdir, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { relative, resolve } from "node:path";
 import { packageName, sharedPackages } from "./shared-libraries.mts";
+import { BuildError } from "./diagnostics";
 
 const dependencyMaps = [
   "dependencies",
@@ -76,9 +77,15 @@ export async function installPluginPackages(root: string, manifest: Record<strin
   if (!lock) {
     for (const name of ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]) {
       if (await optionalFile(resolve(root, name)))
-        throw new Error(
-          `Found ${name} in ${root}. Migrate it to a Bun lockfile before building so the recorded dependencies are preserved.`,
-        );
+        throw new BuildError([
+          {
+            file: resolve(root, name),
+            line: 1,
+            column: 1,
+            code: "PLUGIN_LOCKFILE_FORMAT",
+            message: `Found ${name} in ${root}. Migrate it to a Bun lockfile before building so the recorded dependencies are preserved.`,
+          },
+        ]);
     }
   }
   const stamp = resolve(root, ".tokamak/npm-install");
@@ -95,18 +102,30 @@ export async function installPluginPackages(root: string, manifest: Record<strin
     ["run", "bun", "--", "install", "--cwd", root, ...(lock ? ["--frozen-lockfile"] : [])],
     {
       cwd: checkout,
-      stdio: "inherit",
+      stdio: ["inherit", "pipe", "pipe"],
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
       timeout: 60_000,
       killSignal: "SIGKILL",
     },
   );
+  if (install.stdout) process.stdout.write(install.stdout);
+  if (install.stderr) process.stderr.write(install.stderr);
   if (install.status !== 0) {
     const reason = install.error?.message ?? `exit ${install.status ?? install.signal}`;
-    throw new Error(
-      `Could not install npm packages in ${root}: ${reason}. ` +
-        (lock ? `The frozen ${lock.name} must agree with package.json. ` : "") +
-        "Check registry access or the local Bun cache.",
-    );
+    const disagreement = lock && /lockfile had changes/i.test(install.stderr ?? "");
+    throw new BuildError([
+      {
+        file: disagreement ? resolve(installRoot, lock.name) : resolve(root, "package.json"),
+        line: 1,
+        column: 1,
+        code: disagreement ? "PLUGIN_LOCKFILE_MISMATCH" : "PLUGIN_DEPENDENCY_INSTALL",
+        message:
+          `Could not install npm packages in ${root}: ${reason}. ` +
+          (lock ? `The frozen ${lock.name} must agree with package.json. ` : "") +
+          "Check registry access or the local Bun cache.",
+      },
+    ]);
   }
   const installedLock = await bunLock(installRoot);
   if (installedLock) {

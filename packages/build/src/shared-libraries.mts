@@ -1,6 +1,7 @@
 // The window supplies runtime modules; type and stylesheet entries are build-only.
 import { dirname, isAbsolute, join } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { BuildError } from "./diagnostics.ts";
 
 const authoredWindow = [
   "solid-js", // Signals and reactive state in plugin views.
@@ -84,9 +85,12 @@ export function checkTokamakImport(
     : stylesheetEntries.includes(id)
       ? " (stylesheet only)"
       : "";
-  throw new Error(
-    `Plugin import ${JSON.stringify(id)} in ${file} is not allowed in the ${part} part${restriction}. Allowed paths: ${allowed.join(", ")}`,
-  );
+  throw new BuildError([
+    {
+      code: sharedPackages.has(packageName(resolved)) ? "PLUGIN_SHARED_IMPORT" : "PLUGIN_PRIVATE_IMPORT",
+      message: `Plugin import ${JSON.stringify(id)} in ${file} is not allowed in the ${part} part${restriction}. Allowed paths: ${allowed.join(", ")}`,
+    },
+  ]);
 }
 
 const windowEntries = new Set(windowSharedImports);
@@ -111,7 +115,10 @@ export function windowExternal(id: string, importer: string, target?: string) {
   const owner = target && resolvedPackage(target);
   const shared = sharedPackages.has(requested) ? requested : owner;
   if (shared && sharedPackages.has(shared))
-    throw new Error(
-      `Plugin import ${JSON.stringify(id)} in ${importer} resolves to shared library ${shared}. Allowed paths: ${windowSharedImports.filter((path) => packageName(path) === shared).join(", ")}`,
-    );
+    throw new BuildError([
+      {
+        code: "PLUGIN_SHARED_IMPORT",
+        message: `Plugin import ${JSON.stringify(id)} in ${importer} resolves to shared library ${shared}. Allowed paths: ${windowSharedImports.filter((path) => packageName(path) === shared).join(", ")}`,
+      },
+    ]);
 }

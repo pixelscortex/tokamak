@@ -15,6 +15,7 @@ import {
   pluginTsconfig,
 } from "./plugin-boundary.mjs";
 import ts from "typescript";
+import { BuildError, sdkDiagnosticPrefix } from "../../build/src/diagnostics.ts";
 
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 
@@ -79,13 +80,23 @@ export async function bundleFeature(folder, namespace, worker = false, preparedT
   // Temporary entry/config live together and are always removed. They must
   // never be mistaken for author modules on the next build.
   const temporary = await mkdtemp(join(generated, "build-"));
+  const diagnostics = [];
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
     let source = featureSource(root, files, modules, hasSchema);
     let workerPlugins = [];
     if (worker) {
-      const result = await workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot });
+      const result = await workerSources({
+        root,
+        files,
+        modules,
+        hasSchema,
+        sdkRoot,
+        header,
+        pluginRoot,
+        diagnostics,
+      });
       source = result.source;
       workerPlugins = result.plugins;
     }
@@ -104,7 +115,7 @@ export async function bundleFeature(folder, namespace, worker = false, preparedT
       env: "disable",
       allowUnresolved: [],
       plugins: [
-        bunPluginBoundary(pluginRoot),
+        bunPluginBoundary(pluginRoot, diagnostics),
         ...workerPlugins,
         {
           name: "stable-feature-entry",
@@ -135,6 +146,9 @@ export async function bundleFeature(folder, namespace, worker = false, preparedT
       bundle: join(root, "dist/bundle.js"),
       api: join(generated, "api.ts"),
     };
+  } catch (error) {
+    if (diagnostics.length) throw new BuildError(diagnostics, { cause: error });
+    throw error;
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -155,21 +169,23 @@ if (import.meta.main) {
   const feature = resolve(sdkRoot, "../..", args[0]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, args[2], args[3] === "--worker", preparedTypes);
+  try {
+    await bundleFeature(feature, args[2], args[3] === "--worker", preparedTypes);
+  } catch (error) {
+    if (preparedTypes && error instanceof BuildError)
+      console.error(sdkDiagnosticPrefix + JSON.stringify(error.diagnostics));
+    throw error;
+  }
 }
 
 async function scanFiles(root) {
   const files = [];
-  const scanner = new Bun.Transpiler({ loader: "ts" });
   for await (const scanned of new Bun.Glob("**/*.ts").scan({
     cwd: root,
     onlyFiles: true,
   })) {
     const file = scanned.split(sep).join("/");
     if (!isServerModule(root, file)) continue;
-    // scan is a real parser, not a regexp. We do not interpret initializer
-    // syntax: exported definitions are recognized by their runtime brand.
-    scanner.scan(await Bun.file(join(root, file)).text());
     files.push(file);
   }
   files.sort();

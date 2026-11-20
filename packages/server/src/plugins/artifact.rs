@@ -63,6 +63,7 @@ impl Artifact {
         Ok(Self {
             manifest,
             build_id,
+            source: root,
             bundle,
             assets,
             provides,

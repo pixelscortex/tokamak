@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import { pluginSlots, readPluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
 import { clientEntry } from "./descriptor.ts";
+import { BuildError, typescriptDiagnostics } from "./diagnostics.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
  * 6.0.3 is the newest JS API release; 7.x has no JS API. Upgrading belongs to
  * a separate tooling change, not the plugin wire-format implementation. */
@@ -36,14 +37,7 @@ export function uiContributions(root: string) {
     ...program.getGlobalDiagnostics(),
     ...program.getSemanticDiagnostics(),
   ];
-  if (diagnostics.length)
-    throw new Error(
-      ts.formatDiagnostics(diagnostics, {
-        getCanonicalFileName: (file) => file,
-        getCurrentDirectory: () => root,
-        getNewLine: () => "\n",
-      }),
-    );
+  if (diagnostics.length) throw new BuildError(typescriptDiagnostics(diagnostics, root));
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(entry);
   if (!source) throw new Error(`Missing plugin UI entry ${entry}`);
