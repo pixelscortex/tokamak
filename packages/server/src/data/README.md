@@ -74,12 +74,11 @@ The server completes index changes in the schema transaction before publishing
 the new plugin version. Colliding writes receive a retryable conflict. Failed
 loads discard partial changes, leaving the old indexes and rows in place. A
 unique backfill that encounters duplicates reports the index and conflicting
-value. A failed reload of an active plugin leaves the old version installed.
-At startup the server skips the affected plugin and anything that requires it,
-including transitive dependents. Optional dependencies do not cause skips. Each
-reload retries skipped plugins, so a repair to stored rows takes effect even
-without a new build. The reload result reports any remaining skips and reasons
-under `skipped`.
+value. At startup and reload, the server skips the affected plugin and anything
+that requires it, including transitive dependents. Other plugins still load.
+Optional dependencies do not cause skips. Each reload retries skipped plugins,
+so a repair to stored rows takes effect even without a new build. The reload
+result reports any remaining skips and reasons under `skipped`.
 
 `db.query` retains `{table, where, order, limit}`. Indexed requests additionally
 carry `index: {name, eq: [{field, value}], range: [{field, operator, value}]}` and

@@ -27,9 +27,9 @@ impl Loaded {
         database: &crate::data::Database,
         previous: Option<&Self>,
     ) -> Result<(), Error> {
-        // Repairs can happen without a build change. Try the full installation,
-        // then retry the transaction without any previously skipped plugin
-        // that still fails, preserving one commit for the published reload.
+        // Try skipped plugins again in case their rows were repaired. Roll back
+        // and retry without plugins whose indexes fail to fill, so the published
+        // reload still has one commit.
         loop {
             let failure =
                 match Box::pin(self.record_grants_for(database, previous, &self.catalog.order))
@@ -38,10 +38,10 @@ impl Loaded {
                     Ok(()) => return Ok(()),
                     Err(failure) => failure,
                 };
-            let Some(id) = failure
-                .plugin
-                .filter(|id| previous.is_some_and(|old| old.skipped.contains_key(id)))
-            else {
+            let Some(id) = failure.plugin.filter(|id| {
+                matches!(&failure.error, Error::IndexBackfill(_))
+                    || previous.is_some_and(|old| old.skipped.contains_key(id))
+            }) else {
                 return Err(failure.error);
             };
             self.skip(id, failure.error.to_string());

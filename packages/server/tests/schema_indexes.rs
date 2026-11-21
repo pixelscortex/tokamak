@@ -113,6 +113,15 @@ const BETA: Variant = Variant {
     version: "1.0.0",
     edits: &[],
 };
+const BETA_BY_OWNER: Variant = Variant {
+    key: "beta-by-owner",
+    version: "1.0.1",
+    edits: &[(
+        r#"index("by_owner_created", ["text"])"#,
+        r#"index("by_owner_created", ["owner"])"#,
+    )],
+    ..BETA
+};
 
 /// Builds each variant once per test process; returns its `dist` directory.
 fn artifact(variant: &Variant) -> PathBuf {
@@ -728,8 +737,8 @@ backends!(
 // 4. Backfill and rollback
 // ---------------------------------------------------------------------------
 
-/// The previous generation must still serve its own indexes after a refused
-/// reload, and nothing from the refused generation may be left installed.
+/// Restoring the previous build serves its rows and indexes again, with no
+/// partial indexes from the skipped build.
 async fn assert_base_generation_intact(client: &mut Client, rows: &Value) {
     assert_eq!(
         &client.ok("alpha/todos:scan", json!({"order":"asc"})).await,
@@ -784,70 +793,40 @@ async fn grant_exists(database: &Database, key: &str) -> bool {
     found
 }
 
-async fn duplicate_backfill_keeps_the_old_generation(disk: bool) {
+async fn duplicate_backfill_skips_changed_plugin_and_rolls_back_schema(disk: bool) {
     let installation = Installation::new(disk);
     installation.install(&ALPHA);
     let server = installation.load().await.unwrap();
     let mut client = Client::connect(&server).await;
-    let mut reader = Client::connect(&server).await;
     client.ok("alpha/todos:add", todo("ann", "a", 10)).await;
     client
         .ok("alpha/todos:addNote", json!({"topic":"t","body":"x"}))
         .await;
     client.ok("alpha/todos:add", todo("ann", "b", 15)).await;
     let rows = client.ok("alpha/todos:scan", json!({"order":"asc"})).await;
-    reader
-        .session
-        .subscribe(500, "alpha/todos:recent", json!({"owner":"ann","since":0}))
-        .unwrap();
-    assert!(matches!(
-        next(&mut reader.session).await,
-        Event::Subscription {
-            id: 500,
-            result: Ok(_)
-        }
-    ));
-    let revision = server.plugins().await.unwrap()["revision"].clone();
-
     installation.install(&ALPHA_DUPLICATES);
-    let error = server
-        .reload_plugin("alpha".into())
-        .await
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains("by_owner_only") && error.contains("ann"),
-        "{error}"
-    );
-    assert_eq!(server.plugins().await.unwrap()["revision"], revision);
-    assert_base_generation_intact(&mut client, &rows).await;
-    // Existing subscriptions keep running on the old generation's index.
-    let id = client.ok("alpha/todos:add", todo("ann", "later", 20)).await;
-    let value = loop {
-        match next(&mut reader.session).await {
-            Event::Subscription {
-                id: 500,
-                result: Ok(value),
-            } if ids(&value).contains(&id.as_str().unwrap().to_owned()) => break value,
-            Event::Subscription {
-                id: 500,
-                result: Ok(_),
-            } => continue,
-            event => panic!("unexpected {event:?}"),
-        }
-    };
-    assert_eq!(value.as_array().unwrap().len(), 3);
-    let rows = client.ok("alpha/todos:scan", json!({"order":"asc"})).await;
+    let catalog = server.reload_plugin("alpha".into()).await.unwrap();
+    assert!(plugin_ids(&catalog).is_empty());
+    assert_backfill_skip(&catalog, "alpha");
+    assert_plugin_unloaded(&mut client, "alpha").await;
+
+    if !disk {
+        installation.install(&ALPHA);
+        let catalog = server.reload_plugin("alpha".into()).await.unwrap();
+        assert_eq!(catalog["skipped"], json!({}));
+        assert_base_generation_intact(&mut client, &rows).await;
+    }
     drop(client);
-    drop(reader);
     server.close().await.unwrap();
 
-    assert_failed_index_reload_persistence(&installation, &rows, disk).await;
+    if disk {
+        assert_failed_index_reload_persistence(&installation, &rows).await;
+    }
 }
 backends!(
-    duplicate_backfill_keeps_the_old_generation_memory,
-    duplicate_backfill_keeps_the_old_generation_disk,
-    duplicate_backfill_keeps_the_old_generation
+    duplicate_backfill_skips_changed_plugin_and_rolls_back_schema_memory,
+    duplicate_backfill_skips_changed_plugin_and_rolls_back_schema_disk,
+    duplicate_backfill_skips_changed_plugin_and_rolls_back_schema
 );
 
 async fn reload_backfills_rebuilds_and_drops_indexes_without_touching_rows(disk: bool) {
@@ -946,25 +925,26 @@ fn startup_skips_duplicate_backfill_and_serves_other_plugins() {
         server.close().await.unwrap();
 
         installation.install(&ALPHA_DUPLICATES);
+        installation.edit_manifest("beta", |m| m["plugin"]["version"] = json!("1.0.1"));
+        let log = local_startup_log(&installation).await;
+        assert!(
+            log.lines().any(|line| {
+                line.contains("Skipping plugin alpha:")
+                    && line.contains("by_owner_only")
+                    && line.contains("ann")
+            }),
+            "{log}"
+        );
         let server = installation.load().await.unwrap();
         let mut client = Client::connect(&server).await;
-        assert!(
-            client
-                .err("alpha/todos:scan", json!({"order":"asc"}))
-                .await
-                .contains("unknown function: alpha/todos:scan")
-        );
+        assert_plugin_unloaded(&mut client, "alpha").await;
         assert_eq!(
             texts(&client.ok("beta/todos:byText", json!({})).await),
             ["c"]
         );
-        assert_eq!(
-            server.plugins().await.unwrap()["plugins"]
-                .as_array()
-                .unwrap()
-                .len(),
-            1
-        );
+        let catalog = server.plugins().await.unwrap();
+        assert_eq!(plugin_ids(&catalog), ["beta"]);
+        assert_eq!(catalog["plugins"][0]["plugin"]["version"], "1.0.1");
         drop(client);
         server.close().await.unwrap();
 
@@ -987,6 +967,200 @@ fn plugin_ids(catalog: &Value) -> Vec<&str> {
         .iter()
         .map(|manifest| manifest["plugin"]["id"].as_str().unwrap())
         .collect()
+}
+
+fn assert_backfill_skip(catalog: &Value, id: &str) {
+    let reason = catalog["skipped"][id].as_str().unwrap();
+    assert!(
+        reason.contains(&format!("Plugin {id} schema index todos.by_owner_only"))
+            && reason.contains("ann"),
+        "{reason}"
+    );
+}
+
+async fn assert_plugin_unloaded(client: &mut Client, id: &str) {
+    let name = format!("{id}/todos:scan");
+    let error = client.err(&name, json!({"order":"asc"})).await;
+    assert!(
+        error.contains(&format!("unknown function: {name}")),
+        "{error}"
+    );
+}
+
+#[test]
+fn reload_skips_readded_plugin_and_updates_its_sibling() {
+    run(async {
+        let installation = Installation::new(true);
+        installation.install(&ALPHA);
+        installation.install(&BETA);
+        let server = installation.load().await.unwrap();
+        let mut client = Client::connect(&server).await;
+        client.ok("alpha/todos:add", todo("ann", "a", 10)).await;
+        client.ok("alpha/todos:add", todo("ann", "b", 20)).await;
+        let mut rows = client.ok("alpha/todos:scan", json!({"order":"asc"})).await;
+
+        std::fs::rename(
+            installation.plugins().join("alpha"),
+            installation.root.join("old-alpha"),
+        )
+        .unwrap();
+        let catalog = server.reload_plugin("alpha".into()).await.unwrap();
+        assert_eq!(plugin_ids(&catalog), ["beta"]);
+
+        installation.install(&ALPHA_DUPLICATES);
+        installation.edit_manifest("beta", |m| m["plugin"]["version"] = json!("1.0.1"));
+        let catalog = server.reload_plugin("alpha".into()).await.unwrap();
+        assert_eq!(plugin_ids(&catalog), ["beta"]);
+        assert_eq!(catalog["plugins"][0]["plugin"]["version"], "1.0.1");
+        assert_eq!(
+            server.plugins().await.unwrap()["plugins"],
+            catalog["plugins"]
+        );
+        assert_backfill_skip(&catalog, "alpha");
+        assert_plugin_unloaded(&mut client, "alpha").await;
+        drop(client);
+        server.close().await.unwrap();
+
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        let space = DataSpace::plugin("alpha").unwrap();
+        let mut tx = database.begin().await.unwrap();
+        let persisted: Vec<_> = tx
+            .query(&physical_table("alpha", "todos"))
+            .with_index("by_owner_created")
+            .collect()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| space.document(row).unwrap())
+            .collect();
+        assert_eq!(json!(persisted), rows);
+        let duplicate = space.id(rows[1]["_id"].as_str().unwrap()).unwrap();
+        tx.patch(&duplicate, json_object(&json!({"owner":"bob"})).unwrap())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        database.close().await.unwrap();
+
+        rows[1]["owner"] = json!("bob");
+        let server = installation.load().await.unwrap();
+        let mut client = Client::connect(&server).await;
+        assert_eq!(
+            plugin_ids(&server.plugins().await.unwrap()),
+            ["alpha", "beta"]
+        );
+        assert_eq!(
+            client
+                .ok(
+                    "alpha/todos:probe",
+                    json!({"table":"todos","index":"by_owner_only"})
+                )
+                .await,
+            rows
+        );
+        drop(client);
+        server.close().await.unwrap();
+    });
+}
+
+#[test]
+fn reload_reports_both_failed_backfills_and_updates_the_plugin_between_them() {
+    run(async {
+        let installation = Installation::new(true);
+        let zeta = Variant {
+            key: "zeta-duplicates",
+            id: "zeta",
+            ..ALPHA_DUPLICATES
+        };
+        installation.install(&ALPHA);
+        installation.install(&BETA);
+        let database = Database::open(installation.storage()).await.unwrap();
+        for id in ["alpha", "zeta"] {
+            seed_duplicate_owners_for(&database, id).await;
+        }
+        let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+        let server = Server::load_plugins(database, pool, &installation.plugins())
+            .await
+            .unwrap();
+        let mut client = Client::connect(&server).await;
+        client
+            .ok(
+                "beta/todos:add",
+                json!({"owner":"ann","text":"c","created":30}),
+            )
+            .await;
+
+        installation.install(&ALPHA_DUPLICATES);
+        installation.install(&zeta);
+        installation.install(&BETA_BY_OWNER);
+        let catalog = server.reload_plugin("beta".into()).await.unwrap();
+        assert_eq!(plugin_ids(&catalog), ["beta"]);
+        assert_eq!(catalog["plugins"][0]["plugin"]["version"], "1.0.1");
+        for id in ["alpha", "zeta"] {
+            assert_backfill_skip(&catalog, id);
+            assert_plugin_unloaded(&mut client, id).await;
+        }
+        assert_eq!(
+            texts(&client.ok("beta/todos:byText", json!({})).await),
+            ["c"]
+        );
+        drop(client);
+        server.close().await.unwrap();
+
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        let mut tx = database.read_only().await.unwrap();
+        let rows = tx
+            .query(&physical_table("beta", "todos"))
+            .with_index("by_owner_created")
+            .eq("owner", "ann")
+            .collect()
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].clone().into_json()["text"], "c");
+        tx.rollback().await.unwrap();
+        database.close().await.unwrap();
+    });
+}
+
+#[test]
+fn startup_skips_both_failed_backfills_and_loads_the_plugin_between_them() {
+    run(async {
+        let installation = Installation::new(true);
+        let zeta = Variant {
+            key: "zeta-duplicates",
+            id: "zeta",
+            ..ALPHA_DUPLICATES
+        };
+        for variant in [&ALPHA_DUPLICATES, &BETA, &zeta] {
+            installation.install(variant);
+        }
+        let mut database = Database::open(installation.storage()).await.unwrap();
+        for id in ["alpha", "zeta"] {
+            seed_duplicate_owners_for(&database, id).await;
+        }
+        database.close().await.unwrap();
+
+        let log = local_startup_log(&installation).await;
+        for id in ["alpha", "zeta"] {
+            assert!(
+                log.lines().any(|line| {
+                    line.contains(&format!("Skipping plugin {id}:"))
+                        && line.contains("by_owner_only")
+                        && line.contains("ann")
+                }),
+                "{log}"
+            );
+        }
+        let server = installation.load().await.unwrap();
+        assert_eq!(plugin_ids(&server.plugins().await.unwrap()), ["beta"]);
+        let mut client = Client::connect(&server).await;
+        for id in ["alpha", "zeta"] {
+            assert_plugin_unloaded(&mut client, id).await;
+        }
+        assert_eq!(client.ok("beta/todos:byText", json!({})).await, json!([]));
+        drop(client);
+        server.close().await.unwrap();
+    });
 }
 
 #[test]
@@ -1157,7 +1331,11 @@ fn changed_skipped_build_reports_inspection_failure_without_blocking_reload() {
 }
 
 async fn seed_duplicate_owners(db: &Database) -> Id {
-    let table = physical_table("alpha", "todos");
+    seed_duplicate_owners_for(db, "alpha").await
+}
+
+async fn seed_duplicate_owners_for(db: &Database, id: &str) -> Id {
+    let table = physical_table(id, "todos");
     let mut tx = db.begin().await.unwrap();
     tx.insert(&table, json_object(&todo("ann", "a", 1)).unwrap())
         .await
@@ -1827,31 +2005,25 @@ fn invalid_index_payloads() -> Vec<(&'static str, Value, Value, &'static str)> {
     cases.into_iter().chain(invalid_range_payloads()).collect()
 }
 
-async fn assert_failed_index_reload_persistence(
-    installation: &Installation,
-    rows: &Value,
-    disk: bool,
-) {
-    if disk {
-        // Inspect persisted state directly: the refused 1.1.0 generation must
-        // not have recorded its grant (it is written in the same transaction).
-        let database = Database::open(installation.storage()).await.unwrap();
-        assert!(grant_exists(&database, "alpha@1.0.0").await);
-        assert!(
-            !grant_exists(&database, "alpha@1.1.0").await,
-            "refused generation left its grant"
-        );
-        assert_persisted_old_indexes(&database, rows).await;
-        let mut database = database;
-        database.close().await.unwrap();
+async fn assert_failed_index_reload_persistence(installation: &Installation, rows: &Value) {
+    // Inspect persisted state directly: the refused 1.1.0 generation must
+    // not have recorded its grant (it is written in the same transaction).
+    let database = Database::open(installation.storage()).await.unwrap();
+    assert!(grant_exists(&database, "alpha@1.0.0").await);
+    assert!(
+        !grant_exists(&database, "alpha@1.1.0").await,
+        "refused generation left its grant"
+    );
+    assert_persisted_old_indexes(&database, rows).await;
+    let mut database = database;
+    database.close().await.unwrap();
 
-        installation.install(&ALPHA);
-        let server = installation.load().await.unwrap();
-        let mut client = Client::connect(&server).await;
-        assert_base_generation_intact(&mut client, rows).await;
-        drop(client);
-        server.close().await.unwrap();
-    }
+    installation.install(&ALPHA);
+    let server = installation.load().await.unwrap();
+    let mut client = Client::connect(&server).await;
+    assert_base_generation_intact(&mut client, rows).await;
+    drop(client);
+    server.close().await.unwrap();
 }
 
 async fn assert_persisted_old_indexes(database: &Database, rows: &Value) {
