@@ -9,7 +9,7 @@ try {
   await mkdir(`${directory}/plugins/chat`, { recursive: true });
   await cp(`${root}plugins/chat/dist`, `${directory}/plugins/chat/dist`, { recursive: true });
   const child = spawn(
-    `${root}target/debug/tokamak`,
+    `${root}target/debug/tokamak-server`,
     [
       // --local-dir resets the listener, so the explicit port must follow it.
       ...(process.env.TOKAMAK_SERVER_DIR ? ["--local-dir", process.env.TOKAMAK_SERVER_DIR] : []),

@@ -86,7 +86,7 @@ if (import.meta.main) {
     await writeFile(`${directory}/local/server.token`, token, { mode: 0o600 });
     await writeFile(`${root}/app/.dev/chat-sandbox.env`, `VITE_TOKAMAK_TOKEN=${token}\n`, { mode: 0o600 });
     const child = spawn(
-      `${root}/target/debug/tokamak`,
+      `${root}/target/debug/tokamak-server`,
       [
         "--local-dir",
         `${directory}/local`,
