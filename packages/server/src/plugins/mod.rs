@@ -37,6 +37,7 @@ pub(crate) struct Loaded {
     pub targets: BTreeMap<String, Target>,
     pub descriptor: Value,
     pub catalog_text: String,
+    pub(crate) skipped: BTreeMap<String, String>,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
 }
