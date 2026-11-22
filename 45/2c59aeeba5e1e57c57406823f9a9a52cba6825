@@ -1,0 +1,25 @@
+e2e/fake-agent/replay-privacy.mjs
+  s_2eb0c1ff799f04::t_f00d13f1837c21 158
+  s_2eb0c1ff799f04::t_4466911f507401 3,5,39-41,44-59,107-156,159,164
+  s_2eb0c1ff799f04::t_6a7ed601e4a2a5 157,160
+.ci/check.sh
+  s_2eb0c1ff799f04::t_f00d13f1837c21 15-16
+e2e/fake-agent/README.md
+  s_2eb0c1ff799f04::t_f00d13f1837c21 55-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "452c59aeeba5e1e57c57406823f9a9a52cba6825",
+  "prompts": {},
+  "sessions": {
+    "s_2eb0c1ff799f04": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6784bbf-1a56-4ef1-bac8-6771aa6724ff",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
