@@ -1,0 +1,23 @@
+packages/server/tests/auth-driver.mjs
+  s_24950e0e98659e::t_4d8a49025f83bf 599-604,781
+  s_24950e0e98659e::t_ba6aba83ea7e85 605
+  s_24950e0e98659e::t_b08a450c7859b6 606
+packages/server/tests/fixtures/plugins/.gitignore
+  s_24950e0e98659e::t_4d8a49025f83bf 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b749d0b6e2582c30bf69811a6511f4cc5d7b09a",
+  "prompts": {},
+  "sessions": {
+    "s_24950e0e98659e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20273-10ec-7111-a026-723dd076066b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
