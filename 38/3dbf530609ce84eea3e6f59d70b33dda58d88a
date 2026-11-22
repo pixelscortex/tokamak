@@ -1,0 +1,21 @@
+packages/server/PLUGINS.md
+  s_24950e0e98659e::t_4255a467090803 305-309
+e2e/fake-agent/README.md
+  s_24950e0e98659e::t_4255a467090803 53-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "383dbf530609ce84eea3e6f59d70b33dda58d88a",
+  "prompts": {},
+  "sessions": {
+    "s_24950e0e98659e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20273-10ec-7111-a026-723dd076066b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
