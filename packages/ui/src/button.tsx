@@ -54,11 +54,17 @@ export type ButtonVariant = "brand" | "primary" | "outline" | "destructive" | "g
 export type ButtonSize = "md" | "lg";
 
 export type ButtonLook = { variant?: ButtonVariant; size?: ButtonSize; class?: string } & (
-  | { icon?: string; label?: undefined; children: JSX.Element }
-  | { icon: string; label: string; children?: undefined }
+  | {
+      icon?: string;
+      /** A mark of your own (an agent's logo, say) in the icon's place, before the text. */
+      lead?: JSX.Element;
+      label?: undefined;
+      children: JSX.Element;
+    }
+  | { icon: string; lead?: undefined; label: string; children?: undefined }
 );
 
-export const lookKeys = ["variant", "size", "icon", "label", "children", "class"] as const;
+export const lookKeys = ["variant", "size", "icon", "lead", "label", "children", "class"] as const;
 
 export function buttonClass(props: ButtonLook): string {
   return cn(
@@ -71,6 +77,9 @@ export function ButtonContent(props: ButtonLook): JSX.Element {
   return (
     <>
       {props.icon && <Icon path={props.icon} />}
+      {/* Beside the text, never inside it: the text is trimmed to its cap height to sit dead
+          centre, and a mark inside that line moves the line's baseline to the mark's bottom edge. */}
+      {props.lead}
       {props.children !== undefined && <span class="text-trim">{props.children}</span>}
     </>
   );

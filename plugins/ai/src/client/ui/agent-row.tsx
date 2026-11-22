@@ -153,19 +153,20 @@ function Row(props: {
   return (
     <Show when={props.resolved()}>
       {(current) => (
-        // ps-1: the tray's 4 + this 4 + the button's 12 puts the agent mark on the box's text line (4 + 16).
-        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center ps-1 pe-3">
+        // No padding at the start: the agent button's edge sits on the box's edge above it, and
+        // 4 px from the tray on the left and below alike.
+        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center pe-3">
           <Picker
             name="Agent"
             options={agents().map((agent) => ({ id: agent.id, label: agent.name }))}
             always
+            lead={<AgentMark agentId={current().agent.id} />}
             onOpen={refresh}
             onPick={(id) => {
               const agent = agents().find((entry) => entry.id === id);
               if (agent) change(current(), { agent });
             }}
           >
-            <AgentMark agentId={current().agent.id} />
             {current().agent.name}
           </Picker>
           <Show when={!missing()}>
@@ -274,25 +275,35 @@ function Picker(props: {
   options: readonly { id: string; label: string }[];
   /** Opens even with one option (or none): opening asks the agents again. */
   always?: boolean;
+  /** A mark before the value (the agent's logo). */
+  lead?: JSX.Element;
   onOpen: (open: boolean) => void;
   onPick: (id: string) => void;
   children: JSX.Element;
 }): JSX.Element {
   const value = () => (
-    <span class="inline-flex items-center gap-2">
+    <>
       <span class="sr-only">{props.name}: </span>
       {props.children}
-    </span>
+    </>
   );
   return (
     <Show
       when={props.always || props.options.length > 1}
-      fallback={<span class="inline-flex h-8 items-center px-3 text-row text-ink-2">{value()}</span>}
+      fallback={
+        // Not a button, but the same box as one, so it lines up with its neighbours.
+        <span class="inline-flex h-8 items-center gap-2 px-3 text-row text-ink-2">
+          {props.lead}
+          <span class="text-trim">{value()}</span>
+        </span>
+      }
     >
-      {/* The standard ghost trigger, untouched: its size owns height and padding. No negative
-          margins, so neighbouring hover fills never overlap. */}
+      {/* The standard ghost trigger, untouched: its size owns height, padding and text. No
+          negative margins, so neighbouring hover fills never overlap. */}
       <Menu.Root onOpenChange={props.onOpen} onAction={props.onPick}>
-        <Menu.Trigger variant="ghost">{value()}</Menu.Trigger>
+        <Menu.Trigger variant="ghost" lead={props.lead}>
+          {value()}
+        </Menu.Trigger>
         <Menu.Content>
           <For each={props.options}>
             {(option) => <Menu.Item value={option.id}>{option.label}</Menu.Item>}
