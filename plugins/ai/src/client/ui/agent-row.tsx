@@ -26,7 +26,7 @@ import { AgentMark } from "./agent-mark";
 
 /**
  * The agent row under the composer box (Paper "Stage · thread", composer):
- * separate pickers for agent (its mark and name), model (in mono), level,
+ * separate pickers for agent (its mark and name), model, level,
  * speed, mode and permission level on the left, a short line on the right.
  * The pickers are quiet text until hovered; no chevrons. A picker hides when the agent offers
  * nothing for it; each one asks every agent for its `info` again as it opens.
@@ -153,7 +153,8 @@ function Row(props: {
   return (
     <Show when={props.resolved()}>
       {(current) => (
-        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center ps-2 pe-3">
+        // ps-1: the tray's 4 + this 4 + the button's 12 puts the agent mark on the box's text line (4 + 16).
+        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center ps-1 pe-3">
           <Picker
             name="Agent"
             options={agents().map((agent) => ({ id: agent.id, label: agent.name }))}
@@ -164,8 +165,8 @@ function Row(props: {
               if (agent) change(current(), { agent });
             }}
           >
-            <AgentMark agentId={current().agent.id} class="text-ink" />
-            <span class="text-row font-normal text-ink">{current().agent.name}</span>
+            <AgentMark agentId={current().agent.id} />
+            {current().agent.name}
           </Picker>
           <Show when={!missing()}>
             <Choosers current={current()} refresh={refresh} change={change} />
@@ -190,7 +191,6 @@ const OFFERED: readonly {
   readonly key: keyof Picked;
   readonly options: (current: Resolved) => readonly { id: string; label: string }[];
   readonly value: (current: Resolved) => string | undefined;
-  readonly mono?: boolean;
 }[] = [
   {
     name: "Model",
@@ -201,7 +201,6 @@ const OFFERED: readonly {
         label: modelLabel(current.agent.name, model.name) ?? model.name,
       })),
     value: (current) => modelLabel(current.agent.name, current.model?.name),
-    mono: true,
   },
   {
     name: "Level",
@@ -245,10 +244,9 @@ function Choosers(props: {
                 onOpen={props.refresh}
                 onPick={(id) => props.change(props.current, { [picker.key]: id })}
               >
-                {/* Paper sets the model in mono; the other values in the quiet sans label. */}
-                <span class={picker.mono ? "font-mono text-data text-ink-3" : "text-label text-ink-3"}>
-                  {value()}
-                </span>
+                {/* Plain text: the button owns its text size, weight and tone. A different size
+                    inside it sat off its cap-height centring. */}
+                {value()}
               </Picker>
             )}
           </Show>
@@ -260,7 +258,7 @@ function Choosers(props: {
         onOpen={props.refresh}
         onPick={(id) => props.change(props.current, { access: id as Access })}
       >
-        <span class="text-label text-ink-3">{ACCESS_LABEL[props.current.access]}</span>
+        {ACCESS_LABEL[props.current.access]}
       </Picker>
     </>
   );
@@ -289,7 +287,7 @@ function Picker(props: {
   return (
     <Show
       when={props.always || props.options.length > 1}
-      fallback={<span class="inline-flex h-8 items-center px-1">{value()}</span>}
+      fallback={<span class="inline-flex h-8 items-center px-3 text-row text-ink-2">{value()}</span>}
     >
       {/* The standard ghost trigger, untouched: its size owns height and padding. No negative
           margins, so neighbouring hover fills never overlap. */}
