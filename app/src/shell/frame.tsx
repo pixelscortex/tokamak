@@ -56,6 +56,7 @@ export function Frame(): JSX.Element {
         <Show when={showRail}>
           <Rail />
         </Show>
+        {/* Two groups, so opening or closing the panel never changes the sidebar's width. */}
         <Resizable.Root autoSaveId="tokamak-frame" class="flex-1">
           <Show when={sidebarShown()}>
             <Resizable.Panel id="sidebar" defaultSize="244px" minSize="200px" maxSize="420px">
@@ -63,17 +64,21 @@ export function Frame(): JSX.Element {
             </Resizable.Panel>
             <Resizable.Handle aria-label="Resize sidebar" class="mb-2" />
           </Show>
-          <Resizable.Panel id="stage" minSize="360px" ref={followStageEdge()}>
-            <div class={panelFilled() ? "flex min-w-0 flex-1 pb-1" : "flex min-w-0 flex-1 pe-2 pb-2"}>
-              <Stage />
-            </div>
+          <Resizable.Panel id="main" minSize="360px">
+            <Resizable.Root autoSaveId="tokamak-panel" class="flex-1">
+              <Resizable.Panel id="stage" minSize="360px" ref={followStageEdge()}>
+                <div class={panelFilled() ? "flex min-w-0 flex-1 pb-1" : "flex min-w-0 flex-1 pe-2 pb-2"}>
+                  <Stage />
+                </div>
+              </Resizable.Panel>
+              <Show when={panelFilled()}>
+                <Resizable.Handle aria-label="Resize panel" class="mb-1" />
+                <Resizable.Panel id="panel" defaultSize="600px" minSize="320px">
+                  <div class="flex min-w-0 flex-1 pe-1 pb-1">{panel}</div>
+                </Resizable.Panel>
+              </Show>
+            </Resizable.Root>
           </Resizable.Panel>
-          <Show when={panelFilled()}>
-            <Resizable.Handle aria-label="Resize panel" class="mb-1" />
-            <Resizable.Panel id="panel" defaultSize="600px" minSize="320px">
-              <div class="flex min-w-0 flex-1 pe-1 pb-1">{panel}</div>
-            </Resizable.Panel>
-          </Show>
         </Resizable.Root>
         <div hidden>
           <Show when={!sidebarShown()}>{sidebar}</Show>
