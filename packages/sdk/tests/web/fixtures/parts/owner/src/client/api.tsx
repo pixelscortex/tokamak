@@ -1,7 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { For, onCleanup } from "solid-js";
 import { component } from "@tokamak/sdk/client";
-import { Button } from "@tokamak/ui";
 
 export interface ExampleProps {
   label: string;
@@ -11,7 +10,7 @@ export interface ExampleProps {
 const SendButton = (props: ExampleProps) => {
   props.lifecycle("send mounted");
   onCleanup(() => props.lifecycle("send unloaded"));
-  return <Button>{props.label}</Button>;
+  return <button>{props.label}</button>;
 };
 
 export const Composer = component("composer", {}, (props: ExampleProps) => (

@@ -24,9 +24,16 @@ export const FixtureView = view({ route: "/" }, () => {
     <section aria-label="Integration fixture" class="flex flex-col gap-4 p-8">
       <Region.Sidebar>
         <Row
-          as="button"
           lead={<Icon path={icons.add} />}
-          onClick={() => void client.mutation(api.threads.start, { text: title(), folder: { kind: "own" } })}
+          render={(attrs) => (
+            <button
+              {...attrs}
+              type="button"
+              onClick={() =>
+                void client.mutation(api.threads.start, { text: title(), folder: { kind: "own" } })
+              }
+            />
+          )}
         >
           New fixture thread
         </Row>
@@ -92,7 +99,7 @@ export const WindowStateView = view({ route: "/window-state" }, () => (
       <label>
         Draft <input name="draft" />
       </label>
-      <Button type="submit">Save drafts</Button>
+      <button>Save drafts</button>
     </form>
     <p>Window draft: {windowDraft() || "empty"}</p>
     <p>Device draft: {deviceDraft() || "empty"}</p>

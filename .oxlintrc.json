@@ -50,9 +50,9 @@
   "plugins": ["typescript", "import"],
   "overrides": [
     {
-      "files": ["packages/ui/src/**"],
+      "files": ["**/tests/**", "**/*.test.*", "**/*.spec.*", "**/fixtures/**"],
+      "excludeFiles": ["packages/ui/lint/fixtures/**"],
       "rules": {
-        "tokamak/no-negative-margin": "off",
         "tokamak/no-raw-button": "off"
       }
     },

@@ -4,14 +4,15 @@ import { resolve } from "node:path";
 import { expect, test } from "vitest";
 
 const root = resolve(process.cwd(), "../..");
-const lint = (fixture: string) => {
-  const run = spawnSync(
-    "node_modules/.bin/oxlint",
-    ["-c", "packages/ui/lint/oxlint.json", `packages/ui/lint/fixtures/${fixture}`],
-    { cwd: root, encoding: "utf8" },
-  );
+const lintPaths = (config: string, ...paths: string[]) => {
+  const run = spawnSync("node_modules/.bin/oxlint", ["-c", config, ...paths], {
+    cwd: root,
+    encoding: "utf8",
+  });
   return { status: run.status, out: run.stdout + run.stderr };
 };
+const sharedConfig = "packages/ui/lint/oxlint.json";
+const lint = (fixture: string) => lintPaths(sharedConfig, `packages/ui/lint/fixtures/${fixture}`);
 
 test.each([
   ["raw-color.tsx", "no-raw-colors", "text-ink-2, text-ink-3"],
@@ -30,20 +31,37 @@ test.each([
 test("negative margin is denied on primitives even with a variant", () => {
   const { status, out } = lint("negative-margin-primitive.tsx");
   expect(status).not.toBe(0);
-  expect(out.match(/shadcn\(no-restyle\)/g)).toHaveLength(2);
-  expect(out).toContain('"-ms-3" uses a negative margin on <Button>');
-  expect(out).toContain('"hover:-mb-2" uses a negative margin on <Button>');
+  expect(out.match(/: error /g)).toHaveLength(2);
+  expect(out.match(/tokamak\(no-negative-margin\)/g)).toHaveLength(2);
+  expect(out).toContain('"-ms-3" is a negative margin');
+  expect(out).toContain('"hover:-mb-2" is a negative margin');
 });
 
 test.each([
   ["negative-margin.tsx", "no-negative-margin", "gap on the parent", 2],
   ["raw-button.tsx", "no-raw-button", 'Row with as="button" for list rows', 2],
-  ["text-style-in-button.tsx", "no-text-style-in-button", "owns its text size, weight and tone", 6],
+  ["text-style-in-button.tsx", "no-text-style-in-button", "owns its text size, weight and tone", 15],
 ] as const)("%s fails with %s and names the alternative", (fixture, rule, alternative, count) => {
   const { status, out } = lint(fixture);
   expect(status).not.toBe(0);
   expect(out.split(`tokamak(${rule})`)).toHaveLength(count + 1);
   expect(out).toContain(alternative);
+});
+
+test("class rules read helper calls, branches and complete template tokens", () => {
+  const { status, out } = lint("class-expressions.tsx");
+  expect(status).not.toBe(0);
+  expect(out.match(/tokamak\(no-negative-margin\)/g)).toHaveLength(3);
+  expect(out.match(/tokamak\(no-text-style-in-button\)/g)).toHaveLength(3);
+  for (const token of ["hover:-mt-2", "-mx-2", "-ms-3", "lowercase", "uppercase", "underline"]) {
+    expect(out).toContain(`"${token}"`);
+  }
+});
+
+test.each([sharedConfig, ".oxlintrc.json"])("%s allows implementation markup in UI source", (config) => {
+  const { status, out } = lintPaths(config, "packages/ui/src/row.tsx", "packages/ui/src/menu.tsx");
+  expect(out).not.toMatch(/: error /);
+  expect(status).toBe(0);
 });
 
 test("a fixed-radius primitive gets the parent fix", () => {

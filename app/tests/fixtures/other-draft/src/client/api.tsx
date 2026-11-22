@@ -1,5 +1,4 @@
 import { state, view } from "@tokamak/sdk/client";
-import { Button } from "@tokamak/ui";
 
 // Match the integration fixture's path and binding name to exercise the same compiler key.
 const windowDraft = state("");
@@ -16,7 +15,7 @@ export const OtherDraftView = view({ route: "/" }, () => (
       <label>
         Draft <input name="draft" />
       </label>
-      <Button type="submit">Save drafts</Button>
+      <button>Save drafts</button>
     </form>
     <p>Window draft: {windowDraft() || "empty"}</p>
   </section>

@@ -34,23 +34,21 @@ export const primitiveShapes = {
   "Dialog.Content": [16, 24],
 };
 
+function classValue(element) {
+  const attribute = element.openingElement.attributes.find(
+    (attr) => attr.type === "JSXAttribute" && (attr.name.name === "class" || attr.name.name === "className"),
+  );
+  return attribute?.value;
+}
+
 function staticClass(element) {
-  for (const attribute of element.openingElement.attributes) {
-    if (attribute.type !== "JSXAttribute") continue;
-    const name = attribute.name.name;
-    if (name !== "class" && name !== "className") continue;
-    const value = attribute.value;
-    if (!value) return "";
-    if (value.type === "Literal" && typeof value.value === "string") return value.value;
-    if (value.type === "JSXExpressionContainer") {
-      const expression = value.expression;
-      if (expression.type === "Literal" && typeof expression.value === "string") return expression.value;
-      if (expression.type === "TemplateLiteral" && expression.expressions.length === 0)
-        return expression.quasis[0].value.cooked;
-    }
-    return undefined;
-  }
-  return "";
+  const value = classValue(element);
+  if (!value) return "";
+  const expression = value.type === "JSXExpressionContainer" ? value.expression : value;
+  if (expression.type === "Literal" && typeof expression.value === "string") return expression.value;
+  if (expression.type === "TemplateLiteral" && expression.expressions.length === 0)
+    return expression.quasis[0].value.cooked;
+  return undefined;
 }
 
 function elementName(element) {
@@ -201,10 +199,106 @@ function utility(token) {
   return token.slice(start).replace(/^!|!$/g, "");
 }
 
+function* templateStrings({ quasis, expressions }) {
+  for (const [index, quasi] of quasis.entries()) {
+    const text = quasi.value.cooked ?? "";
+    // Only take whole utilities, not pieces joined to a dynamic value.
+    const start = index > 0 ? text.replace(/^\S+/, "") : text;
+    yield index < expressions.length ? start.replace(/\S+$/, "") : start;
+    if (index === expressions.length) continue;
+    const next = quasis[index + 1].value.cooked ?? "";
+    if (
+      (/\s$/.test(text) || (index === 0 && !text)) &&
+      (/^\s/.test(next) || (!next && index + 1 === expressions.length))
+    )
+      yield* classStrings(expressions[index]);
+  }
+}
+
+function properties(node) {
+  return node?.type === "ObjectExpression" ? node.properties.filter((prop) => prop.type === "Property") : [];
+}
+
+function keyOf(prop) {
+  return prop.key.type === "Literal" ? prop.key.value : !prop.computed ? prop.key.name : undefined;
+}
+
+function* styleValues(node) {
+  if (node?.type === "ObjectExpression") {
+    for (const prop of properties(node)) yield* styleValues(prop.value);
+  } else yield* classStrings(node);
+}
+
+function* variantStrings(config) {
+  for (const prop of properties(config)) {
+    const key = keyOf(prop);
+    if (key === "base" || key === "slots" || key === "variants") yield* styleValues(prop.value);
+    if ((key === "compoundVariants" || key === "compoundSlots") && prop.value.type === "ArrayExpression") {
+      for (const entry of prop.value.elements) {
+        for (const field of properties(entry)) {
+          if (keyOf(field) === "class" || keyOf(field) === "className") yield* styleValues(field.value);
+        }
+      }
+    }
+  }
+}
+
+function* classStrings(node) {
+  switch (node?.type) {
+    case "Literal":
+      if (typeof node.value === "string") yield node.value;
+      break;
+    case "JSXExpressionContainer":
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+      yield* classStrings(node.expression);
+      break;
+    case "TemplateLiteral":
+      yield* templateStrings(node);
+      break;
+    case "ConditionalExpression":
+      yield* classStrings(node.consequent);
+      yield* classStrings(node.alternate);
+      break;
+    case "LogicalExpression":
+      if (node.operator !== "&&") yield* classStrings(node.left);
+      yield* classStrings(node.right);
+      break;
+    case "ArrayExpression":
+      for (const entry of node.elements) yield* classStrings(entry);
+      break;
+    case "SpreadElement":
+      yield* classStrings(node.argument);
+      break;
+    case "ObjectExpression":
+      for (const prop of properties(node)) {
+        const key = keyOf(prop);
+        if (typeof key === "string") yield key;
+      }
+      break;
+    case "CallExpression":
+      yield* callStrings(node);
+      break;
+  }
+}
+
+function* callStrings({ callee, arguments: args }) {
+  if (callee.type === "Identifier" && callee.name === "cn") {
+    for (const arg of args) yield* classStrings(arg);
+  } else if (callee.type === "Identifier" && callee.name === "tv") {
+    yield* variantStrings(args[0]);
+  } else if (callee.type === "CallExpression") {
+    yield* callStrings(callee);
+  } else if (callee.type === "MemberExpression" && callee.object.type === "CallExpression") {
+    yield* callStrings(callee.object);
+  }
+}
+
 function matchingClass(element, matches) {
-  return staticClass(element)
-    ?.split(/\s+/)
-    .find((token) => matches(utility(token)));
+  for (const classes of classStrings(classValue(element))) {
+    const token = classes.split(/\s+/).find((part) => matches(utility(part)));
+    if (token) return token;
+  }
 }
 
 const noNegativeMargin = {
@@ -255,12 +349,22 @@ const buttonLooks = new Set([
   "Select.Trigger",
 ]);
 const textLayout =
-  /^(?:text-(?:start|end|left|right|center|justify|wrap|nowrap|balance|pretty|ellipsis|clip))$/;
+  /^text-(?:start|end|left|right|center|justify|wrap|nowrap|balance|pretty|ellipsis|clip|trim)$/;
+const textStyle =
+  /^(?:(?:text|font|tracking|leading)-|(?:uppercase|lowercase|capitalize|italic|underline|line-through)$)/;
+
+function leadOwner(attribute) {
+  const owner = attribute.parent?.parent;
+  if (attribute.name.name !== "lead" || owner?.type !== "JSXElement") return undefined;
+  const name = elementName(owner);
+  return buttonLooks.has(name) ? name : undefined;
+}
 
 function buttonAncestor(element) {
   for (let node = element.parent; node; node = node.parent) {
-    // JSX passed as a prop is a separate tree (for example a tooltip's content).
-    if (node.type === "JSXAttribute" || node.type === "JSXSpreadAttribute") return undefined;
+    // Only the lead prop renders inside the button, beside its children.
+    if (node.type === "JSXAttribute") return leadOwner(node);
+    if (node.type === "JSXSpreadAttribute") return undefined;
     if (node.type !== "JSXElement") continue;
     const name = elementName(node);
     if (buttonLooks.has(name)) return name;
@@ -271,16 +375,15 @@ function buttonAncestor(element) {
 const noTextStyleInButton = {
   meta: {
     type: "problem",
-    docs: { description: "Button labels inherit their typography and tone." },
+    docs: {
+      description: "Button labels and leads inherit typography and tone; Row buttons have their own slots.",
+    },
     schema: [],
   },
   create(context) {
     return {
       JSXElement(element) {
-        const token = matchingClass(
-          element,
-          (name) => /^(?:text|font|leading|tracking)-/.test(name) && !textLayout.test(name),
-        );
+        const token = matchingClass(element, (name) => textStyle.test(name) && !textLayout.test(name));
         if (!token) return;
         const button = buttonAncestor(element);
         if (button)

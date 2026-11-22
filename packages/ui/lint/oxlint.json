@@ -28,7 +28,6 @@
       "error",
       {
         "allow": ["layout"],
-        "deny": ["-m-*", "-mx-*", "-my-*", "-ms-*", "-me-*", "-mt-*", "-mr-*", "-mb-*", "-ml-*"],
         "contracts": [
           {
             "pattern": "^Icon$",
@@ -36,7 +35,6 @@
           }
         ],
         "message": {
-          "layout": "\"{{className}}\" uses a negative margin on <{{component}}>. Use a size or density, or gap on the parent.",
           "spacing": "<{{component}}> owns its padding. Use a size ({{sizes|none defined}}), or {{around}}.",
           "default": "<{{component}}> owns its look; only layout classes (margin, width, flex and grid placement) may be added. Use a variant ({{variants|none defined}}) or build your own element from tokens."
         }
@@ -47,5 +45,14 @@
     "tokamak/no-negative-margin": "error",
     "tokamak/no-raw-button": "error",
     "tokamak/no-text-style-in-button": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["**/packages/ui/src/**"],
+      "rules": {
+        "tokamak/no-negative-margin": "off",
+        "tokamak/no-raw-button": "off"
+      }
+    }
+  ]
 }

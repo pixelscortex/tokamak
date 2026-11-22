@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "@solidjs/web": "2.0.0",
-    "@tokamak/ui": "workspace:*",
     "@types/node": "26.6.6",
     "jsdom": "31.0.1",
     "solid-js": "2.0.0",

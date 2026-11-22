@@ -20,5 +20,16 @@ export const TextStyleInButton = (props: { showActions: boolean }) => (
     <Select.Trigger>
       <span class="font-medium">Density</span>
     </Select.Trigger>
+    <Button lead={<span class="text-ink-3" />}>Agent</Button>
+    <Menu.Trigger lead={<span class="uppercase" />}>Options</Menu.Trigger>
+    <Button>
+      <span class="lowercase">lower</span>
+      <span class="capitalize">capitalized</span>
+      <span class="italic">italic</span>
+      <span class="underline">underlined</span>
+      <span class="line-through">archived</span>
+      <span class="tracking-wide">spaced</span>
+      <span class="leading-none">compact</span>
+    </Button>
   </>
 );

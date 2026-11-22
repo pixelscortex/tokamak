@@ -1,7 +1,6 @@
 // A test plugin that extends chat the way `ai` and `code` will: through the
 // elements chat publishes, never through chat's source.
 import { after, append, before, prepend, replace, wrap } from "@tokamak/sdk/client";
-import { Button } from "@tokamak/ui";
 import { createSignal, onCleanup } from "solid-js";
 import * as chat from "plugin:chat/client";
 
@@ -46,9 +45,13 @@ function ReplyDisclosure(props: { part: "body" | "footer"; message: chat.Message
   );
   return (
     <>
-      <Button aria-expanded={open() ? "true" : "false"} onClick={() => setOpen((value) => !value)}>
+      <button
+        type="button"
+        aria-expanded={open() ? "true" : "false"}
+        onClick={() => setOpen((value) => !value)}
+      >
         Probe {props.part} actions
-      </Button>
+      </button>
       {open() && (
         <p>
           {props.part} actions for {chat.messageText(props.message)}

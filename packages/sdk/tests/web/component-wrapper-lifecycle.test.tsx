@@ -3,7 +3,6 @@ import { render } from "@solidjs/web";
 import { createSignal, flush, onCleanup } from "solid-js";
 import { expect, onTestFinished, test, vi } from "vitest";
 import { ExtensionProvider, replace, wrap } from "../../client";
-import { Button } from "@tokamak/ui";
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
 import { Composer } from "./fixtures/parts/owner/src/client/_generated/components";
 
@@ -29,7 +28,9 @@ function details(name: string, unmounted: () => void) {
     onCleanup(unmounted);
     return (
       <div>
-        <Button onClick={() => setOpen(true)}>{name}</Button>
+        <button type="button" onClick={() => setOpen(true)}>
+          {name}
+        </button>
         {open() && (
           <p>
             {name} for {props.label}
@@ -85,7 +86,7 @@ test("an open wrapper survives replacing and restoring the element inside it", a
   const [replacing, setReplacing] = createSignal(false);
   const unmounted = vi.fn();
   const lifecycle = vi.fn();
-  const replacement = replace(button, () => <Button>Replacement</Button>, { when: replacing });
+  const replacement = replace(button, () => <button type="button">Replacement</button>, { when: replacing });
   const { scope } = mount(
     [
       layer("Details", details("Details", unmounted), "wrap", button),

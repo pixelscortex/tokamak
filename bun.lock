@@ -56,7 +56,6 @@
       },
       "devDependencies": {
         "@solidjs/web": "2.0.0",
-        "@tokamak/ui": "workspace:*",
         "@types/node": "26.6.6",
         "jsdom": "31.0.1",
         "solid-js": "2.0.0",
@@ -81,7 +80,6 @@
       "devDependencies": {
         "@solidjs/vite-plugin": "3.0.0",
         "@testing-library/dom": "10.4.2",
-        "@tokamak/ui": "workspace:*",
         "jsdom": "31.0.1",
         "typescript": "5.9.3",
         "vitest": "5.1.0",
@@ -219,9 +217,6 @@
         "vite": "8.3.6",
       },
     },
-  },
-  "patchedDependencies": {
-    "@shadcn/lint@0.2.5": "patches/@shadcn%2Flint@0.2.5.patch",
   },
   "overrides": {
     "@solidjs/web": "2.0.0",
