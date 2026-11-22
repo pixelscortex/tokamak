@@ -1,1 +1,1 @@
-export const OffScale = () => <div class="flex gap-5 text-row text-ink">Weekly admin</div>;
+export const OffScale = () => <div class="flex gap-7 text-row text-ink">Weekly admin</div>;

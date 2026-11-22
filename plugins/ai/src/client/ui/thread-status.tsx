@@ -2,8 +2,9 @@ import { For, Show, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { useClient } from "@tokamak/sdk/client";
 import type { ThreadRowProps } from "plugin:chat/client";
-import { Icon, StatusIcon, rowVariants } from "@tokamak/ui";
-import { agentIcon } from "../lib/icons";
+import { StatusIcon, rowVariants } from "@tokamak/ui";
+import { modelLabel } from "../lib/agents";
+import { AgentMark } from "./agent-mark";
 import { followThread, iconFor, statusOf } from "../lib/thread-status";
 
 /**
@@ -21,16 +22,17 @@ export function ThreadStatusIcon(props: ThreadRowProps): JSX.Element {
 }
 
 /**
- * The second line of a running or waiting thread: the agent's mark, the model
- * and the thread's folder ("✳ Opus 5.5 · invoices-app").
+ * The second line of a running or waiting thread (Paper "Threads · C"): the
+ * agent's mark, the model in mono and the thread's folder ("✳ Opus 5.5 ·
+ * invoices-app").
  */
 export function ThreadDetail(props: ThreadRowProps): JSX.Element {
   const status = () => statusOf(props.thread._id);
   return (
     <>
-      <Icon path={agentIcon} size={12} label={status()?.agent.name} />
-      <span class="text-data">{status()?.model}</span>
-      <span class="truncate text-data">· {folderName(props.thread)}</span>
+      <AgentMark agentId={status()?.agent.id} size={12} label={status()?.agent.name} />
+      <span class="shrink-0 text-data">{modelLabel(status()?.agent.name, status()?.model)}</span>
+      <span class="truncate text-label">· {folderName(props.thread)}</span>
     </>
   );
 }
@@ -50,7 +52,7 @@ export function ThreadHelpers(props: ThreadRowProps): JSX.Element {
           <li class={half.root()}>
             <span class={half.line()}>
               <span class={half.lead()}>
-                <Icon path={agentIcon} size={12} />
+                <AgentMark agentId={statusOf(props.thread._id)?.agent.id} size={12} />
               </span>
               <span class="shrink-0 text-data text-ink-2">{helper.name}</span>
               <span class={half.title()}>{helper.title}</span>

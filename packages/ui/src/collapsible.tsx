@@ -57,7 +57,7 @@ export function Trigger(
       <span class={slots().title()}>{props.children}</span>
       {props.trail && <span class={slots().trail()}>{props.trail}</span>}
       <span class="flex text-ink-3 transition duration-200 group-data-open/trigger:rotate-180">
-        <Icon path={icons.chevronDown} size={12} />
+        <Icon path={icons.chevronDown} size={14} />
       </span>
     </Base.CollapsibleTrigger>
   );

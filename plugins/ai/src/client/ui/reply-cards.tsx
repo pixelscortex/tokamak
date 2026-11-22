@@ -11,7 +11,7 @@ import { Spinning } from "./spinning";
 /**
  * Under the reply's text: the agent's to-do list as "Tasks", its plan as a
  * card, and the turn's usage, small, at the end. Cards follow Paper "Thread
- * ideas", option C, "Widget · plan"; the 16 px space between text and card is
+ * ideas", "Widget · plan" (the count alone heads the to-do list); the 16 px space between text and card is
  * the article's 8 plus this block's 8.
  */
 export function ReplyCards(props: MessageProps): JSX.Element {
@@ -43,8 +43,7 @@ function TasksCard(props: { tasks: readonly Task[] }): JSX.Element {
         <span class="flex w-4 shrink-0 justify-center text-ink">
           <Icon path={tasksIcon} />
         </span>
-        <span class="text-label text-ink-2">Tasks</span>
-        <span class="text-data text-ink-3">
+        <span class="text-data text-ink-2">
           {done()} / {props.tasks.length}
         </span>
       </div>

@@ -109,18 +109,18 @@ Tailwind utilities defined with the tokens. Use them as classes.
 
 ## Tokens
 
-| Kind    | Names                                                                                                                        |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Tones   | `window`, `stage`, `tray`, `card`, `band`                                                                                    |
-| Text    | `ink`, `ink-2`, `ink-3`                                                                                                      |
-| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`                                                                        |
-| Brand   | `brand`, `brand-text`, `brand-ink`, `brand-tint`                                                                             |
-| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                                                                    |
-| State   | `hover`, `selected` (set by the surface underneath)                                                                          |
-| Type    | `text-read`, `text-row`, `text-label`, `text-data`; `font-sans`, `font-mono`                                                 |
-| Spacing | `1 2 3 4 6 8 12 16` (4, 8, 12, 16, 24, 32, 48, 64 px)                                                                        |
-| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16                                                             |
-| Other   | `shadow-raised` (keys), `shadow-quiet` (outline), `max-w-read` 560, `max-w-thread` 760, `max-w-dialog` 440, `min-w-menu` 192 |
+| Kind    | Names                                                                                                                                                                   |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tones   | `window`, `stage`, `tray`, `card`, `band`; `chip` (header chips), `lifted` (initial discs, a pressed segment)                                                           |
+| Text    | `ink`, `ink-2`, `ink-3`                                                                                                                                                 |
+| Status  | `added`, `removed`, `warn`, `info`, each with `-tint`; `diff-added`, `diff-removed` (quiet diff lines)                                                                  |
+| Brand   | `brand`, `brand-text`, `brand-ink`, `brand-tint`                                                                                                                        |
+| Edges   | `edge`, `edge-strong`, `lip`, `highlight`                                                                                                                               |
+| State   | `hover`, `selected` (set by the surface underneath)                                                                                                                     |
+| Type    | `text-read`, `text-row`, `text-label`, `text-data`, `text-code` (13/20 mono), `text-initial`; `font-sans`, `font-mono`                                                  |
+| Spacing | `1 2 3 4 5 6 8 10 12 16` (4, 8, 12, 16, 20, 24, 32, 40, 48, 64 px); `mark` 14, `avatar` 18                                                                              |
+| Radius  | `rounded-xs` 4, `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16                                                                                                        |
+| Other   | `shadow-raised` (keys), `shadow-quiet` (outline), `max-w-read` 560, `max-w-thread` 760, `max-w-dialog` 440, `min-w-menu` 192, `min-w-fold` 360; `scroller`, `wrap-code` |
 
 Colours are utilities: `bg-stage`, `text-ink-3`, `bg-added-tint`. Every other
 scale is cleared, so `p-5`, `rounded-xl` and `bg-zinc-800` do not exist.

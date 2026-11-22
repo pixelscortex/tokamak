@@ -2,7 +2,7 @@ import { For, Show, createEffect, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { Id, TokamakClient } from "@tokamak/sdk";
 import { Region, useClient, usePageTitle, useQuery, useShortcuts, view } from "@tokamak/sdk/client";
-import { Button, StatusIcon, icons } from "@tokamak/ui";
+import { Button, ScrollArea, StatusIcon, icons } from "@tokamak/ui";
 import { api, type Folder } from "../lib/api";
 import { createFollow } from "../lib/follow";
 import { chatIcon } from "../lib/icons";
@@ -162,33 +162,43 @@ function OpenThread(props: {
       return { threadId: props.threadId, messageId, first: false };
     },
   });
-  let content!: HTMLDivElement;
+  let box: HTMLDivElement | undefined;
+  let content: HTMLDivElement | undefined;
+  const attach = () => box && content && follow.attach(box, content);
   const list = () => messages.data() ?? [];
+  // The messages and the composer share one column: the same padding and the
+  // same width, centred in the same box (the scrollbar lies over the edge and
+  // takes no room), so their edges line up.
   return (
     <div class="flex min-h-0 flex-1 flex-col">
-      <div
-        ref={(box) => queueMicrotask(() => follow.attach(box, content))}
-        class="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6"
+      <ScrollArea
+        class="min-h-0 flex-1"
+        viewportRef={(element) => {
+          box = element;
+          queueMicrotask(attach);
+        }}
       >
-        <div
-          ref={(element) => (content = element)}
-          role="log"
-          aria-label="Conversation"
-          class="mt-auto flex w-full max-w-thread flex-col pt-12 pb-8"
-        >
-          <For each={list()} keyed={(row) => row._id}>
-            {(row, index) => (
-              <Message
-                message={row()}
-                threadId={props.threadId}
-                next={list()[index() + 1]}
-                isLast={index() === list().length - 1}
-              />
-            )}
-          </For>
+        <div class="flex flex-1 flex-col items-center px-8">
+          <div
+            ref={(element) => (content = element)}
+            role="log"
+            aria-label="Conversation"
+            class="mt-auto flex w-full max-w-thread flex-col pt-6 pb-6"
+          >
+            <For each={list()} keyed={(row) => row._id}>
+              {(row, index) => (
+                <Message
+                  message={row()}
+                  threadId={props.threadId}
+                  next={list()[index() + 1]}
+                  isLast={index() === list().length - 1}
+                />
+              )}
+            </For>
+          </div>
         </div>
-      </div>
-      <div class="flex shrink-0 justify-center px-6 pb-4">
+      </ScrollArea>
+      <div class="flex shrink-0 justify-center px-8 pb-4">
         <div class="flex w-full max-w-thread flex-col gap-2">
           <ErrorLine extra={messages.error()?.message} />
           <Composer

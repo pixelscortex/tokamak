@@ -1,24 +1,43 @@
 import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { useClient } from "@tokamak/sdk/client";
-import { Icon } from "@tokamak/ui";
 import type { MessageProps } from "plugin:chat/client";
-import { agentIcon } from "../lib/icons";
+import { agents, modelLabel } from "../lib/agents";
 import { useTurn } from "../lib/replies";
+import { AgentMark } from "./agent-mark";
 
 /**
- * Above an agent's reply: the agent's mark, its name and the model the turn
- * used ("✳ Claude  opus 5.5"), and nothing else: no persona, no time (Paper
- * "Thread ideas", option C, "Header 8 → first block").
+ * Above an agent's reply: the agent's mark and the model the turn used, and
+ * nothing else ("✳ Fable 5.2"): the mark already names the agent, so its name
+ * is not repeated, and there is no persona and no time (Paper "Stage ·
+ * thread", agent header). The mark's label names the agent for screen readers.
  */
 export function ReplyHeader(props: MessageProps): JSX.Element {
   const turn = useTurn(useClient(), props);
+  const agentName = () => turn()?.agent.name ?? props.message.author?.name;
+  const model = () => {
+    const t = turn();
+    let name = t?.modelName ?? t?.model;
+    // Turns from before agents named the default alias by its model kept "Default (recommended)":
+    // name the model the alias stands for now, as the agent lists it.
+    if (t && name && /^default\b/i.test(name)) {
+      const live = agents()
+        .find((agent) => agent.id === t.agent.id)
+        ?.info.models.find((entry) => entry.id === t.model)?.name;
+      if (live && !/^default\b/i.test(live)) name = live;
+    }
+    return modelLabel(agentName(), name);
+  };
   return (
-    <header role="group" aria-label="Reply from" class="flex items-center gap-2">
-      <Icon path={agentIcon} class="text-ink" />
-      <span class="text-label text-ink-3">{turn()?.agent.name ?? props.message.author?.name}</span>
-      <Show when={turn()?.modelName ?? turn()?.model}>
-        {(model) => <span class="text-data text-ink-3">{model()}</span>}
+    <header role="group" aria-label="Reply from" class="flex h-5 items-center gap-2">
+      <AgentMark
+        agentId={turn()?.agent.id ?? props.message.author?.id.replace(/^agent:/, "")}
+        modelId={turn()?.model}
+        label={agentName()}
+        class="text-ink"
+      />
+      <Show when={model()} fallback={<span class="text-label text-ink-3">{agentName()}</span>}>
+        {(name) => <span class="text-data text-ink-3">{name()}</span>}
       </Show>
     </header>
   );

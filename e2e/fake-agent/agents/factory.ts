@@ -131,8 +131,12 @@ export function fakeAgent({ id, name, efforts = [], speeds = [], modes = [] }: F
     },
   });
 
-  return { id, name, info, start };
+  return { id, name, icon: NEUTRAL_MARK, info, start };
 }
+
+/** A neutral mark for test agents (a dot in a ring), in the contract's SVG shape. */
+const NEUTRAL_MARK =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2C17.523 2 22 6.477 22 12C22 17.523 17.523 22 12 22ZM12 20C16.418 20 20 16.418 20 12C20 7.582 16.418 4 12 4C7.582 4 4 7.582 4 12C4 16.418 7.582 20 12 20ZM12 15C10.343 15 9 13.657 9 12C9 10.343 10.343 9 12 9C13.657 9 15 10.343 15 12C15 13.657 13.657 15 12 15Z"/></svg>';
 
 /**
  * What this turn was given, as plain text the `context` replay says back: the

@@ -20,8 +20,14 @@ export interface Info {
    */
   readonly models: readonly {
     readonly id: string;
+    /**
+     * As people see it, without the agent's name: "Fable 5.2", not "Claude
+     * Fable 5.2". The window drops a leading agent name anyway.
+     */
     readonly name: string;
     readonly efforts: readonly string[];
+    /** This model's own mark, when it differs from the agent's `icon`; same format. */
+    readonly icon?: string;
   }[];
   /** The agent row's Speed picker (e.g. "standard", "fast"). */
   readonly speeds: readonly string[];
@@ -209,6 +215,13 @@ export interface Agent {
   readonly id: string;
   /** What a person sees: "Claude", "Codex". No persona names. */
   readonly name: string;
+  /**
+   * The agent's mark, shown in the agent row, above its replies and in the
+   * thread list: an SVG document with a 24 × 24 viewBox whose paths are
+   * painted in `currentColor` (the LobeHub mono icons are this shape). Only
+   * the paths' outlines are drawn. Without one, a neutral mark stands in.
+   */
+  readonly icon?: string;
   info(): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;

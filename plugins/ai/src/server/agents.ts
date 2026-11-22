@@ -24,6 +24,7 @@ export const list = local({
       (await agent.list()).map(async (provider) => ({
         id: provider.id,
         name: provider.name,
+        ...(typeof provider.icon === "string" && { icon: provider.icon }),
         info: await infoOf(provider),
       })),
     ),

@@ -2,9 +2,10 @@
 @import "tailwindcss";
 @import "@tokamak/ui/theme.css";
 
-/* The rail and the sidebar together, as drawn on the boards. */
-@theme {
-  --container-nav: 296px;
+/* The rail and the sidebar together, as drawn on the boards; the frame sets
+   --tk-nav to the stage's left edge once the sidebar is resized. */
+@theme inline {
+  --container-nav: var(--tk-nav, 296px);
 }
 
 body {

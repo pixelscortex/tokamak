@@ -93,10 +93,14 @@ export function actions(count: number): string {
   return `${count} ${count === 1 ? "action" : "actions"}`;
 }
 
-/** What the actions line says while a step runs: "Running pnpm test auth", "Explore: Find the cache". */
-export function doing(step: NonNullable<Turn["current"]>): string {
-  if (step.type === "helper") return `${step.name ?? "Helper"}: ${step.title}`;
-  return `${kinds[step.kind ?? "other"].verb} ${step.title}`;
+/**
+ * What the actions line says while a step runs, in two parts: the verb and
+ * what it acts on ("Running" · `pnpm test auth`), or a helper's name and task
+ * ("Explore" · "Find the cache").
+ */
+export function doingParts(step: NonNullable<Turn["current"]>): { verb: string; detail: string } {
+  if (step.type === "helper") return { verb: step.name ?? "Helper", detail: step.title };
+  return { verb: kinds[step.kind ?? "other"].verb, detail: step.title };
 }
 
 /** Token counts the way usage is read at a glance: 950, 12.4k, 1.2M. */

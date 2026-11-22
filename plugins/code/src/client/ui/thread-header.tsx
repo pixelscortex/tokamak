@@ -1,7 +1,7 @@
 import { Show, createEffect } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Region, useClient } from "@tokamak/sdk/client";
-import { Button, Chip, Icon } from "@tokamak/ui";
+import { Button, Chip } from "@tokamak/ui";
 import type { HeaderProps } from "plugin:chat/client";
 import { branchOf, followBranch, openReview, rememberLocalClient, review } from "../lib/changes";
 import { branchIcon, singleLayoutIcon, splitLayoutIcon } from "../lib/icons";
@@ -19,11 +19,8 @@ export function BranchChip(props: HeaderProps): JSX.Element {
     <Show when={branchOf(props.thread._id)}>
       {(branch) => (
         // The chip keeps the whole name; the title beside it truncates instead.
-        <Chip mono label={`Branch ${branch()}`} class="ms-2 shrink-0">
-          <span class="inline-flex items-center gap-2">
-            <Icon path={branchIcon} size={12} class="text-ink-3" />
-            {branch()}
-          </span>
+        <Chip mono icon={branchIcon} label={`Branch ${branch()}`} class="ms-2 shrink-0">
+          {branch()}
         </Chip>
       )}
     </Show>
@@ -33,7 +30,7 @@ export function BranchChip(props: HeaderProps): JSX.Element {
 /**
  * The layout control before the thread menu (Paper "Layout control"): the
  * thread alone, or beside the review panel. Only in a Git folder. The
- * pressed button takes the tray's selected fill from the group, so Button's
+ * pressed button takes the lifted fill from the group, so Button's
  * own look stays untouched.
  */
 export function ReviewToggle(props: HeaderProps): JSX.Element {
@@ -43,7 +40,7 @@ export function ReviewToggle(props: HeaderProps): JSX.Element {
       <div
         role="group"
         aria-label="Layout"
-        class="flex rounded-sm surface-tray *:aria-pressed:bg-selected *:aria-pressed:text-ink"
+        class="flex rounded-sm surface-tray *:aria-pressed:bg-lifted *:aria-pressed:text-ink"
       >
         <Button
           variant="ghost"

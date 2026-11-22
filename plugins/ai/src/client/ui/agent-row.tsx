@@ -2,11 +2,11 @@ import { For, Show, createEffect, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { TokamakClient } from "@tokamak/sdk";
 import { auth, useClient, useQuery, useShortcuts } from "@tokamak/sdk/client";
-import { Icon, Menu, icons } from "@tokamak/ui";
+import { Menu } from "@tokamak/ui";
 import { holdSend, type ComposerProps } from "plugin:chat/client";
 import type { Picked } from "../../shared/offered";
 import { errorText, isSendersDevice } from "../../shared/turn-shared";
-import { agents, api, notice, refreshAgents, unavailable } from "../lib/agents";
+import { agents, api, modelLabel, notice, refreshAgents, unavailable } from "../lib/agents";
 import {
   ACCESS_LABEL,
   creatorOnlyLine,
@@ -19,15 +19,16 @@ import {
   type Change,
   type Resolved,
 } from "../lib/choices";
-import { agentIcon } from "../lib/icons";
 import { watchQuestions } from "../lib/questions";
 import { listenForQueue } from "../lib/turn";
 import { activeFor, localActiveTurn, stopTurn } from "../lib/turn-controls";
+import { AgentMark } from "./agent-mark";
 
 /**
- * The agent row under the composer box (Paper "Chat v7 · dark", composer):
- * separate pickers for agent, model, level, speed, mode and permission level
- * on the left, a short line on the right. A picker hides when the agent offers
+ * The agent row under the composer box (Paper "Stage · thread", composer):
+ * separate pickers for agent (its mark and name), model (in mono), level,
+ * speed, mode and permission level on the left, a short line on the right.
+ * The pickers are quiet text until hovered; no chevrons. A picker hides when the agent offers
  * nothing for it; each one asks every agent for its `info` again as it opens.
  * The choices belong to the thread (the new thread's stay in this window
  * until its first Send). A missing or signed-out agent shows only its line,
@@ -114,7 +115,7 @@ function OpenThreadRow(props: {
         }
       >
         {(started) => (
-          <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center ps-3 pe-3">
+          <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center px-3">
             <span role="status" class="text-label text-ink-3">
               {creatorOnlyLine(started().name)}
             </span>
@@ -145,7 +146,7 @@ function Row(props: {
   return (
     <Show when={props.resolved()}>
       {(current) => (
-        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center ps-1 pe-3">
+        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center ps-2 pe-3">
           <Picker
             name="Agent"
             options={agents().map((agent) => ({ id: agent.id, label: agent.name }))}
@@ -156,8 +157,8 @@ function Row(props: {
               if (agent) change(current(), { agent });
             }}
           >
-            <Icon path={agentIcon} class="size-3 text-ink" />
-            <span class="text-row text-ink-2">{current().agent.name}</span>
+            <AgentMark agentId={current().agent.id} class="text-ink" />
+            <span class="text-row font-normal text-ink">{current().agent.name}</span>
           </Picker>
           <Show when={!missing()}>
             <Choosers current={current()} refresh={refresh} change={change} />
@@ -187,8 +188,12 @@ const OFFERED: readonly {
   {
     name: "Model",
     key: "model",
-    options: (current) => current.agent.info.models.map((model) => ({ id: model.id, label: model.name })),
-    value: (current) => current.model?.name,
+    options: (current) =>
+      current.agent.info.models.map((model) => ({
+        id: model.id,
+        label: modelLabel(current.agent.name, model.name) ?? model.name,
+      })),
+    value: (current) => modelLabel(current.agent.name, current.model?.name),
     mono: true,
   },
   {
@@ -277,15 +282,12 @@ function Picker(props: {
   return (
     <Show
       when={props.always || props.options.length > 1}
-      fallback={<span class="inline-flex h-8 items-center px-2">{value()}</span>}
+      fallback={<span class="inline-flex h-8 items-center px-1">{value()}</span>}
     >
-      {/* Ghost triggers keep their own padding; the margin brings them as close as Paper draws them. */}
+      {/* Ghost triggers keep their own 12 px padding; the margin leaves Paper's 8 px between values. */}
       <Menu.Root onOpenChange={props.onOpen} onAction={props.onPick}>
-        <Menu.Trigger variant="ghost" class="-mx-1">
-          <span class="inline-flex items-center gap-2">
-            {value()}
-            <Icon path={icons.chevronDown} class="size-3 text-ink-3" />
-          </span>
+        <Menu.Trigger variant="ghost" class="-mx-2">
+          {value()}
         </Menu.Trigger>
         <Menu.Content>
           <For each={props.options}>

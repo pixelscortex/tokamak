@@ -8,14 +8,18 @@
 import type { JSX } from "@solidjs/web";
 import { cn } from "./cn.ts";
 
-export type IconProps = { path: string; size?: 12 | 16; label?: string; class?: string };
+export type IconProps = { path: string; size?: 12 | 14 | 16; label?: string; class?: string };
 
 export function Icon(props: IconProps): JSX.Element {
   return (
     <svg
       data-slot="icon"
       viewBox="0 0 24 24"
-      class={cn("block shrink-0", props.size === 12 ? "size-3" : "size-4", props.class)}
+      class={cn(
+        "block shrink-0",
+        props.size === 12 ? "size-3" : props.size === 14 ? "size-mark" : "size-4",
+        props.class,
+      )}
       role={props.label ? "img" : undefined}
       aria-label={props.label}
       aria-hidden={props.label ? undefined : "true"}

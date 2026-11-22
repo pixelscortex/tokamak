@@ -78,12 +78,16 @@ export const Header = component("header", {}, (props: HeaderProps) => {
   );
 });
 
-/** The thread's folder by name; the full path is its label. */
+/**
+ * The thread's folder by name, as a chip like the branch beside it (Paper's
+ * header chips: 32 tall, a 14 px mark, the name in mono); the full path is
+ * its label.
+ */
 function FolderChip(props: { path: string | undefined }): JSX.Element {
   return (
     <Show when={props.path}>
       {(path) => (
-        <Chip size="sm" mono label={`Folder ${path()}`}>
+        <Chip mono icon={glyphs.folder} label={`Folder ${path()}`} class="shrink-0">
           {folderName(path())}
         </Chip>
       )}

@@ -13,13 +13,13 @@
     "shadcn/no-arbitrary-values": [
       "error",
       {
-        "message": "\"{{className}}\" is an arbitrary value. Use the scale: spacing 1 2 3 4 6 8 12 16 (4 to 64 px), radius rounded-xs, sm, md, lg (4 to 16 px), text roles text-read, text-row, text-label, text-data, and the colour tokens in @tokamak/ui/theme.css."
+        "message": "\"{{className}}\" is an arbitrary value. Use the scale: spacing 1 2 3 4 5 6 8 10 12 16 (4 to 64 px), radius rounded-xs, sm, md, lg (4 to 16 px), text roles text-read, text-row, text-label, text-data, and the colour tokens in @tokamak/ui/theme.css."
       }
     ],
     "shadcn/no-unknown-classes": [
       "error",
       {
-        "message": "\"{{className}}\" does not exist in the Tokamak theme. {{suggestions}} Spacing steps are 1 2 3 4 6 8 12 16, radii xs sm md lg, text roles read row label data, and shadow-raised is the only shadow."
+        "message": "\"{{className}}\" does not exist in the Tokamak theme. {{suggestions}} Spacing steps are 1 2 3 4 5 6 8 10 12 16, radii xs sm md lg, text roles read row label data, and shadow-raised is the only shadow."
       }
     ],
     "shadcn/no-inline-styles": "error",

@@ -42,8 +42,8 @@ export const Message = component("message", {}, (props: MessageProps) => (
     class="flex flex-col gap-2 pb-12"
     aria-label={`${props.message.author?.name ?? "Unknown"} at ${timeOfDay(props.message.createdAt)}`}
   >
-    <header part="header" data-part="header" class="flex items-center gap-2">
-      <Avatar name={props.message.author?.name ?? "?"} size={16} />
+    <header part="header" data-part="header" class="flex h-5 items-center gap-2">
+      <Avatar name={props.message.author?.name ?? "?"} size={18} />
       <span class="text-label text-ink-3">{props.message.author?.name ?? "Unknown"}</span>
       <time class="text-data text-ink-3" datetime={new Date(props.message.createdAt).toISOString()}>
         {timeOfDay(props.message.createdAt)}

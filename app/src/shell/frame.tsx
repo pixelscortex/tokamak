@@ -1,8 +1,8 @@
-import { Match, Show, Switch } from "solid-js";
+import { Match, Show, Switch, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Outlet } from "@tanstack/solid-router";
 import { RegionOutlet, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
-import { Icon, StatusIcon, icons } from "@tokamak/ui";
+import { Icon, Resizable, ScrollArea, StatusIcon, icons } from "@tokamak/ui";
 import { showRail } from "./config";
 import { useShell } from "./context";
 import { Palette } from "./palette";
@@ -14,49 +14,99 @@ import { TopStrip } from "./top-strip";
 
 /**
  * The window: a top strip, the rail and the sidebar on the window tone, and the
- * stage (with an optional panel) floating beside them.
+ * stage (with an optional panel) floating beside them. The sidebar and the
+ * panel are resized by dragging the gap beside them (or with the arrow keys on
+ * it); their widths are kept on this device.
  */
 export function Frame(): JSX.Element {
   const shell = useShell();
   const sidebarShown = shell.sidebar.shown;
   const panelFilled = shell.panelFilled;
+  // Made once and moved between the resizable group and a hidden holder, so the
+  // regions' outlets (and what plugins render into them) stay mounted while hidden.
+  const sidebar = (
+    <aside
+      aria-label="Sidebar"
+      hidden={!sidebarShown()}
+      class="flex min-w-0 flex-1 flex-col pt-1 pe-3 pb-3 ps-2 density-dense"
+    >
+      <ScrollArea class="min-h-0 flex-1">
+        <div class="flex flex-col gap-1">
+          <Show when={sidebarShown()}>
+            <ServerSwitcher />
+          </Show>
+          <RegionOutlet name="sidebar" />
+        </div>
+      </ScrollArea>
+    </aside>
+  );
+  const panel = (
+    <section
+      aria-label="Panel"
+      hidden={!panelFilled()}
+      class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md surface-stage"
+    >
+      <RegionOutlet name="panel" />
+    </section>
+  );
   return (
     <div class="flex h-dvh flex-col overflow-hidden surface-window">
       <TopStrip />
       <div class="flex min-h-0 flex-1">
-        <div class={sidebarShown() ? "flex w-nav shrink-0" : "flex shrink-0"}>
-          <Show when={showRail}>
-            <Rail />
+        <Show when={showRail}>
+          <Rail />
+        </Show>
+        <Resizable.Root autoSaveId="tokamak-frame" class="flex-1">
+          <Show when={sidebarShown()}>
+            <Resizable.Panel id="sidebar" defaultSize="244px" minSize="200px" maxSize="420px">
+              {sidebar}
+            </Resizable.Panel>
+            <Resizable.Handle aria-label="Resize sidebar" class="mb-2" />
           </Show>
-          <aside
-            aria-label="Sidebar"
-            hidden={!sidebarShown()}
-            class="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto pt-1 pe-4 pb-3 ps-2 density-dense"
-          >
-            <Show when={sidebarShown()}>
-              <ServerSwitcher />
-            </Show>
-            <RegionOutlet name="sidebar" />
-          </aside>
-        </div>
-        <div
-          class={
-            panelFilled() ? "flex min-w-0 flex-1 gap-1 pe-1 pb-1" : "flex min-w-0 flex-1 gap-1 pe-2 pb-2"
-          }
-        >
-          <Stage />
-          <section
-            aria-label="Panel"
-            hidden={!panelFilled()}
-            class="flex w-1/2 max-w-read shrink-0 flex-col overflow-hidden rounded-md surface-stage"
-          >
-            <RegionOutlet name="panel" />
-          </section>
+          <Resizable.Panel id="stage" minSize="360px" ref={followStageEdge()}>
+            <div class={panelFilled() ? "flex min-w-0 flex-1 pb-1" : "flex min-w-0 flex-1 pe-2 pb-2"}>
+              <Stage />
+            </div>
+          </Resizable.Panel>
+          <Show when={panelFilled()}>
+            <Resizable.Handle aria-label="Resize panel" class="mb-1" />
+            <Resizable.Panel id="panel" defaultSize="600px" minSize="320px">
+              <div class="flex min-w-0 flex-1 pe-1 pb-1">{panel}</div>
+            </Resizable.Panel>
+          </Show>
+        </Resizable.Root>
+        <div hidden>
+          <Show when={!sidebarShown()}>{sidebar}</Show>
+          <Show when={!panelFilled()}>{panel}</Show>
         </div>
       </div>
       <Palette />
     </div>
   );
+}
+
+/**
+ * Keeps --tk-nav at the stage's left edge, so the top strip's tabs start where
+ * the stage does (styles.css: w-nav) whatever width the sidebar is dragged to.
+ */
+function followStageEdge(): (stage: HTMLElement) => void {
+  const root = document.documentElement;
+  let stage: HTMLElement | undefined;
+  const observer =
+    typeof ResizeObserver === "undefined"
+      ? undefined
+      : new ResizeObserver(() => {
+          if (stage)
+            root.style.setProperty("--tk-nav", `${Math.round(stage.getBoundingClientRect().left)}px`);
+        });
+  onCleanup(() => {
+    observer?.disconnect();
+    root.style.removeProperty("--tk-nav");
+  });
+  return (element) => {
+    stage = element;
+    observer?.observe(element);
+  };
 }
 
 function Stage(): JSX.Element {

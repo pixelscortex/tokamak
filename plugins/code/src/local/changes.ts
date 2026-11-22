@@ -6,6 +6,8 @@ export interface TurnChange {
   readonly files: number;
   readonly added: number;
   readonly removed: number;
+  /** How many of `files` are binary: they have no line counts. */
+  readonly binary: number;
   /**
    * Set on the thread's first snapshot when an earlier turn ran without Git:
    * the number of files in the folder when tracking started. Null otherwise.
@@ -80,6 +82,16 @@ async function snapshots(ctx: LocalContext, turn: Turn) {
   return before && after ? { before, after } : undefined;
 }
 
+/**
+ * Files the operating system writes on its own (Finder's .DS_Store and "._"
+ * files, Windows' Thumbs.db and desktop.ini). They are never a turn's change:
+ * left out of the counts, the card and the review panel.
+ */
+export function isSystemJunk(path: string): boolean {
+  const name = path.split("/").at(-1) ?? path;
+  return name === ".DS_Store" || name.startsWith("._") || name === "Thumbs.db" || name === "desktop.ini";
+}
+
 /** `git diff --numstat -z` rows: added, removed and path, NUL-terminated. */
 async function changedFiles(ctx: LocalContext, turn: Turn, before: string, after: string) {
   const output = (await readGit(ctx, turn.root, diffArgs(turn, before, after, ["--numstat", "-z"]))).join(
@@ -116,12 +128,20 @@ export async function turnChange(
 ): Promise<TurnChange | null> {
   const saved = await snapshots(ctx, turn);
   if (!saved) return null;
-  const files = await changedFiles(ctx, turn, saved.before, saved.after);
+  const files = (await changedFiles(ctx, turn, saved.before, saved.after)).filter(
+    (file) => !isSystemJunk(file.path),
+  );
   const tracking =
     (await ranWithoutGit(ctx, turn, ranEarlier)) && (await startsChain(ctx, turn, saved.before))
       ? await fileCount(ctx, turn, saved.before)
       : null;
-  return { files: files.length, added: sum(files, "added"), removed: sum(files, "removed"), tracking };
+  return {
+    files: files.length,
+    added: sum(files, "added"),
+    removed: sum(files, "removed"),
+    binary: files.filter((file) => file.binary).length,
+    tracking,
+  };
 }
 
 /** Whether any of `turnIds` has no snapshot ref in this thread. */
@@ -208,8 +228,8 @@ export async function turnDiff(ctx: LocalContext, turn: Turn): Promise<TurnDiff 
     },
   );
   const cutAt = complete ? -1 : sections.length - 1;
-  return {
-    files: files.map((file, index) => {
+  const shownFiles = files
+    .map((file, index) => {
       const section = sections[index];
       const shown = !!section && (index !== cutAt || section.lines.length > 0);
       return {
@@ -218,9 +238,13 @@ export async function turnDiff(ctx: LocalContext, turn: Turn): Promise<TurnDiff 
         partial: index === cutAt && shown,
         note: shown ? noteFor(file, section) : null,
       };
-    }),
-    added: sum(files, "added"),
-    removed: sum(files, "removed"),
+    })
+    // Paired with their sections first: the sections follow every numstat row.
+    .filter((file) => !isSystemJunk(file.path));
+  return {
+    files: shownFiles,
+    added: sum(shownFiles, "added"),
+    removed: sum(shownFiles, "removed"),
     cut: !complete,
   };
 }

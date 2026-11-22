@@ -8,6 +8,8 @@ export { api };
 export interface AgentEntry {
   readonly id: string;
   readonly name: string;
+  /** The agent's mark as its plugin gave it (an SVG document); see `Agent.icon`. */
+  readonly icon?: string;
   readonly info: Info;
 }
 
@@ -79,4 +81,17 @@ export function unavailable(agent: AgentEntry): string | undefined {
   if (!agent.info.installed) return reasonLine("NotInstalled", agent.name, agent.info.updateRequired);
   if (!agent.info.signedIn) return reasonLine("SignedOut", agent.name);
   return undefined;
+}
+
+/**
+ * A model's name as people read it, without the agent's name in front:
+ * "Claude Fable 5.2" under Claude is "Fable 5.2".
+ */
+export function modelLabel(agentName: string | undefined, model: string | undefined): string | undefined {
+  if (!model) return undefined;
+  if (!agentName) return model;
+  const prefix = `${agentName} `;
+  return model.toLowerCase().startsWith(prefix.toLowerCase()) && model.length > prefix.length
+    ? model.slice(prefix.length)
+    : model;
 }

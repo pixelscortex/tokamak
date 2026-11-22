@@ -1,7 +1,10 @@
+/// <reference path="./svg.d.ts" />
 import { local, provide, type LocalContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { killAfter, minimumVersion, open, parse, signedIn, speeds, streamArgs, usableVersion } from "./wire";
 import { turn } from "./turn";
+// The agent's mark, vendored from LobeHub icons (MIT; see icons/LICENSE.md).
+import icon from "./icons/claude.svg" with { type: "text" };
 
 const updateRequired = `Claude needs Claude Code ${minimumVersion} or later.`;
 
@@ -31,6 +34,27 @@ const info = local({
   },
 });
 
+/**
+ * A model's name as people know it, never an alias's label: the default
+ * ("Default (recommended)", "Use the default model (currently Opus 5.5)")
+ * reads "Opus 5.5", and an alias ("Opus", "Opus 5.5 · Best for…") reads
+ * "Opus 5.5". Other names are kept ("Claude Fable 5.2"; the window drops
+ * "Claude").
+ */
+export function modelName(model: { displayName: string; description?: unknown }): string {
+  const description = typeof model.description === "string" ? model.description : "";
+  const current = /\(currently ([^)]+)\)/.exec(description)?.[1]?.trim();
+  if (current) return current;
+  const head = description.split(" · ")[0]?.trim();
+  if (
+    head &&
+    head !== model.displayName &&
+    head.toLowerCase().startsWith(`${model.displayName.toLowerCase()} `)
+  )
+    return head;
+  return model.displayName.replace(/\s*\(recommended\)$/i, "");
+}
+
 async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "speeds">> {
   // No user message is sent: initialize reveals model aliases and supported
   // effort levels without purchasing a turn. Avoid loading MCP servers just
@@ -57,11 +81,14 @@ async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "spe
           .filter((model) => typeof model?.value === "string" && typeof model.displayName === "string")
           .map((model) => ({
             id: model.value,
-            name: model.displayName,
+            name: modelName(model),
             efforts: Array.isArray(model.supportedEffortLevels)
               ? model.supportedEffortLevels.filter((level) => typeof level === "string")
               : [],
-          }));
+          }))
+          // An alias of the model the default already is ("opus" while the default is Opus 5.5)
+          // would read the same as the default; the first keeps the name.
+          .filter((model, index, all) => all.findIndex((other) => other.name === model.name) === index);
         // Opus can use fast mode, but account or provider policy can disable it.
         const fast = response?.fast_mode_state;
         return {
@@ -88,4 +115,4 @@ const start = local({
   },
 });
 
-export default provide(ai.agent, { id: "claude", name: "Claude", info, start });
+export default provide(ai.agent, { id: "claude", name: "Claude", icon, info, start });

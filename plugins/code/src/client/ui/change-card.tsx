@@ -33,7 +33,7 @@ export function ChangeCard(props: MessageProps): JSX.Element {
             <CardText change={change()} />
             <span class="flex-1" />
             <span class="text-label text-ink-3">open in review</span>
-            <Icon path={chevronRightIcon} size={12} class="text-ink-3" />
+            <Icon path={chevronRightIcon} size={14} class="text-ink-3" />
           </button>
         </Show>
       )}
@@ -51,7 +51,18 @@ function CardText(props: { change: ReplyChange }): JSX.Element {
           : `Started tracking · ${filesLabel(props.change.tracking)}`}
       </span>
       <Show when={props.change.files > 0}>
-        <Counts added={props.change.added} removed={props.change.removed} />
+        <Show
+          when={props.change.added + props.change.removed > 0}
+          fallback={
+            // No line to count ("1 file 0 0" said nothing): binary files say so; an empty file or a
+            // mode change shows only its file count.
+            <Show when={props.change.binary === props.change.files}>
+              <span class="text-label text-ink-3">· binary</span>
+            </Show>
+          }
+        >
+          <Counts added={props.change.added} removed={props.change.removed} />
+        </Show>
       </Show>
     </>
   );

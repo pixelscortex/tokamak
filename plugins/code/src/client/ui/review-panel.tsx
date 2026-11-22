@@ -2,7 +2,7 @@ import { For, Match, Show, Switch, createEffect, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
 import { useClient } from "@tokamak/sdk/client";
-import { FileName, Icon, Row } from "@tokamak/ui";
+import { FileName, Icon, ScrollArea } from "@tokamak/ui";
 import { api } from "../../server/_generated/api";
 import { turnsOf } from "../lib/changes";
 import { fileCodeIcon } from "../lib/icons";
@@ -102,17 +102,15 @@ function TurnReview(props: { number: number; diff: Diff }): JSX.Element {
         <span class="text-row text-ink-2">· {filesLabel(props.diff.files.length)}</span>
         <Counts added={props.diff.added} removed={props.diff.removed} />
       </h2>
-      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3">
-        <ul aria-label="Changed files" class="flex shrink-0 flex-col gap-1 px-3 pt-1 pb-3">
+      {/* The panel's one scroller: diff lines wrap, so nothing inside scrolls sideways. */}
+      <ScrollArea class="min-h-0 flex-1">
+        <ul aria-label="Changed files" class="flex shrink-0 flex-col px-3 pt-1 pb-3">
           <For each={props.diff.files} keyed={(file) => file.path}>
             {(file) => (
-              <li>
-                <Row
-                  lead={<Icon path={fileCodeIcon} />}
-                  trail={<Counts added={file().added} removed={file().removed} />}
-                >
-                  <FileName path={file().path} />
-                </Row>
+              <li class="flex h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-row text-ink">
+                <Icon path={fileCodeIcon} size={14} class="text-ink-3" />
+                <FileName path={file().path} class="min-w-0 flex-1" />
+                <FileCounts added={file().added} removed={file().removed} />
               </li>
             )}
           </For>
@@ -123,24 +121,42 @@ function TurnReview(props: { number: number; diff: Diff }): JSX.Element {
             listed above without their changes.
           </p>
         </Show>
-        <div class="flex flex-col gap-3 px-3">
+        <div class="flex flex-col gap-3 px-3 pb-3">
           <For each={props.diff.files} keyed={(file) => file.path}>
             {(file) => <FilePatch file={file()} />}
           </For>
         </div>
-      </div>
+      </ScrollArea>
     </>
   );
 }
 
-/** One file's plain diff (Paper "Diff"): its name and counts, then each hunk with old and new line numbers. */
+/** A file row's counts (Paper's changed files): "+14" then "−9" right-aligned in its own lane. */
+function FileCounts(props: { added: number; removed: number }): JSX.Element {
+  return (
+    <>
+      <span class={["shrink-0 text-data", props.added ? "text-added" : "text-ink-3"]}>
+        {props.added ? plus(props.added) : "0"}
+      </span>
+      <span class={["w-8 shrink-0 text-end text-data", props.removed ? "text-removed" : "text-ink-3"]}>
+        {props.removed ? minus(props.removed) : "0"}
+      </span>
+    </>
+  );
+}
+
+/**
+ * One file's plain diff (Paper "Diff"): its name and counts on the tray, then
+ * each hunk with old and new line numbers on the stage. Changed lines get a
+ * quiet wash and a coloured sign; long lines wrap under their own text.
+ */
 function FilePatch(props: { file: FileDiff }): JSX.Element {
   return (
     <article
       aria-label={`Diff of ${props.file.path}`}
       class="flex flex-col overflow-hidden rounded-md surface-tray"
     >
-      <header class="flex h-12 shrink-0 items-center gap-2 ps-3 pe-1">
+      <header class="flex h-10 shrink-0 items-center gap-2 ps-3 pe-1">
         <span class="flex min-w-0 text-row font-medium text-ink">
           <FileName path={props.file.path} folder={false} class="min-w-0" />
         </span>
@@ -153,10 +169,8 @@ function FilePatch(props: { file: FileDiff }): JSX.Element {
         </Match>
         <Match when={props.file.patch?.length ? props.file.patch : undefined}>
           {(patch) => (
-            <div class="overflow-x-auto bg-stage pb-2 font-mono text-data">
-              <div class="flex min-w-max flex-col">
-                <For each={rows(patch())}>{(row) => <PatchRow row={row} />}</For>
-              </div>
+            <div class="flex flex-col bg-stage pb-2">
+              <For each={rows(patch())}>{(row) => <PatchRow row={row} />}</For>
             </div>
           )}
         </Match>
@@ -203,23 +217,36 @@ function rows(patch: readonly string[]): PatchLine[] {
 function PatchRow(props: { row: PatchLine }): JSX.Element {
   const row = props.row;
   if (row.kind === "hunk")
-    return <div class="mt-2 flex h-8 items-center bg-tray ps-3 pe-1 text-ink-3 first:mt-0">{row.text}</div>;
-  if (row.kind === "note") return <div class="ps-16 text-ink-3">{row.text}</div>;
+    return (
+      <div class="mt-2 flex h-8 shrink-0 items-center bg-tray ps-3 pe-1 first:mt-0">
+        <span class="min-w-0 truncate text-data text-ink-3">{row.text}</span>
+      </div>
+    );
+  if (row.kind === "note") return <div class="ps-16 text-label text-ink-3">{row.text}</div>;
+  const number = "flex h-5 w-10 shrink-0 items-center justify-end text-data text-ink-3";
   return (
     <div
-      class={["flex", { "bg-added-tint": row.kind === "added", "bg-removed-tint": row.kind === "removed" }]}
+      class={[
+        "flex min-w-0",
+        { "bg-diff-added": row.kind === "added", "bg-diff-removed": row.kind === "removed" },
+      ]}
     >
-      <span class="w-8 shrink-0 text-end text-ink-3">{row.old ?? ""}</span>
-      <span class="w-8 shrink-0 text-end text-ink-3">{row.new ?? ""}</span>
+      <span class={number}>{row.old ?? ""}</span>
+      <span class={number}>{row.new ?? ""}</span>
       <span
         class={[
-          "w-6 shrink-0 text-center",
+          "w-6 shrink-0 text-center text-code",
           { "text-added": row.kind === "added", "text-removed": row.kind === "removed" },
         ]}
       >
         {row.kind === "added" ? "+" : row.kind === "removed" ? "−" : ""}
       </span>
-      <span class={["pe-3 whitespace-pre", row.kind === "context" ? "text-ink-2" : "text-ink"]}>
+      <span
+        class={[
+          "min-w-0 flex-1 pe-3 text-code wrap-code",
+          row.kind === "context" ? "text-ink-2" : "text-ink",
+        ]}
+      >
         {row.text}
       </span>
     </div>

@@ -5,12 +5,12 @@ import { useClient, useQuery } from "@tokamak/sdk/client";
 import { Collapsible, Icon, StatusIcon, icons } from "@tokamak/ui";
 import type { MessageProps } from "plugin:chat/client";
 import { api } from "../../server/_generated/api";
-import { agentIcon, historyIcon } from "../lib/icons";
+import { AgentMark } from "./agent-mark";
 import { kinds } from "../lib/kinds";
 import {
   actions,
   clock,
-  doing,
+  doingParts,
   duration,
   useClock,
   useTurn,
@@ -21,12 +21,11 @@ import {
 import { Spinning } from "./spinning";
 
 /**
- * The agent's work, above the reply's text: thinking folded, the actions line
- * that folds every step into one row, and one folded row per helper agent.
- * Commands never become messages of their own. Paper "Thread ideas", option
- * C, with the audit lane folded into its header line; the line's shape is
- * Chat v7's "Worked · 4 actions · 12s". What a folded part opens to is read
- * only while it is open.
+ * The agent's work, above the reply's text: thinking as a quiet line, the
+ * actions line that folds every step into one row ("Worked · 5 actions"),
+ * and one folded row per helper agent. Commands never become messages of
+ * their own (Paper "Stage · thread": the folded work line; "Thread ideas",
+ * option A). What a folded part opens to is read only while it is open.
  */
 export function ReplyWork(props: MessageProps): JSX.Element {
   const client = useClient();
@@ -40,7 +39,7 @@ export function ReplyWork(props: MessageProps): JSX.Element {
           </Show>
           <ActionsLine client={client} turn={t} />
           <For each={t().helpers} keyed={(helper) => helper._id}>
-            {(helper) => <HelperRow client={client} helper={helper()} />}
+            {(helper) => <HelperRow client={client} helper={helper()} agentId={t().agent.id} />}
           </For>
         </div>
       )}
@@ -49,9 +48,10 @@ export function ReplyWork(props: MessageProps): JSX.Element {
 }
 
 /**
- * A folded block of the turn's work: a 32 px line on the tray (at least
- * Chat v7's 320 px) that opens in place and grows to fit what it opens to, up
- * to the reading width. A closed panel leaves the page, and its reads with it.
+ * A folded block of the turn's work: a 32 px line on the tray, at least 360
+ * wide (Paper's work line), that opens in place and grows to fit what it
+ * opens to, up to the reading width. A closed panel leaves the page, and its
+ * reads with it.
  */
 function Folded(props: { children: JSX.Element }): JSX.Element {
   return (
@@ -66,14 +66,17 @@ function FoldedText(props: { text: string | null | undefined }): JSX.Element {
   return <p class="px-3 pb-2 text-row break-words whitespace-pre-wrap text-ink-3">{props.text ?? ""}</p>;
 }
 
+/** Thinking: a quiet line with no fill, so it does not weigh as much as the work. */
 function Thinking(props: { client: TokamakClient; turnId: Turn["_id"] }): JSX.Element {
   return (
-    <Folded>
-      <Collapsible.Trigger lead={<Icon path={icons.more} />}>Thinking</Collapsible.Trigger>
+    <Collapsible.Root class="flex w-full max-w-read flex-col">
+      <Collapsible.Trigger variant="quiet" lead={<Icon path={icons.more} />} class="w-fit">
+        <span class="text-label">Thinking</span>
+      </Collapsible.Trigger>
       <Collapsible.Panel>
         <ThinkingText client={props.client} turnId={props.turnId} />
       </Collapsible.Panel>
-    </Folded>
+    </Collapsible.Root>
   );
 }
 
@@ -84,30 +87,44 @@ function ThinkingText(props: { client: TokamakClient; turnId: Turn["_id"] }): JS
 }
 
 /**
- * "14 actions · 1m 12s" once the turn has ended; while it runs, the step in
- * progress and its clock ("Running pnpm test auth · 0:04"). Opens to one row
- * per step. Hidden for a finished turn that took no step.
+ * "Worked  14 actions  1m 12s" once the turn has ended; while it runs, the
+ * step in progress and its clock ("Running  pnpm test auth  0:04", the
+ * command in mono). Opens to one row per step. Hidden for a finished turn
+ * that took no step.
  */
 function ActionsLine(props: { client: TokamakClient; turn: Accessor<Turn> }): JSX.Element {
   const turn = () => props.turn();
   const running = () => turn().state === "running";
   const now = useClock(running);
   const count = () => turn().actions ?? 0;
+  const current = () => {
+    const step = turn().current;
+    return step ? doingParts(step) : undefined;
+  };
   return (
     <Show when={running() || count() > 0}>
       <Folded>
         <Collapsible.Trigger
-          lead={running() ? <Spinning /> : <Icon path={historyIcon} />}
+          lead={running() ? <Spinning /> : <Icon path={icons.done} />}
           trail={
             <Show when={running()} fallback={duration((turn().finishedAt ?? now()) - turn().startedAt)}>
-              <span class="text-ink-2">{clock(now() - (turn().current?.startedAt ?? turn().startedAt))}</span>
+              {clock(now() - (turn().current?.startedAt ?? turn().startedAt))}
             </Show>
           }
         >
-          <Show when={running()} fallback={actions(count())}>
-            <span class="truncate font-medium text-ink">
-              {turn().current ? doing(turn().current!) : "Working"}
-            </span>
+          <Show
+            when={running()}
+            fallback={
+              <>
+                <span class="text-ink-2">Worked</span>{" "}
+                <span class="text-label text-ink-3">{actions(count())}</span>
+              </>
+            }
+          >
+            <span class="shrink-0 font-medium text-ink">{current()?.verb ?? "Working"}</span>{" "}
+            <Show when={current()?.detail}>
+              {(detail) => <span class="min-w-0 truncate text-data text-ink-3">{detail()}</span>}
+            </Show>
           </Show>
         </Collapsible.Trigger>
         <Collapsible.Panel>
@@ -158,7 +175,7 @@ function elapsed(step: { startedAt: number; finishedAt?: number }, now: number):
 }
 
 /** One built-in helper agent, folded: its kind and task; opens to its answer. */
-function HelperRow(props: { client: TokamakClient; helper: Helper }): JSX.Element {
+function HelperRow(props: { client: TokamakClient; helper: Helper; agentId: string }): JSX.Element {
   const helper = () => props.helper;
   const now = useClock(() => helper().state === "running");
   return (
@@ -170,13 +187,13 @@ function HelperRow(props: { client: TokamakClient; helper: Helper }): JSX.Elemen
           ) : helper().state === "failed" ? (
             <StatusIcon status="failed" />
           ) : (
-            <Icon path={agentIcon} />
+            <AgentMark agentId={props.agentId} size={16} />
           )
         }
         trail={elapsed(helper(), now())}
       >
-        <span>{helper().name ?? "Helper"}</span>
-        <span class="truncate text-label text-ink-3">{helper().title}</span>
+        <span class="shrink-0 text-ink-2">{helper().name ?? "Helper"}</span>{" "}
+        <span class="min-w-0 truncate text-label text-ink-3">{helper().title}</span>
       </Collapsible.Trigger>
       <Collapsible.Panel>
         <Show when={helper().hasText} fallback={<FoldedText text="No answer yet." />}>

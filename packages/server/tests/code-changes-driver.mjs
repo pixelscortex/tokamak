@@ -110,12 +110,15 @@ async function countsAndDiffsMatchGit(desk, code) {
       );
       await unlink(join(folder, "gone.txt"));
       await writeFile(join(folder, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 0, 3]));
+      // Written by the operating system, not the agent: never part of the turn's change.
+      await writeFile(join(folder, ".DS_Store"), Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31, 0]));
     },
   });
 
   const expected = numstat(git, threadId, turnId);
-  // agent.txt +1 −1 (the agent), gone.txt −1, logo.png binary, src/table.ts +3 −1.
+  // agent.txt +1 −1 (the agent), gone.txt −1, logo.png binary, src/table.ts +3 −1; .DS_Store is left out.
   assert.deepEqual(expected, [
+    { path: ".DS_Store", added: "-", removed: "-" },
     { path: "agent.txt", added: "1", removed: "1" },
     { path: "gone.txt", added: "0", removed: "1" },
     { path: "logo.png", added: "-", removed: "-" },
@@ -125,6 +128,7 @@ async function countsAndDiffsMatchGit(desk, code) {
     files: 4,
     added: 4,
     removed: 3,
+    binary: 1,
     tracking: null,
   });
 
@@ -164,6 +168,7 @@ async function quietTurnChangesNothing(desk, code) {
     files: 0,
     added: 0,
     removed: 0,
+    binary: 0,
     tracking: null,
   });
   assert.deepEqual((await desk.local(code.changes.diff, { threadId, turnId })).files, []);
@@ -283,7 +288,7 @@ async function startedTracking(desk, code) {
         turnId: second.turnId,
         ranEarlier: [first.turnId],
       }),
-      { files: 1, added: 1, removed: 0, tracking: 3 },
+      { files: 1, added: 1, removed: 0, binary: 0, tracking: 3 },
       "tracking starts with .gitignore, one.txt and two.txt; the agent then adds agent.txt",
     );
     assert.equal(

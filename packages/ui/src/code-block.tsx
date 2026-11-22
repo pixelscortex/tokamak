@@ -50,7 +50,7 @@ export function CodeBlock(props: {
           onClick={() => void copy()}
         />
       </div>
-      <pre class="m-0 overflow-x-auto px-3 pb-3 font-mono text-row text-ink">
+      <pre class="m-0 overflow-x-auto overflow-y-hidden px-3 pb-3 font-mono text-row text-ink">
         <code>{props.code}</code>
       </pre>
     </figure>

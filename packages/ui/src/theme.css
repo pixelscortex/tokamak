@@ -18,6 +18,10 @@
   --color-tray: oklch(20.02% 0 0);
   --color-card: oklch(22.64% 0 0);
   --color-band: oklch(25.2% 0 0);
+  /* A chip on the stage (the branch and folder in a thread's header). */
+  --color-chip: oklch(23.5% 0 0);
+  /* Raised above a card: an initial's disc, the pressed half of a segmented control. */
+  --color-lifted: oklch(28.5% 0 0);
   --color-ink: oklch(92.49% 0 0);
   --color-ink-2: oklch(74.76% 0 0);
   --color-ink-3: oklch(63.34% 0 0);
@@ -29,6 +33,9 @@
   --color-removed-tint: oklch(22.7% 0.036 20.3);
   --color-warn-tint: oklch(25.35% 0.032 82.4);
   --color-info-tint: oklch(23.98% 0.048 259.9);
+  /* A diff's added and removed lines: a quiet wash under the code, so long changes stay readable. */
+  --color-diff-added: oklch(20.5% 0.022 155);
+  --color-diff-removed: oklch(20.5% 0.024 20);
   /* brand fills the brand button; brand-text is the lighter shade for brand text,
      links and the focus ring, since brand itself is under 4.5 on the dark tones. */
   --color-brand: oklch(58.7% 0.243 300.9);
@@ -47,8 +54,12 @@
   --spacing-2: 8px;
   --spacing-3: 12px;
   --spacing-4: 16px;
+  /* One line of a message header or a diff (Paper's 20 px rows). */
+  --spacing-5: 20px;
   --spacing-6: 24px;
   --spacing-8: 32px;
+  /* A diff's line-number lane and a file header in the review panel (Paper "Diff"). */
+  --spacing-10: 40px;
   --spacing-12: 48px;
   --spacing-16: 64px;
 
@@ -77,6 +88,13 @@
   --text-label--font-weight: 500;
   --text-data: 12px;
   --text-data--line-height: 16px;
+  /* Code in a diff: mono, one 20 px line per source line. */
+  --text-code: 13px;
+  --text-code--line-height: 20px;
+  /* The letter in an 18 px initial disc. */
+  --text-initial: 10px;
+  --text-initial--line-height: 12px;
+  --text-initial--font-weight: 600;
 
   --leading-*: initial;
   --tracking-*: initial;
@@ -95,7 +113,14 @@
   --container-dialog: 440px;
   --container-menu: 192px;
   /* A folded line in a thread (an agent's actions line) is at least this wide. */
-  --container-fold: 320px;
+  --container-fold: 360px;
+}
+
+/* Two sizes off the 4 px scale that Paper draws: an initial's disc before a
+   message's author (18) and the small marks in rows and chips (14). */
+@theme {
+  --spacing-avatar: 18px;
+  --spacing-mark: 14px;
 }
 
 /* Values that depend on the surface, density or nesting an element sits in. */
@@ -128,6 +153,46 @@
 
 /* Data is mono: it is the role for things a person could copy. */
 @utility text-data {
+  font-family: var(--font-mono);
+}
+
+/* The scrollbar thumb's colour (Paper "Scrollbars · options", option B). Registered so
+   it can transition: a scrollbar pseudo-element cannot be transitioned itself, but it
+   follows this property. */
+@property --tk-thumb {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+/* A panel's one native scroll container: scrolls on y only and keeps a steady 12 px
+   lane; the thumb brightens while the pointer or focus is inside. (ScrollArea draws
+   the same thumb over its edge instead.) */
+@utility scroller {
+  overflow-x: hidden;
+  overflow-y: scroll;
+  --tk-thumb: var(--color-edge);
+  transition: --tk-thumb 300ms ease-out 600ms;
+  &:hover,
+  &:focus-within {
+    --tk-thumb: var(--color-edge-strong);
+    transition: --tk-thumb 150ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+/* A code line that wraps instead of scrolling sideways; wrapped parts hang 2ch in. */
+@utility wrap-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-inline-start: 2ch;
+  text-indent: -2ch;
+}
+
+/* Code is mono too, a step larger than data. */
+@utility text-code {
   font-family: var(--font-mono);
 }
 
@@ -244,6 +309,7 @@
     --tk-row: 40px;
     --tk-row-x: 12px;
     --tk-key-side: 0px;
+    --tk-thumb: var(--color-edge);
     font: 400 var(--text-row) / var(--text-row--line-height) var(--font-sans);
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
@@ -257,6 +323,8 @@
     --color-tray: oklch(97.02% 0 0);
     --color-card: oklch(94.61% 0 0);
     --color-band: oklch(92.19% 0 0);
+    --color-chip: oklch(94.61% 0 0);
+    --color-lifted: oklch(90.67% 0 0);
     --color-ink: oklch(20.46% 0 0);
     --color-ink-2: oklch(40.91% 0 0);
     --color-ink-3: oklch(51.03% 0 0);
@@ -268,6 +336,8 @@
     --color-removed-tint: oklch(95.66% 0.018 17.5);
     --color-warn-tint: oklch(96.92% 0.031 86.5);
     --color-info-tint: oklch(95.67% 0.019 263);
+    --color-diff-added: oklch(97.5% 0.014 155);
+    --color-diff-removed: oklch(97.2% 0.013 20);
     --color-brand: oklch(49% 0.24 300.8);
     --color-brand-text: oklch(49% 0.24 300.8);
     --color-brand-ink: oklch(100% 0 0);
@@ -278,6 +348,38 @@
     --color-highlight: oklch(100% 0 0 / 0.25);
     --tk-window-selected: var(--color-stage);
     --tk-key-side: 1px;
+  }
+  /* Every native scroller gets the quiet thumb (option B): a 4 px thumb in a 12 px lane.
+     WebKit (Tauri on macOS and Linux) and Chromium (Tauri on Windows). Setting either
+     standard scrollbar property switches these rules off, hence the guard. */
+  @supports selector(::-webkit-scrollbar) {
+    ::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+    ::-webkit-scrollbar-track,
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: var(--tk-thumb);
+      background-clip: content-box;
+      border: 4px solid transparent;
+      border-radius: 999px;
+      min-height: 32px;
+      min-width: 32px;
+    }
+    ::-webkit-scrollbar-thumb:hover,
+    ::-webkit-scrollbar-thumb:active {
+      background-color: var(--color-ink-3);
+    }
+  }
+  /* Engines without the pseudo-elements (Firefox): no inset or radius control there. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--tk-thumb) transparent;
+    }
   }
   :focus-visible {
     outline: 2px solid var(--color-brand-text);
