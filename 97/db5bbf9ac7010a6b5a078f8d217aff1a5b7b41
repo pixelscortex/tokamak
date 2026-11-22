@@ -1,0 +1,46 @@
+plugins/ai/tests/agent-row.test.tsx
+  s_0eedb15a6f462e::t_8722a57a1dde42 131
+plugins/ai/src/client/lib/turn-controls.ts
+  s_0eedb15a6f462e::t_e44d2fa17eaa47 2-3,16-17,19-20,22-30
+  s_0eedb15a6f462e::t_8c04730228259d 7,18,21
+plugins/ai/src/server/choices.ts
+  s_0eedb15a6f462e::t_8722a57a1dde42 3,50-52
+plugins/chat/src/server/folders/folders.ts
+  s_0eedb15a6f462e::t_e44d2fa17eaa47 7,23
+  s_0eedb15a6f462e::t_8722a57a1dde42 2
+plugins/ai/src/client/lib/choices.ts
+  s_0eedb15a6f462e::t_8c04730228259d 1
+plugins/chat/src/server/threads/threads.ts
+  s_0eedb15a6f462e::t_e44d2fa17eaa47 5,28,88,169
+  s_0eedb15a6f462e::t_8722a57a1dde42 1
+plugins/ai/src/client/lib/turn.ts
+  s_0eedb15a6f462e::t_8c04730228259d 2
+plugins/ai/src/server/_functions.ts
+  s_0eedb15a6f462e::t_8722a57a1dde42 1
+plugins/chat/src/server/_functions.ts
+  s_0eedb15a6f462e::t_b4b8537d61af77 1-7
+  s_0eedb15a6f462e::t_e44d2fa17eaa47 16
+  s_0eedb15a6f462e::t_8722a57a1dde42 15,17-18
+  s_0eedb15a6f462e::t_84af49f76cf356 19
+plugins/ai/src/client/ui/agent-row.tsx
+  s_0eedb15a6f462e::t_e44d2fa17eaa47 25
+  s_0eedb15a6f462e::t_696c24fb8c404d 95-101
+plugins/ai/src/client/ui/permission-card.tsx
+  s_0eedb15a6f462e::t_8722a57a1dde42 16-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "97db5bbf9ac7010a6b5a078f8d217aff1a5b7b41",
+  "prompts": {},
+  "sessions": {
+    "s_0eedb15a6f462e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20328-e363-7f00-bf24-82ac4cc811da",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
