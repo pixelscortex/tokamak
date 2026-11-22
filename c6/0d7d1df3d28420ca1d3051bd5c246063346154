@@ -1,0 +1,52 @@
+packages/build/src/client-surface.ts
+  s_3684101c55ffe3::t_117d46c835503f 3,24,26,36,76
+packages/server/tests/identity.rs
+  s_3684101c55ffe3::t_8e1ff85b631cbb 90-99
+packages/build/src/ui-build-config.ts
+  s_3684101c55ffe3::t_117d46c835503f 6,9
+packages/build/src/window-state.ts
+  s_3684101c55ffe3::t_117d46c835503f 5,7,27,113-114,128-129,153-154,206
+packages/server/src/service/window_state.rs
+  s_3684101c55ffe3::t_8e1ff85b631cbb 32-33,53-54,64,66,76-77,91-92,96-97
+packages/build/src/descriptor.ts
+  s_3684101c55ffe3::t_117d46c835503f 9,11
+  s_3684101c55ffe3::t_7af09582a7101f 6,10
+  s_3684101c55ffe3::t_d9647c51e1b6bb 12
+packages/sdk/vitest.config.ts
+  s_3684101c55ffe3::t_d82e37057179b8 8
+packages/build/vitest.config.ts
+  s_3684101c55ffe3::t_d82e37057179b8 1-29
+packages/build/tests/run.sh
+  s_3684101c55ffe3::t_d82e37057179b8 4
+packages/build/tests/fixtures/window-plugin/binding.ts
+  s_3684101c55ffe3::t_d82e37057179b8 1-3
+packages/server/src/service/requests.rs
+  s_3684101c55ffe3::t_8e1ff85b631cbb 82
+packages/build/tests/window-state.test.tsx
+  s_3684101c55ffe3::t_d82e37057179b8 1-26
+packages/build/package.json
+  s_3684101c55ffe3::t_d82e37057179b8 21-25
+packages/sdk/tools/plugin-boundary.mjs
+  s_3684101c55ffe3::t_117d46c835503f 15,34,40
+  s_3684101c55ffe3::t_8e1ff85b631cbb 31,39
+packages/sdk/tsconfig.solid.json
+  s_3684101c55ffe3::t_d82e37057179b8 8
+bun.lock
+  s_3684101c55ffe3::t_d1698b1bd0a0ff 58,60-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c60d7d1df3d28420ca1d3051bd5c246063346154",
+  "prompts": {},
+  "sessions": {
+    "s_3684101c55ffe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-2ecf-7310-a3c1-056605a9938e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
