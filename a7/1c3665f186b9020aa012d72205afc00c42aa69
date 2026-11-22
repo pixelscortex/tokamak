@@ -1,0 +1,50 @@
+wiki/content/docs/api/window.mdx
+  s_24950e0e98659e::t_939ae4bec28038 1-22,26-39,47,49-68,74-81
+  s_24950e0e98659e::t_817d84c9aaac6b 23-25,40-46,48,69-73
+wiki/press.config.tsx
+  s_24950e0e98659e::t_3b1313b2ca1561 1,56
+wiki/scripts/content.test.ts
+  s_24950e0e98659e::t_3b1313b2ca1561 83
+  s_24950e0e98659e::t_817d84c9aaac6b 74-77
+README.md
+  s_24950e0e98659e::t_3b1313b2ca1561 7-14
+wiki/src/lib/source-repository.ts
+  s_24950e0e98659e::t_3b1313b2ca1561 1-16
+plugins/chat/README.md
+  s_24950e0e98659e::t_3b1313b2ca1561 46-47,49
+packages/server/PLUGINS.md
+  s_24950e0e98659e::t_3b1313b2ca1561 306
+e2e/fake-agent/README.md
+  s_24950e0e98659e::t_0e8ae11aa04a5b 36
+packages/server/tests/README.md
+  s_24950e0e98659e::t_651113cbb7bc1e 199
+wiki/src/lib/remark-source-links.ts
+  s_24950e0e98659e::t_3b1313b2ca1561 1,15,32-33,38-39
+  s_24950e0e98659e::t_817d84c9aaac6b 34-37
+packages/server/HOW_IT_WORKS.md
+  s_24950e0e98659e::t_3b1313b2ca1561 9-10,109-123
+  s_24950e0e98659e::t_817d84c9aaac6b 108
+plugins/code/README.md
+  s_24950e0e98659e::t_85edbc6c3fa323 22-24
+wiki/scripts/check-api.mjs
+  s_24950e0e98659e::t_3b1313b2ca1561 38-40,54-55
+  s_24950e0e98659e::t_817d84c9aaac6b 41-53
+wiki/content/docs/api/meta.json
+  s_24950e0e98659e::t_3b1313b2ca1561 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a71c3665f186b9020aa012d72205afc00c42aa69",
+  "prompts": {},
+  "sessions": {
+    "s_24950e0e98659e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20273-10ec-7111-a026-723dd076066b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
