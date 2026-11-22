@@ -1,0 +1,55 @@
+spikes/engine-cold-start/.gitignore
+  s_8606d1a0f130a5::t_5e7889b6538fd6 1-3
+spikes/engine-cold-start/Cargo.lock
+  s_8606d1a0f130a5::t_8a2e549c3725a2 1-3125
+spikes/engine-cold-start/Cargo.toml
+  s_8606d1a0f130a5::t_253f6d23e3923a 1-59
+spikes/engine-cold-start/MEASUREMENTS.jsonl
+  s_8606d1a0f130a5::t_0d628e972a0aa4 1-581
+spikes/engine-cold-start/REPORT.md
+  s_8606d1a0f130a5::t_1f2da25c6bd8c2 1-129
+spikes/engine-cold-start/bench.py
+  s_8606d1a0f130a5::t_a522b4f5b98af6 1-201
+spikes/engine-cold-start/build.sh
+  s_8606d1a0f130a5::t_118b3fa0db9cc0 1-19
+spikes/engine-cold-start/prepare.mjs
+  s_8606d1a0f130a5::t_45bb2fb54306f4 1-33
+spikes/engine-cold-start/src/async-scope.js
+  s_8606d1a0f130a5::t_a08e1d13255ab6 1-42
+spikes/engine-cold-start/src/bin/boa.rs
+  s_8606d1a0f130a5::t_c7f0acdcb58766 1-186
+spikes/engine-cold-start/src/bin/boa_probe.rs
+  s_8606d1a0f130a5::t_4757e4349969e8 1-85
+spikes/engine-cold-start/src/bin/quickjs.rs
+  s_8606d1a0f130a5::t_d7117ff068b73f 1-174
+spikes/engine-cold-start/src/glue.js
+  s_8606d1a0f130a5::t_e3ffec8d1c6832 1-38
+spikes/engine-cold-start/src/measure.rs
+  s_8606d1a0f130a5::t_828e1285ea9e1f 1-63
+spikes/engine-cold-start/src/native.rs
+  s_8606d1a0f130a5::t_ad61f8cce109c7 1-435
+spikes/engine-cold-start/src/platform.js
+  s_8606d1a0f130a5::t_19975a952258ee 1-35
+spikes/engine-cold-start/src/program.rs
+  s_8606d1a0f130a5::t_aeaa9a516d3dad 1-287
+spikes/engine-cold-start/stubs/async-hooks.js
+  s_8606d1a0f130a5::t_e1e8f8cc2ec641 1-6
+spikes/engine-cold-start/stubs/crypto.js
+  s_8606d1a0f130a5::t_76da4783ac89cc 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31d79b09aef1b495064b153a192874af770a0dc4",
+  "prompts": {},
+  "sessions": {
+    "s_8606d1a0f130a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a204a0-8cf0-7910-acaf-f89234d6f774",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
