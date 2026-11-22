@@ -1,0 +1,21 @@
+e2e/browser/ai.spec.ts
+  s_61c7aa4d512211::t_b82d2d487a7ae2 99,192
+plugins/ai/src/client/ui/reply-header.tsx
+  s_61c7aa4d512211::t_0ae5688be02dfc 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c45553c5308068213511ff36e1d0d88ef5eba7d4",
+  "prompts": {},
+  "sessions": {
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
