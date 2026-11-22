@@ -1,0 +1,59 @@
+plugins/chat/src/server/_functions.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1-7,15-18
+  s_8f13dd997b35ed::t_07671c2075ad3b 19
+e2e/fake-agent/replays/codex/accept.jsonl
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1-2,7-31
+e2e/fake-agent/replays/codex/acceptForSession.jsonl
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1-2,7-24
+plugins/ai/src/client/lib/turn.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 2
+e2e/fake-agent/agent-turn.mjs
+  s_8f13dd997b35ed::t_6b7a7f075316b9 53,65,72
+plugins/claude/tests/turns.mjs
+  s_8f13dd997b35ed::t_6b7a7f075316b9 54,56,58,60,62,67,218,224,248,262-277,289-293,298-299,352-354,361-362,366-368,374-375,381-383,385,399,414,430,432,436,445,462
+plugins/ai/src/client/lib/turn-controls.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 2-3,7,16-30
+plugins/ai/src/client/ui/permission-card.tsx
+  s_8f13dd997b35ed::t_6b7a7f075316b9 16-18
+plugins/ai/tests/agent-row.test.tsx
+  s_8f13dd997b35ed::t_6b7a7f075316b9 131
+e2e/fake-agent/replays/codex/cancel.jsonl
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1,6-18
+e2e/fake-agent/replays/codex/helper-approval.jsonl
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1-2,7-14,16-41
+plugins/ai/src/server/choices.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 3,50-52
+e2e/fake-agent/replays/codex/decline.jsonl
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1,6-22
+plugins/ai/src/client/lib/choices.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1
+plugins/ai/src/server/_functions.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1
+plugins/ai/src/client/ui/agent-row.tsx
+  s_8f13dd997b35ed::t_6b7a7f075316b9 25,95-101
+plugins/chat/src/server/folders/folders.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 2,7,23
+plugins/chat/src/server/threads/threads.ts
+  s_8f13dd997b35ed::t_6b7a7f075316b9 1,5,28,88,169
+plugins/codex/tests/e2e.mjs
+  s_8f13dd997b35ed::t_6b7a7f075316b9 3,90,120,157,174,191,202,204-205,233-236,245-261,264,267-272,275-276,282-288,290-292,295-300,302-322,331-332
+  s_8f13dd997b35ed::t_596bf95c3c0838 333-334
+packages/server/tests/ai-liveness-driver.mjs
+  s_8f13dd997b35ed::t_6b7a7f075316b9 177,182-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c03af0a93d79dfe5a3854278969c014bd49c05f",
+  "prompts": {},
+  "sessions": {
+    "s_8f13dd997b35ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2032b-5319-7bd3-a063-7fdd9219e767",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
