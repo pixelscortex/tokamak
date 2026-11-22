@@ -1,0 +1,38 @@
+e2e/browser/ai.spec.ts
+  s_c1b5268d524e75::t_0466535149e180 96,104,158
+  s_c1b5268d524e75::t_1bd26e083a7a21 148-152,155
+plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
+  s_c1b5268d524e75::t_e03f75a8306a72 30-34
+  s_c1b5268d524e75::t_0718e8193b2fbf 3,19-23,38
+  s_c1b5268d524e75::t_e209f9512c79e5 4,24-29,35-37,39-42
+  s_c1b5268d524e75::t_eecc53745a8899 43
+packages/sdk/component-parts.tsx
+  s_c1b5268d524e75::t_2ddcfa2b56256e 50,86-91,97,103-104
+  s_c1b5268d524e75::t_e03f75a8306a72 118-120
+plugins/chat/tests/extensions.test.tsx
+  s_c1b5268d524e75::t_71d7be6c7b0ca3 32,178,186
+  s_c1b5268d524e75::t_4d90760c47aad3 4-5,7,11,136-177,179-185,187-208
+  s_c1b5268d524e75::t_f9e9eb1f3ff4e7 209-211
+  s_c1b5268d524e75::t_a629e661523b34 212-214
+packages/sdk/tests/web/component-actions.test.tsx
+  s_c1b5268d524e75::t_87ee7df2ebaf78 2,190-212,214-222,227-237,240
+  s_c1b5268d524e75::t_22bb0b844d3d37 4,213,223-226,238-239
+  s_c1b5268d524e75::t_db5103f29e8f56 241-243
+  s_c1b5268d524e75::t_c70a2aed19c0f6 244-245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6f886571215ebfe290ca69f9ac2acc3a55c21007",
+  "prompts": {},
+  "sessions": {
+    "s_c1b5268d524e75": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a201db-63dc-75e2-a2ec-e2d8242e3639",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
