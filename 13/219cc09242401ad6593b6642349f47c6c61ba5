@@ -1,0 +1,171 @@
+packages/server/src/websocket.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 6,51-61,175,190-191,288,366-368,395-416,499-511
+app/src/plugins/views.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 17,63,66,71-76
+packages/build/src/component-parts.ts
+  s_f4331c2d925ceb::t_83891e2783e56d 6-14,352-356
+  s_f4331c2d925ceb::t_96ffc360a5157c 20,36,62,73,77,91,281,293,297,306-307,314,340,363,368
+packages/server/src/service/builtin_queries.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 1-16
+packages/build/tests/run.sh
+  s_f4331c2d925ceb::t_d311512e6211d9 4
+  s_f4331c2d925ceb::t_189b96b2a617e9 3
+packages/build/src/ui-build-config.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 6,9
+packages/sdk/src/client.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 8,31-35,38,44,50-51,82,119-123
+  s_f4331c2d925ceb::t_3df9a63fd7a6d2 124
+packages/sdk/src/functions.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 20-33,49,57,66,115-120,139,151,247,249
+packages/sdk/tools/plugin-boundary.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 15,36-46,252-254,366
+packages/sdk/tests/transport.test.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 174-187
+packages/server/tests/build-actions.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 191
+e2e/browser/app.spec.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1,13-39,74,177-219
+packages/server/src/identity.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 1,4-9,16-23,28,36,41-105,193-195,203,234-245,275,293-295,305-325,327,330-333,351-359,394
+packages/sdk/solid.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 8-9,60-67
+packages/server/src/service/command_loop.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 59,74,84,120
+app/src/shell/session.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 49,84
+packages/sdk/tests/acceptance.test.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 7,161-165
+packages/build/src/client-surface.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1,12,15,20,33-34,38-39,41-52
+  s_f4331c2d925ceb::t_71dfa1dc908396 19,35,68,83,101-104
+packages/server/tests/sdk-transport-driver.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 185-193,201-203
+packages/build/src/window-state.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-6,8-11,13-26,28-45,47,49,64-187,189-213
+  s_f4331c2d925ceb::t_71dfa1dc908396 7,12,27,46,48,50-63,188
+packages/server/src/host/worker/tests.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 55-57
+app/scripts/integration-fixture.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 7-12
+packages/sdk/package.json
+  s_f4331c2d925ceb::t_d311512e6211d9 12-13
+packages/sdk/src/host.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 46,70
+packages/server/tests/actions.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 28-29,115,124
+app/src/plugins/web-host.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-7,20,23-24,27-28,36-37,127-129,139,160-176
+  s_f4331c2d925ceb::t_6fdbe3d6ac3925 177
+packages/server/src/service/session.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 59,144
+packages/server/src/host.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 56,68,103,141,153,155,216
+packages/server/src/actions.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 14,30,33,56,66,96,106,112,127,155,165,181,207
+packages/server/src/plugins/tests.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 150-161
+packages/server/src/service/requests.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 4,40-41,60,66-74,79,86-98,105,109
+packages/sdk/tests/web/solid.test.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 6,8,12,97-132
+  s_f4331c2d925ceb::t_a0bd0efc3f83a0 133
+e2e/browser.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 14,30-38
+packages/server/tests/within.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-13
+packages/build/tests/window-state.test.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 1-5,7-26
+  s_f4331c2d925ceb::t_fc76d7a3cb4689 6
+packages/sdk/client.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 43-44
+packages/server/src/service/subscriptions.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 50,53,58,108-129,134,144-146,148,150-175,181
+packages/build/tests/boundary.test.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 4,234-238
+packages/server/src/plugins/manifest.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 120-122
+packages/sdk/src/index.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 25,34-35,69
+packages/server/src/service/mod.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 86,107-108,110-112,153,162-167,169,194,204
+packages/server/tests/auth-driver.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 1-188
+packages/server/src/service/action_coordination.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 7,43,112
+app/tests/fixtures/other-draft/src/client/api.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 1-22
+packages/server/tests/identity.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 27-30,33,89-113,315-326,328
+  s_f4331c2d925ceb::t_a01b82bdf6320f 327
+app/tests/fixtures/other-draft/package.json
+  s_f4331c2d925ceb::t_d311512e6211d9 1-6
+packages/build/src/compiler.ts
+  s_f4331c2d925ceb::t_71dfa1dc908396 11-12
+  s_f4331c2d925ceb::t_83891e2783e56d 6-8
+  s_f4331c2d925ceb::t_8ed247d69c4b41 13
+app/tests/fixtures/integration/src/client/api.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 3,13,46,75-102
+packages/server/src/service/invocations.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 9,27
+packages/sdk/window-state-host.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-173
+packages/sdk/src/window-state-protocol.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-7
+packages/server/tests/actions-driver.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 10
+packages/server/tests/fixtures/auth/src/server/identity.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-17
+packages/sdk/README.md
+  s_f4331c2d925ceb::t_d311512e6211d9 352-373
+  s_f4331c2d925ceb::t_8560a10f6b643d 374
+packages/build/package.json
+  s_f4331c2d925ceb::t_d311512e6211d9 21-25
+packages/build/vitest.config.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-29
+packages/server/tests/fixtures/auth/package.json
+  s_f4331c2d925ceb::t_d311512e6211d9 1-5
+app/tests/fixtures/other-draft/plugin.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-3
+packages/build/tests/fixtures/window-plugin/src/main.tsx
+  s_f4331c2d925ceb::t_d311512e6211d9 1,3-18,20-24,26,28-29
+  s_f4331c2d925ceb::t_fc76d7a3cb4689 2,19,25,27,30
+packages/server/PLUGINS.md
+  s_f4331c2d925ceb::t_d311512e6211d9 55-57,157-166
+  s_f4331c2d925ceb::t_e2c5d3cfaa49da 167
+packages/server/src/service/window_state.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 1-99
+packages/build/tests/fixtures/window-plugin/binding.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-3
+packages/build/tests/window-state.test.mjs
+  s_f4331c2d925ceb::t_d311512e6211d9 1-42
+packages/sdk/tsconfig.solid.json
+  s_f4331c2d925ceb::t_d311512e6211d9 10
+packages/sdk/window-state.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-41
+packages/server/tests/fixtures/auth/plugin.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-3
+packages/server/src/service/plugin_control.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 46,48-54,57,95-97
+packages/server/src/service/server.rs
+  s_f4331c2d925ceb::t_d311512e6211d9 48-49,52-63,65-67,71-79,81,88
+packages/sdk/src/auth.ts
+  s_f4331c2d925ceb::t_d311512e6211d9 1-7
+bun.lock
+  s_f4331c2d925ceb::t_737e39175276b9 58,60-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13219cc09242401ad6593b6642349f47c6c61ba5",
+  "prompts": {},
+  "sessions": {
+    "s_f4331c2d925ceb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-28ed-7d33-aee7-6ad1bb1bd4d1",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
