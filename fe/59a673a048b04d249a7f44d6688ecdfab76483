@@ -1,0 +1,52 @@
+plugins/codex/tests/e2e.mjs
+  s_13922ebd3d9eea::t_7595e37066dc84 129-134,136,173-174
+  s_13922ebd3d9eea::t_c8037eabfddd91 1-2,5-6,8-16,22-37,46,51-54,57-73,75-98,101,116-128,135,137-139,170-172,175-210,212,214-239
+  s_13922ebd3d9eea::t_b7dc8ca6575850 3,17-21,38,55-56,74,99-100,102-115,211,213,240
+  s_13922ebd3d9eea::t_2cc40793780102 140-169
+  s_13922ebd3d9eea::t_3cfa5d725978e6 7
+  s_13922ebd3d9eea::t_df85113c82319c 4,39-45,47-50
+packages/server/tests/codex_turns.rs
+  s_13922ebd3d9eea::t_3cfa5d725978e6 1-17
+e2e/fake-agent/replays/codex/history.jsonl
+  s_13922ebd3d9eea::t_2cc40793780102 1-36
+e2e/fake-agent/program.mjs
+  s_13922ebd3d9eea::t_ed657781098de6 12,24,42,82-90,94
+e2e/fake-agent/replays/codex/accept.jsonl
+  s_13922ebd3d9eea::t_9bb5df88911998 1-21
+e2e/fake-agent/replays/codex/acceptForSession.jsonl
+  s_13922ebd3d9eea::t_a343ebb80779bc 1-21
+e2e/fake-agent/replays/codex/cancel.jsonl
+  s_13922ebd3d9eea::t_b6c987405d2812 1-18
+e2e/fake-agent/replays/codex/decline.jsonl
+  s_13922ebd3d9eea::t_ed0264281f5983 1-21
+e2e/fake-agent/replays/codex/edit.jsonl
+  s_13922ebd3d9eea::t_c2078eedf9f8c4 1-29
+e2e/fake-agent/replays/codex/info.jsonl
+  s_13922ebd3d9eea::t_592941de0970cd 1-12
+e2e/fake-agent/replays/codex/plan.jsonl
+  s_13922ebd3d9eea::t_7311cc5199b361 1-22
+e2e/fake-agent/replays/codex/signed-out.jsonl
+  s_13922ebd3d9eea::t_6fca4da6840da6 1-6
+e2e/fake-agent/replays/codex/steer.jsonl
+  s_13922ebd3d9eea::t_b5ad7e902d874c 1-19
+e2e/fake-agent/replays/codex/stop.jsonl
+  s_13922ebd3d9eea::t_93481c6dc56978 1-16
+plugins/codex/tests/codexProbe.ts.fixture
+  s_13922ebd3d9eea::t_6ccbde7a3fb2c0 1-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe59a673a048b04d249a7f44d6688ecdfab76483",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
