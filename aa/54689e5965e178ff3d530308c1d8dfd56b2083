@@ -1,0 +1,64 @@
+plugins/ai/src/server/run.ts
+  s_5017df894b25cd::t_61b7a6e40e0ee5 5,48,51,53-54,61,63-64
+plugins/code/package.json
+  s_5017df894b25cd::t_61b7a6e40e0ee5 1-12
+packages/server/tests/code-snapshots-driver.mjs
+  s_5017df894b25cd::t_48b89e2b97e85a 12-13
+  s_5017df894b25cd::t_27eed0dce3160f 25-28,35-38
+  s_5017df894b25cd::t_abb0c2e445588d 1-11,14-24,29-34,39-47
+e2e/fake-agent/program.mjs
+  s_5017df894b25cd::t_abb0c2e445588d 15,24-25,92-96
+  s_312a34bc8d5ba4::t_c32ac793b44fee 97
+plugins/ai/src/contracts.ts
+  s_5017df894b25cd::t_27eed0dce3160f 16-20
+  s_5017df894b25cd::t_61b7a6e40e0ee5 1,65-75
+plugins/code/src/server/tsconfig.json
+  s_5017df894b25cd::t_61b7a6e40e0ee5 1-5
+e2e/fake-agent/README.md
+  s_5017df894b25cd::t_fa7421cc8a826c 8-9
+packages/server/tests/code_snapshots.rs
+  s_5017df894b25cd::t_fa7421cc8a826c 1-22
+plugins/code/contracts/ai.ts
+  s_5017df894b25cd::t_27eed0dce3160f 1-75
+plugins/code/src/server/hooks.ts
+  s_5017df894b25cd::t_61b7a6e40e0ee5 1-2,4-40
+  s_5017df894b25cd::t_ef761e17943ec3 3
+plugins/code/src/local/git.ts
+  s_5017df894b25cd::t_27eed0dce3160f 1-121
+plugins/ai/src/server/turn-hooks.ts
+  s_5017df894b25cd::t_61b7a6e40e0ee5 1-33
+plugins/code/plugin.ts
+  s_5017df894b25cd::t_61b7a6e40e0ee5 1-10
+e2e/fake-agent/replays/edit.jsonl
+  s_5017df894b25cd::t_abb0c2e445588d 1-5
+bun.lock
+  s_5017df894b25cd::t_36bfd408c2ad4c 172-181,860-861
+plugins/code/src/server/_generated/api.ts
+  s_5017df894b25cd::t_f8218365d7369b 1-4
+plugins/code/src/server/_generated/internal.ts
+  s_5017df894b25cd::t_579140c4dd3927 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aa54689e5965e178ff3d530308c1d8dfd56b2083",
+  "prompts": {},
+  "sessions": {
+    "s_312a34bc8d5ba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20148-225d-7b23-a104-1c434af1d174",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_5017df894b25cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20148-60e7-76e0-952f-eb902bf2d771",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
