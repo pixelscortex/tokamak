@@ -1,0 +1,30 @@
+packages/server/src/service/startup.rs
+  s_844ef8d40d75dc::t_e4c3ea6be9430c 165
+packages/server/src/service/window_state.rs
+  s_844ef8d40d75dc::t_e4c3ea6be9430c 82,86,90-94,136-138,169-171
+  s_826168563f30c4::t_fd86405a8212d5 172-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d0829b0e7d7b967a7f34c6359e49b8a12cdb15e",
+  "prompts": {},
+  "sessions": {
+    "s_826168563f30c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200de-f01f-7df1-b817-9eaabc6a583a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_844ef8d40d75dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200e5-9e8d-7ef0-9181-8dba22c295a4",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
