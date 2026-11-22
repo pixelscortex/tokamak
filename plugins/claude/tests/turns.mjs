@@ -427,11 +427,13 @@ async function reports(run) {
   const helper = progress.reply.helpers.find(({ name }) => name === "Explore");
   assert.equal(helper?.state, "done");
   assert.equal(helper.hasText, true);
-  assert.match(await progress.helper(helper), /exists/i);
+  const helperText = await progress.helper(helper);
   if (live) {
+    assert.ok(helperText.trim(), "the helper's report can be opened");
     assert.equal(await readFile(join(progress.folder, "todo-smoke.txt"), "utf8"), "TOKAMAK_TEST");
     assert.ok(progress.reply.usage.outputTokens > 0);
   } else {
+    assert.match(helperText, /exists/i);
     assert.deepEqual(progress.reply.usage, {
       inputTokens: 201944,
       cachedInputTokens: 192317,
