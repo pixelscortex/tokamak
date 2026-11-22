@@ -1,0 +1,19 @@
+plugins/code/contracts/ai.ts
+  s_99043c518cfc5d::t_0f8e017bf12c1b 189,198-204,211-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90dc83ceb9dfde0ae14d9018cf9c342159a508be",
+  "prompts": {},
+  "sessions": {
+    "s_99043c518cfc5d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79d31844-efa8-419c-bba7-87cd6fde4e83",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
