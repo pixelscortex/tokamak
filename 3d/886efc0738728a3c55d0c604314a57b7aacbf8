@@ -1,0 +1,28 @@
+packages/sdk/client.tsx
+  s_416ef60618c0ac::t_091a32db3798a5 65,83,235,237
+packages/sdk/component-actions.ts
+  s_416ef60618c0ac::t_091a32db3798a5 63,65-69,78,88,103,112-115,122,130
+packages/sdk/component-parts.tsx
+  s_416ef60618c0ac::t_091a32db3798a5 30-31,47
+packages/sdk/tests/web/component-actions.test.tsx
+  s_416ef60618c0ac::t_e24160325c789b 316-388,390-395
+  s_416ef60618c0ac::t_9216d963694d14 389
+packages/build/README.md
+  s_416ef60618c0ac::t_d4e835bb3cc1b6 157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d886efc0738728a3c55d0c604314a57b7aacbf8",
+  "prompts": {},
+  "sessions": {
+    "s_416ef60618c0ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a23bd7be-0bbf-42e7-99fd-e89dbc063cfd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
