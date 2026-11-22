@@ -2,21 +2,27 @@
   <Row lead={<StatusIcon status="done" />} trail="12m">Paginate customer list</Row>
   <Row kind="double" selected lead={…} trail="0:12" detail="sonnet 4.5 · invoices-app">Add CSV export</Row>
   <Row kind="half" lead={<Icon path={mark} size={12} />}>haiku 4.5 running tests</Row>
+  <Row as="button" onClick={createThread}>New thread</Row>
   <Row render={(attrs) => <a href="/threads/1" {...attrs} />}>Weekly admin</Row>
 
   Single rows follow the container's density-* (32 / 40 / 48); double is 48,
   half is 24 and starts at the title edge of the row above. Lead 16, 8 from
   the title; trail one quiet item; detail holds facts, never status words.
   Selected: the surface's selected fill, ink, weight 500.
+  tab: inherits navigation chrome, with 12 px start padding and no end padding.
+  action/featured: ink labels with 8 px sides; featured uses the hover fill at rest.
+  card: an action on a card surface, with an 8 px trail gap and a hover transition.
 */
 import { merge, omit } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { cn, tv } from "./cn.ts";
 
+const actionSlots = { root: "px-2 text-ink", lead: "text-ink", trail: "text-label" };
+
 export const rowVariants = tv({
   slots: {
     root: [
-      "group/row flex min-w-0 flex-col justify-center rounded-sm px-row text-start text-row text-ink-2 no-underline",
+      "group/row flex min-w-0 flex-col justify-center rounded-sm text-start text-row text-ink-2 no-underline",
       "data-selected:bg-selected data-selected:text-ink",
       "group-data-selected/row:bg-selected group-data-selected/row:text-ink group-data-disabled/row:text-ink-3",
     ],
@@ -37,15 +43,28 @@ export const rowVariants = tv({
       },
     },
     lead: { true: { detail: "ps-6" } },
-    interactive: { true: { root: "cursor-pointer hover:bg-hover focus-ring" } },
+    interactive: { true: { root: "cursor-pointer focus-ring" } },
+    variant: {
+      standard: { root: "px-row" },
+      tab: { root: "ps-3 text-inherit" },
+      action: actionSlots,
+      featured: { ...actionSlots, root: [actionSlots.root, "bg-hover"] },
+      card: { root: "px-row transition duration-200", lead: "text-ink", trail: "gap-2 text-label" },
+    },
   },
-  defaultVariants: { kind: "single" },
+  compoundVariants: [
+    { interactive: true, variant: ["standard", "action", "card"], class: { root: "hover:bg-hover" } },
+    { interactive: true, variant: "featured", class: { root: "hover:bg-selected" } },
+  ],
+  defaultVariants: { kind: "single", variant: "standard" },
 });
 
 export type RowKind = "single" | "double" | "half";
+type RowVariant = "standard" | "tab" | "action" | "featured" | "card";
 
 export type RowParts = {
   kind?: RowKind;
+  variant?: RowVariant;
   lead?: JSX.Element;
   trail?: JSX.Element;
   detail?: JSX.Element;
@@ -53,7 +72,7 @@ export type RowParts = {
 };
 
 export function RowBody(props: RowParts): JSX.Element {
-  const slots = () => rowVariants({ kind: props.kind, lead: Boolean(props.lead) });
+  const slots = () => rowVariants({ kind: props.kind, variant: props.variant, lead: Boolean(props.lead) });
   return (
     <>
       <span data-slot="row-line" class={slots().line()}>
@@ -84,22 +103,45 @@ export type RowProps = RowParts &
   Omit<JSX.HTMLAttributes<HTMLElement>, "children" | "class"> & {
     class?: string;
     selected?: boolean;
+    as?: "button";
     render?: (attrs: Record<string, unknown>) => JSX.Element;
   };
 
 export function Row(props: RowProps): JSX.Element {
-  const rest = omit(props, "kind", "lead", "trail", "detail", "children", "selected", "render", "class");
+  const rest = omit(
+    props,
+    "kind",
+    "variant",
+    "lead",
+    "trail",
+    "detail",
+    "children",
+    "selected",
+    "as",
+    "render",
+    "class",
+  );
   const attrs = merge(rest, {
     "data-slot": "row",
     get "data-selected"() {
       return props.selected ? "" : undefined;
     },
     get class() {
-      return cn(rowVariants({ kind: props.kind, interactive: Boolean(props.render) }).root(), props.class);
+      return cn(
+        rowVariants({
+          kind: props.kind,
+          variant: props.variant,
+          interactive: props.as === "button" || Boolean(props.render),
+        }).root(),
+        props.as === "button" && "w-full",
+        props.class,
+      );
     },
     get children() {
       return <RowBody {...props} />;
     },
   }) as Record<string, unknown>;
-  return props.render ? props.render(attrs) : <div {...attrs} />;
+  if (props.render) return props.render(attrs);
+  if (props.as === "button") return <button type="button" {...attrs} />;
+  return <div {...attrs} />;
 }

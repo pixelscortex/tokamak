@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button, Icon, icons } from "@tokamak/ui";
+import { Button, Icon, icons, Row } from "@tokamak/ui";
 import { useShell } from "../context";
 import { shellIcons } from "../icons";
 import { shellPages } from "../pages";
@@ -60,7 +60,7 @@ export function Actions(props: {
 }): JSX.Element {
   return (
     <div class="flex items-center gap-2">
-      <Button variant="ghost" class="-ms-3" onClick={props.onBack}>
+      <Button variant="ghost" onClick={props.onBack}>
         {props.back}
       </Button>
       <div class="flex-1" />
@@ -184,25 +184,26 @@ export function Recent(): JSX.Element {
       .slice(0, 5);
   return (
     <Show when={recent().length}>
-      <div class="mt-4 flex flex-col gap-1">
+      <div class="density-dense mt-4 flex flex-col gap-1">
         <h3 class="flex h-6 items-center text-label text-ink-3">Recent</h3>
         <For each={recent()}>
           {(server) => (
-            <button
-              type="button"
-              class="-mx-2 flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-start hover:bg-hover focus-ring"
+            <Row
+              as="button"
+              lead={<Icon path={shellIcons.cloud} />}
+              trail={"lastUsed" in server ? age(server.lastUsed) : ""}
               onClick={() => {
                 shell.switchServer(server.id);
                 shell.navigation.close(shellPages.connect.route);
               }}
             >
-              <Icon path={shellIcons.cloud} class="text-ink-3" />
-              <span class="truncate text-row text-ink-2">{server.name}</span>
-              <span class="min-w-0 flex-1 truncate text-data text-ink-3">
-                {"address" in server ? new URL(server.address).host : ""}
+              <span class="flex items-center gap-2">
+                <span class="min-w-0 truncate">{server.name}</span>
+                <span class="min-w-0 flex-1 truncate text-data text-ink-3">
+                  {"address" in server ? new URL(server.address).host : ""}
+                </span>
               </span>
-              <span class="text-data text-ink-3">{"lastUsed" in server ? age(server.lastUsed) : ""}</span>
-            </button>
+            </Row>
           )}
         </For>
       </div>

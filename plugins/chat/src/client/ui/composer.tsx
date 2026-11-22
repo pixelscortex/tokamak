@@ -32,7 +32,7 @@ export const Composer = component("composer", {}, (props: ComposerProps) => (
     <div
       part="box"
       data-part="box"
-      class="flex min-h-0 flex-col gap-2 rounded-inner surface-card py-3 ps-4 pe-3"
+      class="flex min-h-0 flex-col gap-2 rounded-inner surface-card py-3 ps-2 pe-3"
     >
       {/* @tokamak/ui's Textarea draws a well with an edge; the composer's anatomy
           has none, so this is the same ui-sdk textarea with the composer's own look. */}
@@ -58,9 +58,9 @@ export const Composer = component("composer", {}, (props: ComposerProps) => (
           }
         }}
         data-composer-input=""
-        class="block min-h-8 w-full resize-none bg-transparent py-1 text-read text-ink outline-none placeholder:text-ink-3 field-sizing-content"
+        class="block min-h-8 w-full resize-none bg-transparent py-1 ps-2 text-read text-ink outline-none placeholder:text-ink-3 field-sizing-content"
       />
-      <div class="-ms-2 flex h-8 items-center gap-1">
+      <div class="flex h-8 items-center gap-1">
         <span part="tools" data-part="tools" class="flex items-center gap-1 empty:hidden" />
         <span class="flex-1" />
         <SendButton disabled={props.sending || !props.draft.trim() || isHeld(props)} onSend={props.onSend} />

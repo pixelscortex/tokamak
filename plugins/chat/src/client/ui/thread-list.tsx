@@ -59,10 +59,11 @@ export function ThreadList(props: {
   return (
     <nav aria-label="Chat threads" class="flex flex-col gap-4">
       <Row
+        as="button"
         lead={<Icon path={glyphs.add} />}
         trail={<Kbd keys="mod+n" />}
         selected={props.current === undefined}
-        render={(attrs) => <button {...attrs} type="button" onClick={() => props.onNew()} />}
+        onClick={() => props.onNew()}
       >
         New thread
       </Row>

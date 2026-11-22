@@ -127,7 +127,7 @@ test("row list has one tab stop, moves with arrows, selects with Enter and skips
   const pick = vi.fn();
   mount(() => (
     <>
-      <button type="button">Before</button>
+      <Button>Before</Button>
       <RowList.Root aria-label="Threads" defaultValue="a" onValueChange={pick}>
         <RowList.Option value="a" lead={<StatusIcon status="running" label="Add CSV export" />} trail="0:12">
           Add CSV export
@@ -153,6 +153,25 @@ test("row list has one tab stop, moves with arrows, selects with Enter and skips
   await waitFor(() => expect(options[2]!.getAttribute("aria-selected")).toBe("true"));
   expect(pick.mock.calls.at(-1)?.[0]).toBe("c");
   expect(options[2]!.querySelector('[data-slot="row-box"]')?.className).toContain("h-12");
+});
+
+test("a row button activates from the keyboard without submitting its form", async () => {
+  const user = userEvent.setup();
+  const pick = vi.fn();
+  const submit = vi.fn((event: SubmitEvent) => event.preventDefault());
+  mount(() => (
+    <form onSubmit={submit}>
+      <Row as="button" role="radio" aria-checked="true" title="Use no folder" selected onClick={pick}>
+        No folder
+      </Row>
+    </form>
+  ));
+  const row = screen.getByRole("radio", { name: "No folder", checked: true });
+  expect(row.getAttribute("title")).toBe("Use no folder");
+  row.focus();
+  await user.keyboard("{Enter}");
+  expect(pick).toHaveBeenCalledTimes(1);
+  expect(submit).not.toHaveBeenCalled();
 });
 
 test("a status icon carries its word in the name, never on screen", () => {

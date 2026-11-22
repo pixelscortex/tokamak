@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { isTauri } from "@tauri-apps/api/core";
-import { Icon } from "@tokamak/ui";
+import { Icon, Row } from "@tokamak/ui";
 import { useShell, type ShellState } from "./context";
 import { shellIcons } from "./icons";
 import { hrefOf } from "./views";
@@ -32,28 +32,28 @@ export function Welcome(): JSX.Element {
             a server.
           </p>
         </div>
-        <div class="-mx-2 flex flex-col gap-1 density-normal">
+        <div class="density-normal flex flex-col gap-1">
           <Show when={first()}>
             {(view) => (
-              <button
-                type="button"
-                class="flex h-row cursor-pointer items-center gap-2 rounded-sm px-2 text-start hover:bg-hover focus-ring"
+              <Row
+                as="button"
+                variant="action"
+                lead={<Icon path={view().icon ?? shellIcons.chatNew} />}
                 onClick={() => shell.navigation.go(hrefOf(view()))}
               >
-                <Icon path={view().icon ?? shellIcons.chatNew} class="text-ink" />
-                <span class="flex-1 text-row text-ink">Open {view().title} on This Mac</span>
-              </button>
+                Open {view().title} on This Mac
+              </Row>
             )}
           </Show>
-          <button
-            type="button"
-            class="flex h-row cursor-pointer items-center gap-2 rounded-sm bg-hover px-2 text-start hover:bg-selected focus-ring"
+          <Row
+            as="button"
+            variant="featured"
+            lead={<Icon path={shellIcons.cloud} />}
+            trail="Got an invite?"
             onClick={() => shell.openConnect()}
           >
-            <Icon path={shellIcons.cloud} class="text-ink" />
-            <span class="flex-1 text-row text-ink">Join a friend's server</span>
-            <span class="text-label text-ink-3">Got an invite?</span>
-          </button>
+            Join a friend's server
+          </Row>
         </div>
       </section>
       <div class="grow-2" />

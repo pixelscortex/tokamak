@@ -6,6 +6,8 @@
   brand or primary: the one main action in a region. outline: the default.
   destructive: only the button that deletes. ghost: icon buttons and quiet
   actions. An icon-only button needs a label; it becomes its name.
+  quiet: ink text on a soft fill that strengthens on hover, for notice actions.
+  bare: colour-only hover for chrome icons, with a 12 px glyph in the usual target.
 */
 import { Button as Base } from "@ui-sdk/solid/button";
 import { omit } from "solid-js";
@@ -38,6 +40,8 @@ export const buttonVariants = tv({
       ],
       ghost:
         "text-ink-2 hover:bg-edge hover:text-ink active:bg-edge-strong/45 data-open:bg-edge data-open:text-ink",
+      quiet: "bg-edge/50 text-ink hover:bg-edge",
+      bare: "text-ink-3 transition-none hover:text-ink",
     },
     size: { md: "h-8 px-3", lg: "h-12 px-4" },
     iconOnly: { true: "px-0" },
@@ -50,7 +54,7 @@ export const buttonVariants = tv({
   defaultVariants: { variant: "outline", size: "md" },
 });
 
-export type ButtonVariant = "brand" | "primary" | "outline" | "destructive" | "ghost";
+export type ButtonVariant = "brand" | "primary" | "outline" | "destructive" | "ghost" | "quiet" | "bare";
 export type ButtonSize = "md" | "lg";
 
 export type ButtonLook = { variant?: ButtonVariant; size?: ButtonSize; class?: string } & (
@@ -76,11 +80,13 @@ export function buttonClass(props: ButtonLook): string {
 export function ButtonContent(props: ButtonLook): JSX.Element {
   return (
     <>
-      {props.icon && <Icon path={props.icon} />}
+      {props.icon && <Icon path={props.icon} size={props.variant === "bare" ? 12 : undefined} />}
       {/* Beside the text, never inside it: the text is trimmed to its cap height to sit dead
           centre, and a mark inside that line moves the line's baseline to the mark's bottom edge. */}
       {props.lead}
-      {props.children !== undefined && <span class="text-trim">{props.children}</span>}
+      {props.children !== undefined && (
+        <span class={props.variant === "quiet" ? undefined : "text-trim"}>{props.children}</span>
+      )}
     </>
   );
 }

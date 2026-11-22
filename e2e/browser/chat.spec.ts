@@ -29,7 +29,12 @@ async function startThread(page: Page, text: string) {
 test("the app opens on a new thread, and only the first Send creates it", async ({ page }) => {
   await openChat(page);
   await expect(page.getByRole("radiogroup", { name: "Folder" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "No folder" })).toHaveAttribute("aria-checked", "true");
+  const noFolder = page.getByRole("radio", { name: "No folder" });
+  await expect(noFolder).toHaveAttribute("aria-checked", "true");
+  await expect(noFolder).toHaveAttribute("data-selected", "");
+  await expect
+    .poll(() => noFolder.evaluate((row) => row.clientWidth === row.parentElement?.clientWidth))
+    .toBe(true);
   const before = await threads(page).count();
   const text = unique("Plan the release");
   await composer(page).fill(text);

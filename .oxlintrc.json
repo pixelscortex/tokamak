@@ -50,6 +50,13 @@
   "plugins": ["typescript", "import"],
   "overrides": [
     {
+      "files": ["**/tests/**", "**/*.test.*", "**/*.spec.*", "**/fixtures/**"],
+      "excludeFiles": ["packages/ui/lint/fixtures/**"],
+      "rules": {
+        "tokamak/no-raw-button": "off"
+      }
+    },
+    {
       "files": [
         "packages/build/**",
         "**/tools/**",

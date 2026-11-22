@@ -41,6 +41,18 @@
       }
     ],
     "tokamak/concentric-radius": "error",
-    "tokamak/density-inward": "error"
-  }
+    "tokamak/density-inward": "error",
+    "tokamak/no-negative-margin": "error",
+    "tokamak/no-raw-button": "error",
+    "tokamak/no-text-style-in-button": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/packages/ui/src/**"],
+      "rules": {
+        "tokamak/no-negative-margin": "off",
+        "tokamak/no-raw-button": "off"
+      }
+    }
+  ]
 }
