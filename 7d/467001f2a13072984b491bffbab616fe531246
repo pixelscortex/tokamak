@@ -1,0 +1,69 @@
+plugins/chat/tests/fixtures/chat-probe/plugin.ts
+  s_416ef60618c0ac::t_59aa795c461015 1-2
+plugins/chat/vitest.config.ts
+  s_416ef60618c0ac::t_07f74b0da30bb3 1
+  s_416ef60618c0ac::t_4c18e44fc18b81 2
+e2e/browser/chat.spec.ts
+  s_416ef60618c0ac::t_8890c36ac37479 3-4,6-9,15,18-23,26,28-45,48,50-62,65,67-82,85,87-93,98-106
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 94-97
+plugins/chat/src/server/threads/threads.ts
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 55-56
+plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
+  s_416ef60618c0ac::t_59aa795c461015 1-17
+plugins/chat/tests/fixtures/chat-probe/package.json
+  s_416ef60618c0ac::t_59aa795c461015 1-6
+plugins/chat/tests/window-state.ts
+  s_416ef60618c0ac::t_29bdf326c55e30 1-5
+plugins/chat/src/client/ui/empty.tsx
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 82-84
+  s_416ef60618c0ac::t_d39556b2ddfd67 22,50,118,136
+moon.yml
+  s_416ef60618c0ac::t_1ae702c32f865d 52
+packages/server/tests/chat_threads.rs
+  s_416ef60618c0ac::t_a20853c0247cb7 1,7-8,10
+  s_416ef60618c0ac::t_3b6a37ad55a7fe 2-6,9,11-19
+plugins/chat/src/client/pages/chat.tsx
+  s_416ef60618c0ac::t_d39556b2ddfd67 6,144
+plugins/chat/src/client/tsconfig.json
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 6
+plugins/chat/tests/vitest.config.ts
+  s_416ef60618c0ac::t_07f74b0da30bb3 1-6,9-77
+  s_416ef60618c0ac::t_8b93ae056e748e 7-8
+plugins/chat/tests/extensions.test.tsx
+  s_416ef60618c0ac::t_b929335c5d2476 1-117
+plugins/chat/src/client/lib/icons.ts
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 8-15,17-18
+packages/server/tests/chat-threads-driver.mjs
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 69-72,84-89,118-124,131-138,167-170,184-187,193-195,204-211,220-223
+  s_416ef60618c0ac::t_3b6a37ad55a7fe 1-68,73-83,90-117,125-130,139-166,171-183,188-192,196-203,212-219,224-239
+plugins/chat/src/client/ui/message.tsx
+  s_416ef60618c0ac::t_d39556b2ddfd67 3,26-27
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 14
+plugins/chat/tests/chat-probe.d.ts
+  s_416ef60618c0ac::t_59aa795c461015 1,4-7
+  s_416ef60618c0ac::t_1ae702c32f865d 2-3
+plugins/chat/tests/tsconfig.json
+  s_416ef60618c0ac::t_1ae702c32f865d 1-6,9
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 7-8
+e2e/browser/servers.spec.ts
+  s_416ef60618c0ac::t_e4c86aa71fb2b4 47-49
+  s_416ef60618c0ac::t_a40faaa12251fd 7,43-45,55,62-63
+plugins/chat/src/client/_generated/components.d.ts
+  s_416ef60618c0ac::t_52f1565efe1949 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7d467001f2a13072984b491bffbab616fe531246",
+  "prompts": {},
+  "sessions": {
+    "s_416ef60618c0ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a23bd7be-0bbf-42e7-99fd-e89dbc063cfd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
