@@ -1,0 +1,94 @@
+packages/sdk/client.tsx
+  s_3684101c55ffe3::t_60cf60f3c6d8af 19
+packages/server/src/plugins/tests.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 150-161
+packages/server/src/service/requests.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 4,40-41,60,66-74,79,105,109
+  s_3684101c55ffe3::t_8a974c07e8c126 90
+packages/server/tests/fixtures/auth/package.json
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-5
+packages/server/tests/fixtures/auth/src/server/identity.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-17
+packages/server/src/websocket.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 6,51-61,175,190-191,288,366-368,395-416,499-511
+packages/sdk/src/index.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 25,34-35,69
+packages/server/src/host/worker/tests.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 55-57
+packages/server/src/service/plugin_control.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 46,48-54,57,95-97
+packages/server/tests/within.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-13
+packages/server/src/service/mod.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 86,107-108,110-112,153,162-167,169,194
+packages/sdk/src/host.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 46,70
+packages/sdk/tests/acceptance.test.mjs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 7,161-165
+packages/server/src/service/builtin_queries.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-16
+packages/server/tests/build-actions.mjs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 191
+packages/server/src/service/command_loop.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 59,74,84,120
+packages/server/src/service/session.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 59,144
+packages/server/src/service/server.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 48-49,52-63,65-67,71-79,81,88
+packages/server/src/actions.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 14,30,33,56,66,96,106,112,127,155,165,181,207
+packages/server/src/plugins/manifest.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 120-122
+packages/server/src/service/subscriptions.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 50,53,58,108-129,134,144-146,148,150-175,181
+packages/server/PLUGINS.md
+  s_3684101c55ffe3::t_60cf60f3c6d8af 46-48,148-157
+  s_3684101c55ffe3::t_0148916d81ac20 158
+packages/server/tests/identity.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 315-328
+packages/sdk/src/functions.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 20-33,49,57,66,115-120,139,151,247,249
+packages/build/tests/boundary.test.mjs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 4,234-238
+packages/server/src/service/invocations.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 9,27
+packages/server/tests/actions-driver.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 10
+packages/server/src/service/action_coordination.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 7,43,112
+packages/server/tests/fixtures/auth/plugin.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-3
+packages/server/src/host.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 56,68,103,141,153,155,216
+packages/sdk/README.md
+  s_3684101c55ffe3::t_60cf60f3c6d8af 338-360
+packages/sdk/src/auth.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-7
+packages/server/src/identity.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1,4-9,16-23,28,36,41-105,193-195,203,234-245,275,293-295,305-325,327,330-333,351-359,394
+packages/server/tests/actions.rs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 28-29,115,124
+packages/sdk/solid.ts
+  s_3684101c55ffe3::t_60cf60f3c6d8af 8-9,60-67
+packages/sdk/tests/web/solid.test.tsx
+  s_3684101c55ffe3::t_60cf60f3c6d8af 6,8,12,97-132
+  s_3684101c55ffe3::t_72be5988135973 133
+packages/server/tests/auth-driver.mjs
+  s_3684101c55ffe3::t_60cf60f3c6d8af 1-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "07eb77e4f43cc1931fcb4f426ea04e4e67930dc7",
+  "prompts": {},
+  "sessions": {
+    "s_3684101c55ffe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-2ecf-7310-a3c1-056605a9938e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
