@@ -1,0 +1,19 @@
+packages/worker/Cargo.toml
+  s_c7470711f4ad55::t_21acbe1fbe5535 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "936543661fbbf4a1fb12b006902c960ab93d260d",
+  "prompts": {},
+  "sessions": {
+    "s_c7470711f4ad55": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-1f45-7500-b6a5-f24919e0c3a6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
