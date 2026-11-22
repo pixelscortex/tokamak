@@ -1,0 +1,31 @@
+e2e/fake-agent/replays/codex/accept.jsonl
+  s_2eb0c1ff799f04::t_22e7e297802c2a 2,6
+plugins/codex/src/server/turn.ts
+  s_2eb0c1ff799f04::t_22e7e297802c2a 182-184
+e2e/fake-agent/replays/codex/cancel.jsonl
+  s_2eb0c1ff799f04::t_22e7e297802c2a 2,6
+e2e/fake-agent/replays/codex/decline.jsonl
+  s_2eb0c1ff799f04::t_22e7e297802c2a 2,6
+e2e/fake-agent/replays/codex/acceptForSession.jsonl
+  s_2eb0c1ff799f04::t_22e7e297802c2a 2,6
+e2e/fake-agent/replays/codex/helper-approval.jsonl
+  s_2eb0c1ff799f04::t_22e7e297802c2a 2,6
+plugins/codex/README.md
+  s_2eb0c1ff799f04::t_9dc1d82c32e39f 18-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71dd1159150c373cc0333fffa8193be514789420",
+  "prompts": {},
+  "sessions": {
+    "s_2eb0c1ff799f04": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6784bbf-1a56-4ef1-bac8-6771aa6724ff",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
