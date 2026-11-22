@@ -1,0 +1,23 @@
+plugins/codex/src/server/reports.ts
+  s_13922ebd3d9eea::t_1354f5638fa4cf 156-163
+plugins/codex/tests/codexProbe.ts.fixture
+  s_13922ebd3d9eea::t_7ea2035449806d 28
+plugins/codex/tests/e2e.mjs
+  s_13922ebd3d9eea::t_3210cc9d478dfb 118-121,125-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "57bbec1255e24d266b9488da2f0c9be438a34b77",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
