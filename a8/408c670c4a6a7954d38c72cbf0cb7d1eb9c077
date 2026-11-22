@@ -1,0 +1,19 @@
+e2e/browser/ai-thread.spec.ts
+  s_312a34bc8d5ba4::t_bfccada4a161bc 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8408c670c4a6a7954d38c72cbf0cb7d1eb9c077",
+  "prompts": {},
+  "sessions": {
+    "s_312a34bc8d5ba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20148-225d-7b23-a104-1c434af1d174",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+    }
+  }
+}
