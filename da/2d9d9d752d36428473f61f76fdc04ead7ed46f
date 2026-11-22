@@ -1,0 +1,47 @@
+e2e/browser/app.spec.ts
+  s_eed82efa8a9122::t_afd67e920377fc 262-326
+e2e/fake-agent/replays/claude-info.jsonl
+  s_eed82efa8a9122::t_e9cdd719a01d34 3
+packages/server/tests/code-changes-driver.mjs
+  s_eed82efa8a9122::t_ff947174dc6efe 113-115,117-119,124-125,128-130,137-138,146,158,171
+packages/ui/src/theme.css
+  s_eed82efa8a9122::t_97608b9f2892ce 376-381
+plugins/ai/src/client/lib/agents.ts
+  s_eed82efa8a9122::t_03b33350bc0444 88-90,92-93
+plugins/ai/src/client/ui/agent-mark.tsx
+  s_eed82efa8a9122::t_97535a3ec269a8 5,19-20,29,34,42-43,45
+plugins/ai/src/client/ui/reply-header.tsx
+  s_eed82efa8a9122::t_ce4706285dac70 5,18
+plugins/ai/src/server/agents.ts
+  s_eed82efa8a9122::t_98f82444d864df 4,28-29
+plugins/ai/src/shared/icon.ts
+  s_eed82efa8a9122::t_6f45db1e59c6d1 1-5
+plugins/ai/tests/agent-mark.test.tsx
+  s_eed82efa8a9122::t_d1648837797263 1-88
+plugins/claude/src/server/agent.ts
+  s_eed82efa8a9122::t_66542ef8d680d5 38-44,49,90
+plugins/claude/tests/turns.mjs
+  s_eed82efa8a9122::t_b1c1365de3fd2a 109-119
+plugins/code/src/client/ui/review-panel.tsx
+  s_eed82efa8a9122::t_458aaa29948d6b 5,107,110-116
+plugins/code/src/local/changes.ts
+  s_eed82efa8a9122::t_56ad94cf6e086a 85-93,95-99,101-133,172-174,251,285
+wiki/content/docs/design/index.mdx
+  s_eed82efa8a9122::t_1bd07ff4ee6866 94-110,198,200-207,229-232
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da2d9d9d752d36428473f61f76fdc04ead7ed46f",
+  "prompts": {},
+  "sessions": {
+    "s_eed82efa8a9122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e344ae2c-2a7a-44a3-98c5-88acd00349ae",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
