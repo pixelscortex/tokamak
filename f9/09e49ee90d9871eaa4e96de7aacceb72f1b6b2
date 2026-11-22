@@ -1,0 +1,51 @@
+plugins/chat/src/client/lib/sent.ts
+  s_312a34bc8d5ba4::t_21f643261d3124 44-63
+plugins/chat/src/client/api.ts
+  s_312a34bc8d5ba4::t_21f643261d3124 12-13
+plugins/chat/src/client/ui/message.tsx
+  s_312a34bc8d5ba4::t_21f643261d3124 1,41-51,54-55,61-62
+  s_312a34bc8d5ba4::t_c05d573fa702b4 56-60
+plugins/ai/src/client/ui/agent-row.tsx
+  s_312a34bc8d5ba4::t_21f643261d3124 1,3-4,8,17,28,31-47,51-57
+  s_312a34bc8d5ba4::t_c05d573fa702b4 48-50,82-91
+plugins/ai/src/client/lib/turn-controls.ts
+  s_312a34bc8d5ba4::t_c05d573fa702b4 17-82
+  s_312a34bc8d5ba4::t_6ef3deab3b659c 1-16,83-90
+plugins/chat/src/client/ui/composer.tsx
+  s_312a34bc8d5ba4::t_c05d573fa702b4 47-52
+  s_312a34bc8d5ba4::t_21f643261d3124 18,46,53-56
+e2e/browser/ai.spec.ts
+  s_312a34bc8d5ba4::t_6a2d2662b6b4f5 96,104-114
+  s_312a34bc8d5ba4::t_b3be3ee8bb021e 53-95,97-103,115-118
+plugins/ai/src/client/lib/turn.ts
+  s_312a34bc8d5ba4::t_c05d573fa702b4 20-21
+  s_312a34bc8d5ba4::t_21f643261d3124 2,23-25,35,39-46
+  s_312a34bc8d5ba4::t_716aae134b208b 4,6,11,18
+plugins/chat/src/client/lib/send.ts
+  s_312a34bc8d5ba4::t_21f643261d3124 4,16,21,28,30-32,37,52-54
+  s_312a34bc8d5ba4::t_c05d573fa702b4 29
+  s_312a34bc8d5ba4::t_36458ce4ef4e5e 55
+plugins/chat/src/client/pages/chat.tsx
+  s_312a34bc8d5ba4::t_21f643261d3124 154,196
+plugins/ai/src/client/api.ts
+  s_312a34bc8d5ba4::t_21f643261d3124 8,10,19-22
+plugins/ai/src/client/ui/turn-controls.tsx
+  s_312a34bc8d5ba4::t_21f643261d3124 1-16,18-21,23-34,50-52
+  s_312a34bc8d5ba4::t_c05d573fa702b4 17,22,35-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f909e49ee90d9871eaa4e96de7aacceb72f1b6b2",
+  "prompts": {},
+  "sessions": {
+    "s_312a34bc8d5ba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20148-225d-7b23-a104-1c434af1d174",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
