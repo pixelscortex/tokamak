@@ -1,0 +1,98 @@
+packages/sdk/tools/plugin-boundary.mjs
+  s_f4331c2d925ceb::t_820d4ae1fec4f8 18-22,97-100,112
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_f4331c2d925ceb::t_d751a0f5b0a218 4-5,9,13-16
+packages/sdk/component-actions.ts
+  s_f4331c2d925ceb::t_84d670b74aec5b 15-18,41,53
+packages/build/src/compiler.ts
+  s_f4331c2d925ceb::t_548fa8aa8f558e 1-42
+packages/sdk/component-parts.tsx
+  s_f4331c2d925ceb::t_f358b1b3c3e3e6 85,89,95,102-107,116,125
+  s_f4331c2d925ceb::t_0e185e2cf73725 117-123
+packages/build/src/contributions.ts
+  s_f4331c2d925ceb::t_25b305b86a17d7 1-3,8,48,50-51,55,57,71,77,90,145,257,261,266-271,274,278,283-284,323,365,368-371,373,376-378
+packages/sdk/tests/web/component-actions.test.tsx
+  s_f4331c2d925ceb::t_88d779262cbac8 132,165-175,178-179,183-184
+  s_f4331c2d925ceb::t_0debda4cd9b43b 247,251
+  s_f4331c2d925ceb::t_0e185e2cf73725 262-264
+app/src/plugins/views.tsx
+  s_f4331c2d925ceb::t_0debda4cd9b43b 8,231,274-279
+packages/sdk/tests/web/built-component-addon.d.ts
+  s_f4331c2d925ceb::t_6fb8e5d62fe686 2-9
+  s_4ccc9a2575a981::t_954acfe8ac53be 1,10
+packages/sdk/vitest.config.ts
+  s_f4331c2d925ceb::t_1ee30157ae0634 12,15-21,29-30,32-33
+  s_f4331c2d925ceb::t_0e185e2cf73725 22-28
+  s_f4331c2d925ceb::t_6fb8e5d62fe686 31
+  s_f4331c2d925ceb::t_24cdee7c599188 3,9-11,34,43
+packages/server/src/plugins/mod.rs
+  s_f4331c2d925ceb::t_dd048cbc83ca3a 28
+packages/build/README.md
+  s_f4331c2d925ceb::t_607aed0148c054 37-38,115-116,148-149,156-158
+packages/build/src/component-parts.ts
+  s_f4331c2d925ceb::t_820d4ae1fec4f8 288-289,299-300,304,317-318,334,336-338,342-343,349-350,356-357,361-363
+  s_f4331c2d925ceb::t_356ddb334682b0 201,211,221,235,241,315-316,320-321
+  s_f4331c2d925ceb::t_0e185e2cf73725 19-21,73-76,146-148,173-174,180-184,234,236-240,242-243,260-261,272-278
+  s_f4331c2d925ceb::t_8f75927528d5b3 166-172,176-179,185
+  s_f4331c2d925ceb::t_8cafef083697a2 164
+  s_f4331c2d925ceb::t_548fa8aa8f558e 2,6,17-18,22,35,38,52,112,119,130-145,149-163,165,175,186,188,207-210,212,215-216,229-233,244-245,254-259,262-271,279
+  s_f4331c2d925ceb::t_040a877d5bcc4f 187
+  s_f4331c2d925ceb::t_87348ea62561de 280
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_f4331c2d925ceb::t_0e185e2cf73725 37-39
+packages/build/tests/components.test.mjs
+  s_f4331c2d925ceb::t_0e185e2cf73725 136-138,150-151,161-163,167-168
+  s_f4331c2d925ceb::t_6fb8e5d62fe686 125-135,139-149,152-160,164-166,169-173
+packages/sdk/client.tsx
+  s_f4331c2d925ceb::t_a2aec99236fb88 117-121,145-147,156-157,192-195,245-248,254,260
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_f4331c2d925ceb::t_1ee30157ae0634 10,13,35
+  s_f4331c2d925ceb::t_0e185e2cf73725 22-29,36-49
+  s_f4331c2d925ceb::t_6fb8e5d62fe686 7,12,15-19
+  s_f4331c2d925ceb::t_d3ee72d05b563c 1-6,8-9,11,14,20-21,30-34,50-61
+packages/sdk/README.md
+  s_f4331c2d925ceb::t_607aed0148c054 338-351
+packages/server/PLUGINS.md
+  s_f4331c2d925ceb::t_607aed0148c054 46-54
+packages/build/src/client-surface.ts
+  s_f4331c2d925ceb::t_820d4ae1fec4f8 2-3,29,48,54-55,57,67,124,127
+packages/server/src/plugins/catalog.rs
+  s_f4331c2d925ceb::t_dd048cbc83ca3a 3,17,22,27,35,66,68,71,75,82,97,108,123,130,132,147,170-171,180,232
+app/tests/plugins.test.tsx
+  s_f4331c2d925ceb::t_0dd2091defe255 160-161,170-173,198,242-244,247
+  s_f4331c2d925ceb::t_0e185e2cf73725 162-169
+packages/sdk/tests/web/fixtures/parts/addon/package.json
+  s_f4331c2d925ceb::t_6e0f3271bb803d 1-5
+packages/sdk/tests/web/fixtures/parts/addon/plugin.ts
+  s_f4331c2d925ceb::t_a528cd619b806d 1-2
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_f4331c2d925ceb::t_d0bedf941cb107 1-4
+packages/sdk/tests/web/fixtures/parts/addon/tsconfig.json
+  s_f4331c2d925ceb::t_6470bfc8f06982 1-7
+packages/sdk/tsconfig.solid.json
+  s_f4331c2d925ceb::t_2716f41f6bcd93 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29775aa14fb359736e0f5ba8c9a9cc7fbbc9f511",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_f4331c2d925ceb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-28ed-7d33-aee7-6ad1bb1bd4d1",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
