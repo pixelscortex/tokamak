@@ -291,11 +291,10 @@ function Picker(props: {
       when={props.always || props.options.length > 1}
       fallback={<span class="inline-flex h-8 items-center px-1">{value()}</span>}
     >
-      {/* A short 24 px trigger with 4 px sides, no negative margins: neighbours touch but never
-          overlap (the ghost fill is translucent, so overlapping fills stacked into a brighter strip),
-          and two 4 px sides leave Paper's 8 px between values. */}
+      {/* The standard ghost trigger, untouched: its size owns height and padding. No negative
+          margins, so neighbouring hover fills never overlap. */}
       <Menu.Root onOpenChange={props.onOpen} onAction={props.onPick}>
-        <Menu.Trigger variant="ghost" class="h-6 px-1">
+        <Menu.Trigger variant="ghost">
           {value()}
         </Menu.Trigger>
         <Menu.Content>
