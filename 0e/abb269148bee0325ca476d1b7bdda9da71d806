@@ -1,0 +1,120 @@
+e2e/fake-agent/replays/claude-steer.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-96
+e2e/fake-agent/replays/claude-refuse.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-10,12-18
+  s_f6e69910f6f024::t_65c562eccd6a5e 11
+plugins/claude/tests/turns.mjs
+  s_f6e69910f6f024::t_3015c3f3407b96 141-146,164-169,238-243
+  s_f6e69910f6f024::t_3ede151c1214da 1,14,36-39,48,52,115,120-123,271-274,282-286,288,290
+  s_f6e69910f6f024::t_5d009ab5780380 2-7,15-26,28,35,50,53-59,64-69,75-114,124-140,155-156,161-163,178-191,195-198,223-226,229-237,244,248-249,253-259,263-266,275-281,292
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 8-13,27,29-34,40-43,49,51,60-63,70-74,116-119,147-149,152-154,157-160,170-177,192-194,199-222,245-247,250-252,260-262,267-270,287,289,291
+  s_f6e69910f6f024::t_88057cd4e95597 44-47,151,227-228
+  s_f6e69910f6f024::t_5314f64b813ba5 150
+packages/server/tests/claude_turns.rs
+  s_f6e69910f6f024::t_7e373446420cea 1-17
+plugins/claude/src/server/tsconfig.json
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-10
+e2e/fake-agent/program.mjs
+  s_f6e69910f6f024::t_993f5c0cc7225a 12,86
+  s_f6e69910f6f024::t_017d94d156025e 13,27,87
+e2e/fake-agent/replays/claude-hello.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-13
+e2e/fake-agent/replays/claude-remember.jsonl
+  s_f6e69910f6f024::t_ba5a5b725afe6b 11
+  s_f6e69910f6f024::t_2577717c0bcf62 1-10,12-23
+e2e/fake-agent/replays/claude-history.jsonl
+  s_f6e69910f6f024::t_2b75cdbe0d0dea 1-3
+  s_f6e69910f6f024::t_5314f64b813ba5 4,6
+  s_f6e69910f6f024::t_88057cd4e95597 5,7-12
+plugins/claude/src/server/agent.ts
+  s_f6e69910f6f024::t_0a97f1f2d9875c 4-5,76-77
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-3,6-42,45-68,71-75
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 43-44,69-70
+e2e/fake-agent/replays/claude-stop-asking.jsonl
+  s_f6e69910f6f024::t_a5a25f1dffe496 1-16
+e2e/fake-agent/replays/claude-steer-tools.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-21
+e2e/fake-agent/replays/claude-lost.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-3
+plugins/claude/tests/observe.ts
+  s_f6e69910f6f024::t_88057cd4e95597 19-25,51
+  s_f6e69910f6f024::t_2826be70dfe110 33
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 1-18,26-32,34-50,52-82
+e2e/fake-agent/replays/claude-info.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-3
+plugins/claude/src/server/_generated/internal.ts
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-4
+bun.lock
+  s_f6e69910f6f024::t_05166b6466b735 172-178,853-854
+e2e/fake-agent/replays/claude-plan.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-19,21-27
+  s_f6e69910f6f024::t_a9b1ade3191ce0 20
+e2e/fake-agent/replays/claude-todo-list.jsonl
+  s_f6e69910f6f024::t_537dffd50e8e00 1-4
+  s_f6e69910f6f024::t_a5a25f1dffe496 5-134
+plugins/claude/package.json
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-9
+plugins/claude/src/server/turn.ts
+  s_f6e69910f6f024::t_2ef9e6802f0e3a 2-5,9-10,21,24-32,35-36,42-43,46-48,50-77,79-86,88,90,100-107,112-119,121-126,130-133,135,150-155,158-159,166,168-180
+  s_f6e69910f6f024::t_88057cd4e95597 44,108-111,120,127-128,134,136-145,147-148
+  s_f6e69910f6f024::t_4a5c5c06d86306 1,6-8,11-13,22-23,33-34,41,45,49,87,99,129,146,149,157,167,181-182
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 14-20,37-40,92-98,160-165
+  s_f6e69910f6f024::t_537dffd50e8e00 78,89,91,156
+plugins/claude/src/server/_generated/api.ts
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-4
+plugins/claude/src/server/permissions.ts
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 5-19,37-51
+  s_f6e69910f6f024::t_88057cd4e95597 24,61-122,124-128
+  s_f6e69910f6f024::t_d9b30a907155b6 1-4,20-23,25-36,52-60,129-130
+  s_f6e69910f6f024::t_a5a25f1dffe496 123
+plugins/claude/src/server/wire.ts
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 94-96
+  s_f6e69910f6f024::t_a5a25f1dffe496 59
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-58,60-93,97-99,101-152
+  s_f6e69910f6f024::t_2701fd3ad3a1c3 100
+e2e/fake-agent/replays/claude-permit.jsonl
+  s_f6e69910f6f024::t_bb5d67f041fb20 11
+  s_f6e69910f6f024::t_2577717c0bcf62 1-10,12-28
+plugins/claude/src/server/events.ts
+  s_f6e69910f6f024::t_a5a25f1dffe496 44-45,57-60,201-205,217-226
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 98-101,112-113,115,149-153,169,182-183,185-186,191-192,194-195,208-209
+  s_f6e69910f6f024::t_4f498fad38b10e 25,109-110,114,159,161-168,171,216,227,229-235
+  s_f6e69910f6f024::t_83e4188cdc1127 1-24,26-43,46-56,61-62,70-78,80-84,86-97,102,104-108,111,116-148,154-158,160,170,172-181,184,187-190,193,196,200,207,210-215,228,236-237
+  s_f6e69910f6f024::t_3015c3f3407b96 63-69,79,85,103,197-199,206
+e2e/fake-agent/replays/claude-resume.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-11
+plugins/claude/tests/replay.mjs
+  s_f6e69910f6f024::t_64aa1b347b517f 19,21-23,46-47,51-53
+  s_f6e69910f6f024::t_5d009ab5780380 1-14,18,24-35,44-45
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 15-17,20,36-43,48-50
+plugins/claude/plugin.ts
+  s_f6e69910f6f024::t_4a5c5c06d86306 1-3
+plugins/claude/README.md
+  s_f6e69910f6f024::t_3015c3f3407b96 13
+  s_f6e69910f6f024::t_a83efab02543a7 1-12,14-27
+e2e/fake-agent/replays/claude-cancel.jsonl
+  s_f6e69910f6f024::t_b12a0e631578e6 11
+  s_f6e69910f6f024::t_2577717c0bcf62 1-10,12-13
+e2e/fake-agent/replays/claude-stop.jsonl
+  s_f6e69910f6f024::t_2577717c0bcf62 1-13
+plugins/claude/src/server/run.ts
+  s_f6e69910f6f024::t_83e4188cdc1127 1-12,19,21-33,35
+  s_f6e69910f6f024::t_9a4754c2f2e0dd 13-18
+  s_f6e69910f6f024::t_4695e9628f64b0 20,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0eabb269148bee0325ca476d1b7bdda9da71d806",
+  "prompts": {},
+  "sessions": {
+    "s_f6e69910f6f024": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-f67f-75c0-a829-9883ea5cdc85",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
