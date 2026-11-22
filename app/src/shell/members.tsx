@@ -216,7 +216,7 @@ function memberAction(edit: MemberEdit): MemberAction {
     },
     reset: {
       title: "Reset password",
-      description: `Set a temporary password for ${member?.name}. They’ll choose a new one at sign-in. No email is sent. Their signed-in devices stay signed in. To sign them out, go to Settings → Devices.`,
+      description: `Set a temporary password for ${member?.name}. All their devices will be signed out. They’ll choose a new password at sign-in. No email is sent.`,
       path: `${target}/reset-password`,
       body: (fields) => ({ password: fields.password }),
     },

@@ -131,7 +131,13 @@ async fn reset(
             .reset_member_password(binding, input.password)
             .await
         {
-            Ok(()) => StatusCode::NO_CONTENT.into_response(),
+            Ok(()) => match adapter.identities.revoke_member_devices(&id) {
+                Ok(()) => StatusCode::NO_CONTENT.into_response(),
+                Err(error) => {
+                    eprintln!("Could not save device sign-out after password reset: {error}");
+                    unavailable()
+                }
+            },
             Err(error) => provider_failure(error),
         }
     })

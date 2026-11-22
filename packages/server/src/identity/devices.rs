@@ -77,6 +77,14 @@ impl DeviceRecord {
         self.revoked_at.is_none()
     }
 
+    fn revoke(&mut self) -> Option<CancellationToken> {
+        if !self.is_active() {
+            return None;
+        }
+        self.revoked_at = Some(now());
+        Some(self.cancelled.clone())
+    }
+
     pub(super) fn is_local(&self) -> bool {
         self.kind == Kind::Local
     }
@@ -180,16 +188,44 @@ impl Identities {
         let cancelled = self.change(RevokeError::Store, |members| {
             let (actor, _) = active_device(members, caller).ok_or(RevokeError::Forbidden)?;
             let actor = actor.user.clone();
-            let device = members
+            let (target, device) = members
                 .iter_mut()
-                .filter(|member| member.revoked_at.is_none() && can_manage(&actor, member))
-                .flat_map(|member| &mut member.devices)
-                .find(|device| device.public.id == id && device.kind == Kind::Issued)
+                .filter(|member| member.revoked_at.is_none())
+                .find_map(|member| {
+                    member
+                        .devices
+                        .iter_mut()
+                        .find(|device| device.public.id == id && device.kind == Kind::Issued)
+                        .map(|device| (&member.user, device))
+                })
                 .ok_or(RevokeError::Unknown)?;
-            device.revoked_at.get_or_insert_with(now);
-            Ok(device.cancelled.clone())
+            if !can_manage(&actor, target) {
+                return Err(RevokeError::Forbidden);
+            }
+            Ok(device.revoke())
         })?;
-        cancelled.cancel();
+        if let Some(token) = cancelled {
+            token.cancel();
+        }
+        Ok(())
+    }
+
+    pub(crate) fn revoke_member_devices(&self, id: &str) -> io::Result<()> {
+        let cancelled: Vec<_> = self.change(std::convert::identity, |members| {
+            let member = members
+                .iter_mut()
+                .find(|member| member.user.id == id && member.revoked_at.is_none())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Unknown member"))?;
+            Ok(member
+                .devices
+                .iter_mut()
+                .filter(|device| device.kind == Kind::Issued)
+                .filter_map(DeviceRecord::revoke)
+                .collect())
+        })?;
+        for token in cancelled {
+            token.cancel();
+        }
         Ok(())
     }
 
@@ -203,7 +239,9 @@ impl Identities {
         Some(
             members
                 .iter()
-                .filter(|member| member.revoked_at.is_none() && can_manage(&actor.user, member))
+                .filter(|member| {
+                    member.revoked_at.is_none() && can_manage(&actor.user, &member.user)
+                })
                 .flat_map(|member| member.devices.iter().map(move |device| (member, device)))
                 // The bootstrap key is a recovery credential, outside device sign-out.
                 .filter(|(_, device)| device.kind == Kind::Issued && device.is_active())
@@ -303,6 +341,10 @@ fn active_device_mut<'a>(
     Some(&mut members[member].devices[device])
 }
 
-fn can_manage(actor: &User, target: &Member) -> bool {
-    actor.id == target.user.id || matches!(actor.role, Role::Owner | Role::Admin)
+fn can_manage(actor: &User, target: &User) -> bool {
+    match actor.role {
+        Role::Owner => true,
+        Role::Admin => target.role == Role::Member,
+        Role::Member => actor.id == target.id,
+    }
 }
