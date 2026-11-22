@@ -45,6 +45,8 @@ async function localServer() {
   // The agent row's list: the fake agent, installed and signed in, each replay a model.
   const listed = (await desk.local(ai.agents.list, {})).find((agent) => agent.id === AGENT.id);
   assert.equal(listed?.name, AGENT.name);
+  // The mark the agent plugin registered (`Agent.icon`) reaches the window as SVG text.
+  assert.match(listed.icon ?? "", /^<svg[^>]*viewBox="0 0 24 24"[\s\S]*<path d="M/);
   assert.equal(listed.info.installed && listed.info.signedIn, true);
   const models = listed.info.models.map((model) => model.id);
   assert.ok(models.includes("echo") && models.includes("fail"), `replays offered as models: ${models}`);
