@@ -2,6 +2,7 @@
   <Row lead={<StatusIcon status="done" />} trail="12m">Paginate customer list</Row>
   <Row kind="double" selected lead={…} trail="0:12" detail="sonnet 4.5 · invoices-app">Add CSV export</Row>
   <Row kind="half" lead={<Icon path={mark} size={12} />}>haiku 4.5 running tests</Row>
+  <Row as="button" onClick={createThread}>New thread</Row>
   <Row render={(attrs) => <a href="/threads/1" {...attrs} />}>Weekly admin</Row>
 
   Single rows follow the container's density-* (32 / 40 / 48); double is 48,
@@ -84,22 +85,40 @@ export type RowProps = RowParts &
   Omit<JSX.HTMLAttributes<HTMLElement>, "children" | "class"> & {
     class?: string;
     selected?: boolean;
+    as?: "button";
     render?: (attrs: Record<string, unknown>) => JSX.Element;
   };
 
 export function Row(props: RowProps): JSX.Element {
-  const rest = omit(props, "kind", "lead", "trail", "detail", "children", "selected", "render", "class");
+  const rest = omit(
+    props,
+    "kind",
+    "lead",
+    "trail",
+    "detail",
+    "children",
+    "selected",
+    "as",
+    "render",
+    "class",
+  );
   const attrs = merge(rest, {
     "data-slot": "row",
     get "data-selected"() {
       return props.selected ? "" : undefined;
     },
     get class() {
-      return cn(rowVariants({ kind: props.kind, interactive: Boolean(props.render) }).root(), props.class);
+      return cn(
+        rowVariants({ kind: props.kind, interactive: props.as === "button" || Boolean(props.render) }).root(),
+        props.as === "button" && "w-full",
+        props.class,
+      );
     },
     get children() {
       return <RowBody {...props} />;
     },
   }) as Record<string, unknown>;
-  return props.render ? props.render(attrs) : <div {...attrs} />;
+  if (props.render) return props.render(attrs);
+  if (props.as === "button") return <button type="button" {...attrs} />;
+  return <div {...attrs} />;
 }
