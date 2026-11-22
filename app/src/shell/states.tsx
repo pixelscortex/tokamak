@@ -101,13 +101,11 @@ export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Ele
 /** A quiet tone step: the band's own action, lighter than a key and without an outline. */
 function QuietButton(props: { onClick: () => void; children: string }): JSX.Element {
   return (
-    <button
-      type="button"
-      class="flex h-8 shrink-0 cursor-pointer items-center rounded-sm bg-edge/50 px-3 text-row font-medium text-ink transition duration-200 hover:bg-edge focus-ring"
-      onClick={() => props.onClick()}
-    >
-      {props.children}
-    </button>
+    <div class="flex shrink-0 rounded-sm bg-edge/50">
+      <Button variant="ghost" onClick={() => props.onClick()}>
+        {props.children}
+      </Button>
+    </div>
   );
 }
 

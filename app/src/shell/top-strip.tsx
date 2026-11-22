@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Icon, icons, Tooltip } from "@tokamak/ui";
+import { Button, Icon, icons, Row, Tooltip } from "@tokamak/ui";
 import { showRail } from "./config";
 import { keys, useShell } from "./context";
 import { Control, TipText } from "./control";
@@ -80,7 +80,11 @@ function Tabs(): JSX.Element {
     return connection.state === "connected" ? connection.plugins.views()[0] : undefined;
   };
   return (
-    <nav data-tauri-drag-region aria-label="Open pages" class="flex h-8 min-w-0 flex-1 items-center gap-1">
+    <nav
+      data-tauri-drag-region
+      aria-label="Open pages"
+      class="density-dense flex h-8 min-w-0 flex-1 items-center gap-1"
+    >
       <For each={nav.tabs()}>
         {(tab) => {
           const current = () => nav.active() === tab.href;
@@ -90,24 +94,24 @@ function Tabs(): JSX.Element {
               data-current={current() || undefined}
               class="group flex h-8 w-menu min-w-16 shrink items-center rounded-sm text-ink-2 hover:bg-hover hover:text-ink data-current:surface-stage data-current:font-medium"
             >
-              <button
-                type="button"
+              <Row
+                as="button"
                 aria-current={current() ? "page" : undefined}
-                class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-sm ps-3 text-start text-row focus-ring"
+                class="flex-1"
+                lead={tab.view.icon && <Icon path={tab.view.icon} />}
                 onClick={() => nav.go(tab.href)}
               >
-                {tab.view.icon && <Icon path={tab.view.icon} class="text-ink-3" />}
-                <span class="truncate">{title()}</span>
-              </button>
+                {title()}
+              </Row>
               <Show when={nav.tabs().length > 1 || isShellPage(tab.href.split("?")[0]!)}>
-                <button
-                  type="button"
-                  aria-label={`Close ${title()}`}
-                  class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm text-ink-3 opacity-0 group-hover:opacity-100 group-data-current:opacity-100 hover:text-ink focus-visible:opacity-100 focus-ring"
-                  onClick={() => nav.close(tab.href)}
-                >
-                  <Icon path={icons.close} size={12} />
-                </button>
+                <div class="flex shrink-0 opacity-0 group-hover:opacity-100 group-data-current:opacity-100 focus-within:opacity-100">
+                  <Button
+                    variant="ghost"
+                    icon={icons.close}
+                    label={`Close ${title()}`}
+                    onClick={() => nav.close(tab.href)}
+                  />
+                </div>
               </Show>
             </div>
           );

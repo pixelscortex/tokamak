@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Icon } from "@tokamak/ui";
+import { Icon, Row } from "@tokamak/ui";
 import type { MessageProps } from "plugin:chat/client";
 import { changeOf, openReview, type ReplyChange } from "../lib/changes";
 import { chevronRightIcon, fileCodeIcon } from "../lib/icons";
@@ -20,21 +20,29 @@ export function ChangeCard(props: MessageProps): JSX.Element {
           when={change().files > 0}
           fallback={
             <div class="flex h-8 w-full items-center gap-2 rounded-sm px-2 surface-card">
+              <Icon path={fileCodeIcon} class="text-ink" />
               <CardText change={change()} />
             </div>
           }
         >
-          <button
-            type="button"
-            aria-label={`Review turn ${change().number}`}
-            onClick={() => openReview(props.threadId, change().turnId)}
-            class="flex h-8 w-full cursor-pointer items-center gap-2 rounded-sm px-2 text-start transition duration-200 surface-card hover:bg-hover focus-ring"
-          >
-            <CardText change={change()} />
-            <span class="flex-1" />
-            <span class="text-label text-ink-3">open in review</span>
-            <Icon path={chevronRightIcon} size={14} class="text-ink-3" />
-          </button>
+          <div class="density-dense rounded-sm surface-card">
+            <Row
+              as="button"
+              aria-label={`Review turn ${change().number}`}
+              onClick={() => openReview(props.threadId, change().turnId)}
+              lead={<Icon path={fileCodeIcon} class="text-ink" />}
+              trail={
+                <>
+                  <span class="text-label">open in review</span>
+                  <Icon path={chevronRightIcon} size={14} />
+                </>
+              }
+            >
+              <span class="flex items-center gap-2">
+                <CardText change={change()} />
+              </span>
+            </Row>
+          </div>
         </Show>
       )}
     </Show>
@@ -44,7 +52,6 @@ export function ChangeCard(props: MessageProps): JSX.Element {
 function CardText(props: { change: ReplyChange }): JSX.Element {
   return (
     <>
-      <Icon path={fileCodeIcon} class="text-ink" />
       <span class="text-row font-medium text-ink">
         {props.change.tracking === null
           ? filesLabel(props.change.files)

@@ -156,20 +156,15 @@ function Choice(props: {
   return (
     <div class="rounded-sm surface-tray">
       <Row
+        as="button"
         selected={props.checked}
         lead={<Icon path={props.icon} />}
         trail={props.checked ? <Icon path={glyphs.check} /> : undefined}
-        render={(attrs) => (
-          <button
-            {...attrs}
-            type="button"
-            role={props.opensDialog ? undefined : "radio"}
-            aria-checked={props.opensDialog ? undefined : props.checked ? "true" : "false"}
-            aria-haspopup={props.opensDialog ? "dialog" : undefined}
-            title={props.detail}
-            onClick={() => props.onPick()}
-          />
-        )}
+        role={props.opensDialog ? undefined : "radio"}
+        aria-checked={props.opensDialog ? undefined : props.checked ? "true" : "false"}
+        aria-haspopup={props.opensDialog ? "dialog" : undefined}
+        title={props.detail}
+        onClick={() => props.onPick()}
       >
         {props.label}
       </Row>

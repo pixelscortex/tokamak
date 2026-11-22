@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button, Icon, icons } from "@tokamak/ui";
+import { Button, Icon, icons, Row } from "@tokamak/ui";
 import { useShell } from "../context";
 import { shellIcons } from "../icons";
 import { shellPages } from "../pages";
@@ -10,7 +10,7 @@ const stepLabels = ["Address", "Connecting", "Verify", "Customize"] as const;
 /** The quiet four-bar progress mark and the step's name. */
 export function Progress(props: { step: 1 | 2 | 3 | 4 }): JSX.Element {
   return (
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 px-3">
       <div aria-hidden="true" class="flex gap-1">
         <For each={stepLabels}>
           {(_, index) => (
@@ -36,7 +36,7 @@ export function Progress(props: { step: 1 | 2 | 3 | 4 }): JSX.Element {
 
 export function Head(props: { title: string; address?: string; children?: JSX.Element }): JSX.Element {
   return (
-    <div class="flex flex-col gap-2">
+    <div class="flex flex-col gap-2 px-3">
       <h2 class="text-read font-semibold text-ink">{props.title}</h2>
       <Show when={props.address}>
         <p class="font-mono text-row text-ink-2">{props.address}</p>
@@ -59,8 +59,8 @@ export function Actions(props: {
   autofocus?: boolean;
 }): JSX.Element {
   return (
-    <div class="flex items-center gap-2">
-      <Button variant="ghost" class="-ms-3" onClick={props.onBack}>
+    <div class="flex items-center gap-2 pe-3">
+      <Button variant="ghost" onClick={props.onBack}>
         {props.back}
       </Button>
       <div class="flex-1" />
@@ -82,7 +82,7 @@ export function Actions(props: {
 
 export function Checks(props: { children: JSX.Element }): JSX.Element {
   return (
-    <ul aria-label="Checks" class="flex flex-col gap-1 rounded-md surface-tray px-4 py-3">
+    <ul aria-label="Checks" class="mx-3 flex flex-col gap-1 rounded-md surface-tray px-4 py-3">
       {props.children}
     </ul>
   );
@@ -133,7 +133,7 @@ export function Check(props: {
 
 export function ServerCard(props: { name: string; address: string }): JSX.Element {
   return (
-    <div class="flex items-center gap-3 rounded-md surface-tray p-4">
+    <div class="mx-3 flex items-center gap-3 rounded-md surface-tray p-4">
       <span class="flex size-8 shrink-0 items-center justify-center rounded-sm bg-edge/50">
         <Icon path={shellIcons.cloud} class="text-ink" />
       </span>
@@ -184,25 +184,26 @@ export function Recent(): JSX.Element {
       .slice(0, 5);
   return (
     <Show when={recent().length}>
-      <div class="mt-4 flex flex-col gap-1">
-        <h3 class="flex h-6 items-center text-label text-ink-3">Recent</h3>
+      <div class="density-dense mt-4 flex flex-col gap-1 px-1">
+        <h3 class="flex h-6 items-center px-2 text-label text-ink-3">Recent</h3>
         <For each={recent()}>
           {(server) => (
-            <button
-              type="button"
-              class="-mx-2 flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-start hover:bg-hover focus-ring"
+            <Row
+              as="button"
+              lead={<Icon path={shellIcons.cloud} />}
+              trail={"lastUsed" in server ? age(server.lastUsed) : ""}
               onClick={() => {
                 shell.switchServer(server.id);
                 shell.navigation.close(shellPages.connect.route);
               }}
             >
-              <Icon path={shellIcons.cloud} class="text-ink-3" />
-              <span class="truncate text-row text-ink-2">{server.name}</span>
-              <span class="min-w-0 flex-1 truncate text-data text-ink-3">
-                {"address" in server ? new URL(server.address).host : ""}
+              <span class="flex items-center gap-2">
+                <span class="min-w-0 truncate">{server.name}</span>
+                <span class="min-w-0 flex-1 truncate text-data text-ink-3">
+                  {"address" in server ? new URL(server.address).host : ""}
+                </span>
               </span>
-              <span class="text-data text-ink-3">{"lastUsed" in server ? age(server.lastUsed) : ""}</span>
-            </button>
+            </Row>
           )}
         </For>
       </div>
