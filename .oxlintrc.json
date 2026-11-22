@@ -50,6 +50,13 @@
   "plugins": ["typescript", "import"],
   "overrides": [
     {
+      "files": ["packages/ui/src/**"],
+      "rules": {
+        "tokamak/no-negative-margin": "off",
+        "tokamak/no-raw-button": "off"
+      }
+    },
+    {
       "files": [
         "packages/build/**",
         "**/tools/**",

@@ -27,6 +27,25 @@ test.each([
   expect(out).toContain(alternative);
 });
 
+test("negative margin is denied on primitives even with a variant", () => {
+  const { status, out } = lint("negative-margin-primitive.tsx");
+  expect(status).not.toBe(0);
+  expect(out.match(/shadcn\(no-restyle\)/g)).toHaveLength(2);
+  expect(out).toContain('"-ms-3" uses a negative margin on <Button>');
+  expect(out).toContain('"hover:-mb-2" uses a negative margin on <Button>');
+});
+
+test.each([
+  ["negative-margin.tsx", "no-negative-margin", "gap on the parent", 2],
+  ["raw-button.tsx", "no-raw-button", 'Row with as="button" for list rows', 2],
+  ["text-style-in-button.tsx", "no-text-style-in-button", "owns its text size, weight and tone", 6],
+] as const)("%s fails with %s and names the alternative", (fixture, rule, alternative, count) => {
+  const { status, out } = lint(fixture);
+  expect(status).not.toBe(0);
+  expect(out.split(`tokamak(${rule})`)).toHaveLength(count + 1);
+  expect(out).toContain(alternative);
+});
+
 test("a fixed-radius primitive gets the parent fix", () => {
   expect(lint("corner.tsx").out).toContain(
     "<Button> has a fixed 8 px radius, so give the parent rounded-md or give the parent p-2",
@@ -39,8 +58,8 @@ test("a namespaced primitive's own radius is known", () => {
   );
 });
 
-test("the corrected file passes", () => {
-  const { status, out } = lint("corrected.tsx");
+test.each(["corrected.tsx", "fixed-control-sizes.tsx"])("%s passes", (fixture) => {
+  const { status, out } = lint(fixture);
   expect(out).not.toMatch(/\b[1-9]\d* errors?\b/);
   expect(status).toBe(0);
 });

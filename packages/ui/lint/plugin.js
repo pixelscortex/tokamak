@@ -187,9 +187,121 @@ const densityInward = {
   },
 };
 
+function utility(token) {
+  // Variants can contain colons inside selectors, and arbitrary values can
+  // contain colons too. Only a colon outside brackets separates the utility.
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < token.length; index++) {
+    const char = token[index];
+    if (char === "[" || char === "(") depth++;
+    else if (char === "]" || char === ")") depth--;
+    else if (char === ":" && depth === 0) start = index + 1;
+  }
+  return token.slice(start).replace(/^!|!$/g, "");
+}
+
+function matchingClass(element, matches) {
+  return staticClass(element)
+    ?.split(/\s+/)
+    .find((token) => matches(utility(token)));
+}
+
+const noNegativeMargin = {
+  meta: {
+    type: "problem",
+    docs: { description: "Use size, density or layout instead of negative margins." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      JSXElement(element) {
+        const token = matchingClass(element, (name) => /^-m[xysetrbl]?-/.test(name));
+        if (token)
+          context.report({
+            node: element.openingElement,
+            message: `"${token}" is a negative margin. Use a size or density, or gap on the parent.`,
+          });
+      },
+    };
+  },
+};
+
+const noRawButton = {
+  meta: {
+    type: "problem",
+    docs: { description: "Use the shared button or row primitive." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      JSXElement(element) {
+        if (elementName(element) === "button")
+          context.report({
+            node: element.openingElement,
+            message: 'Use Button from @tokamak/ui, or Row with as="button" for list rows.',
+          });
+      },
+    };
+  },
+};
+
+const buttonLooks = new Set([
+  "Button",
+  "Menu.Trigger",
+  "Dialog.Trigger",
+  "Dialog.Close",
+  "Tooltip.Trigger",
+  "Select.Trigger",
+]);
+const textLayout =
+  /^(?:text-(?:start|end|left|right|center|justify|wrap|nowrap|balance|pretty|ellipsis|clip))$/;
+
+function buttonAncestor(element) {
+  for (let node = element.parent; node; node = node.parent) {
+    // JSX passed as a prop is a separate tree (for example a tooltip's content).
+    if (node.type === "JSXAttribute" || node.type === "JSXSpreadAttribute") return undefined;
+    if (node.type !== "JSXElement") continue;
+    const name = elementName(node);
+    if (buttonLooks.has(name)) return name;
+  }
+  return undefined;
+}
+
+const noTextStyleInButton = {
+  meta: {
+    type: "problem",
+    docs: { description: "Button labels inherit their typography and tone." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      JSXElement(element) {
+        const token = matchingClass(
+          element,
+          (name) => /^(?:text|font|leading|tracking)-/.test(name) && !textLayout.test(name),
+        );
+        if (!token) return;
+        const button = buttonAncestor(element);
+        if (button)
+          context.report({
+            node: element.openingElement,
+            message: `<${button}> owns its text size, weight and tone. Remove "${token}" and let the text inherit.`,
+          });
+      },
+    };
+  },
+};
+
 export const plugin = {
   meta: { name: "tokamak" },
-  rules: { "concentric-radius": concentricRadius, "density-inward": densityInward },
+  rules: {
+    "concentric-radius": concentricRadius,
+    "density-inward": densityInward,
+    "no-negative-margin": noNegativeMargin,
+    "no-raw-button": noRawButton,
+    "no-text-style-in-button": noTextStyleInButton,
+  },
 };
 
 export default plugin;
