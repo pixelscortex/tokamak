@@ -1,0 +1,19 @@
+plugins/ai/src/client/ui/agent-row.tsx
+  s_c81ddbe6819468::t_20fd81f0f21678 295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37e66fc584680352012204a8def615686221aab0",
+  "prompts": {},
+  "sessions": {
+    "s_c81ddbe6819468": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203cd-c270-7943-8517-6f76d8e6093c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
