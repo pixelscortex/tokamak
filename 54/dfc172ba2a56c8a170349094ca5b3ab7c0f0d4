@@ -1,0 +1,84 @@
+packages/server/src/service/invocations.rs
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 13-21,37
+  s_0bb9cb1d8d8ab2::t_786cf515c7d794 11-12
+  s_0bb9cb1d8d8ab2::t_2f093a06694283 10
+packages/server/src/service/plugin_control.rs
+  s_0bb9cb1d8d8ab2::t_28210c688e0b1e 78,133-139
+  s_0bb9cb1d8d8ab2::t_d7888768899722 140-146
+  s_0bb9cb1d8d8ab2::t_786cf515c7d794 73-77,150,152-154,160-168
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 2,63,69,127,151,171-172
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 66,79-80,128,131-132,147-149,155-157
+packages/server/tests/fixtures/auth/src/server/members.ts
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 1,7,11
+packages/sdk/src/internal/contracts.ts
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 6
+packages/server/src/identity/devices.rs
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 290
+  s_0bb9cb1d8d8ab2::t_e534657eefb83a 274-281,286
+packages/sdk/src/index.ts
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 90
+packages/server/src/plugins/contracts.rs
+  s_0bb9cb1d8d8ab2::t_e534657eefb83a 12-13,15,20-36,124-125,233,282,284,287
+  s_0bb9cb1d8d8ab2::t_d7888768899722 290-292
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 295
+  s_0bb9cb1d8d8ab2::t_28210c688e0b1e 171,229-231,288-289,293-294
+packages/server/src/websocket/members.rs
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 116
+  s_0bb9cb1d8d8ab2::t_523994fb211af8 33,38,47,54-64,119-120,150,174,233,237,244,253
+  s_0bb9cb1d8d8ab2::t_7ffea00057f4f0 1
+packages/server/src/service/server.rs
+  s_0bb9cb1d8d8ab2::t_786cf515c7d794 144-148
+packages/server/src/identity.rs
+  s_0bb9cb1d8d8ab2::t_28210c688e0b1e 19
+  s_0bb9cb1d8d8ab2::t_e534657eefb83a 301-304,378-381,387
+packages/sdk/tools/contracts.mjs
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 7,68,116-118
+packages/sdk/src/auth.ts
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 3,12,24,38
+packages/server/src/service/mod.rs
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 179-188
+packages/server/src/service/sign_in.rs
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 297
+  s_0bb9cb1d8d8ab2::t_786cf515c7d794 133-135,137,139-147,149-153,155-157,162-166,301-304
+  s_0bb9cb1d8d8ab2::t_e534657eefb83a 97
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 2,87,94,98-99,128,131-132,138,148,154,158-161,167-169,230,260,283,295-296,298-300,305-307
+  s_0bb9cb1d8d8ab2::t_e137104afb6948 95-96,308,350
+packages/server/src/plugins/mod.rs
+  s_0bb9cb1d8d8ab2::t_e534657eefb83a 77
+packages/server/PLUGINS.md
+  s_0bb9cb1d8d8ab2::t_511564a7a2d365 285-287
+packages/server/src/websocket/sign_in.rs
+  s_0bb9cb1d8d8ab2::t_523994fb211af8 2,9
+plugins/basic-auth/src/server/accounts.ts
+  s_0bb9cb1d8d8ab2::t_4dae5da28209cc 12,177-183
+  s_0bb9cb1d8d8ab2::t_9c0b5c763c887e 1
+packages/server/src/websocket/response.rs
+  s_0bb9cb1d8d8ab2::t_523994fb211af8 1-68
+packages/server/src/identity/accounts.rs
+  s_0bb9cb1d8d8ab2::t_e534657eefb83a 50
+  s_0bb9cb1d8d8ab2::t_599552057f65dd 24,26,32,37,44
+packages/sdk/README.md
+  s_0bb9cb1d8d8ab2::t_511564a7a2d365 464,467,478-482
+packages/server/tests/auth-driver.mjs
+  s_0bb9cb1d8d8ab2::t_3c342cb1cb1af3 3-14,411-412,422-430
+  s_0bb9cb1d8d8ab2::t_c18ce0b56b450d 303-315,317
+  s_0bb9cb1d8d8ab2::t_14c5a380d8641f 272-274,337,341,375,380-383,392,409,431
+packages/server/src/websocket.rs
+  s_0bb9cb1d8d8ab2::t_523994fb211af8 6,17,40,44-45,60,66,68,218,493
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "54dfc172ba2a56c8a170349094ca5b3ab7c0f0d4",
+  "prompts": {},
+  "sessions": {
+    "s_0bb9cb1d8d8ab2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20133-3950-7e51-b212-4b1bc15c47e0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
