@@ -1,0 +1,67 @@
+packages/build/tests/fixtures/browser/src/client/api.ts
+  s_0a399312e8f8f5::t_749bf3e27e5505 1
+packages/sdk/client.tsx
+  s_0a399312e8f8f5::t_915f0126065e89 25
+packages/build/tests/browser.test.ts
+  s_0a399312e8f8f5::t_9891d7d2ed66de 114
+  s_0a399312e8f8f5::t_749bf3e27e5505 21-22,82,115-117,121,124
+packages/sdk/README.md
+  s_0a399312e8f8f5::t_8cfca408db518c 486-490
+packages/build/src/component-parts.ts
+  s_0a399312e8f8f5::t_915f0126065e89 61
+  s_0a399312e8f8f5::t_9891d7d2ed66de 199
+wiki/content/docs/design/index.mdx
+  s_0a399312e8f8f5::t_8cfca408db518c 378
+packages/build/tests/fixtures/browser/src/client/view.tsx
+  s_0a399312e8f8f5::t_749bf3e27e5505 1,6-12,15
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_0a399312e8f8f5::t_66a09672d389cb 3-4,6
+packages/runtime/PLUGINS.md
+  s_0a399312e8f8f5::t_8cfca408db518c 4,6-7
+packages/runtime/ROUTING.md
+  s_0a399312e8f8f5::t_8cfca408db518c 4,7,9,13
+packages/sdk/component-actions.ts
+  s_0a399312e8f8f5::t_915f0126065e89 28,33,36,41,53
+packages/build/tests/plugins.test.mjs
+  s_0a399312e8f8f5::t_749bf3e27e5505 222,243-245,250-254,257-265
+  s_0a399312e8f8f5::t_9891d7d2ed66de 231-239,246-249,255-256,266
+  s_0a399312e8f8f5::t_6809c9623424a6 267-268
+packages/server/src/plugin-skill.md
+  s_0a399312e8f8f5::t_8cfca408db518c 28-31,34-35
+packages/build/src/contributions.ts
+  s_0a399312e8f8f5::t_915f0126065e89 62,64-66,114-120,123-124,126,129-131
+  s_0a399312e8f8f5::t_494342eddfdae6 127,135-149
+  s_0a399312e8f8f5::t_0b23c680b5d172 150-151
+packages/sdk/view.ts
+  s_0a399312e8f8f5::t_9891d7d2ed66de 14
+  s_0a399312e8f8f5::t_92e4cb5aed146a 13,15-16,19
+  s_0a399312e8f8f5::t_915f0126065e89 1-12,17-18,20-27
+app/src/plugins/views.tsx
+  s_0a399312e8f8f5::t_a7c97be3c9defb 19,209,211
+app/tests/fixtures/integration/src/client/api.tsx
+  s_0a399312e8f8f5::t_ceac924d71e059 3,19,69,78,86
+app/tests/fixtures/other-draft/src/client/api.tsx
+  s_0a399312e8f8f5::t_2f0b4d666df38f 1,6
+app/tests/fixtures/ui.js
+  s_0a399312e8f8f5::t_6f8910e62dd491 3,13
+app/tests/plugins.test.tsx
+  s_0a399312e8f8f5::t_97874ac99ef8a9 14,215
+plugins/chat/src/client/pages/chat.tsx
+  s_0a399312e8f8f5::t_a2ab5c17a7b6d8 4,26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e82e9f9324921dc5d45035fc58f127eab1900a00",
+  "prompts": {},
+  "sessions": {
+    "s_0a399312e8f8f5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2021c-f7a0-7b22-bbef-8f3ad91e0903",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
