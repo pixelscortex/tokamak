@@ -13,6 +13,9 @@ const expiredLine = "This question expired when the app quit.";
 /** Cards on screen now: with focus on no field, keys go to a card only when it is the one shown. */
 let shown = 0;
 
+// Ignore digits briefly so typing in the prompt cannot answer a new question by accident.
+const DIGIT_GRACE_MS = 500;
+
 /**
  * The permission question on the composer (Paper "System · rules", Composer
  * anatomy, state "Needs you"): the lock, "Claude wants to run" and the command
@@ -22,13 +25,6 @@ let shown = 0;
  * Shown only to the sender, on the device that runs the turn
  * (`turns:questions`), while their turn waits.
  */
-/**
- * How long a new question ignores the digit keys. Someone typing a number in
- * the prompt as the card appears would otherwise answer a question they have
- * not read yet.
- */
-const DIGIT_GRACE_MS = 500;
-
 export function PermissionCard(props: ComposerProps): JSX.Element {
   const client = useClient();
   const question = () => questionFor(props.threadId);

@@ -1,10 +1,21 @@
-import { createFunctions, type DatabaseReader, type ModelFromSchema, type Id } from "@tokamak/sdk";
+import {
+  LOCAL_USER,
+  createFunctions,
+  type DatabaseReader,
+  type ModelFromSchema,
+  type Id,
+} from "@tokamak/sdk";
 import schema from "./schema";
 
 export const { query, mutation } = createFunctions(schema);
 
 export const DEFAULT_TITLE = "New thread";
 export type Model = ModelFromSchema<typeof schema>;
+
+/** Who started the thread, including threads saved before chat stored a creator. */
+export function threadCreatorId(thread: { createdBy?: string }): string {
+  return thread.createdBy ?? LOCAL_USER;
+}
 
 export async function thread(db: DatabaseReader<Model>, id: Id<"threads">) {
   const value = await db.get(id);

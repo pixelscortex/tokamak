@@ -1,4 +1,4 @@
-import { authCaller, type TokamakClient } from "@tokamak/sdk";
+import type { TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { Access, Info } from "../../contracts";
 import type { Choices } from "../../server/schema";
@@ -134,15 +134,6 @@ export function label(value: string): string {
 }
 
 export const ACCESS_LABEL: Record<Access, string> = { full: "Full access", ask: "Ask first" };
-
-/** Whether the caller started the thread: only they run its agent; anyone else's Send stays plain chat. */
-export async function runsAgentHere(client: TokamakClient, threadId: string): Promise<boolean> {
-  const [creator, caller] = await Promise.all([
-    client.query(api.choices.creator, { threadId }),
-    client.query(authCaller, {}),
-  ]);
-  return creator?.id === caller.user.id;
-}
 
 /** The agent row's line for someone who did not start the thread. */
 export function creatorOnlyLine(name: string | undefined): string {

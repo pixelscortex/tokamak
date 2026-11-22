@@ -1,6 +1,6 @@
 import { v, type DatabaseWriter, type Id, type MutationContext } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
-import { mutation, ownerOf, query, type Model } from "./_functions";
+import { mutation, query, type Model } from "./_functions";
 import { choiceFields, type Choices } from "./schema";
 
 /**
@@ -47,9 +47,9 @@ export async function startedBy(
   threadId: string,
   userId: string,
 ): Promise<boolean> {
-  const thread = await ctx.use(chat).getThread({ threadId: threadId as Id<"threads"> });
-  if (!thread) throw new Error("That thread no longer exists");
-  return ownerOf(thread) === userId;
+  const creator = await ctx.use(chat).threadCreator({ threadId: threadId as Id<"threads"> });
+  if (!creator) throw new Error("That thread no longer exists");
+  return creator.id === userId;
 }
 
 /** Replaces the thread's choices; also used by `turns:begin` to keep what a turn used. */
