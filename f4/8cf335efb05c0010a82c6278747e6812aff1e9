@@ -1,0 +1,156 @@
+plugins/ai/src/server/questions.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-137
+plugins/ai/src/client/lib/questions.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-70
+plugins/ai/src/shared/offered.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-43
+GLOSSARY.md
+  s_61c7aa4d512211::t_d1dfbbce45892f 66-73
+plugins/ai/src/server/agents.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 3,6-14,27,31-41
+plugins/code/contracts/ai.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 17-20,26-31,33-72,146,148-150,152-156,158-166,184-190
+  s_61c7aa4d512211::t_a678bb60daae21 73-131,136-138,169-183
+plugins/ai/src/server/_functions.ts
+  s_61c7aa4d512211::t_63675c883cbb15 8-10,12-14,19-25
+  s_61c7aa4d512211::t_d1dfbbce45892f 28-34
+  s_61c7aa4d512211::t_d9dc001a8687a4 35
+packages/server/tests/ai-turns-driver.mjs
+  s_61c7aa4d512211::t_d1dfbbce45892f 26,74,79,330-493,754-786
+  s_61c7aa4d512211::t_e7a94936034ce1 30,329
+plugins/ai/src/server/choices.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-62
+e2e/browser/ai-thread.spec.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-177
+plugins/ai/src/server/_generated/api.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 4-7,10-11,21,36,38,45-46,48-49,59,70,72
+plugins/ai/src/server/schema.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1,9-19,83-98,101-112,135,139-145
+plugins/ai/tests/vitest.config.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-40
+plugins/ai/src/client/lib/icons.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 31-33
+plugins/chat/src/server/messages/messages.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 14,24-25,38-51
+  s_61c7aa4d512211::t_50218e32c26c5b 52-53
+plugins/chat/src/server/_generated/api.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 9,55
+plugins/chat/tests/extensions.test.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 2,10-19,134-191
+  s_61c7aa4d512211::t_04a3129a3d3e90 192-196
+plugins/ai/src/client/lib/choices.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-136
+e2e/fake-agent/harness.mjs
+  s_61c7aa4d512211::t_d1dfbbce45892f 89-92,109,200-201,219-220,243-262
+e2e/fake-agent/agents/other-agent/package.json
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-6
+plugins/ai/package.json
+  s_61c7aa4d512211::t_d1dfbbce45892f 6-8,16-17,19-21
+plugins/ai/src/client/lib/turn-controls.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 7,31-32,34,36,40
+plugins/ai/src/client/lib/turn.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 5,11-12,17-20,25,33
+plugins/chat/src/server/api.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 4
+plugins/chat/src/client/ui/composer.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 7,27,48,57,66
+plugins/ai/src/server/run.ts
+  s_61c7aa4d512211::t_c8bc936d2ccad8 4,12
+  s_61c7aa4d512211::t_d1dfbbce45892f 8-9,11,17-21,32,34-36,41,47,54-57,67,70-79,95-96,98,110,166-187,189-192
+  s_61c7aa4d512211::t_f708d641903588 63
+plugins/ai/src/client/lib/agents.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 21,32-34,39-46
+plugins/chat/src/client/lib/hold.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-29
+plugins/ai/tests/tsconfig.json
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-8
+app/src/shell/shortcuts.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 40,45-48
+plugins/ai/tests/window-state.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-20
+e2e/fake-agent/agents/factory.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-22,28-29,36-86,109-176
+  s_61c7aa4d512211::t_d5f7924372297b 23-27,30-35,87-108
+e2e/fake-agent/agents/other-agent/plugin.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-5
+plugins/ai/tsconfig.json
+  s_61c7aa4d512211::t_d1dfbbce45892f 3
+packages/server/tests/ai-threads-driver.mjs
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-174,193-339
+  s_61c7aa4d512211::t_14bf9d9c0f651b 175-192
+plugins/chat/src/client/api.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 4,14
+e2e/fake-agent/replays/thinks-and-runs.jsonl
+  s_61c7aa4d512211::t_14bf9d9c0f651b 1-8
+e2e/fake-agent/README.md
+  s_61c7aa4d512211::t_d1dfbbce45892f 9-12,24-33,37-38,50-51
+  s_61c7aa4d512211::t_2f2af2b87a9e94 21-23
+packages/ui/src/menu.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 11-12,27-28
+e2e/browser/ai.spec.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 332-427
+e2e/fake-agent/agents/fake-agent/src/server/agent.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1,3,5-9
+e2e/fake-agent/program.mjs
+  s_61c7aa4d512211::t_d1dfbbce45892f 25-29,164-170,173-181,187
+packages/sdk/client.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 351-356
+plugins/ai/src/client/api.ts
+  s_61c7aa4d512211::t_63675c883cbb15 5
+  s_61c7aa4d512211::t_d1dfbbce45892f 15,18,26-29
+plugins/ai/src/client/ui/permission-card.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-127
+plugins/ai/src/server/turns.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 12,17,50,215-219,248-252,260-261,265-297,316,394-449,565,583-623
+  s_61c7aa4d512211::t_5593bcb7120718 19,545-546
+e2e/fake-agent/agents/other-agent/src/server/agent.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-14
+e2e/fake-agent/replays/context.jsonl
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-8
+packages/server/tests/chat-threads-driver.mjs
+  s_61c7aa4d512211::t_d1dfbbce45892f 111
+app/src/plugins/views.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 241-242,264,267,269,273-274
+plugins/ai/tests/agent-row.test.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-126
+plugins/ai/src/client/ui/heading.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 3-4,12,15
+e2e/fake-agent/replays/ask-once.jsonl
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-7
+packages/server/tests/ai_threads.rs
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-25
+e2e/fake-agent/replays/ask-session.jsonl
+  s_61c7aa4d512211::t_d1dfbbce45892f 1-15
+plugins/ai/README.md
+  s_61c7aa4d512211::t_d1dfbbce45892f 9-32,67,89-112,124-126,130-133,168-180,197-199
+plugins/ai/src/client/ui/agent-row.tsx
+  s_61c7aa4d512211::t_d1dfbbce45892f 1,3,6-7,9,11-20,22-24,28-34,36-39,44,67-116,118-129,131-136,138,151-195,197-267
+e2e/browser/desktop.ts
+  s_61c7aa4d512211::t_d1dfbbce45892f 28-29,31-33,119
+plugins/ai/src/contracts.ts
+  s_61c7aa4d512211::t_ab66b62572ee6f 35,37-67,70-72,138,184
+  s_61c7aa4d512211::t_d1dfbbce45892f 17-20,26-31,33-34,146,148-150,152-156,158-166,185-190
+  s_61c7aa4d512211::t_c2966ad3fb3c1f 36
+bun.lock
+  s_61c7aa4d512211::t_7f256ad254f2c2 138-139,141,143
+e2e/fake-agent/agents/fake-agent/src/server/factory.ts
+  s_61c7aa4d512211::t_93be72daf96362 1
+e2e/fake-agent/agents/other-agent/src/server/factory.ts
+  s_61c7aa4d512211::t_3b4403a1f3148e 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f48cf335efb05c0010a82c6278747e6812aff1e9",
+  "prompts": {},
+  "sessions": {
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
