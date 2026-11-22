@@ -1,0 +1,85 @@
+packages/server/tests/auth-driver.mjs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 2,18,21,24-31,47,54-60,62,64,78,91,96,106,109,127-236,298-419
+app/src/shell/pages.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 25-32
+app/src/plugins/web-host.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 11,112,183,190-208
+app/src/host/chat-machine.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 3,31
+app/tests/connect.test.tsx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 98,104
+packages/server/src/identity/devices.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1-303
+packages/server/src/plugins/mod.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 73
+packages/server/src/service/plugin_control.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 12,189
+packages/server/src/service/startup.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 2,97-104,108,111
+packages/server/src/identity.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 11,15,17,59,62-67,79-87,107-111,116-129,134-138,147,149,191-199,207-208,213-214,224-226,231,234-237,243-244,250-263,265-269,274-281,288-291,293-294,305-324,329-350,377-388,391,393-396,400,402,446
+packages/server/PLUGINS.md
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 188-212
+packages/server/src/backend.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 7,28-46,52
+app/src/shell/session.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 6,13-15,66,99,104-108
+packages/server/src/host/worker/tests.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 40
+app/src/host/auth.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1-11
+packages/server/src/plugins/loading.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 3-8,10-15,22-30,47-49
+packages/server/Cargo.toml
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 32
+app/src/plugins/adapter.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1,58,74
+app/tests/identity.test.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 5,7,17-18
+app/src/host/reach.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1-2,55
+app/src/shell/devices.tsx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1-203
+app/src/router.tsx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 7,23-24
+packages/server/src/main.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 235,238-242,354
+app/tests/plugins.test.tsx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 49,52,69,117-125,133,139-144,154
+wiki/content/docs/hosting.mdx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 38-40,82-83
+app/src/shell/settings-menu.tsx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 2,6,12-17,30-32
+app/tests/session.test.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 24,26,30-33,49,51
+packages/server/src/service/server.rs
+  s_844ef8d40d75dc::t_729b5c327a46bf 72
+packages/build/README.md
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 48-53
+app/tests/devices.test.tsx
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1-58
+packages/server/src/web.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 65
+app/src/host/identity.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 1,8-9,15
+app/tests/switching.test.ts
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 21,77-78
+packages/server/src/websocket.rs
+  s_844ef8d40d75dc::t_d4b6bd86fa7b22 6,12-13,15,17,21,42-47,54,182,186,199-201,232-250,265-270,274-282,297,312-330,332-334,340,342,347,358,362,420-421,431,437,456-562,658,667-668,672,677,682,692-694,696-701,703-705,708-709
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8c2d5d4e70ab843111c034eb9a0309ec9370df5",
+  "prompts": {},
+  "sessions": {
+    "s_844ef8d40d75dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200e5-9e8d-7ef0-9181-8dba22c295a4",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
