@@ -1,0 +1,23 @@
+plugins/codex/src/server/reports.ts
+  s_61c7aa4d512211::t_9be73bcc2b3e8d 56,61,81,99,102,112,114
+plugins/claude/src/server/events.ts
+  s_61c7aa4d512211::t_9be73bcc2b3e8d 64,71,124,130,141,151,156,164,178,184,209
+plugins/codex/src/server/turn.ts
+  s_61c7aa4d512211::t_9be73bcc2b3e8d 127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d4d80bc6f12fddb82fbac54342db77a4c1c2d222",
+  "prompts": {},
+  "sessions": {
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
