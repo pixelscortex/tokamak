@@ -37,7 +37,11 @@ const shot = (page: Page, name: string) => page.screenshot({ path: join(out!, `$
 
 test("thread screens", async ({ browser }) => {
   test.setTimeout(240_000);
-  const context = await browser.newContext({ viewport: { width: 1728, height: 1117 }, deviceScaleFactor: 2 });
+  const context = await browser.newContext({
+    viewport: { width: 1728, height: 1117 },
+    deviceScaleFactor: 2,
+    colorScheme: "dark",
+  });
   try {
     const { home } = await asDesktop(context);
     const page = await context.newPage();
@@ -68,17 +72,17 @@ test("thread screens", async ({ browser }) => {
     await shot(page, "reply-running");
 
     await writeFile(join(folder, "go"), "");
-    await expect(replies.first().getByRole("button", { name: /^5 actions/ })).toBeVisible();
+    await expect(replies.first().getByRole("button", { name: /^Worked\s*5 actions/ })).toBeVisible();
     await shot(page, "reply-finished");
     await replies
       .first()
-      .getByRole("button", { name: /^5 actions/ })
+      .getByRole("button", { name: /^Worked\s*5 actions/ })
       .click();
     await replies.first().getByRole("button", { name: "Thinking" }).click();
     await shot(page, "reply-opened");
     await replies
       .first()
-      .getByRole("button", { name: /^5 actions/ })
+      .getByRole("button", { name: /^Worked\s*5 actions/ })
       .click();
     await replies.first().getByRole("button", { name: "Thinking" }).click();
 
@@ -86,16 +90,51 @@ test("thread screens", async ({ browser }) => {
     await unlinkGo(folder);
     await agentRow(page).getByRole("button").nth(1).click();
     await page.getByRole("menuitem", { name: "edit", exact: true }).click();
-    await writeFile(join(folder, "go"), "");
+    const lines = Array.from(
+      { length: 240 },
+      (_, n) => `  const value${n} = format(rows[${n}], columns, { plain: true, locale: "en" });`,
+    );
+    await writeFile(join(folder, "export.ts"), lines.join("\n") + "\n");
+    git("add", "-A");
+    git("-c", "user.name=Sam", "-c", "user.email=sam@example.com", "commit", "-qm", "start");
     await send(page, "Add a CSV export to the invoices page.");
+    // The replay holds after its text: edit while the turn runs (a long edit, and a file the
+    // operating system writes), then let it end.
     await expect(conversation(page).getByText("I edited agent.txt.")).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Review turn/ })).toBeVisible();
+    const edited = [...lines];
+    edited.splice(
+      10,
+      3,
+      "  // The export reads the table's own column list, so the file and the screen can't drift apart, ever.",
+    );
+    for (const at of [60, 110, 160, 210])
+      edited.splice(at, 2, `  const total${at} = sum(rows.slice(0, ${at}));`);
+    edited.push("  export const csv = toCsv(rows, columns);");
+    await writeFile(join(folder, "export.ts"), edited.join("\n") + "\n");
+    await writeFile(join(folder, ".DS_Store"), Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31]));
+    await writeFile(join(folder, "go"), "");
+    await expect(page.getByRole("button", { name: /^Review turn 2/ })).toBeVisible();
     await shot(page, "change-card");
-    await page.getByRole("button", { name: /^Review turn/ }).click();
+    await page.getByRole("button", { name: /^Review turn 2/ }).click();
     await expect(
       page.getByRole("region", { name: "Review" }).getByRole("list", { name: "Changed files" }),
     ).toBeVisible();
     await shot(page, "review-panel");
+    // The scrollbar's two hover steps: pointer in the panel, then on the thumb.
+    const review = page.getByRole("region", { name: "Review" });
+    const thumb = review.locator("[data-slot=scroll-area-thumb]").first();
+    const colour = () => thumb.evaluate((element) => getComputedStyle(element).backgroundColor);
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(1200);
+    console.log("thumb at rest", await colour());
+    await review.hover({ position: { x: 200, y: 400 } });
+    await page.waitForTimeout(400);
+    console.log("thumb, pointer in the panel", await colour());
+    await review.screenshot({ path: join(out!, "scrollbar-panel-hover.png") });
+    await thumb.hover({ force: true });
+    await page.waitForTimeout(400);
+    console.log("thumb hovered", await colour());
+    await review.screenshot({ path: join(out!, "scrollbar-thumb-hover.png") });
     await page.getByRole("button", { name: "Thread only" }).click();
 
     // A few more threads for the list.

@@ -90,10 +90,12 @@ test("the agent row names the agent and Send streams its reply into the thread",
  */
 async function expectFinishedReply(page: Page) {
   const reply = replyOf(page);
-  // The header names the agent and the model, nothing else.
-  await expect(reply.getByRole("group", { name: "Reply from" })).toHaveText(/^\s*Fake agent\s*work\s*$/);
+  // The header is the agent's mark (named for screen readers) and the model, nothing else.
+  const from = reply.getByRole("group", { name: "Reply from" });
+  await expect(from).toHaveText(/^\s*work\s*$/);
+  await expect(from.getByRole("img", { name: "Fake agent" })).toBeVisible();
   await expect(reply.locator("time")).toHaveCount(0);
-  const line = reply.getByRole("button", { name: /^5 actions/ });
+  const line = reply.getByRole("button", { name: /^Worked\s*5 actions/ });
   await expect(line).toBeVisible();
   await expect(line).toHaveText(/5 actions\s*\d+(\.\d)?s/);
   const steps = reply.getByRole("list", { name: "Actions" }).getByRole("listitem");
@@ -145,7 +147,7 @@ test("a reply shows its work folded into one actions line, with thinking, a help
   const actions = reply.getByRole("list", { name: "Actions" });
   await expect(actions).toBeVisible();
   await writeFile(join(folder, "go"), "");
-  await expect(reply.getByRole("button", { name: /^5 actions/ })).toBeVisible();
+  await expect(reply.getByRole("button", { name: /^Worked\s*5 actions/ })).toBeVisible();
   await expect(actions).toBeVisible();
   // The commands are steps of the one reply, never messages of their own.
   await expect(conversation(page).getByRole("article")).toHaveCount(2);
@@ -156,7 +158,7 @@ test("a reply shows its work folded into one actions line, with thinking, a help
   await second.goto("/");
   await threads(second).filter({ hasText: text }).click();
   await replyOf(second)
-    .getByRole("button", { name: /^5 actions/ })
+    .getByRole("button", { name: /^Worked\s*5 actions/ })
     .click();
   await expectFinishedReply(second);
   await context.close();
@@ -189,14 +191,14 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
   await threads(second).filter({ hasText: "Message 1" }).first().click();
   const replies = replyOf(second);
   await expect(replies).toHaveCount(100);
-  await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/Fake agent\s*quick/);
-  await expect(replies.first().getByRole("button", { name: /^1 action/ })).toBeVisible();
+  await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/^\s*quick\s*$/);
+  await expect(replies.first().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
   await expect(replies.last()).toContainText("Done: Message 150");
 
   // And it keeps updating: a new turn in the first window shows up in the second, drawn.
   await send("Message 151");
   await expect(replies.last()).toContainText("Done: Message 151");
-  await expect(replies.last().getByRole("button", { name: /^1 action/ })).toBeVisible();
+  await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
   await context.close();
 });
 
