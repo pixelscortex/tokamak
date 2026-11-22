@@ -1,0 +1,19 @@
+packages/server/tests/ai-liveness-driver.mjs
+  s_0eedb15a6f462e::t_8841a59b9cd64a 177,182-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6adb113d7b66acb9d341fea1a50d8b8b94b8392a",
+  "prompts": {},
+  "sessions": {
+    "s_0eedb15a6f462e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20328-e363-7f00-bf24-82ac4cc811da",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
