@@ -1,0 +1,19 @@
+plugins/chat/tests/vitest.config.ts
+  s_416ef60618c0ac::t_d02ecc76d637bc 4,17-18,21,23-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e655caaa6fb1fb3175bc3bb1f845077030df4e78",
+  "prompts": {},
+  "sessions": {
+    "s_416ef60618c0ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a23bd7be-0bbf-42e7-99fd-e89dbc063cfd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
