@@ -1,33 +1,33 @@
-.oxlintrc.json
-  s_c81ddbe6819468::t_890e4894c9532a 53-54
-app/tests/fixtures/integration/src/client/api.tsx
-  s_c81ddbe6819468::t_53bd44f8447dbc 28-36,102
-app/tests/fixtures/other-draft/src/client/api.tsx
-  s_c81ddbe6819468::t_2273da2e2fea6e 18
-package.json
-  s_c81ddbe6819468::t_9b29fcfb85a61a 41
-packages/build/tests/fixtures/window-plugin/src/main.tsx
-  s_c81ddbe6819468::t_0faffc6ab97bbf 8,15,23
-packages/sdk/tests/web/component-wrapper-lifecycle.test.tsx
-  s_c81ddbe6819468::t_81030158ecc641 31-33,89
-packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
-  s_c81ddbe6819468::t_1d5bd5efcd2df0 13
-packages/ui/lint/fixtures/class-expressions.tsx
-  s_c81ddbe6819468::t_7774f7173fa3d5 1-14
-packages/ui/lint/fixtures/fixed-control-sizes.tsx
-  s_c81ddbe6819468::t_c82e65dfb14c1a 5,8,11-12
-packages/ui/lint/fixtures/text-style-in-button.tsx
-  s_c81ddbe6819468::t_eab5295d16190d 23-33
-packages/ui/lint/oxlint.json
-  s_c81ddbe6819468::t_eab623394f3d74 48-57
-packages/ui/lint/plugin.js
-  s_c81ddbe6819468::t_ea8cfbfa18bc7c 37-43,45-51,202-296,298-301,352-361,365-367,378-380,386
-packages/ui/tests/lint.test.ts
-  s_c81ddbe6819468::t_8d776416e14d42 7-11,14-15,34-37,43,51-66
-plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
-  s_c81ddbe6819468::t_52fc67c7b8ae17 48-52,54
 wiki/content/docs/design/index.mdx
-  s_c81ddbe6819468::t_7340b83a479a12 361-363
+  s_c81ddbe6819468::t_4eaa6873785c0c 361-363
+packages/ui/lint/fixtures/class-expressions.tsx
+  s_c81ddbe6819468::t_4eaa6873785c0c 1-14
+.oxlintrc.json
+  s_61def10676cf0b::t_6419cadb16d6d0 53-54
+app/tests/fixtures/integration/src/client/api.tsx
+  s_c81ddbe6819468::t_bdced6f5e8232f 28-36,102
+app/tests/fixtures/other-draft/src/client/api.tsx
+  s_c81ddbe6819468::t_8f23554a6fae5a 18
+package.json
+  s_c81ddbe6819468::t_7b789d72f8fa19 41
+packages/build/tests/fixtures/window-plugin/src/main.tsx
+  s_c81ddbe6819468::t_22a711ddf3f0b8 8,15,23
+packages/sdk/tests/web/component-wrapper-lifecycle.test.tsx
+  s_c81ddbe6819468::t_d8da91a83ba51e 31-33,89
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_c81ddbe6819468::t_e9faba5e21fa43 13
+packages/ui/lint/fixtures/fixed-control-sizes.tsx
+  s_c81ddbe6819468::t_cdc02d17f674ac 5,8,11-12
+packages/ui/lint/fixtures/text-style-in-button.tsx
+  s_c81ddbe6819468::t_0264678bc5c16f 23-33
+packages/ui/lint/plugin.js
+  s_c81ddbe6819468::t_d2b63a1ff77ee2 37-43,45-51,202-296,298-301,352-361,365-367,378-380,386
+packages/ui/tests/lint.test.ts
+  s_c81ddbe6819468::t_8f071891c0e000 7-11,14-15,34-37,43,51-66
+plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
+  s_c81ddbe6819468::t_183f56e6fb942c 48-52,54
+packages/ui/lint/oxlint.json
+  s_4ccc9a2575a981::t_2f20ffe3c0d6c3 48-57
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -35,13 +35,29 @@ wiki/content/docs/design/index.mdx
   "base_commit_sha": "b305b4c865700f35b5aca805c60cd07bdda90941",
   "prompts": {},
   "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_61def10676cf0b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c4bb262f-9ea6-4c66-970b-e0ac48ace41d",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
     "s_c81ddbe6819468": {
       "agent_id": {
         "tool": "codex",
         "id": "01a203cd-c270-7943-8517-6f76d8e6093c",
-        "model": "unknown"
+        "model": "gpt-6.2-sol"
       },
-      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
     }
   }
 }
