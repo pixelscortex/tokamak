@@ -1,10 +1,4 @@
-import {
-  LOCAL_USER,
-  createFunctions,
-  type DatabaseReader,
-  type Doc,
-  type ModelFromSchema,
-} from "@tokamak/sdk";
+import { createFunctions, type DatabaseReader, type Doc, type ModelFromSchema } from "@tokamak/sdk";
 import { ACTIVE, ENDED } from "../shared/turn-shared";
 import schema from "./schema";
 
@@ -63,9 +57,4 @@ export function view({
   ...turn
 }: Turn): TurnView {
   return { ...turn, hasThinking: Boolean(thinking) };
-}
-
-/** Who started a chat thread: the one person who may change its choices. */
-export function ownerOf(thread: { createdBy?: string }): string {
-  return thread.createdBy ?? LOCAL_USER;
 }

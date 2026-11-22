@@ -1,6 +1,6 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
-import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
@@ -87,6 +87,7 @@ try {
     assert.equal(model, "gpt-6.2-sol", "the default is first even on page two");
     assert.deepEqual(available.speeds, ["default", "priority"]);
   }
+  passed("availability and model catalog");
 
   const turns = agentTurns({
     h,
@@ -116,6 +117,7 @@ try {
     const command = editSteps.find((step) => step.title.includes("cat marker.txt"));
     assert.deepEqual([command?.kind, command?.state], ["command", "done"]);
   }
+  passed("edit, reply, reports and session");
 
   const missingSession = "00000000-0000-4000-8000-000000000001";
   const historyFolder = await h.folder("history");
@@ -152,6 +154,7 @@ try {
       { text: "Verify it", state: "running" },
     ]);
   }
+  passed("lost session recovery with history");
 
   // Continue the real thread, but switch the replay executable's working folder to select the next tape.
   const follow = async (tape, prompt, options) =>
@@ -168,6 +171,7 @@ try {
       { inputTokens: 41_839, outputTokens: 240, cachedInputTokens: 39_168 },
       "usage excludes the previous turn's tokens",
     );
+  passed("resumed session and plan");
 
   const steerText = "Stop the list and reply exactly: STEERED";
   const steered = await follow("steer", longPrompt, {
@@ -184,6 +188,7 @@ try {
       { inputTokens: 21_781, outputTokens: 7, cachedInputTokens: 21_376 },
       "without an earlier usage notification, the first total is the baseline",
     );
+  passed("steer while streaming");
   const stopped = await follow("stop", longPrompt, {
     state: "stopped",
     async during(turn) {
@@ -194,7 +199,10 @@ try {
   assert.equal(stopped.row.sessionId, recorded.row.sessionId);
   if (real) assert.ok(stopped.text, "the partial reply is retained");
   else assert.equal(stopped.text, "1. Apples are");
+  passed("stop while streaming");
 
+  const helperPrompt =
+    "Use the built-in subagent tool to launch exactly one explorer. Ask it to reply with only HELPER-OK, without running commands or editing files. Wait for it to finish and tell me its answer. Do not use a shell to launch an agent.";
   if (!real) {
     const earlyFolder = await h.folder("early-stop");
     const early = await turns.run(earlyFolder, longPrompt, {
@@ -209,8 +217,6 @@ try {
     });
     assert.equal(early.row.sessionId, recorded.row.sessionId);
 
-    const helperPrompt =
-      "Use the built-in subagent tool to launch exactly one explorer. Ask it to reply with only HELPER-OK, without running commands or editing files. Wait for it to finish and tell me its answer. Do not use a shell to launch an agent.";
     const helped = await run("helpers", helperPrompt, { speed: "priority" });
     assert.equal(helped.row.speed, "priority");
     assert.deepEqual(
@@ -224,26 +230,10 @@ try {
       [{ key: "helper-thread", name: "explorer", title: "/root/helper", state: "done", hasText: true }],
     );
     assert.equal(await helped.helper(helped.reply.helpers[0]), "HELPER-OK");
-    for (const [tape, access] of [
-      ["helper-approval", "ask"],
-      ["full-approval", "full"],
-    ]) {
-      const result = await run(tape, helperPrompt, {
-        access,
-        answers: access === "ask" ? 1 : 0,
-        during:
-          access === "ask"
-            ? async (turn) => {
-                const question = await turn.question();
-                assert.match(question.subject, /helper-approval/);
-                await turn.answer(question, "approve");
-              }
-            : undefined,
-      });
-      assert.equal(result.row.access, access);
-      assert.equal(result.reply.helpers[0].state, "done", "the helper ends with the parent turn");
-      assert.deepEqual(await result.steps(), [], "the helper's command stays out of the parent reply");
-    }
+    const full = await run("full-approval", helperPrompt, { access: "full" });
+    assert.equal(full.row.access, "full");
+    assert.equal(full.reply.helpers[0].state, "done", "the helper ends with the parent turn");
+    assert.deepEqual(await full.steps(), [], "the helper's command stays out of the parent reply");
   }
 
   for (const [tape, answer, allowed] of [
@@ -252,43 +242,94 @@ try {
     ["decline", "decline", false],
     ["cancel", "cancel", false],
   ]) {
-    const file = join(h.home, `approval-${tape}.txt`);
-    const result = await run(
-      tape,
-      `Use a shell command with sandbox_permissions require_escalated to write exactly tokamak-permission to ${file}. The file is outside the current folder. Do not write it any other way or retry if declined. Say what happened.`,
+    const folder = await h.folder(tape);
+    const edit = tape === "accept";
+    const original = "unchanged\n";
+    const commandText = "tokamak-permission";
+    const marker = join(folder, "existing.txt");
+    await writeFile(marker, original);
+    async function checkFolder(files, contents) {
+      assert.deepEqual((await readdir(folder)).sort(), files);
+      assert.equal(await readFile(marker, "utf8"), contents);
+    }
+    const command =
+      "Use the shell tool once to run `printf %s tokamak-permission > command.txt` in the current folder. Do not use an escalated sandbox or any substitute tool. If declined, do not retry. Then report the outcome.";
+    const result = await turns.run(
+      folder,
+      edit
+        ? `First use the native apply_patch tool to replace the only line in existing.txt (unchanged) with patched. Do not use the shell for the edit. Then: ${command}`
+        : command,
       {
         access: "ask",
-        answers: 1,
+        answers: edit ? 2 : 1,
         state: answer === "cancel" ? "stopped" : "done",
         async during(turn) {
+          if (edit) {
+            const question = await turn.question();
+            assert.equal(question.action, "edit");
+            await checkFolder(["existing.txt"], original);
+            await turn.answer(question, "approve");
+          }
           const question = await turn.question();
           assert.equal(question.action, "run");
-          assert.match(question.subject, /tokamak-permission/);
+          assert.match(question.subject, /command\.txt/);
+          await checkFolder(["existing.txt"], edit ? "patched\n" : original);
           await turn.answer(question, answer);
         },
       },
     );
     assert.equal(result.row.access, "ask");
+    const steps = await result.steps();
+    if (edit)
+      assert.ok(
+        steps.some(
+          ({ kind, title, state }) => kind === "edit" && title.endsWith("existing.txt") && state === "done",
+        ),
+      );
     assert.ok(
-      (await result.steps()).some(
-        (step) => step.title.includes("tokamak-permission") && step.state === (allowed ? "done" : "failed"),
+      steps.some(
+        ({ kind, title, state }) =>
+          kind === "command" && title.includes("command.txt") && state === (allowed ? "done" : "failed"),
       ),
     );
-    if (real)
-      assert.equal(
-        await stat(file).then(
-          () => true,
-          () => false,
-        ),
-        allowed,
-      );
+    await checkFolder(
+      allowed ? ["command.txt", "existing.txt"] : ["existing.txt"],
+      edit ? "patched\n" : original,
+    );
+    if (allowed) assert.equal(await readFile(join(folder, "command.txt"), "utf8"), commandText);
+    passed(tape === "accept" ? "approve a file edit and a writing command" : tape);
   }
+
+  const helped = await run(
+    "helper-approval",
+    "Use the built-in subagent tool to launch exactly one helper named helper. Ask it to run the shell command `printf %s helper-approval > helper.txt` in this same folder, then report completion. Wait for the helper to finish and report its result. Do not run a shell command or edit files yourself.",
+    {
+      access: "ask",
+      answers: 1,
+      async during(turn) {
+        const question = await turn.question();
+        assert.equal(question.action, "run");
+        assert.match(question.subject, /helper\.txt/);
+        await turn.answer(question, "approve");
+      },
+    },
+  );
+  assert.equal(helped.row.access, "ask");
+  assert.equal(helped.reply.helpers.length, 1);
+  assert.equal(helped.reply.helpers[0].state, "done");
+  assert.deepEqual(await helped.steps(), [], "the helper's command stays out of the parent reply");
+  assert.equal(await readFile(join(helped.folder, "helper.txt"), "utf8"), "helper-approval");
+  passed("helper approval");
   console.log(
     `codex (${real ? "real" : "replay"}): availability, model catalog, reply and session rows, reasoning, tools, plan, usage, steer, stop, four approval decisions`,
   );
 } finally {
   for (const stop of cleanup.reverse()) await Promise.resolve(stop()).catch(() => {});
   await h.close();
+}
+
+function passed(name) {
+  if (real) console.log(`Codex PASS: ${name}`);
 }
 
 function shellQuote(value) {

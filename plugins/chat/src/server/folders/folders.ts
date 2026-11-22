@@ -1,9 +1,10 @@
 /// <reference types="node" />
-import { LOCAL_USER, fail, local, v } from "@tokamak/sdk";
+import { fail, local, v } from "@tokamak/sdk";
 import { mkdir, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import { api } from "../_generated/api";
+import { threadCreatorId } from "../_functions";
 
 /**
  * The folder a thread works in, on its creator's computer, ready to use; null
@@ -19,7 +20,7 @@ export const resolve = local({
     const thread = await ctx.runQuery(api.threads.get, { threadId });
     if (!thread) throw new Error("Thread no longer exists");
     // The folder is on the creator's computer; another member's Send stays plain chat.
-    if ((thread.createdBy ?? LOCAL_USER) !== ctx.auth.user.id) return null;
+    if (threadCreatorId(thread) !== ctx.auth.user.id) return null;
     const folder = thread.folder;
     if (folder?.kind === "chosen") return expand(folder.path);
     if (folder?.path !== undefined) {

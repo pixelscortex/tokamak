@@ -1,8 +1,8 @@
-import { LOCAL_USER, local, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
+import { local, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
 import { threadDeletedLocal, threadDeletedServer } from "../../contracts";
 import { api } from "../_generated/api";
 import { folder } from "../folders/folder";
-import { mutation, nonempty, query, thread, type Model } from "../_functions";
+import { mutation, nonempty, query, thread, threadCreatorId, type Model } from "../_functions";
 
 export const list = query({
   handler: ({ db }) => db.query("threads").withIndex("by_updatedAt").order("desc").collect(),
@@ -25,7 +25,7 @@ export const creator = query({
   handler: async ({ db }, { threadId }): Promise<{ id: string; name?: string } | null> => {
     const current = await db.get(threadId);
     if (!current) return null;
-    const id = current.createdBy ?? LOCAL_USER;
+    const id = threadCreatorId(current);
     const first = await db
       .query("messages")
       .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
@@ -85,7 +85,7 @@ export const recentFolders = query({
   handler: async ({ db, auth }) => {
     const folders: string[] = [];
     for (const row of await db.query("threads").withIndex("by_updatedAt").order("desc").take(RECENT_SCAN)) {
-      if (row.folder?.kind !== "chosen" || row.createdBy !== auth.user.id) continue;
+      if (row.folder?.kind !== "chosen" || threadCreatorId(row) !== auth.user.id) continue;
       if (!folders.includes(row.folder.path)) folders.push(row.folder.path);
       if (folders.length === RECENT_FOLDERS) break;
     }
@@ -166,7 +166,7 @@ async function creatorsThread(
   action: CreatorAction,
 ): Promise<Doc<Model, "threads">> {
   const current = await thread(db, threadId);
-  if ((current.createdBy ?? LOCAL_USER) !== userId)
+  if (threadCreatorId(current) !== userId)
     throw new Error(`Only the person who started this thread can ${action}`);
   return current;
 }
