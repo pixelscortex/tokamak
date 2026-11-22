@@ -1,0 +1,43 @@
+plugins/codex/README.md
+  s_13922ebd3d9eea::t_53b9992d6a39d9 23
+plugins/codex/src/server/turn.ts
+  s_13922ebd3d9eea::t_6688bdc842f482 103
+e2e/fake-agent/replays/codex/history.jsonl
+  s_13922ebd3d9eea::t_a4477f11835b46 1,38-39
+  s_13922ebd3d9eea::t_a1768e890c1f78 19-23
+  s_13922ebd3d9eea::t_6688bdc842f482 41-42
+plugins/codex/tests/e2e.mjs
+  s_13922ebd3d9eea::t_c2cc757d85669a 167-169
+  s_13922ebd3d9eea::t_6688bdc842f482 160-165,171-172
+  s_13922ebd3d9eea::t_a4477f11835b46 138-139,166,170,173-175
+  s_13922ebd3d9eea::t_a1768e890c1f78 156-159,196-201
+plugins/codex/src/server/reports.ts
+  s_13922ebd3d9eea::t_a1768e890c1f78 30,49,51-52,100-104,119-124
+  s_13922ebd3d9eea::t_53b9992d6a39d9 7,111,206,213-217,219-221,238-240
+  s_13922ebd3d9eea::t_973036ae4df494 225-227,229-236
+  s_61c7aa4d512211::t_a8e35b97dc4fa1 125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "381ceaaf5d5c8cbd4876a09957594e476fa938ab",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
