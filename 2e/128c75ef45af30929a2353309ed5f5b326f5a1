@@ -1,0 +1,19 @@
+packages/server/tests/build-actions.mjs
+  s_416ef60618c0ac::t_38b4b6f479f1d4 196-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2e128c75ef45af30929a2353309ed5f5b326f5a1",
+  "prompts": {},
+  "sessions": {
+    "s_416ef60618c0ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a23bd7be-0bbf-42e7-99fd-e89dbc063cfd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
