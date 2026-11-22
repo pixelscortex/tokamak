@@ -61,9 +61,10 @@ export async function screenTree(page: Page): Promise<ScreenNode> {
     const hidden = (element: Element, style: CSSStyleDeclaration) => {
       if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0)
         return true;
-      // Screen-reader text: a 1 px box clipped away.
-      if (style.position === "absolute" && style.clip === "rect(0px, 0px, 0px, 0px)") return true;
       const rect = element.getBoundingClientRect();
+      // Screen-reader text (sr-only): a 1 px box that hides what overflows it.
+      if (style.position === "absolute" && style.overflow === "hidden" && rect.width <= 1 && rect.height <= 1)
+        return true;
       return rect.width === 0 && rect.height === 0 && element.children.length === 0;
     };
     const nameOf = (element: Element) =>
@@ -78,6 +79,21 @@ export async function screenTree(page: Page): Promise<ScreenNode> {
       w: Math.round(rect.width * 100) / 100,
       h: Math.round(rect.height * 100) / 100,
     });
+    /**
+     * The text as drawn: kept as is where whitespace is preserved (code), else
+     * collapsed, keeping a leading space only when the browser drew it (it has
+     * width), since the box starts there.
+     */
+    function shown(node: Text, raw: string, whiteSpace: string): string {
+      if (whiteSpace.startsWith("pre") || whiteSpace === "break-spaces") return raw;
+      const collapsed = raw.replace(/\s+/g, " ");
+      const lead = raw.length - raw.trimStart().length;
+      if (!lead) return collapsed.trimEnd();
+      const space = document.createRange();
+      space.setStart(node, 0);
+      space.setEnd(node, lead);
+      return space.getBoundingClientRect().width > 0 ? ` ${collapsed.trim()}` : collapsed.trim();
+    }
     function walk(element: Element): unknown {
       const style = getComputedStyle(element);
       if (hidden(element, style)) return null;
@@ -110,15 +126,15 @@ export async function screenTree(page: Page): Promise<ScreenNode> {
       const children: unknown[] = [];
       for (const child of element.childNodes) {
         if (child.nodeType === Node.TEXT_NODE) {
-          const text = child.textContent ?? "";
-          if (!text.trim()) continue;
+          const raw = child.textContent ?? "";
+          if (!raw.trim()) continue;
           const range = document.createRange();
           range.selectNodeContents(child);
           children.push({
             tag: "#text",
             box: box(range.getBoundingClientRect()),
             style: {},
-            text: text.replace(/\s+/g, " "),
+            text: shown(child as Text, raw, style.whiteSpace),
             children: [],
           });
         } else if (child.nodeType === Node.ELEMENT_NODE) {

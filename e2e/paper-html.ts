@@ -130,7 +130,9 @@ function type(style: Readonly<Record<string, string>>): string[] {
 
 const px = (value: number) => `${Math.round(value * 2) / 2}px`;
 const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const attr = (text: string) => escape(text).replace(/"/g, "&quot;");
+// Layer names come from labels, and a folder's label holds its full path: keep only its name.
+const attr = (text: string) =>
+  escape(text.replace(/(^|\s)\/\S*\/(?=[^/\s]+$)/, "$1/example/")).replace(/"/g, "&quot;");
 
 /** True when the element draws nothing and has no name: its children are placed in its parent. */
 function invisible(node: ScreenNode): boolean {
@@ -161,7 +163,8 @@ function render(node: ScreenNode, origin: { x: number; y: number }, inherited: S
       `white-space:${wraps ? "pre-wrap" : "pre"}`,
       ...type(inherited.style),
     ];
-    return `<span style="${style.filter(Boolean).join(";")}">${escape(node.text?.trim() ?? "")}</span>`;
+    // A div per text: Paper merges sibling spans into one text node, which loses their places.
+    return `<div style="${style.filter(Boolean).join(";")}">${escape(node.text ?? "")}</div>`;
   }
   if (node.svg) {
     const paths = node.svg.paths
@@ -173,9 +176,16 @@ function render(node: ScreenNode, origin: { x: number; y: number }, inherited: S
     return `<svg layer-name="${attr(node.name ?? "icon")}" viewBox="${node.svg.viewBox}" style="${at};${size}">${paths}</svg>`;
   }
   if (node.tag === "textarea" || node.tag === "input") {
-    const padTop = Number.parseFloat(node.style["padding-top"] ?? "0");
     const padLeft = Number.parseFloat(node.style["padding-left"] ?? "0");
-    const text = `<span style="position:absolute;left:${px(padLeft)};top:${px(padTop)};white-space:pre;${type(node.style).join(";")}">${escape(node.text ?? "")}</span>`;
+    const lineHeight =
+      Number.parseFloat(node.style["line-height"] ?? "") ||
+      Number.parseFloat(node.style["font-size"] ?? "16") * 1.25;
+    // A textarea starts its text at its top padding; an input centres its one line.
+    const top =
+      node.tag === "textarea"
+        ? Number.parseFloat(node.style["padding-top"] ?? "0")
+        : (node.box.h - lineHeight) / 2;
+    const text = `<div style="position:absolute;left:${px(padLeft)};top:${px(top)};white-space:pre;${type(node.style).join(";")}">${escape(node.text ?? "")}</div>`;
     return `<div layer-name="${attr(node.name ?? node.tag)}" style="${[at, size, ...look(node.style)].join(";")}">${text}</div>`;
   }
   const inner = children(node, node.box, node);
