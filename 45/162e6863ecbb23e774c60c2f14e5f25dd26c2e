@@ -1,0 +1,19 @@
+packages/server/tests/ai-turns-driver.mjs
+  s_61c7aa4d512211::t_4787f7ad65a9e2 172-180,182-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45162e6863ecbb23e774c60c2f14e5f25dd26c2e",
+  "prompts": {},
+  "sessions": {
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
