@@ -60,6 +60,14 @@ plugins/codex/src/server/turn.ts
         "model": "gpt-6.2-sol"
       },
       "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
     }
   }
 }

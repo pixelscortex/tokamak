@@ -16,6 +16,8 @@ plugins/ai/src/server/schema.ts
 plugins/ai/src/server/turns.ts
   s_312a34bc8d5ba4::t_5c513314299f52 65-68,155-160,179-182,229-232
   s_312a34bc8d5ba4::t_34a286464ad5fd 1,3-4,34,49,53-64,69-82,87-90,106-114,120,136,138-139,144-145,151-154,161-178,183-186,225-228,233-237,242-244,258,268-276,323,325
+  s_b78d166f675f88::t_fb9c09dccc7dd5 321
+  s_b78d166f675f88::t_3bb242d8f21392 1,320
 plugins/chat/src/client/lib/send.ts
   s_312a34bc8d5ba4::t_029df48c220173 4,21,29
 plugins/ai/src/client/lib/turn.ts
@@ -64,6 +66,8 @@ e2e/fake-agent/replays/no-steer.jsonl
   s_312a34bc8d5ba4::t_94ad05a005266a 1-4
 plugins/ai/src/server/_generated/api.ts
   s_312a34bc8d5ba4::t_e5b7f8d50e9361 10,13-16,37,40-43
+plugins/chat/src/server/messages/messages.ts
+  s_b78d166f675f88::t_5446988df4f8f6 37
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -76,6 +80,14 @@ plugins/ai/src/server/_generated/api.ts
         "tool": "codex",
         "id": "01a20148-225d-7b23-a104-1c434af1d174",
         "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
       },
       "human_author": "JustKira <shighgamerhg@gmail.com>"
     }
