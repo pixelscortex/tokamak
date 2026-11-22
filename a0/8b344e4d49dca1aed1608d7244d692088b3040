@@ -1,0 +1,19 @@
+app/src/shell/frame.tsx
+  s_eed82efa8a9122::t_d583d115bcec6e 59,67-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a08b344e4d49dca1aed1608d7244d692088b3040",
+  "prompts": {},
+  "sessions": {
+    "s_eed82efa8a9122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e344ae2c-2a7a-44a3-98c5-88acd00349ae",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
