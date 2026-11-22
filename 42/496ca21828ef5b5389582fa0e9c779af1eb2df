@@ -1,0 +1,26 @@
+packages/sdk/README.md
+  s_7f02959c6c1be8::t_db58c54e387d80 338-360
+packages/sdk/client.tsx
+  s_7f02959c6c1be8::t_f8f8d37197e0f4 19
+packages/sdk/solid.ts
+  s_7f02959c6c1be8::t_f8f8d37197e0f4 8-9,60-67
+packages/sdk/tests/web/solid.test.tsx
+  s_7f02959c6c1be8::t_9481e0398d8606 6,8,12,97-132
+  s_7f02959c6c1be8::t_79410e556f17e4 133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42496ca21828ef5b5389582fa0e9c779af1eb2df",
+  "prompts": {},
+  "sessions": {
+    "s_7f02959c6c1be8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-42c6-7f61-b749-3c3629f0d6ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
