@@ -60,27 +60,30 @@ dark theme, built from the app itself rather than redrawn by hand:
    and `<name>.json`, the laid-out tree with computed styles (`e2e/browser/screen-tree.ts`).
 2. `proto run bun -- e2e/paper-html.ts <folder>/<name>.json` turns a tree
    into HTML for Paper's `write_html`: every box placed at the size the
-   browser gave it, colours as hex, Geist and Geist Mono. `--page` with a
-   layer path writes one region (such as `Panel`); `PAPER_DROP` leaves out
-   layers by name prefix (the AI page leaves out code's `Branch `, `Layout`
-   and `Review turn`).
+   browser gave it, colours as hex, Geist and Geist Mono, one text box per
+   text. `--page` with a layer path writes one region (such as `Panel`).
+   `PAPER_DROP` leaves out layers by name prefix; no page uses it today.
 3. Paste it into an artboard of the same name, then compare the artboard's
    screenshot with the PNG.
 
-On the AI and Code pages, the first artboard is chat's open thread (the
-base); the others show the same screens with the plugin on, each added part
-outlined in dashes and tagged "plugin · part → action Chat.part".
+Every artboard is a plain copy of one screen: nothing is drawn on top of it,
+no outlines and no labels. Which plugin adds which part, and on which
+artboard it shows, is written in each plugin's "What it adds to others"
+table here, not in Paper.
+
+The AI and Code pages start with `Base · Chat · open thread`, chat's open
+thread as the chat page draws it. The other artboards on those pages are the
+whole app with every plugin on, so an AI artboard also shows code's branch
+chip, layout control and change card, as the app does.
 
 The copies leave out what only the test app draws: the fixture plugins' rail
 letters (F, P, T, W, O) and the fake agent's "Replayed by the fake agent"
 line. Names and models come from the test agent ("Fake agent", "work").
 
-**Matched to:** `dev` at `d99791ac` ("The new-thread composer is as wide as an
-open thread's"), 2026-11-22. `dev` has moved since (`b305b4c8`, fixed control
-sizes): the composer box padding moved to its input, the change card is now a
-`Row`, and buttons gained `quiet` and `bare`. They look nearly the same, but
-recheck the Chat and Code pages and the class names quoted in `chat.md` and
-`code.md` against the new code.
+**Matched to:** `dev` at `b305b4c8` ("Cover static class expressions and
+simplify lint configuration", 2026-11-22), merged into `design/app-map` at
+`af0474e3`. The screenshots were taken from that merge plus this branch's
+test changes (no app code changed).
 
 ## Open questions
 

@@ -9,12 +9,11 @@ Paper page: `App 1:1 · Chat plugin`.
 | Screen                                                             | Source                                                                    | Paper artboard               |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------- | ---------------------------- |
 | New thread: icon, "Start a conversation", folder choices, composer | `plugins/chat/src/client/pages/chat.tsx` (`NewThread`), `ui/empty.tsx`    | `Chat · new thread`          |
-| New thread with text in the composer (Send filled)                 | `ui/composer.tsx`                                                         | `Chat · typing`              |
 | Open thread: header, messages, composer                            | `pages/chat.tsx` (`OpenThread`), `ui/message.tsx`, `ui/thread-header.tsx` | `Chat · open thread`         |
 | Thread menu open (Rename, Delete thread)                           | `ui/thread-header.tsx` (`ThreadMenu`)                                     | `Chat · thread menu`         |
 | Thread list in the sidebar ("New thread ⌘N", then threads)         | `ui/thread-list.tsx`                                                      | shown on every chat artboard |
 
-Not drawn yet: the "Choose a folder" dialog, the delete dialog, a failed or
+Not drawn yet: the composer with text in it (Send filled), the "Choose a folder" dialog, the delete dialog, a failed or
 stopped reply line ("Stopped", "Failed · …"), a queued message (dashed box).
 
 ## Parts it offers
@@ -47,16 +46,16 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 
 ## What it adds to others
 
-| Target                 | What                                                                      | File                        |
-| ---------------------- | ------------------------------------------------------------------------- | --------------------------- |
-| Shell `sidebar` region | The thread list                                                           | `pages/chat.tsx`            |
-| Shell `header` region  | The open thread's header; the page title "New thread" or the thread title | `pages/chat.tsx`            |
-| Shell rail             | Its view mark                                                             | `lib/icons.ts` (`chatIcon`) |
+| Target                 | What                                                                      | File                        | Paper artboard                                                               |
+| ---------------------- | ------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| Shell `sidebar` region | The thread list                                                           | `pages/chat.tsx`            | every `Chat ·` artboard                                                      |
+| Shell `header` region  | The open thread's header; the page title "New thread" or the thread title | `pages/chat.tsx`            | `Chat · open thread`, `Chat · thread menu`; the title on `Chat · new thread` |
+| Shell rail             | Its view mark                                                             | `lib/icons.ts` (`chatIcon`) | every `Chat ·` and `Shell ·` artboard                                        |
 
 ## If you change X, check Y
 
 - The composer tray (`nest-lg/1 surface-tray`, gap 4) or the box padding
-  (`py-3 ps-4 pe-3`): `ai` agent row (no start padding, so its first button
+  (`py-3 ps-2 pe-3`, plus the input's own `ps-2`): `ai` agent row (no start padding, so its first button
   sits on the box edge), `ai` permission card (`ps-3 pe-1` on the tray), `ai`
   Stop button (same size as Send).
 - The message column width (`max-w-thread` 760, `px-8`) or the composer
@@ -76,7 +75,8 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 
 ## Primitives used
 
-`Button`, `Avatar`, `Chip`, `Dialog`, `Icon`, `Kbd`, `Menu`, `Row`, `RowList`,
+`Button`, `Avatar`, `Chip`, `Dialog`, `Icon`, `Kbd`, `Menu`, `Row` (its
+button form, `as="button"`, for "New thread" and the folder choices), `RowList`,
 `rowVariants`, `ScrollArea`, `StatusIcon`, `Textarea` (dialog only; the
 composer uses the bare ui-sdk textarea), the `surface-*`, `nest-*`,
 `density-*` and `focus-ring` utilities.

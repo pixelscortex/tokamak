@@ -16,14 +16,14 @@ None.
 
 ## What it adds to others
 
-| Target                                    | What                                                                                           | File                                                                         |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| ai agent row, reply header, thread detail | Name "Claude" and its mark (LobeHub's Claude icon, single-colour paths)                        | `plugins/claude/src/server/agent.ts`, `src/server/icons/claude.svg`          |
-| ai Model picker                           | Claude's models by the names people know (no alias labels); "Default" when Claude lists none   | `src/server/agent.ts`                                                        |
-| ai Level picker                           | Each model's effort levels, as Claude reports them                                             | `src/server/agent.ts`                                                        |
-| ai Speed picker                           | Standard and Fast, only when Claude reports fast mode                                          | `src/server/agent.ts`                                                        |
-| ai agent row line                         | "Claude isn't installed." / "Claude is signed out. Sign in, then come back." / the update line | `src/server/agent.ts` (info), lines in `plugins/ai/src/client/lib/agents.ts` |
-| ai reply                                  | Thinking summaries, tool steps, tasks, usage; permission questions on Ask first                | `src/server/events.ts`, `src/server/permissions.ts`                          |
+| Target                                    | What                                                                                           | File                                                                         | Paper artboard (test agent in its place)                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| ai agent row, reply header, thread detail | Name "Claude" and its mark (LobeHub's Claude icon, single-colour paths)                        | `plugins/claude/src/server/agent.ts`, `src/server/icons/claude.svg`          | every `AI ·` artboard                                                         |
+| ai Model picker                           | Claude's models by the names people know (no alias labels); "Default" when Claude lists none   | `src/server/agent.ts`                                                        | the model ("work") on every `AI ·` agent row; menu not drawn yet              |
+| ai Level picker                           | Each model's effort levels, as Claude reports them                                             | `src/server/agent.ts`                                                        | not drawn yet (the test agent has no levels)                                  |
+| ai Speed picker                           | Standard and Fast, only when Claude reports fast mode                                          | `src/server/agent.ts`                                                        | not drawn yet (the test agent has no speeds)                                  |
+| ai agent row line                         | "Claude isn't installed." / "Claude is signed out. Sign in, then come back." / the update line | `src/server/agent.ts` (info), lines in `plugins/ai/src/client/lib/agents.ts` | not drawn yet                                                                 |
+| ai reply                                  | Thinking summaries, tool steps, tasks, usage; permission questions on Ask first                | `src/server/events.ts`, `src/server/permissions.ts`                          | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
 
 ## If you change X, check Y
 

@@ -3,24 +3,26 @@
 Puts agents into chat threads. It has no screen of its own: everything it
 draws goes into chat's parts. Agents (`claude`, `codex`) give it only data
 (name, mark, models, reports) through the `agent` contract.
-Paper page: `App 1:1 · AI plugin` (chat's open thread as the base, then each
-screen with ai's parts outlined and tagged).
+Paper page: `App 1:1 · AI plugin`: chat's open thread as the base, then each
+screen as the app draws it with every plugin on (code's branch chip, layout
+control and change card show too). Nothing is drawn on top of the artboards;
+the table under "What it adds to others" says which artboard shows each part.
 
 ## Screens
 
 All of these are chat screens with ai's parts in them. The client draws them
 only when it has a local part (the desktop app); a plain browser shows chat alone.
 
-| Screen                                                                                         | Source                                                              | Paper artboard             |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------- |
-| New thread: agent heading, agent row                                                           | `plugins/ai/src/client/ui/heading.tsx`, `ui/agent-row.tsx`          | `AI · new thread`          |
-| Reply while the turn runs: work line with the step and clock, Stop, thread status              | `ui/reply-work.tsx`, `ui/turn-controls.tsx`, `ui/thread-status.tsx` | `AI · reply running`       |
-| Reply after the turn: reply header, "Worked · 5 actions", helper row, text, tasks, plan, usage | `ui/reply-header.tsx`, `ui/reply-work.tsx`, `ui/reply-cards.tsx`    | `AI · reply finished`      |
-| Thinking and the actions line opened                                                           | `ui/reply-work.tsx`                                                 | `AI · reply opened`        |
-| Permission question on the composer (Ask first)                                                | `ui/permission-card.tsx`                                            | `AI · permission question` |
-| Thread list with status icons                                                                  | `ui/thread-status.tsx`                                              | `AI · thread list`         |
+| Screen                                                                                         | Source                                                              | Paper artboard              |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------- |
+| Base: chat's open thread without this plugin (a copy of `Chat · open thread`)                  | `plugins/chat`                                                      | `Base · Chat · open thread` |
+| New thread: agent heading, agent row                                                           | `plugins/ai/src/client/ui/heading.tsx`, `ui/agent-row.tsx`          | `AI · new thread`           |
+| Reply while the turn runs: work line with the step and clock, Stop, thread status              | `ui/reply-work.tsx`, `ui/turn-controls.tsx`, `ui/thread-status.tsx` | `AI · reply running`        |
+| Reply after the turn: reply header, "Worked · 5 actions", helper row, text, tasks, plan, usage | `ui/reply-header.tsx`, `ui/reply-work.tsx`, `ui/reply-cards.tsx`    | `AI · reply finished`       |
+| Thinking and the actions line opened                                                           | `ui/reply-work.tsx`                                                 | `AI · reply opened`         |
+| Permission question on the composer (Ask first)                                                | `ui/permission-card.tsx`                                            | `AI · permission question`  |
 
-Not drawn yet: the agent row's lines ("Codex isn't installed.", signed out,
+Not drawn yet: the thread list after several turns (its status icons show on the other artboards), the agent row's lines ("Codex isn't installed.", signed out,
 "Only Sam can run the agent here"), a picker menu open, steers, queued messages, the
 expired question line, "Force stop".
 
@@ -34,19 +36,19 @@ None. `ai` publishes no `component`. Agents add to it only through data in
 
 All actions are in `plugins/ai/src/client/api.ts`.
 
-| Target (chat part)    | Action                                 | What is drawn                                                                                                                            | File                     |
-| --------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `Composer.box`        | after                                  | Agent row: agent (mark and name), model, level, speed, mode, permission level; a line on the right ("esc to stop")                       | `ui/agent-row.tsx`       |
-| `Composer.top`        | prepend, while a question waits        | Permission card: lock, "Fake agent wants to run", the command in mono, Approve / Always allow this session / Decline / Cancel (keys 1–4) | `ui/permission-card.tsx` |
-| `Composer.sendButton` | replace, while this window's turn runs | Stop (then Force stop after 10 s)                                                                                                        | `ui/turn-controls.tsx`   |
-| `Empty.heading`       | replace                                | "What should Claude work on?"                                                                                                            | `ui/heading.tsx`         |
-| `Message.header`      | replace, agent replies                 | Agent mark and the model ("✳ Opus 5.5"), no time                                                                                         | `ui/reply-header.tsx`    |
-| `Message.body`        | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`      |
-| `Message.body`        | after, agent replies                   | Tasks card, plan card, usage line                                                                                                        | `ui/reply-cards.tsx`     |
-| `Message.body`        | after, agent replies                   | Steers (follow-ups sent while it ran)                                                                                                    | `ui/turn-steers.tsx`     |
-| `ThreadRow.status`    | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`   |
-| `ThreadRow.detail`    | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`   |
-| `ThreadRow.detail`    | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`   |
+| Target (chat part)    | Action                                 | What is drawn                                                                                                                            | File                     | Paper artboard                                                                |
+| --------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| `Composer.box`        | after                                  | Agent row: agent (mark and name), model, level, speed, mode, permission level; a line on the right ("esc to stop")                       | `ui/agent-row.tsx`       | all five `AI ·` artboards                                                     |
+| `Composer.top`        | prepend, while a question waits        | Permission card: lock, "Fake agent wants to run", the command in mono, Approve / Always allow this session / Decline / Cancel (keys 1–4) | `ui/permission-card.tsx` | `AI · permission question`                                                    |
+| `Composer.sendButton` | replace, while this window's turn runs | Stop (then Force stop after 10 s)                                                                                                        | `ui/turn-controls.tsx`   | `AI · reply running`, `AI · permission question`                              |
+| `Empty.heading`       | replace                                | "What should Fake agent work on?" (the agent's name)                                                                                     | `ui/heading.tsx`         | `AI · new thread`                                                             |
+| `Message.header`      | replace, agent replies                 | Agent mark and the model ("work" for the test agent), no time                                                                            | `ui/reply-header.tsx`    | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
+| `Message.body`        | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`      | `AI · reply running`, `reply finished`; opened in `AI · reply opened`         |
+| `Message.body`        | after, agent replies                   | Tasks card, plan card, usage line                                                                                                        | `ui/reply-cards.tsx`     | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
+| `Message.body`        | after, agent replies                   | Steers (follow-ups sent while it ran)                                                                                                    | `ui/turn-steers.tsx`     | not drawn yet                                                                 |
+| `ThreadRow.status`    | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`   | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
+| `ThreadRow.detail`    | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`   | `AI · reply running`, `AI · permission question`                              |
+| `ThreadRow.detail`    | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`   | `AI · reply running`                                                          |
 
 It also turns chat's Send off with `holdSend` while the thread's agent is
 missing or signed out, and listens to `onSent` / `onDraftSubmit`.
@@ -73,7 +75,7 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
 
 ## Primitives used
 
-`Button`, `Collapsible`, `Icon`, `icons`, `Kbd`, `Menu`, `rowVariants`,
+`Button`, `Collapsible` (Thinking uses its `quiet` trigger), `Icon`, `icons`, `Kbd`, `Menu`, `rowVariants`,
 `StatusIcon`, `Tooltip`; its own `AgentMark` and `Spinning`.
 
 ## Open questions

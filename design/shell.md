@@ -8,20 +8,15 @@ Paper page: `App 1:1 · Shell`.
 
 ## Screens
 
-| Screen                                                                      | Source                                                               | Paper artboard               |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------- |
-| The frame with every region filled (sidebar, header, panel), regions tagged | `app/src/shell/frame.tsx`, `top-strip.tsx`, `rail.tsx`               | `Shell · frame`              |
-| Welcome: "This Mac is ready", open Chat, join a friend's server             | `welcome.tsx`                                                        | `Shell · welcome`            |
-| Add a server, step 1 of 4: the address                                      | `connect/flow.tsx`, `connect/steps.tsx`, `connect/parts.tsx`         | `Shell · add a server`       |
-| Sign-in dialog over the "needs you to sign in" band                         | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`            |
-| Members on a shared server                                                  | `members.tsx`                                                        | `Shell · members`            |
-| Members on This Mac ("Members are managed on a shared server.")             | `members.tsx`                                                        | `Shell · members (This Mac)` |
-| Devices on a shared server                                                  | `devices.tsx`                                                        | `Shell · devices`            |
-| Server menu open                                                            | `switcher.tsx`                                                       | `Shell · server menu`        |
-| Settings menu open (theme, UI kit)                                          | `settings-menu.tsx`                                                  | `Shell · settings menu`      |
-| Search palette                                                              | `palette.tsx`                                                        | `Shell · search`             |
+| Screen                                                          | Source                                                               | Paper artboard         |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------- |
+| The frame with every region filled (sidebar, header, panel)     | `app/src/shell/frame.tsx`, `top-strip.tsx`, `rail.tsx`               | `Shell · frame`        |
+| Welcome: "This Mac is ready", open Chat, join a friend's server | `welcome.tsx`                                                        | `Shell · welcome`      |
+| Add a server, step 1 of 4: the address                          | `connect/flow.tsx`, `connect/steps.tsx`, `connect/parts.tsx`         | `Shell · add a server` |
+| Sign-in dialog over the "needs you to sign in" band             | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`      |
+| Members on a shared server                                      | `members.tsx`                                                        | `Shell · members`      |
 
-Not drawn yet: connecting, can't reach a server (without the dialog), no
+Not drawn yet: devices on a shared server (`devices.tsx`), members on This Mac ("Members are managed on a shared server."), the server menu, the settings menu, the search palette, connecting, can't reach a server (without the dialog), no
 plugins, nothing here, the quit dialog, the add-member and rename dialogs,
 connect steps 2 to 4, the frame without the rail or with the sidebar hidden.
 
@@ -63,13 +58,22 @@ edges (4 px when the panel is open).
 
 ## Primitives used
 
-`Avatar`, `Button`, `Dialog`, `Icon`, `icons`, `Kbd`, `Menu`, `Resizable`,
+`Avatar`, `Button` (`quiet` on the unreachable band, `bare` for a tab's close
+mark), `Dialog`, `Icon`, `icons`, `Kbd`, `Menu`, `Resizable`, `Row` (button
+form: the tabs as `variant="tab"`, the welcome choices, recent servers),
 `ScrollArea`, `StatusIcon`, `Tooltip`; its own `Control` (32 px ghost icon
 button with a tooltip and keys) and `Notice`.
 
 ## Open questions
 
+- In the browser test run the sign-in dialog sits at the window's top-left
+  corner, not in the middle (`Dialog.Content` centres itself with `m-auto`);
+  `Shell · sign-in` copies it as the app draws it. Check whether the desktop
+  app centres it.
+- The Members page's tab reads "New thread" (with the person icon) instead of
+  "Members"; `Shell · members` copies that too.
+
 - The test app's rail also shows test-only views (F, P, T, W, O); the Paper
-  copy leaves them out, but the search palette artboard still lists them.
+  copy leaves them out.
 - The top strip keeps 76 px (a 64 px spacer and 12 px) for the macOS window
   buttons only in the desktop app; the screenshots come from a browser, so the Paper copy has no gap there.
