@@ -1,0 +1,19 @@
+app/scripts/prepare-host.ts
+  s_4911f4a479dbca::t_16be4e2072b3fa 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "062fb21cd22882e220647f51e2178b72cf88ef93",
+  "prompts": {},
+  "sessions": {
+    "s_4911f4a479dbca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20109-5a76-7763-b577-cc10280b4252",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
