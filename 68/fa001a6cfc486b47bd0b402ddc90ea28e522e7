@@ -1,0 +1,19 @@
+packages/server/tests/sdk-transport-driver.mjs
+  s_50ddb902f521ae::t_1ae915a8b3ac66 361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68fa001a6cfc486b47bd0b402ddc90ea28e522e7",
+  "prompts": {},
+  "sessions": {
+    "s_50ddb902f521ae": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-16ad-77a1-b0af-87926414cc06",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
