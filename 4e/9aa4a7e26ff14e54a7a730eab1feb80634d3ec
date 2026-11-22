@@ -1,0 +1,25 @@
+plugins/chat/src/client/ui/message.tsx
+  s_1a704cf54d1539::t_8ef4a5948e66b5 61-62,69-71
+  s_1a704cf54d1539::t_eba71da52cf0f8 4,39-43
+plugins/ai/src/client/ui/reply-cards.tsx
+  s_1a704cf54d1539::t_ab751bc6b02fec 4,82-86,96-97
+  s_1a704cf54d1539::t_4af24205bc5921 98
+plugins/chat/README.md
+  s_1a704cf54d1539::t_f4f1c404ed70b9 60-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e9aa4a7e26ff14e54a7a730eab1feb80634d3ec",
+  "prompts": {},
+  "sessions": {
+    "s_1a704cf54d1539": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0c94b43b-2229-4451-97b5-a99e8a4ac9f4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
