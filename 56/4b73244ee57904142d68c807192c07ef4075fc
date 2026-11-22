@@ -1,0 +1,19 @@
+e2e/browser/ai.spec.ts
+  s_0b1d4da3223056::t_9a6dd28de46297 203-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "564b73244ee57904142d68c807192c07ef4075fc",
+  "prompts": {},
+  "sessions": {
+    "s_0b1d4da3223056": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cecb09cc-1bef-478d-b542-70ea1e989f72",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
