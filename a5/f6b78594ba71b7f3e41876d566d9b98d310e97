@@ -1,0 +1,19 @@
+packages/server/src/identity.rs
+  s_c52545fc8ba0e0::t_0b65bf18beff52 106-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5f6b78594ba71b7f3e41876d566d9b98d310e97",
+  "prompts": {},
+  "sessions": {
+    "s_c52545fc8ba0e0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200cb-b588-7412-9a7d-883f0424aac9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
