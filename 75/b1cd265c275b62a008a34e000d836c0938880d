@@ -1,0 +1,19 @@
+packages/sdk/tsconfig.solid.json
+  s_f4331c2d925ceb::t_1bcc1a3d3ad597 10-11,13-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "75b1cd265c275b62a008a34e000d836c0938880d",
+  "prompts": {},
+  "sessions": {
+    "s_f4331c2d925ceb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-28ed-7d33-aee7-6ad1bb1bd4d1",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
