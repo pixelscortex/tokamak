@@ -1,0 +1,37 @@
+packages/build/README.md
+  s_bfeeacdd960976::t_a04760b773405f 40-41,44,49
+  s_bfeeacdd960976::t_9056641fc8a571 50-51
+packages/server/src/websocket.rs
+  s_bfeeacdd960976::t_a04760b773405f 15,28,194,319-321,339-347
+e2e/browser/app.spec.ts
+  s_bfeeacdd960976::t_71b14c0fcf5d7e 41-53,56,58-60,62,67-75,78-80
+  s_bfeeacdd960976::t_b839b9cd3b20f0 63-65,76-77
+app/src/plugins/web-host.ts
+  s_bfeeacdd960976::t_002462dad4b370 186-187
+  s_bfeeacdd960976::t_453ccb27c285cd 17,58-60,81,182-185,189,191-193,195
+packages/server/src/service/server.rs
+  s_bfeeacdd960976::t_a04760b773405f 37
+packages/server/PLUGINS.md
+  s_bfeeacdd960976::t_9056641fc8a571 30,33,35-36
+app/tests/plugins.test.tsx
+  s_bfeeacdd960976::t_2f9030323d6d9d 119-121,139,153,163,165
+  s_bfeeacdd960976::t_b839b9cd3b20f0 154-156
+packages/server/src/service/plugin_control.rs
+  s_bfeeacdd960976::t_a04760b773405f 65,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "efcaba4186d9ba34cb16eccce3aecd746ab8a105",
+  "prompts": {},
+  "sessions": {
+    "s_bfeeacdd960976": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200f8-5838-7a30-bcef-7e66db3b4a52",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
