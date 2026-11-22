@@ -1,0 +1,21 @@
+packages/ui/src/row.tsx
+  s_c81ddbe6819468::t_d6cdb0c1af69dc 5,88,93-104,111-115,121-123
+packages/ui/tests/primitives.test.tsx
+  s_c81ddbe6819468::t_18c102fd562a59 130,158-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d7b703e7f5aac37cbc731ce4e8639b2a893c311",
+  "prompts": {},
+  "sessions": {
+    "s_c81ddbe6819468": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203cd-c270-7943-8517-6f76d8e6093c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
