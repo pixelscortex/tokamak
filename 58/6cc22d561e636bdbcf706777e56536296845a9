@@ -1,0 +1,33 @@
+app/src/shell/connect/parts.tsx
+  s_c81ddbe6819468::t_f53f371164c0a9 13,39,62,85,136,187-188
+app/src/shell/connect/steps.tsx
+  s_c81ddbe6819468::t_6e9445687abdb1 33,126,156,208,223,238
+app/src/shell/states.tsx
+  s_c81ddbe6819468::t_e5ccbdcb8a91c1 81-85,88-89,98
+app/src/shell/top-strip.tsx
+  s_c81ddbe6819468::t_485f3b42d70914 99,108,110
+app/src/shell/welcome.tsx
+  s_c81ddbe6819468::t_c7c5d75a0de4c2 28,40-41,44,48-56
+packages/ui/src/button.tsx
+  s_c81ddbe6819468::t_651d24a34170b6 9-10,43-44,57,83,87-89
+packages/ui/src/row.tsx
+  s_c81ddbe6819468::t_7c997df3baecd2 12-14,20-21,25,46-53,55-59,63,67,75,114,131-135
+plugins/code/src/client/ui/change-card.tsx
+  s_c81ddbe6819468::t_c5596bba6cc34e 31,34,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "586cc22d561e636bdbcf706777e56536296845a9",
+  "prompts": {},
+  "sessions": {
+    "s_c81ddbe6819468": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203cd-c270-7943-8517-6f76d8e6093c",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+    }
+  }
+}
