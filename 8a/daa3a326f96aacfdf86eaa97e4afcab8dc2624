@@ -1,0 +1,67 @@
+plugins/ai/src/server/schema.ts
+  s_b78d166f675f88::t_0323417aa3d152 20-32,34-45
+plugins/ai/src/client/lib/choices.ts
+  s_b78d166f675f88::t_51a100838439b8 108
+  s_b78d166f675f88::t_3e64ba245cbd50 1-107,109-126
+plugins/ai/src/server/choices.ts
+  s_b78d166f675f88::t_e84bfa69a405c0 2,4-43,45-55
+  s_b78d166f675f88::t_65772778661825 1,3,44
+plugins/ai/src/client/ui/agent-row.tsx
+  s_b78d166f675f88::t_ea0451ef77f820 122,162-163,182
+  s_b78d166f675f88::t_1715a42398e1c4 1,3-4,6-7,9-18,23-28,30-32,34,38-79,81-86,88,101-109,111-121,123-161,164-181,183-198
+plugins/ai/src/client/lib/turn.ts
+  s_b78d166f675f88::t_51a100838439b8 3-4,8-11,16-21,26-30,33-34
+plugins/chat/src/server/api.ts
+  s_b78d166f675f88::t_e84bfa69a405c0 1
+plugins/ai/src/contracts.ts
+  s_b78d166f675f88::t_1e92e5644a8a21 15-19,21-24,28-37,52-55,57-63
+plugins/ai/src/server/_generated/api.ts
+  s_b78d166f675f88::t_d75715e54e1062 4-7,22-23
+packages/server/tests/ai-threads-driver.mjs
+  s_b78d166f675f88::t_8724b630d19468 1-190,193-197
+  s_b78d166f675f88::t_969c4d2f069a01 191-192
+plugins/ai/src/server/run.ts
+  s_b78d166f675f88::t_d75715e54e1062 11-12,14-15,26,28,49,53-61,72-74,83-84,89-92
+  s_b78d166f675f88::t_969c4d2f069a01 6,37
+  s_b78d166f675f88::t_80985baac646ca 93-94
+e2e/fake-agent/agents/fake-agent/src/server/agent.ts
+  s_b78d166f675f88::t_a21f3e3eb77647 2-5,9-11,15-16,24-30,37,39-41,47-50,54-55,57-59,82-83,90-99
+  s_b78d166f675f88::t_969c4d2f069a01 103-110
+  s_b78d166f675f88::t_f51c64283a88ba 100
+e2e/fake-agent/agents/other-agent/src/server/agent.ts
+  s_b78d166f675f88::t_969c4d2f069a01 103-110
+  s_b78d166f675f88::t_b78af5f7c1f8e1 1-102,111
+packages/server/tests/ai_threads.rs
+  s_b78d166f675f88::t_32e57da5a3fdc9 1-20
+plugins/ai/src/server/turns.ts
+  s_b78d166f675f88::t_ff9102f68f26dd 4-5,30-33,63-67,91-100,156-159
+  s_b78d166f675f88::t_7ad66d00f16df7 160
+plugins/ai/src/client/ui/heading.tsx
+  s_b78d166f675f88::t_ea0451ef77f820 3-4,12,15
+plugins/ai/src/server/agents.ts
+  s_b78d166f675f88::t_969c4d2f069a01 3,19,23-27
+e2e/fake-agent/harness.mjs
+  s_b78d166f675f88::t_47056eff57ccd7 213-214
+e2e/fake-agent/agents/other-agent/package.json
+  s_b78d166f675f88::t_a6af8682e8f224 1-6
+e2e/fake-agent/agents/other-agent/plugin.ts
+  s_b78d166f675f88::t_b2db8c832cce25 1-5
+e2e/fake-agent/replays/context.jsonl
+  s_b78d166f675f88::t_1218e486fe0a17 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8adaa3a326f96aacfdf86eaa97e4afcab8dc2624",
+  "prompts": {},
+  "sessions": {
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
