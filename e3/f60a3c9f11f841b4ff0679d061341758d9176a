@@ -1,0 +1,27 @@
+plugins/claude/tests/turns.mjs
+  s_2931c97fc3196e::t_99758608621373 9,141-154,216-220,316-320,387-398
+  s_2931c97fc3196e::t_73b22833f62f1f 185-191
+  s_2931c97fc3196e::t_0b7d783bf18d8c 7,20,39-47,54-65,140,155-177,179-182,192-199,201-204,207-214,221-222,227-234,236,242,247-250,253-255,263-269,272-274,305-315,321-324,326,340-349,352,356-357,363-386,399,401
+e2e/fake-agent/replays/claude-todo-list.jsonl
+  s_2931c97fc3196e::t_99758608621373 105
+e2e/fake-agent/replays/claude-stop-asking.jsonl
+  s_2931c97fc3196e::t_99758608621373 12-13
+e2e/fake-agent/replays/claude-history.jsonl
+  s_2931c97fc3196e::t_3099148e25db98 4,6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e3f60a3c9f11f841b4ff0679d061341758d9176a",
+  "prompts": {},
+  "sessions": {
+    "s_2931c97fc3196e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a201db-563e-71c3-a4d1-3b70d657eea2",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
