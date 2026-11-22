@@ -1,0 +1,45 @@
+packages/server/src/identity.rs
+  s_844ef8d40d75dc::t_732222a3d2e728 354-363
+packages/server/tests/plugins.rs
+  s_844ef8d40d75dc::t_9913205101db05 1032-1038
+  s_844ef8d40d75dc::t_d8b900232137bf 601-614,998-1000,1004,1012-1014,1018,1040,1053,1057,1062-1073,1076,1087,1089-1090,1093-1148
+  s_844ef8d40d75dc::t_9507dc4db77b30 985-989,1081-1084,1150-1152
+  s_844ef8d40d75dc::t_27bddb9048e5ef 904-905,910-912,990-997,1001-1003,1005-1011,1015-1017,1019-1031,1039,1041-1052,1054-1056,1058-1061,1074-1075,1077-1080,1149,1155-1156
+packages/server/src/service/mod.rs
+  s_844ef8d40d75dc::t_732222a3d2e728 143
+packages/server/src/plugins/catalog.rs
+  s_844ef8d40d75dc::t_d8b900232137bf 1,90-95
+packages/server/src/plugins/dependencies.rs
+  s_844ef8d40d75dc::t_d8b900232137bf 4-6,8-9,27-33,44-54,58-62
+packages/server/src/service/server.rs
+  s_844ef8d40d75dc::t_732222a3d2e728 120-132,135-136
+  s_844ef8d40d75dc::t_d8b900232137bf 133-134
+packages/server/src/service/window_state.rs
+  s_844ef8d40d75dc::t_732222a3d2e728 56-57,82,85-92,99-102,105-106,112-115,117-126,132,140-141
+  s_844ef8d40d75dc::t_d8b900232137bf 93-98,103-104,133-139
+packages/server/src/websocket.rs
+  s_844ef8d40d75dc::t_732222a3d2e728 176-181
+packages/server/src/service/plugin_control.rs
+  s_844ef8d40d75dc::t_732222a3d2e728 61-62
+packages/server/src/service/startup.rs
+  s_844ef8d40d75dc::t_d8b900232137bf 165-167,169-174
+  s_844ef8d40d75dc::t_732222a3d2e728 164,168,175-182
+packages/server/tests/sdk-transport-driver.mjs
+  s_844ef8d40d75dc::t_37eeed8a6335be 192-194,196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7085e870cce6e3ee7470ada262322fe0d564f306",
+  "prompts": {},
+  "sessions": {
+    "s_844ef8d40d75dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200e5-9e8d-7ef0-9181-8dba22c295a4",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
