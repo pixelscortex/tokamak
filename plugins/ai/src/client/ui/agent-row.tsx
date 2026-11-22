@@ -292,9 +292,7 @@ function Picker(props: {
       {/* The standard ghost trigger, untouched: its size owns height and padding. No negative
           margins, so neighbouring hover fills never overlap. */}
       <Menu.Root onOpenChange={props.onOpen} onAction={props.onPick}>
-        <Menu.Trigger variant="ghost">
-          {value()}
-        </Menu.Trigger>
+        <Menu.Trigger variant="ghost">{value()}</Menu.Trigger>
         <Menu.Content>
           <For each={props.options}>
             {(option) => <Menu.Item value={option.id}>{option.label}</Menu.Item>}
