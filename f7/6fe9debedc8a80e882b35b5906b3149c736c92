@@ -1,0 +1,37 @@
+packages/server/tests/ai-threads-driver.mjs
+  s_b78d166f675f88::t_fabc6ee30d8594 80-83,191-192,245-249,267-270,286-289,296-300,305-312,319-324
+plugins/ai/README.md
+  s_b78d166f675f88::t_f9ea8a44023923 10,19-23,36,51-54,57,59-62,71,76-77
+  s_b78d166f675f88::t_a245ce931fa48d 63
+plugins/ai/src/client/lib/choices.ts
+  s_b78d166f675f88::t_fabc6ee30d8594 20-28
+plugins/ai/src/server/choices.ts
+  s_b78d166f675f88::t_fabc6ee30d8594 50-54
+plugins/ai/tests/agent-row.test.tsx
+  s_b78d166f675f88::t_fabc6ee30d8594 53-60
+plugins/ai/src/server/run.ts
+  s_b78d166f675f88::t_92da1ffc5b1079 36,43-44
+e2e/fake-agent/README.md
+  s_b78d166f675f88::t_77cefd9c535ba5 43-44
+  s_b78d166f675f88::t_f9ea8a44023923 19-27
+e2e/fake-agent/agents/fake-agent/src/server/agent.ts
+  s_b78d166f675f88::t_fabc6ee30d8594 6-9
+e2e/fake-agent/agents/other-agent/src/server/agent.ts
+  s_b78d166f675f88::t_fabc6ee30d8594 8-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f76fe9debedc8a80e882b35b5906b3149c736c92",
+  "prompts": {},
+  "sessions": {
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
