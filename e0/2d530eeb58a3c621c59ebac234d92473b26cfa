@@ -1,0 +1,147 @@
+packages/server/src/plugins/loading.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 56-75,145-153,167-177
+plugins/basic-auth/src/server/method.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-43
+packages/server/src/identity.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 14,17,71,73-81,144-145,216,267,328
+packages/sdk/src/functions.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 122-132,217-229,247,250-255,258-264,272-277
+packages/sdk/core-contracts/auth.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 4,6,8-20
+packages/server/src/host.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 56,141,155,170,189-191,232-255
+  s_e5891711f087c2::t_b218a6d92aa33c 256-257
+plugins/basic-auth/src/server/_generated/internal.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-16
+packages/server/tests/chat_threads.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 8-13
+plugins/basic-auth/src/server/tsconfig.json
+  s_e5891711f087c2::t_ed840cddeb5f74 1-5
+plugins/basic-auth/plugin.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-10
+app/scripts/integration-fixture.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 9
+app/src/shell/context.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 3,22-28,39-42
+e2e/browser/servers.spec.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 19
+packages/server/src/service/invocations.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 9
+packages/server/src/host/worker/tests.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 56
+packages/server/src/websocket/sign_in.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 1-297
+packages/server/src/plugins/dependencies.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 26-36
+app/src/host/sign-in.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-97
+packages/build/tests/contracts.test.mjs
+  s_e5891711f087c2::t_ed840cddeb5f74 133-166
+plugins/basic-auth/src/server/credentials.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-2
+plugins/basic-auth/src/server/schema.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-13
+packages/server/tests/auth-driver.mjs
+  s_e5891711f087c2::t_ed840cddeb5f74 3,45,56,199,238-548,610-616,621-636,648,657,688,691,696,705-708,714-716,718
+packages/server/src/service/subscriptions.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 172
+packages/engine/Cargo.toml
+  s_e5891711f087c2::t_ed840cddeb5f74 9
+packages/server/src/service/requests.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 116
+app/scripts/prepare-host.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 13
+packages/engine/src/lib.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 9,19
+packages/sdk/worker/contracts.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 31
+packages/server/src/service/mod.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 181,255,287-289
+packages/engine/src/password.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 1-77
+e2e/browser/sign-in.spec.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-134
+e2e/serve-hosted.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-2,4-6
+app/src/shell/states.tsx
+  s_e5891711f087c2::t_ed840cddeb5f74 65-67,83-94
+e2e/browser.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 41
+packages/sdk/README.md
+  s_e5891711f087c2::t_ed840cddeb5f74 430-434
+app/src/shell/connect/flow.tsx
+  s_e5891711f087c2::t_ed840cddeb5f74 6,47,91-104,113-125,128-129,197-200,202
+packages/server/src/service/action_coordination.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 43,135-137
+app/src/shell/sign-in.tsx
+  s_e5891711f087c2::t_ed840cddeb5f74 1-270
+packages/server/PLUGINS.md
+  s_e5891711f087c2::t_ed840cddeb5f74 266-297
+plugins/basic-auth/src/server/_generated/api.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-4
+packages/server/src/websocket/sign_in_limit.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 1-214
+plugins/basic-auth/package.json
+  s_e5891711f087c2::t_ed840cddeb5f74 1-9
+packages/sdk/src/host.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 46-52,95
+packages/build/src/auth-dependencies.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-60
+packages/server/src/plugins/mod.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 59-68,87
+packages/server/src/service/startup.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 217
+packages/server/src/service/command_loop.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 120
+packages/server/src/websocket.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 40-42,63-65,196-206,210,213-249,255,259,264,267,275,283-297,299-301,304,331,351,353,358-361,372,401-417,539-543,557,802-811
+  s_e5891711f087c2::t_f985dd0755180b 812
+plugins/basic-auth/src/server/accounts.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-72
+packages/server/src/plugins/contracts.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 8-11,14-15,19-23,25,27-28,31,35,65-70,79-84,87,92,111-115,117-198,200,203-212,214,226-233,271-299,310-312
+packages/server/src/actions.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 14,31,34,44,93,99,159
+packages/build/src/vite.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 20,25,103-105
+app/src/shell/shell.tsx
+  s_e5891711f087c2::t_ed840cddeb5f74 6,12,18,58,77,98-104,150-153,160-178
+packages/build/tests/plugin-fixtures.mjs
+  s_e5891711f087c2::t_ed840cddeb5f74 32,35
+app/src/shell/field.tsx
+  s_e5891711f087c2::t_ed840cddeb5f74 25-27,35-37
+packages/server/src/plugins/grants.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 48
+e2e/hosted-fixture.ts
+  s_e5891711f087c2::t_ed840cddeb5f74 1-63
+packages/server/src/service/sign_in.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 1-187
+app/tests/connect.test.tsx
+  s_e5891711f087c2::t_ed840cddeb5f74 21,89,322,331-332
+packages/server/src/identity/accounts.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 1-58
+packages/server/tests/identity.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 304-317
+packages/server/src/service/plugin_control.rs
+  s_e5891711f087c2::t_ed840cddeb5f74 69
+Cargo.lock
+  s_e5891711f087c2::t_e4b7c229a3a3cd 1559
+bun.lock
+  s_e5891711f087c2::t_dfba9941c360cb 142-148,814-815
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e02d530eeb58a3c621c59ebac234d92473b26cfa",
+  "prompts": {},
+  "sessions": {
+    "s_e5891711f087c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38b9c299-4e61-4c0b-9a0f-722012298e40",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
