@@ -1,0 +1,23 @@
+e2e/own-machine.ts
+  s_bfeeacdd960976::t_7ef4f094b594cf 6,140-141,147-148,165-170,175,177,185
+  s_bfeeacdd960976::t_7fdfbf5cba7260 143-146,171-174
+  s_bfeeacdd960976::t_58b6790affa3eb 5
+  s_bfeeacdd960976::t_4a591d7ea3a0cd 208-210
+  s_bfeeacdd960976::t_66218fb5d822bb 211-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0004cf40198ad665e9723cb55a03641b985ce837",
+  "prompts": {},
+  "sessions": {
+    "s_bfeeacdd960976": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200f8-5838-7a30-bcef-7e66db3b4a52",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
