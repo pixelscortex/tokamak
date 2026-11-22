@@ -1,0 +1,93 @@
+plugins/codex/package.json
+  s_f6e69910f6f024::t_baf37bcae546e3 1-12
+plugins/codex/src/server/agent.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-9
+e2e/fake-agent/replays/codex/acceptForSession.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-21
+plugins/codex/src/server/_generated/internal.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-4
+e2e/fake-agent/replays/codex/signed-out.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-6
+plugins/codex/src/server/approvals.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-112
+plugins/codex/src/server/rpc.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-136
+plugins/codex/src/server/turn.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-225
+plugins/codex/tests/e2e.mjs
+  s_f6e69910f6f024::t_baf37bcae546e3 1-296
+.github/workflows/ci.yml
+  s_f6e69910f6f024::t_baf37bcae546e3 52
+e2e/fake-agent/replays/codex/cancel.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-18
+plugins/codex/src/server/info.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-111
+e2e/fake-agent/replays/codex/helpers.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-22
+packages/server/tests/codex_turns.rs
+  s_f6e69910f6f024::t_baf37bcae546e3 1-19
+plugins/codex/src/server/tsconfig.json
+  s_f6e69910f6f024::t_baf37bcae546e3 1-5
+e2e/fake-agent/replays/codex/decline.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-21
+e2e/fake-agent/replays/codex/stop.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-16
+plugins/codex/src/server/_generated/api.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-4
+plugins/codex/README.md
+  s_f6e69910f6f024::t_baf37bcae546e3 1-41
+e2e/fake-agent/replays/codex/helper-approval.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-17
+plugins/codex/plugin.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-9
+plugins/codex/tests/check-replay-privacy.mjs
+  s_f6e69910f6f024::t_baf37bcae546e3 1-71
+e2e/fake-agent/replays/codex/info.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-12
+app/src-tauri/src/local.rs
+  s_f6e69910f6f024::t_762a04f8d53875 334,336,454,477
+e2e/fake-agent/replays/codex/plan.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-22
+plugins/codex/src/server/helpers.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-121
+e2e/fake-agent/program.mjs
+  s_f6e69910f6f024::t_baf37bcae546e3 45
+e2e/fake-agent/replays/codex/steer.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-18
+packages/server/tests/README.md
+  s_f6e69910f6f024::t_baf37bcae546e3 33-41
+e2e/fake-agent/replays/codex/accept.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-21
+e2e/fake-agent/replays/codex/full-approval.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-17
+plugins/codex/src/server/reports.ts
+  s_f6e69910f6f024::t_baf37bcae546e3 1-202
+plugins/codex/tests/codexProbe.ts.fixture
+  s_f6e69910f6f024::t_baf37bcae546e3 1-87
+.ci/check.sh
+  s_f6e69910f6f024::t_762a04f8d53875 3,17-18
+e2e/fake-agent/replays/codex/history.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-40
+e2e/fake-agent/replays/codex/early-stop.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-15
+e2e/fake-agent/replays/codex/edit.jsonl
+  s_f6e69910f6f024::t_baf37bcae546e3 1-29
+bun.lock
+  s_f6e69910f6f024::t_38b023bb390374 179-188,869-870
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f72bce5eba7d46dfd6d47eaf82f90a60deab216",
+  "prompts": {},
+  "sessions": {
+    "s_f6e69910f6f024": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-f67f-75c0-a829-9883ea5cdc85",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+plugins/claude/tests/replay-privacy.mjs
+  s_f6e69910f6f024::t_eb7704655603ab 35-38,40-42,45,48
+  s_f6e69910f6f024::t_0b5c07520a3811 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0acf41602c13c5ca70d2e1085e4994984bcb4f61",
+  "prompts": {},
+  "sessions": {
+    "s_f6e69910f6f024": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-f67f-75c0-a829-9883ea5cdc85",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
