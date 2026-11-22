@@ -1,0 +1,65 @@
+packages/server/tests/codex_turns.rs
+  s_13922ebd3d9eea::t_aaa090f918ffdb 5-6
+plugins/codex/tests/codexProbe.ts.fixture
+  s_13922ebd3d9eea::t_0f60936450bef5 10,12,14,21,37,42,76-79
+.github/workflows/ci.yml
+  s_13922ebd3d9eea::t_aaa090f918ffdb 51-52
+packages/server/tests/README.md
+  s_13922ebd3d9eea::t_aaa090f918ffdb 33-41
+plugins/codex/src/server/helpers.ts
+  s_13922ebd3d9eea::t_f4ccc7896119b2 2-5,12-30,36-46,53-72,74,76-84,86-107,109-121
+  s_13922ebd3d9eea::t_adc76720f7db20 1,31,73,85,108
+  s_13922ebd3d9eea::t_6ac385069b71ae 6-11,32-35,47-52,75
+plugins/codex/src/server/reports.ts
+  s_13922ebd3d9eea::t_6ac385069b71ae 119-124,160-167,181-186
+  s_13922ebd3d9eea::t_adc76720f7db20 2,14,29,34,67,76,78-80,118,125-126,129-130,157,168-169,178,194,198
+e2e/fake-agent/replays/codex/steer.jsonl
+  s_13922ebd3d9eea::t_27256a2de5b5a5 1
+app/src-tauri/src/local.rs
+  s_13922ebd3d9eea::t_aaa090f918ffdb 334
+plugins/codex/src/server/info.ts
+  s_13922ebd3d9eea::t_4d05013c2e1efb 5,8-11,18,21,32-33,45,62-63,65,74,93
+  s_13922ebd3d9eea::t_c3dd3775cd4c8e 64,66
+  s_13922ebd3d9eea::t_6ac385069b71ae 67-73
+e2e/fake-agent/replays/codex/full-approval.jsonl
+  s_13922ebd3d9eea::t_27256a2de5b5a5 1-17
+plugins/codex/src/server/rpc.ts
+  s_13922ebd3d9eea::t_1547999994f0b7 130-133
+plugins/codex/tests/check-replay-privacy.mjs
+  s_13922ebd3d9eea::t_59c616fb070f9a 14,55-56
+  s_13922ebd3d9eea::t_d7eb7f6546f0e4 57-59
+e2e/fake-agent/replays/codex/helpers.jsonl
+  s_13922ebd3d9eea::t_27256a2de5b5a5 1-22
+e2e/fake-agent/replays/codex/helper-approval.jsonl
+  s_13922ebd3d9eea::t_27256a2de5b5a5 1-17
+e2e/fake-agent/replays/codex/history.jsonl
+  s_13922ebd3d9eea::t_27256a2de5b5a5 1
+plugins/codex/README.md
+  s_13922ebd3d9eea::t_aaa090f918ffdb 13-16,20-21,27-30
+plugins/codex/src/server/approvals.ts
+  s_13922ebd3d9eea::t_4d05013c2e1efb 20-22,24,47,55-60,63,76,81,83,86-90
+  s_13922ebd3d9eea::t_c3dd3775cd4c8e 18-19,23,46
+e2e/fake-agent/replays/codex/early-stop.jsonl
+  s_13922ebd3d9eea::t_27256a2de5b5a5 1-15
+plugins/codex/tests/e2e.mjs
+  s_13922ebd3d9eea::t_aaa090f918ffdb 43-44,61,63-65,70,79,83,89,91-93,97,103-106,109,114,118,121,130,199-204,209-230,276-280
+plugins/codex/src/server/turn.ts
+  s_13922ebd3d9eea::t_b37b5d29fd9e0e 4,19-21,32,36,38-42,46,48-49,51,63,80-116,124,127,139,143-145,147-148,153-154,159,169-179
+  s_13922ebd3d9eea::t_6ac385069b71ae 136-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74c50d7e92fa8ff8b12a23937380bcb4a762a4de",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
