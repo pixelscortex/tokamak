@@ -1,0 +1,23 @@
+e2e/paper-html.ts
+  s_6a0ecf07ed0118::t_342dfada215b55 199,232-239
+  s_6a0ecf07ed0118::t_da17093cb1a6b2 273-274
+  s_6a0ecf07ed0118::t_ef7ff26df83a2a 177-183
+  s_6a0ecf07ed0118::t_f6a7281c316d1a 198,201,230-231,240-241,244-248,251
+  s_6a0ecf07ed0118::t_8db0ba7506d71b 242-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ed6be93125d483f08cf8bd7140cc7083232ce69",
+  "prompts": {},
+  "sessions": {
+    "s_6a0ecf07ed0118": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0d4e556-5f25-465f-ae93-1e3d6ee74690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
