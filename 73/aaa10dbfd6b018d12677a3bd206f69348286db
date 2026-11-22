@@ -1,0 +1,23 @@
+app/src-tauri/src/links.rs
+  s_1a704cf54d1539::t_86875c7f3f89ab 1-61
+app/src-tauri/src/main.rs
+  s_1a704cf54d1539::t_462010b685ff9a 3,15-24
+app/src-tauri/tauri.conf.json
+  s_1a704cf54d1539::t_462010b685ff9a 15-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73aaa10dbfd6b018d12677a3bd206f69348286db",
+  "prompts": {},
+  "sessions": {
+    "s_1a704cf54d1539": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0c94b43b-2229-4451-97b5-a99e8a4ac9f4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
