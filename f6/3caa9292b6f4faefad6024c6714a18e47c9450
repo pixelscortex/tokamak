@@ -1,0 +1,96 @@
+plugins/code/src/local/git.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-315
+e2e/browser.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 6,47-48
+plugins/chat/src/server/api.ts
+  s_dd6ee6eb6de096::t_516b6273635f04 1
+plugins/code/src/client/tsconfig.json
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-11
+e2e/fake-agent/replays/edit-fail.jsonl
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-5
+moon.yml
+  s_dd6ee6eb6de096::t_fc203d85b95149 56-58
+plugins/chat/src/contracts.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-14
+plugins/ai/src/server/turn-hooks.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-67
+e2e/fake-agent/README.md
+  s_dd6ee6eb6de096::t_fc203d85b95149 8-9
+e2e/browser/code.spec.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-53
+plugins/code/src/server/hooks.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-69
+plugins/code/src/server/tsconfig.json
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-5
+plugins/chat/README.md
+  s_dd6ee6eb6de096::t_fc203d85b95149 44,46-48
+e2e/fake-agent/replays/edit-stop.jsonl
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-5
+plugins/ai/src/contracts.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1,69-87
+plugins/code/contracts/ai.ts
+  s_dd6ee6eb6de096::t_6879d924c69c42 16-20,27,42-45
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-15,21-26,28-41,46-87
+e2e/fake-agent/replays/edit.jsonl
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-5
+packages/server/tests/code-snapshots-driver.mjs
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-44,46-283,287-321
+  s_dd6ee6eb6de096::t_516b6273635f04 45,284-286
+plugins/chat/src/client/pages/chat.tsx
+  s_dd6ee6eb6de096::t_fc203d85b95149 80-85
+plugins/ai/src/server/run.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 9,52,59-63,79,81
+  s_dd6ee6eb6de096::t_516b6273635f04 64-78,80,86-87,89
+plugins/code/tsconfig.json
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-5
+plugins/code/src/server/notices.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-14
+packages/server/tests/code_snapshots.rs
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-22
+plugins/ai/src/client/lib/queue.ts
+  s_dd6ee6eb6de096::t_516b6273635f04 61-69
+plugins/chat/src/server/threads/threads.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 4-6,160-177
+  s_dd6ee6eb6de096::t_a883869aa476bd 178-180
+plugins/ai/src/client/lib/turn.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 30
+plugins/code/package.json
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-14
+plugins/code/src/server/_generated/api.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-10
+plugins/code/src/client/api.tsx
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-57
+plugins/code/src/server/_generated/internal.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-4
+e2e/fake-agent/program.mjs
+  s_dd6ee6eb6de096::t_fc203d85b95149 15,27,94-98
+  s_dd6ee6eb6de096::t_546eb908a282a9 99
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-173
+plugins/code/README.md
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-29
+plugins/ai/README.md
+  s_dd6ee6eb6de096::t_fc203d85b95149 85-97
+plugins/chat/src/server/_generated/api.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 40,75
+plugins/code/plugin.ts
+  s_dd6ee6eb6de096::t_fc203d85b95149 1-11
+bun.lock
+  s_dd6ee6eb6de096::t_b10003a521f25d 172-183,862-863
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f63caa9292b6f4faefad6024c6714a18e47c9450",
+  "prompts": {},
+  "sessions": {
+    "s_dd6ee6eb6de096": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2016e-c6ec-7ff3-a3da-1ca374d8e514",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+    }
+  }
+}
