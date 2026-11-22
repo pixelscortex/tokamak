@@ -1,0 +1,35 @@
+packages/server/tests/ai-liveness-driver.mjs
+  s_e1b186e9a407ce::t_fb3938102f26aa 45-52,65-68,104-107
+packages/sdk/tests/web/quit.test.tsx
+  s_e1b186e9a407ce::t_fb3938102f26aa 8-11
+plugins/ai/src/server/schema.ts
+  s_e1b186e9a407ce::t_fb3938102f26aa 10-15
+packages/sdk/tsconfig.solid.json
+  s_e1b186e9a407ce::t_fb3938102f26aa 13-20
+plugins/chat/src/server/replies/replies.ts
+  s_e1b186e9a407ce::t_fb3938102f26aa 64-66
+plugins/ai/src/server/working.ts
+  s_e1b186e9a407ce::t_fb3938102f26aa 40-41
+plugins/ai/src/server/liveness.ts
+  s_e1b186e9a407ce::t_fb3938102f26aa 34-35,114-119
+plugins/ai/src/client/ui/thread-status.tsx
+  s_e1b186e9a407ce::t_fb3938102f26aa 41-46
+e2e/browser/quit.spec.ts
+  s_e1b186e9a407ce::t_fb3938102f26aa 24-26,93-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c29fe425718ce6051635f92390579caf5ea68da4",
+  "prompts": {},
+  "sessions": {
+    "s_e1b186e9a407ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1d10f952-74f9-4ebd-88d0-a4ebae9e3575",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
