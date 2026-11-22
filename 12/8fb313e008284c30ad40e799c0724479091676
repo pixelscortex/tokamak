@@ -1,0 +1,48 @@
+design/claude.md
+  s_6a0ecf07ed0118::t_fb8f342cacd7b4 22-24
+  s_6a0ecf07ed0118::t_aa1d3601eafbde 19-21,25-26
+design/README.md
+  s_6a0ecf07ed0118::t_854c15c69cfb3a 63-65,69-77,83-86
+design/code.md
+  s_6a0ecf07ed0118::t_854c15c69cfb3a 14-17,31-38
+  s_6a0ecf07ed0118::t_05c3db29a0e545 45-47
+  s_6a0ecf07ed0118::t_726717c8e62ad8 7-10
+  s_6a0ecf07ed0118::t_1160eb859d6bee 62
+design/chat.md
+  s_6a0ecf07ed0118::t_854c15c69cfb3a 49-53
+  s_6a0ecf07ed0118::t_1160eb859d6bee 78-79
+  s_6a0ecf07ed0118::t_05c3db29a0e545 58
+  s_6a0ecf07ed0118::t_e3ef8fe05a80ba 16
+design/ai.md
+  s_6a0ecf07ed0118::t_6469a6e6605068 6-9
+  s_6a0ecf07ed0118::t_e0b803d6d631b8 16-23
+  s_6a0ecf07ed0118::t_854c15c69cfb3a 39-51
+  s_6a0ecf07ed0118::t_e3ef8fe05a80ba 25
+  s_6a0ecf07ed0118::t_1160eb859d6bee 78
+design/codex.md
+  s_6a0ecf07ed0118::t_aa1d3601eafbde 19-21,25-26
+  s_6a0ecf07ed0118::t_fb8f342cacd7b4 22-24
+design/shell.md
+  s_6a0ecf07ed0118::t_e0b803d6d631b8 77
+  s_6a0ecf07ed0118::t_854c15c69cfb3a 11-17
+  s_6a0ecf07ed0118::t_1160eb859d6bee 61-63
+  s_6a0ecf07ed0118::t_21cba47ab952be 19
+  s_6a0ecf07ed0118::t_1bed478da2309e 69-74
+  s_6a0ecf07ed0118::t_b46145e9e25e49 18,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "128fb313e008284c30ad40e799c0724479091676",
+  "prompts": {},
+  "sessions": {
+    "s_6a0ecf07ed0118": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0d4e556-5f25-465f-ae93-1e3d6ee74690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
