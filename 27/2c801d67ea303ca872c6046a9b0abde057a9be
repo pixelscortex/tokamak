@@ -1,0 +1,65 @@
+packages/build/README.md
+  s_24950e0e98659e::t_462c2c1ab76a21 85
+  s_24950e0e98659e::t_3b1313b2ca1561 18,54
+packages/server/tests/fixtures/plugins/a/src/server/tsconfig.json
+  s_24950e0e98659e::t_651113cbb7bc1e 1
+packages/build/tests/contracts.test.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 61
+packages/server/tests/fixtures/plugins/a/api.ts
+  s_24950e0e98659e::t_651113cbb7bc1e 1
+packages/build/src/vite.ts
+  s_24950e0e98659e::t_462c2c1ab76a21 182
+packages/server/tests/fixtures/actions/b/api.ts
+  s_24950e0e98659e::t_651113cbb7bc1e 1-2
+packages/server/src/plugins/artifact.rs
+  s_24950e0e98659e::t_651113cbb7bc1e 25,36,40
+packages/sdk/tools/plugin-boundary.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 58,236
+packages/server/tests/schema_indexes.rs
+  s_24950e0e98659e::t_651113cbb7bc1e 142,149,163,171
+packages/build/tests/plugins.test.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 180
+packages/build/tests/local.test.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 41
+packages/server/src/plugins/contracts.rs
+  s_24950e0e98659e::t_651113cbb7bc1e 437
+  s_24950e0e98659e::t_69974b13f97493 13,167-168
+packages/build/tests/browser-assets.mjs
+  s_24950e0e98659e::t_817d84c9aaac6b 74-76
+  s_24950e0e98659e::t_939ae4bec28038 21,23-25,83,100,128,133-135
+packages/server/tests/plugins.rs
+  s_24950e0e98659e::t_651113cbb7bc1e 441,454,459,515,1105,1107,1112-1114
+  s_24950e0e98659e::t_817d84c9aaac6b 1101-1104,1108-1110
+packages/engine/tests/vendored_quickjs.rs
+  s_24950e0e98659e::t_3b1313b2ca1561 17,43,45,59
+packages/sdk/tools/server-files.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 17
+packages/sdk/tools/placement.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 47
+packages/build/tests/boundary.test.mjs
+  s_24950e0e98659e::t_651113cbb7bc1e 174,182
+packages/server/tests/fixtures/plugins/b/api.ts
+  s_24950e0e98659e::t_651113cbb7bc1e 1-2
+packages/server/tests/fixtures/plugins/b/src/server/tsconfig.json
+  s_24950e0e98659e::t_651113cbb7bc1e 1
+packages/sdk/tools/bundle.mjs
+  s_24950e0e98659e::t_462c2c1ab76a21 169,172
+packages/server/src/plugins/manifest.rs
+  s_24950e0e98659e::t_651113cbb7bc1e 38,71,171,184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "272c801d67ea303ca872c6046a9b0abde057a9be",
+  "prompts": {},
+  "sessions": {
+    "s_24950e0e98659e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20273-10ec-7111-a026-723dd076066b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
