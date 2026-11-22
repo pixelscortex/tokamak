@@ -1,0 +1,37 @@
+e2e/browser/screens.spec.ts
+  s_6a0ecf07ed0118::t_6a925d64f29fcf 90-93
+  s_6a0ecf07ed0118::t_6c8b02f7d00266 5-6,50-89,94-129,133,237-240,244-250
+  s_6a0ecf07ed0118::t_7a6639467a0891 44-48,241-243
+  s_6a0ecf07ed0118::t_4f808d32fec9e0 8,39-43
+  s_6a0ecf07ed0118::t_1c936ed5491e67 49
+e2e/paper-html.ts
+  s_6a0ecf07ed0118::t_36f6374a73e9cf 185-189,192,196,199
+  s_6a0ecf07ed0118::t_464f342279f531 7,190-191,193
+  s_6a0ecf07ed0118::t_cdb7dd8b45959b 102-106
+  s_6a0ecf07ed0118::t_031e6e12bfd43a 20-23,28-34,41-43,47-68,73-76,92,124,182
+  s_6a0ecf07ed0118::t_e00aae386a11d0 225,228-229
+  s_6a0ecf07ed0118::t_c75e70d1e67b7b 1-6,8-10,13-19,87-91,93,96-98,101,107-123,125-136,144-149,153,164-167,172-181,183-184,197-198,200,204-224
+  s_6a0ecf07ed0118::t_136312e1678429 11-12,226-227
+  s_6a0ecf07ed0118::t_63a81aca2f4ff7 154-157
+  s_6a0ecf07ed0118::t_7a6639467a0891 24-27,44-46,69-72,77-86,94-95,137-143,150-152,158-163,168-171,194-195,201-203
+  s_6a0ecf07ed0118::t_1cdac58b585974 35-40,99-100
+e2e/browser/screen-tree.ts
+  s_6a0ecf07ed0118::t_1ff747a70d5222 1-61,64-134
+  s_6a0ecf07ed0118::t_7a6639467a0891 62-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6dc81ec8a87ad3007b25e691b2a2d4b96191d36a",
+  "prompts": {},
+  "sessions": {
+    "s_6a0ecf07ed0118": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0d4e556-5f25-465f-ae93-1e3d6ee74690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
