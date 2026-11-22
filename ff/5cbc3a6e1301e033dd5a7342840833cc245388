@@ -1,0 +1,84 @@
+plugins/claude/src/server/agent.ts
+  s_f6e69910f6f024::t_971ff2ef71691d 3,7-9,11,13-14,19,22,30,36,40-42,47-48,55-56,58,67-68,77,82,87-88
+  s_f6e69910f6f024::t_da94e4e918bd32 43-46,69-72
+plugins/claude/src/server/turn.ts
+  s_f6e69910f6f024::t_8e4b4a0e7bf1d6 43
+  s_f6e69910f6f024::t_78c50a6237d385 12,17-20
+  s_f6e69910f6f024::t_971ff2ef71691d 2,5,10-11,112,114-115,123,132,139,159
+plugins/ai/src/client/lib/agents.ts
+  s_f6e69910f6f024::t_6931c07ce850aa 73,76,90
+plugins/claude/README.md
+  s_f6e69910f6f024::t_b1da42da4e50dc 5,7,10-12,16
+plugins/claude/src/server/wire.ts
+  s_f6e69910f6f024::t_78c50a6237d385 88-94
+  s_f6e69910f6f024::t_da94e4e918bd32 147-154
+  s_f6e69910f6f024::t_46cf1926534d0f 1,4,53-58,95-99,103-105,121,125,131,133-134,138,144-146,155,165,171
+plugins/claude/tests/replay.mjs
+  s_f6e69910f6f024::t_8e4b4a0e7bf1d6 50
+  s_f6e69910f6f024::t_da94e4e918bd32 15-16,18-23
+  s_f6e69910f6f024::t_b1da42da4e50dc 11,38
+plugins/claude/src/server/run.ts
+  s_f6e69910f6f024::t_971ff2ef71691d 3,25
+plugins/claude/tests/replay-privacy.mjs
+  s_f6e69910f6f024::t_78c50a6237d385 7,15,18-21,26-28,35
+  s_f6e69910f6f024::t_da94e4e918bd32 31-34,43-46
+  s_f6e69910f6f024::t_999ecaabd299a3 1-6,16-17,29-30,36-42,47-48,53-55
+  s_f6e69910f6f024::t_a6acc0a33c0792 8-14,22-25,49-52
+packages/server/tests/claude_turns.rs
+  s_f6e69910f6f024::t_6931c07ce850aa 3
+e2e/fake-agent/replays/claude-info.jsonl
+  s_f6e69910f6f024::t_a6acc0a33c0792 3
+plugins/claude/src/server/permissions.ts
+  s_f6e69910f6f024::t_f03a266907d62f 2,23-32,35,38,99
+  s_f6e69910f6f024::t_37ed97e8d39092 22,120,123,127-128
+  s_f6e69910f6f024::t_da94e4e918bd32 33-34
+plugins/ai/src/contracts.ts
+  s_f6e69910f6f024::t_da94e4e918bd32 18-22
+  s_f6e69910f6f024::t_6931c07ce850aa 11-12
+.github/workflows/ci.yml
+  s_f6e69910f6f024::t_6931c07ce850aa 51
+app/src-tauri/src/local.rs
+  s_f6e69910f6f024::t_c9d051bc2a3579 470-473
+  s_f6e69910f6f024::t_6931c07ce850aa 330-331,334-338,451-455,460-461,474-477
+e2e/fake-agent/replays/claude-scope.jsonl
+  s_f6e69910f6f024::t_012aec9472a940 1-23
+plugins/claude/tests/turns.mjs
+  s_f6e69910f6f024::t_da94e4e918bd32 100-108,138-143,224-230,254-255,303-307,319-326
+  s_f6e69910f6f024::t_de0a01dd25a264 1-2,18,24,33,49-50,64-65,69,73-81,91,96-98,109-113,120-121,125,129-132,136-137,144-145,157,159,164-165,167,179-180,189,196-220,223,239-242,301-302,308-309,327-328,354,358,363,370-374,386,394
+  s_f6e69910f6f024::t_b86fd0f32cc761 36-37,256-262
+  s_f6e69910f6f024::t_8e4b4a0e7bf1d6 310-318
+  s_f6e69910f6f024::t_b1da42da4e50dc 88-90,92-95,99
+  s_f6e69910f6f024::t_b213d80c8e424f 329-330
+plugins/claude/tests/observe.ts
+  s_f6e69910f6f024::t_b86fd0f32cc761 29,34,39,64-68,89-94
+  s_f6e69910f6f024::t_8e4b4a0e7bf1d6 38,74-76,79
+.ci/check.sh
+  s_f6e69910f6f024::t_6931c07ce850aa 3-4,17-18
+plugins/claude/src/server/events.ts
+  s_f6e69910f6f024::t_f03a266907d62f 12-32,127-128
+  s_f6e69910f6f024::t_971ff2ef71691d 41,70,194,196-197,203
+plugins/ai/src/client/lib/turn.ts
+  s_f6e69910f6f024::t_6931c07ce850aa 23
+  s_f6e69910f6f024::t_da94e4e918bd32 24-30
+plugins/ai/src/server/run.ts
+  s_f6e69910f6f024::t_da94e4e918bd32 36-39
+  s_f6e69910f6f024::t_6931c07ce850aa 35
+e2e/fake-agent/replays/claude-stop-tools.jsonl
+  s_f6e69910f6f024::t_012aec9472a940 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff5cbc3a6e1301e033dd5a7342840833cc245388",
+  "prompts": {},
+  "sessions": {
+    "s_f6e69910f6f024": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-f67f-75c0-a829-9883ea5cdc85",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    }
+  }
+}
