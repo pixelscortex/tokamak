@@ -1,0 +1,21 @@
+plugins/chat/src/client/_generated/components.d.ts
+  s_1a704cf54d1539::t_ea7aafb571998a 32
+plugins/chat/README.md
+  s_1a704cf54d1539::t_9639dad102d217 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "92fd1bb46b47c674cb22647f40e69289bba49ccb",
+  "prompts": {},
+  "sessions": {
+    "s_1a704cf54d1539": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0c94b43b-2229-4451-97b5-a99e8a4ac9f4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
