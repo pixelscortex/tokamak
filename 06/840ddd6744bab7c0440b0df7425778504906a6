@@ -1,0 +1,89 @@
+e2e/fake-agent/replays/context.jsonl
+  s_b78d166f675f88::t_1218e486fe0a17 1-8
+e2e/fake-agent/agents/fake-agent/src/server/factory.ts
+  s_b78d166f675f88::t_3b63aa037390da 1
+packages/server/tests/ai_threads.rs
+  s_b78d166f675f88::t_32e57da5a3fdc9 1-8,15-25
+  s_b78d166f675f88::t_f1e86676c79061 9-14
+packages/server/tests/ai-threads-driver.mjs
+  s_b78d166f675f88::t_7b84ec516ac31d 325
+  s_b78d166f675f88::t_3faba49b6555a4 2-5,22,25-26,32-47,54-56,58-59,61-63,79,109,112,115-116,120,123,131,139,141,148,156,161,163,174-190,193-226,230-232,238-239,242,252,255-256,258-259,262-263,266,275-277,279-284,290,303,313-315,317
+  s_b78d166f675f88::t_96d1d15a920b33 302
+  s_b78d166f675f88::t_f1e86676c79061 57,60,68-74,94-98,110-111,113,146-147,149-151,240-241,243,278,285
+  s_b78d166f675f88::t_8724b630d19468 1,6-21,23-24,27-31,48-53,64-67,75-78,84-93,99-108,114,117-119,121-122,124-130,132-138,140,142-145,152-155,157-160,162,164-173,227-229,233-237,244,250-251,253-254,257,260-261,264-265,271-274,301,326
+  s_b78d166f675f88::t_fabc6ee30d8594 80-83,191-192,245-249,267-270,286-289,296-300,304-312,318-324
+  s_b78d166f675f88::t_c205c4d749061d 291-295,316
+packages/server/tests/ai-turns-driver.mjs
+  s_b78d166f675f88::t_d49dcca0db0d60 62
+  s_b78d166f675f88::t_0565eac8157a98 67
+e2e/fake-agent/agents/factory.ts
+  s_b78d166f675f88::t_d5872ee6fb7c53 1-3,10-29,31-34,36-40,42-58,61-64,69-90,92-95,97-118,120-131,139
+  s_b78d166f675f88::t_a5a6329503ac1c 7-8,41,59-60,91,132-138
+  s_b78d166f675f88::t_fb7ba92cfca80b 65-68
+  s_b78d166f675f88::t_b045295e65c401 35
+  s_b78d166f675f88::t_a6d3a12023c6c2 4-6,9,30,96
+  s_b78d166f675f88::t_a65add8a5e3a0e 119
+e2e/fake-agent/README.md
+  s_b78d166f675f88::t_f9ea8a44023923 20-28
+  s_b78d166f675f88::t_77cefd9c535ba5 44-45
+  s_b78d166f675f88::t_ea530cd829644f 18-19
+e2e/fake-agent/harness.mjs
+  s_b78d166f675f88::t_3b5a426f026526 109
+  s_b78d166f675f88::t_47056eff57ccd7 217-218
+  s_b78d166f675f88::t_8e24a0cb60fc93 89-92
+e2e/fake-agent/agents/other-agent/plugin.ts
+  s_b78d166f675f88::t_b2db8c832cce25 1-3,5
+  s_b78d166f675f88::t_3b5a426f026526 4
+e2e/fake-agent/agents/other-agent/src/server/factory.ts
+  s_b78d166f675f88::t_e26e4258624108 1
+e2e/browser/ai-thread.spec.ts
+  s_b78d166f675f88::t_f1e86676c79061 16-17,63-65
+  s_b78d166f675f88::t_4302a1e5678a49 1-2,4-8,10-15,18-38,40-49,52-55,57-62,66-108,110-112,115-119,121-128,130-133,135-138,140-156
+  s_b78d166f675f88::t_40993539bfd93c 9,39,50-51,56,120,129,134,139
+  s_b78d166f675f88::t_b44e2d20c3214c 3
+  s_b78d166f675f88::t_2c664620e2767b 109,113-114
+packages/server/tests/chat-threads-driver.mjs
+  s_b78d166f675f88::t_d49dcca0db0d60 111
+e2e/fake-agent/agents/other-agent/package.json
+  s_b78d166f675f88::t_a6af8682e8f224 1-6
+e2e/fake-agent/agents/other-agent/src/server/agent.ts
+  s_b78d166f675f88::t_b78af5f7c1f8e1 2
+  s_b78d166f675f88::t_fabc6ee30d8594 8-13
+  s_b78d166f675f88::t_a6d3a12023c6c2 1,6-7,14
+  s_b78d166f675f88::t_d5872ee6fb7c53 5
+  s_b78d166f675f88::t_8e24a0cb60fc93 3
+  s_b78d166f675f88::t_7b0f5ed94efa38 4
+e2e/browser/desktop.ts
+  s_b78d166f675f88::t_fb7ba92cfca80b 31-33
+  s_b78d166f675f88::t_c2703ce225998d 28-29
+  s_312a34bc8d5ba4::t_0b8c5a089fff2b 119
+e2e/fake-agent/agents/fake-agent/src/server/agent.ts
+  s_b78d166f675f88::t_fabc6ee30d8594 6-9
+  s_b78d166f675f88::t_a6d3a12023c6c2 1
+  s_b78d166f675f88::t_d5872ee6fb7c53 5
+  s_b78d166f675f88::t_8e24a0cb60fc93 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06840ddd6744bab7c0440b0df7425778504906a6",
+  "prompts": {},
+  "sessions": {
+    "s_312a34bc8d5ba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20148-225d-7b23-a104-1c434af1d174",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
