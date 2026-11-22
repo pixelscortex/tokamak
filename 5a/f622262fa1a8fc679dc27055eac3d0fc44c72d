@@ -1,0 +1,19 @@
+packages/sdk/src/functions.ts
+  s_826168563f30c4::t_43eec9344c7672 325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5af622262fa1a8fc679dc27055eac3d0fc44c72d",
+  "prompts": {},
+  "sessions": {
+    "s_826168563f30c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200de-f01f-7df1-b817-9eaabc6a583a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
