@@ -1,13 +1,6 @@
-#[cfg(windows)]
-use super::windows::Child as WorkerChild;
 use super::*;
-#[cfg(not(windows))]
-use std::process::Stdio;
-#[cfg(not(windows))]
-use tokio::process::Child as WorkerChild;
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    process::Child,
     task::JoinSet,
 };
 
@@ -17,74 +10,6 @@ struct Call {
     active: CancellationToken,
     cancel_at: Option<tokio::time::Instant>,
 }
-#[cfg(not(windows))]
-struct Group(u32);
-#[cfg(not(windows))]
-impl Drop for Group {
-    fn drop(&mut self) {
-        // Every descendant inherits this group, including plugin-launched agents.
-        #[cfg(unix)]
-        unsafe {
-            libc::kill(-(self.0 as i32), libc::SIGKILL);
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn guardian(group: u32) -> Result<Option<Child>, String> {
-    #[cfg(unix)]
-    {
-        // stdin is a private liveness pipe. Only the server holds its write end;
-        // EOF works even if the worker's JS event loop is blocked indefinitely.
-        let mut command = tokio::process::Command::new("/bin/sh");
-        command.process_group(group as i32);
-        command.args(["-c", "trap '' TERM; while IFS= read -r line; do :; done; kill -TERM -\"$1\" 2>/dev/null; /bin/sleep 0.2; kill -KILL -\"$1\" 2>/dev/null", "worker-guardian", &group.to_string()]);
-        command
-            .env_clear()
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
-            .map(Some)
-            .map_err(|e| format!("Worker guardian could not start: {e}"))
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = group;
-        Ok(None)
-    }
-}
-
-#[cfg(not(windows))]
-fn launch(
-    id: &str,
-    bun: &Path,
-    entry: &Path,
-    code: &Path,
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
-) -> Result<(WorkerChild, Group, Option<Child>), String> {
-    let mut command = tokio::process::Command::new(bun);
-    #[cfg(unix)]
-    command.process_group(0);
-    let child = command
-        .arg(entry)
-        .arg(code)
-        .env_clear()
-        .envs(env)
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
-    let group = Group(child.id().ok_or("Worker has no pid")?);
-    let guardian = guardian(group.0)?;
-    Ok((child, group, guardian))
-}
-
 pub(super) fn spawn(
     runtime: &tokio::runtime::Handle,
     id: &str,
@@ -97,20 +22,11 @@ pub(super) fn spawn(
     // Nested QuickJS actions can run on a short-lived runtime. Bind child I/O
     // to the server runtime that owns the long-lived worker instead.
     let _entered = runtime.enter();
-    #[cfg(windows)]
-    let (mut child, containment, mut guardian) = {
-        let (child, job) = super::windows::spawn(bun, entry.path(), code.path(), cwd, env)
-            .map_err(|e| format!("Plugin {id} worker could not start: {e}"))?;
-        (child, job, None::<Child>)
-    };
-    #[cfg(not(windows))]
-    let (mut child, containment, mut guardian) =
-        launch(id, bun, entry.path(), code.path(), cwd, env)?;
-    let guardian_input = guardian.as_mut().and_then(|child| child.stdin.take());
-    let input = child.stdin.take().ok_or("Worker stdin missing")?;
-    let output = child.stdout.take().ok_or("Worker stdout missing")?;
-    let stderr = child.stderr.take().ok_or("Worker stderr missing")?;
-    let (commands, receive) = mpsc::channel(128);
+    let mut child =
+        tokamak_worker::Process::launch(bun, entry.path(), code.path(), cwd, env, Lane::Action)
+            .map_err(|error| format!("Plugin {id} worker could not start: {error}"))?;
+    let (input, output, stderr) = child.pipes()?;
+    let (commands, receive) = mpsc::channel(WORKER_CAPACITY);
     let process = Arc::new(Process {
         commands,
         kill: CancellationToken::new(),
@@ -123,49 +39,27 @@ pub(super) fn spawn(
         let _finished = finished;
         // Keep the verified snapshots alive through exit; never reopen build output.
         let _snapshots = (entry, code);
-        let _guardian_input = guardian_input;
         let label = id.clone();
         let _stderr = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
             forward_stderr(label, stderr).await;
         }));
-        let (writes, outgoing) = mpsc::channel::<Value>(128);
+        let (writes, outgoing) = mpsc::channel::<Value>(WORKER_CAPACITY);
         let (failed, mut failure) = oneshot::channel();
         let _writer = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
             let result = write_messages(input, outgoing).await;
             let _ = failed.send(result.err().unwrap_or_else(|| "Worker stdin closed".into()));
         }));
         let mut calls = BTreeMap::new();
-        let supervise = run(
-            &id,
-            &mut child,
-            output,
-            receive,
-            Control {
+        let error = tokio::select! {
+            result = run(&id, output, receive, Control {
                 input: &writes,
                 failure: &mut failure,
                 kill: &running.kill,
-            },
-            &mut calls,
-        );
-        let error = tokio::select! {
-            result = supervise => result,
-            status = async {
-                match guardian.as_mut() {
-                    Some(child) => child.wait().await,
-                    None => std::future::pending().await,
-                }
-            } => Err(format!("Worker guardian exited: {status:?}")),
-        }
-        .err()
-        .unwrap_or_else(|| "Worker stopped".into());
+            }, &mut calls) => result.err().unwrap_or_else(|| "Worker stopped".into()),
+            error = child.exited() => error,
+        };
         let _ = writes.try_send(json!({"type":"shutdown"}));
-        drop(containment);
-        #[cfg(not(windows))]
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-        if let Some(mut guardian) = guardian {
-            let _ = guardian.wait().await;
-        }
+        child.stop().await;
         fail_pending_calls(&id, &error, calls);
         running.stopped.cancel();
     });
@@ -180,7 +74,7 @@ fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
         .map_err(|_| "Worker write queue full or closed".into())
 }
 fn oversized(value: &Value) -> Result<bool, String> {
-    Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= FRAME)
+    Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= WORKER_FRAME_BYTES)
 }
 struct Control<'a> {
     input: &'a mpsc::Sender<Value>,
@@ -189,7 +83,6 @@ struct Control<'a> {
 }
 async fn run(
     id: &str,
-    child: &mut WorkerChild,
     output: tokio::process::ChildStdout,
     mut commands: mpsc::Receiver<Command>,
     control: Control<'_>,
@@ -214,14 +107,13 @@ async fn run(
         tokio::select! {
             _ = kill.cancelled() => return Err("worker stopped".into()),
             _ = cancelled => return Err("action cancellation timed out".into()),
-            status = child.wait() => return Err(format!("process exited ({status:?})")),
             error = &mut *failure => return Err(error.unwrap_or_else(|_| "stdin writer closed".into())),
             Some(result) = ops.join_next() => {
                 forward_operation_result(result, calls, input)?;
             },
             command = commands.recv() => match command {
                 Some(Command::Invoke {id, name, args, ops, reply}) => {
-                    if calls.len() >= 128 { let _ = reply.send(Err("Worker invocation capacity exceeded".into())); continue; }
+                    if calls.len() >= WORKER_CAPACITY { let _ = reply.send(Err("Worker invocation capacity exceeded".into())); continue; }
                     let message = json!({"type":"invoke","id":id,"fn":name,"args":args});
                     if oversized(&message)? {
                         let _ = reply.send(Err("Worker invocation exceeds 1 MiB limit".into()));
@@ -257,7 +149,7 @@ async fn run(
                         let Some(call) = calls.get(&call_id).filter(|c| !c.active.is_cancelled()) else {
                             write(input, json!({"type":"opResult","id":op,"error":"stale invocation: host operation refused"}))?; continue;
                         };
-                        if ops.len() >= 128 { return Err("Worker operation capacity exceeded".into()); }
+                        if ops.len() >= WORKER_CAPACITY { return Err("Worker operation capacity exceeded".into()); }
                         let name = message["name"].as_str().ok_or("Invalid worker op name")?.to_owned();
                         let payload = message.get("payload").ok_or("Worker op has no payload")?.clone();
                         let registry = call.ops.clone(); let active = call.active.clone();
@@ -289,7 +181,7 @@ async fn read_frame(
         }
         let end = bytes.iter().position(|b| *b == b'\n');
         let count = end.map_or(bytes.len(), |n| n + 1);
-        if frame.len() + count > FRAME {
+        if frame.len() + count > WORKER_FRAME_BYTES {
             return Err("Worker message exceeds 1 MiB limit".into());
         }
         frame.extend_from_slice(&bytes[..count]);
@@ -320,7 +212,7 @@ async fn write_messages(
     while let Some(message) = outgoing.recv().await {
         let mut bytes = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
         bytes.push(b'\n');
-        if bytes.len() > FRAME {
+        if bytes.len() > WORKER_FRAME_BYTES {
             return Err("Worker message exceeds 1 MiB limit".into());
         }
         tokio::time::timeout(Duration::from_secs(5), async {

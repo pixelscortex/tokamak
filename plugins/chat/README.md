@@ -1,121 +1,110 @@
 # Chat
 
-Chat stores threads, messages, and runs. Every answer comes from an installed
-`chat.backend` provider; today the ACP plugin connects Claude Code and Codex.
-See the root [quick start](../../README.md#quick-start) and
-[ACP setup](../acp/README.md) for agent configuration.
+Chat is pure threads: the thread list, the new thread, the composer, messages,
+the folder of a thread and the thread header. It knows nothing about agents,
+turns or code. Other plugins (`ai`, `code`) extend its components, learn about
+each Send, and write replies through its plugin-only functions.
 
-## Backend contract
+## What a person sees
 
-Chat discovers providers through `ctx.providers("chat.backend")`. Each provider
-exports `backend:describe`, `backend:configure`, and `backend:turn`; their shared
-TypeScript contract is exported from `src/server/api.ts`. Configure validates provider-specific
-settings. Turn receives the thread, run, response message, text, complete prior
-conversation, settings, and optional saved session state. Chat keeps this history
-for providers that need to seed a fresh agent session.
+Opening the app lands on a new thread: an icon, "Start a conversation", the
+recent folders with "Choose a folder…" and "No folder", and the composer.
+Nothing is stored until the first Send, which creates the thread and its first
+message. "No folder" gives the thread an empty folder of its own under the
+app's data, `<app data>/no-project/threads/<thread>`, made by chat's local part.
+The list has "New thread ⌘N" on top and one list of threads, newest first.
+The header shows the title (double-click renames), the folder, and `⋯` with
+Rename and Delete thread.
 
-New threads select the first available provider option. Thread creation is an
-action so discovery happens outside a database transaction. With no available
-agent, sending fails with "No agents found. Install `claude-agent-acp` or `codex-acp` (see README)" before
-creating messages or a run. Cmd+M lists only provider options and configures the
-selected agent's folder. Threads preserve session state when the same backend
-and settings are selected again.
+## Folders
 
-## Persistence and lifecycle
+A thread's `folder` is `{ kind: "chosen", path }` or `{ kind: "own", path? }`
+("No folder"). It lives on the creator's computer. On the desktop, a typed
+folder goes through the local `folders:check` (expands `~`, must exist); a plain
+browser stores it as typed. `folders:resolve({ threadId })` (local) returns the
+folder ready to use and makes an own folder the first time it is asked for;
+only the thread's creator can store it (`threads:setFolder`). On anyone
+else's computer it returns null, so their Send stays plain chat. Without the
+client's data folder (`TOKAMAK_APP_DATA_DIR`), an own folder is a temporary one
+that is not stored.
 
-- Threads contain a title, timestamps, and optional provider backend/settings/state.
-- Messages contain ordered text, tool, plan, and permission parts, with status and
-  optional bounded error text. Generic tool parts render as dim activity lines
-  with expandable details.
-- Runs track streaming, cancellation, heartbeats, permission waiting, and recovery.
-- `send:start` atomically inserts a user message, assistant placeholder, and run;
-  it refuses concurrent sends. `send:update` persists buffered text and generic
-  part updates. Provider failures settle the run and unfinished parts.
-- `stream-buffer.ts` batches text and polls cancellation/heartbeats while the
-  provider waits. Permission handling retains claim/delivery semantics.
-- Recovery uses three unchanged observations from one sweeper, independent of
-  wall-clock age. Heartbeats protect healthy runs. Recovered messages and parts
-  settle with "Interrupted"; the thread can receive another turn.
+## Server and local functions
 
-`threads:create`, `threads:list`, `threads:rename`, and `threads:remove` manage
-threads; removal cascades to messages and runs. `threads:setBackend` is private
-to chat clients. Public provider functions include `chat:send`, `send:update`,
-`send:running`, `send:session`, and permission request/claim/state functions.
+- `threads:start({ text, folder })` creates a thread with its first message and
+  returns `{ threadId, messageId }`.
+- `threads:list`, `threads:get`, `threads:rename`, `threads:remove` (removes its
+  messages too), `threads:recentFolders` (the caller's last three chosen folders),
+  `threads:setFolder` (an own folder's path, once, creator only),
+  `threads:creator` (`{ id, name? }` of whoever started it, named as on its first
+  message; exported as `threadCreator`).
+- `messages:list`, `messages:post({ threadId, text })` (returns the message id).
+- Plugin-only: `messages:stage` stores a queued message; `messages:deliver`
+  puts it into the transcript or marks it failed. `messages:prompt` reads a
+  user's message by id. Exported as `stageMessage`, `deliverMessage` and `readPrompt`.
+- Plugin-only (no window can call them): `replies:start({ threadId, token, author })`
+  opens a reply bound to a 64-hex token the calling plugin chose for its turn;
+  `replies:write({ messageId, token, text, done?, outcome?, error? })` replaces its
+  text, and only with that token. A finished reply can be cancelled or failed.
+  Exported from `src/server/api.ts` as `startReply` / `writeReply`.
+- Local: `folders:resolve`, `folders:check`, `threads:removeLocal`. Use them only when
+  `client.hasLocal` (a `TokamakClient` getter, true in the desktop client).
+  Only the creator can rename or delete a thread. The server calls the
+  `threadDeletedServer` providers in the deletion transaction.
+  `threads:removeLocal({ threadId })` deletes the thread on the server, then calls
+  `threadDeletedLocal` providers from `plugin:chat/contracts` in the local part. Their
+  `after({ threadId, folder })` can clean up local data; `folder` may be absent.
 
-## Verification
+Agent runs and permission questions belong to `ai`. Chat stores the thread
+and streams replies from plugins through its reply API.
 
-Run `moon run app:check app:test` and `cargo test -p server`. Server tests cover
-thread CRUD, generic part validation, recovery, missing providers, ACP streaming,
-permissions, cancellation, and session restoration. See ACP's README for optional
-real-agent smoke tests.
+## Extending chat
 
-Backend writes require a per-turn capability generated in chat's send action.
-The selected provider receives it; run queries never return it. Text/part updates,
-session saves, and permission request/claim/undelivered writes validate it against
-the active run. Completion, cancellation, and recovery revoke the token.
+Import the components through `plugin:chat/client` and act on their elements.
+Every action and its `when` receive the component's props.
 
-## Client UI and composer mods
+| Component   | Elements                                                        | Props                                    |
+| ----------- | --------------------------------------------------------------- | ---------------------------------------- |
+| `Composer`  | `top`, `box`, `input`, `tools`, `sendButton`                    | `threadId`, `folder`, `draft`, `sending` |
+| `Message`   | `avatar`, `header`, `body`, `footer`                            | `message`, `threadId`, `next`, `isLast`  |
+| `Empty`     | `icon`, `glyph`, `heading`, `folders`                           | `folders`, `folder`                      |
+| `ThreadRow` | `row`, `status`, `title`, `age`, `detail` (second line)         | `thread`, `now`                          |
+| `Header`    | `icon`, `title`, `titleInput`, `folder`, `menu`, `deleteDialog` | `thread`                                 |
 
-Chat owns its `/` view contribution (`/p/chat` in the shell). The view fills
-the shell's regions: the thread list goes in `Region.Sidebar`, the thread's
-title, folder and actions in `Region.Header`, and the thread with its composer
-is the stage body. Everything is Tailwind classes on `@tokamak/ui` tokens and
-primitives; `styles.css` only compiles those utilities, and markdown needs no
-stylesheet because each rendered element carries its own classes.
+`Message.next` and `isLast` tell where a run of replies ends without chat
+knowing about turns. A filled `ThreadRow.detail` makes the row a double row.
 
-- `src/client/pages/screen.tsx`: the view, shortcuts and the thread pane.
-- `src/client/ui/`: `sidebar/` (recent threads), `header/` (rename, copy,
-  delete), `thread/` (turns, markdown, the folded work row, the plan list,
-  empty and no-agent states) and `composer/`.
-- `src/client/lib/`: state (`use-chat`, `use-drafts` with the follow-up queue,
-  `use-backends`, `use-run-recovery`, `use-thread-editor`, `chat-keys`),
-  `turns.ts` (folding a turn's tools into one summary), `follow.ts` (scroll
-  following) and `composer.ts` (the composer API and slots).
-
-Keys: Enter sends and Shift+Enter adds a line; while a reply runs Enter queues
-the text as the next turn, Esc stops, and 1–4 answer a permission while the
-draft is empty. ⌘N opens a new thread, ⌘M the agent menu, ⌘⇧C copies the last
-reply.
-
-The public client entry (`src/client/api.ts`, exposed as `@plugins/chat/ui`)
-exports `Composer`, `ComposerInput`, `ComposerStrip` and `SendButton`. Each is
-wrappable or replaceable. The default composer shows `SendButton`, which turns
-into Stop while a reply runs.
-
-| Token                | Qualified slot              | Position                                 |
-| -------------------- | --------------------------- | ---------------------------------------- |
-| `composerBefore`     | `chat.composer.before`      | Top of the composer card (context chips) |
-| `composerActions`    | `chat.composer.actions`     | Action row, left of send                 |
-| `composerStripLeft`  | `chat.composer.strip.left`  | Strip, before the agent picker           |
-| `composerStripRight` | `chat.composer.strip.right` | Strip, after the hint                    |
-| `composerAfter`      | `chat.composer.after`       | Below the composer                       |
-
-Every fill receives `{ composer: ComposerAPI }`. `threadId()`, `getDraft()`,
-`setDraft(text)`, `insertText(text)` (at the caret or selection), `submit()`
-and `busy()` share the current thread's draft and run state. Components inside
-the view can also call `useComposer()`.
+`onDraftSubmit` can handle an open thread's draft before normal Send. It
+receives `{ threadId, text, intent }`, where intent is `"steer"` for Enter or
+`"queue"` for Cmd+Enter / Ctrl+Enter. Return true once handled; otherwise chat
+stores it and calls `onSent` as usual. `resolveFolder(client, threadId)` is also
+exported for clients starting a staged message.
 
 ```tsx
-import { fill, wrap } from "@tokamak/sdk/client";
-import { Button } from "@tokamak/ui";
-import { ComposerInput, composerActions, composerStripRight } from "@plugins/chat/ui";
-export const Insert = fill(composerActions, { order: 10 }, ({ composer }) => (
-  <Button variant="ghost" onClick={() => composer.insertText("Run tests")}>
-    Tests
-  </Button>
-));
-export const Status = fill(composerStripRight, {}, () => (
-  <span class="text-label text-ink-3">Review mode</span>
-));
-export const Frame = wrap(ComposerInput, (Original) => (props) => <Original {...props} />);
-// Export these from your plugin's src/client/api.ts; no registration step.
+import { onCleanup } from "solid-js";
+import { after, append, prepend, replace } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Row = after(chat.Composer.box, AgentRow);
+export const Question = prepend(chat.Composer.top, PermissionCard, { when: (c) => waiting(c.threadId) });
+export const Card = append(chat.Message.footer, ChangeCard, {
+  when: (m) => !m.next || m.next.role === "user",
+});
+export const Heading = replace(chat.Empty.heading, AgentHeading);
+export const Status = append(chat.ThreadRow.status, StatusIcon);
+export const Branch = after(chat.Header.title, BranchChip);
+
+// After each Send, once the message is stored and the folder exists on this computer:
+// { threadId, messageId, text, folder, first }.
+onCleanup(chat.onSent((sent) => beginTurn(sent)));
 ```
 
-## Client checks
+## Checks
 
-`proto run bun -- run moon run chat:test` runs the unit tests in `tests/`.
-`src/client/tsconfig.json` typechecks the client (part of `workspace:plugins-check`).
-`proto run bun -- run e2e:browser` drives the real chat flow in a browser
-(`e2e/browser/chat.spec.ts`). For a hands-on look, `proto run bun -- e2e/chat-sandbox.ts`
-serves a disposable store with ACP and a scripted agent (`e2e/fixtures/scripted-agent.py`);
-HOME and PATH are replaced so no real, billing agent CLI can be launched.
+- Window: `proto run bun -- run moon run chat:test` (builds `tests/fixtures/chat-probe`,
+  a plugin that extends every element above, and loads it like the app does;
+  checks Send announcements).
+- End to end: `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test chat_threads`
+  (real server, real chat build, a real reply plugin, two clients, chat's real
+  local part, and a shared server where a member is refused).
+- Browser: `proto run bun -- run e2e:browser e2e/browser/chat.spec.ts`.
+- Types: `src/client/tsconfig.json` and `tests/tsconfig.json` (in `workspace:plugins-check`).

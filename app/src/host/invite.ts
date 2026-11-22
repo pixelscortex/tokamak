@@ -72,7 +72,7 @@ export function buildInvite(origin: string, token: string): string {
 
 /**
  * A name for a server until it can report its own: the first label of a domain
- * (`tokamak-pixelscortex` for `tokamak-pixelscortex.up.railway.app`), or the whole
+ * (`tokamak-example` for `tokamak-example.up.railway.app`), or the whole
  * host for an IP address or a loopback name.
  */
 export function nameFromHost(host: string): string {

@@ -62,7 +62,9 @@ export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Ele
         <Icon path={icons.failed} label="Not connected" class="text-removed" />
         <div class="flex min-w-0 flex-1 flex-col">
           <p class="text-row font-medium text-ink">
-            {props.needs === "token" ? `${server().name} needs an invite` : `Can't reach ${server().name}`}
+            {props.needs === "token"
+              ? `${server().name} needs you to sign in`
+              : `Can't reach ${server().name}`}
           </p>
           <p class="text-label text-ink-3">
             <Show when={address() && !props.reason.includes(new URL(address()!).host) && address()}>
@@ -78,7 +80,18 @@ export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Ele
           when={props.needs === "token" && address()}
           fallback={<QuietButton onClick={() => shell.session.retry()}>Retry</QuietButton>}
         >
-          {(origin) => <QuietButton onClick={() => shell.openConnect(origin())}>Add invite</QuietButton>}
+          {(origin) => (
+            <QuietButton
+              onClick={() =>
+                shell.openSignIn({
+                  origin: origin(),
+                  onInvite: () => shell.openConnect(origin()),
+                })
+              }
+            >
+              Sign in
+            </QuietButton>
+          )}
         </Show>
       </div>
     </div>

@@ -1,1 +1,1 @@
-export { FixtureView, actions, Panel, dependency } from "./view";
+export { FixtureBody, FixtureView, dependency } from "./view";

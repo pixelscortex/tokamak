@@ -1,4 +1,7 @@
-import { pluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
+import { inSource } from "./compiler.ts";
+import { realpathSync } from "node:fs";
+import { pluginCompilerOptions } from "../../sdk/tools/plugin-compiler.mjs";
+import { componentParts } from "./component-parts.ts";
 import { clientEntry } from "./descriptor.ts";
 /** Public client declarations come from the entry's symbol graph, never a
  * runtime scan. This also intercepts calls inside the declaring plugin. */
@@ -6,64 +9,63 @@ import ts from "typescript";
 import { normalizePath } from "vite";
 import MagicString from "magic-string";
 import type { Plugin } from "vite";
+import { windowStateTransform } from "./window-state.ts";
 
-export function clientSurface(root: () => string, pluginId: () => string): Plugin {
-  let declarations: Map<string, Map<string, string[]>>;
+type SourceEdit = [start: number, end: number, replacement: string];
+
+function erasedNodes(source: ts.SourceFile, cuts: SourceEdit[]) {
+  return (node: ts.Node) => cuts.some(([start, end]) => node.getStart(source) >= start && node.end <= end);
+}
+
+export function clientSurface(
+  root: () => string,
+  pluginId: () => string,
+  placement: (id: string) => SourceEdit[] = () => [],
+): Plugin {
+  let directory: string;
   let program: ts.Program;
-  let checker: ts.TypeChecker;
-  const slotHelpers = new Set<ts.Symbol>();
+  let parts: ReturnType<typeof componentParts>;
+  let windowState: ReturnType<typeof windowStateTransform>;
   return {
     name: "tokamak-client-surface",
     enforce: "pre",
+    generateBundle: {
+      order: "post",
+      handler() {
+        parts?.publish((message) => this.warn(message));
+      },
+    },
     transform(code, id) {
       id = normalizePath(id);
-      if (!id.startsWith(normalizePath(root()) + "/src/") || !/\.tsx?$/.test(id)) return;
-      if (!declarations) {
-        declarations = new Map();
-        const entry = clientEntry(root());
-        const configPath = ts.findConfigFile(root(), ts.sys.fileExists);
+      // Vite uses real paths for module IDs, even when the plugin root is a symlink.
+      directory ??= normalizePath(realpathSync(root()));
+      if (!inSource(directory, id) || !/\.tsx?$/.test(id)) return;
+      if (!program) {
+        const entry = clientEntry(directory);
+        const configPath = ts.findConfigFile(directory, ts.sys.fileExists);
         const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
-        const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root());
-        program = ts.createProgram([entry], pluginCompilerOptions(root(), parsed.options));
-        checker = program.getTypeChecker();
-        for (const file of program.getSourceFiles()) {
-          for (const statement of file.statements) {
-            if (
-              !ts.isImportDeclaration(statement) ||
-              !ts.isStringLiteral(statement.moduleSpecifier) ||
-              statement.moduleSpecifier.text !== "@tokamak/sdk/client"
-            )
-              continue;
-            const sdk = checker.getSymbolAtLocation(statement.moduleSpecifier);
-            const helper = sdk && checker.getExportsOfModule(sdk).find((s) => s.name === "defineSlot");
-            if (helper)
-              slotHelpers.add(
-                helper.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(helper) : helper,
-              );
-          }
-        }
-        const source = program.getSourceFile(entry)!;
-        const module = checker.getSymbolAtLocation(source)!;
-        for (let symbol of checker.getExportsOfModule(module)) {
-          const name = symbol.name;
-          if (!/^[A-Z]/.test(name)) continue;
-          if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-          const declaration = symbol.valueDeclaration;
-          if (
-            !declaration ||
-            !checker.getTypeOfSymbolAtLocation(symbol, declaration).getCallSignatures().length
-          )
-            continue;
-          const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
-          if (type.getProperties().some((p) => p.name.startsWith("__@contributionBrand@"))) continue;
-          const file = normalizePath(declaration.getSourceFile().fileName);
-          if (!file.startsWith(normalizePath(root()) + "/src/")) continue;
-          let names = declarations.get(file);
-          if (!names) declarations.set(file, (names = new Map()));
-          const targets = names.get(symbol.name) ?? [];
-          targets.push(`${pluginId()}.${name}`);
-          names.set(symbol.name, targets);
-        }
+        const parsed = ts.parseJsonConfigFileContent(config, ts.sys, directory);
+        program = ts.createProgram(
+          [entry],
+          pluginCompilerOptions(directory, {
+            // Resolve package exports and read TSX even when the plugin has no tsconfig.
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            jsx: ts.JsxEmit.Preserve,
+            ...parsed.options,
+          }),
+        );
+        // Both transforms share source coordinates. Window state only sees
+        // code retained in the window, so it cannot edit an erased handler.
+        windowState = windowStateTransform(directory, entry, program, (file) =>
+          erasedNodes(file, placement(normalizePath(file.fileName))),
+        );
+        parts = componentParts(
+          program.getSourceFile(entry)!,
+          program.getTypeChecker(),
+          pluginId(),
+          directory,
+        );
       }
       const source =
         program.getSourceFile(id) ??
@@ -75,67 +77,15 @@ export function clientSurface(root: () => string, pluginId: () => string): Plugi
           id.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
         );
       const output = new MagicString(code);
-      let changed = false;
-      let imports = false;
-      for (const node of source.statements) {
-        if (ts.isFunctionDeclaration(node) && node.name) {
-          const target = declarations.get(id)?.get(node.name.text);
-          if (target) {
-            const name = node.name.text;
-            let exported = "";
-            for (const modifier of node.modifiers ?? [])
-              if (
-                modifier.kind === ts.SyntaxKind.ExportKeyword ||
-                modifier.kind === ts.SyntaxKind.DefaultKeyword
-              ) {
-                exported += `${modifier.getText(source)} `;
-                output.remove(modifier.getStart(source), modifier.end);
-              }
-            output.overwrite(node.name.getStart(source), node.name.end, `${name}Original`);
-            // The public name stays a function declaration so it is hoisted like the
-            // original; the wrapped component is made on first use.
-            output.appendLeft(
-              node.end,
-              `\n${exported}function ${name}(props) { return (${name}.__public ??= __publicComponent(${JSON.stringify(target)}, ${name}Original))(props); }\n`,
-            );
-            changed = imports = true;
-          }
-        } else if (ts.isVariableStatement(node)) {
-          for (const declaration of node.declarationList.declarations) {
-            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
-            const target = declarations.get(id)?.get(declaration.name.text);
-            if (target) {
-              const init = declaration.initializer;
-              output.appendLeft(init.getStart(source), `__publicComponent(${JSON.stringify(target)}, `);
-              output.appendLeft(init.end, ")");
-              changed = imports = true;
-            }
-          }
-        }
-      }
-      function isSlotHelper(expression: ts.Expression) {
-        let symbol = checker.getSymbolAtLocation(
-          ts.isPropertyAccessExpression(expression) ? expression.name : expression,
-        );
-        if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-        return !!symbol && slotHelpers.has(symbol);
-      }
-      function slots(node: ts.Node) {
-        if (ts.isCallExpression(node) && isSlotHelper(node.expression)) {
-          const name = node.arguments[0];
-          if (!name || !ts.isStringLiteralLike(name)) throw new Error("defineSlot requires a literal name");
-          output.overwrite(name.getStart(source), name.end, JSON.stringify(`${pluginId()}.${name.text}`));
-          changed = true;
-        }
-        ts.forEachChild(node, slots);
-      }
-      slots(source);
-      if (imports)
-        output.prepend('import { publicComponent as __publicComponent } from "@tokamak/sdk/client";\n');
-      if (changed)
+      const cuts = placement(id);
+      for (const [start, end, replacement] of cuts) output.overwrite(start, end, replacement);
+      // Both transforms use the original offsets. A part mounts its original
+      // tag lazily, so attach the state site to that tag inside its render callback.
+      const state = windowState(source, output, parts.has);
+      if (parts.transform(source, output, state?.partMounts) || state || cuts.length)
         return {
           code: output.toString(),
-          map: output.generateMap({ source: id, includeContent: true, hires: true }),
+          map: output.generateMap({ source: id, includeContent: cuts.length === 0, hires: true }),
         };
     },
   };

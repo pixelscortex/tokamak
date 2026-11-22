@@ -1,5 +1,5 @@
 //! Static preflight, disk-backed immutable artifact snapshots and dependency routing.
-use crate::{Error, data::DataSpace};
+use crate::{Error, data::DataSpace, service::Visibility};
 use engine::Bundle;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -17,15 +17,14 @@ pub struct Artifact {
     pub manifest: Manifest,
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
-    provides: BTreeSet<String>,
-    consumes: BTreeSet<String>,
     permissions: BTreeSet<String>,
 }
 pub struct Catalog {
     pub order: Vec<String>,
     pub plugins: BTreeMap<String, Arc<Artifact>>,
     pub revision: String,
-    providers: BTreeMap<String, Vec<String>>,
+    install_order: Vec<String>,
+    pub(crate) removed_plugins: Vec<String>,
     pub(crate) environment: PathBuf,
     pub(crate) directory: PathBuf,
 }
@@ -39,7 +38,8 @@ pub(crate) struct Loaded {
     pub catalog_text: String,
     pub(crate) skipped: BTreeMap<String, String>,
     pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
-    inspected: BTreeMap<String, (Value, BTreeMap<String, crate::service::FunctionKind>)>,
+    contracts: Contracts,
+    inspected: BTreeMap<String, crate::service::InspectedBundle>,
 }
 
 #[derive(Clone)]
@@ -47,9 +47,20 @@ pub(crate) struct Target {
     pub owner: String,
     pub local_name: String,
     pub mutation: bool,
+    pub visibility: Visibility,
     pub kind: crate::service::FunctionKind,
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,
+}
+
+impl Target {
+    pub(crate) fn check_anonymous_scope(&self, provider: &str) -> Result<(), String> {
+        if self.owner == provider && self.visibility == Visibility::Internal {
+            Ok(())
+        } else {
+            Err("Anonymous calls can only access private functions of their provider".into())
+        }
+    }
 }
 
 fn invalid(message: impl Into<String>) -> Error {
@@ -59,6 +70,8 @@ fn invalid(message: impl Into<String>) -> Error {
 mod artifact;
 mod assets;
 mod catalog;
+mod contracts;
+pub(crate) use contracts::MemberEvent;
 mod dependencies;
 mod grants;
 mod loading;
@@ -66,7 +79,13 @@ mod manifest;
 
 pub use assets::Asset;
 use assets::asset;
+use contracts::Contracts;
+pub(crate) use contracts::register_contract_list;
+pub use contracts::{
+    ContractDeclaration, ContractPlace, ContractRegistration, SignInField, SignInForm, SignInMethod,
+};
 use dependencies::resolve;
+pub(crate) use loading::StartupPolicy;
 pub use manifest::*;
 
 #[cfg(test)]

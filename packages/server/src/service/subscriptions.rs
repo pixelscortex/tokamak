@@ -47,15 +47,15 @@ impl Coordinator {
                     .subscriptions
                     .iter()
                     .find(|(_, sub)| sub.dirty)
-                    .map(|(&id, sub)| (owner, id, sub.name.clone(), sub.args.clone()))
+                    .map(|(&id, sub)| (owner, id, sub.query.clone()))
             });
 
-            let Some((owner, id, name, args)) = next else {
+            let Some((owner, id, query)) = next else {
                 return;
             };
             self.subscription(owner, id).dirty = false;
 
-            let call = self.run_subscription(owner, &name, args).await;
+            let call = self.run_subscription(owner, query).await;
 
             let sub = self.subscription(owner, id);
             sub.reads = call.reads;
@@ -103,28 +103,36 @@ impl Coordinator {
     }
 
     pub(super) async fn subscribe(&mut self, session: u64, id: u64, name: String, args: Json) {
+        let kind = self.client_kind(&name);
         let client = self.sessions.get_mut(&session).expect("checked session");
 
-        let error = if self.kinds.get(&name) != Some(&FunctionKind::Query) {
-            Some("subscriptions require a registered query")
-        } else if client.subscriptions.contains_key(&id) {
-            Some("subscription ID already in use")
-        } else if client.subscriptions.len() >= SUBSCRIPTIONS {
-            Some("subscription capacity exceeded")
-        } else {
-            None
+        let query = match builtin_queries::resolve(&name, &args) {
+            Some(resolved) => resolved.map(SubscriptionQuery::Builtin),
+            None if kind == Some(FunctionKind::Query) => {
+                Ok(SubscriptionQuery::Plugin { name, args })
+            }
+            None => Err("subscriptions require a registered query"),
         };
-
-        if let Some(error) = error {
-            // Invalid registration never replaces an existing subscription.
-            self.respond(session, id, Err(error.into()));
-            return;
-        }
+        let query = match query.and_then(|query| {
+            if client.subscriptions.contains_key(&id) {
+                Err("subscription ID already in use")
+            } else if client.subscriptions.len() >= SUBSCRIPTIONS {
+                Err("subscription capacity exceeded")
+            } else {
+                Ok(query)
+            }
+        }) {
+            Ok(query) => query,
+            Err(error) => {
+                // Invalid registration never replaces an existing subscription.
+                self.respond(session, id, Err(error.into()));
+                return;
+            }
+        };
         client.subscriptions.insert(
             id,
             Subscription {
-                name,
-                args,
+                query,
                 reads: ReadSet::new(),
                 last: None,
                 dirty: true,
@@ -134,36 +142,45 @@ impl Coordinator {
         self.drain_changes();
         self.refresh().await;
     }
-    async fn run_subscription(&self, owner: u64, name: &str, args: Json) -> host::Call {
-        let user = self.sessions[&owner]
-            .user
+    async fn run_subscription(&self, owner: u64, query: SubscriptionQuery) -> host::Call {
+        let auth = self.sessions[&owner]
+            .auth
+            .caller
             .read()
-            .expect("user lock")
+            .expect("auth lock")
             .clone();
-        if self.kinds.get(name) == Some(&FunctionKind::Query) {
-            host::invoke(
-                &self.database,
-                &self.pool,
-                host::Invocation {
-                    bundle: self.bundle.clone(),
-                    name,
-                    args,
-                    mutation: false,
-                    space: &self.space,
-                    plugins: self.plugins.clone(),
-                    determinism: engine::Determinism::default(),
-                    user,
-                },
-            )
-            .await
-        } else {
-            host::Call {
+        match query {
+            SubscriptionQuery::Builtin(read) => host::Call {
+                result: Ok(read(&auth)),
+                reads: ReadSet::new(),
+                conflict: false,
+            },
+            SubscriptionQuery::Plugin { name, args }
+                if self.client_kind(&name) == Some(FunctionKind::Query) =>
+            {
+                host::invoke(
+                    &self.database,
+                    &self.pool,
+                    host::Invocation {
+                        bundle: self.bundle.clone(),
+                        name: &name,
+                        args,
+                        mutation: false,
+                        space: &self.space,
+                        plugins: self.plugins.clone(),
+                        determinism: engine::Determinism::default(),
+                        auth: Some(auth),
+                    },
+                )
+                .await
+            }
+            SubscriptionQuery::Plugin { .. } => host::Call {
                 result: Err(
                     "Subscription query is not registered in this plugin generation".into(),
                 ),
                 reads: ReadSet::new(),
                 conflict: false,
-            }
+            },
         }
     }
 }

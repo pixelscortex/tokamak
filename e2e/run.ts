@@ -1,5 +1,3 @@
-import { prepareAgentEnvironment } from "./chat-sandbox";
-import { ownMachineScenario } from "./own-machine";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -53,7 +51,7 @@ export async function headless(
   const child = spawn(
     resolve("target/debug/tokamak-server"),
     [...(options.args ?? ["--bundle", bundle]), "--data", data, "--listen", "127.0.0.1:0", "--workers", "1"],
-    { cwd: repository, env: { ...env, ...sandbox.env, ...options.env }, stdio: ["pipe", "pipe", "pipe"] },
+    { cwd: repository, env: { ...env, ...options.env }, stdio: ["pipe", "pipe", "pipe"] },
   );
   let output = "";
   let ready!: (address: string) => void;
@@ -105,8 +103,10 @@ export async function headless(
 
 export async function connect(address: string, token?: string) {
   const url = new URL(address);
-  if (token) url.searchParams.set("token", token);
-  const socket = new WebSocket(url);
+  const socket = new WebSocket(
+    url,
+    token ? ["tokamak", `tokamak.bearer.${encodeURIComponent(token)}`] : undefined,
+  );
   try {
     await bounded(
       new Promise<void>((resolve, reject) => {
@@ -170,7 +170,6 @@ function observer(client: TokamakClient) {
 
 await mkdir("target/e2e", { recursive: true });
 const root = await mkdtemp(resolve("target/e2e/run-"));
-const sandbox = await prepareAgentEnvironment(root);
 let feature: string | undefined;
 try {
   command([process.execPath, "check", "--no-script", "--project", "e2e/tsconfig.json"]);
@@ -251,7 +250,6 @@ try {
   console.log(
     "PASS scenario 5: CPU loop interrupted by runtime budget; next real service mutation succeeded",
   );
-  if (process.platform !== "win32") await ownMachineScenario(root, headless, connect);
 } finally {
   // headless always reaps the child before removing its own exclusively owned DB.
   await rm(root, { recursive: true, force: true });

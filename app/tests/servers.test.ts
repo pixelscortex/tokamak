@@ -38,9 +38,9 @@ test("This Mac comes first, joined servers follow, and the choice survives a res
 test("joining a saved address again replaces its token and keeps its name", () => {
   const { servers, dispose } = make();
   const first = join(servers, "http://127.0.0.1:43124", "old");
-  servers.rename(first.id, "Kira's server");
+  servers.rename(first.id, "Sam's server");
   const again = join(servers, "http://127.0.0.1:43124", "new");
-  expect(again).toMatchObject({ id: first.id, name: "Kira's server", token: "new" });
+  expect(again).toMatchObject({ id: first.id, name: "Sam's server", token: "new" });
   flush();
   expect(servers.list()).toHaveLength(2);
   dispose();

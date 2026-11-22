@@ -21,3 +21,13 @@ const todos = useQuery(client, api.todos.list, () => ({ done: false }));
 ## QueryState
 
 <api-declaration path="../../../../packages/sdk/src/../solid.ts" name="QueryState" />
+
+## Client and member
+
+The shell provides the connected client through `ClientContext`. Use `useClient()` to call public functions and `auth.me()` to read the current member and device. Reading identity can suspend until it arrives.
+
+<api-declaration path="../../../../packages/sdk/solid.ts" name="ClientContext" />
+
+<api-declaration path="../../../../packages/sdk/solid.ts" name="useClient" />
+
+<api-declaration path="../../../../packages/sdk/solid.ts" name="auth" />

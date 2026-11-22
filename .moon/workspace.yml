@@ -12,6 +12,7 @@ projects:
   app: "app"
   wiki: "wiki"
   chat: "plugins/chat"
+  ai: "plugins/ai"
 vcs:
   defaultBranch: "main"
   provider: "github"

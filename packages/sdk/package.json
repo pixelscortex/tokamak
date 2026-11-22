@@ -9,7 +9,9 @@
     "./web": {
       "types": "./web.d.ts"
     },
-    "./client": "./client.tsx"
+    "./client": "./client.tsx",
+    "./window-state-host": "./window-state-host.ts",
+    "./internal/contracts": "./src/internal/contracts.ts"
   },
   "devDependencies": {
     "@solidjs/vite-plugin": "3.0.0",

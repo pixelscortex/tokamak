@@ -98,6 +98,10 @@ function Stage(): JSX.Element {
 
 function Footer(): JSX.Element {
   const shell = useShell();
+  const unsaved = () => {
+    const connection = shell.session.connection();
+    return connection.state === "connected" && connection.plugins.host.hasUnsavedWindowState();
+  };
   const host = () => {
     const connection = shell.session.connection();
     return connection.state === "connected" ? new URL(connection.endpoint.http).host : undefined;
@@ -121,6 +125,9 @@ function Footer(): JSX.Element {
             <Icon path={icons.failed} size={12} label="Not connected" class="text-removed" />
           </Match>
         </Switch>
+      </p>
+      <p role="status" aria-label="Save status" class="text-ink-2">
+        <Show when={unsaved()}>Your changes haven’t been saved yet.</Show>
       </p>
     </footer>
   );

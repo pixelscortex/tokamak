@@ -37,13 +37,15 @@ export interface ShellShortcuts extends Shortcuts {
 }
 
 export function createShortcuts(target: Document = document): ShellShortcuts {
-  const handlers = new Map<string, Set<() => void>>();
+  const handlers = new Map<string, Set<() => void | boolean>>();
   const dispatch = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.repeat) return;
     const set = handlers.get(eventName(event));
     if (!set?.size) return;
-    event.preventDefault();
-    for (const handler of set) handler();
+    let handled = false;
+    for (const handler of set) handled = handler() !== false || handled;
+    // Every handler declined (see Shortcuts.registerShortcut): the key goes on.
+    if (handled) event.preventDefault();
   };
   target.addEventListener("keydown", dispatch);
   onCleanup(() => target.removeEventListener("keydown", dispatch));

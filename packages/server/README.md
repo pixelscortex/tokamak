@@ -492,4 +492,4 @@ Owned-probe measured release executable SHA-256:
 See [Plugin workers](../../README.md#plugin-workers) for the generic Bun action
 runtime and newline-JSON bridge. The server has no agent-protocol client;
 agent discovery, sessions, permission promises, and adapter processes belong to
-the ACP plugin.
+the Claude and Codex plugins in the client’s local part.

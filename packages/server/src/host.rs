@@ -53,7 +53,7 @@ pub(crate) struct Invocation<'a> {
     pub space: &'a DataSpace,
     pub plugins: Option<Arc<crate::plugins::Loaded>>,
     pub determinism: Determinism,
-    pub user: crate::identity::User,
+    pub auth: Option<crate::identity::AuthContext>,
 }
 
 pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocation<'_>) -> Call {
@@ -65,7 +65,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         space,
         plugins,
         determinism,
-        user,
+        auth,
     } = invocation;
     let (bundle, name, space, graph) = resolve_invocation(bundle, name, space, plugins);
     let tx = if mutation {
@@ -100,7 +100,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         graph,
         CallContext {
             determinism: Some(determinism),
-            user,
+            auth,
         },
     );
 
@@ -138,7 +138,7 @@ type Graph = Option<(Arc<crate::plugins::Loaded>, String, Vec<String>)>;
 
 struct CallContext {
     determinism: Option<Determinism>,
-    user: crate::identity::User,
+    auth: Option<crate::identity::AuthContext>,
 }
 
 fn operations(
@@ -150,11 +150,9 @@ fn operations(
     graph: Graph,
     context: CallContext,
 ) -> Arc<OpRegistry> {
-    let CallContext { user, determinism } = context;
+    let CallContext { auth, determinism } = context;
     let mut ops = OpRegistry::new();
-    let caller_user = user.clone();
-    ops.register_sync("user.current", move |_| Ok(json!(caller_user)))
-        .expect("unique operation");
+    crate::identity::register_caller(auth.as_ref(), &mut ops).expect("unique operation");
 
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
@@ -169,28 +167,8 @@ fn operations(
     );
 
     if let Some((plugins, owner, path)) = graph {
-        let catalog = plugins.clone();
-
-        let caller = owner.clone();
-
-        let failed = failure.clone();
-        ops.register_sync("plugin.providers", move |payload| {
-            let result = text(&payload, "interface")
-                .map_err(|e| e.to_string())
-                .and_then(|interface| {
-                    catalog
-                        .catalog
-                        .providers(&caller, interface)
-                        .map_err(|e| e.to_string())
-                })
-                .map(|ids| json!(ids));
-
-            if let Err(error) = &result {
-                *failed.lock().expect("failure lock") = Some(error.clone());
-            }
-            result
-        })
-        .expect("unique operation");
+        crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
+            .expect("unique operation");
         ops.register_module("plugin.call", move |payload| {
             let resolved = (|| {
                 if failure.lock().expect("failure lock").is_some() {
@@ -201,7 +179,17 @@ fn operations(
 
                 let args = field(&payload, "args").map_err(|e| e.to_string())?.clone();
 
-                let target = plugins.target(&owner, name, writable, &path)?;
+                let target = plugins.target(
+                    &owner,
+                    name,
+                    writable,
+                    &path,
+                    payload.get("contract").and_then(Json::as_str),
+                )?;
+                target.kind.check_requested(&payload)?;
+                if auth.is_none() {
+                    target.check_anonymous_scope(&owner)?;
+                }
 
                 let mut child_path = path.clone();
                 child_path.push(name.into());
@@ -215,7 +203,7 @@ fn operations(
                     Some((plugins.clone(), target.owner, child_path)),
                     CallContext {
                         determinism: None,
-                        user: user.clone(),
+                        auth: auth.clone(),
                     },
                 );
 

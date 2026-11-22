@@ -22,7 +22,7 @@ impl Artifact {
         for name in names {
             let whole_backend = manifest
                 .entries
-                .backend
+                .server
                 .as_ref()
                 .is_some_and(|entry| name == &entry.code || name == &entry.map);
             assets.insert(
@@ -33,11 +33,11 @@ impl Artifact {
 
         let bundle = manifest
             .entries
-            .backend
+            .server
             .as_ref()
             .map(|entry| {
                 if let Some(previous) = previous
-                    && let Some(old) = &previous.manifest.entries.backend
+                    && let Some(old) = &previous.manifest.entries.server
                     && old.code == entry.code
                     && old.map == entry.map
                     && manifest.hashes.get(&entry.code) == previous.manifest.hashes.get(&old.code)
@@ -55,18 +55,12 @@ impl Artifact {
             })
             .transpose()?;
 
-        let provides = manifest.plugin.provides.iter().cloned().collect();
-
-        let consumes = manifest.plugin.consumes.iter().cloned().collect();
-
         let permissions = manifest.plugin.permissions.iter().cloned().collect();
 
         Ok(Self {
             manifest,
             bundle,
             assets,
-            provides,
-            consumes,
             permissions,
         })
     }

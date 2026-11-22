@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::MemberEvent;
 
 impl Coordinator {
     pub(super) fn metadata(&self) -> Result<Json, Error> {
@@ -9,6 +10,7 @@ impl Coordinator {
         let mut metadata = plugins.catalog.metadata();
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
+        metadata["skipped"] = serde_json::json!(plugins.skipped);
 
         Ok(metadata)
     }
@@ -43,18 +45,54 @@ impl Coordinator {
 
     pub(super) async fn control(&mut self, command: Command) {
         match command {
-            Command::RenameUser(user, reply) => {
+            Command::UpdateUser(user, reply) => {
                 for client in self.sessions.values_mut() {
-                    let mut current = client.user.write().expect("user lock");
-                    if current.id == user.id {
-                        *current = user.clone();
+                    let mut current = client.auth.caller.write().expect("auth lock");
+                    if current.user.id != user.id || current.user == user {
+                        continue;
+                    }
+                    current.user = user.clone();
+                    for subscription in client.subscriptions.values_mut() {
+                        subscription.dirty = true;
                     }
                 }
+                self.refresh().await;
                 let _ = reply.send(());
+            }
+            Command::MemberAdded(user, reply) => {
+                Box::pin(self.member_hooks(MemberEvent::Added, &user)).await;
+                let _ = reply.send(());
+            }
+            Command::MemberRemoved { id, user, reply } => {
+                let result = Box::pin(window_state::remove_users(&self.database, &[id])).await;
+                if let Some(user) = user {
+                    Box::pin(self.member_hooks(MemberEvent::Removed, &user)).await;
+                }
+                let _ = reply.send(result);
+            }
+            Command::MemberAccountAbandoned {
+                user,
+                cleanup,
+                reply,
+            } => {
+                Box::pin(self.abandon_member_account(&user, cleanup)).await;
+                let _ = reply.send(());
+            }
+            Command::RemoveUserWindowState(ids, reply) => {
+                let result = Box::pin(window_state::remove_users(&self.database, &ids)).await;
+                let _ = reply.send(result);
             }
             Command::RunFunction(call) => self.run_function(call).await,
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
+            }
+            Command::RunSignIn(request) => self.start_sign_in(request),
+            Command::SignInMethods(reply) => {
+                let result = match &self.plugins {
+                    Some(loaded) => loaded.sign_in_methods(),
+                    None => Ok(Vec::new()),
+                };
+                let _ = reply.send(result);
             }
             Command::Asset(revision, id, name, reply) => {
                 let result = self
@@ -86,7 +124,64 @@ impl Coordinator {
         }
     }
 
+    async fn member_hooks(&mut self, event: MemberEvent, user: &crate::identity::User) {
+        let Some(loaded) = self.plugins.clone() else {
+            return;
+        };
+        let targets = loaded.member_hooks(event, None);
+        self.run_member_hooks(event, user, loaded, targets).await;
+    }
+
+    async fn abandon_member_account(
+        &mut self,
+        user: &crate::identity::User,
+        cleanup: sign_in::MemberAccountCleanup,
+    ) {
+        self.run_member_hooks(
+            MemberEvent::Removed,
+            user,
+            cleanup.generation,
+            cleanup.targets,
+        )
+        .await;
+    }
+
+    async fn run_member_hooks(
+        &mut self,
+        event: MemberEvent,
+        user: &crate::identity::User,
+        generation: Arc<crate::plugins::Loaded>,
+        targets: Vec<String>,
+    ) {
+        let args = serde_json::json!(user);
+        for target in targets {
+            // Hooks run as private mutations so they can update plugin data
+            // without borrowing the managing person's session or device.
+            if Box::pin(self.invoke_function_in(
+                Some(generation.clone()),
+                &target,
+                args.clone(),
+                true,
+                None,
+            ))
+            .await
+            .is_err()
+            {
+                eprintln!(
+                    "Membership hook failed: {} {target} member={:?}",
+                    event.name(),
+                    user.id
+                );
+            }
+        }
+        self.drain_changes();
+        self.refresh().await;
+    }
+
     pub(super) async fn reload(&mut self, id: &str) -> Result<Json, Error> {
+        if id == "auth" {
+            return Err(Error::Invalid("auth is built into the server".into()));
+        }
         let root = self
             .plugin_root
             .as_ref()
@@ -96,10 +191,7 @@ impl Coordinator {
             crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
 
         if !catalog.plugins.contains_key(id)
-            && !self
-                .plugins
-                .as_ref()
-                .is_some_and(|loaded| loaded.catalog.plugins.contains_key(id))
+            && !catalog.removed_plugins.iter().any(|removed| removed == id)
         {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
@@ -117,6 +209,15 @@ impl Coordinator {
             .map_err(|e| Error::Invalid(e.to_string()))?,
         );
         Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
+        Box::pin(window_state::remove_plugins(
+            &self.database,
+            &candidate.catalog.removed_plugins,
+        ))
+        .await
+        .map_err(Error::Invalid)?;
+        candidate
+            .catalog
+            .persist_install_order(self.database.directory())?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
         // Cancel old-generation actions so a reload cannot leave revoked network
@@ -164,11 +265,7 @@ impl Coordinator {
         }
         self.invalidate(None);
         self.refresh().await;
-        let mut catalog = self.metadata()?;
-        if let Some(loaded) = &self.plugins {
-            catalog["skipped"] = serde_json::json!(loaded.skipped);
-        }
-        Ok(catalog)
+        self.metadata()
     }
 
     pub(super) fn asset_page(

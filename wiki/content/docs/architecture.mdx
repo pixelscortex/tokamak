@@ -32,20 +32,12 @@ Tailwind 4, and ui-sdk controls. There is no SSR or meta-framework. Tauri suppli
 the native window and a drag capability. The current development helper starts
 the existing server separately with a disposable loopback store.
 
-The skeleton has a live thread list at `/` and a controls page at `/kit`.
-The shared UI package is empty. Chat's old client source is retained for its
-rewrite and excluded from the build.
-
 ## Plugin UI
 
-The author API remains unchanged. The SDK supplies DOM contexts, live queries,
-slots, fills, wrappers, and replacements. Static analysis preserves the
-compiler-qualified contribution identities.
-
-Plugin UI compilation is disabled while the web ESM target is built. Server
-artifacts omit `entries.ui`. The reusable catalog and generation lifecycle code
-lives in `@tokamak/runtime/plugins`; it has no evaluator. The next loader must
-use server-provided modules and share host runtime identities. Plugin isolation,
+Plugins publish window routes and named component elements through the build.
+Other plugins extend those elements with typed component actions. The window
+loads the built modules from the server and shares SDK and Solid contexts through
+the app’s import map. Plugin isolation,
 server discovery/authentication, and desktop server packaging remain open work.
 
 The former renderer route is parked under TKM-121. It no longer constrains web

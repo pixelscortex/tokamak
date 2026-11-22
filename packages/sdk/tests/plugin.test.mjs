@@ -38,19 +38,16 @@ test("plugin capability descriptors are immutable JSON snapshots", () => {
     depends: { "tokamak.core": "^0.1" },
     optional: { "acme.ai": "*" },
     breaks: { "acme.legacy": "<1" },
-    provides: ["notes"],
-    consumes: ["ai"],
     permissions: ["net:example.com"],
-    placement: "hub",
-    contributes: { commands: [{ title: "Summarize", tags: ["ai"] }] },
+    contributes: { view: [{ id: "Summary", route: "/" }] },
     exports: "./api.ts",
   };
   const plugin = definePlugin(source);
   source.depends["tokamak.core"] = "*";
-  source.contributes.commands[0].tags.push("changed");
+  source.contributes.view[0].route = "/changed";
   expect(plugin.depends["tokamak.core"]).toBe("^0.1");
-  expect(plugin.contributes.commands[0].tags).toEqual(["ai"]);
-  expect(Object.isFrozen(plugin.contributes.commands[0].tags)).toBe(true);
+  expect(plugin.contributes.view[0].route).toBe("/");
+  expect(Object.isFrozen(plugin.contributes.view[0])).toBe(true);
   for (const patch of [
     { api: 42 },
     { api: "node@1" },
@@ -63,7 +60,6 @@ test("plugin capability descriptors are immutable JSON snapshots", () => {
     { provides: [""] },
     { consumes: ["ai", "ai"] },
     { permissions: [false] },
-    { placement: "browser" },
     { exports: 3 },
     { contributes: { commands: {} } },
   ]) {
@@ -74,10 +70,10 @@ test("plugin capability descriptors are immutable JSON snapshots", () => {
 test("authored plugin dependencies are unversioned IDs", () => {
   const depends = ["chat"];
   const plugin = definePlugin({
-    id: "acp",
+    id: "ai",
     version: "0.1.0",
-    name: "ACP",
-    description: "Agent backend",
+    name: "AI",
+    description: "Agent turns",
     depends,
   });
   depends.push("other");

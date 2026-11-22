@@ -46,7 +46,7 @@ null (other writes). `get(id)` returns a document or null. Query builders are
 immutable, use repeated `.where(field, '=', value)` for equality AND, order by
 creation time with `.order('asc' | 'desc')` (default asc), and execute only with
 `take(n)`, `first()` or `collect()`. There is no SQL expression, pagination,
-implicit thenable or internal function API.
+or implicit thenable.
 
 Declare indexes on tables before loading the plugin:
 
@@ -121,9 +121,8 @@ export const sync = action({
 
 Declare `permissions: ['net:example.com']` in the plugin definition. Grants use
 the canonical URL hostname, omit the port, and are checked on every request and
-redirect. Legacy bundles receive no network grants. `ctx.providers` remains
-available to actions; nested cross-plugin calls use the existing dependency,
-interface and export checks. Reload cancels old-generation actions, and explicit
+redirect. Legacy bundles receive no network grants. Nested cross-plugin calls
+check declared dependencies and exports. Reload cancels old-generation actions, and explicit
 server shutdown cancels busy JS, pending timers and HTTP I/O. Disconnect alone
 does not retract an accepted action; its outcome can be unknown.
 
@@ -141,6 +140,76 @@ Both bundled transports implement the `action` wire request. The optional
 `ClientTransport.action` preserves existing custom transports; `client.action`
 throws clearly when a custom transport has not implemented it.
 
+## Internal functions and expected failures
+
+Use `internalQuery`, `internalMutation` or `internalAction` for a function only
+your plugin's server code can call. The same builders are available from
+`createFunctions(schema)`. Import its reference from `_generated/internal`.
+Queries can run nested queries; mutations can run nested queries and mutations
+within the same transaction. Actions can also call `ctx.runAction`.
+
+```ts
+import { action, fail, internalQuery, v } from "@tokamak/sdk";
+import { internal } from "./_generated/internal";
+
+export const checkTitle = internalQuery({
+  args: { title: v.string() },
+  handler: (_, { title }) => (title.length > 200 ? fail("TooLong", { max: 200 }) : { title }),
+});
+
+export const previewTitle = action({
+  args: { title: v.string() },
+  handler: (ctx, args) => ctx.runQuery(internal.titles.checkTitle, args),
+});
+```
+
+The action's caller receives the inferred result. For an object success like
+`{ title }`, `if (result.failed && result.kind === "TooLong")` narrows to the
+failure and makes `result.data.max` a number. Use `isFailure(result)` from
+`@tokamak/sdk` to distinguish failures from any success, including a string or
+`null`. A returned `fail` is a JSON value and does not roll back writes. Throw
+for unexpected errors.
+
+## Local functions
+
+`local({ args, handler })` runs in the desktop client's Bun worker. Put it
+under the plugin's `src/`; it can share a module with server functions.
+The plugin build emits its own `local.js` and a typed reference in the
+generated `api`. The desktop client uses the matching plugin build installed
+on the computer. A browser without the desktop client cannot run it.
+
+```ts
+import { local } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+
+export const collect = local({
+  handler: async (ctx) => {
+    const program = ctx.proc(["git", "status", "--short"], { cwd: "/path/to/repo" });
+    for await (const text of program.stdout) {
+      await ctx.runMutation(api.records.save, { text });
+    }
+    return await program.exited;
+  },
+});
+// From the window: await client.local(api.jobs.collect, {});
+```
+
+`client.hasLocal` is true when the window has a local part (the desktop
+client); in a plain browser `client.local` throws, so check it first when local
+work is optional.
+
+`ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
+one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
+a signal. The invocation stays alive until the handler settles. To cancel
+from the window, pass `{ signal }` to `client.local`; the worker stops programs
+still running for that invocation. Use `node:fs/promises` for local files.
+Use `ctx.withPrograms(async (stopPrograms) => { … })` to group the programs
+started in one part of an invocation. Calling `stopPrograms()` ends those
+process groups without cancelling the invocation or its other programs.
+Local functions have no database context. Use `ctx.runQuery`,
+`ctx.runMutation`, or `ctx.runAction` with references from the public `api` to
+call the connected server. Only server functions can use `_generated/internal`.
+
 ## Build and consume typed references
 
 From the workspace, with a feature folder path relative to the workspace root:
@@ -155,16 +224,17 @@ The bundle task writes:
 
 - `FEATURE/dist/bundle.js`: one self-contained ESM module.
 - `FEATURE/dist/bundle.js.map`: linked source map with source contents.
-- `FEATURE/_generated/api.ts`: typed UI references, not handlers.
+- `FEATURE/_generated/api.ts`: typed public references.
+- `FEATURE/_generated/internal.ts`: references for the plugin's server code.
 
 Discovery includes `.ts` modules recursively, excluding `schema.ts`, declarations,
 `.test.ts`/`.spec.ts`, `tests/`, `dist/`, `node_modules/` and paths beginning with
 `_` or `.`. Imported helpers in excluded folders still bundle normally; they are
 not independent function modules. Use a backend-only feature folder. Module
 path collisions (`a.ts` with `a/b.ts`) fail rather than produce ambiguous APIs.
-Generated references need feature source types available to the UI type checker;
-they do not import backend code at runtime. Keep `_generated/` out of source
-control and regenerate before checking a consumer.
+Generated references need feature source types available to the type checker;
+they do not import server code at runtime. Commit both files and regenerate
+them when functions change.
 
 The bundle checker inherits the feature's resolution options unchanged, including
 `paths` aliases inherited from another config (relative to the declaring config).
@@ -330,16 +400,180 @@ Solid 2. Provide the connected client with `<ClientContext value={client}>`.
 Reactive query argument changes unsubscribe the old query; owner disposal
 unsubscribes the current query.
 
-`@tokamak/sdk/client` supplies DOM slots, extension providers, public component
-wrappers/replacements, contribution helpers and brands, and shortcut contexts.
+`@tokamak/sdk/client` supplies components and their extension actions, window
+state, and shortcut and region helpers.
 These entries use Solid 2.0.0 and `@solidjs/web` 2.0.0. They do not mount the app,
 open sockets, or implement plugin module loading.
 
+`state(initial, { keep: "me" })` loads the signed-in user's saved value once.
+Edits show immediately and save after that load succeeds. Use a pure updater
+such as `pins.set(previous => [...previous, pin])` to extend a saved value:
+the updater may run again against the stored value. Passing a value to `set`
+replaces it.
+
+## Component actions
+
+Export a `component(name, options, render)` from your plugin's window API to
+give other plugins named JSX elements they can extend. The builder publishes
+typed paths using `ComponentParts`, so an action can target a path such as
+`chat.Composer.sendButton` and receive the owner's props.
+
+Use `before` and `after` for siblings, `prepend` and `append` for children,
+`wrap` to surround an element, `replace` to substitute another element, or
+`hide` to remove it. A named native element can accept a `PartAdditions`
+callback to place the prepended and appended children explicitly.
+See the [builder guide](../build/README.md#extending-a-component) for examples
+and the rules for naming, ordering, and locking elements.
+
+## Caller identity
+
+Queries, mutations and actions receive `ctx.auth.user` (`id`, `name`, and
+`role`: `owner`, `admin`, or `member`) and `ctx.auth.device` (`id` and
+`name`). Nested calls keep the same caller on signed-in requests. Before
+sign-in, an `auth.method` action and its nested calls are anonymous:
+`ctx.auth` throws, and nested calls can only access private queries and mutations
+of that provider.
+
+In a window component, call `auth.me()` during setup. It returns a live object
+with `id`, `name`, `role`, and `device`. Read the fields in reactive code so they
+update in place. The fields suspend until identity loads.
+
+```tsx
+import { auth } from "@tokamak/sdk/client";
+import { Loading } from "@solidjs/web";
+
+function AccountName() {
+  const me = auth.me();
+  return (
+    <Loading fallback="Loading…">
+      <span>{me.name}</span>
+    </Loading>
+  );
+}
+```
+
+The core provides identity even without any installed plugins. A local
+server supplies the owner automatically and uses the computer's name for
+the device.
+
+### Membership hooks
+
+Plugins with `depends: ["auth"]` can export a server hook to react when a
+shared server adds or removes a member:
+
+```ts
+import { onMember } from "@tokamak/sdk";
+import * as auth from "plugin:auth/contracts";
+
+export const cleanup = onMember(auth.memberRemoved, async (ctx, member) => {
+  // Use member.id to find data that belongs to the removed member.
+});
+```
+
+`auth.memberAdded` has the same signature. Hooks run as private mutations
+after the membership change takes effect. Use the event's `{ id, name, role }`
+to identify the member; there is no caller or device. For a schema-typed
+handler, use `provide(auth.memberRemoved, { run: internalMutation(...) })`
+with `memberFields` as its arguments and return `null`. Hooks run on currently
+loaded plugins; a failed hook is logged and does not undo a membership change.
+
+A sign-in plugin that implements `auth.method.createAccount` must also clean
+up the account by `member.id` in `auth.memberRemoved`. If the core cannot save
+the member binding, it runs only that provider's cleanup with the unused ID.
+
 ## Views in the shell
 
-`view({ route, icon }, Component)` declares a page. `icon` is optional: one
-single-colour SVG path in a 24 × 24 box, written as a literal or a `const`
-string so the compiler can read it; the shell shows it in the rail, tabs and
-search. Inside a view, `Region.Sidebar`, `Region.Header` and `Region.Panel`
+Export `view({ route, title, icon }, render)` to declare a page. The route is
+a literal; the optional title and icon can be literals or `const` strings.
+Use one single-colour SVG path in a 24 × 24 box for the icon shown in the rail,
+tabs and search. To expose elements, use a `component` inside the page.
+Inside a view, `Region.Sidebar`, `Region.Header` and `Region.Panel`
 place content in the shell, and `usePageTitle(() => title)` names the page for
 its tab and the window title while the view is mounted.
+
+### Quitting with work in progress
+
+When the person quits the desktop app, it asks every check registered with
+`onQuit` from `@tokamak/sdk/client`. A check that answers a blocker makes the
+app ask first ("Claude is still working in 1 thread · Stop and quit ·
+Cancel"); Stop and quit runs each blocker's `stop` before the app closes. A
+check that throws or takes over 2 seconds blocks nothing. The app reads the
+answers with `quitBlockers()`.
+
+```ts
+import { onQuit } from "@tokamak/sdk/client";
+const remove = onQuit(async () => {
+  const turns = await running();
+  return turns.length ? { message: "Claude is still working in 1 thread", stop: stopAll } : undefined;
+});
+```
+
+`within(promise, ms)` from `@tokamak/sdk` waits at most `ms` and resolves
+`TIMED_OUT` when the time is up (window and local code; server functions have no timers).
+
+### Typed contracts between plugins
+
+Define a contract in `src/contracts.ts`. The defining plugin can discover and
+choose providers without depending on them:
+
+```ts
+import { contract } from "@tokamak/sdk";
+
+export const agent = contract<{
+  id: string;
+  name: string;
+  start: (run: { report(text: string): void }) => Promise<void>;
+}>("agent", { place: "local" });
+```
+
+A provider declares the defining plugin in `depends` or `optional` in
+`plugin.ts`. Export the registration from any function source file:
+
+```ts
+import { provide } from "@tokamak/sdk";
+import { agent } from "plugin:ai/contracts";
+
+export default provide(agent, {
+  id: "example",
+  name: "Example",
+  start: async (run) => {
+    run.report("Started");
+  },
+});
+```
+
+In a function belonging to the defining plugin, call `await agent.list()`,
+`await agent.get(id)` (returns `undefined` when absent), or
+`await agent.get(id).start(run)` for a required method. Use the awaited
+provider to read data or check optional methods. Lookups use the current
+catalog. An explicit
+implementation `id` is the selection key; otherwise the plugin id is used.
+
+A local contract is called from `local`. Plain methods can receive callbacks
+and other in-process objects, and can use ordinary local imports. Use
+`local({ handler: (ctx, run: Run) => ... })` when a method needs local
+context (such as `ctx.proc`). Declare it as a private constant and pass it
+to `provide`. The contract passes the live argument in the same worker;
+window calls to exported local functions use their JSON validators. A matching
+provider build must also be installed on the client. Changing or removing an
+imported provider retires its worker so the old module unloads.
+
+A server contract defaults to `place: "server"`. For each
+method provide a server function definition such as `internalAction` or
+`internalQuery`; calls obey the usual kind rules and cross the server function
+boundary as JSON. Data fields are JSON, and the implementation uses an object
+literal so the build can register its methods.
+
+An optional provider still builds and runs without the defining plugin
+installed. The compiler only needs its public contract types. If the defining
+plugin's source is unavailable, check in an exact copy of its public contract
+declaration at `contracts/<id>.ts` in the provider. That copy supplies types
+and a contract key. The implementation stays inactive until the owner is in
+the installed catalog, which refuses a mismatched declaration hash.
+
+For a direct server-to-server export, wrap a query, mutation or action in
+`pluginOnly(...)` and re-export it from `src/server/api.ts` as usual.
+Dependents can import the reference from `plugin:<id>/server`. Within the
+defining plugin, use the generated `_generated/plugin.ts` references. These
+functions are excluded from the window API, local-to-server transport and
+subscriptions. `internal*` remains private to its own plugin.

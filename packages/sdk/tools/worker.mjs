@@ -1,69 +1,92 @@
-// Classify exported definitions through their SDK types, without evaluating
-// authored modules on the build machine (aliases and reexports work too).
-import ts from "typescript";
-import { dirname, join, sep } from "node:path";
-import { bunPluginBoundary, pluginCompilerOptions } from "./plugin-boundary.mjs";
+import { Visibility } from "../src/visibility.ts";
+import { join, sep } from "node:path";
+import { functionPlacement, lanes, placementTransform, registrySource } from "./placement.mjs";
+import { bunPluginBoundary } from "./plugin-boundary.mjs";
+import { contractTarget } from "./contracts.mjs";
+import { serverBuiltins } from "./server-builtins.mjs";
 
-export async function workerSources({ root, files, modules, hasSchema, sdkRoot, header, pluginRoot }) {
-  const configPath = ts.findConfigFile(root, ts.sys.fileExists);
-  const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile).config : {};
-  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
-  const program = ts.createProgram(
-    files.map((file) => join(root, file)),
-    pluginCompilerOptions(pluginRoot, parsed.options),
+export async function workerSources({
+  root,
+  files,
+  modules,
+  hasSchema,
+  sdkRoot,
+  header,
+  pluginRoot,
+  placement,
+}) {
+  const paths = files.map((file) => join(root, file));
+  placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root });
+  const inLane = (keep) =>
+    paths.flatMap((path, index) => {
+      const definitions = placement?.modules.get(path);
+      const names = definitions
+        ? [...definitions].filter(([, definition]) => keep(definition.kind)).map(([name]) => name)
+        : [];
+      return names.length ? [[path, modules[index], names]] : [];
+    });
+  const actions = inLane((kind) => kind === "action");
+  // QuickJS holds dispatch metadata. The Bun worker validates the original
+  // definitions, so their handlers and argument validators stay with them.
+  const metadata = actions.flatMap(([path, module, names]) =>
+    names.map((name) => ({
+      name: `${module}:${name}`,
+      kind: "action",
+      args: { kind: "any" },
+      visibility: placement.modules.get(path).get(name).visibility,
+    })),
   );
-  const checker = program.getTypeChecker();
-  const imports = [];
-  const actions = [];
-  const metadata = [];
-  for (const [i, file] of files.entries()) {
-    const source = program.getSourceFile(join(root, file));
-    const symbol = source && checker.getSymbolAtLocation(source);
-    const local = [];
-    const remote = [];
-    for (const exported of symbol ? checker.getExportsOfModule(symbol) : []) {
-      const type = checker.getTypeOfSymbolAtLocation(exported, source);
-      const kind = type.getProperty("kind");
-      if (!kind || !type.getProperty("invoke")) continue;
-      const value = checker.getTypeOfSymbolAtLocation(kind, source);
-      if (!(value.flags & ts.TypeFlags.StringLiteral)) continue;
-      if (value.value === "action") {
-        remote.push(exported.name);
-        // Arguments are validated by the original definition in invokeFunction
-        // inside Bun. QuickJS holds routing metadata, never an action handler.
-        metadata.push({ name: `${modules[i]}:${exported.name}`, kind: "action", args: { kind: "any" } });
-      } else if (["query", "mutation"].includes(value.value)) local.push(exported.name);
-    }
-    const module = JSON.stringify(join(root, file.slice(0, -3)));
-    if (local.length)
-      imports.push(
-        `import { ${local.map((name) => `${name} as f${i}_${name}`).join(",")} } from ${module};\nconst m${i} = {${local.map((name) => `${name}: f${i}_${name}`).join(",")}};`,
-      );
-    if (remote.length)
-      actions.push(
-        `import { ${remote.map((name) => `${name} as f${i}_${name}`).join(",")} } from ${module};\nconst m${i} = {${remote.map((name) => `${name}: f${i}_${name}`).join(",")}};`,
-      );
-  }
-  const registry = (items) =>
-    `createRegistry({${items
-      .map((item) => {
-        const i = Number(/const m(\d+)/.exec(item)[1]);
-        return `${JSON.stringify(modules[i])}: m${i}`;
-      })
-      .join(",")}})`;
-  const workerSource =
-    header +
-    `import {createRegistry} from ${JSON.stringify(join(sdkRoot, "src/index.ts"))};\n` +
-    actions.join("\n") +
-    `\nexport const functions = ${registry(actions)};\n`;
-  for (const [name, source, sourcemap] of [
-    ["worker.js", workerSource, "external"],
+  const providers = placement?.providers ?? [];
+  for (const provider of providers)
+    for (const method of provider.methods)
+      if (method.kind === "action")
+        metadata.push({
+          name: contractTarget(provider, method),
+          kind: "action",
+          args: { kind: "any" },
+          visibility: Visibility.Internal,
+        });
+  await buildWorkerBundles({
+    root,
+    sdkRoot,
+    pluginRoot,
+    source: registrySource({
+      root,
+      modules: actions,
+      providers: providers.filter((p) => p.methods.some((m) => m.kind === "action")),
+      lane: lanes.worker,
+      worker: true,
+      header,
+    }),
+    name: "worker",
+    plugins: placement ? [placementTransform(placement, lanes.worker)] : [],
+  });
+  return {
+    source: registrySource({
+      root,
+      modules: inLane(lanes.descriptor.keep),
+      hasSchema,
+      metadata,
+      providers,
+      lane: lanes.descriptor,
+      header,
+    }),
+    plugins: [
+      serverBuiltins("worker-server-builtins"),
+      ...(placement ? [placementTransform(placement, lanes.descriptor)] : []),
+    ],
+  };
+}
+
+export async function buildWorkerBundles({ root, sdkRoot, pluginRoot, name, source, plugins = [] }) {
+  for (const [asset, contents, sourcemap] of [
+    [name + ".js", source, "external"],
     [
-      "worker-entry.js",
-      (await Bun.file(join(sdkRoot, "worker/entry.ts")).text()).replaceAll(
-        "../src/",
-        sdkRoot.split(sep).join("/") + "/src/",
-      ),
+      name + "-entry.js",
+      (await Bun.file(join(sdkRoot, "worker/entry.ts")).text())
+        .replace('"./process"', JSON.stringify(join(sdkRoot, "worker/process.ts")))
+        .replace('"./contracts"', JSON.stringify(join(sdkRoot, "worker/contracts.ts")))
+        .replaceAll("../src/", sdkRoot.split(sep).join("/") + "/src/"),
       "none",
     ],
   ]) {
@@ -74,9 +97,17 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
       packages: "bundle",
       sourcemap,
       outdir: join(root, "dist"),
-      naming: name,
+      naming: asset,
+      env: "disable",
       plugins: [
-        bunPluginBoundary(pluginRoot),
+        bunPluginBoundary(pluginRoot, { publicOnly: name === "local" }),
+        ...plugins,
+        {
+          name: "worker-sdk",
+          setup(build) {
+            build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({ path: join(sdkRoot, "src/index.ts") }));
+          },
+        },
         {
           name: "worker-source",
           setup(build) {
@@ -85,7 +116,7 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
               namespace: "worker",
             }));
             build.onLoad({ filter: /.*/, namespace: "worker" }, () => ({
-              contents: source,
+              contents,
               loader: "ts",
               resolveDir: join(sdkRoot, "worker"),
             }));
@@ -95,48 +126,4 @@ export async function workerSources({ root, files, modules, hasSchema, sdkRoot, 
     });
     if (!result.success) throw new AggregateError(result.logs, "Worker bundle failed");
   }
-  const source =
-    header +
-    `import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue} from "@tokamak/sdk";\n` +
-    imports.join("\n") +
-    "\n" +
-    (hasSchema
-      ? `import schemaValue from ${JSON.stringify(join(root, "schema"))};\nexport const schema = schemaMetadata(schemaValue);\n`
-      : "export const schema = schemaMetadata(null);\n") +
-    `const functions = ${registry(imports)};\nexport const metadata = [...functionMetadata(functions), ...${JSON.stringify(metadata)}];\nexport const describe = () => ({schema, functions: metadata});\nexport const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n`;
-  return {
-    source,
-    plugins: [
-      {
-        name: "quickjs-functions",
-        setup(build) {
-          build.onResolve({ filter: /^node:/ }, ({ path }) => ({ path, external: true }));
-          build.onLoad({ filter: /\.tsx?$/ }, async ({ path }) => {
-            const file = program.getSourceFile(path);
-            if (!file) return;
-            const edits = [];
-            function visit(node) {
-              if (ts.isVariableDeclaration(node) && node.initializer) {
-                const type = checker.getTypeAtLocation(node.initializer);
-                const kind = type.getProperty("kind");
-                if (
-                  kind &&
-                  type.getProperty("invoke") &&
-                  checker.getTypeOfSymbolAtLocation(kind, node).value === "action"
-                )
-                  edits.push([node.initializer.getStart(file), node.initializer.end]);
-              }
-              ts.forEachChild(node, visit);
-            }
-            visit(file);
-            if (!edits.length) return;
-            let contents = file.text;
-            for (const [start, end] of edits.sort((a, b) => b[0] - a[0]))
-              contents = contents.slice(0, start) + "undefined" + contents.slice(end);
-            return { contents, loader: "ts", resolveDir: dirname(path) };
-          });
-        },
-      },
-    ],
-  };
 }

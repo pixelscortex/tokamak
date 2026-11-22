@@ -2,11 +2,11 @@
 // references before bundling. Stdio carries real Rust Session protocol messages.
 import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
-import { chatScenario } from "./chat-driver";
 import { createInterface } from "node:readline";
 import { TokamakClient, InProcessTransport, WebSocketTransport, type Event } from "@tokamak/sdk";
-import { api } from "./a/backend/_generated/api";
-import { api as b } from "./b/backend/_generated/api";
+import { api } from "./a/src/server/_generated/api";
+import { api as b } from "./b/src/server/_generated/api";
+import { within } from "./within";
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -14,19 +14,6 @@ function deferred<T = void>() {
     resolve = done;
   });
   return { promise, resolve };
-}
-async function within<T>(promise: Promise<T>, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`timeout: ${label}`)), 4000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 const lines = createInterface({ input: process.stdin });
 let deliver!: (event: Event) => void;
@@ -135,9 +122,7 @@ assert.ok(address && typeof address !== "string");
 const base = `http://127.0.0.1:${address.port}`;
 
 try {
-  if (scenario.startsWith("chat-")) {
-    await chatScenario(client, scenario);
-  } else if (scenario === "contract") {
+  if (scenario === "contract") {
     // Prove the configured normal call budget is real, then outlive it in action.
     await assert.rejects(client.query(api.ops.timeoutQuery, {}), /wall-clock budget/);
     await assert.rejects(client.mutation(api.ops.timeoutMutation, {}), /wall-clock budget/);

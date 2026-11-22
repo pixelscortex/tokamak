@@ -7,8 +7,11 @@ import { useRouter } from "@tokamak/runtime/router";
 import { signal, revision } from "@plugins/fixture-dependency/ui";
 export const sharedDependencySignal = signal;
 export const sharedSignal = createSignal;
+function checkRevision(revision) {
+  if (revision === "throws") throw new Error("fixture view failed");
+}
 export const View = view({ route: "/" }, () => {
-  if ("FIXTURE_REVISION" === "throws") throw new Error("fixture view failed");
+  checkRevision("FIXTURE_REVISION");
   const query = useQuery(useClient(), api.data.read, () => ({}));
   const [count, setCount] = createSignal(0);
   onCleanup(useShortcuts().registerShortcut("Meta+n", () => setCount(count() + 1)));

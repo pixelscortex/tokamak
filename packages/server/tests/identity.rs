@@ -6,8 +6,10 @@ use server::{
     identity::{Identities, User},
     websocket::{self, HostedWeb, LocalAccess},
 };
+use sha2::{Digest, Sha256};
 use std::{sync::Arc, time::Duration};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 
 #[path = "support/sdk.rs"]
@@ -24,9 +26,13 @@ async fn event(socket: &mut Socket) -> Value {
 }
 
 async fn call(socket: &mut Socket, kind: &str, name: &str) -> Value {
+    call_args(socket, kind, name, json!({})).await
+}
+
+async fn call_args(socket: &mut Socket, kind: &str, name: &str, args: Value) -> Value {
     socket
         .send(Message::Text(
-            json!({"type":kind,"id":1,"name":name,"args":{}})
+            json!({"type":kind,"id":1,"name":name,"args":args})
                 .to_string()
                 .into(),
         ))
@@ -44,9 +50,18 @@ fn hosted_members_have_distinct_callers_and_revocation_closes_sockets() {
             let directory = tempfile::tempdir().unwrap();
             std::fs::write(directory.path().join("index.html"), "test").unwrap();
             let owner = "0123456789abcdef0123456789abcdef";
-            let identities = Arc::new(
-                Identities::hosted(directory.path().join("members.json"), owner, "Owner").unwrap(),
-            );
+            let member_file = directory.path().join("members.json");
+            let members: Vec<_> = ["Alice", "Bob"]
+                .into_iter()
+                .map(|name| {
+                    let key = format!("fixture-key-{name}");
+                    json!({"id":name,"name":name,"role":"member","created_at":1,
+                    "devices":[{"id":format!("device-{name}"),"name":"Test device","kind":"device",
+                        "token_hash":format!("{:x}", Sha256::digest(key))}]})
+                })
+                .collect();
+            std::fs::write(&member_file, json!(members).to_string()).unwrap();
+            let identities = Arc::new(Identities::hosted(member_file, owner, "Owner").unwrap());
             let backend = Backend::start(BackendConfig {
                 storage: Storage::Memory,
                 bundle: sdk::bundle(),
@@ -77,7 +92,7 @@ fn hosted_members_have_distinct_callers_and_revocation_closes_sockets() {
             let mut users = Vec::new();
             let mut tokens = Vec::new();
             for name in ["Alice", "Bob"] {
-                let (socket, user, token) = invite_and_verify(&client, &http, owner, name).await;
+                let (socket, user, token) = verify_member(&client, &http, name).await;
                 tokens.push(token);
                 users.push(user);
                 sockets.push(socket);
@@ -149,22 +164,8 @@ async fn account(client: &reqwest::Client, http: &str, token: &str) -> Value {
     assert_eq!(response.status(), 200);
     serde_json::from_str(&response.text().await.unwrap()).unwrap()
 }
-async fn invite_and_verify(
-    client: &reqwest::Client,
-    http: &str,
-    owner: &str,
-    name: &str,
-) -> (Socket, User, String) {
-    let response = client
-        .post(format!("{http}/members"))
-        .bearer_auth(owner)
-        .body(json!({"name":name}).to_string())
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), 200);
-    let invited: Value = serde_json::from_str(&response.text().await.unwrap()).unwrap();
-    let token = invited["token"].as_str().unwrap().to_owned();
+async fn verify_member(client: &reqwest::Client, http: &str, name: &str) -> (Socket, User, String) {
+    let token = format!("fixture-key-{name}");
     let user: User = serde_json::from_value(account(client, http, &token).await).unwrap();
     let response = client
         .get(format!("{http}/account"))
@@ -176,12 +177,12 @@ async fn invite_and_verify(
         serde_json::from_str::<Value>(&response.text().await.unwrap()).unwrap(),
         json!(user)
     );
-    let (mut socket, _) = tokio_tungstenite::connect_async(format!(
-        "{}/ws?token={token}",
-        http.replace("http://", "ws://")
-    ))
-    .await
-    .unwrap();
+    let url = format!("{}/ws", http.replace("http://", "ws://"));
+    let mut request = url.as_str().into_client_request().unwrap();
+    request
+        .headers_mut()
+        .insert("authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
     assert_eq!(
         call(&mut socket, "query", "probe:whoQuery").await["user"],
         json!(user)
@@ -269,17 +270,57 @@ async fn rename_and_revoke(
             .status(),
         401
     );
-    assert!(
-        tokio_tungstenite::connect_async(format!(
-            "{}/ws?token={}",
-            http.replace("http://", "ws://"),
-            tokens[0]
-        ))
-        .await
-        .is_err()
+    let url = format!("{}/ws", http.replace("http://", "ws://"));
+    let mut request = url.as_str().into_client_request().unwrap();
+    request.headers_mut().insert(
+        "authorization",
+        format!("Bearer {}", tokens[0]).parse().unwrap(),
     );
+    assert!(tokio_tungstenite::connect_async(request).await.is_err());
     assert_eq!(
         call(&mut sockets[1], "query", "probe:whoQuery").await["user"]["id"],
         users[1].id
+    );
+}
+
+#[test]
+fn real_server_exposes_authenticated_user_and_device_to_plugins() {
+    let result = sdk::bun_script("auth-driver.mjs")
+        .arg(env!("CARGO_BIN_EXE_tokamak-server"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "auth acceptance:\n{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn shared_server_signs_in_with_an_owned_account_and_issues_independent_devices() {
+    let result = sdk::bun_script("auth-driver.mjs")
+        .args([env!("CARGO_BIN_EXE_tokamak-server"), "--sign-in"])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "sign-in acceptance:\n{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn shared_server_requires_members_to_replace_temporary_passwords_before_connecting() {
+    let result = sdk::bun_script("auth-driver.mjs")
+        .args([env!("CARGO_BIN_EXE_tokamak-server"), "--members"])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "members acceptance:\n{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
     );
 }

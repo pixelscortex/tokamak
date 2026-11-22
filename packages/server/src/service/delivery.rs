@@ -1,4 +1,5 @@
 use super::*;
+use crate::identity::Role;
 
 impl Coordinator {
     pub(super) fn respond(&mut self, session: u64, id: u64, result: Result<Json, String>) {
@@ -6,6 +7,20 @@ impl Coordinator {
     }
 
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
+        if let Event::Response {
+            result: Err(error), ..
+        }
+        | Event::Subscription {
+            result: Err(error), ..
+        } = &mut event
+            && let Some(stack_start) = error.find("\n    at ")
+            && self.sessions.get(&session).is_some_and(|client| {
+                client.auth.caller.read().expect("auth lock").user.role != Role::Owner
+            })
+        {
+            // Interpreter stack frames can contain the server's source paths.
+            error.truncate(stack_start);
+        }
         // Count serialized bytes without allocating an unbounded transport buffer.
         // Native routing envelopes are accounted for separately by the mailbox.
         struct Limit(usize);
@@ -58,7 +73,6 @@ impl Coordinator {
         let Some(client) = self.sessions.get(&session) else {
             return;
         };
-
         if let Err(error) = client.output.try_send(event) {
             if matches!(error, mpsc::error::TrySendError::Full(_)) {
                 client.slow.store(true, Ordering::Release);

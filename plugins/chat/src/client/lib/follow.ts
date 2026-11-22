@@ -1,9 +1,9 @@
 import { createSignal, onCleanup } from "solid-js";
 
 /** How close to the end still counts as reading the latest. */
-export const NEAR_END = 32;
+const NEAR_END = 32;
 
-export function nearEnd(box: { scrollTop: number; scrollHeight: number; clientHeight: number }) {
+function nearEnd(box: { scrollTop: number; scrollHeight: number; clientHeight: number }) {
   return box.scrollHeight - box.clientHeight - box.scrollTop <= NEAR_END;
 }
 

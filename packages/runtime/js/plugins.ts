@@ -1,7 +1,8 @@
 /** Manifest-first loading and generation retirement. No UI asset is requested
  * until load() is called by a contribution or a cross-plugin import. */
 import { createMemo, createSignal } from "solid-js";
-import type { ContributionKind, JsonValue } from "@tokamak/sdk";
+import type { JsonValue } from "@tokamak/sdk";
+type ContributionKind = "component-action" | "view";
 export type ModuleExports = Readonly<Record<string, unknown>>;
 export interface PluginModuleHost {
   importModule?(name: string, manifest: PluginManifest, revision: string): Promise<ModuleExports>;
@@ -17,6 +18,7 @@ export interface PluginModuleHost {
 }
 
 export interface PluginManifest {
+  installOrder?: number;
   plugin: {
     id: string;
     version: string;
@@ -37,11 +39,12 @@ export interface PluginAssets {
   pluginAsset(plugin: string, name: string, revision: string): Promise<string>;
   onPluginsChanged(listener: (event: { plugins: string[]; catalog: JsonValue }) => void): () => void;
 }
-export interface SlotContribution {
+export interface CatalogContribution {
   plugin: string;
   id: string;
   kind: ContributionKind;
   options: Readonly<Record<string, string | number>>;
+  installOrder?: number;
 }
 const moduleName = (id: string) => `@plugins/${id}/ui`;
 function catalog(value: JsonValue): PluginCatalog {
@@ -198,13 +201,16 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
         if (!disposed && changes === before) throw error;
       }
     },
-    contributions(kind: ContributionKind): SlotContribution[] {
+    contributions(kind: ContributionKind): CatalogContribution[] {
       return metadata().plugins.flatMap((p) =>
         (p.plugin.contributes?.[kind] ?? []).map((options) => ({
           plugin: p.plugin.id,
           id: options.id,
           kind,
           options,
+          ...(kind === "component-action" && p.installOrder !== undefined
+            ? { installOrder: p.installOrder }
+            : {}),
         })),
       );
     },

@@ -104,7 +104,7 @@ Unindexed queries retain their JSON equality and creation-time ordering.
 
 Define indexes inside a write transaction:
 
-```rust,ignore
+```rust
 transaction.define_index(&messages, "by_channel_time", &["channel", "time"], false).await?;
 let rows = transaction.query(&messages)
     .with_index("by_channel_time")

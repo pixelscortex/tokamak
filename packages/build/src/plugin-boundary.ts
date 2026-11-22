@@ -1,6 +1,8 @@
 import type { Plugin } from "vite";
-import { isAbsolute } from "node:path";
+import { realpathSync } from "node:fs";
+import { isAbsolute, resolve, sep } from "node:path";
 import { assertPluginResolution, pluginReferenceSource } from "../../sdk/tools/plugin-boundary.mjs";
+import { isInternalReferenceModule, serverDirectory } from "../../sdk/tools/server-files.mjs";
 
 export function pluginBoundary(root: () => string): Plugin {
   return {
@@ -23,12 +25,24 @@ export function pluginBoundary(root: () => string): Plugin {
           target,
           !id.startsWith(".") && !isAbsolute(id) && /\/node_modules\//.test(resolved.id),
         );
+        const directory = realpathSync(root());
+        const server = serverDirectory(directory);
+        const file = realpathSync(target);
+        if (
+          isInternalReferenceModule(file) ||
+          (server !== resolve(directory, "src") &&
+            file.startsWith(server + sep) &&
+            file !== resolve(server, "_generated/api.ts"))
+        )
+          throw new Error(
+            `Server code cannot be imported by the window: ${id}. Import the generated public api instead.`,
+          );
       }
       return resolved;
     },
     load(id) {
       if (id.startsWith("\0tokamak-reference:"))
-        return pluginReferenceSource(root(), id.slice("\0tokamak-reference:".length));
+        return pluginReferenceSource(root(), id.slice("\0tokamak-reference:".length), { publicOnly: true });
     },
   };
 }

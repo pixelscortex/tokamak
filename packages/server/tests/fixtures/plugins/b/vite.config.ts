@@ -8,8 +8,6 @@ export default {
         id: "b",
         version: "1.0.0",
         exports: "./api.ts",
-        consumes: ["cycle"],
-        provides: ["cycle"],
       },
     }),
   ],

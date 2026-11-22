@@ -10,14 +10,22 @@ export interface PluginDefinition {
   readonly depends?: Readonly<Record<string, string>>;
   readonly optional?: Readonly<Record<string, string>>;
   readonly breaks?: Readonly<Record<string, string>>;
-  readonly provides?: readonly string[];
-  readonly consumes?: readonly string[];
   readonly permissions?: readonly string[];
   readonly runtime?: "worker";
   readonly maintenance?: string;
-  readonly placement?: "hub" | "runner" | "hybrid";
   readonly contributes?: Readonly<Record<string, readonly JsonValue[]>>;
   readonly exports?: string;
+}
+
+export function declaresAccessTo(
+  plugin: Pick<PluginDefinition, "id" | "depends" | "optional">,
+  owner: string,
+): boolean {
+  return (
+    plugin.id === owner ||
+    Object.hasOwn(plugin.depends ?? {}, owner) ||
+    Object.hasOwn(plugin.optional ?? {}, owner)
+  );
 }
 
 function versionSyntax(version: string): boolean {
@@ -76,10 +84,7 @@ export function definePlugin(
     "depends",
     "optional",
     "breaks",
-    "provides",
-    "consumes",
     "permissions",
-    "placement",
     "runtime",
     "maintenance",
     "contributes",
@@ -123,7 +128,7 @@ function validateRequirements(definition: PluginDefinition) {
 }
 
 function validateLists(definition: PluginDefinition) {
-  for (const key of ["provides", "consumes", "permissions"] as const) {
+  for (const key of ["permissions"] as const) {
     const list = definition[key];
     if (
       list !== undefined &&
@@ -146,9 +151,6 @@ function validateMetadata(definition: PluginDefinition) {
     (typeof definition.api !== "string" || !definition.api.startsWith("tokamak@"))
   ) {
     throw new Error("Invalid host API requirement");
-  }
-  if (definition.placement !== undefined && !["hub", "runner", "hybrid"].includes(definition.placement)) {
-    throw new Error("Invalid plugin placement");
   }
   if (definition.exports !== undefined && typeof definition.exports !== "string")
     throw new Error("Invalid plugin exports path");

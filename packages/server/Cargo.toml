@@ -29,7 +29,13 @@ mime_guess = "2.0.5"
 percent-encoding = "2.3.2"
 semver = "1.0.28"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
-axum = { version = "0.8.9", default-features = false, features = ["ws", "http1", "tokio", "query"] }
+axum = { version = "0.8.9", default-features = false, features = [
+  "ws",
+  "http1",
+  "tokio",
+  "query",
+  "matched-path",
+] }
 tower = { version = "0.5.3", default-features = false }
 # Already used by the embedded engine; its owned cancellation future wakes
 # accepted TCP I/O, including HTTP peers that never finish upgrade headers.
@@ -45,6 +51,7 @@ surrealdb-idx = { version = "=4.0.0", default-features = false, features = ["vec
 surrealdb-kvs = { version = "=4.0.0", default-features = false }
 surrealdb-kvs-any = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 engine = { path = "../engine" }
+tokamak-worker = { path = "../worker" }
 serde_json = "1.0.154"
 tokio = { version = "1.54.1", default-features = false, features = [
   "rt-multi-thread",
@@ -60,14 +67,6 @@ tokio = { version = "1.54.1", default-features = false, features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = [
-  "Win32_Foundation",
-  "Win32_Security",
-  "Win32_System_JobObjects",
-  "Win32_System_Threading",
-] }
 
 [dev-dependencies]
 tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["connect", "handshake"] }

@@ -15,7 +15,7 @@ published last; installation still needs its own complete-artifact staging.
 
 The UI target emits browser ESM in `ui.js` and `ui.js.map`, compiled with Solid 2
 DOM JSX. `ui: false` explicitly disables the
-UI target; the server target and `backend: false` option keep their names.
+UI target; `backend: false` disables the server target. The server output is declared in `entries.server`.
 Client `styles.css` is discovered beside the client entry and compiled with
 Tailwind. Imported CSS is also collected by Vite. No registration wrapper or
 HTML shell is emitted.
@@ -34,8 +34,8 @@ and compiler-emitted `@plugins/*` module names. Authors use
 revision-pinned module, including literal dynamic imports. Static imports infer
 required dependencies; literal dynamic imports infer optional dependencies.
 
-The catalog keeps existing manifest fields and adds `revision`, `uiUrl` and
-`stylesheetUrl` per plugin. URLs are `/plugins/<id>/<catalog revision>/assets/<name>`;
+The catalog keeps existing manifest fields and adds `revision`, `installOrder`,
+`uiUrl` and `stylesheetUrl` per plugin. URLs are `/plugins/<id>/<catalog revision>/assets/<name>`;
 plugins without UI or CSS have null URLs. Only manifest-declared UI assets from
 the current verified snapshot are served. Stale revisions return 404. Successful
 assets use `private, max-age=31536000, immutable` caching and JavaScript uses
@@ -45,10 +45,13 @@ Asset GET, catalog GET and WebSocket upgrades accept exactly the origins in
 `TOKAMAK_ALLOWED_ORIGINS` (comma-separated, replacing the defaults):
 `tauri://localhost`, `http://tauri.localhost`, `http://127.0.0.1:1420`.
 Other origins receive 403. Requests without Origin remain supported.
-Desktop mode requires the existing local token, either `Authorization: Bearer …`
-or `?token=…` on those browser routes. Web loaders must append the token to each
-asset URL, including stylesheet URLs, and the WebSocket URL. Missing or wrong
-tokens receive 401. Tokenless loopback development exposes these routes too,
+Desktop mode requires the existing local token. The window sends
+`Authorization: Bearer …` for HTTP, including asset and stylesheet fetches.
+It applies the fetched CSS as a constructed stylesheet, which it removes
+when the plugin generation retires.
+On browser WebSocket upgrades it offers `tokamak` and
+`tokamak.bearer.<percent-encoded token>` as subprotocols; the server selects
+only `tokamak`. Missing or wrong credentials receive 401. Tokenless loopback development exposes these routes too,
 with the same origin checks. Control routes remain native-only and require
 header authorization in desktop mode.
 
@@ -79,8 +82,13 @@ await ctx.use(chat).updateRun({ runId, token, delta: "Hello" });
 that plugin's `src/server/api.ts` and generated references for its exported
 queries, mutations and actions. The `api` object uses the public export names;
 named imports also carry references. No runtime helpers or handlers cross the
-boundary. Legacy packages use `backend/api.ts`. Public APIs are inspected
+boundary. Public APIs are inspected
 statically and are never executed by the builder.
+
+Within a plugin, use `src/server/_generated/api.ts` from the window. Its runtime
+references contain only public names. The window build refuses imports of other
+server code, including `_generated/internal.ts`. Internal definitions cannot be
+re-exported through the public server entry. Commit both generated files.
 
 `plugin:<id>/client` compiles to the internal module name `@plugins/<id>/ui`.
 Authors use only `plugin:<id>/client`; authored `@plugins/*` imports are rejected.
@@ -106,3 +114,68 @@ paths to the plugin's tsconfig (relative to the plugin root):
 
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
+
+## Extending a component
+
+Export the component from the plugin's window API, then build the owner plugin.
+In the render function, a tag such as `<SendButton />` publishes `sendButton`.
+Use `part="name"` on a native element or to give two uses of the same tag
+different names. Solid controls such as `Show` and `For` publish paths only
+with an explicit `part`. Mark an element `locked` to prevent actions on it.
+
+```tsx
+// chat/src/client/api.tsx
+import { component } from "@tokamak/sdk/client";
+
+const SendButton = () => <button>Send</button>;
+export const Composer = component("composer", {}, () => (
+  <section part="toolbar">
+    <SendButton />
+    <span part="status" locked>
+      Ready
+    </span>
+  </section>
+));
+```
+
+Commit the generated `src/client/_generated/components.d.ts` with the component.
+Other plugins use the public client import and export each action from their own
+window API:
+
+```tsx
+import { append, before } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Cost = before(chat.Composer.sendButton, () => <small>Free</small>);
+export const Mic = append(chat.Composer.toolbar, MicLevel, { when: micEnabled, order: 10 });
+```
+
+`before` and `after` render siblings; `prepend` and `append` render inside the
+element. `wrap` gets the current element as `props.children`. The remaining
+actions are `replace(path, UI, options?)` and `hide(path, options?)`, which
+dispose the original element and its descendants when active. Hiding also
+removes its `before` and `after` additions. Actions receive
+the declaring component's props, and so does `when`, a live check such as `(m) => m.isLast`. Layers at one
+position are ordered by `order` (default 0) and then plugin ID. The first
+installed replacement owns the position even while its condition is false.
+
+A named native element can place the inside layers explicitly with a sole
+function child, for example `{(added) => <><header>{added.prepend}</header><footer>{added.append}</footer></>}`.
+The callback receives `PartAdditions`. On a component tag, use its ordinary
+render prop for the data it supplies; put any placement callback on a named
+native child.
+
+### Contract registrations
+
+`src/contracts.ts` declares named public contract keys. A
+`plugin:<id>/contracts` import compiles to a key and type references only; it
+never includes the provider or defining plugin's executable code. Optional
+dependencies can build with a checked-in copy of the public declarations at
+`contracts/<id>.ts` if the defining plugin's source is absent. The compiler
+checks each exported `provide(...)` against the declaration and requires the
+defining plugin in `depends` or `optional`. The artifact records declarations
+and registrations in `contracts` and `contractProviders`, and includes
+implementation code only in the declared local or server lane.
+
+Generated `_generated/plugin.ts` contains references for `pluginOnly(...)`
+functions when present. Commit it along with `api.ts` and `internal.ts`.

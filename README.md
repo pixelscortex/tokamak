@@ -4,6 +4,14 @@ Tokamak is a Rust server with TypeScript plugins and a Solid 2 web client in
 Tauri 2. The client skeleton lists and creates Chat threads. `/kit` holds
 ui-sdk controls. Compiler-built plugin views load through the server; the product shell is next.
 
+On a shared server, local functions use the matching plugin builds already installed on
+each member's computer. Milestone 1 does not download those builds from the server.
+Only the creator can rename or delete a thread or run its agent. Other members can post text.
+
+Agents use the sign-in on the member's computer. The client passes through
+`SSH_AUTH_SOCK` and `SSH_AGENT_PID` when present, so the agent can use the member's
+SSH agent for commands such as `git push`. The Mac app requires macOS 14 or later.
+
 ## Run
 
 Install proto, rustup, and your platform's Tauri prerequisites. `.prototools`
@@ -87,3 +95,11 @@ Crashes fail pending actions and restart on the next call with a short backoff.
 Actions have a one-hour wall deadline; cancellation allows 500 ms to settle
 before the worker and its children are killed. Plugins without the field keep
 running actions in QuickJS.
+
+The desktop client uses a separate Bun worker for `local` functions.
+`client.local(api.module.function, args, { signal })` runs the matching
+installed plugin build. Local handlers can use files and start programs
+with `ctx.proc`; stopping a program or aborting its invocation stops its
+process tree. Local handlers call public server functions through the
+window's authenticated session. Only a change to that plugin's local
+artifact, or its removal, retires the worker on plugin reload.

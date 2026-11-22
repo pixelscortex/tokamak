@@ -139,14 +139,14 @@ fn artifact(variant: &Variant) -> PathBuf {
         .join("packages/server/target/schema-index-builds")
         .join(format!("{}-{}", std::process::id(), variant.key));
     let _ = std::fs::remove_dir_all(&target);
-    std::fs::create_dir_all(target.join("backend")).unwrap();
+    std::fs::create_dir_all(target.join("src/server")).unwrap();
     std::fs::create_dir_all(target.join("node_modules/@tokamak")).unwrap();
     std::os::unix::fs::symlink(
         root.join("packages/sdk"),
         target.join("node_modules/@tokamak/sdk"),
     )
     .unwrap();
-    for entry in std::fs::read_dir(source.join("backend")).unwrap() {
+    for entry in std::fs::read_dir(source.join("src/server")).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().into_string().unwrap();
         let mut text = std::fs::read_to_string(entry.path()).unwrap();
@@ -160,7 +160,7 @@ fn artifact(variant: &Variant) -> PathBuf {
                 text = text.replace(from, to);
             }
         }
-        std::fs::write(target.join("backend").join(name), text).unwrap();
+        std::fs::write(target.join("src/server").join(name), text).unwrap();
     }
     std::fs::write(
         target.join("package.json"),
@@ -168,7 +168,7 @@ fn artifact(variant: &Variant) -> PathBuf {
     )
     .unwrap();
     std::fs::write(
-        target.join("backend/tsconfig.json"),
+        target.join("src/server/tsconfig.json"),
         json!({
             "extends": root.join("tsconfig.json")
         })
@@ -1529,7 +1529,7 @@ async fn local_startup_log(installation: &Installation) -> String {
 }
 
 #[test]
-fn chat_starts_with_current_schema_and_indexes_legacy_runs() {
+fn chat_starts_with_current_schema_and_keeps_legacy_messages() {
     let output = std::process::Command::new("proto")
         .args([
             "run",
@@ -1538,7 +1538,7 @@ fn chat_starts_with_current_schema_and_indexes_legacy_runs() {
             "-e",
             r#"
             import { schemaMetadata } from './packages/sdk/src/index';
-            import previous from './plugins/chat/tests/fixtures/schema-before-own-machine';
+            import previous from './plugins/chat/tests/fixtures/schema-before-local-turns';
             import current from './plugins/chat/src/server/schema';
             console.log(JSON.stringify([schemaMetadata(previous), schemaMetadata(current)]));
         "#,
@@ -1556,16 +1556,16 @@ fn chat_starts_with_current_schema_and_indexes_legacy_runs() {
     run(async {
         let installation = Installation::new(true);
         let space = DataSpace::plugin("chat").unwrap();
-        let runs = space.table(&Table::new("runs").unwrap()).unwrap();
+        let messages = space.table(&Table::new("messages").unwrap()).unwrap();
         start_chat_schema(&installation, &space, previous).await;
 
         let mut database = Database::open(installation.storage()).await.unwrap();
         let mut tx = database.begin().await.unwrap();
         tx.insert(
-            &runs,
+            &messages,
             json_object(&json!({
-                "threadId": "chat/threads:legacy", "messageId": "chat/messages:legacy",
-                "status": "done", "startedAt": 1,
+                "threadId": "chat/threads:legacy", "role":"assistant", "createdAt":1,
+                "status":"complete","parts":[{"type":"text","text":"Earlier reply"}],
             }))
             .unwrap(),
         )
@@ -1577,15 +1577,17 @@ fn chat_starts_with_current_schema_and_indexes_legacy_runs() {
         start_chat_schema(&installation, &space, current).await;
         let mut database = Database::open(installation.storage()).await.unwrap();
         let mut tx = database.read_only().await.unwrap();
-        let rows = tx.query(&runs).collect().await.unwrap();
+        let rows = tx.query(&messages).collect().await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(
-            tx.query(&runs)
-                .with_index("by_status_expiresAt")
-                .collect()
-                .await
-                .unwrap(),
-            rows
+            rows[0].fields.get("role"),
+            Some(&server::data::Value::String("assistant".into()))
+        );
+        assert_eq!(
+            rows[0].fields.get("parts"),
+            json_object(&json!({ "parts": [{"type":"text","text":"Earlier reply"}] }))
+                .unwrap()
+                .get("parts")
         );
         tx.commit().await.unwrap();
         database.close().await.unwrap();

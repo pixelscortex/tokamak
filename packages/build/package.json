@@ -18,6 +18,10 @@
     "vite": "8.3.6"
   },
   "devDependencies": {
-    "@types/node": "26.6.6"
+    "@solidjs/web": "2.0.0",
+    "@types/node": "26.6.6",
+    "jsdom": "31.0.1",
+    "solid-js": "2.0.0",
+    "vitest": "5.1.0"
   }
 }

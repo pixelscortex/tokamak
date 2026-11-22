@@ -1,19 +1,33 @@
+import {
+  createWindowState,
+  offerWindowState,
+  windowStateModule,
+  windowStateStorage,
+  type WindowStateTransport,
+} from "@tokamak/sdk/window-state-host";
+import { createSignal } from "solid-js";
 import { parse } from "virtual:plugin-lexer";
 import type { ModuleExports, PluginManifest, PluginModuleHost } from "../../../packages/runtime/js/plugins";
 import { expandImporters } from "../../../packages/runtime/js/plugins";
+import { bearerHeaders } from "../host/auth";
 import { assetURL, type ServerEndpoint } from "./adapter";
 
 type Generation = {
   urls: Set<string>;
   owners: Set<() => void>;
-  styles: HTMLLinkElement[];
+  stylesheet?: CSSStyleSheet;
   retired: boolean;
   modules: Map<string, Promise<string>>;
   exports?: ModuleExports;
+  stateUrl?: string;
 };
 const moduleName = (id: string) => `@plugins/${id}/ui`;
+const pluginIdOf = (name: string) => name.split("/")[1]!;
+
 export class WebPluginHost implements PluginModuleHost {
   private generations = new Map<string, Generation>();
+  // Module URLs rotate on reload; the window still owns the plugin's state.
+  private stateScopes = createSignal<ReadonlyMap<string, ReturnType<typeof createWindowState>>>(new Map());
   private imports = new Map<string, Set<string>>();
   private moduleImports = new Map<string, Set<string>>();
   private listeners = new Map<string, Set<(cause: unknown) => void>>();
@@ -21,7 +35,17 @@ export class WebPluginHost implements PluginModuleHost {
   constructor(
     private endpoint: ServerEndpoint,
     private manifests: () => readonly PluginManifest[],
+    private stateTransport?: WindowStateTransport,
+    private workspaceKey = endpoint.http,
   ) {}
+  hasUnsavedWindowState(): boolean {
+    return [...this.stateScopes[0]().values()].some((scope) => scope.hasUnsavedChanges());
+  }
+  disposeWindowState() {
+    const [scopes, setScopes] = this.stateScopes;
+    for (const scope of scopes().values()) scope.dispose();
+    setScopes(new Map());
+  }
   affected(names: readonly string[]) {
     const affected = new Set(names);
     const importers = new Map<string, Set<string>>();
@@ -40,7 +64,9 @@ export class WebPluginHost implements PluginModuleHost {
       if (generation) {
         generation.retired = true;
         for (const dispose of generation.owners) dispose();
-        for (const style of generation.styles) style.remove();
+        const { stylesheet } = generation;
+        if (stylesheet)
+          document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== stylesheet);
         for (const url of generation.urls) URL.revokeObjectURL(url);
         for (const url of generation.modules.keys()) this.moduleImports.delete(url);
       }
@@ -61,7 +87,7 @@ export class WebPluginHost implements PluginModuleHost {
   private generation(name: string): Generation {
     let value = this.generations.get(name);
     if (!value) {
-      value = { urls: new Set(), owners: new Set(), styles: [], retired: false, modules: new Map() };
+      value = { urls: new Set(), owners: new Set(), retired: false, modules: new Map() };
       this.generations.set(name, value);
     }
     return value;
@@ -94,7 +120,7 @@ export class WebPluginHost implements PluginModuleHost {
     return task;
   }
   private async rewrite(name: string, url: string, generation: Generation, stack: readonly string[]) {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: bearerHeaders(this.endpoint.token) });
     if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
     let code = await response.text();
     this.live(generation);
@@ -110,7 +136,9 @@ export class WebPluginHost implements PluginModuleHost {
       }
       if (!entry.n) throw new Error(`${name}: nonliteral dynamic imports are unsupported`);
       let target = entry.n;
-      if (target.startsWith("@plugins/")) {
+      if (target === windowStateModule) {
+        target = this.bindWindowState(name, generation);
+      } else if (target.startsWith("@plugins/")) {
         const [, id, ...rest] = target.split("/");
         const manifest = this.manifests().find((p) => p.plugin.id === id);
         if (!manifest?.entries.ui) {
@@ -119,8 +147,8 @@ export class WebPluginHost implements PluginModuleHost {
           if (entry.d >= 0) continue;
           throw new Error(`${name}: missing UI dependency ${target}`);
         }
-        this.attachStyles(manifest, this.generation(moduleName(id!)));
         const dependency = moduleName(id!);
+        this.attachStyles(manifest, this.generation(dependency));
         const dependencies = this.imports.get(name) ?? new Set();
         dependencies.add(dependency);
         this.imports.set(name, dependencies);
@@ -141,18 +169,43 @@ export class WebPluginHost implements PluginModuleHost {
     generation.urls.add(blob);
     return blob;
   }
+  private bindWindowState(name: string, generation: Generation): string {
+    if (generation.stateUrl) return generation.stateUrl;
+    const plugin = pluginIdOf(name);
+    const [scopes, setScopes] = this.stateScopes;
+    let scope = scopes().get(plugin);
+    if (!scope) {
+      scope = createWindowState(windowStateStorage(plugin, this.workspaceKey, this.stateTransport));
+      setScopes(new Map(scopes()).set(plugin, scope));
+    }
+    const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const source = `import { claimWindowState } from "@tokamak/sdk/window-state-host";
+export default claimWindowState(${JSON.stringify(key)});`;
+    generation.stateUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+    generation.urls.add(generation.stateUrl);
+    generation.owners.add(offerWindowState(key, scope));
+    return generation.stateUrl;
+  }
   private attachStyles(manifest: PluginManifest, generation: Generation) {
-    if (!manifest.entries.ui?.css || generation.styles.length) return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = assetURL(this.endpoint, manifest.entries.ui.css);
-    link.dataset.plugin = manifest.plugin.id;
-    link.onerror = () => {
-      if (!generation.retired)
-        this.notifyError(moduleName(manifest.plugin.id), new Error("Stylesheet failed to load"));
-    };
-    generation.styles.push(link);
-    document.head.append(link);
+    const path = manifest.entries.ui?.css;
+    if (!path || generation.stylesheet) return;
+    const url = assetURL(this.endpoint, path);
+    // A link cannot send Authorization, and the CSP blocks Blob stylesheet URLs.
+    const sheet = new CSSStyleSheet();
+    generation.stylesheet = sheet;
+    void (async () => {
+      const response = await fetch(url, { headers: bearerHeaders(this.endpoint.token) });
+      if (!response.ok) throw new Error("Stylesheet failed to load");
+      const css = await response.text();
+      if (generation.retired) return;
+      await sheet.replace(css);
+      if (generation.retired) return;
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    })().catch((cause) => {
+      if (!generation.retired) this.notifyError(moduleName(manifest.plugin.id), cause);
+    });
   }
   async importModule(name: string, manifest: PluginManifest): Promise<ModuleExports> {
     const generation = this.generation(name);

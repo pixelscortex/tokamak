@@ -1,12 +1,19 @@
+import { installBasicAuth, signInMember } from "../../../e2e/fake-agent/harness.mjs";
 // TKM7 end-to-end driver: identical public SDK calls over native messages and
 // real headless WebSockets. Native stdin/stdout is only a test host bridge to
 // Rust Session; it does not emulate the database, dispatcher, or SDK transport.
 import assert from "node:assert/strict";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { TokamakClient, InProcessTransport, WebSocketTransport, createApi } from "../../sdk/src/index.ts";
+import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import {
+  TokamakClient,
+  InProcessTransport,
+  WebSocketTransport,
+  createApi,
+  isFailure,
+} from "../../sdk/src/index.ts";
 import { buildFeature } from "./build-feature.mjs";
 
 const api = createApi();
@@ -117,8 +124,8 @@ async function native() {
   process.stdin.pause();
 }
 
-async function socket(url, opened = () => {}) {
-  const ws = new WebSocket(url);
+async function socket(url, opened = () => {}, options) {
+  const ws = new WebSocket(url, options);
   await within(
     new Promise((resolve, reject) => {
       ws.addEventListener("open", resolve, { once: true });
@@ -182,6 +189,12 @@ async function headless(binary) {
     const url = await start();
     transports.push(await socket(url), await socket(url));
     const id = await within(acceptance(transports), "headless SDK acceptance");
+    const windowState = { plugin: "notes", key: "src/client/draft.ts:draft" };
+    await assert.rejects(
+      transports[0].mutation("tokamak:writeWindowState", { ...windowState, value: { text: "draft" } }),
+      /catalog/i,
+    );
+    assert.equal(await transports[1].query("tokamak:readWindowState", windowState), null);
     // Leave a live subscription/idle socket at SIGTERM: upgraded connections
     // must be retired rather than preventing the storage shutdown barrier.
     const idle = observation(new TokamakClient(transports[1]));
@@ -220,7 +233,132 @@ async function disconnect(url) {
   }
 }
 
+async function internalFunctions(binary, worker = false) {
+  const target = join(import.meta.dir, "../target");
+  await mkdir(target, { recursive: true });
+  const root = await mkdtemp(join(target, "internal-fixture-"));
+  let server, transport, ownerTransport;
+  try {
+    for (const [fixture, id] of [
+      ["internal", "internal-test"],
+      ["internal-caller", "internal-caller"],
+    ]) {
+      const source = join(root, id);
+      await cp(join(import.meta.dir, "fixtures", fixture), source, { recursive: true });
+      await symlink(resolve("app/node_modules"), join(source, "node_modules"), "dir");
+      if (worker && id === "internal-test")
+        await writeFile(
+          join(source, "plugin.ts"),
+          `import { definePlugin } from "@tokamak/sdk";
+export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "worker" });`,
+        );
+      const build = Bun.spawn([process.execPath, "packages/build/src/build.ts", source], {
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      assert.equal(await within(build.exited, `${id} fixture build`), 0);
+      await cp(join(source, "dist"), join(root, "plugins", id), { recursive: true });
+    }
+    await installBasicAuth(join(root, "plugins"));
+    const web = join(root, "web");
+    await mkdir(web);
+    await writeFile(join(web, "index.html"), "Fixture");
+    const ownerToken = "internal-fixture-owner-token-at-least-32-characters";
+    server = Bun.spawn(
+      [
+        binary,
+        "--plugins",
+        join(root, "plugins"),
+        "--data",
+        join(root, "db"),
+        "--listen",
+        "127.0.0.1:0",
+        "--web",
+        web,
+      ],
+      { stdout: "pipe", stderr: "inherit", env: { ...process.env, TOKAMAK_ACCESS_TOKEN: ownerToken } },
+    );
+    const lines = createInterface({ input: Readable.fromWeb(server.stdout) });
+    const url = await within(
+      new Promise((resolve, reject) => {
+        lines.on("line", (line) => {
+          const match = line.match(/ws:\/\/\S+/);
+          if (match) resolve(match[0]);
+        });
+        lines.on("close", () => reject(new Error("server exited before announcing listener")));
+      }),
+      "internal fixture server readiness",
+    );
+    const { key } = await signInMember(url, ownerToken, "Fixture");
+    transport = await socket(url, undefined, { headers: { authorization: `Bearer ${key}` } });
+    ownerTransport = await socket(url, undefined, { headers: { authorization: `Bearer ${ownerToken}` } });
+    const client = new TokamakClient(transport);
+    const { api } = await import(join(root, "internal-test/src/server/_generated/api.ts"));
+    const { api: caller } = await import(join(root, "internal-caller/src/server/_generated/api.ts"));
+    const success = await client.action(api.ops.add, { title: "cat" });
+    assert.deepEqual(success, { title: "CAT" });
+    assert.equal(isFailure(success), false);
+    const failure = await client.action(api.ops.add, { title: "long" });
+    assert.equal(isFailure(failure), true);
+    assert.deepEqual(failure, {
+      failed: true,
+      kind: "TooLong",
+      data: { max: 3 },
+    });
+    assert.deepEqual(await client.mutation(api.ops.addTogether, { title: "dog" }), ["CAT", "dog"]);
+    await assert.rejects(
+      client.mutation(api.ops.addTogether, { title: "discard", abort: true }),
+      (error) => error.message === "Fixture aborted",
+    );
+    const owner = new TokamakClient(ownerTransport);
+    await assert.rejects(owner.mutation(api.ops.addTogether, { title: "discard", abort: true }), (error) =>
+      /^Fixture aborted\n    at /.test(error.message),
+    );
+    assert.deepEqual(await client.query(api.ops.list, {}), ["CAT", "dog"]);
+    assert.deepEqual(await client.query(caller.probe.read, { internal: false }), ["CAT", "dog"]);
+    await assert.rejects(
+      client.query(caller.probe.read, { internal: true }),
+      /ops:read is not exported by internal-test/,
+    );
+    const functions = (await transport.plugins()).functions.map(({ name }) => name);
+    assert.deepEqual(functions.sort(), [
+      "internal-caller/probe:read",
+      "internal-test/ops:add",
+      "internal-test/ops:addTogether",
+      "internal-test/ops:list",
+    ]);
+    await assert.rejects(ownerTransport.query("internal-test/ops:read", {}), /unknown function/);
+    await assert.rejects(
+      transport.mutation("internal-test/ops:save", { title: "hidden" }),
+      /unknown function/,
+    );
+    await assert.rejects(transport.action("internal-test/ops:format", { title: "cat" }), /unknown function/);
+    const privateSubscription = await within(
+      new Promise((resolve) => transport.subscribe("internal-test/ops:read", {}, resolve)),
+      "internal subscription rejection",
+    );
+    assert.equal(privateSubscription.terminal, true);
+    assert.match(privateSubscription.error.message, /registered query/);
+    server.kill("SIGTERM");
+    assert.equal(await within(server.exited, "internal fixture server shutdown"), 0);
+    server = undefined;
+  } finally {
+    transport?.close();
+    ownerTransport?.close();
+    if (server) {
+      server.kill("SIGKILL");
+      await server.exited;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 if (process.argv[2] === "disconnect") await disconnect(process.argv[3]);
 else if (process.argv[2] === "native") await native();
 else if (process.argv[2] === "headless") await headless(process.argv[3]);
-else throw new Error("expected native or headless <binary>");
+else if (process.argv[2] === "internal") await internalFunctions(process.argv[3]);
+else if (process.argv[2] === "internal-worker") await internalFunctions(process.argv[3], true);
+else
+  throw new Error(
+    "expected native, disconnect <ws-url>, headless <binary>, internal <binary>, or internal-worker <binary>",
+  );

@@ -12,7 +12,7 @@ use crate::{
 use engine::{Bundle, OpRegistry, Pool, PoolConfig};
 use serde_json::Value as Json;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     sync::{
         Arc,
@@ -26,6 +26,67 @@ pub(crate) enum FunctionKind {
     Query,
     Mutation,
     Action,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Visibility {
+    Public,
+    PluginOnly,
+    Internal,
+}
+
+impl Visibility {
+    fn from_descriptor(function: &Json) -> Result<Self, Error> {
+        if let Some(value) = function.get("visibility") {
+            return match value.as_str() {
+                Some("public") => Ok(Self::Public),
+                Some("pluginOnly") => Ok(Self::PluginOnly),
+                Some("internal") => Ok(Self::Internal),
+                _ => Err(Error::Invalid("Invalid function visibility".into())),
+            };
+        }
+        // Older installed bundles used flags. Decode once at the bundle boundary.
+        let flag = |key| match function.get(key) {
+            None => Ok(false),
+            Some(value) => value
+                .as_bool()
+                .ok_or_else(|| Error::Invalid(format!("Function {key} flag must be boolean"))),
+        };
+        match (flag("internal")?, flag("pluginOnly")?) {
+            (false, false) => Ok(Self::Public),
+            (true, false) => Ok(Self::Internal),
+            (false, true) => Ok(Self::PluginOnly),
+            (true, true) => Err(Error::Invalid(
+                "Conflicting function visibility flags".into(),
+            )),
+        }
+    }
+}
+
+impl FunctionKind {
+    fn from_wire(value: &Json) -> Option<Self> {
+        match value.as_str()? {
+            "query" => Some(Self::Query),
+            "mutation" => Some(Self::Mutation),
+            "action" => Some(Self::Action),
+            _ => None,
+        }
+    }
+
+    fn check_nested(self, other: Option<Self>) -> Result<(), String> {
+        if Some(self) == other {
+            Ok(())
+        } else {
+            Err("nested function kind does not match request".into())
+        }
+    }
+
+    pub(crate) fn check_requested(self, payload: &Json) -> Result<(), String> {
+        // Calls made through ctx.use do not specify a kind.
+        payload.get("kind").map_or(Ok(()), |requested| {
+            self.check_nested(Self::from_wire(requested))
+        })
+    }
 }
 
 const COMMANDS: usize = 64;
@@ -83,7 +144,7 @@ pub struct Session {
 #[derive(Clone)]
 pub struct SessionSender {
     id: u64,
-    user: Arc<std::sync::RwLock<crate::identity::User>>,
+    auth: SessionAuth,
     commands: mpsc::Sender<Command>,
     slow: Arc<AtomicBool>,
     alive: mpsc::WeakSender<Event>,
@@ -104,14 +165,32 @@ type Connection = (
     mpsc::WeakSender<Event>,
 );
 
+pub(crate) struct SessionIdentity {
+    caller: std::sync::RwLock<crate::identity::AuthContext>,
+    revoked: tokio_util::sync::CancellationToken,
+}
+
+type SessionAuth = Arc<SessionIdentity>;
+
 pub(crate) enum Command {
-    Connect(
-        Arc<std::sync::RwLock<crate::identity::User>>,
-        oneshot::Sender<Result<Connection, Error>>,
-    ),
-    RenameUser(crate::identity::User, oneshot::Sender<()>),
-    Action(u64, crate::identity::User, Action),
+    Connect(SessionAuth, oneshot::Sender<Result<Connection, Error>>),
+    UpdateUser(crate::identity::User, oneshot::Sender<()>),
+    MemberAdded(crate::identity::User, oneshot::Sender<()>),
+    MemberRemoved {
+        id: String,
+        user: Option<crate::identity::User>,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    MemberAccountAbandoned {
+        user: crate::identity::User,
+        cleanup: sign_in::MemberAccountCleanup,
+        reply: oneshot::Sender<()>,
+    },
+    RemoveUserWindowState(Vec<String>, oneshot::Sender<Result<(), String>>),
+    Action(u64, SessionAuth, Action),
     Plugins(oneshot::Sender<Result<Json, Error>>),
+    RunSignIn(sign_in::SignInRequest),
+    SignInMethods(oneshot::Sender<Result<Vec<crate::plugins::SignInMethod>, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
     Asset(
@@ -151,8 +230,7 @@ pub(crate) enum Action {
 }
 
 struct Subscription {
-    name: String,
-    args: Json,
+    query: SubscriptionQuery,
     reads: ReadSet,
     last: Option<Result<Json, String>>,
     dirty: bool,
@@ -161,8 +239,14 @@ struct Subscription {
     uncertain: bool,
 }
 
+#[derive(Clone)]
+enum SubscriptionQuery {
+    Builtin(builtin_queries::BuiltinQuery),
+    Plugin { name: String, args: Json },
+}
+
 struct Client {
-    user: Arc<std::sync::RwLock<crate::identity::User>>,
+    auth: SessionAuth,
     output: mpsc::Sender<Event>,
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,
@@ -173,11 +257,13 @@ struct Coordinator {
     pool: Arc<Pool>,
     bundle: Option<Arc<Bundle>>,
     kinds: BTreeMap<String, FunctionKind>,
+    single_bundle_private: BTreeSet<String>,
     space: DataSpace,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
     action_pool: Arc<Pool>,
+    sign_in_pool: Option<Pool>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
     commands: mpsc::WeakSender<Command>,
     sessions: BTreeMap<u64, Client>,
@@ -186,7 +272,17 @@ struct Coordinator {
     closed: watch::Sender<Option<Result<(), Error>>>,
 }
 
+impl Coordinator {
+    fn client_kind(&self, name: &str) -> Option<FunctionKind> {
+        if self.single_bundle_private.contains(name) {
+            return None;
+        }
+        self.kinds.get(name).copied()
+    }
+}
+
 mod action_coordination;
+mod builtin_queries;
 mod command_loop;
 mod delivery;
 mod invocations;
@@ -196,5 +292,9 @@ mod server;
 mod session;
 mod startup;
 mod subscriptions;
+mod window_state;
 
-pub(crate) use startup::inspect;
+pub(crate) use startup::{InspectedBundle, inspect};
+
+mod sign_in;
+pub(crate) use sign_in::SignInError;

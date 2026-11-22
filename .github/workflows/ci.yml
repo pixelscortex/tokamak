@@ -48,8 +48,8 @@ jobs:
       - if: always()
         run: sccache --show-stats
   rust:
-    # Unit tests inside the Rust crates. Integration, end-to-end and browser
-    # suites are not run in CI for now; they stay runnable locally.
+    # Rust unit tests and the offline Codex replay. Real agent runs and other
+    # integration and browser suites stay local.
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30

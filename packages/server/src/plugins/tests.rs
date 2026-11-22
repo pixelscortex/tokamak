@@ -44,24 +44,18 @@ fn error(root: &Path) -> String {
         .to_string()
 }
 #[test]
-fn resolves_dependencies_optional_providers_and_private_assets() {
+fn resolves_dependencies_and_preserves_private_assets() {
     let root = scratch();
-    write(
-        &root.0,
-        "z-core",
-        json!({"id":"core","version":"0.1.0","provides":["ai"]}),
-    );
+    write(&root.0, "z-core", json!({"id":"core","version":"0.1.0"}));
     write(
         &root.0,
         "a-notes",
         json!({"id":"notes","version":"1.0.0",
-        "depends":{"core":"^0.1"}, "optional":{"missing":"*"}, "consumes":["ai"],
+        "depends":{"core":"^0.1"}, "optional":{"missing":"*"},
         "permissions":["net:example.com"]}),
     );
     let catalog = Catalog::read(&root.0).unwrap();
     assert_eq!(catalog.order, ["core", "notes"]);
-    assert_eq!(catalog.providers("notes", "ai").unwrap(), ["core"]);
-    assert!(catalog.providers("notes", "private").is_err());
     assert!(catalog.can_call("notes", "core"));
     assert!(!catalog.can_call("core", "notes"));
     assert!(catalog.permits_network("notes", "example.com"));
@@ -147,6 +141,18 @@ fn rejects_unbuilt_and_escaping_artifacts() {
             .contains("inside")
     );
 }
+
+#[test]
+fn catalog_refuses_a_plugin_with_the_reserved_auth_id() {
+    let root = scratch();
+    write(
+        &root.0,
+        "external-identity",
+        json!({"id":"auth","version":"1.0.0"}),
+    );
+    assert!(error(&root.0).contains("auth is built into the server"));
+}
+
 #[cfg(unix)]
 #[test]
 fn rejects_asset_symlinks_outside_artifact() {

@@ -1,17 +1,11 @@
 # Plugin client contracts
 
 Plugins keep `src/server/api.ts` and `src/client/api.ts` as their public contracts.
-The compiler derives contribution identities from exported SDK brands, without
-executing client code. `view`, `itemRenderer`, `toolbar`, `command`, and
-`entityCard` remain available from `@tokamak/sdk` and `@tokamak/sdk/client`.
-
-`@tokamak/sdk/client` supplies `defineSlot`, `fill`, `wrap`, `replace`, `Slot`,
-`publicComponent`, `ExtensionProvider`, and shortcut context helpers for the DOM.
-The compiler qualifies slot names as `<plugin>.<slot>` and public components as
-`<plugin>.<export>`. Fills sort by order, plugin ID, then fill identity or export
-name. Each fill has an error boundary. Replacements precede wrappers; layers
-sort by plugin ID and export name. A failed layer falls back to its inner layer.
-The first replacement wins. The shell owns the client and extension lifetimes.
+The compiler discovers pages declared with `view({ route, title }, render)`
+and component actions from window exports without executing them. The shell
+mounts each page. Use `component` inside a page and give an element a named `part`
+to expose it. Use `before`, `after`, `prepend`, `append`, `wrap`, `replace`, or
+`hide` from a dependent plugin. The first installed replacement wins.
 
 The browser UI target in `packages/build` emits native DOM ES modules. Host
 libraries stay bare imports resolved by the app's static import map. For cross-plugin imports,
@@ -27,8 +21,8 @@ Server-only plugin artifacts need no UI entry.
 The server catalog retains manifest metadata and adds `revision`, `uiUrl` and
 `stylesheetUrl`. Assets are revision-pinned at
 `/plugins/<id>/<revision>/assets/<name>`. The app's `plugins/adapter.ts` resolves
-these against the endpoint from `host/endpoint.ts` and adds its private query
-token. The same token authenticates the WebSocket. Server CORS permits only
+these against the endpoint from `host/endpoint.ts` and authenticates with the
+device key. The same key authenticates the WebSocket. Server CORS permits only
 configured app origins (`TOKAMAK_ALLOWED_ORIGINS`).
 
 The runtime's `createPluginLoader` retains catalog paging, contribution lookup

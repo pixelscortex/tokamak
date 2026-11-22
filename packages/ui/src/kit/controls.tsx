@@ -102,7 +102,7 @@ export function Facts(): JSX.Element {
         <span class="flex items-center gap-2 text-row text-ink-2">
           Stop <Kbd keys="esc" />
         </span>
-        <Avatar name="Kira" />
+        <Avatar name="Sam" />
         <Avatar name="Ana" size={16} />
       </div>
       <div class="flex items-center gap-6">

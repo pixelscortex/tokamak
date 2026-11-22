@@ -6,7 +6,19 @@ impl Coordinator {
         name: &str,
         args: Json,
         mutation: bool,
-        user: crate::identity::User,
+        auth: Option<crate::identity::AuthContext>,
+    ) -> Result<Json, String> {
+        self.invoke_function_in(self.plugins.clone(), name, args, mutation, auth)
+            .await
+    }
+
+    pub(super) async fn invoke_function_in(
+        &mut self,
+        plugins: Option<Arc<crate::plugins::Loaded>>,
+        name: &str,
+        args: Json,
+        mutation: bool,
+        auth: Option<crate::identity::AuthContext>,
     ) -> Result<Json, String> {
         let mut result = Err("mutation conflict retry limit exceeded".into());
 
@@ -22,9 +34,9 @@ impl Coordinator {
                     args: args.clone(),
                     mutation,
                     space: &self.space,
-                    plugins: self.plugins.clone(),
+                    plugins: plugins.clone(),
                     determinism,
-                    user: user.clone(),
+                    auth: auth.clone(),
                 },
             )
             .await;

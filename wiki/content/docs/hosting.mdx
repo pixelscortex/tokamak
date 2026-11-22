@@ -35,9 +35,9 @@ device (the browser keeps it per origin). Remove a server from the switcher to
 forget its token.
 Each invite identifies a member. Every signed-in member can read and write every
 thread; there are no per-thread permissions yet. Use HTTPS
-when exposing the server remotely. Disable proxy query-string logging: WebSocket
-and plugin requests carry the token as `?token=` (HTTP also accepts Bearer auth).
-Tokens are never included in server logs.
+when exposing the server remotely. The window sends its key in the Authorization
+header for HTTP and in the offered subprotocols for browser WebSocket upgrades.
+Keep both credential headers and legacy token query strings out of proxy logs.
 
 ## Temporary members and invites
 
@@ -46,7 +46,7 @@ Set `TOKAMAK_OWNER_NAME` to the owner's initial name (default `Owner`). Existing
 saved connections keep working. Hosted mode still requires this bootstrap token.
 These temporary identities will be replaced by real accounts later.
 
-Run these commands on your own machine; they call the server over HTTPS:
+Run these commands on your computer; they call the server over HTTPS:
 
 ```sh
 export TOKAMAK_TOKEN='<owner token>'
@@ -79,17 +79,15 @@ Built-in HTTP operations accept `Authorization: Bearer <token>`:
   1–100 characters and no control characters.
 
 Member management, plugin reload and shutdown are owner-only (403 for members).
-`/account` also accepts `?token=` for browser requests, like `/ws` and `/plugins`.
+For older clients, `/account`, `/ws`, and `/plugins` still accept `?token=`.
+The device list and device sign-out require the Authorization header.
 The existing connect form sends its saved display name after connecting when it
 differs from the server's name. No new sign-in UI is required.
 
-Plugins receive the authenticated caller as `ctx.user` in every query, mutation
-and action, including subscriptions and calls through other plugins. The built-in
-WebSocket query `tokamak:whoami` with `{}` returns the same identity. Desktop/local
-mode uses `{ id: "local", name: "You", role: "owner" }`; `TOKAMAK_OWNER_NAME` can
-override that local name. Chat user messages snapshot `author: { id, name }`;
-assistant messages snapshot `askedBy: { id, name }` when the run starts. Old rows
-without these optional fields stay valid, and later renames do not rewrite history.
+Plugins receive the authenticated member and device as `ctx.auth.user` and
+`ctx.auth.device`, including in subscriptions and nested calls. The built-in
+`auth:caller` query returns that identity. A local server supplies the
+owner `local` (named `You`, or `TOKAMAK_OWNER_NAME`).
 
 The image includes only the chat plugin. Threads can be created and saved; the
 agent picker is empty until agents on users' machines are connected. No agent

@@ -1,10 +1,9 @@
 import { definePlugin } from "@tokamak/sdk";
 export default definePlugin({
   id: "chat",
-  maintenance: "runs:recover",
   version: "0.3.0",
   name: "Chat",
-  description: "Threads, messages, and agent conversations.",
+  description: "Threads, messages and the folder each thread works in.",
   depends: [],
   permissions: [],
 });

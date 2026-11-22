@@ -1,10 +1,12 @@
 use super::*;
+use crate::plugins::StartupPolicy;
 
 struct Startup {
     bundle: Option<Arc<Bundle>>,
     space: DataSpace,
     descriptor: Json,
     kinds: BTreeMap<String, FunctionKind>,
+    single_bundle_private: BTreeSet<String>,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
 }
@@ -28,7 +30,7 @@ impl Server {
         let inspected = async {
             let inspected = inspect(&pool, bundle.clone()).await?;
 
-            let schema = crate::schema::Schema::parse(&inspected.0["schema"])?;
+            let schema = crate::schema::Schema::parse(&inspected.descriptor["schema"])?;
 
             let mut tx = Box::pin(database.begin())
                 .await
@@ -56,12 +58,28 @@ impl Server {
         }
         .await;
 
-        let (descriptor, kinds) = match inspected {
+        let InspectedBundle {
+            mut descriptor,
+            kinds,
+            visibility,
+        } = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
                 return Err(startup_error(&mut database, error).await);
             }
         };
+        let single_bundle_private: BTreeSet<_> = visibility
+            .into_iter()
+            .filter_map(|(name, visibility)| (visibility != Visibility::Public).then_some(name))
+            .collect();
+        // The single-bundle action bridge needs every kind for nested calls;
+        // the client descriptor and routing must still omit internal functions.
+        descriptor["functions"]
+            .as_array_mut()
+            .expect("inspected")
+            .retain(|function| {
+                !single_bundle_private.contains(function["name"].as_str().expect("inspected"))
+            });
         Self::start(
             database,
             pool,
@@ -70,6 +88,7 @@ impl Server {
                 space,
                 descriptor,
                 kinds,
+                single_bundle_private,
                 plugins: None,
                 plugin_root: None,
             },
@@ -79,22 +98,32 @@ impl Server {
 
     /// All static manifests resolve before any plugin module is evaluated.
     pub async fn load_plugins(
-        mut database: Database,
+        database: Database,
         pool: Arc<Pool>,
         root: &std::path::Path,
     ) -> Result<Self, Error> {
-        let directory = database
-            .directory()
-            .unwrap_or(root.parent().unwrap_or(root));
-        let loaded = match crate::plugins::Catalog::read_in_directory(root, None, directory) {
-            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool).await,
+        Self::load_plugin_catalog(database, pool, root, StartupPolicy::Strict).await
+    }
+
+    pub(crate) async fn load_plugin_catalog(
+        mut database: Database,
+        pool: Arc<Pool>,
+        root: &std::path::Path,
+        policy: StartupPolicy,
+    ) -> Result<Self, Error> {
+        let loaded = match crate::plugins::Catalog::read_at_startup(root, database.directory()) {
+            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy).await,
             Err(error) => Err(error),
         };
 
         let loaded = match loaded {
-            Ok(mut loaded) => Box::pin(loaded.record_startup_grants(&database))
+            Ok(mut loaded) => {
+                async {
+                    Box::pin(loaded.record_startup_grants(&database)).await?;
+                    Ok(Arc::new(loaded))
+                }
                 .await
-                .map(|()| Arc::new(loaded)),
+            }
             Err(error) => Err(error),
         };
 
@@ -114,6 +143,7 @@ impl Server {
                 space: DataSpace::default(),
                 descriptor: loaded.descriptor.clone(),
                 kinds,
+                single_bundle_private: BTreeSet::new(),
                 plugins: Some(loaded),
                 plugin_root: Some(root.to_owned()),
             },
@@ -131,9 +161,29 @@ impl Server {
             space,
             descriptor,
             kinds,
+            single_bundle_private,
             plugins,
             plugin_root,
         } = startup;
+        let state = async {
+            Box::pin(window_state::initialize(&database, plugins.is_some()))
+                .await
+                .map_err(Error::Invalid)?;
+            if let Some(loaded) = &plugins {
+                Box::pin(window_state::remove_plugins(
+                    &database,
+                    &loaded.catalog.removed_plugins,
+                ))
+                .await
+                .map_err(Error::Invalid)?;
+                loaded.catalog.persist_install_order(database.directory())?;
+            }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = state {
+            return Err(startup_error(&mut database, error).await);
+        }
         let action_pool = match Pool::new_actions(PoolConfig {
             limits: pool.limits().clone(),
             ..PoolConfig::default()
@@ -158,11 +208,13 @@ impl Server {
             pool,
             bundle,
             kinds,
+            single_bundle_private,
             space,
             plugins,
             plugin_root,
             changes,
             action_pool,
+            sign_in_pool: None,
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
             sessions: BTreeMap::new(),
@@ -185,10 +237,14 @@ impl Server {
     }
 }
 
-pub(crate) async fn inspect(
-    pool: &Pool,
-    bundle: Arc<Bundle>,
-) -> Result<(Json, BTreeMap<String, FunctionKind>), Error> {
+#[derive(Clone)]
+pub(crate) struct InspectedBundle {
+    pub descriptor: Json,
+    pub kinds: BTreeMap<String, FunctionKind>,
+    pub visibility: BTreeMap<String, Visibility>,
+}
+
+pub(crate) async fn inspect(pool: &Pool, bundle: Arc<Bundle>) -> Result<InspectedBundle, Error> {
     let descriptor = pool
         .submit(
             bundle.clone(),
@@ -201,6 +257,7 @@ pub(crate) async fn inspect(
         .map_err(|e| Error::Invalid(e.to_string()))?;
 
     let mut kinds = BTreeMap::new();
+    let mut visibility = BTreeMap::new();
 
     for function in descriptor
         .get("functions")
@@ -211,19 +268,13 @@ pub(crate) async fn inspect(
             .get("name")
             .and_then(Json::as_str)
             .ok_or_else(|| Error::Invalid("invalid function name".into()))?;
+        visibility.insert(name.to_owned(), Visibility::from_descriptor(function)?);
 
-        let mutation = match function.get("kind").and_then(Json::as_str) {
-            Some("query") => FunctionKind::Query,
-            Some("mutation") => FunctionKind::Mutation,
-            Some("action") => FunctionKind::Action,
-            _ => {
-                return Err(Error::Invalid(
-                    "function kind must be query, mutation or action".into(),
-                ));
-            }
-        };
+        let kind = FunctionKind::from_wire(&function["kind"]).ok_or_else(|| {
+            Error::Invalid("function kind must be query, mutation or action".into())
+        })?;
 
-        if kinds.insert(name.to_owned(), mutation).is_some() {
+        if kinds.insert(name.to_owned(), kind).is_some() {
             return Err(Error::Invalid("duplicate function name".into()));
         }
     }
@@ -235,7 +286,11 @@ pub(crate) async fn inspect(
     }
     crate::schema::Schema::parse(&descriptor["schema"])?;
 
-    Ok((descriptor, kinds))
+    Ok(InspectedBundle {
+        descriptor,
+        kinds,
+        visibility,
+    })
 }
 
 async fn startup_error(database: &mut Database, error: Error) -> Error {

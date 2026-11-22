@@ -1556,6 +1556,7 @@ dependencies = [
 name = "engine"
 version = "0.1.0"
 dependencies = [
+ "argon2",
  "encoding_rs",
  "futures-util",
  "getrandom 0.4.3",
@@ -5320,13 +5321,13 @@ dependencies = [
  "surrealdb-kvs-any",
  "surrealdb-types",
  "tempfile",
+ "tokamak-worker",
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
  "tower",
  "ts-rs",
  "uuid",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6757,9 +6758,24 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tauri",
  "tauri-build",
+ "tempfile",
+ "tokamak-worker",
+ "tokio",
+ "tokio-util",
  "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokamak-worker"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "libc",
+ "tokio",
  "windows-sys 0.61.2",
 ]
 

@@ -13,7 +13,7 @@ tasks:
     options:
       mergeArgs: "replace"
   test:
-    command: "proto run bun -- --conditions=browser test tests/plugins.test.mjs tests/server-binary.test.ts"
+    command: "proto run bun -- --conditions=browser test tests/local.test.mjs tests/plugins.test.mjs tests/server-binary.test.ts"
     options:
       cache: false
       mergeArgs: "replace"

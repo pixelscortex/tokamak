@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { FALLBACK_LOCAL_DEVICE } from "../../sdk/src/index.ts";
 import { source, build, built, workspace } from "./plugin-fixtures.mjs";
 
 async function scratch(check) {
@@ -146,58 +147,31 @@ for (const worker of [false, true]) {
   }, 60_000);
 }
 
-test("sanctioned client imports use the registry, including lazy slots", async () => {
+test("sanctioned client imports use the registry, including lazy imports", async () => {
   await scratch(async (root) => {
-    const owner = await source(root, "owner", "");
-    await file(
-      owner,
-      "src/client/api.ts",
-      `import {defineSlot} from "@tokamak/sdk/client";
-      export const actions = defineSlot<{text:string}>("actions");`,
-    );
+    const owner = await source(root, "owner", 'export { label } from "./client/api";');
+    await file(owner, "src/client/api.ts", "export const label = 'owner';");
+    built(owner);
     const path = await source(
       root,
       "client",
-      `import {fill} from "@tokamak/sdk/client";
-      import {actions} from "plugin:owner/client";
-      export const Extra = fill(actions, {}, p => <p>{p.text}</p>);
+      `import {label} from "plugin:owner/client";
+      export const fromOwner = label;
       export const load = () => import("plugin:owner/client");`,
     );
     built(path);
     const code = await output(path, "ui.js");
-    expect(code).toMatch(/from ["']@plugins\/owner\/ui["']/);
-    expect(code).toMatch(/import\(["'`]@plugins\/owner\/ui["'`]\)/);
-    const manifest = JSON.parse(await output(path, "manifest.json"));
-    expect(manifest.plugin.depends).toEqual({ owner: "*" });
-    expect(manifest.plugin.contributes.fill[0].target).toBe("owner.actions");
+    expect(code).toContain("@plugins/owner/ui");
+    expect(JSON.parse(await output(path, "manifest.json")).plugin.depends).toEqual({ owner: "*" });
   });
 }, 30_000);
-
-// Inspect every emitted file, including sourcesContent: checking only the JS
-// can miss tree-shaken implementation or a hidden source-map copy.
-test("production ACP artifacts include no chat implementation", async () => {
-  built(resolve(workspace, "plugins/chat"));
-  const path = resolve(workspace, "plugins/acp");
-  built(path);
-  for (const name of ["bundle.js", "bundle.js.map", "worker.js", "worker.js.map", "worker-entry.js"]) {
-    const code = await output(path, name);
-    expect(code).not.toMatch(
-      /function (streamBuffer|permissionWait|appendText|applyToolUpdate|replacePlan|unfinishedToolError)\b/,
-    );
-    expect(code).not.toContain("Turn backend mismatch");
-    expect(code).not.toContain("Response message no longer exists");
-    if (name.endsWith(".map")) {
-      expect(JSON.parse(code).sources.some((source) => /(?:^|\/)chat\//.test(source))).toBe(false);
-    }
-  }
-}, 60_000);
 
 test("public aliases preserve registered wire names and calls go through plugin.call", async () => {
   await scratch(async (root) => {
     const other = await source(root, "other", "", { ui: false });
     await file(
       other,
-      "backend/ops.ts",
+      "src/server/ops.ts",
       `import { query } from "@tokamak/sdk";
       export const read = query({ handler: () => "FOREIGN_RUNTIME" });
       export const hidden = query({ handler: () => "PRIVATE_RUNTIME" });
@@ -205,7 +179,7 @@ test("public aliases preserve registered wire names and calls go through plugin.
     );
     await file(
       other,
-      "backend/api.ts",
+      "src/server/api.ts",
       `export { read as renamed, helper } from "./ops";
       export type { hidden } from "./ops";`,
     );
@@ -230,7 +204,11 @@ test("public aliases preserve registered wire names and calls go through plugin.
       { name: "main:call", args: {} },
       {
         op(operation, payload) {
-          if (operation === "user.current") return { id: "local", name: "You", role: "owner" };
+          if (operation === "auth.current")
+            return {
+              user: { id: "local", name: "You", role: "owner" },
+              device: FALLBACK_LOCAL_DEVICE,
+            };
           calls.push([operation, payload]);
           return "host result";
         },

@@ -18,6 +18,7 @@ import { ShellContext } from "../src/shell/context";
 import { Frame } from "../src/shell/frame";
 import type { Connection, Session } from "../src/shell/session";
 import { createShellState } from "../src/shell/shell";
+import { SignInDialog } from "../src/shell/sign-in";
 import { shortcutName } from "../src/shell/shortcuts";
 
 const notes: PluginView = {
@@ -32,7 +33,7 @@ const local = () => ({ http: "http://127.0.0.1:43123", ws: "ws://127.0.0.1:43123
 const connected: Connection = {
   state: "connected",
   client: {} as never,
-  plugins: { views: () => [notes] } as unknown as PluginShell,
+  plugins: { views: () => [notes], host: { hasUnsavedWindowState: () => false } } as unknown as PluginShell,
   endpoint: local(),
 };
 
@@ -85,6 +86,7 @@ function mount(
     return (
       <ShellContext value={shell}>
         <Frame />
+        <SignInDialog />
       </ShellContext>
     );
   }
@@ -95,13 +97,13 @@ function mount(
 
 /** A pretend network: which origins answer /health, and which token their catalog takes. */
 function network(answering: Record<string, string>) {
-  const fetch = vi.fn(async (input: string | URL) => {
+  const fetch = vi.fn(async (input: string | URL, options?: RequestInit) => {
     const url = new URL(input);
     const token = answering[url.origin];
     if (token === undefined) throw new TypeError("Failed to fetch");
     if (url.pathname === "/health") return new Response("ok");
     if (url.pathname === "/plugins")
-      return url.searchParams.get("token") === token
+      return new Headers(options?.headers).get("authorization") === `Bearer ${token}`
         ? Response.json({ revision: "1", plugins: [] })
         : new Response(null, { status: 401 });
     return new Response(null, { status: 404 });
@@ -163,35 +165,35 @@ test("adding a server: address, connecting, a rejected then accepted token, your
 });
 
 test("a pasted invite carries its token: the chip shows and Verify asks for nothing", async () => {
-  network({ "https://tokamak-kira.up.railway.app": good });
+  network({ "https://tokamak-sam.up.railway.app": good });
   localStorage.setItem("tokamak.servers", JSON.stringify({ servers: [], displayName: "Noor" }));
   const user = userEvent.setup();
   const { servers, dispose } = mount({ start: "/connect" });
   try {
     const field = await screen.findByRole("textbox", { name: "Server address" });
     await user.click(field);
-    await user.paste(`https://tokamak-kira.up.railway.app/join#${good}`);
-    expect((field as HTMLInputElement).value).toBe("tokamak-kira.up.railway.app");
+    await user.paste(`https://tokamak-sam.up.railway.app/join#${good}`);
+    expect((field as HTMLInputElement).value).toBe("tokamak-sam.up.railway.app");
     expect(screen.getByRole("img", { name: "Invite token included" })).toBeTruthy();
     expect(screen.getByText("Your invite came with it, so you won't need to type it")).toBeTruthy();
     // The token belongs to the address it came with.
     await user.type(field, "x");
     expect(screen.queryByRole("img", { name: "Invite token included" })).toBeNull();
     await user.clear(field);
-    await user.paste(`https://tokamak-kira.up.railway.app/join#${good}`);
+    await user.paste(`https://tokamak-sam.up.railway.app/join#${good}`);
     await user.keyboard("{Enter}");
 
     await waitFor(() => expect(within(step()).getByText("Made a secure connection")).toBeTruthy());
     await user.click(within(step()).getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Is this the right place?" });
-    expect(within(step()).getByText("tokamak-kira")).toBeTruthy();
+    expect(within(step()).getByText("tokamak-sam")).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: "Invite token" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Join" }));
 
     const name = await screen.findByRole("textbox", { name: "Your name" });
     expect((name as HTMLInputElement).value).toBe("Noor");
     expect(screen.getByText("The name you used before")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Open tokamak-kira" }));
+    await user.click(screen.getByRole("button", { name: "Open tokamak-sam" }));
     flush();
     await waitFor(() => expect(servers().current()).toMatchObject({ token: good, displayName: "Noor" }));
   } finally {
@@ -255,7 +257,7 @@ test("the switcher lists servers with their keys, and ⌘2 switches and closes t
   localStorage.setItem(
     "tokamak.servers",
     JSON.stringify({
-      servers: [{ id: "kira", name: "Kira's server", address: "https://kira.example.app", token: good }],
+      servers: [{ id: "sam", name: "Sam's server", address: "https://sam.example.app", token: good }],
     }),
   );
   network({});
@@ -268,14 +270,14 @@ test("the switcher lists servers with their keys, and ⌘2 switches and closes t
     expect(mac.getAttribute("aria-keyshortcuts")).toBe(shortcutName("mod+1"));
     expect(mac.getAttribute("aria-current")).toBe("true");
     // Other servers are asked whether they answer while the menu is open.
-    await screen.findByRole("menuitem", { name: "Kira's server, not answering" });
+    await screen.findByRole("menuitem", { name: "Sam's server, not answering" });
     expect(screen.queryByRole("menuitem", { name: /^Remove/ })).toBeNull();
     await user.keyboard("{Escape}");
 
     await user.keyboard(`{${mod}>}2{/${mod}}`);
-    await waitFor(() => expect(servers().current().id).toBe("kira"));
+    await waitFor(() => expect(servers().current().id).toBe("sam"));
     await waitFor(() => expect(router.history.location.pathname).toBe("/"));
-    await user.click(screen.getByRole("button", { name: /^Server: Kira's server/ }));
+    await user.click(screen.getByRole("button", { name: /^Server: Sam's server/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Remove this server" }));
     await waitFor(() => expect(servers().current().id).toBe("local"));
     flush();
@@ -317,7 +319,7 @@ test("an unreachable server never blocks the window", async () => {
   }
 });
 
-test("a page served by a hosted server asks for its invite in place of a token form", async () => {
+test("a hosted window can still join with an invite from the sign-in dialog", async () => {
   network({ "https://tokamak.example.app": good });
   const user = userEvent.setup();
   const { session, servers, dispose } = mount({
@@ -326,8 +328,8 @@ test("a page served by a hosted server asks for its invite in place of a token f
   });
   try {
     const band = await screen.findByRole("alert", { name: "Server unreachable" });
-    expect(band.textContent).toContain("tokamak needs an invite");
-    await user.click(within(band).getByRole("button", { name: "Add invite" }));
+    expect(band.textContent).toContain("tokamak needs you to sign in");
+    await user.click(await screen.findByRole("button", { name: "Use an invite" }));
     // The address is the page's own; the flow starts reaching it straight away.
     await waitFor(() => expect(within(step()).getByText("Found the server")).toBeTruthy());
     await user.click(within(step()).getByRole("button", { name: "Continue" }));

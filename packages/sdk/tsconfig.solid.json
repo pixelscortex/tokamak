@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "allowJs": true,
+    "paths": { "@tokamak/sdk/client": ["./client.tsx"] },
     "lib": ["ES2022", "DOM"],
     "skipLibCheck": true,
     "jsx": "preserve",
@@ -8,5 +10,13 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["solid.ts", "client.tsx", "tests/web/**/*.tsx", "vitest.config.ts"]
+  "include": [
+    "solid.ts",
+    "client.tsx",
+    "quit.ts",
+    "tests/web/**/*.d.ts",
+    "tests/web/**/*.tsx",
+    "vitest.config.ts"
+  ],
+  "exclude": ["tests/web/fixtures/parts/addon"]
 }

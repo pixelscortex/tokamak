@@ -1,3 +1,4 @@
+import { sourceRepository } from "./src/lib/source-repository";
 import { createPress, recommendedPreset } from "fumapress";
 import { metaSchema, pageSchema } from "fumapress/schema";
 import { defineDocs } from "fumadocs-mdx/macro";
@@ -52,7 +53,7 @@ export default app.config({
     // Light theme only, so there is no theme switch.
     providerProps: { theme: { forcedTheme: "light", enableSystem: false } },
     layoutProps: {
-      githubUrl: "https://github.com/pixelscortex/tokamak",
+      ...(sourceRepository && { githubUrl: `https://github.com/${sourceRepository}` }),
       themeSwitch: { enabled: false },
     },
   },

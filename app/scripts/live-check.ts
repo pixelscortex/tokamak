@@ -1,11 +1,6 @@
-import { createApi, TokamakClient, WebSocketTransport, type FunctionReference } from "@tokamak/sdk";
+import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
+import { api } from "../../plugins/chat/src/server/_generated/api";
 
-const api = createApi<{
-  threads: {
-    list: FunctionReference<"query", {}, { title: string }[]>;
-    create: FunctionReference<"action", { title?: string }, string>;
-  };
-}>("chat");
 const socket = new WebSocket("ws://127.0.0.1:43123/ws");
 await new Promise<void>((resolve, reject) => {
   socket.onopen = () => resolve();
@@ -31,12 +26,12 @@ const stop = client.subscribe(api.threads.list, {}, (event) => {
 });
 try {
   await initial;
-  const id = await client.action(api.threads.create, { title });
+  const { threadId } = await client.mutation(api.threads.start, { text: title, folder: { kind: "own" } });
   await Promise.race([
     live,
     new Promise((_, reject) => setTimeout(() => reject(new Error("No live update")), 5000)),
   ]);
-  console.log(JSON.stringify({ created: id, updates, live: true }));
+  console.log(JSON.stringify({ created: threadId, updates, live: true }));
 } finally {
   stop();
   transport.close();

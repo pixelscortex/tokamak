@@ -4,10 +4,6 @@ fn host_api() -> String {
     "tokamak@^0.1".into()
 }
 
-fn hub() -> String {
-    "hub".into()
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
@@ -26,13 +22,7 @@ pub struct Definition {
     #[serde(default)]
     pub breaks: BTreeMap<String, String>,
     #[serde(default)]
-    pub provides: Vec<String>,
-    #[serde(default)]
-    pub consumes: Vec<String>,
-    #[serde(default)]
     pub permissions: Vec<String>,
-    #[serde(default = "hub")]
-    pub placement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -45,7 +35,7 @@ pub struct Definition {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct BackendEntry {
+pub struct ServerEntry {
     pub code: String,
     pub map: String,
     pub api: String,
@@ -75,8 +65,10 @@ pub struct WorkerEntry {
 pub struct Entries {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<WorkerEntry>,
     #[serde(default)]
-    pub backend: Option<BackendEntry>,
+    pub server: Option<ServerEntry>,
     #[serde(default)]
     pub ui: Option<UiEntry>,
 }
@@ -89,10 +81,20 @@ pub struct Manifest {
     pub entries: Entries,
     #[serde(default)]
     pub public_functions: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub plugin_functions: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contracts: Vec<ContractDeclaration>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contract_providers: Vec<ContractRegistration>,
     pub hashes: BTreeMap<String, String>,
 }
 
 impl Definition {
+    pub(super) fn declares_access_to(&self, owner: &str) -> bool {
+        self.id == owner || self.depends.contains_key(owner) || self.optional.contains_key(owner)
+    }
+
     pub(super) fn dependencies(&self) -> impl DoubleEndedIterator<Item = (&String, &String)> {
         self.depends.iter().chain(&self.optional)
     }
@@ -117,6 +119,9 @@ impl Manifest {
         if self.plugin.id == "tokamak.host" {
             return Err(invalid("tokamak.host is reserved for kernel metadata"));
         }
+        if self.plugin.id == "auth" {
+            return Err(invalid("auth is built into the server"));
+        }
         Version::parse(&self.plugin.version)
             .map_err(|e| invalid(format!("Invalid plugin version: {e}")))?;
 
@@ -138,10 +143,6 @@ impl Manifest {
             )));
         }
 
-        if !["hub", "runner", "hybrid"].contains(&self.plugin.placement.as_str()) {
-            return Err(invalid("Invalid plugin placement"));
-        }
-
         for map in [
             &self.plugin.depends,
             &self.plugin.optional,
@@ -154,16 +155,11 @@ impl Manifest {
             }
         }
 
-        for list in [
-            &self.plugin.provides,
-            &self.plugin.consumes,
-            &self.plugin.permissions,
-        ] {
-            let unique = list.iter().collect::<BTreeSet<_>>();
-
-            if unique.len() != list.len() || list.iter().any(|value| value.is_empty()) {
-                return Err(invalid("Invalid plugin capability/interface list"));
-            }
+        let permissions = &self.plugin.permissions;
+        if permissions.iter().collect::<BTreeSet<_>>().len() != permissions.len()
+            || permissions.iter().any(String::is_empty)
+        {
+            return Err(invalid("Invalid plugin permissions"));
         }
 
         if self
@@ -172,10 +168,11 @@ impl Manifest {
             .as_deref()
             .is_some_and(|v| v != "worker")
             || (self.plugin.runtime.as_deref() == Some("worker")) != self.entries.worker.is_some()
-            || (self.entries.worker.is_some() && self.entries.backend.is_none())
+            || (self.entries.worker.is_some() && self.entries.server.is_none())
         {
             return Err(invalid("Invalid plugin worker runtime/entry"));
         }
+        self.validate_contracts()?;
         self.validate_entries()
     }
 
@@ -184,7 +181,7 @@ impl Manifest {
 
         let backend_paths = self
             .entries
-            .backend
+            .server
             .as_ref()
             .into_iter()
             .flat_map(|entry| [&entry.code, &entry.map, &entry.api]);
@@ -196,13 +193,11 @@ impl Manifest {
                 .chain(entry.shell.iter())
         });
 
-        for name in backend_paths.chain(ui_paths).chain(
-            self.entries
-                .worker
-                .as_ref()
-                .into_iter()
-                .flat_map(|e| [&e.entry, &e.code, &e.map]),
-        ) {
+        let worker_paths = [&self.entries.worker, &self.entries.local]
+            .into_iter()
+            .flatten()
+            .flat_map(|e| [&e.entry, &e.code, &e.map]);
+        for name in backend_paths.chain(ui_paths).chain(worker_paths) {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

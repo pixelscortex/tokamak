@@ -4,7 +4,7 @@ impl Coordinator {
     pub(super) fn start_action(
         &mut self,
         session: u64,
-        user: crate::identity::User,
+        auth: crate::identity::AuthContext,
         id: u64,
         name: String,
         args: Json,
@@ -40,7 +40,7 @@ impl Coordinator {
             environment.clone(),
             self.action_pool.limits().clone(),
             vec![name.clone()],
-            user,
+            Some(auth),
         ) {
             Ok(ops) => ops,
             Err(error) => {
@@ -109,7 +109,7 @@ impl Coordinator {
                         &call.name,
                         call.args.clone(),
                         call.kind == FunctionKind::Mutation,
-                        call.user.clone(),
+                        call.auth.clone(),
                     )
                     .await;
                 self.drain_changes();
@@ -122,23 +122,24 @@ impl Coordinator {
     }
 
     fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
-        match (&self.plugins, &call.generation, &call.owner) {
+        let actual = match (&self.plugins, &call.generation, &call.owner) {
             (Some(current), Some(generation), Some(owner)) if Arc::ptr_eq(current, generation) => {
-                let target =
-                    current.target(owner, &call.name, call.kind == FunctionKind::Mutation, &[])?;
+                let target = current.target(
+                    owner,
+                    &call.name,
+                    call.kind == FunctionKind::Mutation,
+                    &[],
+                    call.contract.as_deref(),
+                )?;
 
-                if target.kind != call.kind {
-                    return Err("nested function kind does not match request".to_owned());
+                if call.auth.is_none() {
+                    target.check_anonymous_scope(owner)?;
                 }
+                Some(target.kind)
             }
-            (None, None, None) => {
-                if self.kinds.get(&call.name) != Some(&call.kind) {
-                    return Err("nested function kind does not match request".to_owned());
-                }
-            }
+            (None, None, None) => self.kinds.get(&call.name).copied(),
             _ => return Err("action belongs to a retired plugin generation".to_owned()),
-        }
-
-        Ok(())
+        };
+        call.kind.check_nested(actual)
     }
 }

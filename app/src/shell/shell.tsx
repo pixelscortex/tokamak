@@ -3,17 +3,19 @@ import type { JSX } from "@solidjs/web";
 import { Outlet, type AnyRouter } from "@tanstack/solid-router";
 import { RegionProvider, ShortcutContext, usePageTitleValue, useRegionFilled } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
+import { nameFromHost } from "../host/invite";
 import { checkAccess, reach } from "../host/reach";
-import { createServers, defaultServers, thisMac, type Servers } from "../host/servers";
-import { remoteChat } from "../host/chat-machine";
+import { createServers, defaultServers, type Servers } from "../host/servers";
 import type { PluginRouting } from "../plugins/views";
 import type { ServerEndpoint } from "../plugins/adapter";
-import { ShellContext, keys, serverKey, type ShellState } from "./context";
+import { ShellContext, keys, serverKey, type ShellState, type SignInTarget } from "./context";
 import { Frame } from "./frame";
 import { createNavigation } from "./navigation";
 import { shellPageList, shellPages } from "./pages";
 import { createSession, type Session } from "./session";
 import { createShortcuts, shortcutName } from "./shortcuts";
+import { QuitDialog } from "./quit";
+import { SignInDialog } from "./sign-in";
 import { createTheme } from "./theme";
 
 export interface ShellProps {
@@ -35,12 +37,6 @@ function Body(props: ShellProps): JSX.Element {
     routing: props.routing,
     server: () => servers.current().id,
     getEndpoint: () => servers.endpointOf(untrack(servers.current)),
-    remoteChat: (hub) => {
-      const kind = untrack(servers.current).kind;
-      return kind === "local"
-        ? undefined
-        : remoteChat(hub, kind === "remote" ? () => servers.endpointOf(thisMac) : undefined);
-    },
     displayName: () => {
       const server = untrack(servers.current);
       return server.kind === "local" ? undefined : server.displayName;
@@ -53,7 +49,7 @@ function Body(props: ShellProps): JSX.Element {
           ? { reason: "Not answering." }
           : { reason: "Something answered, but it isn't a Tokamak server." };
       if ((await checkAccess(endpoint.http, endpoint.token ?? "", { timeout: 5_000 })) === "rejected")
-        return { reason: "The server no longer accepts the saved access token.", needs: "token" };
+        return { reason: "The server no longer accepts this device’s key.", needs: "token" };
       return undefined;
     },
   });
@@ -72,6 +68,8 @@ function Body(props: ShellProps): JSX.Element {
           />
           <Outlet />
         </Show>
+        <SignInDialog />
+        <QuitDialog />
       </ShortcutContext>
     </ShellContext>
   );
@@ -92,6 +90,13 @@ export function createShellState(
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [serverMenuOpen, setServerMenuOpen] = createSignal(false);
   let invite: string | undefined;
+  const [signIn, setSignIn] = createSignal<SignInTarget | undefined>(undefined, { ownedWrite: true });
+  createEffect(session.connection, (connection) => {
+    const server = untrack(servers.current);
+    if (connection.state === "failed" && connection.needs === "token" && server.kind !== "local") {
+      setSignIn({ origin: server.address, onInvite: () => shell.openConnect(server.address) });
+    }
+  });
 
   const sidebarFilled = useRegionFilled("sidebar");
   const panelFilled = useRegionFilled("panel");
@@ -137,12 +142,34 @@ export function createShellState(
     servers,
     switchServer(id) {
       if (id === servers.current().id) return;
-      if (servers.select(id)) navigation.reset();
+      if (servers.select(id)) {
+        setSignIn(undefined);
+        navigation.reset();
+      }
     },
     openConnect(text) {
       invite = text;
       setServerMenuOpen(false);
       navigation.openView(shellPages.connect);
+    },
+    signIn,
+    openSignIn: setSignIn,
+    closeSignIn() {
+      setSignIn(undefined);
+    },
+    finishSignIn(key) {
+      const target = untrack(signIn);
+      if (!target) return;
+      const saved = servers.save({
+        address: target.origin,
+        token: key,
+        name: nameFromHost(new URL(target.origin).host),
+        displayName: "",
+      });
+      setSignIn(undefined);
+      if (saved.id === untrack(servers.current).id) session.retry();
+      else shell.switchServer(saved.id);
+      target.onSignedIn?.();
     },
     takeInvite() {
       const text = invite;

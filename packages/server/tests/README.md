@@ -30,6 +30,15 @@ Disk scenarios use unique directories under
 ignored `packages/server/target/tkm5-databases` and remove them after awaited shutdown.
 There are no added dependencies or enlarged native stacks.
 
+## Codex replay
+
+`CARGO_BUILD_JOBS=2 cargo test --locked -p server --test codex_turns` builds
+and installs the Codex provider in a real server and drives it through the
+client's local worker against sanitized app-server replays. It runs in CI and
+does not require a Codex executable or login. See the
+[Codex test instructions](../../../plugins/codex/README.md) for the separate
+opt-in real program check and the replay privacy scan.
+
 ## TKM7 transport and ownership acceptance
 
 `sdk_transport.rs` runs the same `TokamakClient` workflow in
@@ -187,7 +196,7 @@ product code changes remain.
 ## TKM-45 fix regressions
 
 The `web_fix_*` tests in `actions.rs` extend the same isolated public-builder,
-real engine/server and SDK transport harness. `fixtures/actions/a/backend/web.ts`
+real engine/server and SDK transport harness. `fixtures/actions/a/src/server/web.ts`
 contains the action probes, and `actions-driver.ts` owns the loopback HTTP peers.
 Run the focused suite with:
 
@@ -256,6 +265,7 @@ The same command with `CLAUDECODE=1 AI_AGENT=1` completed all 28 tasks in
 3m 23s; all 27 action tests passed again. `cargo fmt --all -- --check`,
 `git diff --check`, and a zero product-source diff also passed.
 
-## Chat and ACP synchronization
+## Chat and agent turns
 
-Offline chat and ACP tests exercise streaming, permissions, cancellation and recovery.
+Use `.ci/check.sh rust` for the offline suites, including Chat threads, agent
+turns, liveness, code snapshots, and the Claude and Codex replays.

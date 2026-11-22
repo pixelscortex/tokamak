@@ -1,6 +1,7 @@
 // UI references carry names and compile-time argument/result types, never
 // handlers. The generated api imports backend modules ONLY in type positions.
 import type { FunctionDefinition, FunctionKind } from "./functions";
+import type { Visibility } from "./visibility";
 
 const referenceTypes: unique symbol = Symbol("tokamak.reference.types");
 
@@ -11,32 +12,58 @@ export interface FunctionReference<K extends FunctionKind, A, R> {
   readonly [referenceTypes]: { kind: K; args: A; result: R };
 }
 
-export type ApiFromModule<M> = {
-  readonly [E in keyof M as M[E] extends FunctionDefinition ? E : never]: M[E] extends FunctionDefinition<
-    infer K,
-    infer A,
-    infer R
-  >
-    ? FunctionReference<K, A, R>
-    : never;
+type ReferencesFromModule<M, V extends Visibility> = {
+  readonly [
+    E in keyof M as M[E] extends FunctionDefinition<FunctionKind, unknown, unknown, V> ? E : never
+  ]: ReferenceFromDefinition<M[E]>;
 };
+
+export type ReferenceFromDefinition<D> =
+  D extends FunctionDefinition<infer K, infer A, infer R> ? FunctionReference<K, A, R> : never;
+
+export type ApiFromModule<M> = ReferencesFromModule<M, typeof Visibility.Public>;
+export type InternalFromModule<M> = ReferencesFromModule<M, typeof Visibility.Internal>;
+export type PluginFunctionsFromModule<M> = ReferencesFromModule<M, typeof Visibility.PluginOnly>;
 
 export type ArgsOf<R> = R extends FunctionReference<FunctionKind, infer A, unknown> ? A : never;
 
 export type ResultOf<R> = R extends FunctionReference<FunctionKind, unknown, infer V> ? V : never;
 
 /**
- * The generated type is finite, while the implementation is lazy. This avoids
- * importing feature code into a UI just to discover a function's wire name.
+ * Generated references have an explicit list of wire names. The lazy form is
+ * retained for existing hand-written references.
  * A reference must be at least module.export; folders add module path segments.
  */
-export function createApi<T>(namespace?: string): T {
+export function createApi<T>(namespace?: string, names?: readonly string[]): T {
+  const qualify = (name: string) => (namespace ? `${namespace}/${name}` : name);
+  if (names) {
+    type Branch = Record<string, object>;
+    const root: Branch = Object.create(null);
+    const branches = [root];
+    for (const name of names) {
+      const separator = name.indexOf(":");
+      const module = name.slice(0, separator);
+      const method = name.slice(separator + 1);
+      let branch = root;
+      for (const segment of module.split("/")) {
+        if (!Object.hasOwn(branch, segment)) {
+          const child: Branch = Object.create(null);
+          branch[segment] = child;
+          branches.push(child);
+        }
+        branch = branch[segment] as Branch;
+      }
+      branch[method] = Object.freeze({ [functionName]: qualify(name) });
+    }
+    branches.forEach(Object.freeze);
+    return root as T;
+  }
   const path = (parts: string[]): unknown =>
     new Proxy(Object.create(null) as object, {
       get(_target, key) {
         if (key === functionName) {
           if (parts.length < 2) throw new Error("Expected api.module.export reference");
-          return `${namespace ? `${namespace}/` : ""}${parts.slice(0, -1).join("/")}:${parts[parts.length - 1]}`;
+          return qualify(`${parts.slice(0, -1).join("/")}:${parts[parts.length - 1]}`);
         }
         if (typeof key === "string") return path([...parts, key]);
         return undefined;

@@ -1,9 +1,6 @@
 //! Generic process actions. Database authority stays in invocation-bound ops.
-mod discovery;
 mod logs;
 mod process;
-#[cfg(windows)]
-mod windows;
 
 use crate::plugins::Asset;
 use engine::OpRegistry;
@@ -20,7 +17,7 @@ use std::{
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
-const FRAME: usize = 1024 * 1024;
+use tokamak_worker::{Lane, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 const GRACE: Duration = Duration::from_millis(500);
 // Actions may wait for human permission for 30 minutes. This is a wall deadline,
 // independent of the much shorter deterministic query/mutation CPU budget.
@@ -112,7 +109,7 @@ impl Supervisor {
             next: AtomicU64::new(0),
             closed: CancellationToken::new(),
             runtime: tokio::runtime::Handle::current(),
-            bun: discovery::resolve("bun", &discovery::search_paths()),
+            bun: tokamak_worker::resolve("bun", &tokamak_worker::search_paths()),
         }))
     }
     async fn process(&self) -> Result<Arc<Process>, String> {

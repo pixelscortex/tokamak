@@ -18,7 +18,10 @@ class FakeSocket extends EventTarget {
   static all: FakeSocket[] = [];
   readyState = 0;
   bufferedAmount = 0;
-  constructor(public url: URL) {
+  constructor(
+    public url: URL,
+    public protocols?: string[],
+  ) {
     super();
     FakeSocket.all.push(this);
   }
@@ -74,7 +77,8 @@ test("switching servers back and forth keeps one socket and retires the old plug
     };
 
     await connectedTo("a");
-    expect(latest().url.searchParams.get("token")).toBe("a-token");
+    expect(latest().url.search).toBe("");
+    expect(latest().protocols).toEqual(["tokamak", "tokamak.bearer.a-token"]);
     select("b");
     await connectedTo("b");
     // Back to a while b's replacement is still opening: the half-open socket closes too.

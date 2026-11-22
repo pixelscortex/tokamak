@@ -1,0 +1,38 @@
+---
+title: Contracts
+description: Declare what other plugins can provide and find their installed implementations.
+---
+
+Export a typed contract from `src/contracts.ts`. A provider declares the owner
+as a dependency, imports the key from `plugin:<id>/contracts`, and exports a
+`provide(key, implementation)` declaration. Set `place: "local"` for contracts
+whose implementations run in the local part. For an optional dependency, the
+provider can keep a byte-identical copy of the owner’s contract file under
+`contracts/<id>.ts`.
+
+In a plugin function, call `key.list()` to read installed implementations or
+await `key.get(id)` to select one by plugin id.
+
+<api-declaration path="../../../../packages/sdk/src/internal/contracts.ts" name="contract" />
+
+<api-declaration path="../../../../packages/sdk/src/internal/contracts.ts" name="provide" />
+
+<api-declaration path="../../../../packages/sdk/src/internal/contracts.ts" name="Contract" />
+
+<api-declaration path="../../../../packages/sdk/src/internal/contracts.ts" name="ContractPlace" />
+
+<api-declaration path="../../../../packages/sdk/src/internal/contracts.ts" name="Provider" />
+
+## Membership events
+
+Use `onMember` with an event exported by `plugin:auth/contracts` to register a
+mutation that runs when membership changes. Use `authCaller` to read the current
+connection’s member and device on the server.
+
+<api-declaration path="../../../../packages/sdk/src/auth.ts" name="onMember" />
+
+<api-declaration path="../../../../packages/sdk/src/auth.ts" name="MemberHook" />
+
+<api-declaration path="../../../../packages/sdk/src/auth.ts" name="authCaller" />
+
+<api-declaration path="../../../../packages/sdk/src/auth.ts" name="memberFields" />

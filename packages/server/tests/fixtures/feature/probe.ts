@@ -12,12 +12,12 @@ import {
 } from "@tokamak/sdk";
 
 export const whoQuery = query({
-  handler: async (ctx) => ({ user: ctx.user, count: (await ctx.db.query("items").collect()).length }),
+  handler: async (ctx) => ({ user: ctx.auth.user, count: (await ctx.db.query("items").collect()).length }),
 });
 export const whoMutation = mutation({
   handler: async (ctx) => {
-    await ctx.db.insert("items", { author: ctx.user.id });
-    return ctx.user;
+    await ctx.db.insert("items", { author: ctx.auth.user.id });
+    return ctx.auth.user;
   },
 });
 const identityApi = createApi<{
@@ -25,7 +25,7 @@ const identityApi = createApi<{
 }>();
 export const whoAction = action({
   handler: async (ctx) => ({
-    user: ctx.user,
+    user: ctx.auth.user,
     query: await ctx.runQuery(identityApi.probe.whoQuery, {}),
     mutation: await ctx.runMutation(identityApi.probe.whoMutation, {}),
   }),

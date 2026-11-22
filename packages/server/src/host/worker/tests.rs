@@ -37,6 +37,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
     let mut loaded = Loaded::load(
         Catalog::read(&directory.path().join("plugins")).unwrap(),
         &pool,
+        crate::plugins::StartupPolicy::Strict,
     )
     .await
     .unwrap();
@@ -52,10 +53,8 @@ async fn state(worker: &Supervisor) -> Value {
 
 fn local_user_ops() -> Arc<OpRegistry> {
     let mut ops = OpRegistry::new();
-    ops.register_sync("user.current", |_| {
-        Ok(json!(crate::identity::User::local()))
-    })
-    .unwrap();
+    crate::identity::register_caller(Some(&crate::identity::AuthContext::local()), &mut ops)
+        .unwrap();
     Arc::new(ops)
 }
 

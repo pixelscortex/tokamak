@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import { cp, readFile, writeFile } from "node:fs/promises";
 
@@ -10,6 +10,75 @@ const tabs = (page: Page) => page.getByRole("navigation", { name: "Open pages" }
 // Chat is installed too and, being first in the catalog, owns "/". These tests open
 // the fixture by its address so chat never mounts (it creates a thread on first use).
 const fixtureHome = "/p/integration-fixture";
+const windowStateRoute = `${fixtureHome}/window-state`;
+
+async function publishFixtureRevision(request: APIRequestContext) {
+  const source = `${process.env.TOKAMAK_FIXTURE_SOURCE}/src/client/api.tsx`;
+  const revision = `Fixture revision ${crypto.randomUUID()}`;
+  await writeFile(source, (await readFile(source, "utf8")).replace(/Fixture revision [^"]+/, revision));
+  const built = spawnSync(
+    "proto",
+    ["run", "bun", "--", "packages/build/src/build.ts", process.env.TOKAMAK_FIXTURE_SOURCE!],
+    { stdio: "inherit" },
+  );
+  expect(built.status).toBe(0);
+  await cp(`${process.env.TOKAMAK_FIXTURE_SOURCE}/dist`, `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist`, {
+    recursive: true,
+  });
+  const reload = await request.post("http://127.0.0.1:43123/plugins/integration-fixture/reload", {
+    headers: { Authorization: `Bearer ${process.env.VITE_TOKAMAK_TOKEN}` },
+  });
+  expect(reload.ok()).toBe(true);
+  return revision;
+}
+
+async function saveDraft(page: Page, draft: string) {
+  await page.getByRole("textbox", { name: "Draft" }).fill(draft);
+  await page.getByRole("button", { name: "Save drafts" }).click();
+  await expect(page.getByText(`Window draft: ${draft}`)).toBeVisible();
+}
+
+test("an authenticated plugin stylesheet applies and retires on reload under the app CSP", async ({
+  page,
+  request,
+}) => {
+  const cssRequest = page.waitForRequest((request) => {
+    const path = new URL(request.url()).pathname;
+    return path.startsWith("/plugins/integration-fixture/") && path.endsWith("/styles.css");
+  });
+  const appliedStyle = () =>
+    page.evaluate(() => {
+      const fixture = document.querySelector('[aria-label="Integration fixture"]');
+      return fixture && getComputedStyle(fixture).getPropertyValue("--fixture-stylesheet").trim();
+    });
+  await page.goto(fixtureHome);
+  await connected(page);
+  await expect.poll(appliedStyle).toBe("loaded");
+
+  const asset = await cssRequest;
+  const stylesheet = new URL(asset.url());
+  expect(asset.method()).toBe("GET");
+  expect(stylesheet.origin).toBe("http://127.0.0.1:43123");
+  expect(stylesheet.search).toBe("");
+  expect((await asset.headerValue("authorization")) === `Bearer ${process.env.VITE_TOKAMAK_TOKEN}`).toBe(
+    true,
+  );
+  expect((await request.get(stylesheet.href)).status()).toBe(401);
+
+  const oldSheet = await page.evaluateHandle(() =>
+    document.adoptedStyleSheets.find((sheet) =>
+      Array.from(sheet.cssRules).some((rule) => rule.cssText.includes("--fixture-stylesheet")),
+    ),
+  );
+  expect(await oldSheet.evaluate((sheet) => !!sheet)).toBe(true);
+  const revision = await publishFixtureRevision(request);
+  await expect(page.getByRole("heading", { name: revision, exact: true })).toBeVisible();
+  await expect
+    .poll(() => oldSheet.evaluate((sheet) => !!sheet && document.adoptedStyleSheets.includes(sheet)))
+    .toBe(false);
+  await expect.poll(appliedStyle).toBe("loaded");
+  await oldSheet.dispose();
+});
 
 // Each project gets the same server, so assertions use the observed baseline.
 test("live threads, compiler views, regions, revision replacement and error containment", async ({
@@ -44,22 +113,7 @@ test("live threads, compiler views, regions, revision replacement and error cont
   await page.evaluate((value) => {
     (window as unknown as { documentSentinel: string }).documentSentinel = value;
   }, sentinel);
-  const source = `${process.env.TOKAMAK_FIXTURE_SOURCE}/src/client/api.tsx`;
-  const revision = `Fixture revision ${crypto.randomUUID()}`;
-  await writeFile(source, (await readFile(source, "utf8")).replace(/Fixture revision [^<]+/, revision));
-  const built = spawnSync(
-    "proto",
-    ["run", "bun", "--", "packages/build/src/build.ts", process.env.TOKAMAK_FIXTURE_SOURCE!],
-    { stdio: "inherit" },
-  );
-  expect(built.status).toBe(0);
-  await cp(`${process.env.TOKAMAK_FIXTURE_SOURCE}/dist`, `${process.env.TOKAMAK_PLUGIN_DIR}/fixture/dist`, {
-    recursive: true,
-  });
-  const reload = await request.post("http://127.0.0.1:43123/plugins/integration-fixture/reload", {
-    headers: { Authorization: `Bearer ${process.env.VITE_TOKAMAK_TOKEN}` },
-  });
-  expect(reload.ok()).toBe(true);
+  const revision = await publishFixtureRevision(request);
   await expect(fixture.getByRole("heading", { name: revision, exact: true })).toBeVisible();
   expect(
     await page.evaluate(() => (window as unknown as { documentSentinel: string }).documentSentinel),
@@ -143,7 +197,7 @@ test("server refuses a disallowed browser origin", async ({ page, request }) => 
   const accepted = await page.evaluate(
     (token) =>
       new Promise<boolean>((resolve) => {
-        const socket = new WebSocket(`ws://127.0.0.1:43123/ws?token=${token}`);
+        const socket = new WebSocket("ws://127.0.0.1:43123/ws", ["tokamak", `tokamak.bearer.${token}`]);
         socket.onopen = () => {
           socket.close();
           resolve(true);
@@ -161,4 +215,47 @@ test("server refuses a disallowed browser origin", async ({ page, request }) => 
   const unreachable = page.getByRole("alert", { name: "Server unreachable" });
   await expect(unreachable).toBeVisible();
   await expect(unreachable.getByRole("button", { name: "Retry" })).toBeVisible();
+});
+
+test("window state survives according to its keep option", async ({ page, browser }) => {
+  const draft = crypto.randomUUID();
+  await page.goto(windowStateRoute);
+  await connected(page);
+  await saveDraft(page, draft);
+
+  await page.reload();
+  await expect(page.getByText("Window draft: empty")).toBeVisible();
+  await expect(page.getByText(`Device draft: ${draft}`)).toBeVisible();
+  await expect(page.getByText(`Personal draft: ${draft}`)).toBeVisible();
+
+  const otherDevice = await browser.newContext();
+  try {
+    const other = await otherDevice.newPage();
+    await other.goto(new URL(windowStateRoute, page.url()).href);
+    await expect(other.getByText(`Personal draft: ${draft}`)).toBeVisible();
+    await expect(other.getByText("Device draft: empty")).toBeVisible();
+  } finally {
+    await otherDevice.close();
+  }
+});
+
+test("un-kept state survives a plugin revision in the same window", async ({ page, request }) => {
+  const draft = crypto.randomUUID();
+  await page.goto(windowStateRoute);
+  await saveDraft(page, draft);
+  const revision = await publishFixtureRevision(request);
+  await expect(page.getByRole("heading", { name: revision, exact: true })).toBeVisible();
+  await expect(page.getByText(`Window draft: ${draft}`)).toBeVisible();
+});
+
+test("plugins with the same state key keep separate drafts in one window", async ({ page }) => {
+  await page.goto(windowStateRoute);
+  await saveDraft(page, "First plugin draft");
+  await rail(page).getByRole("link", { name: "OtherDraftView", exact: true }).click();
+  await expect(page.getByText("Window draft: empty")).toBeVisible();
+  await saveDraft(page, "Second plugin draft");
+  await rail(page).getByRole("link", { name: "WindowStateView", exact: true }).click();
+  await expect(page.getByText("Window draft: First plugin draft")).toBeVisible();
+  await rail(page).getByRole("link", { name: "OtherDraftView", exact: true }).click();
+  await expect(page.getByText("Window draft: Second plugin draft")).toBeVisible();
 });

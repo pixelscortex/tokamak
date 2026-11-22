@@ -9,7 +9,7 @@ type GenerateBundle = Extract<NonNullable<Plugin["generateBundle"]>, (...args: n
 export function artifactBundle(
   root: string,
   plugin: Readonly<PluginDefinition>,
-  options: { ui?: false },
+  options: { ui?: false; stripClientSources?: boolean },
 ): GenerateBundle {
   return function (_options, bundle) {
     delete bundle[".tokamak-backend-entry.js"];
@@ -20,6 +20,17 @@ export function artifactBundle(
     if (options.ui !== false) {
       const ui = bundle["ui.js"];
       if (!ui || ui.type !== "chunk") throw new Error("Missing plugin UI module");
+      if (options.stripClientSources || metadata.entries.local) {
+        // Bundlers can refill omitted source text from disk while composing
+        // maps. Strip it from the published map before hashing the artifact.
+        const asset = bundle["ui.js.map"];
+        if (asset?.type === "asset") {
+          const map = JSON.parse(String(asset.source));
+          stripSourcesContent(map);
+          asset.source = JSON.stringify(map);
+        }
+        if (ui.map) stripSourcesContent(ui.map);
+      }
       const depends = { ...plugin.depends };
       const optional = { ...plugin.optional };
       for (const specifier of ui.imports) {
@@ -40,7 +51,7 @@ export function artifactBundle(
         ...plugin,
         depends,
         optional,
-        contributes: uiContributions(root).contributes,
+        contributes: uiContributions(root, plugin.id).contributes,
       });
       metadata.entries.ui = {
         code: "ui.js",
@@ -68,4 +79,8 @@ function artifactManifest(bundle: Parameters<GenerateBundle>[1]) {
   const manifest = bundle["manifest.json"];
   if (!manifest || manifest.type !== "asset") throw new Error("Missing artifact manifest");
   return manifest;
+}
+
+export function stripSourcesContent(map: { sourcesContent?: unknown }) {
+  delete map.sourcesContent;
 }

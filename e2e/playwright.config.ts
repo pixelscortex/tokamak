@@ -21,7 +21,7 @@ export default defineConfig({
     {
       cwd: resolve(import.meta.dirname, ".."),
       command: "proto run bun -- e2e/serve.ts",
-      url: `http://127.0.0.1:43123/plugins?token=${process.env.VITE_TOKAMAK_TOKEN}`,
+      port: 43123,
       timeout: 30_000,
       gracefulShutdown: { signal: "SIGTERM", timeout: 30_000 },
       reuseExistingServer: false,

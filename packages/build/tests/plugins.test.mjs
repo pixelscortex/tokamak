@@ -1,11 +1,9 @@
+import { PLUGIN_UI_BUILD_ENABLED } from "../src/vite.ts";
 import { test, expect } from "bun:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile, stat, cp } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { uiContributions } from "../src/contributions.ts";
-import { clientSurface } from "../src/client-surface.ts";
-import { PLUGIN_UI_BUILD_ENABLED } from "../src/vite.ts";
 
 const workspace = resolve(import.meta.dir, "../../..");
 async function scratch(check) {
@@ -37,94 +35,117 @@ async function source(root, id, code, paths = {}) {
   return path;
 }
 
-test("static contribution discovery preserves brands, aliases and erased exports without execution", async () => {
+test("a generated function reference requires callers to handle typed failures", async () => {
+  await scratch(async (root) => {
+    const path = await source(root, "failures", "export const title = 'Failures';");
+    const server = resolve(path, "src/server");
+    await mkdir(server);
+    await writeFile(
+      resolve(server, "ops.ts"),
+      `import { fail, query, v } from "@tokamak/sdk";
+export const title = query({
+  args: { text: v.string() },
+  handler: (_, { text }) => text.length > 3 ? fail("TooLong", { max: 3 }) : { title: text },
+});
+export const text = query({
+  args: { text: v.string() },
+  handler: (_, { text }) => text.length > 3 ? fail("TooLong", { max: 3 }) : text,
+});`,
+    );
+    const caller = resolve(server, "_caller.ts");
+    const imports = `import { isFailure, type ResultOf } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+type Result = ResultOf<typeof api.ops.title>;`;
+    await writeFile(
+      caller,
+      imports +
+        `
+export function read(result: Result): string {
+  if (result.failed && result.kind === "TooLong") {
+    return result.data.max.toFixed();
+  }
+  return result.failed ? "Unhandled failure" : result.title;
+}
+export function readText(result: ResultOf<typeof api.ops.text>): string {
+  if (isFailure(result)) {
+    const kind: "TooLong" = result.kind;
+    return kind + result.data.max.toFixed();
+  }
+  return result.toUpperCase();
+}`,
+    );
+    await writeFile(resolve(server, "compile.ts"), 'export { read, readText } from "./_caller";');
+    const build = () =>
+      spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), path], {
+        encoding: "utf8",
+      });
+    const valid = build();
+    expect(valid.status, valid.stdout + valid.stderr).toBe(0);
+    await writeFile(
+      caller,
+      imports +
+        "\nexport const read = (result: Result): string => result.title; export const readText = read;",
+    );
+    const invalid = build();
+    expect(invalid.status).not.toBe(0);
+    expect(invalid.stdout + invalid.stderr).toContain("Property 'title' does not exist");
+  });
+}, 30_000);
+
+test("internal definitions stay out of the generated public API and window bundle", async () => {
   await scratch(async (root) => {
     const path = await source(
       root,
-      "parts",
-      `
-      import { view as screen, itemRenderer, toolbar, command, entityCard } from "@tokamak/sdk/client";
-      throw new Error("must never execute");
-      const Local = screen({ route: "/" }, () => <p>View</p>);
-      export { Local as PublicView };
-      export const Item = itemRenderer({ type: "note" }, () => <p />);
-      export const Tools = toolbar({ label: "Actions" }, () => <p />);
-      export const Run = command({ title: "Run" }, () => {});
-      export const Card = entityCard({ table: "notes" }, () => <p />);
-      export type { Local as Ghost };
-    `,
+      "internal-test",
+      'import { api } from "../server/_generated/api"; export const visible = api.ops.read;',
     );
-    expect(uiContributions(path).contributes).toEqual({
-      view: [{ id: "PublicView", route: "/" }],
-      itemRenderer: [{ id: "Item", type: "note" }],
-      toolbar: [{ id: "Tools", label: "Actions" }],
-      command: [{ id: "Run", title: "Run" }],
-      entityCard: [{ id: "Card", table: "notes" }],
-    });
+    const client = resolve(path, "src/client");
+    const server = resolve(path, "src/server");
+    await mkdir(server);
     await writeFile(
-      resolve(path, "src/client/api.tsx"),
-      `
-      import { view } from "@tokamak/sdk/client";
-      const route = "/";
-      export const Bad = view({ route }, () => <p />);
-    `,
+      resolve(server, "ops.ts"),
+      `import { action, internalQuery } from "@tokamak/sdk";
+import { internal } from "./_generated/internal";
+export const secret = internalQuery({ handler: () => "internal-handler-sentinel" });
+export const read = action({ handler: (ctx) => ctx.runQuery(internal.ops.secret, {}) });`,
     );
-    expect(() => uiContributions(path)).toThrow("Invalid UI contribution Bad");
-  });
-});
-
-test("compiler-derived slot and component identities survive the DOM port", async () => {
-  await scratch(async (root) => {
-    const code = `
-      import { defineSlot as slot } from "@tokamak/sdk/client";
-      export const actions = slot<{ text: string }>("composer.actions");
-      function Impl(props: { text: string }) { return <p>{props.text}</p>; }
-      export { Impl as Input, Impl as Alias };
-    `;
-    const owner = await source(root, "owner", code);
-    const transform = clientSurface(
-      () => owner,
-      () => "owner",
-    ).transform;
-    const transformed = transform.call({}, code, resolve(owner, "src/client/api.tsx"));
-    for (const identity of ["owner.composer.actions", "owner.Input", "owner.Alias"])
-      expect(transformed.code).toContain(identity);
-    const mod = await source(
-      root,
-      "mod",
-      `
-      import { fill, wrap, replace } from "@tokamak/sdk/client";
-      import { actions, Input } from "plugin:owner/client";
-      export const Extra = fill(actions, { order: -5, id: "extra" }, p => <p>{p.text}</p>);
-      export const Frame = wrap(Input, Original => props => <div><Original {...props} /></div>);
-      export const Other = replace(Input, props => <p>{props.text}</p>);
-    `,
-      { "plugin:owner/client": [resolve(owner, "src/client/api.tsx")] },
+    const build = () =>
+      spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), path], {
+        encoding: "utf8",
+      });
+    const result = build();
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    const publicRefs = resolve(server, "_generated/api.ts");
+    const internalRefs = resolve(server, "_generated/internal.ts");
+    const { api } = await import(publicRefs);
+    expect(api.ops.secret).toBeUndefined();
+    const ui = await readFile(resolve(path, "dist/ui.js"), "utf8");
+    expect(ui).not.toMatch(/internal-handler-sentinel|ops:secret/);
+    const generated = await Promise.all([readFile(publicRefs, "utf8"), readFile(internalRefs, "utf8")]);
+    const repeated = build();
+    expect(repeated.status, repeated.stdout + repeated.stderr).toBe(0);
+    expect(await Promise.all([readFile(publicRefs, "utf8"), readFile(internalRefs, "utf8")])).toEqual(
+      generated,
     );
-    expect(uiContributions(mod).contributes).toEqual({
-      fill: [{ id: "Extra", target: "owner.composer.actions", order: -5, fillId: "extra" }],
-      wrap: [{ id: "Frame", target: "owner.Input" }],
-      replace: [{ id: "Other", target: "owner.Input" }],
-    });
-  });
-});
 
-test("a public function component stays hoisted after the surface transform", async () => {
-  await scratch(async (root) => {
-    const code = `
-      export const Early = Panel;
-      export function Panel() { return null; }
-    `;
-    const owner = await source(root, "owner", code);
-    const transform = clientSurface(
-      () => owner,
-      () => "owner",
-    ).transform;
-    const transformed = transform.call({}, code, resolve(owner, "src/client/api.tsx")).code;
-    expect(transformed).toContain("export function Panel(props)");
-    expect(transformed).not.toMatch(/export const Panel\b/);
+    await writeFile(
+      resolve(client, "api.tsx"),
+      'import { internal } from "../server/_generated/internal"; export const secret = internal.ops.secret;',
+    );
+    const leak = build();
+    expect(leak.status).not.toBe(0);
+    expect(leak.stdout + leak.stderr).toContain("Server code cannot be imported by the window");
+
+    await writeFile(
+      resolve(path, "plugin.ts"),
+      'export default definePlugin({ id: "internal-test", version: "1.0.0" });\nimport { definePlugin } from "@tokamak/sdk";',
+    );
+    await writeFile(resolve(server, "api.ts"), 'export { secret as reexported } from "./ops";');
+    const reexport = build();
+    expect(reexport.status).not.toBe(0);
+    expect(reexport.stdout + reexport.stderr).toContain("internal function reexported cannot be exported");
   });
-});
+}, 30_000);
 
 test("server artifacts omit UI, verify final hashes and preserve unchanged bytes and mtimes", async () => {
   await scratch(async (root) => {
@@ -156,7 +177,7 @@ test("server artifacts omit UI, verify final hashes and preserve unchanged bytes
     build();
     const manifest = JSON.parse(await readFile(resolve(root, "dist/manifest.json"), "utf8"));
     expect(manifest.entries.ui).toBeUndefined();
-    expect(manifest.entries.backend.code).toBe("bundle.js");
+    expect(manifest.entries.server.code).toBe("bundle.js");
     expect(manifest.publicFunctions).toContain("record:add");
     const before = new Map();
     for (const [name, hash] of Object.entries(manifest.hashes)) {
@@ -171,5 +192,77 @@ test("server artifacts omit UI, verify final hashes and preserve unchanged bytes
       expect(await readFile(path)).toEqual(expected.bytes);
       expect((await stat(path)).mtimeMs).toBe(expected.mtime);
     }
+  });
+}, 30_000);
+
+test("a plugin using the old server context fails to compile", async () => {
+  await scratch(async (root) => {
+    const path = await source(root, "old-context", "export const label = 'Old context';");
+    await mkdir(resolve(path, "src/server"));
+    await writeFile(
+      resolve(path, "src/server/ops.ts"),
+      `import { query } from "@tokamak/sdk";
+export const oldUser = query({ handler: (ctx) => ctx.user });
+export const oldProviders = query({ handler: (ctx) => ctx.providers("old.interface") });`,
+    );
+    const build = spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), path], {
+      encoding: "utf8",
+    });
+    expect(build.status, build.stdout + build.stderr).not.toBe(0);
+    expect(build.stdout + build.stderr).toContain("Property 'user' does not exist");
+    expect(build.stdout + build.stderr).toContain("Property 'providers' does not exist");
+  });
+}, 30_000);
+
+test("a plugin importing a slot or contribution helper fails to compile", async () => {
+  await scratch(async (root) => {
+    const path = await source(
+      root,
+      "old-window",
+      `export { defineSlot, fill, itemRenderer, toolbar, command, entityCard, ChatMachineContext } from "@tokamak/sdk/client";`,
+    );
+    const check = spawnSync(
+      process.execPath,
+      ["check", "--no-script", "--project", resolve(path, "tsconfig.json")],
+      { encoding: "utf8" },
+    );
+    const diagnostics = check.stdout + check.stderr;
+    expect(check.status, diagnostics).not.toBe(0);
+    for (const helper of [
+      "defineSlot",
+      "fill",
+      "itemRenderer",
+      "toolbar",
+      "command",
+      "entityCard",
+      "ChatMachineContext",
+    ])
+      expect(diagnostics).toContain(`has no exported member '${helper}'`);
+  });
+}, 30_000);
+
+test("wrap and replace require named elements and component options cannot declare a page", async () => {
+  await scratch(async (root) => {
+    const path = await source(
+      root,
+      "old-component",
+      `
+import { component, replace, wrap } from "@tokamak/sdk/client";
+const Card = component("card", {}, () => <div />);
+export const oldPage = component("page", { route: "/" }, () => null);
+export const oldWrap = wrap(Card, ({ children }) => children);
+export const oldReplace = replace(Card, () => null);
+`,
+    );
+    const check = spawnSync(
+      process.execPath,
+      ["check", "--no-script", "--project", resolve(path, "tsconfig.json")],
+      { encoding: "utf8" },
+    );
+    const diagnostics = check.stdout + check.stderr;
+    expect(check.status, diagnostics).not.toBe(0);
+    expect(diagnostics).toMatch(/api\.tsx\(4,\d+\): error/);
+    for (const line of [5, 6])
+      expect(diagnostics).toMatch(new RegExp(`api\\.tsx\\(${line},\\d+\\): error[^\\n]+UnlockedPart`));
   });
 }, 30_000);

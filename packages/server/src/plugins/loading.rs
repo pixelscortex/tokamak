@@ -1,8 +1,18 @@
 use super::*;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StartupPolicy {
+    Strict,
+    Recover,
+}
+
 impl Loaded {
-    pub async fn load(catalog: Catalog, pool: &engine::Pool) -> Result<Self, Error> {
-        Self::load_reusing(catalog, pool, None).await
+    pub async fn load(
+        catalog: Catalog,
+        pool: &engine::Pool,
+        policy: StartupPolicy,
+    ) -> Result<Self, Error> {
+        Self::load_with_policy(catalog, pool, None, policy).await
     }
 
     pub async fn load_reusing(
@@ -10,12 +20,22 @@ impl Loaded {
         pool: &engine::Pool,
         previous: Option<&Self>,
     ) -> Result<Self, Error> {
+        Self::load_with_policy(catalog, pool, previous, StartupPolicy::Strict).await
+    }
+
+    async fn load_with_policy(
+        catalog: Catalog,
+        pool: &engine::Pool,
+        previous: Option<&Self>,
+        policy: StartupPolicy,
+    ) -> Result<Self, Error> {
         let mut loaded = Self {
             catalog,
             targets: BTreeMap::new(),
             descriptor: Value::Null,
             catalog_text: String::new(),
             inspected: BTreeMap::new(),
+            contracts: BTreeMap::new(),
             workers: BTreeMap::new(),
             skipped: BTreeMap::new(),
         };
@@ -25,17 +45,34 @@ impl Loaded {
                 continue;
             }
             if let Err(error) = loaded.prepare_plugin(&id, pool, previous).await {
-                if !previous.is_some_and(|old| old.skipped.contains_key(&id)) {
+                if policy == StartupPolicy::Strict
+                    && !previous.is_some_and(|old| old.skipped.contains_key(&id))
+                {
                     return Err(error);
                 }
                 loaded.skip(id, error.to_string());
             }
         }
-        if loaded.skipped.is_empty() {
-            loaded.update_metadata()?;
-        } else {
-            loaded.prune_skipped()?;
-        }
+        loaded.remove_skipped()?;
+        loaded.contracts = loop {
+            match loaded.load_contracts() {
+                Ok(contracts) => break contracts,
+                Err(failure) => {
+                    let Some(id) = failure.auth_provider.filter(|id| {
+                        policy == StartupPolicy::Recover
+                            || previous.is_some_and(|old| old.skipped.contains_key(id))
+                    }) else {
+                        return Err(failure.error);
+                    };
+                    // An invalid auth registration must not stop recovery or
+                    // force existing devices to sign in again.
+                    loaded.skip(id, failure.error.to_string());
+                    loaded.skip_dependents();
+                    loaded.remove_skipped()?;
+                }
+            }
+        };
+        loaded.update_metadata()?;
         Ok(loaded)
     }
 
@@ -57,20 +94,29 @@ impl Loaded {
                         .is_some_and(|old| Arc::ptr_eq(old, bundle))
                 })
                 .and_then(|old| old.inspected.get(id));
-            let (descriptor, kinds) = match cached {
+            let inspected = match cached {
                 Some(value) => value.clone(),
                 None => crate::service::inspect(pool, bundle.clone()).await?,
             };
             for name in &artifact.manifest.public_functions {
-                if !kinds.contains_key(name) {
-                    return Err(invalid(format!(
-                        "Exported function {name} is not a backend function of {id}"
-                    )));
+                let explanation = match inspected.visibility.get(name) {
+                    Some(Visibility::Public) => continue,
+                    Some(Visibility::Internal) => "is internal and cannot be exported",
+                    Some(Visibility::PluginOnly) => {
+                        "is plugin-only and cannot be exported to windows"
+                    }
+                    None => "is not a backend function",
+                };
+                return Err(invalid(format!("Function {id}/{name} {explanation}")));
+            }
+            for name in &artifact.manifest.plugin_functions {
+                if inspected.visibility.get(name) != Some(&Visibility::PluginOnly) {
+                    return Err(invalid(format!("Missing plugin-only function {id}/{name}")));
                 }
             }
-            validate_maintenance(artifact, Some(&kinds))?;
+            validate_maintenance(artifact, Some(&inspected.kinds))?;
             let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
-            for (local_name, kind) in &kinds {
+            for (local_name, kind) in &inspected.kinds {
                 let name = format!("{id}/{local_name}");
                 self.targets.insert(
                     name,
@@ -78,13 +124,14 @@ impl Loaded {
                         owner: id.to_owned(),
                         local_name: local_name.clone(),
                         mutation: *kind == crate::service::FunctionKind::Mutation,
+                        visibility: inspected.visibility[local_name],
                         kind: *kind,
                         bundle: bundle.clone(),
                         space: space.clone(),
                     },
                 );
             }
-            self.inspected.insert(id.to_owned(), (descriptor, kinds));
+            self.inspected.insert(id.to_owned(), inspected);
         } else {
             validate_maintenance(artifact, None)?;
         }
@@ -98,6 +145,15 @@ impl Loaded {
         if self.skipped.is_empty() {
             return Ok(());
         }
+        self.remove_skipped()?;
+        self.contracts = self.load_contracts().map_err(|failure| failure.error)?;
+        self.update_metadata()
+    }
+
+    fn remove_skipped(&mut self) -> Result<(), Error> {
+        if self.skipped.is_empty() {
+            return Ok(());
+        }
         let skipped = &self.skipped;
         self.catalog
             .plugins
@@ -108,7 +164,17 @@ impl Loaded {
             .retain(|_, target| !skipped.contains_key(&target.owner));
         self.workers.retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
-        self.update_metadata()
+        Ok(())
+    }
+
+    pub(super) fn skip_dependents(&mut self) {
+        for id in self.catalog.order.clone() {
+            if !self.skipped.contains_key(&id)
+                && let Some(reason) = self.skipped_dependency(&id)
+            {
+                self.skip(id, reason);
+            }
+        }
     }
 
     pub(super) fn skipped_dependency(&self, id: &str) -> Option<String> {
@@ -131,21 +197,17 @@ impl Loaded {
         let schemas: BTreeMap<_, _> = self
             .inspected
             .iter()
-            .map(|(id, (descriptor, _))| (id, &descriptor["schema"]))
+            .map(|(id, inspected)| (id, &inspected.descriptor["schema"]))
             .collect();
         let functions: Vec<_> = self
             .catalog
             .order
             .iter()
-            .filter_map(|id| {
-                self.inspected
-                    .get(id)
-                    .map(|(descriptor, _)| (id, descriptor))
-            })
-            .flat_map(|(id, descriptor)| {
+            .filter_map(|id| self.inspected.get(id).map(|inspected| (id, inspected)))
+            .flat_map(|(id, inspected)| {
                 client_descriptors(
                     id,
-                    descriptor,
+                    inspected,
                     self.catalog.plugins[id]
                         .manifest
                         .plugin
@@ -165,12 +227,14 @@ impl Loaded {
     pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {
         self.targets
             .iter()
-            .filter(|(_, target)| !self.scheduler_only(target))
+            .filter(|(_, target)| {
+                target.visibility == Visibility::Public && !self.scheduler_only(target)
+            })
             .map(|(name, target)| (name.clone(), target.kind))
             .collect()
     }
 
-    fn scheduler_only(&self, target: &Target) -> bool {
+    pub(super) fn scheduler_only(&self, target: &Target) -> bool {
         self.catalog.plugins[&target.owner]
             .manifest
             .plugin
@@ -185,8 +249,9 @@ impl Loaded {
         name: &str,
         writable: bool,
         path: &[String],
+        contract: Option<&str>,
     ) -> Result<Target, String> {
-        let target = self.action_target(caller, name, path)?;
+        let target = self.action_target(caller, name, path, contract)?;
         if target.kind == crate::service::FunctionKind::Action {
             return Err("Queries and mutations cannot call actions".into());
         }
@@ -202,6 +267,7 @@ impl Loaded {
         caller: &str,
         name: &str,
         path: &[String],
+        contract: Option<&str>,
     ) -> Result<Target, String> {
         let target = self
             .targets
@@ -211,7 +277,11 @@ impl Loaded {
         if self.scheduler_only(target) {
             return Err(format!("Unknown plugin function: {name}"));
         }
-        if !self.catalog.can_call(caller, &target.owner) {
+        if let Some(contract) = contract {
+            if !self.is_contract_method(caller, contract, name) {
+                return Err(format!("Unknown contract method: {name}"));
+            }
+        } else if !self.catalog.can_call(caller, &target.owner) {
             return Err(format!(
                 "{caller} does not declare access to {}",
                 target.owner
@@ -220,14 +290,25 @@ impl Loaded {
 
         let manifest = &self.catalog.plugins[&target.owner].manifest;
 
-        if caller != target.owner
-            && (manifest.plugin.exports.is_none()
-                || !manifest.public_functions.contains(&target.local_name))
-        {
-            return Err(format!(
-                "{} is not exported by {}",
-                target.local_name, target.owner
-            ));
+        if contract.is_none() && caller != target.owner {
+            let exported = manifest.plugin.exports.is_some()
+                && match target.visibility {
+                    Visibility::Public => manifest.public_functions.contains(&target.local_name),
+                    Visibility::PluginOnly => {
+                        manifest.plugin_functions.contains(&target.local_name)
+                            && self.catalog.plugins[caller]
+                                .manifest
+                                .plugin
+                                .declares_access_to(&target.owner)
+                    }
+                    Visibility::Internal => false,
+                };
+            if !exported {
+                return Err(format!(
+                    "{} is not exported by {}",
+                    target.local_name, target.owner
+                ));
+            }
         }
 
         if path.len() >= 16 || path.iter().any(|entry| entry == name) {
@@ -238,14 +319,18 @@ impl Loaded {
     }
 }
 
-fn client_descriptors(id: &str, descriptor: &Value, maintenance: Option<&str>) -> Vec<Value> {
-    descriptor["functions"]
+fn client_descriptors(
+    id: &str,
+    inspected: &crate::service::InspectedBundle,
+    maintenance: Option<&str>,
+) -> Vec<Value> {
+    inspected.descriptor["functions"]
         .as_array()
         .expect("inspected")
         .iter()
         .filter_map(|function| {
             let name = function["name"].as_str().expect("inspected");
-            if maintenance == Some(name) {
+            if maintenance == Some(name) || inspected.visibility[name] != Visibility::Public {
                 return None;
             }
             let mut function = function.clone();
@@ -280,6 +365,7 @@ fn validate_maintenance(
 ) -> Result<(), Error> {
     if let Some(name) = &artifact.manifest.plugin.maintenance
         && (artifact.manifest.public_functions.contains(name)
+            || artifact.manifest.plugin_functions.contains(name)
             || kinds.and_then(|kinds| kinds.get(name))
                 != Some(&crate::service::FunctionKind::Mutation))
     {

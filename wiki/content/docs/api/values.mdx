@@ -15,3 +15,11 @@ IDs are branded strings in the form `table:key`. Table names match
 <api-declaration path="../../../../packages/sdk/src/values.ts" name="JsonObject" />
 
 <api-declaration path="../../../../packages/sdk/src/values.ts" name="Id" />
+
+## Thread context
+
+`threadPrompt` assembles thread history and a new request. `threadRecordBytes` measures a record for the caller’s context budget.
+
+<api-declaration path="../../../../packages/sdk/src/thread-context.ts" name="threadRecordBytes" />
+
+<api-declaration path="../../../../packages/sdk/src/thread-context.ts" name="threadPrompt" />

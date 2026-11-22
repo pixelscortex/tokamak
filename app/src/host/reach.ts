@@ -1,3 +1,5 @@
+import { bearerHeaders } from "./auth";
+
 /**
  * Questions the client can ask a server before it connects.
  *
@@ -50,8 +52,7 @@ export async function checkAccess(
   return withTimeout(options, async (signal) => {
     try {
       const url = new URL("/plugins", origin);
-      url.searchParams.set("token", token);
-      const response = await fetch(url, { cache: "no-store", signal });
+      const response = await fetch(url, { cache: "no-store", headers: bearerHeaders(token), signal });
       if (response.ok) return "accepted";
       return response.status === 401 ? "rejected" : "unknown";
     } catch {

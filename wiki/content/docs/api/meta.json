@@ -3,12 +3,14 @@
   "pages": [
     "plugin",
     "functions",
+    "contracts",
     "validators",
     "schema",
     "database",
     "references",
     "client",
     "solid",
+    "window",
     "values",
     "host"
   ]

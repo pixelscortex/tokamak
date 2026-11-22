@@ -45,13 +45,7 @@ impl Loaded {
                 return Err(failure.error);
             };
             self.skip(id, failure.error.to_string());
-            for id in self.catalog.order.clone() {
-                if !self.skipped.contains_key(&id)
-                    && let Some(reason) = self.skipped_dependency(&id)
-                {
-                    self.skip(id, reason);
-                }
-            }
+            self.skip_dependents();
             self.prune_skipped()?;
         }
     }
@@ -165,7 +159,7 @@ impl Loaded {
         startup: bool,
     ) -> Result<Option<String>, Error> {
         let schema = match self.inspected.get(id) {
-            Some((descriptor, _)) => crate::schema::Schema::parse(&descriptor["schema"])?,
+            Some(inspected) => crate::schema::Schema::parse(&inspected.descriptor["schema"])?,
             None => crate::schema::Schema::default(),
         };
         let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;

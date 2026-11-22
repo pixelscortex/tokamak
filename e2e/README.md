@@ -44,13 +44,13 @@ Keep those names when restyling the host.
 Use `--project=chromium` or `--project=webkit` to narrow a run. Failure traces and
 HTML reports live under `.ci-results/playwright*` and are uploaded by native CI.
 
-Chat also holds a thread-creation response while delivering live updates to check
-that the previous composer cannot send during the switch, and opens the agent
-picker to select and use another agent. `TOKAMAK_E2E_CPU_RATE` applies Chromium
-CPU throttling to the chat checks.
+Chat runs on its own, as pure threads: the new thread on opening, the thread made
+on the first Send, a second page seeing messages live, rename by double-click,
+delete from the menu, and a chosen folder offered again. `TOKAMAK_E2E_CPU_RATE`
+applies Chromium CPU throttling to the chat checks.
 
 A second server runs in hosted mode on `127.0.0.1:43124` (`e2e/serve-hosted.ts`)
-with its own random access token, the same plugins and the same sealed sandbox.
+with its own random access token, Chat, and Password sign-in.
 `servers.spec.ts` adds it through "Add a server" (including a rejected token),
 switches between it and the first server with ⌘1 and ⌘2, and removes it.
 
@@ -60,3 +60,16 @@ document, plugin view error containment and recovery, and HTTP/WebSocket origin
 rejection. The existing server suite still covers persistence and CPU budgets.
 Desktop window automation, OS integration, signing and external agents are outside
 this browser suite.
+
+## Fresh starter installation
+
+Build the server binary, then run the starter smoke in a disposable directory:
+
+```sh
+CARGO_BUILD_JOBS=2 cargo build --locked -p server --bin tokamak-server
+proto run bun -- e2e/starter.mjs
+```
+
+To opt in to one real turn through each installed CLI using its existing login,
+run `proto run bun -- e2e/starter.mjs --real claude codex`. Pass only one name
+to run one provider. This mode refuses CI.

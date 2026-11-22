@@ -1,44 +1,119 @@
-import { backend } from "../backends/backend";
-import { listBackends } from "../backends/backends";
+import { LOCAL_USER, local, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
+import { threadDeletedLocal, threadDeletedServer } from "../../contracts";
 import { api } from "../_generated/api";
-import { v } from "@tokamak/sdk";
-import { DEFAULT_TITLE, action, mutation, nonempty, query, thread } from "../_functions";
+import { folder } from "../folders/folder";
+import { mutation, nonempty, query, thread, type Model } from "../_functions";
 
 export const list = query({
   handler: ({ db }) => db.query("threads").withIndex("by_updatedAt").order("desc").collect(),
 });
 
-export const create = action({
-  args: { title: v.optional(v.string()) },
-  handler: async (ctx, args): Promise<import("@tokamak/sdk").Id<"threads">> => {
-    const first = (await listBackends(ctx))[0];
-    return ctx.runMutation(api.threads.insert, {
-      ...args,
-      ...(first ? { backend: { kind: "plugin" as const, plugin: first.plugin, backendId: first.id } } : {}),
-    });
+/** How many folders the new thread offers as starting points. */
+const RECENT_FOLDERS = 3;
+/** Threads read to find them; older folders drop off the list. */
+const RECENT_SCAN = 200;
+
+/** One thread, for the creator's local part to find its folder. */
+export const get = query({
+  args: { threadId: v.id("threads") },
+  handler: ({ db }, { threadId }) => db.get(threadId),
+});
+
+/** Who started a thread, named as on its first message; null once the thread is gone. */
+export const creator = query({
+  args: { threadId: v.id("threads") },
+  handler: async ({ db }, { threadId }): Promise<{ id: string; name?: string } | null> => {
+    const current = await db.get(threadId);
+    if (!current) return null;
+    const id = current.createdBy ?? LOCAL_USER;
+    const first = await db
+      .query("messages")
+      .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
+      .first();
+    return first?.author?.id === id ? { id, name: first.author.name } : { id };
   },
 });
 
-export const insert = mutation({
-  args: { title: v.optional(v.string()), backend: v.optional(backend) },
-  handler: (ctx, { title, backend }) => {
-    const { db } = ctx;
+/**
+ * Creates a thread with its first message. There are no empty threads: the
+ * window keeps an unsent thread to itself until this first Send.
+ * `{ kind: "own" }` is "No folder": the creator's local part makes that folder
+ * (`folders:resolve`) before anything works in it.
+ */
+export const start = mutation({
+  args: { text: v.string(), folder },
+  handler: async ({ db, auth }, { text, folder }) => {
+    const content = nonempty(text);
     const now = Date.now();
-
-    return db.insert("threads", {
-      ...(backend ? { backend } : {}),
-      title: title === undefined ? DEFAULT_TITLE : nonempty(title),
+    const threadId = await db.insert("threads", {
+      title: titleFrom(content),
+      folder: folder.kind === "chosen" ? { kind: "chosen", path: fullPath(folder.path) } : { kind: "own" },
+      createdBy: auth.user.id,
       createdAt: now,
       updatedAt: now,
     });
+    const messageId = await db.insert("messages", {
+      threadId,
+      role: "user",
+      author: { id: auth.user.id, name: auth.user.name },
+      parts: [{ type: "text", text: content }],
+      status: "complete",
+      createdAt: now,
+    });
+    return { threadId, messageId };
   },
 });
+
+/**
+ * Stores the path of a "No folder" thread's own folder, once, made by its
+ * creator's local part. Only the creator may: the folder is on their computer,
+ * and their agent works in it.
+ */
+export const setFolder = mutation({
+  args: { threadId: v.id("threads"), path: v.string() },
+  handler: async ({ db, auth }, { threadId, path }) => {
+    const current = await creatorsThread(db, threadId, auth.user.id, "set its folder");
+    // Threads from before folders existed have none and get an own folder too.
+    if (current.folder && (current.folder.kind !== "own" || current.folder.path !== undefined))
+      throw new Error("This thread already has a folder");
+    return db.patch(threadId, { folder: { kind: "own", path: fullPath(path) } });
+  },
+});
+
+/** The caller's most recently chosen folders, newest first; own folders are left out. */
+export const recentFolders = query({
+  handler: async ({ db, auth }) => {
+    const folders: string[] = [];
+    for (const row of await db.query("threads").withIndex("by_updatedAt").order("desc").take(RECENT_SCAN)) {
+      if (row.folder?.kind !== "chosen" || row.createdBy !== auth.user.id) continue;
+      if (!folders.includes(row.folder.path)) folders.push(row.folder.path);
+      if (folders.length === RECENT_FOLDERS) break;
+    }
+    return folders;
+  },
+});
+
+/** The first line of the first message, cut to a title's length. */
+function titleFrom(text: string) {
+  const line = text.split("\n", 1)[0]!.trim();
+  return Array.from(line).slice(0, 80).join("");
+}
+
+/**
+ * A folder is an absolute path on its creator's computer. `~` is expanded by
+ * that computer's local part before it is stored; a browser stores what it was given.
+ */
+function fullPath(path: string) {
+  const value = nonempty(path);
+  if (!/^(\/|~(\/|$)|[A-Za-z]:[\\/])/.test(value)) throw new Error("A folder must be a full path");
+  return value;
+}
 
 export const rename = mutation({
   args: { threadId: v.id("threads"), title: v.string() },
   handler: async (ctx, { threadId, title }) => {
     const { db } = ctx;
-    await thread(db, threadId);
+    await creatorsThread(db, threadId, ctx.auth.user.id, "rename it");
     return db.patch(threadId, { title: nonempty(title), updatedAt: Date.now() });
   },
 });
@@ -47,46 +122,51 @@ export const remove = mutation({
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
     const { db } = ctx;
+    await creatorsThread(db, threadId, ctx.auth.user.id, "delete it");
+    for (const hook of await threadDeletedServer.list()) await hook.after({ threadId });
     for (const message of await db
       .query("messages")
       .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", threadId))
       .collect()) {
       await db.delete(message._id);
     }
-    for (const run of await db
-      .query("runs")
-      .withIndex("by_threadId", (q) => q.eq("threadId", threadId))
-      .collect()) {
-      await db.delete(run._id);
-    }
     return db.delete(threadId);
   },
 });
 
-export const setBackend = mutation({
-  args: { threadId: v.id("threads"), backend },
-  handler: async (ctx, { threadId, backend }) => {
-    const { db } = ctx;
-    const current = await thread(db, threadId);
-    if (backend.kind === "plugin") {
-      const previous = current.backend;
-      const { state: _state, ...selected } = backend;
-      backend = {
-        ...selected,
-        plugin: nonempty(backend.plugin),
-        backendId: nonempty(backend.backendId),
-        ...(previous?.kind === "plugin" &&
-        previous.plugin === backend.plugin &&
-        previous.backendId === backend.backendId &&
-        JSON.stringify(previous.settings ?? {}) === JSON.stringify(backend.settings ?? {}) &&
-        previous.state !== undefined
-          ? { state: previous.state }
-          : {}),
-      };
-    }
-    return db.patch(threadId, {
-      backend,
-      updatedAt: Date.now(),
-    });
+/** Desktop deletion can also clean up things plugins kept on this computer. */
+export const removeLocal = local({
+  args: { threadId: v.id("threads") },
+  handler: async (ctx, { threadId }) => {
+    const current = await ctx.runQuery(api.threads.get, { threadId });
+    await ctx.runMutation(api.threads.remove, { threadId });
+    if (!current) return null;
+    const cleaned = await threadDeletedLocal
+      .list()
+      .then(async (hooks) => {
+        const event = { threadId, folder: current.folder?.path };
+        const results = await Promise.allSettled(hooks.map(async (hook) => hook.after(event)));
+        return results.every((result) => result.status === "fulfilled");
+      })
+      .catch(() => false);
+    return cleaned
+      ? null
+      : { warning: "The thread was deleted, but some of its local data couldn't be removed." };
   },
 });
+
+/** What the creator alone may do to a thread, as the refusal says it ("rename it"). */
+type CreatorAction = "set its folder" | "rename it" | "delete it";
+
+/** The thread, if `userId` started it; otherwise refuses `action`. */
+async function creatorsThread(
+  db: DatabaseReader<Model>,
+  threadId: Id<"threads">,
+  userId: string,
+  action: CreatorAction,
+): Promise<Doc<Model, "threads">> {
+  const current = await thread(db, threadId);
+  if ((current.createdBy ?? LOCAL_USER) !== userId)
+    throw new Error(`Only the person who started this thread can ${action}`);
+  return current;
+}

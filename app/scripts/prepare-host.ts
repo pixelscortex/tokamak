@@ -1,5 +1,6 @@
+import { buildStarterPlugins, installStarterPlugins } from "./starter-plugins";
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -9,9 +10,7 @@ function run(command: string, args: string[]) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-// The dev server loads the whole plugins folder, so every plugin in it must be built.
-for (const plugin of ["chat", "acp"])
-  run("proto", ["run", "bun", "--", "packages/build/src/build.ts", `plugins/${plugin}`]);
+buildStarterPlugins();
 run("cargo", [
   "build",
   "--locked",
@@ -34,15 +33,5 @@ run("cargo", [
     `${directory}/tokamak-server-${target}${suffix}`,
   );
   await rm(`${directory}/plugins`, { recursive: true, force: true });
-  for (const plugin of await readdir(`${root}plugins`, { withFileTypes: true })) {
-    if (!plugin.isDirectory()) continue;
-    // Ship built installations only; source trees and local secrets stay outside the app.
-    try {
-      await cp(`${root}plugins/${plugin.name}/dist`, `${directory}/plugins/${plugin.name}/dist`, {
-        recursive: true,
-      });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
+  await installStarterPlugins(`${directory}/plugins`);
 }

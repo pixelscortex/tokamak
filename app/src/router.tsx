@@ -4,6 +4,8 @@ import { Kit } from "./kit";
 import type { ServerEndpoint } from "./plugins/adapter";
 import { useShell } from "./shell/context";
 import { Connect } from "./shell/connect/flow";
+import { Devices } from "./shell/devices";
+import { Members } from "./shell/members";
 import { Shell } from "./shell/shell";
 import { NoPlugins, NotFound } from "./shell/states";
 import { hrefOf } from "./shell/views";
@@ -19,7 +21,9 @@ const kit = createRoute({ getParentRoute: () => root, path: "/kit", component: K
 const connect = createRoute({ getParentRoute: () => root, path: "/connect", component: Connect });
 const welcome = createRoute({ getParentRoute: () => root, path: "/welcome", component: Welcome });
 const join = createRoute({ getParentRoute: () => root, path: "/join", component: Join });
-const base = [home, kit, connect, welcome, join];
+const devices = createRoute({ getParentRoute: () => root, path: "/settings/devices", component: Devices });
+const members = createRoute({ getParentRoute: () => root, path: "/settings/members", component: Members });
+const base = [home, kit, connect, welcome, join, devices, members];
 export const router = createRouter({
   routeTree: root.addChildren(base),
   defaultNotFoundComponent: NotFound,

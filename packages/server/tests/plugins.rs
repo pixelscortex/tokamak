@@ -130,12 +130,6 @@ fn nested_plugins_share_transactions_read_dependencies_and_a_single_worker() {
             let server = Server::load_plugins(database, pool, &root).await.unwrap();
             let mut reader = server.connect().await.unwrap();
             let mut writer = server.connect().await.unwrap();
-            assert_eq!(
-                call(&mut writer, 1, "b/ops:providers", json!({}))
-                    .await
-                    .unwrap(),
-                2
-            );
             assert_nested_plugin_transactions(&mut writer).await;
             reader.subscribe(100, "a/ops:combined", json!({})).unwrap();
             assert!(matches!(
@@ -167,60 +161,119 @@ fn nested_plugins_share_transactions_read_dependencies_and_a_single_worker() {
 #[test]
 fn reload_is_atomic_preserves_storage_and_rejects_partial_or_invalid_installations() {
     let installation = Installation::new();
-    tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
         .block_on(async {
-            let pool = Arc::new(Pool::new(PoolConfig {workers:1,..Default::default()}).unwrap());
+            let pool = Arc::new(
+                Pool::new(PoolConfig {
+                    workers: 1,
+                    ..Default::default()
+                })
+                .unwrap(),
+            );
             let database = Database::open(Storage::Memory).await.unwrap();
-            let server = Server::load_plugins(database,pool,&installation.0).await.unwrap();
+            let server = Server::load_plugins(database, pool, &installation.0)
+                .await
+                .unwrap();
             let mut session = server.connect().await.unwrap();
-            call(&mut session,1,"a/ops:both",json!({"fail":false})).await.unwrap();
-            let mut reader = server.connect().await.unwrap();
-            reader.subscribe(100,"b/ops:providers",json!({})).unwrap();
-            assert!(matches!(next(&mut reader).await,Event::Subscription {id:100,result:Ok(value)} if value == 2));
+            call(&mut session, 1, "a/ops:both", json!({"fail":false}))
+                .await
+                .unwrap();
             let original = server.plugins().await.unwrap()["revision"].clone();
             let path = installation.0.join("b/bundle.js");
             let source = std::fs::read_to_string(&path).unwrap();
             assert!(source.contains("child failure"));
-            let changed = source.replace("child failure","reloaded child failure");
-            std::fs::write(&path,&changed).unwrap();
-            assert!(server.reload_plugin("b".into()).await.unwrap_err().to_string().contains("hash mismatch"));
-            assert_eq!(server.plugins().await.unwrap()["revision"],original);
-            installation.change("b",|manifest| manifest["hashes"]["bundle.js"] =
-                format!("{:x}",Sha256::digest(changed.as_bytes())).into());
+            let changed = source.replace("child failure", "reloaded child failure");
+            std::fs::write(&path, &changed).unwrap();
+            assert!(
+                server
+                    .reload_plugin("b".into())
+                    .await
+                    .unwrap_err()
+                    .to_string()
+                    .contains("hash mismatch")
+            );
+            assert_eq!(server.plugins().await.unwrap()["revision"], original);
+            installation.change("b", |manifest| {
+                manifest["hashes"]["bundle.js"] =
+                    format!("{:x}", Sha256::digest(changed.as_bytes())).into()
+            });
             let started = std::time::Instant::now();
             let reloaded = server.reload_plugin("b".into()).await.unwrap();
             assert!(started.elapsed() < Duration::from_secs(2));
-            assert_ne!(reloaded["revision"],original);
-            assert!(call(&mut session,2,"a/ops:both",json!({"fail":true})).await.unwrap_err().contains("reloaded child failure"));
-            assert_eq!(call(&mut session,3,"b/ops:list",json!({})).await.unwrap().as_array().unwrap().len(),1);
-            let stable = reloaded["revision"].clone();
-            installation.change("b",|manifest| manifest["plugin"]["permissions"] = json!(["net:example.com"]));
-            assert!(server.reload_plugin("b".into()).await.unwrap_err().to_string().contains("bump its version"));
-            assert_eq!(server.plugins().await.unwrap()["revision"],stable);
-            installation.change("b",|manifest| {
-                manifest["plugin"]["permissions"] = json!([]);
-                manifest["plugin"]["provides"] = json!([]);
-            });
-            server.reload_plugin("b".into()).await.unwrap();
-            assert!(matches!(next(&mut reader).await,Event::Subscription {id:100,result:Ok(value)} if value == 1));
-            installation.change("b",|manifest| manifest["plugin"]["consumes"] = json!([]));
-            server.reload_plugin("b".into()).await.unwrap();
-            assert!(call(&mut session,20,"b/ops:denied",json!({})).await.unwrap_err().contains("does not declare access"));
-            assert_eq!(call(&mut session,21,"b/ops:list",json!({})).await.unwrap().as_array().unwrap().len(),1);
-            let stable = server.plugins().await.unwrap()["revision"].clone();
-            installation.change("b",|manifest| {
-                manifest["plugin"]["permissions"] = json!([]);
-                manifest["plugin"]["depends"] = json!({"missing":"*"});
-            });
-            assert!(server.reload_plugin("b".into()).await.unwrap_err().to_string().contains("Missing dependency"));
-            assert_eq!(server.plugins().await.unwrap()["revision"],stable);
-            // A failed reload leaves both the old code and existing connections usable.
-            assert_eq!(call(&mut session,4,"b/ops:list",json!({})).await.unwrap().as_array().unwrap().len(),1);
-            assert!(server.plugin_asset("b".into(),"bundle.js".into()).await.unwrap().is_none());
+            assert_ne!(reloaded["revision"], original);
+            assert!(
+                call(&mut session, 2, "a/ops:both", json!({"fail":true}))
+                    .await
+                    .unwrap_err()
+                    .contains("reloaded child failure")
+            );
+            assert_eq!(
+                call(&mut session, 3, "b/ops:list", json!({}))
+                    .await
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                1
+            );
+            assert_invalid_reload_leaves_plugin_running(&installation, &server, &mut session).await;
+            assert!(
+                server
+                    .plugin_asset("b".into(), "bundle.js".into())
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
             drop(session);
-            drop(reader);
             server.close().await.unwrap();
         });
+}
+
+async fn assert_invalid_reload_leaves_plugin_running(
+    installation: &Installation,
+    server: &Server,
+    session: &mut Session,
+) {
+    let stable = server.plugins().await.unwrap()["revision"].clone();
+    installation.change("b", |manifest| {
+        manifest["plugin"]["permissions"] = json!(["net:example.com"]);
+    });
+    assert!(
+        server
+            .reload_plugin("b".into())
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("bump its version")
+    );
+    assert_eq!(server.plugins().await.unwrap()["revision"], stable);
+    installation.change("b", |manifest| {
+        manifest["plugin"]["permissions"] = json!([]);
+        manifest["plugin"]["depends"] = json!({"missing":"*"});
+    });
+    assert!(
+        server
+            .reload_plugin("b".into())
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("Missing dependency")
+    );
+    assert_eq!(server.plugins().await.unwrap()["revision"], stable);
+    // A failed reload leaves both the old code and existing connections usable.
+    assert_eq!(
+        call(session, 4, "b/ops:list", json!({}))
+            .await
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -279,7 +332,7 @@ fn standalone_binary_exposes_only_authenticated_plugin_controls_and_cli() {
     assert!(!local.join("server.json").exists());
 }
 
-// Dependency and interface capabilities must not bypass exports. Even a caught
+// Dependency access must not bypass exports. Even a caught
 // denial must poison the transaction, including writes preceding the call.
 #[tokio::test]
 async fn private_plugin_calls_are_denied_and_caught_writes_roll_back() {
@@ -290,25 +343,18 @@ async fn private_plugin_calls_are_denied_and_caught_writes_roll_back() {
         .await
         .unwrap();
     let mut session = server.connect().await.unwrap();
-    for provider in [false, true] {
-        let error = call(
-            &mut session,
-            1,
-            "b/ops:denied",
-            json!({"provider":provider}),
-        )
+    let error = call(&mut session, 1, "a/ops:denied", json!({}))
         .await
         .unwrap_err();
-        assert!(
-            error.contains("ops:privateWrite is not exported by a"),
-            "{error}"
+    assert!(
+        error.contains("ops:privateWrite is not exported by b"),
+        "{error}"
+    );
+    for name in ["a/ops:list", "b/ops:list"] {
+        assert_eq!(
+            call(&mut session, 2, name, json!({})).await.unwrap(),
+            json!([])
         );
-        for name in ["a/ops:list", "b/ops:list"] {
-            assert_eq!(
-                call(&mut session, 2, name, json!({})).await.unwrap(),
-                json!([])
-            );
-        }
     }
     // The same private function is legal from a client; self-calls are legal too.
     call(&mut session, 3, "a/ops:privateWrite", json!({}))
@@ -331,15 +377,6 @@ async fn private_plugin_calls_are_denied_and_caught_writes_roll_back() {
     );
     assert_eq!(
         call(&mut session, 7, "b/ops:list", json!({}))
-            .await
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
-        2
-    );
-    assert_eq!(
-        call(&mut session, 8, "b/ops:providerList", json!({}))
             .await
             .unwrap()
             .as_array()
@@ -401,7 +438,7 @@ fn build_source(installation: &Installation, plugin: Option<Value>) -> PathBuf {
         .canonicalize()
         .unwrap();
     let source = installation.0.join("source");
-    std::fs::create_dir_all(source.join("backend")).unwrap();
+    std::fs::create_dir_all(source.join("src/server")).unwrap();
     std::fs::create_dir_all(source.join("node_modules/@tokamak")).unwrap();
     std::os::unix::fs::symlink(
         root.join("packages/sdk"),
@@ -414,12 +451,12 @@ fn build_source(installation: &Installation, plugin: Option<Value>) -> PathBuf {
     )
     .unwrap();
     std::fs::write(
-        source.join("backend/ops.ts"),
+        source.join("src/server/ops.ts"),
         "import { query } from '@tokamak/sdk'; export const answer = query({handler: () => 42});\n",
     )
     .unwrap();
     std::fs::write(
-        source.join("backend/tsconfig.json"),
+        source.join("src/server/tsconfig.json"),
         json!({
             "extends":root.join("tsconfig.json")
         })
@@ -475,7 +512,7 @@ fn builder_rejects_missing_exports_file_and_nonexistent_reexport() {
     );
     std::fs::write(
         source.join("api.ts"),
-        "export { nonexistent } from './backend/ops';\n",
+        "export { nonexistent } from './src/server/ops';\n",
     )
     .unwrap();
     let (success, output) = build_artifact(&source);
@@ -598,7 +635,20 @@ fn assert_snapshot(value: &Value) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_writes() {
     let installation = Installation::new();
-    let database = Database::open(Storage::Memory).await.unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let storage = || Storage::Disk(data.path().join("db"));
+    // Run the startup migration before deliberately holding a second writer
+    // open to force a conflict in the handler itself.
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let initial = Server::load_plugins(
+        Database::open(storage()).await.unwrap(),
+        pool,
+        &installation.0,
+    )
+    .await
+    .unwrap();
+    initial.close().await.unwrap();
+    let database = Database::open(storage()).await.unwrap();
     let items = DataSpace::plugin("a")
         .unwrap()
         .table(&Table::new("items").unwrap())
@@ -643,18 +693,7 @@ async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_wri
         .await
         .unwrap();
     let mut session = server.connect().await.unwrap();
-    let query = call(&mut session, 1, "a/determinism:read", json!({}))
-        .await
-        .unwrap();
-    assert_snapshot(&query);
-    let second_query = call(&mut session, 2, "a/determinism:read", json!({}))
-        .await
-        .unwrap();
-    assert_snapshot(&second_query);
-    assert_ne!(
-        query["before"]["random"], second_query["before"]["random"],
-        "separate queries reused a seed"
-    );
+    assert_distinct_query_seeds(&mut session).await;
     session
         .call(3, "a/determinism:write", json!({"id":presented_id}))
         .unwrap();
@@ -677,6 +716,21 @@ async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_wri
     assert_eq!(replayed, first, "retry changed time or random sequences");
     assert_replayed_plugin_writes(&mut session, &presented_id, &first).await;
     server.close().await.unwrap();
+}
+
+async fn assert_distinct_query_seeds(session: &mut Session) {
+    let query = call(session, 1, "a/determinism:read", json!({}))
+        .await
+        .unwrap();
+    assert_snapshot(&query);
+    let second = call(session, 2, "a/determinism:read", json!({}))
+        .await
+        .unwrap();
+    assert_snapshot(&second);
+    assert_ne!(
+        query["before"]["random"], second["before"]["random"],
+        "separate queries reused a seed"
+    );
 }
 
 async fn assert_nested_plugin_transactions(writer: &mut server::Session) {
@@ -861,5 +915,324 @@ async fn assert_replayed_plugin_writes(
     assert_ne!(
         first["before"]["random"], second_mutation["before"]["random"],
         "separate mutations reused a seed"
+    );
+}
+
+fn install_ui(root: &Installation, id: &str, depends: Value) {
+    let directory = root.0.join(id);
+    std::fs::create_dir(&directory).unwrap();
+    let mut hashes = std::collections::BTreeMap::new();
+    for (name, source) in [("ui.js", "export {};"), ("ui.js.map", "{}")] {
+        std::fs::write(directory.join(name), source).unwrap();
+        hashes.insert(name, format!("{:x}", Sha256::digest(source)));
+    }
+    let manifest = json!({
+        "formatVersion": 1,
+        "plugin": { "id": id, "version": "1.0.0", "depends": depends },
+        "hashes": hashes,
+        "entries": { "ui": { "code": "ui.js", "map": "ui.js.map" } }
+    });
+    std::fs::write(directory.join("manifest.json"), manifest.to_string()).unwrap();
+}
+
+#[test]
+fn first_scan_assigns_installation_priority_by_dependencies_then_id() {
+    let root = Installation::empty();
+    install_ui(&root, "a-dependent", json!({"z-base":"*"}));
+    install_ui(&root, "z-base", json!({}));
+    install_ui(&root, "b-independent", json!({}));
+    let metadata = server::plugins::Catalog::read(&root.0).unwrap().metadata();
+    let plugins = metadata["plugins"].as_array().unwrap();
+    let ids = plugins
+        .iter()
+        .map(|plugin| plugin["plugin"]["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, ["b-independent", "z-base", "a-dependent"]);
+    for (index, plugin) in plugins.iter().enumerate() {
+        assert_eq!(plugin["installOrder"], index);
+    }
+}
+
+#[tokio::test]
+async fn catalog_preserves_installation_order_on_reload_and_restart() {
+    let root = Installation::empty();
+    let data = tempfile::tempdir().unwrap();
+    let install = |id: &str| install_ui(&root, id, json!({}));
+    let start = || async {
+        let database = Database::open(Storage::Disk(data.path().join("db")))
+            .await
+            .unwrap();
+        let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+        Server::load_plugins(database, pool, &root.0).await.unwrap()
+    };
+
+    install("z-first");
+    let server = start().await;
+    install("a-second");
+    let reload = server.reload_plugin("a-second".to_owned()).await.unwrap();
+    assert_eq!(reload["plugins"][0]["plugin"]["id"], "a-second");
+    assert_eq!(reload["plugins"][0]["installOrder"], 1);
+    assert_eq!(reload["plugins"][1]["installOrder"], 0);
+    server.close().await.unwrap();
+
+    // An upgrade can replace the installation directory while the server is closed.
+    std::fs::rename(root.0.join("z-first"), root.0.join(".old")).unwrap();
+    install("z-first");
+    let server = start().await;
+    assert_eq!(
+        server.plugins().await.unwrap()["plugins"],
+        reload["plugins"]
+    );
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn removing_a_plugin_clears_its_saved_window_state() {
+    use server::protocol::Request;
+
+    let root = Installation::empty();
+    install_ui(&root, "notes", json!({}));
+    install_ui(&root, "other", json!({}));
+    let database = Database::open(Storage::Memory).await.unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(database, pool, &root.0).await.unwrap();
+    let mut session = server.connect().await.unwrap();
+    for plugin in ["notes", "other"] {
+        session
+            .sender()
+            .request(Request::Mutation {
+                id: 1,
+                name: "tokamak:writeWindowState".into(),
+                args: json!({"plugin": plugin, "key": "pins", "value": [plugin]}),
+            })
+            .unwrap();
+        assert!(matches!(
+            next(&mut session).await,
+            Event::Response {
+                result: Ok(Value::Null),
+                ..
+            }
+        ));
+    }
+
+    std::fs::rename(root.0.join("notes"), root.0.join(".notes")).unwrap();
+    server.reload_plugin("notes".into()).await.unwrap();
+    std::fs::rename(root.0.join(".notes"), root.0.join("notes")).unwrap();
+    server.reload_plugin("notes".into()).await.unwrap();
+    for (plugin, expected) in [
+        ("notes", Value::Null),
+        ("other", json!({"value": ["other"]})),
+    ] {
+        assert_eq!(
+            read_window_state(&mut session, plugin, "pins").await,
+            expected,
+            "{plugin}"
+        );
+    }
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn startup_removes_hash_only_window_state_and_keeps_owned_rows() {
+    let root = Installation::empty();
+    install_ui(&root, "notes", json!({}));
+    let data = tempfile::tempdir().unwrap();
+    let storage = || Storage::Disk(data.path().join("db"));
+    let database = Database::open(storage()).await.unwrap();
+    let table = DataSpace::plugin("tokamak.host")
+        .unwrap()
+        .table(&Table::new("window_state").unwrap())
+        .unwrap();
+    let mut seed = database.begin().await.unwrap();
+    for key in ["old-1", "old-2", "owned"] {
+        let row = if key == "owned" {
+            json!({"user": "local", "plugin": "notes", "key": key, "value": key})
+        } else {
+            json!({"value": key})
+        };
+        seed.insert(&table, json_object(&row).unwrap())
+            .await
+            .unwrap();
+    }
+    seed.commit().await.unwrap();
+
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(database, pool, &root.0).await.unwrap();
+    server.close().await.unwrap();
+    let mut database = Database::open(storage()).await.unwrap();
+    let mut tx = database.read_only().await.unwrap();
+    let rows = tx.query(&table).collect().await.unwrap();
+    assert_eq!(rows.len(), 1);
+    let row = rows.into_iter().next().unwrap().into_json();
+    assert_eq!(row["key"], "owned");
+    assert_eq!(row["value"], "owned");
+    tx.rollback().await.unwrap();
+    database.close().await.unwrap();
+}
+
+async fn read_window_state(session: &mut Session, plugin: &str, key: &str) -> Value {
+    session
+        .sender()
+        .request(server::protocol::Request::Query {
+            id: 1,
+            name: "tokamak:readWindowState".into(),
+            args: json!({"plugin": plugin, "key": key}),
+        })
+        .unwrap();
+    match next(session).await {
+        Event::Response { result, .. } => result.unwrap(),
+        event => panic!("Unexpected event: {event:?}"),
+    }
+}
+
+#[tokio::test]
+async fn hosted_startup_clears_revoked_members_window_state() {
+    use server::{
+        identity::Identities,
+        websocket::{self, HostedWeb, LocalAccess},
+    };
+
+    let root = Installation::empty();
+    install_ui(&root, "notes", json!({}));
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(data.path().join("index.html"), "test").unwrap();
+    let owner = "0123456789abcdef0123456789abcdef";
+    let members = data.path().join("members.json");
+    let stored: Vec<_> = ["Alice", "Bob", "Carol"]
+        .into_iter()
+        .map(|name| json!({"id":name,"name":name,"role":"member","created_at":1}))
+        .collect();
+    std::fs::write(&members, json!(stored).to_string()).unwrap();
+    let identities = Identities::hosted(members.clone(), owner, "Owner").unwrap();
+    let member = |name: &str| server::identity::User {
+        id: name.into(),
+        name: name.into(),
+        role: server::identity::Role::Member,
+    };
+    let alice = member("Alice");
+    let bob = member("Bob");
+    let carol = member("Carol");
+    let start = || async {
+        let database = Database::open(Storage::Disk(data.path().join("db")))
+            .await
+            .unwrap();
+        let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+        Arc::new(Server::load_plugins(database, pool, &root.0).await.unwrap())
+    };
+
+    let server = start().await;
+    for user in [&alice, &bob, &carol] {
+        let mut session = server.connect_as(user.clone()).await.unwrap();
+        save_member_pins(&mut session, &user.name).await;
+    }
+    server.close().await.unwrap();
+    // Simulate the persisted revocation succeeding without window-state cleanup.
+    identities.revoke(&alice.id).unwrap();
+    let identities = Arc::new(Identities::hosted(members, owner, "Owner").unwrap());
+    let server = start().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let web = HostedWeb::configure(Some(data.path().to_owned()), address).unwrap();
+    let (stop, shutdown) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(websocket::serve_with_identities(
+        listener,
+        server.clone(),
+        async {
+            let _ = shutdown.await;
+        },
+        Some(LocalAccess {
+            token: owner.into(),
+            identity: json!({}),
+        }),
+        web,
+        identities,
+    ));
+    revoke_member_over_http(address, owner, &bob.id).await;
+    for (user, expected) in [
+        (alice, Value::Null),
+        (bob, Value::Null),
+        (carol, json!({"value":["Carol"]})),
+    ] {
+        let mut session = server.connect_as(user).await.unwrap();
+        assert_eq!(
+            read_window_state(&mut session, "notes", "pins").await,
+            expected
+        );
+    }
+    stop.send(()).unwrap();
+    serving.await.unwrap().unwrap();
+    server.close().await.unwrap();
+}
+
+async fn save_member_pins(session: &mut Session, name: &str) {
+    assert_eq!(
+        read_window_state(session, "notes", "pins").await,
+        Value::Null
+    );
+    session
+        .sender()
+        .request(server::protocol::Request::Mutation {
+            id: 2,
+            name: "tokamak:writeWindowState".into(),
+            args: json!({"plugin":"notes","key":"pins","value":[name]}),
+        })
+        .unwrap();
+    assert!(matches!(
+        next(session).await,
+        Event::Response {
+            result: Ok(Value::Null),
+            ..
+        }
+    ));
+}
+
+async fn revoke_member_over_http(address: std::net::SocketAddr, owner: &str, id: &str) {
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
+    assert_eq!(
+        http.get(format!("http://{address}/health"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        http.post(format!("http://{address}/members/{id}/revoke"))
+            .bearer_auth(owner)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+}
+
+#[test]
+fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let scratch = tempfile::tempdir_in(workspace.join("target")).unwrap();
+    let folder = scratch.path().join("hello");
+    let create = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
+            .args(["plugin", "create"])
+            .arg(&folder)
+            .output()
+            .unwrap()
+    };
+    let created = create();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let skill = std::fs::read_to_string(folder.join("SKILL.md")).unwrap();
+    assert!(skill.contains("ctx.auth.user") && skill.contains("ctx.proc"));
+    assert!(!create().status.success());
+    assert_eq!(
+        std::fs::read_to_string(folder.join("SKILL.md")).unwrap(),
+        skill
     );
 }

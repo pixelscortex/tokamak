@@ -56,7 +56,7 @@ impl Coordinator {
                     self.refresh().await;
                 }
                 command = commands.recv() => match command {
-                    Some(Command::Connect(user, reply)) => {
+                    Some(Command::Connect(auth, reply)) => {
                         if self.sessions.len() >= SESSIONS || self.next_session == u64::MAX {
                             let _ = reply.send(Err(Error::Overloaded));
                             continue;
@@ -71,7 +71,7 @@ impl Coordinator {
 
                         let alive = output.downgrade();
                         self.sessions.insert(id, Client {
-                            user,
+                            auth,
                             output,
                             slow: slow.clone(),
                             subscriptions: BTreeMap::new(),
@@ -81,7 +81,7 @@ impl Coordinator {
                             self.sessions.remove(&id);
                         }
                     }
-                    Some(Command::Action(session, user, action)) => self.action(session, user, action).await,
+                    Some(Command::Action(session, auth, action)) => self.action(session, auth, action).await,
                     Some(command) => self.control(command).await,
                     None => break,
                 }
@@ -117,7 +117,7 @@ impl Coordinator {
                     &name,
                     serde_json::json!({}),
                     true,
-                    crate::identity::User::local(),
+                    Some(crate::identity::AuthContext::server()),
                 )
                 .await
             {

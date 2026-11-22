@@ -37,8 +37,9 @@ export const add = mutation({
 
 ## Handler context
 
-Every query, mutation and action receives `ctx.user: { id, name, role }`, supplied
-by the server from the signed-in connection. Subscriptions retain their caller,
+Queries, mutations, actions and local functions receive `ctx.auth.user`
+(`id`, `name`, `role`) and `ctx.auth.device` (`id`, `name`) from the
+signed-in connection. Subscriptions retain their caller,
 and nested action calls and plugin-to-plugin calls preserve the original user.
 Local mode supplies the owner `local`, named `You` (or `TOKAMAK_OWNER_NAME`).
 
@@ -51,8 +52,8 @@ Local mode supplies the owner `local`, named `You` (or `TOKAMAK_OWNER_NAME`).
 <api-declaration path="../../../../packages/sdk/src/functions.ts" name="ActionContext" />
 
 `ctx.use(api)` binds another plugin's generated references to calls through
-the host. A query can only call queries. `ctx.providers(name)` lists the
-installed plugins that provide an interface.
+the host. A query can only call queries. Define a named `contract` to discover
+its installed implementations.
 
 <api-declaration path="../../../../packages/sdk/src/functions.ts" name="PluginCalls" />
 
@@ -63,3 +64,59 @@ installed plugins that provide an interface.
 A handler that returns nothing sends `null` over the wire.
 
 <api-declaration path="../../../../packages/sdk/src/functions.ts" name="WireResult" />
+
+## Actions and internal functions
+
+Use an action for effects. Internal functions can be called by their own plugin using generated `internal` references. Use `pluginOnly` to expose a function to other plugins without making it callable from a window.
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="action" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="internalQuery" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="internalMutation" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="internalAction" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="pluginOnly" />
+
+## Local functions
+
+Local functions run in the local part of the client. Server calls they make use the window’s session. Use `ctx.proc` to run a program and `ctx.signal` to observe cancellation.
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="local" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="LocalContext" />
+
+<api-declaration path="../../../../packages/sdk/src/local.ts" name="LocalProcess" />
+
+<api-declaration path="../../../../packages/sdk/src/local.ts" name="LocalProcessOptions" />
+
+<api-declaration path="../../../../packages/sdk/src/local.ts" name="RunningProcess" />
+
+<api-declaration path="../../../../packages/sdk/src/within.ts" name="within" />
+
+<api-declaration path="../../../../packages/sdk/src/within.ts" name="TIMED_OUT" />
+
+## Expected failures
+
+Return `fail(kind, data)` for a failure the caller can handle and check the result with `isFailure`.
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="fail" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="isFailure" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="Failure" />
+
+## Connection identity
+
+`isServerCall` identifies server maintenance calls, which have their own device identity.
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="AuthContext" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="Device" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="isServerCall" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="SERVER_DEVICE_ID" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="FALLBACK_LOCAL_DEVICE" />

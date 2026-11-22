@@ -1,23 +1,15 @@
-import { pluginCompilerOptions } from "../../sdk/tools/plugin-boundary.mjs";
+import { parsePluginSpecifier } from "../../sdk/tools/plugin-boundary.mjs";
+import { pluginCompilerOptions } from "../../sdk/tools/plugin-compiler.mjs";
+import { componentParts, problem } from "./component-parts.ts";
+import { brand, exportedInitializer, importModule, inSource, unalias, unwrap } from "./compiler.ts";
 import { clientEntry } from "./descriptor.ts";
 /** Use the compiler's export/alias graph, as backend exports do. Keep TS 5.9.3:
  * 6.0.3 is the newest JS API release; 7.x has no JS API. Upgrading belongs to
  * a separate tooling change, not the plugin wire-format implementation. */
+import { resolve } from "node:path";
 import ts from "typescript";
 
-const fields = {
-  fill: "target",
-  wrap: "target",
-  replace: "target",
-  view: "route",
-  itemRenderer: "type",
-  toolbar: "label",
-  command: "title",
-  entityCard: "table",
-} as const;
-/** Options a kind may also carry; each must be a string the compiler can read statically. */
-const optional: Partial<Record<keyof typeof fields, readonly string[]>> = { view: ["icon"] };
-export function uiContributions(root: string) {
+export function uiContributions(root: string, plugin: string) {
   const entry = clientEntry(root);
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
@@ -39,32 +31,54 @@ export function uiContributions(root: string) {
   if (!source) throw new Error(`Missing plugin UI entry ${entry}`);
   const runtimeNames = emittedExports(program, checker);
   const runtime = runtimeNames(source);
-  const original = (s: ts.Symbol): ts.Symbol =>
-    s.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(s) : s;
   const module = checker.getSymbolAtLocation(source);
   const contributes: Record<string, { id: string; [key: string]: string | number }[]> = {};
+  const replacements = new Map<string, string>();
+  const owners = new Map<string, ReturnType<typeof componentParts>>();
+  function lookup(owner: string, exported: string, part: string) {
+    let parts = owners.get(owner);
+    if (!parts) {
+      const folder = resolve(root, "..", owner);
+      const file = program.getSourceFile(clientEntry(folder));
+      if (!file) return;
+      owners.set(owner, (parts = componentParts(file, checker, owner, folder)));
+    }
+    return parts.part(exported, part);
+  }
+  const checked = new Map<ts.SourceFile, readonly ts.Diagnostic[]>();
+  function checkAction(call: ts.CallExpression) {
+    const file = call.getSourceFile();
+    let diagnostics = checked.get(file);
+    if (!diagnostics) checked.set(file, (diagnostics = program.getSemanticDiagnostics(file)));
+    const diagnostic = diagnostics.find(
+      (d) => d.start !== undefined && d.start >= call.getStart(file) && d.start < call.end,
+    );
+    if (diagnostic) throw problem(call, ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+  }
   for (const exported of module ? checker.getExportsOfModule(module) : []) {
     if (!runtime.has(exported.name)) continue;
-    const symbol = original(exported);
+    const symbol = unalias(checker, exported);
     const declaration = symbol.valueDeclaration;
-    if (!declaration) continue;
+    if (!declaration || !inSource(root, declaration.getSourceFile().fileName)) continue;
     const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
-    const brand = type.getProperties().find((p) => p.name.startsWith("__@contributionBrand@"));
-    if (!brand) continue;
-    const kindType = checker.getTypeOfSymbolAtLocation(brand, declaration);
-    const fail = (): never => {
-      throw new Error(
-        `Invalid UI contribution ${exported.name}: use a contribution helper with static literal options`,
-      );
-    };
-    if (!kindType.isStringLiteral() || !(kindType.value in fields)) fail();
-    const kind = (kindType as ts.StringLiteralType).value as keyof typeof fields;
-    const values = ["fill", "wrap", "replace"].includes(kind)
-      ? extensionOptions(declaration, kind, checker, fail)
-      : contributionOptions(declaration, fields[kind], optional[kind] ?? [], checker, fail);
-    if (kind === "view") validateRoute(String(values.route!), fail);
-    if (values.icon !== undefined) validateIcon(String(values.icon), fail);
-    (contributes[kind] ??= []).push({ id: exported.name, ...values });
+    if (brand(type, "viewBrand")) {
+      (contributes.view ??= []).push({ id: exported.name, ...pageOptions(declaration, checker) });
+      continue;
+    }
+    const action = brand(type, "componentActionBrand");
+    if (action) {
+      const kind = checker.getTypeOfSymbolAtLocation(action, declaration);
+      if (!kind.isStringLiteral()) throw problem(declaration, "Declare a single component action");
+      const values = componentActionOptions(declaration, kind.value, checker, plugin, lookup, checkAction);
+      if (kind.value === "replace") {
+        const target = String(values.target);
+        const first = replacements.get(target);
+        if (first) throw problem(declaration, `${first} and ${exported.name} both replace ${target}`);
+        replacements.set(target, exported.name);
+      }
+      (contributes["component-action"] ??= []).push({ id: exported.name, ...values });
+      continue;
+    }
   }
   return { contributes };
 }
@@ -97,38 +111,42 @@ function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
   return runtimeNames;
 }
 
-function contributionOptions(
-  declaration: ts.Declaration,
-  field: string,
-  extra: readonly string[],
+function pageOptions(declaration: ts.Declaration, checker: ts.TypeChecker): Record<string, string> {
+  const init = exportedInitializer(declaration);
+  const options = init && ts.isCallExpression(init) ? unwrap(init.arguments[0]) : undefined;
+  const fail = (): never => {
+    throw problem(options ?? declaration, "Use a literal view route and optional title and icon");
+  };
+  if (!options || !ts.isObjectLiteralExpression(options)) return fail();
+  const values: Record<string, string> = {};
+  for (const property of options.properties) {
+    if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return fail();
+    const name = property.name;
+    const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : fail();
+    if (!["route", "title", "icon"].includes(key) || key in values) return fail();
+    values[key] = pageOptionValue(property, key, checker, fail);
+  }
+  if (values.route === undefined) return fail();
+  validateRoute(values.route, fail);
+  if (values.icon !== undefined) validateIcon(values.icon, fail);
+  return values;
+}
+
+function pageOptionValue(
+  property: ts.PropertyAssignment | ts.ShorthandPropertyAssignment,
+  key: string,
   checker: ts.TypeChecker,
   fail: () => never,
-): Record<string, string> {
-  let initializer = ts.isVariableDeclaration(declaration)
-    ? declaration.initializer
-    : ts.isExportAssignment(declaration)
-      ? declaration.expression
-      : undefined;
-  initializer = unwrap(initializer);
-  if (!initializer || !ts.isCallExpression(initializer)) fail();
-  const call = initializer as ts.CallExpression;
-  let options: ts.Expression | undefined = call.arguments[0];
-  options = unwrap(options);
-  if (!options || !ts.isObjectLiteralExpression(options)) fail();
-  const values: Record<string, string> = {};
-  for (const property of (options as ts.ObjectLiteralExpression).properties) {
-    if (!ts.isPropertyAssignment(property) || !property.name) fail();
-    const name = (property as ts.PropertyAssignment).name;
-    const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : fail();
-    if ((key !== field && !extra.includes(key)) || key in values) fail();
-    // The required field stays a literal; extras may also name a const string.
-    values[key] =
-      key === field
-        ? (literalProperty(property, fail).initializer as ts.StringLiteral).text
-        : constantString((property as ts.PropertyAssignment).initializer, checker, fail);
+): string {
+  if (key === "route") {
+    if (ts.isPropertyAssignment(property) && ts.isStringLiteralLike(property.initializer))
+      return property.initializer.text;
+    return fail();
   }
-  if (!values[field]) fail();
-  return values;
+  if (ts.isPropertyAssignment(property)) return constantString(property.initializer, checker, fail);
+  const value = checker.getShorthandAssignmentValueSymbol(property);
+  const type = value && checker.getTypeOfSymbolAtLocation(value, property.name);
+  return type?.isStringLiteral() ? type.value : fail();
 }
 
 function constantString(expression: ts.Expression, checker: ts.TypeChecker, fail: () => never): string {
@@ -204,97 +222,68 @@ function addDeclaration(
   }
 }
 
-function unwrap(expression: ts.Expression | undefined): ts.Expression | undefined {
-  while (
-    expression &&
-    (ts.isAsExpression(expression) ||
-      ts.isSatisfiesExpression(expression) ||
-      ts.isParenthesizedExpression(expression))
-  )
-    expression = expression.expression;
-  return expression;
-}
-
-function literalProperty(property: ts.ObjectLiteralElementLike, fail: () => never): ts.PropertyAssignment {
-  if (
-    !ts.isPropertyAssignment(property) ||
-    !property.name ||
-    (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name)) ||
-    !ts.isStringLiteralLike(property.initializer)
-  )
-    fail();
-  return property as ts.PropertyAssignment;
-}
-
-function extensionOptions(
+function componentActionOptions(
   declaration: ts.Declaration,
-  kind: string,
+  action: string,
   checker: ts.TypeChecker,
-  fail: () => never,
+  plugin: string,
+  lookup: (owner: string, exported: string, part: string) => { target: string; locked: boolean } | undefined,
+  checkAction: (call: ts.CallExpression) => void,
 ): Record<string, string | number> {
-  const init = unwrap(ts.isVariableDeclaration(declaration) ? declaration.initializer : undefined);
-  if (!init || !ts.isCallExpression(init)) return fail();
-  const target = init.arguments[0];
-  if (!target) return fail();
-  let symbol = checker.getSymbolAtLocation(ts.isPropertyAccessExpression(target) ? target.name : target);
-  if (!symbol) return fail();
-  // The importing module identifies the owner; follow aliases for slot names.
-  let owner: string | undefined;
-  let exported = symbol.name;
-  for (const d of symbol.declarations ?? []) {
-    let n: ts.Node | undefined = d;
-    if (ts.isImportSpecifier(d)) exported = (d.propertyName ?? d.name).text;
-    while (n && !ts.isImportDeclaration(n)) n = n.parent;
-    if (n && ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier))
-      owner = (
-        /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text) ??
-        /^plugin:([^/]+)\/client$/.exec(n.moduleSpecifier.text)
-      )?.[1];
-  }
-  if (ts.isPropertyAccessExpression(target)) {
-    const ns = checker.getSymbolAtLocation(target.expression);
-    for (const d of ns?.declarations ?? []) {
-      let n: ts.Node | undefined = d;
-      while (n && !ts.isImportDeclaration(n)) n = n.parent;
-      if (n && ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier))
-        owner = (
-          /^@plugins\/([^/]+)(?:\/ui)?$/.exec(n.moduleSpecifier.text) ??
-          /^plugin:([^/]+)\/client$/.exec(n.moduleSpecifier.text)
-        )?.[1];
+  const init = exportedInitializer(declaration);
+  if (!init || !ts.isCallExpression(init) || !init.arguments[0])
+    throw problem(declaration, "Export a component action declared with an action helper");
+  const path = init.arguments[0];
+  const type = checker.getTypeAtLocation(path);
+  const reference = importedPart(path, checker);
+  const current = reference && lookup(reference.owner, reference.component, reference.part);
+  if (!current || !brand(type, "componentPartBrand"))
+    throw problem(path, `Component element does not exist or is not a typed path: ${path.getText()}`);
+  if (current.locked) throw problem(path, `Cannot change locked element ${current.target}`);
+  const targetSymbol = type.getProperty("target");
+  const target = targetSymbol && checker.getTypeOfSymbolAtLocation(targetSymbol, path);
+  if (!target?.isStringLiteral() || target.value !== current.target)
+    throw problem(path, `Component path has changed; rebuild the owner of ${path.getText()}`);
+  if (reference.owner === plugin) throw problem(path, "Component actions target another plugin's elements");
+  const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
+  const values: Record<string, string | number> = { action, target: current.target };
+  if (options) {
+    if (!ts.isObjectLiteralExpression(options))
+      throw problem(options, "Use literal component action options");
+    for (const prop of options.properties) {
+      if (!(ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop)))
+        throw problem(prop, "Use a literal order or a live when accessor");
+      if (prop.name.getText() === "when") continue;
+      const value = ts.isPropertyAssignment(prop) ? prop.initializer : undefined;
+      if (prop.name.getText() === "order" && value && /^-?\d+(?:\.\d+)?$/.test(value.getText())) {
+        values.order = Number(value.getText());
+      } else throw problem(prop, "Use a literal order or a live when accessor");
     }
   }
-  if (!owner) return fail();
-  if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-  const values: Record<string, string | number> = { target: `${owner}.${exported}` };
-  if (kind === "fill") {
-    const d = symbol.valueDeclaration;
-    const slot = d && ts.isVariableDeclaration(d) && d.initializer;
-    if (
-      !slot ||
-      !ts.isCallExpression(slot) ||
-      !slot.arguments[0] ||
-      !ts.isStringLiteralLike(slot.arguments[0])
-    )
-      return fail();
-    values.target = `${owner}.${slot.arguments[0].text}`;
-    const options = unwrap(init.arguments[1]);
-    if (!options || !ts.isObjectLiteralExpression(options)) return fail();
-    for (const p of options.properties) {
-      if (!ts.isPropertyAssignment(p) || (!ts.isIdentifier(p.name) && !ts.isStringLiteral(p.name)))
-        return fail();
-      const key = p.name.text;
-      if (key === "id" && ts.isStringLiteralLike(p.initializer)) values.fillId = p.initializer.text;
-      else if (key === "order" && ts.isNumericLiteral(p.initializer))
-        values.order = Number(p.initializer.text);
-      else if (
-        key === "order" &&
-        ts.isPrefixUnaryExpression(p.initializer) &&
-        p.initializer.operator === ts.SyntaxKind.MinusToken &&
-        ts.isNumericLiteral(p.initializer.operand)
-      )
-        values.order = -Number(p.initializer.operand.text);
-      else return fail();
-    }
-  }
+  checkAction(init);
   return values;
+}
+
+/** A path must be written against the public plugin import. In particular a
+ * type assertion cannot invent an address, and a stale generated file cannot
+ * keep publishing a renamed element. */
+function importedPart(path: ts.Expression, checker: ts.TypeChecker) {
+  while (ts.isParenthesizedExpression(path)) path = path.expression;
+  if (!ts.isPropertyAccessExpression(path) || path.questionDotToken) return;
+  const part = path.name.text;
+  const component = path.expression;
+  let binding: ts.Declaration | undefined;
+  let name: string;
+  if (ts.isIdentifier(component)) {
+    const imported = checker.getSymbolAtLocation(component)?.declarations?.find(ts.isImportSpecifier);
+    if (!imported) return;
+    binding = imported;
+    name = (imported.propertyName ?? imported.name).text;
+  } else if (ts.isPropertyAccessExpression(component) && ts.isIdentifier(component.expression)) {
+    binding = checker.getSymbolAtLocation(component.expression)?.declarations?.find(ts.isNamespaceImport);
+    name = component.name.text;
+  } else return;
+  const specifier = importModule(binding);
+  const reference = specifier && parsePluginSpecifier(specifier);
+  if (reference && reference.side === "client") return { owner: reference.id, component: name, part };
 }

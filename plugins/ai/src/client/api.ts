@@ -1,0 +1,56 @@
+/**
+ * ai's window entry: it extends chat through the elements chat publishes and
+ * imports no agent plugin. Agents reach `ai` only through `plugin:ai/contracts`.
+ */
+import { after, append, before, prepend, replace } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+import { AgentRow } from "./ui/agent-row";
+import { TurnSteers } from "./ui/turn-steers";
+import { StopButton } from "./ui/turn-controls";
+import { AgentHeading } from "./ui/heading";
+import { ReplyCards } from "./ui/reply-cards";
+import { ReplyHeader } from "./ui/reply-header";
+import { ReplyWork } from "./ui/reply-work";
+import { isAgentReply } from "./lib/replies";
+import { PermissionCard } from "./ui/permission-card";
+import { activeFor } from "./lib/turn-controls";
+import { listenForSends } from "./lib/turn";
+import { questionFor } from "./lib/questions";
+import { isWorking, statusOf } from "./lib/thread-status";
+import { ThreadDetail, ThreadHelpers, ThreadStatusIcon } from "./ui/thread-status";
+
+listenForSends();
+
+/** The agent row sits under the composer box, inside the composer's tray. */
+export const Agent = after(chat.Composer.box, AgentRow);
+/** "What should Claude work on?" in place of "Start a conversation". */
+export const Heading = replace(chat.Empty.heading, AgentHeading);
+/** The permission question, on the composer's tray above the prompt, while the sender's turn waits. */
+export const Permission = prepend(chat.Composer.top, PermissionCard, {
+  when: (composer) => questionFor(composer.threadId) !== undefined,
+});
+
+/** An agent's reply: "✳ Claude  opus 5.5" in place of chat's author line. */
+export const ReplyAuthor = replace(chat.Message.header, ReplyHeader, { when: isAgentReply });
+/** Above the reply's text: thinking, the actions line and helper rows. */
+export const Work = before(chat.Message.body, ReplyWork, { when: isAgentReply });
+/** Under the reply's text: Tasks, the plan card and usage. */
+export const Cards = after(chat.Message.body, ReplyCards, { when: isAgentReply });
+export const Stop = replace(chat.Composer.sendButton, StopButton, {
+  when: (props) => Boolean(activeFor(props.threadId)),
+});
+
+export const Steers = after(chat.Message.body, TurnSteers, {
+  when: (props) => props.message.author?.id.startsWith("agent:") ?? false,
+});
+
+/** The status icon before each thread's title in chat's list. */
+export const ThreadStatus = prepend(chat.ThreadRow.status, ThreadStatusIcon);
+/** The second line (agent, model, folder), only while the thread's turn runs or waits. */
+export const ThreadWork = append(chat.ThreadRow.detail, ThreadDetail, {
+  when: (row) => isWorking(statusOf(row.thread._id)),
+});
+/** The working turn's helper agents, as small rows under the thread. */
+export const Helpers = after(chat.ThreadRow.detail, ThreadHelpers, {
+  when: (row) => isWorking(statusOf(row.thread._id)) && (statusOf(row.thread._id)?.helpers.length ?? 0) > 0,
+});

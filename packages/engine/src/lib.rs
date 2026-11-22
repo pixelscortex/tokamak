@@ -6,6 +6,7 @@ mod action;
 mod bridge;
 mod determinism;
 mod engine;
+mod password;
 mod pool;
 mod source_map;
 mod types;
@@ -15,6 +16,7 @@ pub use action::ActionEngine;
 pub use bridge::{Invocation, ModuleCall, OpRegistry, install_ops};
 pub use determinism::Determinism;
 pub use engine::{Engine, QuickJsContext, QuickJsEngine};
+pub use password::register_password_crypto;
 pub use pool::{PendingCall, Pool, PoolConfig};
 pub use types::{Bundle, Error, Limits};
 

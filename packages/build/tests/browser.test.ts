@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { tokamak } from "../src/vite";
 import { hostModule } from "../src/ui-build-config";
 
-test("browser plugin emits DOM ESM with host imports, contributions and qualified names", async () => {
+test("browser plugin emits DOM ESM with host imports, routes and qualified parts", async () => {
   const root = resolve(import.meta.dir, "fixtures/browser");
   const result = await build({ root, configFile: false, plugins: [tokamak()], build: { write: false } });
   const output = Array.isArray(result) ? result[0]! : result;
@@ -18,8 +18,8 @@ test("browser plugin emits DOM ESM with host imports, contributions and qualifie
   expect(ui.imports).toContain("@tokamak/sdk/client");
   expect(ui.dynamicImports).toContain("@plugins/other/ui");
   expect(ui.code).toContain("useQuery");
-  expect(ui.code).toContain("browser-fixture.actions");
-  expect(ui.code).toContain("browser-fixture.Panel");
+  expect(ui.code).toContain("browser-fixture.fixtureBody.body");
+  expect(ui.code).not.toContain("browser-fixture.fixtureView.");
   const manifest = output.output.find((file) => file.fileName === "manifest.json");
   if (!manifest || manifest.type !== "asset") throw new Error("Missing manifest");
   const metadata = JSON.parse(String(manifest.source));
@@ -79,7 +79,7 @@ test("static plugin imports infer dependencies and styles remain optional", asyn
   }
 }, 30000);
 
-test("a view may name an icon as a literal or a const path; anything else fails the build", async () => {
+test("a view declares a literal route and may set its title and icon", async () => {
   const { cp, mkdtemp, readFile, rm, writeFile } = await import("node:fs/promises");
   const root = await mkdtemp(resolve(import.meta.dir, "fixtures/browser-icon-"));
   const path = "M4 4H20V20H4Z";
@@ -105,19 +105,23 @@ test("a view may name an icon as a literal or a const path; anything else fails 
     const view = resolve(root, "src/client/view.tsx");
     const original = await readFile(view, "utf8");
     const withOptions = (options: string, prefix = "") =>
-      writeFile(view, prefix + original.replace('view({ route: "/fixture" }', `view(${options}`));
+      writeFile(view, prefix + original.replace('{ route: "/fixture" }', options));
 
     await withOptions(`{ route: "/fixture", icon: "${path}" }`);
     expect(await contributes()).toEqual([{ id: "FixtureView", route: "/fixture", icon: path }]);
     await withOptions(`{ route: "/fixture", icon: mark }`, `const mark = "${path}";\n`);
     expect(await contributes()).toEqual([{ id: "FixtureView", route: "/fixture", icon: path }]);
+    await withOptions(`{ route: "/fixture", title, icon: "${path}" }`, 'const title = "Fixture";\n');
+    expect(await contributes()).toEqual([
+      { id: "FixtureView", route: "/fixture", title: "Fixture", icon: path },
+    ]);
     for (const [options, prefix] of [
       [`{ route: "/fixture", icon: "<svg/>" }`, ""],
       [`{ route: "/fixture", icon: mark }`, `let mark = String(Date.now());\n`],
-      [`{ route: "/fixture", title: "Fixture" }`, ""],
+      [`{ route: path }`, `const path = "/fixture";\n`],
     ]) {
       await withOptions(options!, prefix);
-      await expect(contributes()).rejects.toThrow("static literal options");
+      await expect(contributes()).rejects.toThrow("literal view route");
     }
   } finally {
     await rm(root, { recursive: true, force: true });

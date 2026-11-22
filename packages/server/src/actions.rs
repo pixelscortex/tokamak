@@ -11,12 +11,13 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 pub(crate) struct NestedCall {
-    pub user: crate::identity::User,
+    pub auth: Option<crate::identity::AuthContext>,
     pub generation: Option<Arc<Loaded>>,
     pub owner: Option<String>,
     pub name: String,
     pub args: Json,
     pub kind: FunctionKind,
+    pub contract: Option<String>,
     pub reply: oneshot::Sender<Result<Json, String>>,
 }
 
@@ -27,11 +28,10 @@ pub(crate) fn operations(
     environment: Arc<crate::environment::Snapshot>,
     limits: Limits,
     path: Vec<String>,
-    user: crate::identity::User,
+    auth: Option<crate::identity::AuthContext>,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
-    let caller_user = user.clone();
-    ops.register_sync("user.current", move |_| Ok(serde_json::json!(caller_user)))?;
+    crate::identity::register_caller(auth.as_ref(), &mut ops)?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
@@ -41,6 +41,7 @@ pub(crate) fn operations(
                 .clone(),
         );
     }
+    engine::register_password_crypto(&mut ops)?;
     let values = environment.clone();
     ops.register_sync("action.env", move |payload| {
         let name = payload["name"].as_str().ok_or("env requires a name")?;
@@ -54,7 +55,7 @@ pub(crate) fn operations(
         generation.clone(),
         owner.clone(),
         environment.clone(),
-        user.clone(),
+        auth.clone(),
     )?;
     if let (Some(loaded), Some(owner)) = (generation, owner) {
         register_plugin_call(
@@ -64,37 +65,20 @@ pub(crate) fn operations(
             commands,
             limits,
             path,
-            user,
+            auth,
         )?;
-        register_providers(&mut ops, loaded, owner)?;
+        crate::plugins::register_contract_list(&mut ops, loaded, owner)?;
     }
     Ok(Arc::new(ops))
 }
 
-fn register_providers(
-    ops: &mut OpRegistry,
-    loaded: Arc<Loaded>,
-    owner: String,
-) -> Result<(), engine::Error> {
-    ops.register_sync("plugin.providers", move |payload| {
-        let interface = payload["interface"]
-            .as_str()
-            .ok_or("providers requires an interface")?;
-        loaded
-            .catalog
-            .providers(&owner, interface)
-            .map(|ids| serde_json::json!(ids))
-            .map_err(|e| e.to_string())
-    })
-}
-
-fn register_nested_calls(
+pub(crate) fn register_nested_calls(
     ops: &mut OpRegistry,
     commands: mpsc::WeakSender<Command>,
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
-    user: crate::identity::User,
+    auth: Option<crate::identity::AuthContext>,
 ) -> Result<(), engine::Error> {
     for (operation, kind) in [
         ("action.runQuery", FunctionKind::Query),
@@ -104,13 +88,13 @@ fn register_nested_calls(
         let generation = generation.clone();
         let owner = owner.clone();
         let environment = environment.clone();
-        let user = user.clone();
+        let auth = auth.clone();
         ops.register_async(operation, move |payload| {
             let environment = environment.clone();
             let commands = commands.clone();
             let generation = generation.clone();
             let owner = owner.clone();
-            let user = user.clone();
+            let auth = auth.clone();
             async move {
                 let name = payload["name"]
                     .as_str()
@@ -125,12 +109,13 @@ fn register_nested_calls(
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
-                        user,
+                        auth,
                         generation,
                         owner,
                         name,
                         args,
                         kind,
+                        contract: None,
                         reply,
                     }))
                     .map_err(|e| format!("nested call not admitted: {e}"))?;
@@ -153,7 +138,7 @@ fn register_plugin_call(
     commands: mpsc::WeakSender<Command>,
     limits: Limits,
     path: Vec<String>,
-    user: crate::identity::User,
+    auth: Option<crate::identity::AuthContext>,
 ) -> Result<(), engine::Error> {
     let catalog = loaded.clone();
     let caller = owner.clone();
@@ -163,7 +148,7 @@ fn register_plugin_call(
         let commands = commands.clone();
         let limits = limits.clone();
         let mut path = path.clone();
-        let user = user.clone();
+        let auth = auth.clone();
         async move {
             let name = payload["name"]
                 .as_str()
@@ -172,19 +157,22 @@ fn register_plugin_call(
                 .get("args")
                 .ok_or("plugin call requires args")?
                 .clone();
-            let target = loaded.action_target(&owner, name, &path)?;
+            let contract = payload.get("contract").and_then(Json::as_str);
+            let target = loaded.action_target(&owner, name, &path, contract)?;
+            target.kind.check_requested(&payload)?;
             if target.kind != FunctionKind::Action {
                 let (reply, wait) = oneshot::channel();
                 commands
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
-                        user,
+                        auth,
                         generation: Some(loaded),
                         owner: Some(owner),
                         name: name.into(),
                         args,
                         kind: target.kind,
+                        contract: contract.map(str::to_owned),
                         reply,
                     }))
                     .map_err(|e| format!("nested call not admitted: {e}"))?;
@@ -205,7 +193,7 @@ fn register_plugin_call(
                 environment.clone(),
                 limits.clone(),
                 path,
-                user,
+                auth,
             )
             .map_err(|e| e.to_string())?;
             if let Some(worker) = worker {

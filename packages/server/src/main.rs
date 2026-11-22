@@ -1,6 +1,8 @@
 //! Headless composition only: configuration and process signals live here, not
 //! in storage/features. Local desktop mode uses an authenticated independent server.
 
+mod scaffold;
+
 use engine::{Bundle, PoolConfig};
 use server::{Backend, BackendConfig, data::Storage, websocket};
 use sha2::{Digest, Sha256};
@@ -74,6 +76,7 @@ fn capability(directory: &Path) -> Result<String, Box<dyn std::error::Error>> {
 
 async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let path = match args.as_slice() {
+        [command, path] if command == "create" => return scaffold::create(Path::new(path)),
         [command] if command == "list" => "/plugins".to_owned(),
         [command, id] if command == "reload" => {
             server::data::DataSpace::plugin(id)?;
@@ -81,7 +84,7 @@ async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Err
         }
         _ => {
             return Err(
-                "Expected: tokamak-server plugin list | tokamak-server plugin reload <id>".into(),
+                "Expected: tokamak-server plugin create <folder> | tokamak-server plugin list | tokamak-server plugin reload <id>".into(),
             );
         }
     };
@@ -162,7 +165,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     let mut javascript = PoolConfig::default();
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
-        if matches!(flag.as_str(), "invite" | "members" | "revoke") {
+        if matches!(flag.as_str(), "members" | "revoke") {
             server::identity::command(&flag, args.collect()).await?;
             return Ok(None);
         }
@@ -180,7 +183,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
         }
         if flag == "--help" {
             println!(
-                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nInvites: tokamak-server invite <name> | members | revoke <id> --server <https://address> [--token <owner token>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nMembers: tokamak-server members | revoke <id> --server <https://address> [--token <owner key>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin create <folder> | tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -232,9 +235,14 @@ async fn start_backend(
     javascript: PoolConfig,
     plugins: Option<PathBuf>,
     source: Option<String>,
+    hosted: bool,
 ) -> Result<(Backend, String), Box<dyn std::error::Error>> {
     let result = if let Some(root) = plugins {
-        let backend = Backend::start_plugins(Storage::Disk(data), javascript, &root).await?;
+        let backend = if hosted {
+            Backend::start_shared_plugins(Storage::Disk(data), javascript, &root).await?
+        } else {
+            Backend::start_plugins(Storage::Disk(data), javascript, &root).await?
+        };
         let hash = backend.server().plugins().await?["revision"]
             .as_str()
             .ok_or("Missing catalog revision")?
@@ -346,7 +354,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let plugin_root = plugins.as_ref().map(std::fs::canonicalize).transpose()?;
     let build_id = build_id()?;
-    let (backend, bundle_hash) = start_backend(data, javascript, plugins, source).await?;
+    let (backend, bundle_hash) = start_backend(data, javascript, plugins, source, hosted).await?;
     let identity = serde_json::json!({
         "url": format!("ws://{}/ws", listener.local_addr()?),
         "pid": std::process::id(),

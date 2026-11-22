@@ -35,6 +35,24 @@ const exported = new Set([
   ...exportsOf(await readFile(join(sdk, "solid.ts"), "utf8")),
 ]);
 
+const window = await readFile(join(pages, "window.mdx"), "utf8");
+const { pages: navigation } = JSON.parse(await readFile(join(pages, "meta.json"), "utf8"));
+if (!navigation.includes("window")) throw new Error("The window reference is missing from API navigation");
+for (const name of [
+  "view",
+  "component",
+  "before",
+  "after",
+  "prepend",
+  "append",
+  "wrapPart",
+  "replacePart",
+  "hide",
+  "state",
+  "derived",
+])
+  if (!new RegExp(`name="${name}"`).test(window)) throw new Error(`Window reference is missing ${name}`);
+
 const documented = new Set();
 for (const file of await readdir(pages)) {
   if (!file.endsWith(".mdx")) continue;

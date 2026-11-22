@@ -94,6 +94,8 @@
   --container-thread: 760px;
   --container-dialog: 440px;
   --container-menu: 192px;
+  /* A folded line in a thread (an agent's actions line) is at least this wide. */
+  --container-fold: 320px;
 }
 
 /* Values that depend on the surface, density or nesting an element sits in. */

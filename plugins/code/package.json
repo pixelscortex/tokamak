@@ -1,0 +1,16 @@
+{
+  "name": "code",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@solidjs/web": "2.0.0",
+    "@tokamak/sdk": "workspace:*",
+    "@tokamak/ui": "workspace:*",
+    "solid-js": "2.0.0"
+  },
+  "devDependencies": {
+    "@tokamak/build": "workspace:*",
+    "tailwindcss": "4.3.5"
+  }
+}

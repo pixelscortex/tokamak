@@ -5,6 +5,7 @@ import {
   createSignal,
   createComponent,
   Errored,
+  For,
   Show,
   onCleanup,
   type Accessor,
@@ -13,14 +14,9 @@ import {
 import type { JSX } from "@solidjs/web";
 import { createRoute, type AnyRoute, type AnyRouter } from "@tanstack/solid-router";
 import type { TokamakClient } from "@tokamak/sdk";
+import type { WindowStateTransport } from "@tokamak/sdk/window-state-host";
 import { ClientContext } from "@tokamak/sdk/solid";
-import {
-  ChatMachineContext,
-  ExtensionProvider,
-  ShortcutContext,
-  contributionBrand,
-  type RemoteChat,
-} from "@tokamak/sdk/client";
+import { ExtensionProvider, ShortcutContext, viewRoute } from "@tokamak/sdk/client";
 import {
   createPluginLoader,
   type PluginLoader,
@@ -30,6 +26,10 @@ import { Button, StatusIcon } from "@tokamak/ui";
 import { serverAssets, type CatalogSource, type ServerEndpoint } from "./adapter";
 import { WebPluginHost } from "./web-host";
 import { RouterContext, routerFacade, type MemoryRouter } from "./router";
+
+function pluginRoute(id: string, page: string) {
+  return `/p/${id}${page === "/" ? "" : page}`;
+}
 
 export interface PluginView {
   id: string;
@@ -51,29 +51,33 @@ export interface PluginShell {
   host: WebPluginHost;
   navigation: MemoryRouter;
   client: TokamakClient;
-  remoteChat?: RemoteChat;
   connect(): Promise<void>;
   dispose(): void;
 }
 export function createPluginShell(
   client: TokamakClient,
   endpoint: ServerEndpoint,
-  source: CatalogSource | undefined,
+  source: (CatalogSource & WindowStateTransport) | undefined,
   routing: PluginRouting,
-  remoteChat?: RemoteChat,
+  workspaceKey?: string,
 ): PluginShell {
   let stop!: () => void;
   return createRoot((dispose) => {
     stop = dispose;
-    const host: WebPluginHost = new WebPluginHost(endpoint, () => loader.metadata().plugins);
+    const host: WebPluginHost = new WebPluginHost(
+      endpoint,
+      () => loader.metadata().plugins,
+      source,
+      workspaceKey,
+    );
     const loader: PluginLoader = createPluginLoader(host, serverAssets(endpoint, source));
     const navigation = routerFacade(routing.router);
     const views = createMemo(() =>
       loader.contributions("view").map((c): PluginView => ({
         id: c.id,
         plugin: c.plugin,
-        route: `/p/${c.plugin}${c.options.route === "/" ? "" : c.options.route}`,
-        title: String(c.options.title ?? c.options.label ?? c.id),
+        route: pluginRoute(c.plugin, String(c.options.route)),
+        title: String(c.options.title ?? c.id),
         ...(typeof c.options.icon === "string" ? { icon: c.options.icon } : {}),
         generation: loader.version(c.plugin),
       })),
@@ -83,7 +87,6 @@ export function createPluginShell(
       loader,
       host,
       client,
-      remoteChat,
       navigation,
       connect: () => loader.connect(),
       dispose: () => stop(),
@@ -117,6 +120,7 @@ export function createPluginShell(
     });
     onCleanup(() => {
       loader.dispose();
+      host.disposeWindowState();
       routing.root.addChildren([...routing.base]);
       // The pinned Router RC only rebuilds on root identity changes.
       routing.router.setRoutes(routing.router.buildRouteTree());
@@ -202,11 +206,9 @@ function LoadedView(props: { shell: PluginShell; view: PluginView }) {
     >
       {(exports) => {
         const component = exports()[props.view.id];
-        if (
-          typeof component !== "function" ||
-          (component as { [contributionBrand]?: string })[contributionBrand] !== "view"
-        )
-          throw new Error(`Missing branded view: ${props.view.id}`);
+        const page = viewRoute(component);
+        if (page === undefined || pluginRoute(props.view.plugin, page) !== props.view.route)
+          throw new Error(`Missing view: ${props.view.id}`);
         return (
           <OwnedView
             shell={props.shell}
@@ -227,9 +229,10 @@ function OwnedView(props: {
   onCleanup(() => dispose());
   return createRoot((stop): JSX.Element => {
     dispose = stop;
+    const [alerts, setAlerts] = createSignal<readonly string[]>([]);
     onCleanup(props.shell.host.own(props.plugin, stop));
-    const shortcuts = new Map<string, Set<() => void>>();
-    const registerShortcut = (key: string, handler: () => void) => {
+    const shortcuts = new Map<string, Set<() => void | boolean>>();
+    const registerShortcut = (key: string, handler: () => void | boolean) => {
       const handlers = shortcuts.get(key) ?? new Set();
       handlers.add(handler);
       shortcuts.set(key, handlers);
@@ -251,14 +254,17 @@ function OwnedView(props: {
         .join("+");
       const handlers = shortcuts.get(key);
       if (!handlers?.size) return;
-      event.preventDefault();
+      let handled = false;
       for (const handler of handlers) {
         try {
-          handler();
+          handled = handler() !== false || handled;
         } catch (cause) {
+          handled = true;
           props.shell.host.notifyError(`@plugins/${props.plugin}/ui`, cause);
         }
       }
+      // Every handler declined: the key reaches the page, e.g. a digit typed into a field.
+      if (handled) event.preventDefault();
     };
     document.addEventListener("keydown", dispatch);
     onCleanup(() => {
@@ -269,10 +275,13 @@ function OwnedView(props: {
       <ClientContext value={props.shell.client}>
         <RouterContext value={props.shell.navigation}>
           <ShortcutContext value={{ registerShortcut }}>
-            <ExtensionProvider host={props.shell.loader}>
-              <ChatMachineContext value={props.plugin === "chat" ? (props.shell.remoteChat ?? null) : null}>
-                {createComponent(props.component, { router: props.shell.navigation })}
-              </ChatMachineContext>
+            <ExtensionProvider host={props.shell.loader} onAlerts={setAlerts}>
+              <Show when={alerts().length}>
+                <ul role="alert" aria-label="Plugin alerts" class="px-4 py-2 text-data text-ink-2">
+                  <For each={alerts()}>{(message) => <li>{message}</li>}</For>
+                </ul>
+              </Show>
+              {createComponent(props.component, { router: props.shell.navigation })}
             </ExtensionProvider>
           </ShortcutContext>
         </RouterContext>

@@ -1,0 +1,14 @@
+import { local, v } from "@tokamak/sdk";
+import { api as chat } from "plugin:chat/server";
+import { repository, snapshotNotice } from "../local/git";
+
+/** The names and warning are read from Git, in the local part. */
+export const forTurn = local({
+  args: { threadId: v.id("threads"), turnId: v.string() },
+  handler: async (ctx, { threadId, turnId }) => {
+    const thread = await ctx.runQuery(chat.getThread, { threadId });
+    if (!thread?.folder?.path) return null;
+    const repo = await repository(ctx, thread.folder.path);
+    return repo ? snapshotNotice(ctx, { ...repo, threadId, turnId }) : null;
+  },
+});

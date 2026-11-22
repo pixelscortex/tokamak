@@ -1,2 +1,2 @@
-export { list, add, cycle } from "./backend/ops";
-export { snapshot } from "./backend/determinism";
+export { list, add, cycle } from "./src/server/ops";
+export { snapshot } from "./src/server/determinism";

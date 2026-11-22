@@ -5,6 +5,12 @@ import { functionName } from "./api";
 import type { FunctionReference } from "./api";
 import type { JsonValue } from "./values";
 import { assertJson, jsonSnapshot } from "./values";
+import type { ActionSignal } from "./host";
+import { isWindowStateFunction } from "./window-state-protocol";
+
+export interface LocalTransport {
+  invoke(name: string, args: JsonValue, signal?: ActionSignal): Promise<JsonValue>;
+}
 
 /** Terminal errors mean the transport has removed the subscription. A new
  * subscribe call is required to retry; ordinary rerun errors can still recover. */
@@ -27,24 +33,50 @@ export interface ClientTransport {
 }
 
 export class TokamakClient {
-  constructor(private readonly transport: ClientTransport) {}
+  readonly #transport: ClientTransport;
+  readonly #localTransport?: LocalTransport;
+
+  constructor(transport: ClientTransport, localTransport?: LocalTransport) {
+    this.#transport = transport;
+    this.#localTransport = localTransport;
+  }
 
   async query<A, R>(reference: FunctionReference<"query", A, R>, args: NoInfer<A>): Promise<R> {
-    const value = await this.transport.query(reference[functionName], jsonSnapshot(args, "args"));
+    const value = await this.#transport.query(publicName(reference), jsonSnapshot(args, "args"));
     assertJson(value, "query result");
     return value as R;
   }
 
   async mutation<A, R>(reference: FunctionReference<"mutation", A, R>, args: NoInfer<A>): Promise<R> {
-    const value = await this.transport.mutation(reference[functionName], jsonSnapshot(args, "args"));
+    const value = await this.#transport.mutation(publicName(reference), jsonSnapshot(args, "args"));
     assertJson(value, "mutation result");
     return value as R;
   }
 
   async action<A, R>(reference: FunctionReference<"action", A, R>, args: NoInfer<A>): Promise<R> {
-    if (!this.transport.action) throw new Error("Transport does not support actions");
-    const value = await this.transport.action(reference[functionName], jsonSnapshot(args, "args"));
+    if (!this.#transport.action) throw new Error("Transport does not support actions");
+    const value = await this.#transport.action(publicName(reference), jsonSnapshot(args, "args"));
     assertJson(value, "action result");
+    return value as R;
+  }
+
+  /** True when this window has a local part (the desktop client) to run `local` functions. */
+  get hasLocal(): boolean {
+    return this.#localTransport !== undefined;
+  }
+
+  async local<A, R>(
+    reference: FunctionReference<"local", A, R>,
+    args: NoInfer<A>,
+    options?: { signal?: ActionSignal },
+  ): Promise<R> {
+    if (!this.#localTransport) throw new Error("Local functions require the Tokamak desktop client");
+    const value = await this.#localTransport.invoke(
+      publicName(reference),
+      jsonSnapshot(args, "args"),
+      options?.signal,
+    );
+    assertJson(value, "local result");
     return value as R;
   }
 
@@ -74,7 +106,7 @@ export class TokamakClient {
     };
 
     try {
-      stop = this.transport.subscribe(reference[functionName], jsonSnapshot(args, "args"), (event) => {
+      stop = this.#transport.subscribe(publicName(reference), jsonSnapshot(args, "args"), (event) => {
         if (!active) return;
         try {
           notify(event);
@@ -110,4 +142,10 @@ export class TokamakClient {
       }
     };
   }
+}
+
+function publicName(reference: { readonly [functionName]: string }): string {
+  const name = reference[functionName];
+  if (isWindowStateFunction(name)) throw new Error("Window state is private to its plugin");
+  return name;
 }

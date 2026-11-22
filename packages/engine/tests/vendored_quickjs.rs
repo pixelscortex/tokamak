@@ -14,7 +14,7 @@
 //! inside a cargo test.
 use std::path::{Path, PathBuf};
 
-const FORK: &str = "https://github.com/JustKira/rquickjs";
+const FIX_REVISION: &str = "f17e57e27b37a2c4d9ff12753f2b42067bf15394";
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -40,9 +40,9 @@ fn rquickjs_sys_resolves_to_the_patched_fork() {
         manifest.contains("[patch.crates-io]")
             && manifest.lines().any(|l| {
                 let l = l.trim();
-                l.starts_with("rquickjs-sys") && l.contains(FORK) && l.contains("rev =")
+                l.starts_with("rquickjs-sys") && l.contains(FIX_REVISION) && l.contains("git =")
             }),
-        "Cargo.toml must keep `[patch.crates-io] rquickjs-sys` pinned to a commit of {FORK}; \
+        "Cargo.toml must keep `[patch.crates-io] rquickjs-sys` pinned to the fix revision; \
          without it the QuickJS Array.find crash fix is lost"
     );
 
@@ -56,7 +56,7 @@ fn rquickjs_sys_resolves_to_the_patched_fork() {
         })
         .expect("Cargo.lock has no rquickjs-sys package");
     assert!(
-        entry.contains(&format!("source = \"git+{FORK}")),
+        entry.contains("source = \"git+") && entry.contains(&format!("#{FIX_REVISION}")),
         "rquickjs-sys does not resolve to the patched fork; \
          the QuickJS Array.find crash fix is not in this build:\n{entry}"
     );

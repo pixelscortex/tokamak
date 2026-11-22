@@ -1,0 +1,475 @@
+/// <reference types="node" />
+import { randomBytes } from "node:crypto";
+import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
+import { agent, type Helper, type Run, type Task, type Tool, type Usage } from "../contracts";
+import { errorText } from "../shared/turn-shared";
+import { controlFor, noRunningTurn, turnControl } from "./controls";
+import { api } from "./_generated/api";
+import { offered } from "../shared/offered";
+import { infoOf } from "./agents";
+import { append, fit, jsonBytes, line, PLAN_BYTES, TASKS_MAX, TEXT_BYTES, WRITE_BYTES } from "./limits";
+import { asking, pendingQuestion, sessionKey, settle } from "./questions";
+import { access, answer as answerValue, type stepReport } from "./schema";
+import { keepAlive } from "./keep-alive";
+import { hooksFor } from "./turn-hooks";
+import { workingOn } from "./working";
+
+/**
+ * One turn, run on the sender's own computer: begin it (one writer per
+ * thread), hand the message to the chosen agent's `start` (with the session to
+ * carry on, or the thread's earlier messages for a fresh one), stream what it
+ * reports into the reply, and settle it before releasing the thread. The
+ * window calls this after each Send with the thread's choices; it returns
+ * when the turn has ended.
+ */
+export const turn = local({
+  args: {
+    threadId: v.string(),
+    messageId: v.string(),
+    /** The thread's folder on this computer, from chat's `onSent`. */
+    folder: v.string(),
+    agentId: v.string(),
+    /** The model picked in the agent row; the agent's first model when absent or gone. */
+    model: v.optional(v.string()),
+    /** The level; the model's first when absent or not offered. */
+    effort: v.optional(v.string()),
+    /** The speed; the agent's first when absent or not offered. */
+    speed: v.optional(v.string()),
+    /** The mode; the agent's first when absent or not offered. */
+    mode: v.optional(v.string()),
+    /** Every thread starts on Full access. */
+    access: v.optional(access),
+  },
+  handler: async (ctx, { threadId, messageId, folder, agentId, access, ...picked }) => {
+    // The labels `turns:begin` records are checked here, against what the provider offers.
+    const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
+    agentId = queued?.agent.id ?? agentId;
+    const provider = await agent.get(agentId);
+    if (!provider) return fail("NoAgent", { agentId });
+    const info = await infoOf(provider);
+    if (!info.installed)
+      return fail("NotInstalled", {
+        agent: provider.name,
+        ...(info.updateRequired && { updateRequired: info.updateRequired }),
+      });
+    if (!info.signedIn) return fail("SignedOut", { agent: provider.name });
+    // A queued turn keeps the settings it was queued with.
+    const wanted = queued ?? { ...picked, access };
+    const { model, ...levels } = offered(info, wanted);
+    const settings = { model: model?.id ?? "default", ...levels, access: wanted.access ?? ("full" as const) };
+    const begun = await ctx.runMutation(api.turns.begin, {
+      threadId,
+      messageId,
+      agent: { id: provider.id, name: provider.name },
+      ...settings,
+      ...(model !== undefined && { modelName: model.name }),
+      replyToken: randomBytes(32).toString("hex"),
+    });
+    if (isFailure(begun)) return begun;
+    const { turnId, prompt, history, sessionId } = begun;
+    const hooks = hooksFor({ threadId: threadId as Id<"threads">, turnId, folder });
+    const writer = turnWriter(ctx, turnId);
+    // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
+    // device), so "Always allow this session" answers hold across turns exactly while the session does.
+    const questions = asking(ctx, {
+      turnId,
+      access: settings.access,
+      session: sessionKey(threadId, provider.id),
+      carried: sessionId,
+    });
+    // Stop answers a waiting question "cancel" first: an agent may wait for the answer before it stops.
+    const control = turnControl(turnId, ctx.auth, questions.cancel);
+    // From here until the turn is settled, the server hears from this computer (liveness.ts), and
+    // quitting the app asks first (working.ts). Both are released however the turn ends.
+    let lost: string | undefined;
+    const alive = keepAlive(ctx, turnId, (reason) => {
+      lost = reason;
+      void control.forceStop();
+    });
+    const unregister = workingOn(turnId, { threadId, agent: provider.name, control });
+    try {
+      let ending: { state: "done" | "failed" | "stopped"; error?: string; sessionId?: string };
+      let hookNotice = await hooks.before();
+      if (hookNotice !== undefined) {
+        ending = { state: "failed", error: hookNotice };
+      } else if (lost !== undefined) {
+        // The turn ended (or the server went away) while the hook ran: the agent never starts.
+        ending = { state: "failed", error: lost };
+      } else {
+        try {
+          const result = await ctx.withPrograms((kill) => {
+            // A write the server refused twice: stop the agent's programs now, as Force stop does.
+            void writer.broke.then(() => control.forceStop());
+            return control.run(
+              () =>
+                provider.start({
+                  folder,
+                  prompt,
+                  ...settings,
+                  history,
+                  ...(sessionId === undefined ? {} : { sessionId }),
+                  ...writer.reports,
+                  ask: questions.ask,
+                  sessionChanged: questions.sessionChanged,
+                  onSteer: control.onSteer,
+                  onStop: control.onStop,
+                }),
+              kill,
+            );
+          });
+          ending = result
+            ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
+            : { state: "stopped" };
+        } catch (cause) {
+          ending = { state: "failed", error: errorText(cause) };
+        }
+      }
+      if (lost !== undefined) ending = { ...ending, state: "failed", error: lost };
+      // A graceful interruption can still return the session and its existing grants.
+      questions.end(ending.sessionId);
+      control.close();
+      await writer.settled();
+      const broken = writer.close();
+      // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
+      if (broken !== undefined)
+        ending = { ...ending, state: "failed", error: `Could not save the reply: ${errorText(broken)}` };
+      // Force stop only closes the agent's program scope. Run after hooks before releasing the queue.
+      if (hookNotice === undefined) hookNotice = await hooks.after();
+      let state;
+      try {
+        state = await ctx.runMutation(api.turns.finish, { turnId, ...ending, finishedAt: Date.now() });
+      } catch {
+        // The server cannot be reached or already ended the turn; the interrupt rule frees the thread.
+        // `ended` says why in the person's words when this computer had to stop the agent.
+        return {
+          turnId,
+          state: "failed" as const,
+          ...(hookNotice !== undefined && { hookNotice }),
+          ...(lost !== undefined && { ended: lost }),
+        };
+      }
+      return { turnId, state, ...(hookNotice !== undefined && { hookNotice }) };
+    } finally {
+      control.close();
+      alive.stop();
+      unregister();
+    }
+  },
+});
+
+/** Steers on the sender's local part, and records the text only once the agent can receive it. */
+export const steer = local({
+  args: { turnId: v.id("turns"), text: v.string() },
+  handler: async (ctx, { turnId, text }) => {
+    const control = controlFor(turnId, ctx.auth);
+    if (!control) return noRunningTurn(turnId);
+    const steerText = text.trim();
+    if (!steerText) return fail("EmptySteer", { turnId });
+    return control.steer(steerText, () => ctx.runMutation(api.turns.steer, { turnId, text: steerText }));
+  },
+});
+
+/** Marks Stop on the server before asking the provider to end, so its final reply is stopped. */
+export const stop = local({
+  args: { turnId: v.id("turns") },
+  handler: async (ctx, { turnId }) => {
+    const control = controlFor(turnId, ctx.auth);
+    if (!control) return noRunningTurn(turnId);
+    await ctx.runMutation(api.turns.requestStop, { turnId });
+    await control.requestStop();
+    return null;
+  },
+});
+
+/** Kills the run's program groups after the deadline recorded on its server row. */
+export const forceStop = local({
+  args: { turnId: v.id("turns") },
+  handler: async (ctx, { turnId }) => {
+    const control = controlFor(turnId, ctx.auth);
+    if (!control) return noRunningTurn(turnId);
+    if ((await ctx.runQuery(api.turns.forceStopDelay, { turnId })) !== 0) return fail("TooEarly", { turnId });
+    return control.forceStop();
+  },
+});
+
+/**
+ * The sender's answer to a question waiting in this local part. The card on
+ * the composer calls this; it fails with `Expired` when no turn here waits on
+ * that question, as after the app that asked it quit. `turns:answer` clears
+ * the question on the row (checking inside that the caller is the turn's
+ * sender on its device, with the token only this local part holds); only
+ * then does the answer reach the agent.
+ */
+export const answer = local({
+  args: { turnId: v.id("turns"), questionId: v.string(), answer: answerValue },
+  handler: async (ctx, { turnId, questionId, answer }) => {
+    const pending = pendingQuestion(turnId, questionId);
+    if (!pending) return fail("Expired", { turnId });
+    await ctx.runMutation(api.turns.answer, { turnId, questionId, token: pending.token });
+    // A second click while the first answer was on its way finds nothing left to answer.
+    settle(turnId, pending, answer);
+    return null;
+  },
+});
+
+/**
+ * Whether this local part still holds the question, so the card can say at
+ * once that a question from before the app quit has expired.
+ */
+export const pending = local({
+  args: { turnId: v.id("turns"), questionId: v.string() },
+  handler: async (_ctx, { turnId, questionId }) => pendingQuestion(turnId, questionId) !== undefined,
+});
+
+/** A step as the local part keeps it: the agent's latest report and when this computer saw it begin and end. */
+type StepReport = Infer<typeof stepReport>;
+type WriteArgs = ArgsOf<typeof api.turns.write>;
+/** The report methods of a `Run`: what the agent calls while it works. */
+type Reports = Pick<Run, "text" | "thinking" | "tool" | "tasks" | "plan" | "helper" | "usage">;
+
+const KINDS: readonly string[] = [
+  "command",
+  "read",
+  "edit",
+  "search",
+  "web",
+  "other",
+] satisfies Tool["kind"][];
+const STATES: readonly string[] = ["running", "done", "failed"] satisfies Tool["state"][];
+const TASK_STATES: readonly string[] = ["pending", "running", "done"];
+
+/** Refuses a malformed report back to the agent that made it, before anything is stored. */
+function check(ok: unknown, what: string): asserts ok {
+  if (!ok) throw new TypeError(`ai: ${what}`);
+}
+const isText = (value: unknown): value is string => typeof value === "string";
+const isCount = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+/** The reports that replace what is stored: the to-do list, the plan, usage. */
+type Latest = { tasks?: WriteArgs["tasks"]; plan?: string; usage?: Usage };
+
+/**
+ * What the server has not been sent yet, and how it goes out: each write
+ * takes what fits under `WRITE_BYTES`, text and thinking first (cut to fit
+ * when they must), and leaves the rest for the next one.
+ */
+class Unsent {
+  /** Text and thinking appended since they were last sent. */
+  text = "";
+  thinking = "";
+  readonly latest: Latest = {};
+  readonly dirty = new Set<keyof Latest>();
+  /** Every step as last reported, and the keys that changed since they were last sent. */
+  readonly steps = new Map<string, StepReport>();
+  readonly dirtySteps = new Set<string>();
+
+  /** The whole text and thinking so far, cut at their limits as the server cuts them. */
+  readonly whole = { text: "", thinking: "" };
+
+  append(field: "text" | "thinking", delta: string): void {
+    const next = append(this.whole[field], delta, TEXT_BYTES);
+    this[field] += next.slice(this.whole[field].length);
+    this.whole[field] = next;
+  }
+
+  /** Keeps a step's latest report, timed on this computer: when its id was first seen and when it ended. */
+  step(report: Omit<StepReport, "startedAt" | "finishedAt">): void {
+    const now = Date.now();
+    const known = this.steps.get(report.key);
+    const startedAt = known?.startedAt ?? now;
+    const finishedAt = report.state === "running" ? undefined : (known?.finishedAt ?? now);
+    this.steps.set(report.key, { ...report, startedAt, ...(finishedAt !== undefined && { finishedAt }) });
+    this.dirtySteps.add(report.key);
+  }
+
+  any(): boolean {
+    return this.text !== "" || this.thinking !== "" || this.dirty.size > 0 || this.dirtySteps.size > 0;
+  }
+
+  next(turnId: Id<"turns">): WriteArgs {
+    const out: WriteArgs = { turnId };
+    let room = WRITE_BYTES - jsonBytes(out);
+    const empty = () => Object.keys(out).length === 1;
+    if (this.text) {
+      out.text = fit(this.text, room - 16);
+      this.text = this.text.slice(out.text.length);
+      room -= jsonBytes(out.text) + 16;
+    }
+    if (this.thinking && room > 64) {
+      out.thinking = fit(this.thinking, room - 16);
+      this.thinking = this.thinking.slice(out.thinking.length);
+      room -= jsonBytes(out.thinking) + 16;
+    }
+    for (const field of this.dirty) {
+      const size = jsonBytes(this.latest[field]) + 16;
+      if (size > room && !empty()) continue;
+      Object.assign(out, { [field]: this.latest[field] });
+      this.dirty.delete(field);
+      room -= size;
+    }
+    const changed: StepReport[] = [];
+    for (const key of this.dirtySteps) {
+      const step = this.steps.get(key)!;
+      const size = jsonBytes(step) + 1;
+      if (size > room - 16 && (changed.length > 0 || !empty())) break;
+      changed.push(step);
+      this.dirtySteps.delete(key);
+      room -= size;
+    }
+    if (changed.length > 0) out.steps = changed;
+    return out;
+  }
+}
+
+/**
+ * Collects what the agent reports and stores it on the server. At most one
+ * write is in flight; each carries what changed since the last (text and
+ * thinking as appended deltas, the latest tasks, plan and usage, the changed
+ * steps; see `Unsent`). Texts
+ * are cut at their limits here as on the server. Steps are timed here, on
+ * the computer that runs the turn. A write refused twice breaks the writer:
+ * `broke` resolves, and every later report throws back to the agent.
+ */
+function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
+  const unsent = new Unsent();
+  let flight: Promise<void> | undefined;
+  let broken: unknown;
+  let closed = false;
+  let onBroken: () => void = () => {};
+  const broke = new Promise<undefined>((resolve) => (onBroken = () => resolve(undefined)));
+
+  function pump(): void {
+    flight ??= (async () => {
+      while (unsent.any() && broken === undefined) {
+        const args = unsent.next(turnId);
+        // One retry covers a dropped connection; a second refusal means the server will not take it.
+        await ctx
+          .runMutation(api.turns.write, args)
+          .catch(() => ctx.runMutation(api.turns.write, args))
+          .catch((cause: unknown) => {
+            broken = cause;
+            onBroken();
+          });
+      }
+      flight = undefined;
+    })();
+  }
+  function open() {
+    check(broken === undefined, `the turn could not be saved: ${errorText(broken)}`);
+    check(!closed, "this turn has ended");
+  }
+  function set<K extends keyof Latest>(field: K, value: Latest[K]) {
+    unsent.latest[field] = value;
+    unsent.dirty.add(field);
+    pump();
+  }
+
+  // Each method checks the agent's report (throwing back to the agent) and
+  // keeps only the fields the contract names, so extra fields never reach a row.
+  const reports: Reports = {
+    text(delta) {
+      open();
+      unsent.append("text", checkedText(delta, "text(delta)"));
+      pump();
+    },
+    thinking(delta) {
+      open();
+      unsent.append("thinking", checkedText(delta, "thinking(delta)"));
+      pump();
+    },
+    tool(tool) {
+      open();
+      unsent.step(checkedTool(tool));
+      pump();
+    },
+    helper(helper) {
+      open();
+      unsent.step(checkedHelper(helper));
+      pump();
+    },
+    tasks(list) {
+      open();
+      set("tasks", checkedTasks(list));
+    },
+    plan(markdown) {
+      open();
+      set("plan", append("", checkedText(markdown, "plan(text)"), PLAN_BYTES));
+    },
+    usage(usage) {
+      open();
+      set("usage", checkedUsage(usage));
+    },
+  };
+
+  return {
+    reports,
+    /** Resolves (to undefined) when a write was refused twice. */
+    broke,
+    async settled() {
+      while (flight) await flight;
+    },
+    /** Ends the writer: later reports throw. Returns why writing broke, if it did. */
+    close() {
+      closed = true;
+      return broken;
+    },
+  };
+}
+
+function checkedText(value: unknown, what: string): string {
+  check(isText(value), `${what} takes a string`);
+  return value;
+}
+
+function checkedTool(tool: Tool): Omit<StepReport, "startedAt" | "finishedAt"> {
+  check(isText(tool?.id) && tool.id !== "", "a tool needs an id");
+  check(KINDS.includes(tool.kind), `a tool's kind is one of ${KINDS.join(", ")}`);
+  check(isText(tool.title), "a tool needs a title");
+  check(tool.detail === undefined || isText(tool.detail), "a tool's detail is a string");
+  check(STATES.includes(tool.state), `a tool's state is one of ${STATES.join(", ")}`);
+  const { id, kind, title, detail, state } = tool;
+  return {
+    key: id,
+    type: "tool",
+    kind,
+    title: line(title),
+    ...(detail !== undefined && { detail: line(detail) }),
+    state,
+  };
+}
+
+function checkedHelper(helper: Helper): Omit<StepReport, "startedAt" | "finishedAt"> {
+  check(isText(helper?.id) && helper.id !== "", "a helper needs an id");
+  check(isText(helper.name) && isText(helper.title), "a helper needs a name and a title");
+  check(helper.text === undefined || isText(helper.text), "a helper's text is a string");
+  check(STATES.includes(helper.state), `a helper's state is one of ${STATES.join(", ")}`);
+  const { id, name, title, state, text } = helper;
+  return {
+    key: id,
+    type: "helper",
+    name: line(name),
+    title: line(title),
+    ...(text !== undefined && { text: append("", text, TEXT_BYTES) }),
+    state,
+  };
+}
+
+function checkedTasks(list: readonly Task[]): NonNullable<WriteArgs["tasks"]> {
+  check(Array.isArray(list), "tasks(list) takes an array");
+  for (const item of list)
+    check(isText(item?.text) && TASK_STATES.includes(item.state), "a task is { text, state }");
+  return list.slice(0, TASKS_MAX).map(({ text, state }) => ({ text: line(text), state }));
+}
+
+function checkedUsage(usage: Usage): Usage {
+  const { inputTokens, outputTokens, cachedInputTokens, costUsd } = usage ?? ({} as Usage);
+  check(isCount(inputTokens) && isCount(outputTokens), "usage needs inputTokens and outputTokens (counts)");
+  check(cachedInputTokens === undefined || isCount(cachedInputTokens), "cachedInputTokens is a count");
+  check(costUsd === undefined || isCount(costUsd), "costUsd is a non-negative number");
+  return {
+    inputTokens,
+    outputTokens,
+    ...(cachedInputTokens !== undefined && { cachedInputTokens }),
+    ...(costUsd !== undefined && { costUsd }),
+  };
+}

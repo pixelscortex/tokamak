@@ -1,6 +1,6 @@
 /*
-  <Avatar name="Kira Lee" />
-  <Avatar name="Kira Lee" src={photo} size={16} />
+  <Avatar name="Sam Lee" />
+  <Avatar name="Sam Lee" src={photo} size={16} />
 
   A round image with the first initial as fallback. 24 by default, 16 in a
   row's trail.

@@ -42,7 +42,7 @@ the connection; the SDK reads no environment globals.
 
 <api-declaration path="../../../../packages/sdk/src/transport.ts" name="WebSocketTransport" />
 
-<api-declaration path="../../../../packages/sdk/src/transport.ts" name="ClientWebSocket" />
+<api-declaration path="../../../../packages/sdk/src/websocket-transport.ts" name="ClientWebSocket" />
 
 ## Wire protocol
 
@@ -52,3 +52,9 @@ with `ts-rs`. Don't edit `protocol.ts` by hand.
 <api-declaration path="../../../../packages/sdk/src/protocol.ts" name="Request" />
 
 <api-declaration path="../../../../packages/sdk/src/protocol.ts" name="Event" />
+
+## Local calls and errors
+
+<api-declaration path="../../../../packages/sdk/src/client.ts" name="LocalTransport" />
+
+<api-declaration path="../../../../packages/sdk/src/transport.ts" name="RemoteFunctionError" />

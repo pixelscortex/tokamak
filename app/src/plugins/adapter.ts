@@ -1,3 +1,4 @@
+import { bearerHeaders } from "../host/auth";
 import type { JsonValue } from "@tokamak/sdk";
 import type { Endpoint as ServerEndpoint } from "../host/endpoint";
 export type { Endpoint as ServerEndpoint } from "../host/endpoint";
@@ -11,7 +12,6 @@ export function assetURL(endpoint: ServerEndpoint, path: string): string {
   const url = new URL(path, endpoint.http);
   if (url.origin !== new URL(endpoint.http).origin)
     throw new Error("Plugin assets must use the server origin");
-  if (endpoint.token) url.searchParams.set("token", endpoint.token);
   return url.href;
 }
 
@@ -55,7 +55,9 @@ export function serverAssets(endpoint: ServerEndpoint, source?: CatalogSource): 
   return {
     async plugins() {
       if (source) return normalize(await source.plugins());
-      const response = await fetch(assetURL(endpoint, "/plugins"));
+      const response = await fetch(assetURL(endpoint, "/plugins"), {
+        headers: bearerHeaders(endpoint.token),
+      });
       if (!response.ok) throw new Error(`Plugin catalog: HTTP ${response.status}`);
       return normalize(await response.json());
     },
@@ -71,7 +73,7 @@ export function serverAssets(endpoint: ServerEndpoint, source?: CatalogSource): 
     },
     async pluginAsset(_plugin, path) {
       if (!path) return "";
-      const response = await fetch(assetURL(endpoint, path));
+      const response = await fetch(assetURL(endpoint, path), { headers: bearerHeaders(endpoint.token) });
       if (!response.ok) throw new Error(`Plugin asset ${path}: HTTP ${response.status}`);
       return response.text();
     },

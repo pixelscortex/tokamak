@@ -21,7 +21,7 @@ tasks:
       mutex: "cargo"
   server-build:
     script: >-
-      proto run bun -- ../packages/build/src/build.ts ../plugins/chat &&
+      proto run bun -- scripts/starter-plugins.ts &&
       cargo build --locked -p server --bin tokamak-server
     options:
       cache: false

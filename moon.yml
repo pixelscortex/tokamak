@@ -40,17 +40,20 @@ tasks:
     options:
       cache: true
       outputStyle: stream
-  acp-test:
-    script: "mkdir -p .ci-results && proto run bun -- test plugins/acp --reporter=junit --reporter-outfile=.ci-results/acp.xml"
-    options:
-      cache: false
   plugins-check:
     script: >-
-      proto run bun -- packages/sdk/tools/bundle.mjs plugins/chat/src/server --plugin chat &&
+      proto run bun -- app/scripts/starter-plugins.ts &&
       proto run bun -- check --no-script --project plugins/chat/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/chat/src/client/tsconfig.json &&
-      proto run bun -- packages/build/src/build.ts plugins/acp &&
-      proto run bun -- check --no-script --project plugins/acp/src/server/tsconfig.json
+      proto run bun -- check --no-script --project plugins/chat/tests/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/ai/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/ai/src/client/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/code/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/code/src/client/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/ai/tests/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/claude/src/server/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/codex/src/server/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/basic-auth/src/server/tsconfig.json
     options:
       cache: false
   e2e-check:
@@ -79,6 +82,7 @@ tasks:
     inputs:
       - "/packages/server/**/*"
       - "/packages/engine/**/*"
+      - "/packages/worker/**/*"
       - "/Cargo.toml"
       - "/Cargo.lock"
       - "/rust-toolchain.toml"

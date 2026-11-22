@@ -1,13 +1,27 @@
 import { defineSchema, defineTable, v } from "@tokamak/sdk";
 
-import { textPart, toolPart, planPart } from "./messages/parts";
-import { permissionPart } from "./messages/permission-part";
-import { backend } from "./backends/backend";
+import { textPart, toolPart, planPart, permissionPart } from "./messages/parts";
+import { folder } from "./folders/folder";
 
 export default defineSchema({
   threads: defineTable({
-    backend: v.optional(backend),
+    // The user id of whoever sent the first message. Their computer holds the folder.
+    createdBy: v.optional(v.string()),
+    // Historical rows can still carry this field. No current handler writes it.
+    backend: v.optional(
+      v.object({
+        kind: v.literal("plugin"),
+        plugin: v.string(),
+        backendId: v.string(),
+        settings: v.optional(v.any()),
+        state: v.optional(v.any()),
+      }),
+    ),
     title: v.string(),
+    // Where work for this thread happens on its creator's computer: a folder they
+    // chose, or ("No folder") an empty folder of its own under the app's data.
+    // An own folder's path is known once the creator's local part has made it.
+    folder: v.optional(folder),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_updatedAt", ["updatedAt"]),
@@ -18,42 +32,21 @@ export default defineSchema({
     askedBy: v.optional(v.object({ id: v.string(), name: v.string() })),
     parts: v.array(v.union(textPart, toolPart, planPart, permissionPart)),
     status: v.union(
+      v.literal("queued"),
       v.literal("streaming"),
       v.literal("complete"),
       v.literal("error"),
       v.literal("cancelled"),
+      // A reply whose writer went away before it ended, kept as it was (`error` says why).
+      v.literal("interrupted"),
     ),
     error: v.optional(v.string()),
-    // The agent that produced an assistant message, recorded when its run starts so
-    // the reply keeps its label after the thread switches agents. Absent on user
-    // messages and on rows written before this field existed.
+    // Stored by earlier versions; current replies identify the agent by author.
     agent: v.optional(v.object({ plugin: v.string(), backendId: v.string() })),
+    // A reply written by another plugin (e.g. `ai`) through `replies:*`. Only the
+    // holder of this token, chosen by that plugin when it opened the reply, can
+    // write to it. Never sent to windows.
+    replyToken: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_threadId_createdAt", ["threadId", "createdAt"]),
-  runs: defineTable({
-    token: v.optional(v.union(v.string(), v.null())),
-    backendPlugin: v.optional(v.string()),
-    backendId: v.optional(v.string()),
-    owner: v.optional(v.object({ id: v.string(), name: v.string() })),
-    requestId: v.optional(v.string()),
-    sequence: v.optional(v.number()),
-    threadId: v.id("threads"),
-    messageId: v.id("messages"),
-    status: v.union(v.literal("running"), v.literal("done"), v.literal("error"), v.literal("cancelled")),
-    waiting: v.optional(v.boolean()),
-    error: v.optional(v.string()),
-    updatedAt: v.optional(v.number()),
-    heartbeat: v.optional(v.number()),
-    expiresAt: v.optional(v.number()),
-    observations: v.optional(
-      v.array(
-        v.object({ sweepId: v.string(), tick: v.number(), heartbeat: v.number(), unchanged: v.number() }),
-      ),
-    ),
-    startedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-  })
-    .index("by_threadId", ["threadId"])
-    .index("by_status", ["status"])
-    .index("by_status_expiresAt", ["status", "expiresAt"]),
 });

@@ -1,9 +1,14 @@
 import type { DatabaseReader, Id } from "@tokamak/sdk";
 import type { Model } from "../_functions";
 
-export async function* recentMessages(db: DatabaseReader<Model>, threadId: Id<"threads">, before?: number) {
+export async function* recentMessages(
+  db: DatabaseReader<Model>,
+  threadId: Id<"threads">,
+  before?: number,
+  limit = 200,
+) {
   // Both writers allocate strictly increasing createdAt values inside their transaction.
-  for (let read = 0; read < 200; read += 8) {
+  for (let read = 0; read < limit; read += 8) {
     const cursor = before;
     const page = await db
       .query("messages")

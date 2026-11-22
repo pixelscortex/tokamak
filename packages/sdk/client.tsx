@@ -1,104 +1,99 @@
 /** Client extension points share the shell's owner and plugin generations. */
-import {
-  Errored,
-  For,
-  Show,
-  createContext,
-  createEffect,
-  createMemo,
-  createSignal,
-  onCleanup,
-  useContext,
-  merge,
-  untrack,
-  type Component,
-  createComponent,
-} from "solid-js";
+import { createEffect, createContext, createMemo, createSignal, onCleanup, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { contributionBrand } from "./src/contributions";
-export { useClient, useQuery } from "./solid";
-export { ChatMachineContext, type ChatMachine, type RemoteChat } from "./chat-machine";
-export { view, itemRenderer, toolbar, command, entityCard, contributionBrand } from "./src/contributions";
-
-export interface SlotDefinition<P extends object> {
-  readonly name: string;
-  readonly props?: P;
-}
-export function defineSlot<P extends object>(name: string): SlotDefinition<P> {
-  return { name };
-}
-export function fill<P extends object>(
-  slot: SlotDefinition<P>,
-  options: { order?: number; id?: string },
-  component: Component<P>,
-) {
-  return Object.assign(component, { [contributionBrand]: "fill" as const, options, target: slot.name });
-}
-export function wrap<P extends object>(
-  target: Component<P>,
-  wrapper: (Original: Component<P>) => Component<P>,
-) {
-  return Object.assign(wrapper, { [contributionBrand]: "wrap" as const, target });
-}
-export function replace<P extends object>(target: Component<P>, replacement: Component<P>) {
-  return Object.assign(replacement, { [contributionBrand]: "replace" as const, target });
-}
+import { componentActionKind, isComponentAction, type ComponentAction } from "./component-actions";
+export {
+  component,
+  defineComponent as __defineComponent,
+  before,
+  after,
+  prepend,
+  append,
+  hide,
+  wrapPart as wrap,
+  replacePart as replace,
+  type ComponentPart,
+  type ComponentOptions,
+  type ComponentActionOptions,
+  type ComponentParts,
+  type ComponentSelf,
+} from "./component-actions";
+import { PartActions, type LoadedPartAction } from "./component-parts";
+export { auth, useClient, useQuery } from "./solid";
+export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
+export { state, derived, type StateOptions, type WindowDerived, type WindowState } from "./window-state";
+export { view, viewRoute, type ViewOptions } from "./view";
 
 export interface ExtensionContribution {
   plugin: string;
   id: string;
   kind: string;
   options: Readonly<Record<string, string | number>>;
+  installOrder?: number;
 }
 export interface ExtensionHost {
-  contributions(kind: "fill" | "wrap" | "replace"): ExtensionContribution[];
+  contributions(kind: "component-action"): ExtensionContribution[];
   version(id: string): number;
   load(id: string): Promise<Record<string, unknown>>;
   onError(id: string, listener: (cause: unknown) => void): () => void;
 }
-type Loaded = ExtensionContribution & { component: (...args: any[]) => any };
-const Extensions = createContext<() => Loaded[]>(() => []);
+type CatalogExtension = ExtensionContribution & { version: number };
 
 /** Catalog discovery loads only extension contributors. Removing a plugin clears
  * its layers synchronously; late loads cannot publish into a retired owner. */
-export function ExtensionProvider(props: { host: ExtensionHost; children?: JSX.Element }) {
-  const [loaded, setLoaded] = createSignal<Loaded[]>([], { ownedWrite: true });
-  const plugins = new Map<string, { version: number; stop(): void }>();
+export function ExtensionProvider(props: {
+  host: ExtensionHost;
+  onAlerts?: (messages: readonly string[]) => void;
+  children?: JSX.Element;
+}) {
+  const [partActions, setPartActions] = createSignal<LoadedPartAction[]>([], { ownedWrite: true });
+  const plugins = new Map<string, { signature: string; stop(): void }>();
+  let reported = new Set<string>();
+  function clear(id: string) {
+    setPartActions((previous) => previous.filter((c) => c.plugin !== id));
+  }
   onCleanup(() => {
     for (const plugin of plugins.values()) plugin.stop();
     plugins.clear();
   });
   createEffect(
     () =>
-      ["fill", "wrap", "replace"].flatMap((kind) =>
-        props.host.contributions(kind as "fill" | "wrap" | "replace").map((contribution) => ({
-          ...contribution,
-          version: props.host.version(contribution.plugin),
-        })),
-      ),
+      props.host.contributions("component-action").map((contribution) => ({
+        ...contribution,
+        version: props.host.version(contribution.plugin),
+      })),
     (contributions) => {
-      const groups = new Map<string, (ExtensionContribution & { version: number })[]>();
-      for (const c of contributions) {
+      const { accepted, refused } = resolveReplacements(contributions);
+      for (const message of refused) if (!reported.has(message)) console.warn(message);
+      if (refused.size !== reported.size || [...refused].some((message) => !reported.has(message))) {
+        props.onAlerts?.([...refused]);
+      }
+      reported = refused;
+
+      const groups = new Map<string, CatalogExtension[]>();
+      for (const c of accepted) {
         const group = groups.get(c.plugin) ?? [];
         group.push(c);
         groups.set(c.plugin, group);
       }
+      // A competing replacement can change the accepted exports without changing
+      // this plugin's version. Include the accepted catalog entries as well.
+      const signatures = new Map([...groups].map(([id, group]) => [id, JSON.stringify(group)]));
       for (const [id, plugin] of plugins) {
-        if (!groups.has(id) || plugin.version !== groups.get(id)?.[0]?.version) {
+        if (plugin.signature !== signatures.get(id)) {
           plugin.stop();
           plugins.delete(id);
-          setLoaded((previous) => previous.filter((c) => c.plugin !== id));
+          clear(id);
         }
       }
       for (const [id, group] of groups) {
-        const version = group[0]!.version;
         if (plugins.has(id)) continue;
         let failed = false;
         const plugin = {
-          version,
+          signature: signatures.get(id)!,
           stop: props.host.onError(id, (cause) => {
             failed = true;
-            setLoaded((previous) => previous.filter((c) => c.plugin !== id));
+            clear(id);
             console.warn(`Extension ${id} failed: ${String(cause)}`);
           }),
         };
@@ -106,102 +101,95 @@ export function ExtensionProvider(props: { host: ExtensionHost; children?: JSX.E
         void props.host.load(id).then(
           (exports) => {
             if (plugins.get(id) !== plugin || failed) return;
-            const values = group.flatMap((c) => {
-              const component = exports[c.id];
-              return typeof component === "function"
-                ? [{ ...c, component: component as Loaded["component"] }]
-                : [];
-            });
-            setLoaded((previous) => [...previous, ...values]);
+            const parts: LoadedPartAction[] = [];
+            for (const c of group) {
+              const value = exports[c.id];
+              if (
+                isComponentAction(value) &&
+                value.target === c.options.target &&
+                componentActionKind(value) === c.options.action
+              ) {
+                parts.push(loadedPart(c, value));
+              } else {
+                console.warn(
+                  `Component action ${id}/${c.id} does not match its manifest: expected ${c.options.action} for ${c.options.target}`,
+                );
+              }
+            }
+            if (parts.length) setPartActions((previous) => [...previous, ...parts]);
           },
           (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
         );
       }
     },
   );
-  return <Extensions value={loaded}>{props.children}</Extensions>;
-}
-export function Slot<P extends object>(props: { of: SlotDefinition<P>; props: P }) {
-  const extensions = useContext(Extensions);
-  const fills = createMemo(() =>
-    extensions()
-      .filter((c) => c.kind === "fill" && c.options.target === props.of.name)
-      .sort(
-        (a, b) =>
-          Number(a.options.order ?? 0) - Number(b.options.order ?? 0) ||
-          a.plugin.localeCompare(b.plugin) ||
-          String(a.options.fillId ?? a.id).localeCompare(String(b.options.fillId ?? b.id)),
-      ),
-  );
-  return (
-    <For each={fills()}>
-      {(fill) => (
-        <Errored fallback={() => null}>
-          {untrack(() =>
-            createComponent(
-              fill.component,
-              merge(() => props.props),
-            ),
-          )}
-        </Errored>
-      )}
-    </For>
-  );
+  const byTarget = createMemo(() => {
+    const result = new Map<string, LoadedPartAction[]>();
+    for (const action of partActions()) {
+      const values = result.get(action.action.target) ?? [];
+      values.push(action);
+      result.set(action.action.target, values);
+    }
+    for (const values of result.values()) {
+      values.sort(
+        (a, b) => a.order - b.order || a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id),
+      );
+    }
+    return result;
+  });
+  return <PartActions value={(target) => byTarget().get(target) ?? []}>{props.children}</PartActions>;
 }
 
-/** Compiler-inserted identity at public component declarations, including local
- * calls. The original implementation is private to this component's fallback. */
-export function publicComponent<P extends object>(
-  name: string | readonly string[],
-  original: Component<P>,
-): Component<P> {
-  return (props) => {
-    const extensions = useContext(Extensions);
-    const composed = createMemo(() => {
-      let result = original;
-      let replaced = false;
-      for (const mod of extensions()
-        .filter(
-          (c) =>
-            (typeof name === "string" ? [name] : name).includes(String(c.options.target)) &&
-            c.kind !== "fill",
-        )
-        .sort((a, b) =>
-          a.kind === b.kind
-            ? a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id)
-            : a.kind === "replace"
-              ? -1
-              : 1,
-        )) {
-        if (mod.kind === "replace") {
-          if (replaced) {
-            console.warn(`Ignoring second replacement for ${name}: ${mod.plugin}/${mod.id}`);
-            continue;
-          }
-          replaced = true;
-        }
-        const inner = result;
-        result = (p) => (
-          <Errored fallback={() => createComponent(inner, p)}>
-            {mod.kind === "wrap"
-              ? createComponent(mod.component(inner), p)
-              : createComponent(mod.component, p)}
-          </Errored>
-        );
+function loadedPart(c: ExtensionContribution, action: ComponentAction): LoadedPartAction {
+  return {
+    id: c.id,
+    plugin: c.plugin,
+    order: Number(c.options.order ?? 0),
+    action,
+    enabled(props) {
+      try {
+        return action.when?.(props) ?? true;
+      } catch (cause) {
+        console.warn(`Component action ${c.plugin}/${c.id} failed: ${String(cause)}`);
+        return false;
       }
-      return result;
-    });
-    return (
-      <Show keyed when={composed()}>
-        {(component: Component<P>) => createComponent(component, props)}
-      </Show>
-    );
+    },
   };
 }
 
+function isReplacement(c: ExtensionContribution) {
+  return c.kind === "component-action" && c.options.action === "replace";
+}
+
+function resolveReplacements(contributions: CatalogExtension[]) {
+  const winners = new Map<string, CatalogExtension>();
+  const refused = new Set<string>();
+  // Resolve from the catalog, before any module loads or when accessors run.
+  for (const c of contributions) {
+    if (!isReplacement(c)) continue;
+    const target = String(c.options.target);
+    const first = winners.get(target);
+    if (!first || (c.installOrder ?? Infinity) < (first.installOrder ?? Infinity)) winners.set(target, c);
+  }
+  const accepted = contributions.filter((c) => {
+    if (!isReplacement(c)) return true;
+    const winner = winners.get(String(c.options.target))!;
+    if (winner === c) return true;
+    refused.add(
+      `Replacement from ${c.plugin} (${c.id}) refused for ${c.options.target}: ${winner.plugin} (${winner.id}) installed first`,
+    );
+    return false;
+  });
+  return { accepted, refused };
+}
 /** Registrations belong to the calling plugin owner, even when its view leaves. */
 export interface Shortcuts {
-  registerShortcut(key: string, handler: () => void): () => void;
+  /**
+   * Runs `handler` on `key` ("Meta+n", "1"). A handler that returns `false`
+   * declines this press (say, its field holds text): when every handler
+   * declines, the key goes on as if nothing were registered.
+   */
+  registerShortcut(key: string, handler: () => void | boolean): () => void;
 }
 export const ShortcutContext = createContext<Shortcuts>();
 export function useShortcuts(): Shortcuts {
@@ -219,3 +207,5 @@ export {
   usePageTitleValue,
   type RegionName,
 } from "./regions";
+
+export { renderPart as __renderPart, type PartAdditions } from "./component-parts";

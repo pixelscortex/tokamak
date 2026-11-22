@@ -46,10 +46,10 @@ export function catalog(revision = "one") {
     ],
   };
 }
-test("adapter pins URL and token, preserves metadata, refuses another origin", () => {
+test("adapter pins asset URLs, preserves metadata, refuses another origin", () => {
   const endpoint = { http: "http://127.0.0.1:4000", ws: "ws://127.0.0.1:4000/ws", token: "a&b" };
   expect(assetURL(endpoint, "/plugins/fixture/one/assets/ui.js")).toBe(
-    "http://127.0.0.1:4000/plugins/fixture/one/assets/ui.js?token=a%26b",
+    "http://127.0.0.1:4000/plugins/fixture/one/assets/ui.js",
   );
   expect(() => assetURL(endpoint, "http://example.com/ui.js")).toThrow("server origin");
   expect(adaptCatalog(catalog()).plugins[0]?.plugin.contributes?.view?.[0]?.title).toBe("Fixture");
@@ -66,7 +66,7 @@ test("adapter pins URL and token, preserves metadata, refuses another origin", (
   const entry = adaptCatalog(real).plugins[0]!.entries.ui!;
   expect(entry.code).toBe(real.plugins[0]!.uiUrl);
   expect(assetURL(endpoint, entry.css)).toBe(
-    "http://127.0.0.1:4000/plugins/fixture/server-revision/assets/styles.css?token=a%26b",
+    "http://127.0.0.1:4000/plugins/fixture/server-revision/assets/styles.css",
   );
 });
 
@@ -114,16 +114,18 @@ test("web host rewrites literal imports, owns CSS and disposers, and invalidates
     entries: { ui: { code: "/plugins/other/one/assets/ui.js", css: "" } },
   });
   const blobs = new Map<string, Blob>();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) => ({
-      ok: true,
-      text: async () =>
-        url.includes("/other/")
-          ? "export const value = 1"
-          : `import { value } from '@plugins/other/ui'; export const lazy = () => import('@plugins/other/ui'); export const url = import.meta.url;`,
-    })),
-  );
+  const request = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith(".css"))
+      return (options?.method ?? "GET") === "GET"
+        ? new Response("body { --fixture-sheet: loaded; }")
+        : Response.error();
+    return new Response(
+      url.includes("/other/")
+        ? "export const value = 1"
+        : `import { value } from '@plugins/other/ui'; export const lazy = () => import('@plugins/other/ui'); export const url = import.meta.url;`,
+    );
+  });
+  vi.stubGlobal("fetch", request);
   vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
     const url = `blob:test-${blobs.size}`;
     blobs.set(url, blob as Blob);
@@ -131,25 +133,36 @@ test("web host rewrites literal imports, owns CSS and disposers, and invalidates
   });
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   const host = new WebPluginHost(
-    { http: "http://localhost", ws: "ws://localhost", token: null },
+    { http: "http://localhost", ws: "ws://localhost", token: "asset-key" },
     () => manifests,
   );
+  const originalStyles = document.adoptedStyleSheets;
   try {
     // jsdom cannot execute native blob modules; the browser harness executes the same graph.
     await expect(host.importModule("@plugins/fixture/ui", manifests[0]!)).rejects.toThrow();
     expect(blobs.size).toBe(2);
+    expect(request.mock.calls).toHaveLength(3);
+    for (const [url, options] of request.mock.calls) {
+      expect(new URL(url).search).toBe("");
+      expect(new Headers(options?.headers).get("authorization")).toBe("Bearer asset-key");
+    }
     expect(host.dependencies("@plugins/fixture/ui")).toEqual(["@plugins/other/ui"]);
     expect(host.affected(["@plugins/other/ui"])).toEqual(
       new Set(["@plugins/other/ui", "@plugins/fixture/ui"]),
     );
-    expect(document.querySelector('link[data-plugin="fixture"]')).toBeTruthy();
+    await waitFor(() =>
+      expect(document.adoptedStyleSheets.at(-1)?.cssRules[0]?.cssText ?? "").toContain(
+        "--fixture-sheet: loaded",
+      ),
+    );
     const dispose = vi.fn();
     host.own("fixture", dispose);
     host.remove(host.affected(["@plugins/other/ui"]));
     expect(dispose).toHaveBeenCalledOnce();
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
-    expect(document.querySelector('link[data-plugin="fixture"]')).toBeNull();
+    expect(document.adoptedStyleSheets).toEqual(originalStyles);
   } finally {
+    host.remove(["@plugins/fixture/ui", "@plugins/other/ui"]);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   }
@@ -157,6 +170,20 @@ test("web host rewrites literal imports, owns CSS and disposers, and invalidates
 
 test("runtime routes mount, retire query owners, swap revision, contain throws, and remove routes", async () => {
   let current = catalog();
+  const addon = (id: string, installOrder: number) => ({
+    installOrder,
+    plugin: {
+      id,
+      version: "one",
+      contributes: {
+        view: [],
+        "component-action": [{ id: "Replace", action: "replace", target: "fixture.view.body" }],
+      },
+    },
+    entries: { ui: { code: `/plugins/${id}/one/assets/ui.js`, css: "" } },
+    hashes: {},
+  });
+  current = { ...current, plugins: [...current.plugins, addon("first", 0), addon("later", 1)] };
   let notify!: (event: { plugins: string[]; catalog: JsonValue }) => void;
   const stopQuery = vi.fn();
   const client = {
@@ -181,6 +208,7 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
   const fixtureCleanup = vi.fn();
   vi.spyOn(WebPluginHost.prototype, "importModule").mockImplementation(
     async (_name, manifest: PluginManifest) => {
+      if (manifest.plugin.id !== "fixture") return {};
       const revision = manifest.plugin.version;
       return {
         sharedSignal: createSignal,
@@ -224,8 +252,12 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
     });
     await router.navigate({ href: "/p/fixture" });
     await waitFor(() => expect(target.textContent).toContain("one: query"));
+    expect(target.querySelector('[role="alert"][aria-label="Plugin alerts"]')?.textContent).toMatch(
+      /later.*refused.*first.*installed first/,
+    );
     publish("two");
     await waitFor(() => expect(target.textContent).toContain("two: query"));
+    expect(target.querySelector('[aria-label="Plugin alerts"]')).toBeNull();
     expect(stopQuery).toHaveBeenCalledOnce();
     expect(fixtureCleanup).toHaveBeenCalledOnce();
     publish("throws");

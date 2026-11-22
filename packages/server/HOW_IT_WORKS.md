@@ -6,7 +6,8 @@ Each part below is marked as **built** (on `dev`), **on a branch** (built, not m
 
 ## The one-sentence version
 
-**The Tokamak server is a database (SurrealDB, embedded) plus our own runtime that runs plugin code (QuickJS) next to it, plus a layer that knows which screens need which data.** The desktop is a thin window that draws the UI and asks the server for everything.
+The server stores workspace data in SurrealDB, runs plugin functions and sends live query updates.
+The client has a window that draws the interface and a local part that handles files and programs.
 
 It's the same idea as Convex: Convex is "their database + a V8 runtime + live sync". Tokamak is "SurrealDB + a QuickJS runtime + live sync", in one ~40 MB binary you run yourself.
 
@@ -104,8 +105,22 @@ Plugin A can call plugin B only through the functions B lists in its `exports` f
 
 - **Core threads** (TKM-46/47): threads, items, runs and an inbox, built on the flows above. Token streaming uses an in-memory channel, and the finished text is saved once.
 - **Pagination** (planned): a `paginate()` helper for queries and a `usePaginatedQuery` hook with Convex-style **reactive pagination**. Each loaded page is its own live subscription with a fixed boundary, so pages stay stable while data changes. Long lists and long threads need this.
-- **Hub and runner** (TKM-49): the same server binary in two roles. The hub is the source of truth, anywhere. The runner sits on your Mac for local work (files, Claude Code).
-- **Offline "hybrid" sync** (TKM-50): a runner keeps a local copy of some tables. When offline, mutations run locally and are recorded. On reconnect, the hub **re-runs the same mutations** against the real data. This is why mutations are deterministic and why plugins write intents (`setDone(true)`), not toggles.
+
+## The client, local part and server
+
+Each workspace has one server. A local server runs on the same computer as the
+client; a shared server can serve several members and their devices. The
+server holds threads, messages and plugin tables. Windows subscribe to its
+queries, so every connected window sees the same saved data.
+
+The local part of the client runs plugin functions that need files or programs
+on that computer. For example, AI starts Claude or Codex there using the
+member's own login, while the server stores the reply. The window reaches the
+local part in the desktop app; a plain browser has no local part. On a shared
+server, local functions need matching plugin builds installed on the client.
+
+Offline writes to shared data are planned. The current client needs a server
+connection to write workspace data.
 
 ## So, in one line
 

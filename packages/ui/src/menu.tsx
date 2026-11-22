@@ -8,7 +8,8 @@
     </Menu.Content>
   </Menu.Root>
 
-  A card with 4 padding and radius 12; items are 32 rows with radius 8.
+  A card with 4 padding and radius 12; items are 32 rows with radius 8. A list
+  taller than the room beside its trigger scrolls.
   The trigger takes the Button look props.
 */
 import * as Base from "@ui-sdk/solid/menu";
@@ -23,6 +24,8 @@ type Classed<T extends (props: any) => JSX.Element> = Omit<ComponentProps<T>, "c
 
 export const popupClass = [
   "m-0 flex min-w-menu flex-col rounded-md border-0 surface-card p-1 inset-ring inset-ring-edge outline-none",
+  // The positioner sets --available-height: a long list (many models, say) scrolls inside the window.
+  "max-h-(--available-height) overflow-y-auto overscroll-contain",
   "transition duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0",
 ];
 export const itemClass = [

@@ -12,6 +12,14 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
+    /// Core-only discovery for sign-in before a session exists. No request
+    /// or session command exposes provider actions to windows.
+    pub async fn sign_in_methods(&self) -> Result<Vec<crate::plugins::SignInMethod>, Error> {
+        let (reply, wait) = oneshot::channel();
+        admit(&self.commands, Command::SignInMethods(reply))?;
+        wait.await.map_err(|_| Error::Closed)?
+    }
+
     /// Replaces the complete installation generation, including dependent callers.
     pub async fn reload_plugin(&self, id: String) -> Result<Json, Error> {
         let (reply, wait) = oneshot::channel();
@@ -45,26 +53,54 @@ impl Server {
     }
 
     pub async fn connect(&self) -> Result<Session, Error> {
-        self.connect_as(crate::identity::User::local()).await
+        self.connect_authenticated(crate::identity::AuthContext::local(), Default::default())
+            .await
     }
 
-    pub async fn rename_user(&self, user: crate::identity::User) -> Result<(), Error> {
+    pub(crate) async fn update_user(
+        &self,
+        save: impl FnOnce() -> Result<crate::identity::User, String>,
+    ) -> Result<crate::identity::User, String> {
+        // Reserve notification capacity before persisting. An overloaded or
+        // cancelled requester cannot leave connected clients on a stale role.
+        let permit = self
+            .commands
+            .reserve()
+            .await
+            .map_err(|_| Error::Closed.to_string())?;
+        let user = save()?;
         let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::RenameUser(user, reply))?;
-        wait.await.map_err(|_| Error::Closed)
+        permit.send(Command::UpdateUser(user.clone(), reply));
+        wait.await.map_err(|_| Error::Closed.to_string())?;
+        Ok(user)
     }
 
     pub async fn connect_as(&self, user: crate::identity::User) -> Result<Session, Error> {
-        let user = Arc::new(std::sync::RwLock::new(user));
+        self.connect_authenticated(
+            crate::identity::AuthContext::in_process(user),
+            Default::default(),
+        )
+        .await
+    }
+
+    pub(crate) async fn connect_authenticated(
+        &self,
+        auth: crate::identity::AuthContext,
+        revoked: tokio_util::sync::CancellationToken,
+    ) -> Result<Session, Error> {
+        let auth = Arc::new(SessionIdentity {
+            caller: std::sync::RwLock::new(auth),
+            revoked,
+        });
         let (reply, wait) = oneshot::channel();
-        admit(&self.commands, Command::Connect(user.clone(), reply))?;
+        admit(&self.commands, Command::Connect(auth.clone(), reply))?;
 
         let (id, output, slow, alive) = wait.await.map_err(|_| Error::Closed)??;
 
         Ok(Session {
             sender: SessionSender {
                 id,
-                user,
+                auth,
                 commands: self.commands.clone(),
                 slow,
                 alive,
@@ -73,6 +109,44 @@ impl Server {
             output,
             cleanup: self.cleanup.clone(),
         })
+    }
+
+    pub(crate) async fn revoke_member(
+        &self,
+        identities: &crate::identity::Identities,
+        id: String,
+    ) -> Result<(), String> {
+        // Reserve cleanup before revoking access so it still runs if the HTTP
+        // caller disconnects after the revocation is saved.
+        let permit = self
+            .commands
+            .reserve()
+            .await
+            .map_err(|_| Error::Closed.to_string())?;
+        let removed = identities.remove_member(&id)?;
+        let (reply, wait) = oneshot::channel();
+        permit.send(Command::MemberRemoved {
+            id,
+            user: removed,
+            reply,
+        });
+        wait.await.map_err(|_| Error::Closed.to_string())?
+    }
+
+    pub(crate) async fn clear_revoked_window_state(
+        &self,
+        identities: &crate::identity::Identities,
+    ) -> Result<(), String> {
+        let ids = identities.revoked_member_ids();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let (reply, wait) = oneshot::channel();
+        self.commands
+            .send(Command::RemoveUserWindowState(ids, reply))
+            .await
+            .map_err(|_| Error::Closed.to_string())?;
+        wait.await.map_err(|_| Error::Closed.to_string())?
     }
 
     /// Ordered behind accepted commands; shields shutdown even if this await is

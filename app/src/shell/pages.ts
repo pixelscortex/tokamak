@@ -22,6 +22,22 @@ export const shellPages = {
     icon: shellIcons.computer,
     generation: 0,
   },
+  members: {
+    id: "members",
+    plugin: "shell",
+    route: "/settings/members",
+    title: "Members",
+    icon: shellIcons.members,
+    generation: 0,
+  },
+  devices: {
+    id: "devices",
+    plugin: "shell",
+    route: "/settings/devices",
+    title: "Devices",
+    icon: shellIcons.computer,
+    generation: 0,
+  },
 } satisfies Record<string, PluginView>;
 
 export const shellPageList: readonly PluginView[] = Object.values(shellPages);

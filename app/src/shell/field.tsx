@@ -22,6 +22,9 @@ export function Field(props: {
   autofocus?: boolean;
   autocomplete?: string;
   id?: string;
+  name?: string;
+  type?: "text" | "email" | "password";
+  required?: boolean;
 }): JSX.Element {
   const input = (
     <div class="flex h-12 items-center gap-3 rounded-md bg-edge/50 ps-4 pe-2 inset-ring inset-ring-edge focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-text">
@@ -29,6 +32,9 @@ export function Field(props: {
       {props.lead}
       <input
         id={props.id}
+        name={props.name}
+        type={props.type ?? "text"}
+        required={props.required}
         aria-label={props.visibleLabel ? undefined : props.label}
         aria-invalid={props.invalid ? "true" : undefined}
         aria-describedby={props.describedBy}

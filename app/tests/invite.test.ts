@@ -2,13 +2,13 @@ import { expect, test } from "vitest";
 import { buildInvite, nameFromHost, parseInvite } from "../src/host/invite";
 
 test("an invite round-trips through its one format", () => {
-  const invite = buildInvite("https://tokamak-pixelscortex.up.railway.app", "s3cret/+=token");
-  expect(invite).toBe("https://tokamak-pixelscortex.up.railway.app/join#s3cret%2F%2B%3Dtoken");
+  const invite = buildInvite("https://tokamak-example.up.railway.app", "s3cret/+=token");
+  expect(invite).toBe("https://tokamak-example.up.railway.app/join#s3cret%2F%2B%3Dtoken");
   expect(parseInvite(invite)).toEqual({
     ok: true,
     address: {
-      origin: "https://tokamak-pixelscortex.up.railway.app",
-      host: "tokamak-pixelscortex.up.railway.app",
+      origin: "https://tokamak-example.up.railway.app",
+      host: "tokamak-example.up.railway.app",
       secure: true,
     },
     token: "s3cret/+=token",
@@ -56,7 +56,7 @@ test("text that is not an address says so", () => {
 });
 
 test("a server is named after its host until it can name itself", () => {
-  expect(nameFromHost("tokamak-pixelscortex.up.railway.app")).toBe("tokamak-pixelscortex");
+  expect(nameFromHost("tokamak-example.up.railway.app")).toBe("tokamak-example");
   expect(nameFromHost("127.0.0.1:43124")).toBe("127.0.0.1:43124");
   expect(nameFromHost("localhost:3000")).toBe("localhost:3000");
 });

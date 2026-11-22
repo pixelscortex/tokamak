@@ -17,7 +17,7 @@ leaves the server running; `proto run bun -- run server:stop` stops it.
 uses workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR`
 overrides the installation for disposable integration runs. Stop the server
 before changing installations. Discovery and the private token normally live in
-`~/Library/Application Support/com.pixelscortex.Tokamak` on macOS.
+`~/Library/Application Support/<bundle identifier>` on macOS.
 
 For browser development, use two terminals:
 
@@ -51,6 +51,18 @@ turned off in `shell/config.ts`.
 Keys go through the SDK `Shortcuts` facade (`ShortcutContext`): ⌘B sidebar, ⌘K
 search, ⌘[ and ⌘] back and forward, ⌃Tab and ⌃⇧Tab next and previous tab (Ctrl
 instead of ⌘ off macOS). `/kit` opens full-bleed from the settings menu.
+
+Quitting (`src-tauri/src/quit.rs`, `src/host/quit.ts`, `src/shell/quit.tsx`):
+the Quit menu item (ours replaces the platform's, which on macOS cannot be
+delayed), Cmd+Q, closing the window and other exit requests are held and sent
+to the window on the channel it registers with `quit_listen`. The window asks
+plugins (`quitBlockers`); with nothing running it answers `quit_confirm` at
+once, else it shows the dialog and answers `quit_hold`, then `quit_cancel` or
+(after Stop and quit) `quit_confirm`. No answer within 3 seconds quits anyway.
+`quit_confirm` closes every local worker, ending each agent program with it,
+then exits. The main window runs with WebKit's background throttling off
+(`tauri.conf.json`), so a hidden or minimized window still relays its local
+part's sign of life and answers a quit.
 
 `src/plugins/views.tsx` still exports `createPluginShell` and `PluginViews`; the
 frame reads `views()` for the rail, tabs and search. See

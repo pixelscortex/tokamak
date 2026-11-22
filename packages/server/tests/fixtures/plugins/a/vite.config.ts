@@ -9,7 +9,6 @@ export default {
         version: "1.0.0",
         exports: "./api.ts",
         depends: { b: "^1" },
-        provides: ["cycle"],
       },
     }),
   ],

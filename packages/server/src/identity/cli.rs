@@ -5,7 +5,7 @@ pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std
     let subject = if command == "members" {
         None
     } else {
-        Some(args.next().ok_or("Missing name or member id")?)
+        Some(args.next().ok_or("Missing member id")?)
     };
     let mut address = None;
     let mut token = std::env::var("TOKAMAK_TOKEN").ok();
@@ -18,7 +18,6 @@ pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std
         }
     }
     let mut url = server_url(&address.ok_or("--server is required")?)?;
-    let origin = url.origin().ascii_serialization();
     url.set_path("/members");
     if command == "revoke" {
         url.path_segments_mut()
@@ -35,13 +34,6 @@ pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std
     } else {
         client.post(url)
     };
-    let request = if command == "invite" {
-        request
-            .header("content-type", "application/json")
-            .body(serde_json::json!({"name":subject}).to_string())
-    } else {
-        request
-    };
     let response = request
         .bearer_auth(token.ok_or("--token or TOKAMAK_TOKEN is required")?)
         .send()
@@ -52,12 +44,7 @@ pub async fn command(command: &str, args: Vec<String>) -> Result<(), Box<dyn std
         return Err(format!("Command refused ({status}): {text}").into());
     }
     let value: serde_json::Value = serde_json::from_str(&text)?;
-    if command == "invite" {
-        println!(
-            "{origin}/join#{}",
-            value["token"].as_str().ok_or("Missing invite token")?
-        );
-    } else if command == "members" {
+    if command == "members" {
         println!("id\tname\trole\tcreated\trevoked");
         for member in value.as_array().ok_or("Invalid members response")? {
             println!(

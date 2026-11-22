@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: { exclude: ["@ui-sdk/core"] },
   build: {
     target: "es2022",
+    ...(process.env.TOKAMAK_E2E_PREVIEW_DIR && { outDir: process.env.TOKAMAK_E2E_PREVIEW_DIR }),
     ...(process.env.TOKAMAK_PLUGIN_FIXTURES === "1"
       ? {
           rolldownOptions: {

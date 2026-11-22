@@ -43,6 +43,13 @@ export interface QueryRequest {
  */
 export interface HostOperations {
   "user.current": { args: {}; result: import("./functions").User };
+  "auth.current": { args: {}; result: import("./functions").AuthContext | null };
+  "crypto.hashPassword": { args: { password: string }; result: string };
+  "crypto.verifyPassword": { args: { password: string; hash: string }; result: boolean };
+  "crypto.verifyAndRehashPassword": {
+    args: { password: string; hash: string };
+    result: { valid: boolean; replacementHash?: string };
+  };
   "db.get": { args: { id: string }; result: StoredDocument | null };
   "db.insert": { args: { table: string; value: JsonObject }; result: Id };
   "db.patch": { args: { id: string; value: JsonObject }; result: null };
@@ -52,8 +59,26 @@ export interface HostOperations {
   "action.env": { args: { name: string }; result: string | null };
   "action.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
   "action.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
-  "plugin.call": { args: { name: string; args: JsonValue }; result: JsonValue };
-  "plugin.providers": { args: { interface: string }; result: string[] };
+  "local.contracts": {
+    args: { name: string; owner?: string };
+    result: { plugin: string; registration: string; own: boolean; path: string; owner: string }[];
+  };
+  "local.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
+  "local.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
+  "local.runAction": { args: { name: string; args: JsonValue }; result: JsonValue };
+  "plugin.call": {
+    args: {
+      name: string;
+      args: JsonValue;
+      kind?: import("./functions").ServerFunctionKind;
+      contract?: string;
+    };
+    result: JsonValue;
+  };
+  "contract.list": {
+    args: { name: string; owner?: string };
+    result: { id: string; data: JsonObject; methods: Record<string, string> }[];
+  };
 }
 
 export type HostOperation = keyof HostOperations;
@@ -66,8 +91,11 @@ export interface ActionSignal {
 }
 
 export interface HostBridge {
+  readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
+  readonly proc?: import("./local").LocalProcess;
+  readonly withPrograms?: import("./local").WithPrograms;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
   op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;
 }

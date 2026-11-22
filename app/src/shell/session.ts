@@ -1,10 +1,16 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { LocalFunctions } from "../../../packages/runtime/js/local";
+import { launchLocalWorker } from "../host/local";
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import { TokamakClient, WebSocketTransport } from "@tokamak/sdk";
+import { socketProtocols } from "../host/auth";
 import { endpoint } from "../host/endpoint";
-import type { RemoteChat } from "@tokamak/sdk/client";
 import { syncDisplayName } from "../host/identity";
 import type { ServerEndpoint } from "../plugins/adapter";
 import { createPluginShell, type PluginRouting, type PluginShell } from "../plugins/views";
+
+// Matches DEVICE_SIGNED_OUT in packages/server/src/websocket.rs.
+const DEVICE_SIGNED_OUT = 4001;
 
 export type Connection =
   | { state: "connecting" }
@@ -20,7 +26,6 @@ export interface Session {
 export interface SessionOptions {
   routing: PluginRouting;
   getEndpoint?: () => ServerEndpoint | Promise<ServerEndpoint>;
-  remoteChat?: (hub: ServerEndpoint) => RemoteChat | undefined;
   /**
    * Which server the endpoint belongs to. When it changes, the session drops the old
    * connection (its socket and plugin UI) and connects to the new one.
@@ -46,6 +51,7 @@ export function createSession(options: SessionOptions): Session {
     disconnect();
     const current = attempt;
     setConnection({ state: "connecting" });
+    const workspaceKey = options.server?.();
     const displayName = options.displayName?.();
     const supplied = await (options.getEndpoint ?? endpoint)();
     if (current !== attempt) return;
@@ -55,8 +61,7 @@ export function createSession(options: SessionOptions): Session {
       return;
     }
     const url = new URL(supplied.ws);
-    if (supplied.token) url.searchParams.set("token", supplied.token);
-    const socket = new window.WebSocket(url);
+    const socket = new window.WebSocket(url, socketProtocols(supplied.token));
     close = () => socket.close();
     const timeout = setTimeout(() => socket.close(), 10_000);
     try {
@@ -73,24 +78,25 @@ export function createSession(options: SessionOptions): Session {
       });
       if (current !== attempt) return;
       const transport = new WebSocketTransport(socket);
-      const client = new TokamakClient(transport);
-      const plugins = createPluginShell(
-        client,
-        supplied,
-        transport,
-        options.routing,
-        options.remoteChat?.(supplied),
-      );
+      const local = isTauri() ? new LocalFunctions(transport, launchLocalWorker) : undefined;
+      const client = new TokamakClient(transport, local);
+      const plugins = createPluginShell(client, supplied, transport, options.routing, workspaceKey);
       close = () => {
+        void local?.close();
         plugins.dispose();
         transport.close();
       };
       let closed = false;
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         closed = true;
         if (current !== attempt) return;
+        void local?.close();
         plugins.dispose();
-        setConnection({ state: "failed", reason: "The server closed the connection." });
+        setConnection(
+          event.code === DEVICE_SIGNED_OUT
+            ? { state: "failed", reason: "This device was signed out.", needs: "token" }
+            : { state: "failed", reason: "The server closed the connection." },
+        );
       });
       await syncDisplayName(supplied, displayName);
       if (current !== attempt || closed) return;

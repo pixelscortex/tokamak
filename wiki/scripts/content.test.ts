@@ -71,13 +71,16 @@ test("links resolve from the source path, preserve anchors, and leave code and e
     { type: "link", url: "https://example.com/docs.md" },
     { type: "code", url: "./PLUGINS.md" },
   ];
-  remarkSourceLinks()({ type: "root", children: nodes }, { path: join(generatedDocs, "server/index.md") });
+  remarkSourceLinks("example/tokamak")(
+    { type: "root", children: nodes },
+    { path: join(generatedDocs, "server/index.md") },
+  );
   assert.deepEqual(
     nodes.map((node) => node.url),
     [
       "/docs/server/plugins#build-and-run",
       "/docs/runtime/routing?view=all#evidence",
-      "https://github.com/pixelscortex/tokamak/blob/dev/packages/server/tests/README.md",
+      "https://github.com/example/tokamak/blob/dev/packages/server/tests/README.md",
       "#local",
       "https://example.com/docs.md",
       "./PLUGINS.md",

@@ -1,4 +1,3 @@
-import { prepareAgentEnvironment } from "../../../e2e/chat-sandbox.ts";
 import { randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -9,7 +8,6 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const workspace = resolve(import.meta.dir, "../../..");
 const directory = await mkdtemp(resolve(tmpdir(), "tokamak-browser-assets-"));
-const sandbox = await prepareAgentEnvironment(directory);
 const fixture = resolve(workspace, "packages/build/tests/fixtures/browser");
 const binary = resolve(workspace, "target/debug/tokamak-server");
 const built = spawnSync("proto", ["run", "bun", "--", "packages/build/src/build.ts", fixture], {
@@ -20,9 +18,11 @@ assert.equal(built.status, 0);
 await mkdir(resolve(directory, "plugins/browser-fixture"), { recursive: true });
 await cp(resolve(fixture, "dist"), resolve(directory, "plugins/browser-fixture/dist"), { recursive: true });
 
-async function websocket(url, origin, expected) {
+async function websocket(url, origin, expected, token) {
   const opened = await new Promise((resolve, reject) => {
-    const ws = new WebSocket(url, { headers: origin ? { Origin: origin } : {} });
+    const ws = new WebSocket(url, {
+      headers: { ...(origin && { Origin: origin }), ...(token && { Authorization: `Bearer ${token}` }) },
+    });
     const timer = setTimeout(() => {
       ws.close();
       reject(new Error("WebSocket timeout"));
@@ -55,7 +55,6 @@ try {
       stdio: ["ignore", "ignore", "inherit"],
       env: {
         ...process.env,
-        ...sandbox.env,
         ...(mode === "configured" ? { TOKAMAK_ALLOWED_ORIGINS: "http://configured.example" } : {}),
       },
     });
@@ -72,15 +71,16 @@ try {
             base = identity.url.replace("ws://", "http://").replace(/\/ws$/, "");
             token = await readFile(resolve(local, "server.token"), "utf8");
           }
-          const ready = await fetch(`${base}/plugins${token ? `?token=${token}` : ""}`);
+          const ready = await fetch(`${base}/plugins`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
           if (ready.ok) break;
         } catch {}
         await delay(50);
       }
       assert(base, "Server startup");
       const origin = mode === "configured" ? "http://configured.example" : "http://127.0.0.1:1420";
-      const query = token ? `?token=${token}` : "";
-      const curl = async (path, origin, expected, suffix = query) => {
+      const curl = async (path, origin, expected, key = token, suffix = "") => {
         const headers = resolve(directory, "headers");
         const body = resolve(directory, "body");
         const result = spawnSync(
@@ -97,6 +97,7 @@ try {
             "-w",
             "%{http_code}",
             ...(origin ? ["-H", `Origin: ${origin}`] : []),
+            ...(key ? ["-H", `Authorization: Bearer ${key}`] : []),
             `${base}${path}${suffix}`,
           ],
           { encoding: "utf8" },
@@ -124,14 +125,14 @@ try {
       if (mode === "configured") await curl(plugin.uiUrl, "http://127.0.0.1:1420", 403);
       if (token) {
         await curl(plugin.uiUrl, origin, 401, "");
-        await curl(plugin.uiUrl, origin, 401, "?token=wrong");
+        await curl(plugin.uiUrl, origin, 401, "", `?token=${token}`);
       } else {
         await Bun.write("/tmp/tokamak-plugin-catalog-example.json", JSON.stringify(catalog, null, 2));
       }
       const ws = `${base.replace("http://", "ws://")}/ws`;
-      await websocket(ws + query, origin, true);
-      await websocket(ws + query, undefined, true);
-      await websocket(ws + query, "http://untrusted.example", false);
+      await websocket(ws, origin, true, token);
+      await websocket(ws, undefined, true, token);
+      await websocket(ws, "http://untrusted.example", false, token);
       if (token) await websocket(ws, origin, false);
     } finally {
       child.kill("SIGTERM");

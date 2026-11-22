@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { render } from "@solidjs/web";
-import { createRoot } from "solid-js";
+import { createRoot, createSignal } from "solid-js";
 import { screen, waitFor, within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import {
@@ -33,11 +33,11 @@ const thread = view("Thread", "/t/:id", "Thread");
 const board = view("Board", "/board", "Board");
 const admin = { ...view("Admin", "/admin", "Admin"), icon: "M4 4H20V20H4Z" };
 
-function connected(views: () => readonly PluginView[]): Session {
+function connected(views: () => readonly PluginView[], hasUnsavedWindowState: () => boolean): Session {
   const connection: Connection = {
     state: "connected",
     client: {} as never,
-    plugins: { views } as unknown as PluginShell,
+    plugins: { views, host: { hasUnsavedWindowState } } as unknown as PluginShell,
     endpoint: { http: "http://127.0.0.1:43123", ws: "ws://127.0.0.1:43123/ws", token: null },
   };
   return { connection: () => connection, retry() {} };
@@ -49,7 +49,11 @@ function Titled(props: { title: string }) {
 }
 
 /** The real frame and keys over a memory router, a fake session and fixture routes. */
-function mount(views: readonly PluginView[] = [notes, board], start = "/p/fixture") {
+function mount(
+  views: readonly PluginView[] = [notes, board],
+  start = "/p/fixture",
+  hasUnsavedWindowState = () => false,
+) {
   const root = createRootRoute({
     component: () => (
       <RegionProvider>
@@ -87,7 +91,7 @@ function mount(views: readonly PluginView[] = [notes, board], start = "/p/fixtur
   function Harness() {
     const shell = createShellState(
       router,
-      connected(() => views),
+      connected(() => views, hasUnsavedWindowState),
     );
     return (
       <ShellContext value={shell}>
@@ -102,6 +106,20 @@ function mount(views: readonly PluginView[] = [notes, board], start = "/p/fixtur
 
 beforeEach(() => localStorage.clear());
 afterEach(() => document.documentElement.removeAttribute("data-theme"));
+
+test("the frame shows unsaved plugin changes until they clear", async () => {
+  const [unsaved, setUnsaved] = createSignal(false);
+  const { dispose } = mount([notes], "/p/fixture", unsaved);
+  try {
+    const status = await screen.findByRole("status", { name: "Save status" });
+    setUnsaved(true);
+    await waitFor(() => expect(status.textContent).toContain("Your changes haven’t been saved yet."));
+    setUnsaved(false);
+    await waitFor(() => expect(status.textContent).toBe(""));
+  } finally {
+    dispose();
+  }
+});
 
 test("shortcut names follow the facade's modifier order", () => {
   expect(shortcutName("ctrl+shift+Tab")).toBe("Control+Shift+tab");

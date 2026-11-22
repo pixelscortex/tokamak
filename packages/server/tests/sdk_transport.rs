@@ -4,7 +4,7 @@
 use engine::{Bundle, Engine, Json, OpRegistry, Pool, PoolConfig, QuickJsEngine};
 use serde_json::{Value, json};
 use server::{
-    Backend, BackendConfig, Server,
+    Backend, BackendConfig, Event, Server,
     data::{Database, Storage},
 };
 use std::{
@@ -120,6 +120,22 @@ fn headless_binary_two_real_sdk_clients_and_disk_reopen() {
         String::from_utf8_lossy(&result.stdout),
         String::from_utf8_lossy(&result.stderr)
     );
+}
+
+#[test]
+fn headless_binary_supports_internal_calls_and_typed_failures() {
+    for scenario in ["internal", "internal-worker"] {
+        let result = bun_script("sdk-transport-driver.mjs")
+            .args([scenario, env!("CARGO_BIN_EXE_tokamak-server")])
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{scenario} acceptance:\n{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
 }
 
 // Failed descriptor inspection opens storage before failing. The caller must be
@@ -522,3 +538,66 @@ type PauseGate = Arc<
         )>,
     >,
 >;
+
+#[test]
+fn headless_binary_discovers_and_calls_contract_providers_across_reload() {
+    run(async {
+        let status = tokio::process::Command::from(bun_script("contracts-driver.mjs"))
+            .arg(env!("CARGO_BIN_EXE_tokamak-server"))
+            .kill_on_drop(true)
+            .status()
+            .await
+            .expect("start contract acceptance driver");
+        assert!(
+            status.success(),
+            "contract acceptance driver exited: {status}"
+        );
+    });
+}
+
+#[test]
+fn core_discovers_private_sign_in_methods_before_creating_a_session() {
+    run(async {
+        let scratch = tempfile::tempdir_in(root().join("target")).unwrap();
+        let status = tokio::process::Command::from(bun_script("contracts-driver.mjs"))
+            .arg("--prepare-auth")
+            .arg(scratch.path())
+            .kill_on_drop(true)
+            .status()
+            .await
+            .expect("build sign-in fixture");
+        assert!(status.success());
+
+        let backend =
+            Backend::start_plugins(Storage::Memory, PoolConfig::default(), scratch.path())
+                .await
+                .unwrap();
+        let methods = backend.server().sign_in_methods().await.unwrap();
+        let [method] = methods.as_slice() else {
+            panic!("expected one sign-in method, got {methods:?}")
+        };
+        assert_eq!((&*method.id, &*method.name), ("basic", "Basic"));
+        assert!(matches!(
+            method.form.get("password"),
+            Some(server::plugins::SignInField::Password)
+        ));
+
+        let mut window = backend.connect().await.unwrap();
+        window
+            .call(
+                1,
+                &method.provider_action,
+                json!({"login":"example","password":"test"}),
+            )
+            .unwrap();
+        let Some(Event::Response {
+            result: Err(error), ..
+        }) = window.recv().await.unwrap()
+        else {
+            panic!("the window must not reach the sign-in provider action");
+        };
+        assert!(error.contains("unknown function"), "{error}");
+        drop(window);
+        backend.close().await.unwrap();
+    });
+}

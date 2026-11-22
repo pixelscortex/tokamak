@@ -3,8 +3,10 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { compileCss } from "./css.ts";
 import { clientEntry } from "./descriptor.ts";
+import { windowStateModule } from "../../sdk/src/window-state-protocol.ts";
 
 export const hostModule = (id: string) =>
+  id === windowStateModule ||
   /^(solid-js(?:$|\/)|@solidjs\/web(?:$|\/)|@tokamak\/(?:sdk(?:$|\/)|ui(?:$|\/)|runtime\/router$)|@ui-sdk\/(?:solid|core)(?:$|\/)|@plugins\/)/.test(
     id,
   );

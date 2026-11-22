@@ -1,5 +1,6 @@
 import { createContext, useContext, type Accessor, type Setter } from "solid-js";
 import type { AnyRouter } from "@tanstack/solid-router";
+import type { SignInOptions } from "../host/sign-in";
 import type { Servers } from "../host/servers";
 import type { Navigation } from "./navigation";
 import type { Session } from "./session";
@@ -18,6 +19,13 @@ export const keys = {
 /** ⌘1 to ⌘9 select the servers in the switcher's order. */
 export const serverKey = (index: number) => (index < 9 ? `mod+${index + 1}` : undefined);
 
+export interface SignInTarget {
+  origin: string;
+  options?: SignInOptions;
+  onSignedIn?: () => void;
+  onInvite?: () => void;
+}
+
 export interface ShellState {
   router: AnyRouter;
   session: Session;
@@ -28,6 +36,10 @@ export interface ShellState {
   openConnect(invite?: string): void;
   /** Hands the invite given to openConnect to the page, once. */
   takeInvite(): string | undefined;
+  signIn: Accessor<SignInTarget | undefined>;
+  openSignIn(target: SignInTarget): void;
+  closeSignIn(): void;
+  finishSignIn(key: string): void;
   serverMenuOpen: Accessor<boolean>;
   setServerMenuOpen: Setter<boolean>;
   navigation: Navigation;

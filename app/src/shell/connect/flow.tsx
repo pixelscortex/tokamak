@@ -3,6 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { Region } from "@tokamak/sdk/client";
 import { Icon, icons } from "@tokamak/ui";
 import { nameFromHost, parseInvite, type ParsedInvite, type ServerAddress } from "../../host/invite";
+import { discoverSignIn, exchangeOwnerKey } from "../../host/sign-in";
 import { checkAccess, reach } from "../../host/reach";
 import { useShell } from "../context";
 import { Control } from "../control";
@@ -43,7 +44,7 @@ export function Connect(): JSX.Element {
 
   const cancel = () => shell.navigation.close(shellPages.connect.route);
   const onKey = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !event.defaultPrevented) cancel();
+    if (event.key === "Escape" && !event.defaultPrevented && !shell.signIn()) cancel();
   };
   document.addEventListener("keydown", onKey);
   onCleanup(() => document.removeEventListener("keydown", onKey));
@@ -87,6 +88,20 @@ export function Connect(): JSX.Element {
     connect(parsed.address, parsed.token);
   };
 
+  const continueToSignIn = async (current: StepOf<"connecting">) => {
+    const { address: target, token: invite, answer } = current;
+    if (!answer || checking()) return;
+    const legacy = () => setStep({ name: "verify", address: target, token: invite, answer });
+    if (invite) return legacy();
+    const signal = next();
+    setChecking(true);
+    const options = await discoverSignIn(target.origin, signal);
+    if (signal.aborted) return;
+    setChecking(false);
+    if (!options) return legacy();
+    shell.openSignIn({ origin: target.origin, options, onSignedIn: cancel, onInvite: legacy });
+  };
+
   const join = async (event: SubmitEvent) => {
     event.preventDefault();
     const current = step();
@@ -95,10 +110,23 @@ export function Connect(): JSX.Element {
     if (!secret) return setStep({ ...current, access: "rejected" });
     const signal = next();
     setChecking(true);
-    const access = await checkAccess(current.address.origin, secret, { signal });
+    const origin = current.address.origin;
+    let access = await checkAccess(origin, secret, { signal });
+    let credential = secret;
+    if (access === "accepted" && (await discoverSignIn(origin, signal))) {
+      try {
+        // The invite box also accepts pasted credentials. An owner key must
+        // become a revocable device key before the client can save it.
+        const exchanged = await exchangeOwnerKey(origin, secret, signal);
+        if ("key" in exchanged) credential = exchanged.key;
+      } catch {
+        access = "unknown";
+      }
+    }
     if (signal.aborted) return;
     setChecking(false);
-    if (access === "accepted") return setStep({ name: "customize", address: current.address, token: secret });
+    if (access === "accepted")
+      return setStep({ name: "customize", address: current.address, token: credential });
     setToken(secret);
     setStep({ ...current, access });
   };
@@ -166,11 +194,12 @@ export function Connect(): JSX.Element {
               {(current) => (
                 <ConnectingStep
                   step={current()}
-                  onBack={() => setStep({ name: "address" })}
-                  onContinue={() => {
-                    const { address: target, token: invite, answer } = current();
-                    if (answer) setStep({ name: "verify", address: target, token: invite, answer });
+                  onBack={() => {
+                    request?.abort();
+                    setChecking(false);
+                    setStep({ name: "address" });
                   }}
+                  onContinue={() => void continueToSignIn(current())}
                 />
               )}
             </Match>

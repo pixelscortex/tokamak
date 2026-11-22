@@ -29,9 +29,10 @@ export async function source(root, id, code, options = { backend: false }) {
   await writeFile(resolve(path, "src/main.tsx"), code);
   return path;
 }
-export function build(path) {
+export function build(path, env = process.env) {
   const result = spawnSync(process.execPath, [resolve(workspace, "packages/build/src/build.ts"), path], {
     encoding: "utf8",
+    env,
     timeout: 30_000,
   });
   assert.ifError(result.error);

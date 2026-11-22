@@ -360,19 +360,22 @@ fn server_metadata(binary: &Path) -> Result<(String, PathBuf)> {
     {
         return Err("Cannot determine local server build identity".into());
     }
+    Ok((build, app_data_directory_for(binary)?))
+}
+
+pub(crate) fn app_data_directory() -> Result<PathBuf> {
+    app_data_directory_for(&binary()?)
+}
+
+fn app_data_directory_for(binary: &Path) -> Result<PathBuf> {
     let output = server_command(binary).arg("--local-path").output()?;
     if !output.status.success() {
         return Err("Cannot discover local server directory".into());
     }
-    Ok((
-        build,
-        PathBuf::from(String::from_utf8(output.stdout)?.trim()),
-    ))
+    Ok(PathBuf::from(String::from_utf8(output.stdout)?.trim()))
 }
 
-fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
-    let binary = binary()?;
-    let (build, directory) = server_metadata(&binary)?;
+pub(crate) fn plugin_root(app: &tauri::AppHandle) -> Result<PathBuf> {
     let plugins = if let Some(directory) = std::env::var_os("TOKAMAK_PLUGIN_DIR") {
         PathBuf::from(directory)
     } else if cfg!(debug_assertions) {
@@ -381,6 +384,13 @@ fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
         app.path().resource_dir()?.join("plugins")
     }
     .canonicalize()?;
+    Ok(plugins)
+}
+
+fn ensure(app: &tauri::AppHandle) -> Result<Endpoint> {
+    let binary = binary()?;
+    let (build, directory) = server_metadata(&binary)?;
+    let plugins = plugin_root(app)?;
     let client = Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())

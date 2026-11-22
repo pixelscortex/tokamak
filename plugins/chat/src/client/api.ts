@@ -1,17 +1,15 @@
-/** The chat plugin's public, moddable client surface. */
-export { Composer } from "./ui/composer/chat-composer";
-export { ComposerInput } from "./ui/composer/composer-input";
-export { ComposerStrip } from "./ui/composer/composer-strip";
-export { SendButton } from "./ui/composer/send-button";
-export {
-  composerBefore,
-  composerActions,
-  composerStripLeft,
-  composerStripRight,
-  composerAfter,
-  useComposer,
-} from "./lib/composer";
-export type { ComposerAPI, ComposerSlotProps } from "./lib/composer";
-
-export { Chat } from "./pages/screen";
-export { api } from "./lib/api";
+/**
+ * Chat's window entry. Other plugins extend these components through
+ * `plugin:chat/client`, e.g. `after(chat.Composer.box, AgentRow)`, and learn
+ * about each Send with `onSent`, and can turn Send off with `holdSend`.
+ */
+export { Chat } from "./pages/chat";
+export { Composer, type ComposerProps } from "./ui/composer";
+export { Empty, type EmptyProps } from "./ui/empty";
+export { Header, type HeaderProps } from "./ui/thread-header";
+export { Message, messageText, type MessageProps } from "./ui/message";
+export { ThreadRow, type ThreadRowProps } from "./ui/thread-list";
+export { onDraftSubmit, onSent, type DraftIntent, type DraftSubmission, type Sent } from "./lib/sent";
+export { resolveFolder } from "./lib/send";
+export { holdSend, type Hold } from "./lib/hold";
+export type { Folder, MessageDoc, Thread } from "./lib/api";

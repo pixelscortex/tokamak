@@ -1,2 +1,2 @@
-export { publicRead } from "./backend/ops";
-export { callerQuery, callerMutation, callerAction } from "./backend/ops";
+export { publicRead } from "./src/server/ops";
+export { callerQuery, callerMutation, callerAction } from "./src/server/ops";

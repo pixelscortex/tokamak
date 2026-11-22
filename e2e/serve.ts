@@ -1,5 +1,4 @@
-// The browser suite's server: app/scripts/server.ts, but the server process gets the
-// sealed chat sandbox HOME and PATH so ACP can only discover the scripted agent.
+// The browser suite installs only fake agent providers.
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -22,7 +21,6 @@ try {
     {
       // The server treats stdin closing as its parent going away.
       stdio: ["pipe", "inherit", "inherit"],
-      env: { ...process.env, HOME: process.env.CHAT_SANDBOX_HOME, PATH: process.env.CHAT_SANDBOX_PATH },
     },
   );
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => child.kill(signal));

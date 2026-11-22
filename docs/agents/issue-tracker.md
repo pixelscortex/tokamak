@@ -1,6 +1,6 @@
 # Issue tracker: Linear
 
-Issues and specs for this repo live in Linear, team **TKM** (Tokamak). Use the Linear MCP tools (`mcp__linear-server__*`) for every operation. GitHub Issues on `pixelscortex/tokamak` are not used; GitHub holds code and pull requests only.
+Issues and specs for this repo live in Linear, team **TKM** (Tokamak). Use the Linear MCP tools (`mcp__linear-server__*`) for every operation. GitHub Issues are not used; GitHub holds code and pull requests only.
 
 ## Conventions
 

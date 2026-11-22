@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { installStarterPlugins } from "./starter-plugins";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const parent = fileURLToPath(new URL("../.dev/", import.meta.url));
 await mkdir(parent, { recursive: true });
 const directory = await mkdtemp(`${parent}server-`);
 try {
-  await mkdir(`${directory}/plugins/chat`, { recursive: true });
-  await cp(`${root}plugins/chat/dist`, `${directory}/plugins/chat/dist`, { recursive: true });
+  if (!process.env.TOKAMAK_PLUGIN_DIR) await installStarterPlugins(`${directory}/plugins`);
   const child = spawn(
     `${root}target/debug/tokamak-server`,
     [

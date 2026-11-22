@@ -1,0 +1,82 @@
+import type { TokamakClient } from "@tokamak/sdk";
+import { state } from "@tokamak/sdk/client";
+import type { Info } from "../../contracts";
+import { api } from "../../server/_generated/api";
+
+export { api };
+
+export interface AgentEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly info: Info;
+}
+
+/** Installed agents as this computer's local part last answered; empty in a plain browser. */
+export const agents = state<readonly AgentEntry[]>([]);
+
+/** A short line the row shows after a turn could not begin; cleared by the next Send. */
+export const notice = state<string | undefined>(undefined);
+
+let asking: Promise<void> | undefined;
+let queued: Promise<void> | undefined;
+let connected: TokamakClient | undefined;
+
+/** This window's connection, as the row or the heading last saw it; turns run through it. */
+export function connectedClient(): TokamakClient | undefined {
+  return connected;
+}
+
+/**
+ * Asks every agent plugin for its `info` again, on this computer. Called
+ * whenever the row or the heading appears and whenever a picker opens, so a
+ * fresh install or sign-in shows without a restart. An ask already on its way
+ * may have started before the change, so a call meanwhile asks once more after
+ * it (several such calls share that one).
+ */
+export function refreshAgents(client: TokamakClient): Promise<void> {
+  connected = client;
+  if (!client.hasLocal) return Promise.resolve();
+  if (asking) {
+    queued ??= asking.then(() => {
+      queued = undefined;
+      return refreshAgents(client);
+    });
+    return queued;
+  }
+  asking = client
+    .local(api.agents.list, {})
+    .then(
+      (list) => void agents.set(list),
+      () => void agents.set([]),
+    )
+    .finally(() => {
+      asking = undefined;
+    });
+  return asking;
+}
+
+/** Why a turn cannot run or begin, as `run:turn` fails or the row sees it. */
+export type Reason = "NoAgent" | "NotInstalled" | "SignedOut" | "Busy" | "Answered";
+
+/** The row's line for `reason`, naming the agent as a person sees it. */
+export function reasonLine(reason: Reason, agent: string, updateRequired?: string): string {
+  switch (reason) {
+    case "NotInstalled":
+      return updateRequired ?? `${agent} isn't installed.`;
+    case "SignedOut":
+      return `${agent} is signed out. Sign in, then come back.`;
+    case "Busy":
+      return `${agent} is still working in this thread.`;
+    case "Answered":
+      return `${agent} already answered this message.`;
+    case "NoAgent":
+      return `${agent} is no longer installed.`;
+  }
+}
+
+/** Why Send cannot reach `agent` now, in the row's words; undefined when it can. */
+export function unavailable(agent: AgentEntry): string | undefined {
+  if (!agent.info.installed) return reasonLine("NotInstalled", agent.name, agent.info.updateRequired);
+  if (!agent.info.signedIn) return reasonLine("SignedOut", agent.name);
+  return undefined;
+}

@@ -4,6 +4,7 @@
 use crate::{
     Error, Server, Session,
     data::{DataSpace, Database, Storage},
+    plugins::StartupPolicy,
 };
 use engine::{Bundle, Pool, PoolConfig};
 use std::sync::Arc;
@@ -25,11 +26,30 @@ impl Backend {
         javascript: PoolConfig,
         root: &std::path::Path,
     ) -> Result<Self, Error> {
+        Self::start_plugin_installation(storage, javascript, root, StartupPolicy::Strict).await
+    }
+
+    /// Keep shared-server recovery and existing credentials available when
+    /// installed plugin modules fail to initialize.
+    pub async fn start_shared_plugins(
+        storage: Storage,
+        javascript: PoolConfig,
+        root: &std::path::Path,
+    ) -> Result<Self, Error> {
+        Self::start_plugin_installation(storage, javascript, root, StartupPolicy::Recover).await
+    }
+
+    async fn start_plugin_installation(
+        storage: Storage,
+        javascript: PoolConfig,
+        root: &std::path::Path,
+        policy: StartupPolicy,
+    ) -> Result<Self, Error> {
         let pool = Arc::new(Pool::new(javascript).map_err(|e| Error::Invalid(e.to_string()))?);
         let database = Database::open(storage)
             .await
             .map_err(|e| Error::Invalid(e.to_string()))?;
-        let server = Server::load_plugins(database, pool, root).await?;
+        let server = Server::load_plugin_catalog(database, pool, root, policy).await?;
         Ok(Self {
             server: Arc::new(server),
         })

@@ -1,0 +1,75 @@
+import { For, Show, onCleanup } from "solid-js";
+import type { JSX } from "@solidjs/web";
+import { useClient } from "@tokamak/sdk/client";
+import type { ThreadRowProps } from "plugin:chat/client";
+import { Icon, StatusIcon, rowVariants } from "@tokamak/ui";
+import { agentIcon } from "../lib/icons";
+import { followThread, iconFor, statusOf } from "../lib/thread-status";
+
+/**
+ * The icon before a thread's title in chat's list (Paper "Threads · C"):
+ * running, an amber lock while the agent waits for you, done, a red cross
+ * for failed or interrupted. Nothing for a thread without turns. Live.
+ */
+export function ThreadStatusIcon(props: ThreadRowProps): JSX.Element {
+  onCleanup(followThread(useClient(), props.thread._id));
+  const icon = () => {
+    const status = statusOf(props.thread._id);
+    return status && iconFor(status.state);
+  };
+  return <Show when={icon()}>{(status) => <StatusIcon status={status()} />}</Show>;
+}
+
+/**
+ * The second line of a running or waiting thread: the agent's mark, the model
+ * and the thread's folder ("✳ Opus 5.5 · invoices-app").
+ */
+export function ThreadDetail(props: ThreadRowProps): JSX.Element {
+  const status = () => statusOf(props.thread._id);
+  return (
+    <>
+      <Icon path={agentIcon} size={12} label={status()?.agent.name} />
+      <span class="text-data">{status()?.model}</span>
+      <span class="truncate text-data">· {folderName(props.thread)}</span>
+    </>
+  );
+}
+
+const half = rowVariants({ kind: "half", lead: true });
+
+/**
+ * The working turn's helper agents, one small row each under the thread
+ * (Paper "Half · subagent running / done"): the agent's mark, the helper's
+ * name, what it does, and its state.
+ */
+export function ThreadHelpers(props: ThreadRowProps): JSX.Element {
+  return (
+    <ul aria-label="Helpers" class="flex flex-col">
+      <For each={statusOf(props.thread._id)?.helpers ?? []}>
+        {(helper) => (
+          <li class={half.root()}>
+            <span class={half.line()}>
+              <span class={half.lead()}>
+                <Icon path={agentIcon} size={12} />
+              </span>
+              <span class="shrink-0 text-data text-ink-2">{helper.name}</span>
+              <span class={half.title()}>{helper.title}</span>
+              <StatusIcon status={helper.state} size={12} />
+            </span>
+          </li>
+        )}
+      </For>
+    </ul>
+  );
+}
+
+function folderName(thread: ThreadRowProps["thread"]): string {
+  const folder = thread.folder;
+  if (folder?.kind !== "chosen") return "No folder";
+  return (
+    folder.path
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .at(-1) || folder.path
+  );
+}

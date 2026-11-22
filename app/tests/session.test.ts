@@ -21,13 +21,16 @@ class FakeSocket extends EventTarget {
     FakeSocket.last = this;
   }
   send() {}
-  close() {
+  close(code = 1000) {
     this.readyState = 3;
-    this.dispatchEvent(new Event("close"));
+    this.dispatchEvent(new CloseEvent("close", { code }));
   }
 }
 
-test("a socket that closes while the catalog loads stays failed", async () => {
+test.each([
+  { code: 1000, expected: { state: "failed", reason: "The server closed the connection." } },
+  { code: 4001, expected: { state: "failed", reason: "This device was signed out.", needs: "token" } },
+])("a socket that closes with $code while the catalog loads stays failed", async ({ code, expected }) => {
   vi.stubGlobal("WebSocket", FakeSocket);
   try {
     await createRoot(async (dispose) => {
@@ -43,12 +46,9 @@ test("a socket that closes while the catalog loads stays failed", async () => {
       FakeSocket.last.dispatchEvent(new Event("open"));
       // Let the session reach the catalog load, then lose the socket before it finishes.
       await new Promise((resolve) => setTimeout(resolve));
-      FakeSocket.last.close();
+      FakeSocket.last.close(code);
       flush();
-      expect(session.connection()).toEqual({
-        state: "failed",
-        reason: "The server closed the connection.",
-      });
+      expect(session.connection()).toEqual(expected);
       shell.loaded();
       await new Promise((resolve) => setTimeout(resolve));
       flush();

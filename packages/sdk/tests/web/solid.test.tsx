@@ -1,13 +1,16 @@
-import { expect, test, vi } from "vitest";
+import { expect, expectTypeOf, test, vi } from "vitest";
 import { createRoot, createSignal, flush } from "solid-js";
-import { render } from "@solidjs/web";
+import { Loading, render } from "@solidjs/web";
 import {
   createApi,
+  TokamakClient,
   type FunctionReference,
-  type TokamakClient,
+  type JsonValue,
   type SubscriptionEvent,
+  type User,
 } from "../../src/index";
 import { ClientContext, useClient, useQuery } from "../../solid";
+import { auth } from "../../client";
 
 const api = createApi<{ rows: { list: FunctionReference<"query", { filter: string }, string[]> } }>();
 test("queries deliver values and errors, replace arguments, unsubscribe and ignore retired callbacks", () => {
@@ -91,4 +94,67 @@ test("the DOM client context supplies the shell client", () => {
   expect(received).toBe(client);
   expect(root.textContent).toBe("connected");
   dispose();
+});
+
+test("auth.me reports the same missing provider error as useClient", () => {
+  createRoot((dispose) => {
+    try {
+      expect(useClient).toThrow("Plugin UI requires the shell client");
+      expect(auth.me).toThrow("Plugin UI requires the shell client");
+    } finally {
+      dispose();
+    }
+  });
+});
+
+test("auth.me renders identity changes in the connected window", () => {
+  let receive!: (event: SubscriptionEvent<JsonValue>) => void;
+  const stop = vi.fn();
+  let subscriptions = 0;
+  const client = new TokamakClient({
+    query: () => Promise.reject(new Error("auth must stay subscribed")),
+    mutation: () => Promise.reject(new Error("unexpected mutation")),
+    subscribe(_name, _args, observer) {
+      subscriptions++;
+      receive = observer;
+      return stop;
+    },
+  });
+  function Account() {
+    expectTypeOf(auth.me).returns.toHaveProperty("name").toEqualTypeOf<User["name"]>();
+    const me = auth.me();
+    const device = me.device;
+    return (
+      <Loading fallback="Loading">
+        <span>{`${me.id} · ${me.name} · ${me.role} · ${device.id} · ${device.name}`}</span>
+        <span>{` (${auth.me().name})`}</span>
+      </Loading>
+    );
+  }
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ClientContext value={client}>
+        <Account />
+      </ClientContext>
+    ),
+    root,
+  );
+  flush();
+  expect(root.textContent).toBe("Loading");
+  const device = { id: "device:a", name: "Laptop" };
+  receive({ value: { user: { id: "a", name: "Alice", role: "member" }, device } });
+  flush();
+  expect(root.textContent).toBe("a · Alice · member · device:a · Laptop (Alice)");
+  receive({
+    value: {
+      user: { id: "b", name: "Alicia", role: "admin" },
+      device: { id: "device:b", name: "Desktop" },
+    },
+  });
+  flush();
+  expect(root.textContent).toBe("b · Alicia · admin · device:b · Desktop (Alicia)");
+  expect(subscriptions).toBe(1);
+  dispose();
+  expect(stop).toHaveBeenCalledOnce();
 });

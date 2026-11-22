@@ -9,13 +9,5 @@
     "skipLibCheck": true,
     "allowJs": true
   },
-  "include": [
-    "run.ts",
-    "feature/*.ts",
-    "browser.ts",
-    "chat-sandbox.ts",
-    "serve.ts",
-    "playwright.config.ts",
-    "browser/*.ts"
-  ]
+  "include": ["run.ts", "feature/*.ts", "browser.ts", "serve.ts", "playwright.config.ts", "browser/*.ts"]
 }

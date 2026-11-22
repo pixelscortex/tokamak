@@ -1,0 +1,81 @@
+---
+title: Window
+description: Declare pages and extensible components, add actions to named elements, and keep window state.
+---
+
+Import the window API from `@tokamak/sdk/client`. Export pages, components
+and actions from your plugin's `src/client/api.tsx` so the build can discover them.
+
+## Pages and components
+
+`view` gives a page a literal route and can supply its title and icon.
+A `component` publishes named elements for actions. A JSX component tag
+such as `<SendButton />` exposes `sendButton` by default. Use `part="name"`
+to name a native element or distinguish two uses of the same tag.
+Add `locked` to an element to prevent other plugins from acting on it.
+
+```tsx
+import { component, view } from "@tokamak/sdk/client";
+
+export const Composer = component("composer", {}, () => (
+  <section part="tray">
+    <button part="send">Send</button>
+    <span part="status" locked>
+      Ready
+    </span>
+  </section>
+));
+
+export const Work = view({ route: "/work", title: "Work" }, () => <Composer />);
+```
+
+<api-declaration path="../../../../packages/sdk/view.ts" name="view" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="component" />
+
+## Actions on elements
+
+Import another plugin's window entry through `plugin:example/client`.
+An action targets a component's published path, such as `Composer.tray.send`.
+
+| Action    | Effect                                                                   |
+| --------- | ------------------------------------------------------------------------ |
+| `before`  | Add a sibling immediately before the element.                            |
+| `after`   | Add a sibling immediately after it.                                      |
+| `prepend` | Add a child at the start.                                                |
+| `append`  | Add a child at the end.                                                  |
+| `wrap`    | Surround the current element, which arrives as `props.children`.         |
+| `replace` | Swap in another element and dispose of the original and its descendants. |
+| `hide`    | Remove the element, its children, and additions before and after it.     |
+
+Use `{ when: (props) => condition }` to make an action conditional. The
+check is reactive and receives the declaring component's props. The
+`order` option sorts actions at the same position (default 0, then plugin ID).
+Only the first installed replacement owns a target.
+
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="before" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="after" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="prepend" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="append" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="wrapPart" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="replacePart" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="hide" />
+
+## State
+
+Read a value with `value()` and update it with `value.set(next)` or a
+pure updater. `derived(() => value() * 2)` returns a read-only, reactive
+computation. Both follow Solid's tracking rules.
+
+| `keep`     | Where the value lasts                                   |
+| ---------- | ------------------------------------------------------- |
+| Omitted    | In the current window.                                  |
+| `"device"` | On this device across window restarts.                  |
+| `"me"`     | On the server for the signed-in member, across devices. |
+
+Kept state needs the plugin build. Declare it at module scope with a stable
+variable name so the build can give it a stable storage key.
+
+<api-declaration path="../../../../packages/sdk/window-state.ts" name="state" />
+<api-declaration path="../../../../packages/sdk/window-state.ts" name="derived" />
+
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="LOCAL_USER" />

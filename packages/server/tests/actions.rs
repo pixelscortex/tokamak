@@ -25,8 +25,8 @@ fn root() -> PathBuf {
 
 fn local_user_operations() -> OpRegistry {
     let mut ops = OpRegistry::new();
-    ops.register_sync("user.current", |_| {
-        Ok(json!(server::identity::User::local()))
+    ops.register_sync("auth.current", |_| {
+        Ok(json!(server::identity::AuthContext::local()))
     })
     .unwrap();
     ops
@@ -60,9 +60,6 @@ fn artifacts() -> &'static BTreeMap<String, String> {
 struct Installation(PathBuf);
 impl Installation {
     fn new() -> Self {
-        Self::with_chat(false)
-    }
-    fn with_chat(chat: bool) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = root()
             .join(format!(
@@ -74,9 +71,6 @@ impl Installation {
         std::fs::create_dir_all(&path).unwrap();
         let installation = Self(path);
         for (name, source) in artifacts() {
-            if (name.starts_with("chat/") || name.starts_with("acp/")) && !chat {
-                continue;
-            }
             let path = installation.0.join(name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, source).unwrap();
@@ -91,89 +85,56 @@ impl Drop for Installation {
 }
 struct Child(std::process::Child);
 
-#[test]
-fn chat_records_each_members_author_in_one_shared_thread() {
-    let installation = Installation::with_chat(true);
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            let backend = server::Backend::start_plugins(
-                Storage::Memory,
-                PoolConfig::default(),
-                &installation.0,
-            )
+#[tokio::test]
+async fn plugin_calls_preserve_the_caller_across_queries_mutations_and_actions() {
+    let installation = Installation::new();
+    let db = Database::open(Storage::Memory).await.unwrap();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(db, pool, &installation.0)
+        .await
+        .unwrap();
+    for (id, name) in [("alice", "Alice"), ("bob", "Bob")] {
+        let mut session = server
+            .connect_as(server::identity::User {
+                id: id.into(),
+                name: name.into(),
+                role: server::identity::Role::Member,
+            })
             .await
             .unwrap();
-            let mut alice = backend
-                .server()
-                .connect_as(server::identity::User {
-                    id: "alice".into(),
-                    name: "Alice".into(),
-                    role: "member".into(),
-                })
-                .await
-                .unwrap();
-            let mut bob = backend
-                .server()
-                .connect_as(server::identity::User {
-                    id: "bob".into(),
-                    name: "Bob".into(),
-                    role: "member".into(),
-                })
-                .await
-                .unwrap();
-            verify_plugin_callers(&mut alice, "alice", "Alice").await;
-            verify_plugin_callers(&mut bob, "bob", "Bob").await;
-            let thread = chat_call(&mut alice, "chat/threads:insert", json!({})).await;
-            let token = "ab".repeat(32);
-            for (session, text) in [(&mut alice, "from Alice"), (&mut bob, "from Bob")] {
-                let run = chat_call(
-                    session,
-                    "chat/send:start",
-                    json!({"threadId":thread,"text":text,"token":token,"relay":{"backendId":"test","requestId":"test"}}),
-                )
-                .await;
-                chat_call(
-                    session,
-                    "chat/send:update",
-                    json!({"runId":run["runId"],"token":token,"sequence":1,"delta":"","outcome":"done"}),
-                )
-                .await;
-            }
-            let messages =
-                chat_call(&mut bob, "chat/messages:list", json!({"threadId":thread})).await;
-            for (index, id, name) in [(0, "alice", "Alice"), (2, "bob", "Bob")] {
-                assert_eq!(messages[index]["author"], json!({"id":id,"name":name}));
-                assert_eq!(messages[index + 1]["askedBy"], json!({"id":id,"name":name}));
-            }
-            drop((alice, bob));
-            backend.close().await.unwrap();
-        });
+        verify_plugin_callers(&mut session, id, name).await;
+    }
+    server.close().await.unwrap();
 }
 
-async fn chat_call(session: &mut server::Session, name: &str, args: Value) -> Value {
+async fn call_ok(session: &mut server::Session, name: &str, args: Value) -> Value {
+    call_result(session, name, args).await.unwrap()
+}
+
+async fn call_result(
+    session: &mut server::Session,
+    name: &str,
+    args: Value,
+) -> Result<Value, String> {
     session.call(1, name, args).unwrap();
     let Some(Event::Response { result, .. }) =
         tokio::time::timeout(Duration::from_secs(10), session.recv())
             .await
-            .unwrap()
+            .expect("action response timeout")
             .unwrap()
     else {
-        panic!("missing chat response")
+        panic!("missing action response for {name}")
     };
-    result.unwrap()
+    result
 }
 
 async fn verify_plugin_callers(session: &mut server::Session, id: &str, name: &str) {
     let user = json!({"id":id,"name":name,"role":"member"});
     for function in ["a/ops:callerViaQuery", "a/ops:callerViaMutation"] {
-        assert_eq!(chat_call(session, function, json!({})).await, user);
+        assert_eq!(call_ok(session, function, json!({})).await, user);
     }
     assert_eq!(
-        chat_call(session, "a/ops:callerViaAction", json!({})).await,
+        call_ok(session, "a/ops:callerViaAction", json!({})).await,
         json!([user, user, user])
     );
 }
@@ -194,8 +155,7 @@ fn acceptance(scenario: &str) {
 }
 
 fn acceptance_over(scenario: &str, websocket: bool) {
-    let installation = Installation::with_chat(scenario.starts_with("chat-"));
-    prepare_action_scenario(scenario, &installation);
+    let installation = Installation::new();
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -625,33 +585,6 @@ fn web_fix_cancel_disconnects_with_worker_idle() {
 #[path = "helpers/actions_dns.rs"]
 mod dns;
 
-#[test]
-fn chat_thread_crud_cascades_messages_and_runs() {
-    acceptance("chat-crud");
-}
-#[test]
-fn chat_stale_runs_recover_without_cancelling_healthy_runs() {
-    acceptance("chat-recovery");
-}
-#[test]
-fn chat_bounds_transcripts_and_rejects_late_heartbeats() {
-    acceptance("chat-review");
-}
-#[test]
-fn chat_generic_tool_parts() {
-    acceptance("chat-parts");
-}
-
-#[test]
-fn chat_acp_backend() {
-    acceptance("chat-acp");
-}
-
-#[test]
-fn chat_missing_backend_refuses_send_without_creating_run() {
-    acceptance("chat-backend-missing");
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot() {
     let installation = Installation::new();
@@ -723,11 +656,6 @@ async fn owner_data_is_unchanged_and_action_errors_use_the_invocation_snapshot()
     server.close().await.unwrap();
 }
 
-#[test]
-fn chat_turn_token_rejects_another_plugin() {
-    acceptance("chat-turn-token");
-}
-
 async fn call_owner_function(
     socket: &mut WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
     kind: &str,
@@ -751,38 +679,6 @@ async fn call_owner_function(
         .unwrap()
         .unwrap();
     serde_json::from_str(message.to_text().unwrap()).unwrap()
-}
-
-fn prepare_action_scenario(scenario: &str, installation: &Installation) {
-    if scenario == "chat-backend-missing" {
-        std::fs::remove_dir_all(installation.0.join("acp")).unwrap();
-    }
-    if matches!(scenario, "chat-acp" | "chat-turn-token") {
-        if scenario == "chat-turn-token" {
-            let path = installation.0.join("b/manifest.json");
-            let mut manifest: Value =
-                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-            manifest["plugin"]["depends"]["chat"] = json!("*");
-            std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-        }
-        let directory = installation.0.parent().unwrap();
-        let agent = directory.join("agent.py");
-        std::fs::write(
-            &agent,
-            include_str!("../../../plugins/acp/tests/fake-agent.py"),
-        )
-        .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        std::fs::write(
-            directory.join(".env.local"),
-            format!("ACP_TEST_AGENT={}\n", agent.display()),
-        )
-        .unwrap();
-    }
 }
 
 async fn serve_cancellation_peers(

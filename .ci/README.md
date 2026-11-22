@@ -3,15 +3,16 @@
 All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
 three fast jobs on every PR, and `.ci/check.sh` holds their commands:
 
-- `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied). These
-  do not depend on the platform, so they run once.
-- `typescript`: type checks, TypeScript unit tests and the web build.
-- `rust`: unit tests inside the Rust crates.
+- `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied),
+  plus a byte-for-byte comparison of copied contract declarations against their owners.
+- `typescript`: type checks, plugin build tests, window component tests, and the web build.
+- `rust`: Rust unit tests and the offline Rust integration suites, including fake agents.
 
-Integration, end-to-end and browser suites are not run in CI for now. They stay
-runnable locally: `cargo test --workspace`, `proto run bun -- e2e/run.ts`,
-`proto run bun -- run e2e:browser` (see `e2e/README.md`), and
-`proto run bun -- test plugins/acp`.
+Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
+or the browser suite:
+`cargo test --workspace`, `proto run bun -- e2e/run.ts`, and
+`proto run bun -- run e2e:browser` (see `e2e/README.md`). Real agent turns
+are local only.
 
 Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint,
 TypeScript and Rust. Draft pull requests are skipped; the jobs start when a pull
@@ -89,11 +90,11 @@ Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 The installer is unsigned; Windows may require accepting its unknown-publisher
 prompt. No signing secrets are required.
 
-Plugin workers and ACP agents run on Windows with Bun installed. The server
+Plugin workers and local agents run on Windows with Bun installed. The server
 creates each worker inside a Job Object that ends the whole process tree when the
 server closes the job handle or exits. The app's server probes and sidecar, Bun
-workers, and ACP agent launches do not open a console. Windows CI checks the
-build and server identity only; it does not run worker or ACP tests, launch the
+workers and local agent launches do not open a console. Windows CI checks the
+build and server identity only; it does not run worker or real agent tests, launch the
 installer or desktop UI, or run real Claude or Codex adapters.
 
 On a Windows PC, install and open the bundle, then switch servers. No terminal

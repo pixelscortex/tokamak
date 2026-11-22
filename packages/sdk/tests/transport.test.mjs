@@ -171,3 +171,17 @@ test("WebSocket SDK fails connection on backpressure and refuses unopened socket
   expect(wire.ws.sent).toHaveLength(1);
   expect(wire.ws.closes).toBe(1);
 });
+
+test("a plugin client cannot address another plugin's window state", async () => {
+  const wire = native();
+  const client = new TokamakClient(wire.transport);
+  const args = { plugin: "other", key: "draft" };
+
+  await expect(client.query(api.tokamak.readWindowState, args)).rejects.toThrow(
+    "Window state is private to its plugin",
+  );
+  await expect(client.mutation(api.tokamak.writeWindowState, { ...args, value: "changed" })).rejects.toThrow(
+    "Window state is private to its plugin",
+  );
+  expect(wire.sent).toEqual([]);
+});
