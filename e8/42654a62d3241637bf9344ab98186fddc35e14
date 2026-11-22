@@ -1,0 +1,19 @@
+e2e/browser/screens.spec.ts
+  s_6a0ecf07ed0118::t_698cf55edd24a6 37,81-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e842654a62d3241637bf9344ab98186fddc35e14",
+  "prompts": {},
+  "sessions": {
+    "s_6a0ecf07ed0118": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0d4e556-5f25-465f-ae93-1e3d6ee74690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
