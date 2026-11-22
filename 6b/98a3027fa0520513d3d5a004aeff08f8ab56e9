@@ -1,0 +1,48 @@
+app/src/host/invite.ts
+  s_24950e0e98659e::t_34d533c98bee10 75
+packages/ui/src/avatar.tsx
+  s_24950e0e98659e::t_34d533c98bee10 2-3
+plugins/codex/tests/e2e.mjs
+  s_24950e0e98659e::t_34d533c98bee10 15,19
+app/tests/invite.test.ts
+  s_24950e0e98659e::t_34d533c98bee10 5-6,10-11,59
+e2e/fake-agent/replays/codex/info.jsonl
+  s_24950e0e98659e::t_34d533c98bee10 12
+packages/ui/src/kit/controls.tsx
+  s_24950e0e98659e::t_34d533c98bee10 105
+app/tests/servers.test.ts
+  s_24950e0e98659e::t_34d533c98bee10 41,43
+app/README.md
+  s_24950e0e98659e::t_34d533c98bee10 20
+plugins/chat/tests/send.test.ts
+  s_24950e0e98659e::t_34d533c98bee10 60,63
+plugins/codex/README.md
+  s_24950e0e98659e::t_34d533c98bee10 30
+docs/agents/issue-tracker.md
+  s_24950e0e98659e::t_34d533c98bee10 3
+e2e/fake-agent/replay-privacy.mjs
+  s_24950e0e98659e::t_34d533c98bee10 1-91
+  s_24950e0e98659e::t_a21867b25ee973 96-99
+plugins/claude/tests/turns.mjs
+  s_24950e0e98659e::t_34d533c98bee10 10,16
+app/tests/connect.test.tsx
+  s_24950e0e98659e::t_34d533c98bee10 168,175-176,183,189,196,260,273,278,280
+Cargo.toml
+  s_24950e0e98659e::t_34d533c98bee10 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6b98a3027fa0520513d3d5a004aeff08f8ab56e9",
+  "prompts": {},
+  "sessions": {
+    "s_24950e0e98659e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20273-10ec-7111-a026-723dd076066b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
