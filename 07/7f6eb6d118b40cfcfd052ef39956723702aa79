@@ -1,0 +1,116 @@
+packages/build/src/plugin-boundary.ts
+  s_55cb5929a05291::t_8cb196058b5156 2-3,5,28-33
+packages/build/tests/plugins.test.mjs
+  s_55cb5929a05291::t_8cb196058b5156 129-240
+packages/server/tests/fixtures/internal/src/server/api.ts
+  s_55cb5929a05291::t_8cb196058b5156 1
+packages/server/tests/fixtures/internal/src/server/_generated/api.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-14
+packages/server/tests/fixtures/internal/src/server/ops.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-42
+packages/sdk/README.md
+  s_55cb5929a05291::t_8cb196058b5156 49,144-173,188-189,196-198
+plugins/acp/src/server/_generated/api.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-24
+packages/sdk/src/index.ts
+  s_55cb5929a05291::t_8cb196058b5156 21-25,34,72-79
+packages/sdk/src/functions.ts
+  s_55cb5929a05291::t_8cb196058b5156 36-62,64-78,88-92,97,106-107,120-122,128-133,136,142,151,153,155,157,164,183-184,187-191,200-202,212-213,251-257,264-266,269-274,299,304
+packages/server/tests/fixtures/internal-caller/src/server/probe.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-12
+packages/server/PLUGINS.md
+  s_55cb5929a05291::t_8cb196058b5156 103-104,108-129,161
+plugins/chat/src/server/_functions.ts
+  s_55cb5929a05291::t_8cb196058b5156 11
+packages/server/src/plugins/loading.rs
+  s_55cb5929a05291::t_8cb196058b5156 60,65,70-74,76,78,86,93,140,146-147,150,170,226-227,244-249,255
+packages/server/tests/fixtures/internal-caller/package.json
+  s_55cb5929a05291::t_8cb196058b5156 1-5
+packages/sdk/src/api.ts
+  s_55cb5929a05291::t_8cb196058b5156 14-17,20-25,31-32,35-58,64
+packages/server/tests/fixtures/internal-caller/plugin.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-2
+packages/server/tests/fixtures/internal/src/server/schema.ts
+  s_55cb5929a05291::t_8cb196058b5156 1
+plugins/acp/src/server/relay.ts
+  s_55cb5929a05291::t_8cb196058b5156 14,34
+packages/server/src/service/startup.rs
+  s_55cb5929a05291::t_8cb196058b5156 8,32,60-64,70-77,86,131,149,177,205-212,225,236-240,242,245-250,252,264-268
+packages/server/tests/fixtures/internal/package.json
+  s_55cb5929a05291::t_8cb196058b5156 1-5
+packages/server/tests/actions.rs
+  s_55cb5929a05291::t_8cb196058b5156 130,158-165,170,173,175,658-710
+  s_55cb5929a05291::t_04c36d4f4914a4 711
+packages/build/src/exports.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-5,45-46,48-49,69
+plugins/acp/src/server/_generated/internal.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-4
+packages/server/src/service/mod.rs
+  s_55cb5929a05291::t_8cb196058b5156 15,31-56,206,220-228,242
+plugins/chat/src/server/_generated/internal.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-10
+plugins/acp/src/server/backend.ts
+  s_55cb5929a05291::t_8cb196058b5156 3,15-16,37
+packages/build/README.md
+  s_55cb5929a05291::t_8cb196058b5156 85-89
+packages/sdk/tools/plugin-boundary.mjs
+  s_55cb5929a05291::t_8cb196058b5156 153-164,181-182
+packages/server/src/service/subscriptions.rs
+  s_55cb5929a05291::t_8cb196058b5156 106,111,158
+packages/server/src/host.rs
+  s_55cb5929a05291::t_8cb196058b5156 203
+packages/server/tests/fixtures/record/src/server/_generated/internal.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-4
+packages/server/tests/sdk_transport.rs
+  s_55cb5929a05291::t_8cb196058b5156 125-140
+packages/server/src/service/delivery.rs
+  s_55cb5929a05291::t_8cb196058b5156 2,10-23
+plugins/chat/src/server/threads/threads.ts
+  s_55cb5929a05291::t_8cb196058b5156 3,5,15,22
+packages/sdk/src/host.ts
+  s_55cb5929a05291::t_8cb196058b5156 56-59
+packages/server/src/service/requests.rs
+  s_55cb5929a05291::t_8cb196058b5156 99
+packages/server/tests/fixtures/internal/src/server/_generated/internal.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-14
+packages/sdk/tools/bundle.mjs
+  s_55cb5929a05291::t_8cb196058b5156 15-16,26,28,37,45-54,58-158,172,235-237,310-315
+plugins/acp/src/server/agents/agents.ts
+  s_55cb5929a05291::t_8cb196058b5156 5,11-14
+plugins/chat/src/server/_generated/api.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-68
+packages/server/tests/fixtures/record/src/server/_generated/api.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-18
+packages/server/src/plugins/mod.rs
+  s_55cb5929a05291::t_8cb196058b5156 42,50
+packages/server/tests/fixtures/internal/plugin.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-2
+packages/sdk/tools/worker.mjs
+  s_55cb5929a05291::t_8cb196058b5156 5-10,29,31-33,37-43
+packages/server/src/actions.rs
+  s_55cb5929a05291::t_8cb196058b5156 175
+packages/server/src/plugins/grants.rs
+  s_55cb5929a05291::t_8cb196058b5156 168
+packages/server/tests/sdk-transport-driver.mjs
+  s_55cb5929a05291::t_8cb196058b5156 7-15,126-127,241-365,369-374
+packages/server/src/service/action_coordination.rs
+  s_55cb5929a05291::t_8cb196058b5156 125,130,132,134-135
+plugins/acp/src/server/_local.ts
+  s_55cb5929a05291::t_8cb196058b5156 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "077f6eb6d118b40cfcfd052ef39956723702aa79",
+  "prompts": {},
+  "sessions": {
+    "s_55cb5929a05291": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200d0-91c9-7092-9901-1ca5c12ee4de",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
