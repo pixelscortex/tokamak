@@ -1,0 +1,44 @@
+e2e/fake-agent/replays/codex/edit.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,9-29
+e2e/fake-agent/replays/codex/steer.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,8,10-11,13,15-19
+e2e/fake-agent/replays/codex/acceptForSession.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,9-12,15-21
+e2e/fake-agent/replays/codex/plan.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,8,10-22
+e2e/fake-agent/replays/codex/stop.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,8,10-11,13-14,16
+e2e/fake-agent/replays/codex/history.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,9,13-18,22-36,41,44
+plugins/codex/tests/check-replay-privacy.mjs
+  s_13922ebd3d9eea::t_ed5979ff40ca76 1-66
+e2e/fake-agent/replays/codex/signed-out.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3
+e2e/fake-agent/replays/codex/accept.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,9-12,15-21
+e2e/fake-agent/replays/codex/decline.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,9-12,15-21
+e2e/fake-agent/replays/codex/info.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,6
+plugins/codex/tests/e2e.mjs
+  s_13922ebd3d9eea::t_ed5979ff40ca76 17,21
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 150
+e2e/fake-agent/replays/codex/cancel.jsonl
+  s_13922ebd3d9eea::t_0b6f7c797b2d8f 3,9-12,15-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a1ebf143ff4fbf76d14f7f288336647f29b2499",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
