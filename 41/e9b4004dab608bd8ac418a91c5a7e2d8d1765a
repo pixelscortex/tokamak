@@ -1,0 +1,142 @@
+plugins/claude/src/server/agent.ts
+  s_eed82efa8a9122::t_c38ab52446fe88 6-7,118
+  s_eed82efa8a9122::t_d16b4ebddb4c47 37-48,54-57,84,88-91
+  s_eed82efa8a9122::t_18338f20586dce 49-53
+  s_eed82efa8a9122::t_4109c9b022577f 1
+plugins/ai/src/client/lib/agents.ts
+  s_eed82efa8a9122::t_a1fdab3f3855f3 11-12
+  s_eed82efa8a9122::t_3189d8d5af50e0 85-97
+packages/ui/lint/plugin.js
+  s_eed82efa8a9122::t_4cf59de2c2e9eb 11
+plugins/ai/src/client/lib/replies.ts
+  s_eed82efa8a9122::t_2d6361a7282e42 96-103
+packages/server/tests/code-changes-driver.mjs
+  s_eed82efa8a9122::t_a88dc4031637bf 113-114,119,121,131,171,291
+wiki/content/docs/design/index.mdx
+  s_eed82efa8a9122::t_03736412087a14 112-123
+plugins/ai/src/client/ui/agent-mark.tsx
+  s_eed82efa8a9122::t_6ad386a6e9e603 1,15-17,60,64-74,76-81
+  s_eed82efa8a9122::t_f3aceb0a0ac2ce 2-7,9-10,18-33,36-59,61-63,75,82-83
+  s_eed82efa8a9122::t_db433a76277c2a 8,11-14,34-35
+plugins/chat/src/client/ui/message.tsx
+  s_eed82efa8a9122::t_5824708da64673 45-46
+plugins/ai/src/server/agents.ts
+  s_eed82efa8a9122::t_a1fdab3f3855f3 27
+packages/ui/tests/lint.test.ts
+  s_eed82efa8a9122::t_8225ded668fab0 18-19
+plugins/codex/src/server/icons/LICENSE.md
+  s_eed82efa8a9122::t_128789d1f511fd 1-30
+packages/ui/src/theme.css
+  s_eed82efa8a9122::t_896a80c992a2f0 24,327
+  s_eed82efa8a9122::t_70768842a09db1 116-118,121-122
+  s_eed82efa8a9122::t_2d042bd40e0a74 91-97
+  s_eed82efa8a9122::t_f08334916bc1d0 36-38
+  s_eed82efa8a9122::t_f1311468a6f5b1 61-62
+  s_eed82efa8a9122::t_d6aa825ea10aef 159-193,312,352-382
+  s_eed82efa8a9122::t_65680319ab0897 21-23
+  s_eed82efa8a9122::t_687d67fbe8c71e 119-120,123
+  s_eed82efa8a9122::t_8c563a6997a87c 194-198,326,339-340
+  s_eed82efa8a9122::t_8d84169e47b398 57-58,383
+plugins/claude/src/server/svg.d.ts
+  s_eed82efa8a9122::t_c38ab52446fe88 1-5
+packages/ui/src/chip.tsx
+  s_eed82efa8a9122::t_4a7196c4114f02 5-6,11,17,34-35,48
+plugins/ai/src/contracts.ts
+  s_eed82efa8a9122::t_0895f2493a7876 23-26,29-30,218-224
+plugins/ai/src/client/ui/reply-header.tsx
+  s_eed82efa8a9122::t_28b5a03f4e3e95 5,18-30
+  s_eed82efa8a9122::t_c5af4e026679ee 7,10-13,17,32-40
+plugins/ai/src/client/ui/thread-status.tsx
+  s_eed82efa8a9122::t_f8df163f7cbe96 5-7,25-27,33-35,55
+packages/ui/src/collapsible.tsx
+  s_eed82efa8a9122::t_d6d3b410a8ed52 60
+plugins/claude/src/server/icons/LICENSE.md
+  s_eed82efa8a9122::t_128789d1f511fd 1-30
+packages/ui/src/code-block.tsx
+  s_eed82efa8a9122::t_2d1d668bad29fb 53
+plugins/ai/src/client/ui/reply-cards.tsx
+  s_eed82efa8a9122::t_d6d3b410a8ed52 14,46
+plugins/code/src/client/ui/change-card.tsx
+  s_eed82efa8a9122::t_b8b0bfffa16836 36,54-65
+packages/ui/src/scroll-area.tsx
+  s_eed82efa8a9122::t_2ee8635133f1b3 54,59
+  s_eed82efa8a9122::t_687b9de5aa063a 1-3,11-33,39-50,52,61-64
+  s_eed82efa8a9122::t_79e7426f0093a4 4-10,34-38,51,53,55-58,60
+packages/ui/src/resizable.tsx
+  s_eed82efa8a9122::t_4879dc4b0068eb 1-36,38-40
+  s_eed82efa8a9122::t_c59f3d0735a801 37
+plugins/codex/src/server/svg.d.ts
+  s_eed82efa8a9122::t_c38ab52446fe88 1-5
+plugins/code/src/client/ui/review-panel.tsx
+  s_eed82efa8a9122::t_cc16d398436b4c 5,105-107,110-113,124,129-143,148-152,159,172-173,220-226,229-232,234-235,238,244-245,247-249
+  s_eed82efa8a9122::t_2d1d668bad29fb 246
+packages/ui/src/avatar.tsx
+  s_eed82efa8a9122::t_4a7196c4114f02 6,12,19
+  s_eed82efa8a9122::t_18338f20586dce 20-24
+plugins/claude/src/server/icons/claude.svg
+  s_eed82efa8a9122::t_128789d1f511fd 1
+plugins/ai/src/client/ui/agent-row.tsx
+  s_eed82efa8a9122::t_86745cbb1ba780 5
+  s_eed82efa8a9122::t_8961851d144531 9,25,28-31,118,149,160-161,191-196,285,287,289-290
+plugins/chat/src/client/ui/thread-header.tsx
+  s_eed82efa8a9122::t_2b90d4a028f2d6 81-85,90
+packages/ui/src/index.ts
+  s_eed82efa8a9122::t_c59f3d0735a801 10,18
+packages/ui/lint/fixtures/off-scale.tsx
+  s_eed82efa8a9122::t_9107d384c94bc2 1
+packages/ui/src/icon.tsx
+  s_eed82efa8a9122::t_687d67fbe8c71e 11
+  s_eed82efa8a9122::t_18338f20586dce 18-22
+plugins/code/src/local/changes.ts
+  s_eed82efa8a9122::t_5317d004c8e1f9 9-10,85-94,138-144
+  s_eed82efa8a9122::t_dd80a0d844bd02 131-133,231-232,241-247
+app/src/shell/frame.tsx
+  s_eed82efa8a9122::t_d76a52e507a1ef 1,64,67-68,88-91,93,102,104-105
+  s_eed82efa8a9122::t_cdac82ea64d407 5,17-19,25-51,56-63,69-80
+  s_eed82efa8a9122::t_958475f5f1146a 66,92,94-98,101,103,106-109
+  s_eed82efa8a9122::t_c559d64af71645 99-100
+  s_eed82efa8a9122::t_72b210a1036214 110-111
+e2e/fake-agent/agents/factory.ts
+  s_eed82efa8a9122::t_667414d396c696 134,137-139
+  s_eed82efa8a9122::t_ba0da8d8f5439b 140
+e2e/browser/screens.spec.ts
+  s_eed82efa8a9122::t_18338f20586dce 54-59,73-76,79-82,95-97
+  s_eed82efa8a9122::t_d453618b08199a 103
+  s_eed82efa8a9122::t_1139ca0da2da71 1-53,60-72,77-78,83-94,98-102,104-117
+plugins/code/contracts/ai.ts
+  s_eed82efa8a9122::t_0895f2493a7876 23-26,29-30,218-224
+plugins/chat/src/client/pages/chat.tsx
+  s_eed82efa8a9122::t_5824708da64673 5,165-167,169-171,174-179,181-198
+  s_eed82efa8a9122::t_22c75a2363b883 200-201
+plugins/codex/src/server/agent.ts
+  s_eed82efa8a9122::t_c38ab52446fe88 6-7,12
+  s_eed82efa8a9122::t_695680c2079079 1
+plugins/code/src/client/ui/thread-header.tsx
+  s_eed82efa8a9122::t_c33f62c4cef5c8 33
+  s_eed82efa8a9122::t_4b77185612294f 43
+  s_eed82efa8a9122::t_2b90d4a028f2d6 4,22-23
+packages/ui/lint/oxlint.json
+  s_eed82efa8a9122::t_4cf59de2c2e9eb 16,22
+plugins/codex/src/server/icons/openai.svg
+  s_eed82efa8a9122::t_128789d1f511fd 1
+plugins/ai/src/client/ui/reply-work.tsx
+  s_eed82efa8a9122::t_2d6361a7282e42 8,13,24-28,42,51-54,69,72-75,79,90-93,100-103,108,111,115-127,178,190,195-196
+app/src/styles.css
+  s_eed82efa8a9122::t_d76a52e507a1ef 5-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41e9b4004dab608bd8ac418a91c5a7e2d8d1765a",
+  "prompts": {},
+  "sessions": {
+    "s_eed82efa8a9122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e344ae2c-2a7a-44a3-98c5-88acd00349ae",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
