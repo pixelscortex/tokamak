@@ -78,10 +78,15 @@ export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Ele
         </Button>
         <Show
           when={props.needs === "token" && address()}
-          fallback={<QuietButton onClick={() => shell.session.retry()}>Retry</QuietButton>}
+          fallback={
+            <Button variant="quiet" onClick={() => shell.session.retry()}>
+              Retry
+            </Button>
+          }
         >
           {(origin) => (
-            <QuietButton
+            <Button
+              variant="quiet"
               onClick={() =>
                 shell.openSignIn({
                   origin: origin(),
@@ -90,21 +95,10 @@ export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Ele
               }
             >
               Sign in
-            </QuietButton>
+            </Button>
           )}
         </Show>
       </div>
-    </div>
-  );
-}
-
-/** A quiet tone step: the band's own action, lighter than a key and without an outline. */
-function QuietButton(props: { onClick: () => void; children: string }): JSX.Element {
-  return (
-    <div class="flex shrink-0 rounded-sm bg-edge/50">
-      <Button variant="ghost" onClick={() => props.onClick()}>
-        {props.children}
-      </Button>
     </div>
   );
 }

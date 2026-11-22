@@ -25,7 +25,7 @@ export function Welcome(): JSX.Element {
     <div class="flex min-h-0 flex-1 flex-col items-center overflow-auto px-8 py-16">
       <div class="flex-1" />
       <section aria-label="Welcome" class="flex w-full max-w-dialog flex-col gap-8">
-        <div class="flex flex-col gap-2 px-3">
+        <div class="flex flex-col gap-2">
           <h2 class="text-read font-semibold text-ink">{shell.servers.current().name} is ready</h2>
           <p class="text-read text-pretty text-ink-2">
             Tokamak runs on this computer. Work with your agents here; nothing leaves this Mac until you join
@@ -37,23 +37,23 @@ export function Welcome(): JSX.Element {
             {(view) => (
               <Row
                 as="button"
-                lead={<Icon path={view().icon ?? shellIcons.chatNew} class="text-ink" />}
+                variant="action"
+                lead={<Icon path={view().icon ?? shellIcons.chatNew} />}
                 onClick={() => shell.navigation.go(hrefOf(view()))}
               >
-                <span class="text-ink">Open {view().title} on This Mac</span>
+                Open {view().title} on This Mac
               </Row>
             )}
           </Show>
-          <div class="rounded-sm surface-tray">
-            <Row
-              as="button"
-              lead={<Icon path={shellIcons.cloud} class="text-ink" />}
-              trail={<span class="text-label">Got an invite?</span>}
-              onClick={() => shell.openConnect()}
-            >
-              <span class="text-ink">Join a friend's server</span>
-            </Row>
-          </div>
+          <Row
+            as="button"
+            variant="featured"
+            lead={<Icon path={shellIcons.cloud} />}
+            trail="Got an invite?"
+            onClick={() => shell.openConnect()}
+          >
+            Join a friend's server
+          </Row>
         </div>
       </section>
       <div class="grow-2" />

@@ -30,7 +30,7 @@ export function AddressStep(props: {
       <Head title="Join a server">
         Paste the address you got from the server's owner. If they sent a whole invite, paste all of it.
       </Head>
-      <div class="flex flex-col gap-2 px-3">
+      <div class="flex flex-col gap-2">
         <Field
           label="Server address"
           icon={shellIcons.cloud}
@@ -123,7 +123,7 @@ export function UnreachableStep(props: {
           ms={props.step.answer.ms}
         />
       </Checks>
-      <p class="px-3 text-read text-pretty text-ink-2">
+      <p class="text-read text-pretty text-ink-2">
         {foreign()
           ? "Something answered at this address, but it isn't a Tokamak server. Check the address with whoever sent it."
           : "Nothing answered at this address. The server may be asleep or starting up, which usually takes under a minute. If it keeps failing, check the address with whoever sent it."}
@@ -153,7 +153,7 @@ export function VerifyStep(props: {
       </Head>
       <ServerCard name={props.name} address={props.step.address.host} />
       <Show when={asking()}>
-        <div class="flex flex-col gap-2 px-3">
+        <div class="flex flex-col gap-2">
           <Field
             id="connect-token"
             label="Invite token"
@@ -205,7 +205,7 @@ export function CustomizeStep(props: {
       <Head title="You're in. How should people see you?">
         People on {props.server} will see this name next to what you write.
       </Head>
-      <div class="flex flex-col gap-2 px-3">
+      <div class="flex flex-col gap-2">
         <Field
           id="connect-name"
           label="Your name"
@@ -220,7 +220,7 @@ export function CustomizeStep(props: {
           <p class="text-label text-ink-3">The name you used before</p>
         </Show>
       </div>
-      <div class="flex flex-col gap-2 px-3">
+      <div class="flex flex-col gap-2">
         <p class="text-label text-ink-3">How it looks in a thread</p>
         <div
           role="group"
@@ -235,7 +235,7 @@ export function CustomizeStep(props: {
           <p class="text-read text-ink">Hi all, I'm in.</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 px-3">
+      <div class="flex items-center gap-2">
         <p class="text-label text-ink-3">Kept on this device for now</p>
         <div class="flex-1" />
         <Button variant="brand" type="submit" aria-disabled={shown() ? undefined : "true"}>

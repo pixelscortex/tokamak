@@ -96,6 +96,7 @@ function Tabs(): JSX.Element {
             >
               <Row
                 as="button"
+                variant="tab"
                 aria-current={current() ? "page" : undefined}
                 class="flex-1"
                 lead={tab.view.icon && <Icon path={tab.view.icon} />}
@@ -104,9 +105,9 @@ function Tabs(): JSX.Element {
                 {title()}
               </Row>
               <Show when={nav.tabs().length > 1 || isShellPage(tab.href.split("?")[0]!)}>
-                <div class="flex shrink-0 opacity-0 group-hover:opacity-100 group-data-current:opacity-100 focus-within:opacity-100">
+                <div class="flex shrink-0 opacity-0 group-hover:opacity-100 group-data-current:opacity-100 has-focus-visible:opacity-100">
                   <Button
-                    variant="ghost"
+                    variant="bare"
                     icon={icons.close}
                     label={`Close ${title()}`}
                     onClick={() => nav.close(tab.href)}

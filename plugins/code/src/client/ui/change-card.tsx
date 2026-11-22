@@ -28,12 +28,13 @@ export function ChangeCard(props: MessageProps): JSX.Element {
           <div class="density-dense rounded-sm surface-card">
             <Row
               as="button"
+              variant="card"
               aria-label={`Review turn ${change().number}`}
               onClick={() => openReview(props.threadId, change().turnId)}
-              lead={<Icon path={fileCodeIcon} class="text-ink" />}
+              lead={<Icon path={fileCodeIcon} />}
               trail={
                 <>
-                  <span class="text-label">open in review</span>
+                  <span>open in review</span>
                   <Icon path={chevronRightIcon} size={14} />
                 </>
               }

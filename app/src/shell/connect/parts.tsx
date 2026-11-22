@@ -10,7 +10,7 @@ const stepLabels = ["Address", "Connecting", "Verify", "Customize"] as const;
 /** The quiet four-bar progress mark and the step's name. */
 export function Progress(props: { step: 1 | 2 | 3 | 4 }): JSX.Element {
   return (
-    <div class="flex items-center gap-3 px-3">
+    <div class="flex items-center gap-3">
       <div aria-hidden="true" class="flex gap-1">
         <For each={stepLabels}>
           {(_, index) => (
@@ -36,7 +36,7 @@ export function Progress(props: { step: 1 | 2 | 3 | 4 }): JSX.Element {
 
 export function Head(props: { title: string; address?: string; children?: JSX.Element }): JSX.Element {
   return (
-    <div class="flex flex-col gap-2 px-3">
+    <div class="flex flex-col gap-2">
       <h2 class="text-read font-semibold text-ink">{props.title}</h2>
       <Show when={props.address}>
         <p class="font-mono text-row text-ink-2">{props.address}</p>
@@ -59,7 +59,7 @@ export function Actions(props: {
   autofocus?: boolean;
 }): JSX.Element {
   return (
-    <div class="flex items-center gap-2 pe-3">
+    <div class="flex items-center gap-2">
       <Button variant="ghost" onClick={props.onBack}>
         {props.back}
       </Button>
@@ -82,7 +82,7 @@ export function Actions(props: {
 
 export function Checks(props: { children: JSX.Element }): JSX.Element {
   return (
-    <ul aria-label="Checks" class="mx-3 flex flex-col gap-1 rounded-md surface-tray px-4 py-3">
+    <ul aria-label="Checks" class="flex flex-col gap-1 rounded-md surface-tray px-4 py-3">
       {props.children}
     </ul>
   );
@@ -133,7 +133,7 @@ export function Check(props: {
 
 export function ServerCard(props: { name: string; address: string }): JSX.Element {
   return (
-    <div class="mx-3 flex items-center gap-3 rounded-md surface-tray p-4">
+    <div class="flex items-center gap-3 rounded-md surface-tray p-4">
       <span class="flex size-8 shrink-0 items-center justify-center rounded-sm bg-edge/50">
         <Icon path={shellIcons.cloud} class="text-ink" />
       </span>
@@ -184,8 +184,8 @@ export function Recent(): JSX.Element {
       .slice(0, 5);
   return (
     <Show when={recent().length}>
-      <div class="density-dense mt-4 flex flex-col gap-1 px-1">
-        <h3 class="flex h-6 items-center px-2 text-label text-ink-3">Recent</h3>
+      <div class="density-dense mt-4 flex flex-col gap-1">
+        <h3 class="flex h-6 items-center text-label text-ink-3">Recent</h3>
         <For each={recent()}>
           {(server) => (
             <Row
