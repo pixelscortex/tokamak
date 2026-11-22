@@ -1,0 +1,26 @@
+plugins/ai/src/server/run.ts
+  s_61c7aa4d512211::t_13bd944f63fff5 202-209,211-218,234-241
+  s_61c7aa4d512211::t_e41b6e86185c60 242
+plugins/ai/README.md
+  s_61c7aa4d512211::t_13bd944f63fff5 41-43
+  s_61c7aa4d512211::t_5afde2eedaebc1 19-34,58-63,87-92
+e2e/browser/ai.spec.ts
+  s_61c7aa4d512211::t_8a4e3a9211679e 12-32,74-82,84-98,100-131,133-145
+  s_61c7aa4d512211::t_89f3e8af139e39 83,99,132,146-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ead324c1a9e3b705600a2c87bde05e574092a56e",
+  "prompts": {},
+  "sessions": {
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
