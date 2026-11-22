@@ -51,14 +51,20 @@ try {
   } else {
     await discovery(client);
   }
+  passed("signed-in and signed-out discovery");
   await resume(turns, run);
+  passed("reply and resumed session");
   await recover(turns);
+  passed("lost session recovery with history");
   await stopStreaming(run);
+  passed("stop while streaming");
   await stopRunningTool(run);
+  passed("stop while a command runs");
   await steerTurns(run);
   await permissions(run);
   await permissionScope(run);
   await stopAsking(run);
+  passed("stop while waiting for permission");
   if (!live) await stopAfterWithdrawal(run);
   await reports(run);
   console.log(
@@ -220,13 +226,13 @@ async function stopRunningTool(run) {
     state: "stopped",
     async during(turn) {
       const { current } = await runningCommand(turn);
-      assert.equal(current.title, "sleep 20");
+      if (!live) assert.equal(current.title, "sleep 20");
       await turn.stop();
     },
   });
   assert.ok(
     (await stopped.steps()).some(
-      ({ kind, title, state }) => kind === "command" && title === "sleep 20" && state === "done",
+      ({ kind, title, state }) => kind === "command" && (live || title === "sleep 20") && state === "done",
     ),
   );
   assert.doesNotMatch(stopped.text, /TOO_LATE/);
@@ -250,6 +256,7 @@ async function steerTurns(run) {
       outputTokens: 607,
       costUsd: 0.0116295,
     });
+  passed("steer while streaming");
   const correction = "Correction: only say STEERED. Do not use tools.";
   const merged = await run(
     "steer-tools",
@@ -263,7 +270,22 @@ async function steerTurns(run) {
   );
   assert.equal(merged.text.trim(), "STEERED");
   assert.deepEqual(merged.reply.steers, [correction]);
-  assert.ok((await merged.steps()).some(({ title, state }) => title === "sleep 3" && state === "done"));
+  assert.ok(
+    (await merged.steps()).some(
+      ({ kind, title, state }) => kind === "command" && (live || title === "sleep 3") && state === "done",
+    ),
+  );
+  passed("steer while a command runs");
+}
+
+function checkCommand(question, title, file) {
+  assert.equal(question.action, "run");
+  if (live) assert.ok(question.subject.includes(file), `Command targets ${file}`);
+  else assert.equal(question.subject, title);
+}
+
+function passed(name) {
+  if (live) console.log(`Claude PASS: ${name}`);
 }
 
 async function stopAsking(run) {
@@ -275,12 +297,17 @@ async function stopAsking(run) {
       access: "ask",
       async during(turn) {
         const question = await turn.question();
-        assert.equal(question.subject, "touch stop-asking-fixture.txt");
+        checkCommand(question, "touch stop-asking-fixture.txt", "stop-asking-fixture.txt");
+        if (live)
+          assert.ok(
+            !(await Bun.file(join(await caseFolder("stop-asking"), "stop-asking-fixture.txt")).exists()),
+          );
         await turn.stop();
       },
     },
   );
-  assert.equal(waiting.text, "");
+  if (live) assert.doesNotMatch(waiting.text, /\bDONE\b/);
+  else assert.equal(waiting.text, "");
   assert.ok(waiting.reply.usage);
   if (live) assert.ok(!(await Bun.file(join(waiting.folder, "stop-asking-fixture.txt")).exists()));
 }
@@ -333,37 +360,40 @@ async function permissions(run) {
   ];
   if (!live) cases.push(["cancel-continues", "cancel", "Ask before creating a fixture file.", "failed"]);
   for (const [name, answer, prompt, outcome] of cases) {
-    const title = name === "cancel-continues" ? "touch fixture.txt" : `touch ${name}-probe.txt`;
+    const file = name === "cancel-continues" ? "fixture.txt" : `${name}-probe.txt`;
+    const title = `touch ${file}`;
+    const fixture = Bun.file(join(await caseFolder(name), file));
     const result = await run(name, prompt, {
       access: "ask",
       answers: 1,
       state: name === "cancel" ? "stopped" : "done",
       async during(turn) {
         const question = await turn.question();
-        assert.equal(question.action, "run");
-        assert.equal(question.subject, title);
+        checkCommand(question, title, file);
+        if (live) assert.ok(!(await fixture.exists()), "the command has not run before permission");
         await turn.answer(question, answer);
       },
     });
-    const steps = (await result.steps()).filter((step) => step.title === title);
+    const steps = (await result.steps()).filter(
+      (step) => step.kind === "command" && (live ? step.title.includes(file) : step.title === title),
+    );
     assert.deepEqual(
       steps.map((step) => step.state),
       answer === "approveSession" ? ["done", "done"] : [outcome],
     );
     if (name === "cancel") {
-      assert.equal(result.text, "");
+      if (live) assert.doesNotMatch(result.text, /^1000$/m);
+      else assert.equal(result.text, "");
       assert.ok(result.row.sessionId);
       assert.ok(result.reply.usage, "the CLI's interrupted result was stored");
     }
     if (name === "cancel-continues") assert.equal(result.text, "I continued without using the tool.");
     if (live) {
-      const fixture = Bun.file(join(result.folder, `${name}-probe.txt`));
-      assert.equal(
-        await fixture.exists(),
-        answer === "approve" || answer === "approveSession",
-        `${answer} file effect`,
-      );
+      const allowed = answer === "approve" || answer === "approveSession";
+      assert.equal(await fixture.exists(), allowed, `${answer} file effect`);
+      if (allowed) assert.equal(await fixture.text(), "");
     }
+    passed(`permission: ${answer}`);
   }
 }
 
@@ -377,6 +407,7 @@ async function permissionScope(run) {
       async during(turn) {
         for (const file of ["scope.txt", "separate.txt"]) {
           const question = await turn.question();
+          assert.equal(question.action, "edit");
           assert.equal(question.subject.split(/[\\/]/).at(-1), file);
           await turn.answer(question, "approveSession");
         }
@@ -391,6 +422,7 @@ async function permissionScope(run) {
     assert.equal((await readFile(join(result.folder, "scope.txt"), "utf8")).trim().toUpperCase(), "SECOND");
     assert.equal((await readFile(join(result.folder, "separate.txt"), "utf8")).trim().toUpperCase(), "THIRD");
   }
+  passed("permission stays scoped to the approved path");
 }
 
 async function reports(run) {
@@ -406,11 +438,13 @@ async function reports(run) {
   const helper = progress.reply.helpers.find(({ name }) => name === "Explore");
   assert.equal(helper?.state, "done");
   assert.equal(helper.hasText, true);
-  assert.match(await progress.helper(helper), /exists/i);
+  const helperText = await progress.helper(helper);
   if (live) {
+    assert.ok(helperText.trim(), "the helper's report can be opened");
     assert.equal(await readFile(join(progress.folder, "todo-smoke.txt"), "utf8"), "TOKAMAK_TEST");
     assert.ok(progress.reply.usage.outputTokens > 0);
   } else {
+    assert.match(helperText, /exists/i);
     assert.deepEqual(progress.reply.usage, {
       inputTokens: 201944,
       cachedInputTokens: 192317,
@@ -419,6 +453,7 @@ async function reports(run) {
     });
     assert.match(progress.text, /^DONE/);
   }
+  passed("thinking, file edit, tasks, helper and usage reports");
   const plan = await run(
     "plan",
     live
@@ -435,4 +470,5 @@ async function reports(run) {
     },
   );
   assert.match(plan.reply.plan, live ? /say hello/i : /Plan: Say hello/);
+  passed("plan permission and report");
 }

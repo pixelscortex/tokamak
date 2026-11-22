@@ -112,7 +112,7 @@ impl Coordinator {
             })
             .collect();
         for name in names {
-            if let Err(error) = self
+            match self
                 .invoke_function(
                     &name,
                     serde_json::json!({}),
@@ -121,7 +121,11 @@ impl Coordinator {
                 )
                 .await
             {
-                eprintln!("Plugin maintenance {name}: {error}");
+                Err(error) => eprintln!("Plugin maintenance {name}: {error}"),
+                Ok(result) if crate::protocol::failure_kind(&result).is_some() => {
+                    eprintln!("Plugin maintenance {name} returned a failure");
+                }
+                Ok(_) => {}
             }
             self.drain_changes();
             self.refresh().await;

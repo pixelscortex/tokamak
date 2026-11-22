@@ -21,7 +21,7 @@ import {
 } from "../lib/choices";
 import { watchQuestions } from "../lib/questions";
 import { listenForQueue } from "../lib/turn";
-import { activeFor, localActiveTurn, stopTurn } from "../lib/turn-controls";
+import { activeFor, localActiveTurn, onTurnDraft, stopTurn } from "../lib/turn-controls";
 import { AgentMark } from "./agent-mark";
 
 /**
@@ -93,6 +93,13 @@ function OpenThreadRow(props: {
   const me = auth.me();
   const stored = useQuery(props.client, api.choices.get, () => ({ threadId: props.threadId }));
   const creator = useQuery(props.client, api.choices.creator, () => ({ threadId: props.threadId }));
+  onCleanup(
+    onTurnDraft(
+      props.client,
+      () => props.threadId,
+      () => creator.data()?.id,
+    ),
+  );
   const othersThread = () => {
     const started = creator.data();
     return started && started.id !== me.id ? started : undefined;

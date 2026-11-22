@@ -132,9 +132,12 @@ mode, actions retain their existing nested query and mutation support. Nested
 calls from queries or mutations and `ctx.runAction` require packaged plugins.
 
 Every callee gets its own namespace and the host supplies the caller's identity.
-Queries and mutations called by an outer mutation share its transaction, so all
-writes commit together or none do. Returning `fail(kind, data)` does not roll
-back writes: the result is a JSON value.
+Queries and mutations called by an outer mutation share its transaction. A
+mutation returning `fail(kind, data)` rolls back its writes and returns the
+typed failure. A nested mutation rolls back only its own writes, including
+those of its callees. If the caller handles the failure, its writes can still
+commit. If it returns the failure, its writes roll back too. An action returning
+`fail` does not undo mutations it already called; actions are not transactional.
 Native failures poison the whole transaction even if plugin code catches them.
 Queries cannot call mutations, including queries invoked within a mutation.
 Read dependencies accumulate transitively for subscription invalidation.
@@ -191,8 +194,9 @@ caller can manage, including their names, members, online status and last seen
 times. A device is online while it has an open socket. Last seen updates are
 saved about once a minute and at shutdown.
 `POST /devices/{id}/revoke` signs out that device. Send the caller's key in
-`Authorization: Bearer <key>`. Members can sign out their own devices;
-owners and admins can sign out anyone's issued devices, including the owner's.
+`Authorization: Bearer <key>`. Owners can sign out anyone's issued devices,
+admins can sign out their own and ordinary members' devices, and members can
+sign out their own devices. A forbidden sign-out returns HTTP 403.
 The server closes the device's sockets with code 4001 and rejects the key on
 reconnect. The bootstrap owner key stays available for recovery.
 
@@ -212,8 +216,12 @@ with `POST /members` and `{method, fields}`, reset a password with
 with `POST /members/{id}/revoke`. Use bearer authentication on each route.
 The owner can manage admins and members; admins can manage ordinary members.
 Nobody can remove the owner or reset their password through Members. Reset
-requires a new password on the next sign-in. Removing a member disconnects
-every device, refuses all their keys and clears their `keep: "me"` state.
+revokes all the member's issued keys and closes their sockets with code 4001
+before it changes the password. If revocation fails, the password is unchanged.
+If the provider refuses the password after revocation, the devices stay signed out.
+They sign in with the temporary password and must choose their own before getting
+a new device key. Removing a member disconnects every device, refuses all their
+keys and clears their `keep: "me"` state.
 Legacy owner-issued invite keys still work.
 
 ## Evidence

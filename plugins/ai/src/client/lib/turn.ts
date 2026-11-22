@@ -1,12 +1,11 @@
 import { isFailure, type TokamakClient } from "@tokamak/sdk";
-import { onDraftSubmit, onSent, type Sent } from "plugin:chat/client";
+import { onSent, type Sent } from "plugin:chat/client";
 import { errorText } from "../../shared/turn-shared";
 import { api, connectedClient, notice, reasonLine, unavailable } from "./agents";
 import { threadChoices, toStored } from "./choices";
 import { guardQuit } from "./quit";
 import { watchQueue } from "./queue";
 import { releaseOrphanedTurns } from "./release";
-import { submit } from "./turn-controls";
 
 /**
  * After a Send in this window, runs the turn on this computer's local part
@@ -73,17 +72,12 @@ export function listenForSends(): void {
     const client = connectedClient();
     if (client) void startTurn(client, sent);
   });
-  const unlistenDrafts = onDraftSubmit((draft) => {
-    const client = connectedClient();
-    return client ? submit(client, draft) : Promise.resolve(false);
-  });
   const unguardQuit = guardQuit(() => {
     unlistenQueue?.();
     unlistenQueue = undefined;
   });
   scope[listening] = () => {
     unlistenSends();
-    unlistenDrafts();
     unguardQuit();
     unlistenQueue?.();
     queueClient = undefined;

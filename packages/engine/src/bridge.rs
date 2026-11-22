@@ -19,6 +19,8 @@ use std::{
 type OpResult = Result<Json, String>;
 
 type OpFuture = Pin<Box<dyn Future<Output = OpResult> + Send>>;
+type CompleteModule = Box<dyn FnOnce(Json) -> OpFuture + Send>;
+type OpenModule = Pin<Box<dyn Future<Output = Result<CompleteModule, String>> + Send>>;
 
 enum Op {
     Sync(Box<dyn Fn(Json) -> OpResult + Send + Sync>),
@@ -34,6 +36,7 @@ pub struct ModuleCall {
     args: Json,
     ops: Arc<OpRegistry>,
     on_error: Box<dyn Fn(String) + Send + Sync>,
+    scope: Option<OpenModule>,
     finished: bool,
 }
 impl ModuleCall {
@@ -50,9 +53,30 @@ impl ModuleCall {
             args,
             ops,
             on_error: Box::new(on_error),
+            scope: None,
             finished: false,
         }
     }
+
+    /// Hold native state across a child call and finalize it before publishing the result.
+    /// Exceptions and abandoned calls still notify `on_error`.
+    pub fn with_scope<S, F>(
+        mut self,
+        open: impl Future<Output = Result<S, String>> + Send + 'static,
+        complete: impl FnOnce(S, Json) -> F + Send + 'static,
+    ) -> Self
+    where
+        S: Send + 'static,
+        F: Future<Output = OpResult> + Send + 'static,
+    {
+        self.scope = Some(Box::pin(async move {
+            let state = open.await?;
+            let complete: CompleteModule = Box::new(move |value| Box::pin(complete(state, value)));
+            Ok(complete)
+        }));
+        self
+    }
+
     fn finish(&mut self, error: Option<String>) {
         self.finished = true;
         if let Some(error) = error {
@@ -292,6 +316,11 @@ async fn invoke_module<'js>(
     let source = child.map(|inputs| inputs.module_source(&call.bundle.source));
     let result = async {
         check(&ctx, &lease.active, lease.deadline)?;
+        let complete = match call.scope.take() {
+            Some(open) => Some(open.await.map_err(|e| Exception::throw_message(&ctx, &e))?),
+            None => None,
+        };
+        check(&ctx, &lease.active, lease.deadline)?;
         let module = Module::declare(
             ctx.clone(),
             name.as_str(),
@@ -322,6 +351,13 @@ async fn invoke_module<'js>(
         let result: Value = pending.into_future().await?;
         check(&ctx, &lease.active, lease.deadline)?;
         let result = decode(&ctx, result)?;
+        let result = match complete {
+            Some(complete) => complete(result)
+                .await
+                .map_err(|e| Exception::throw_message(&ctx, &e))?,
+            None => result,
+        };
+        check(&ctx, &lease.active, lease.deadline)?;
         encode(&ctx, result)
     }
     .await;

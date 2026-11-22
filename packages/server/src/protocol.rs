@@ -4,6 +4,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
+// Keep this wire shape in sync with the SDK's isFailure guard.
+pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
+    if value.get("failed")?.as_bool()? && value.get("data").is_some() {
+        value.get("kind")?.as_str()
+    } else {
+        None
+    }
+}
+
 /// IDs fit JavaScript's exact integer range. They share one session-local space;
 /// clients must not reuse them while a call or subscription is outstanding.
 // ts-rs 12 cannot parse serde's enum deny_unknown_fields; describe the wire shape explicitly.

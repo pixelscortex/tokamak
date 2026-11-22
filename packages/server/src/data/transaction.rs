@@ -14,6 +14,7 @@ use surrealdb_datastore::Transaction as StorageTransaction;
 
 mod indexes;
 mod records;
+mod savepoints;
 
 // Hold the catalog stable from a writer's first mutation through its outcome.
 // Read guards coexist; changing the catalog needs exclusive access.

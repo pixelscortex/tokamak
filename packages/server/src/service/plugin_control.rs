@@ -157,16 +157,15 @@ impl Coordinator {
         for target in targets {
             // Hooks run as private mutations so they can update plugin data
             // without borrowing the managing person's session or device.
-            if Box::pin(self.invoke_function_in(
+            let result = Box::pin(self.invoke_function_in(
                 Some(generation.clone()),
                 &target,
                 args.clone(),
                 true,
                 None,
             ))
-            .await
-            .is_err()
-            {
+            .await;
+            if !matches!(result, Ok(value) if crate::protocol::failure_kind(&value).is_none()) {
                 eprintln!(
                     "Membership hook failed: {} {target} member={:?}",
                     event.name(),

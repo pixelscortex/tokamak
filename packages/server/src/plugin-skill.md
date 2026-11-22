@@ -18,6 +18,9 @@ generated references in `src/server/_generated/` and component declarations in
   operations private to this plugin. Use the generated `internal` references
   with `ctx.runQuery`, `ctx.runMutation`, or `ctx.runAction`. Return
   `fail(kind, data)` for expected failures and check them with `isFailure`.
+  A mutation that returns `fail` rolls back its writes. A caller can handle a
+  nested mutation's failure and keep its own writes, or return the failure to
+  roll them back too. An action returning `fail` keeps mutations it already ran.
 - **Local part**: use `local({ args, handler })` for files and programs on the
   person's computer. Use `ctx.proc([program, ...args], { cwd })` for programs
   and `ctx.signal` for cancellation. Call public server functions with their

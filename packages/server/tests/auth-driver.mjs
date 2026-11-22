@@ -137,6 +137,20 @@ async function admin(address, path, body, token = ownerToken) {
   });
 }
 
+async function withBlockedMemberStore(dir, check) {
+  const membersFile = join(dir, "members.json");
+  const backup = `${membersFile}.backup`;
+  await rename(membersFile, backup);
+  // A directory blocks replacement of the member store without affecting the provider's store.
+  await mkdir(membersFile);
+  try {
+    await check();
+  } finally {
+    await rmdir(membersFile);
+    await rename(backup, membersFile);
+  }
+}
+
 function deviceUpdates(address, token, check) {
   return snapshots(address, token, "/devices/live", check);
 }
@@ -222,9 +236,14 @@ async function verifyDevicePermissions(address, device, firstSocket, ownerDevice
         (await next()).map((entry) => entry.id),
         [caller.device.id],
       );
-      assert.equal((await admin(address, target, {}, token)).status, 404);
+      assert.equal((await admin(address, target, {}, token)).status, 403);
       assert.equal((await admin(address, `/members/${caller.user.id}/role`, { role: "admin" })).status, 200);
-      assert.ok((await next()).some((entry) => entry.id === device.id));
+      const manageable = await next();
+      assert.ok(manageable.some((entry) => entry.id === device.id));
+      assert.ok(manageable.some((entry) => entry.id === caller.device.id && entry.current));
+      assert.ok(
+        manageable.every((entry) => entry.member.role === "member" || entry.member.id === caller.user.id),
+      );
 
       assert.equal((await admin(address, "/devices/device%3Aowner/revoke", {}, token)).status, 404);
       const aliceOut = closed(firstSocket);
@@ -233,16 +252,19 @@ async function verifyDevicePermissions(address, device, firstSocket, ownerDevice
     });
     await withClient(address, ownerDeviceKey, async (owner, ownerSocket) => {
       assert.equal((await owner.query(authCaller, {})).device.id, ownerDevice.id);
+      const ownerTarget = `/devices/${ownerDevice.id}/revoke`;
+      assert.equal((await admin(address, ownerTarget, {}, token)).status, 403);
+      assert.equal((await owner.query(authCaller, {})).device.id, ownerDevice.id);
       const ownerOut = closed(ownerSocket);
-      assert.equal((await admin(address, `/devices/${ownerDevice.id}/revoke`, {}, token)).status, 200);
-      assert.equal((await within(ownerOut, "admin signs out an owner's device", 2_000)).code, 4001);
+      assert.equal((await admin(address, ownerTarget, {})).status, 200);
+      assert.equal((await within(ownerOut, "owner signs out an owner's device", 2_000)).code, 4001);
     });
     const bobOut = closed(bobSocket);
     assert.equal(
-      (await admin(address, `/devices/${encodeURIComponent(caller.device.id)}/revoke`, {})).status,
+      (await admin(address, `/devices/${encodeURIComponent(caller.device.id)}/revoke`, {}, token)).status,
       200,
     );
-    assert.equal((await within(bobOut, "owner signs out a member's device", 2_000)).code, 4001);
+    assert.equal((await within(bobOut, "admin signs out their own device", 2_000)).code, 4001);
   });
 }
 
@@ -269,6 +291,7 @@ async function verifyMembers(probe) {
   const alice = { username: "Alice", email: "alice@example.com", password: "first temporary password" };
   const bob = { username: "Bob", email: "bob@example.com", password: "Bob's temporary password" };
   const alicePermanent = "Alice's own password";
+  const bobPrevious = "Bob's previous password";
   const bobReset = "Bob's replacement temporary password";
   const bobPermanent = "Bob's own password";
   const add = (address, fields, token) => admin(address, "/members", { method, fields }, token);
@@ -290,6 +313,7 @@ async function verifyMembers(probe) {
   let removedMember;
   let aliceKey;
   let bobKey;
+  let replacedBobKeys;
   let savedProfiles;
   const logs = await serve(binary, root, plugins, true, async (address, dir) => {
     await verifyBearerRequest(address, "/members/live", "GET", ownerToken);
@@ -299,19 +323,11 @@ async function verifyMembers(probe) {
         ["owner"],
       );
       assert.equal((await add(address, alice, "")).status, 401, "no self-sign-up");
-      const membersFile = join(dir, "members.json");
-      const backup = `${membersFile}.backup`;
-      await rename(membersFile, backup);
-      // An existing directory blocks replacement of this file without affecting the provider's store.
-      await mkdir(membersFile);
-      try {
+      await withBlockedMemberStore(dir, async () => {
         const failed = await add(address, alice);
         assert.equal(failed.status, 503);
         assert.equal((await failed.json()).kind, "MemberManagementUnavailable");
-      } finally {
-        await rmdir(membersFile);
-        await rename(backup, membersFile);
-      }
+      });
       const added = await add(address, alice);
       assert.equal(added.status, 200, `Retry after the member store recovers: ${await added.clone().text()}`);
       const user = await added.json();
@@ -370,17 +386,43 @@ async function verifyMembers(probe) {
           (await admin(address, `/members/${bobUser.id}/role`, { role: "admin" }, aliceKey)).status,
           403,
         );
-        assert.equal(
-          (await admin(address, `/members/${bobUser.id}/reset-password`, { password: bobReset }, aliceKey))
-            .status,
-          204,
-        );
-        assert.equal((await signIn(address, bob.email, bob.password)).status, 401);
-        assert.equal((await signIn(address, bob.email, bobReset)).status, 403);
+        const firstDevice = await signIn(address, bob.email, bob.password, bobPrevious);
+        assert.equal(firstDevice.status, 200);
+        const secondDevice = await signIn(address, bob.username, bobPrevious);
+        assert.equal(secondDevice.status, 200);
+        const { key: firstBobKey } = await firstDevice.json();
+        const { key: secondBobKey } = await secondDevice.json();
+        replacedBobKeys = [firstBobKey, secondBobKey];
+        const resetBob = () =>
+          admin(address, `/members/${bobUser.id}/reset-password`, { password: bobReset }, aliceKey);
+        await withClient(address, firstBobKey, async (firstBob, firstBobSocket) => {
+          await withClient(address, secondBobKey, async (secondBob, secondBobSocket) => {
+            await withBlockedMemberStore(dir, async () => {
+              const failed = await resetBob();
+              assert.equal(failed.status, 503);
+              assert.equal((await failed.json()).kind, "MemberManagementUnavailable");
+            });
+            assert.deepEqual((await firstBob.query(authCaller, {})).user, bobUser);
+            assert.deepEqual((await secondBob.query(authCaller, {})).user, bobUser);
+            const disconnected = Promise.all([closed(firstBobSocket), closed(secondBobSocket)]);
+            const response = await resetBob();
+            assert.equal(response.status, 204, await response.clone().text());
+            for (const socket of await within(disconnected, "both reset devices close", 2_000)) {
+              assert.equal(socket.code, 4001);
+            }
+          });
+        });
+        await assertRefused(address, firstBobKey);
+        await assertRefused(address, secondBobKey);
+        assert.equal((await signIn(address, bob.email, bobPrevious)).status, 401);
+        const bobPending = await signIn(address, bob.email, bobReset);
+        assert.equal(bobPending.status, 403);
+        assert.equal((await bobPending.json()).kind, "PasswordChangeRequired");
         const bobSignedIn = await signIn(address, bob.username, bobReset, bobPermanent);
         assert.equal(bobSignedIn.status, 200, await bobSignedIn.clone().text());
         bobKey = (await bobSignedIn.json()).key;
-        await withClient(address, bobKey, async (_client, _socket, window) => {
+        await withClient(address, bobKey, async (client, _socket, window) => {
+          assert.deepEqual((await client.query(authCaller, {})).user, bobUser);
           await window.mutation(writeDraft, { ...state, value: "Bob's draft" });
         });
 
@@ -421,11 +463,13 @@ async function verifyMembers(probe) {
   for (const secret of [
     alice.password,
     bob.password,
+    bobPrevious,
     bobReset,
     alicePermanent,
     bobPermanent,
     aliceKey,
     bobKey,
+    ...replacedBobKeys,
   ])
     assert.ok(!logs.includes(secret));
   const membersFile = join(root, "shared", "members.json");
@@ -438,6 +482,7 @@ async function verifyMembers(probe) {
   // Restoring only the profile allows reading through the real window interface
   // to prove cleanup persisted and did not erase a different member's kept state.
   await serve(binary, root, plugins, true, async (address) => {
+    for (const key of replacedBobKeys) await assertRefused(address, key);
     await withClient(address, aliceKey, async (_client, _socket, window) => {
       assert.equal(await window.query(readDraft, state), null);
     });

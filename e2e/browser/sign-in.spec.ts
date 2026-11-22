@@ -189,7 +189,7 @@ test("Members recovers a lost Add response, shows role changes live, and removes
   await expect(alice.getByText("Admin", { exact: true })).toBeVisible();
   await alice.getByRole("button", { name: "Actions for Alice" }).click();
   await page.getByRole("menuitem", { name: "Reset password" }).click();
-  await expect(dialog).toHaveAccessibleDescription(/signed-in devices stay signed in.*Settings → Devices/);
+  await expect(dialog).toHaveAccessibleDescription(/All their devices will be signed out/);
   await dialog.getByLabel("Temporary password").fill("replacement temporary password");
   await dialog.getByRole("button", { name: "Reset password" }).click();
   await expect(dialog).toHaveCount(0);

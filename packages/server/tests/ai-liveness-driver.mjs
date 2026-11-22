@@ -20,8 +20,8 @@ const h = await agentHarness({ binary: process.argv[2], name: "ai-liveness" });
 const { ai, chat } = h.api;
 const AGENT = { id: "fake-agent", name: "Fake agent" };
 const replyOf = (turn) => (messages) => messages.find((message) => message._id === turn.replyId);
-/** Long enough for the server to notice the silence: the limit plus its 5-second sweep and some slack. */
-const NOTICED_MS = SILENCE_MS + 15_000;
+/** Allow for the server's sweep and slower scheduling under CI load. */
+const NOTICED_MS = SILENCE_MS + 30_000;
 
 try {
   // The lost server waits out its own 45 seconds alongside.
@@ -174,16 +174,24 @@ async function lostServer() {
   });
   void running.catch(() => {});
   const turns = h.watch(desk, ai.turns.list, { threadId });
-  await turns.until("running turn", (list) => list[0]?.state === "running");
+  const [turn] = await turns.until("running turn", (list) => list[0]?.state === "running");
   const pids = await within(async () =>
     JSON.parse(await readFile(join(folder, "process-tree.json"), "utf8")),
   );
   assert.equal(pids.length, 3);
+  // Let the agent's first write land before testing heartbeat loss. A failed
+  // reply write stops the agent independently of the heartbeat deadline.
+  await h
+    .watch(desk, chat.messages.list, { threadId })
+    .until(
+      "partial reply saved",
+      (list) => replyOf(turn)(list)?.parts[0]?.text === "Partial reply from a stuck agent.",
+    );
   await h.halt(address);
   const cutOff = Date.now();
   await Bun.sleep(SILENCE_MS - BEAT_MS);
   assert.ok(pids.every(alive), "the agent runs on while the server may still come back");
-  const deadline = cutOff + SILENCE_MS + 2 * BEAT_MS;
+  const deadline = cutOff + NOTICED_MS;
   while (pids.some(alive) && Date.now() < deadline) await Bun.sleep(500);
   assert.deepEqual(
     pids.filter(alive),

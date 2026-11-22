@@ -1,10 +1,10 @@
 import { isFailure, type Id, type TokamakClient } from "@tokamak/sdk";
-import { state } from "@tokamak/sdk/client";
-import type { DraftSubmission } from "plugin:chat/client";
+import { auth, state } from "@tokamak/sdk/client";
+import { onDraftSubmit, type DraftSubmission } from "plugin:chat/client";
 import type { TurnView } from "../../server/_functions";
 import { errorText } from "../../shared/turn-shared";
 import { api, notice, reasonLine, unavailable } from "./agents";
-import { runsAgentHere, threadChoices, toStored } from "./choices";
+import { threadChoices, toStored } from "./choices";
 
 export const localActiveTurn = state<TurnView | null>(null);
 
@@ -13,8 +13,21 @@ export function activeFor(threadId: string | undefined) {
   return turn?.threadId === threadId ? turn : null;
 }
 
-export async function submit(client: TokamakClient, { threadId, text, intent }: DraftSubmission) {
-  if (!client.hasLocal || !(await runsAgentHere(client, threadId))) return false;
+/** Intercept drafts for the creator using the same live identity and creator the row displays. */
+export function onTurnDraft(
+  client: TokamakClient,
+  threadId: () => string,
+  creatorId: () => string | undefined,
+) {
+  const me = auth.me();
+  return onDraftSubmit(async (draft) => {
+    if (!client.hasLocal || draft.threadId !== threadId()) return false;
+    const id = creatorId();
+    return id !== undefined && id === me.id && submit(client, draft);
+  });
+}
+
+async function submit(client: TokamakClient, { threadId, text, intent }: DraftSubmission) {
   const holder = await client.query(api.turns.pending, { threadId });
   if (!holder) return false;
   notice.set(undefined);

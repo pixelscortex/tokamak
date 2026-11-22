@@ -73,7 +73,7 @@ export type WireResult<R> = WireValue<
   [Extract<Awaited<R>, Failure<string, unknown>>] extends [never] ? false : true
 >;
 
-/** Return an expected failure as a value, so callers can narrow it by kind. */
+/** Return an expected failure that callers can narrow by kind. A mutation returning it rolls back its writes. */
 export function fail<const K extends string, D extends JsonValue>(kind: K, data: D): Failure<K, D> {
   return { failed: true, kind, data };
 }
@@ -83,6 +83,7 @@ type NarrowFailure<T> = [FailureOf<T>] extends [never] ? T & Failure<string, unk
 
 /** Narrow a result to a failure, including when success is a primitive or null. */
 export function isFailure<T>(value: T): value is NarrowFailure<T> {
+  // Keep this wire shape in sync with the server's failure_kind guard.
   return (
     value !== null &&
     typeof value === "object" &&

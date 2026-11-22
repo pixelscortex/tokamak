@@ -128,7 +128,7 @@ test("a thread whose agent plugin was removed keeps that agent, says it isn't in
   expect(isHeld(composer("t2"))).toBe(false);
 });
 
-test("in someone else's thread the row names who runs the agent and Send stays plain chat", async () => {
+test("in someone else's thread the row names the creator and hides the agent pickers", async () => {
   installed = [{ id: "solo", name: "Solo", info: ready }];
   stored = { agent: { id: "gone", name: "Gone" }, model: "opus", access: "ask" };
   creator = { id: "morgan", name: "Morgan" };
