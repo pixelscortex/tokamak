@@ -267,7 +267,7 @@ function Choosers(props: {
 }
 
 /**
- * One picker: its current value with a chevron, opening a menu of the
+ * One picker: its current value, opening a menu of the
  * options; with one option, a plain label unless it `always` opens. Its text
  * for screen readers (and tests) is "<name>: <value>", e.g. "Model: opus 5.5".
  */
@@ -291,9 +291,11 @@ function Picker(props: {
       when={props.always || props.options.length > 1}
       fallback={<span class="inline-flex h-8 items-center px-1">{value()}</span>}
     >
-      {/* Ghost triggers keep their own 12 px padding; the margin leaves Paper's 8 px between values. */}
+      {/* A short 24 px trigger with 4 px sides, no negative margins: neighbours touch but never
+          overlap (the ghost fill is translucent, so overlapping fills stacked into a brighter strip),
+          and two 4 px sides leave Paper's 8 px between values. */}
       <Menu.Root onOpenChange={props.onOpen} onAction={props.onPick}>
-        <Menu.Trigger variant="ghost" class="-mx-2">
+        <Menu.Trigger variant="ghost" class="h-6 px-1">
           {value()}
         </Menu.Trigger>
         <Menu.Content>
