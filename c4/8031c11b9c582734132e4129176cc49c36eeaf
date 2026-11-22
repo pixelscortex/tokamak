@@ -1,0 +1,91 @@
+packages/server/src/service/invocations.rs
+  s_7f02959c6c1be8::t_b151ada52e84c7 9,27
+packages/server/src/host.rs
+  s_7f02959c6c1be8::t_b151ada52e84c7 56,68,103,141,153,216
+  s_7f02959c6c1be8::t_0559acdd785d2d 155
+packages/sdk/src/auth.ts
+  s_7f02959c6c1be8::t_f8f8d37197e0f4 1-7
+packages/server/src/service/action_coordination.rs
+  s_7f02959c6c1be8::t_b151ada52e84c7 7,43,112
+packages/server/src/identity.rs
+  s_7f02959c6c1be8::t_0559acdd785d2d 360-362,364-366
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 16-17,81-87,202-204,243-254,302-304,314-334,336,339-342,363,367
+  s_7f02959c6c1be8::t_d17364862aa3b3 75
+  s_7f02959c6c1be8::t_a616034716c6c0 1,4-9,18-25,30,38-74,76-80,92-113,212,284,402
+  s_7f02959c6c1be8::t_94899668bea1d7 114
+packages/server/tests/identity.rs
+  s_7f02959c6c1be8::t_51f116564d67cf 286-299
+packages/server/src/service/command_loop.rs
+  s_7f02959c6c1be8::t_b151ada52e84c7 59,74,84,120
+packages/sdk/src/host.ts
+  s_7f02959c6c1be8::t_d17364862aa3b3 46,70
+packages/server/src/service/plugin_control.rs
+  s_7f02959c6c1be8::t_d17364862aa3b3 48
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 46,49-54,57,95-97
+packages/server/src/plugins/manifest.rs
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 120-122
+packages/server/tests/actions.rs
+  s_7f02959c6c1be8::t_7c6190dce7b2f9 28-29,115,124
+packages/server/src/service/session.rs
+  s_7f02959c6c1be8::t_0559acdd785d2d 59,144
+packages/server/tests/fixtures/auth/package.json
+  s_7f02959c6c1be8::t_51f116564d67cf 1-5
+packages/server/src/service/server.rs
+  s_7f02959c6c1be8::t_0559acdd785d2d 48-49,58-62
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 52-57,63,65-67
+  s_7f02959c6c1be8::t_d17364862aa3b3 71-79,81,88
+packages/server/src/service/subscriptions.rs
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 108-114,149-155
+  s_7f02959c6c1be8::t_b151ada52e84c7 144-145,147,167
+packages/server/src/host/worker/tests.rs
+  s_7f02959c6c1be8::t_0559acdd785d2d 55-57
+packages/sdk/tests/acceptance.test.mjs
+  s_7f02959c6c1be8::t_7c6190dce7b2f9 161-165
+packages/server/tests/auth-driver.mjs
+  s_7f02959c6c1be8::t_51f116564d67cf 1-4,6-7,9-120,122-134,186-191
+  s_7f02959c6c1be8::t_c845e35f586db5 5,135-185
+  s_7f02959c6c1be8::t_db58c54e387d80 8,121
+packages/server/tests/fixtures/auth/plugin.ts
+  s_7f02959c6c1be8::t_51f116564d67cf 1-3
+packages/build/tests/boundary.test.mjs
+  s_7f02959c6c1be8::t_7c6190dce7b2f9 233-237
+packages/server/src/service/requests.rs
+  s_7f02959c6c1be8::t_b151ada52e84c7 41,60,79,92,96
+  s_7f02959c6c1be8::t_0559acdd785d2d 4
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 40,66-74
+packages/sdk/src/index.ts
+  s_7f02959c6c1be8::t_f8f8d37197e0f4 68
+  s_7f02959c6c1be8::t_7c6190dce7b2f9 33-34
+packages/server/src/actions.rs
+  s_7f02959c6c1be8::t_b151ada52e84c7 14,30,33,56,66,96,106,112,127,155,165,181,207
+packages/server/src/websocket.rs
+  s_7f02959c6c1be8::t_d17364862aa3b3 6,288
+  s_7f02959c6c1be8::t_d6e2ac30cc3ad8 51-61,175,190-191,366-368,395-400,406-416,499-511
+  s_7f02959c6c1be8::t_0559acdd785d2d 401-405
+packages/server/tests/fixtures/auth/src/server/identity.ts
+  s_7f02959c6c1be8::t_ef3287048cc7ac 1
+  s_7f02959c6c1be8::t_51f116564d67cf 2-8,10-17
+  s_7f02959c6c1be8::t_8ac8588603adfa 9
+packages/sdk/src/functions.ts
+  s_7f02959c6c1be8::t_d17364862aa3b3 20-30,46,54,63,112-117,136,148,244,246
+packages/server/src/service/mod.rs
+  s_7f02959c6c1be8::t_ed9e9a5e0dd412 107-108,111-112
+  s_7f02959c6c1be8::t_d6e2ac30cc3ad8 86,164
+  s_7f02959c6c1be8::t_0559acdd785d2d 110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c48031c11b9c582734132e4129176cc49c36eeaf",
+  "prompts": {},
+  "sessions": {
+    "s_7f02959c6c1be8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-42c6-7f61-b749-3c3629f0d6ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
