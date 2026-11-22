@@ -1,0 +1,24 @@
+plugins/codex/tests/e2e.mjs
+  s_13922ebd3d9eea::t_c8037eabfddd91 218,236
+  s_13922ebd3d9eea::t_c7d26101c25eb3 215-217
+e2e/fake-agent/program.mjs
+  s_13922ebd3d9eea::t_697c93dd2b9b0b 12-13,27,86-87
+.ci/check.sh
+  s_13922ebd3d9eea::t_697c93dd2b9b0b 3-4,17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "83d8bc8535a883d43a8a8ee2059e990f35ff98b8",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
