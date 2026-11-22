@@ -6,7 +6,7 @@ use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_o
 use engine::{Bundle, Determinism, ModuleCall, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 pub(crate) use crate::data::ReadSet;
 
@@ -101,6 +101,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         CallContext {
             determinism: Some(determinism),
             auth,
+            scope: CallScope::default(),
         },
     );
 
@@ -126,7 +127,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         }
     });
 
-    let result = finish_transaction(tx, result, &mut observed).await;
+    let result = finish_transaction(tx, result, mutation, &mut observed).await;
     Call {
         result,
         reads: std::mem::take(&mut observed.reads),
@@ -139,6 +140,66 @@ type Graph = Option<(Arc<crate::plugins::Loaded>, String, Vec<String>)>;
 struct CallContext {
     determinism: Option<Determinism>,
     auth: Option<crate::identity::AuthContext>,
+    scope: CallScope,
+}
+
+// A child holds its parent's gate, so siblings and parent DB operations cannot
+// enter its savepoint. The child has its own gate for calls made inside it.
+#[derive(Clone, Default)]
+struct CallScope(Arc<Mutex<bool>>);
+
+impl CallScope {
+    async fn enter(self) -> Result<OwnedMutexGuard<bool>, String> {
+        let closed = self.0.lock_owned().await;
+        if *closed {
+            return Err("plugin call has already returned".into());
+        }
+        Ok(closed)
+    }
+
+    async fn close(self) {
+        *self.0.lock().await = true;
+    }
+
+    fn nest(
+        self,
+        child: Self,
+        shared: SharedTransaction,
+        mutation: bool,
+        call: ModuleCall,
+    ) -> ModuleCall {
+        let opening = shared.clone();
+        call.with_scope(
+            async move {
+                let guard = self.enter().await?;
+                let savepoint = if mutation {
+                    let mut shared = opening.lock().await;
+                    let tx = shared
+                        .as_mut()
+                        .ok_or("invocation transaction is finished")?;
+                    Some(Box::pin(tx.savepoint()).await.map_err(|e| e.to_string())?)
+                } else {
+                    None
+                };
+                Ok((guard, savepoint))
+            },
+            move |(parent, savepoint), value| async move {
+                let _parent = parent;
+                // Settle this scope before other calls can enter the parent.
+                child.close().await;
+                if let Some(mark) = savepoint {
+                    let mut shared = shared.lock().await;
+                    let tx = shared
+                        .as_mut()
+                        .ok_or("invocation transaction is finished")?;
+                    Box::pin(tx.finish_savepoint(mark, is_failure(&value)))
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(value)
+            },
+        )
+    }
 }
 
 fn operations(
@@ -150,7 +211,11 @@ fn operations(
     graph: Graph,
     context: CallContext,
 ) -> Arc<OpRegistry> {
-    let CallContext { auth, determinism } = context;
+    let CallContext {
+        auth,
+        determinism,
+        scope,
+    } = context;
     let mut ops = OpRegistry::new();
     crate::identity::register_caller(auth.as_ref(), &mut ops).expect("unique operation");
 
@@ -162,6 +227,7 @@ fn operations(
         shared.clone(),
         observations.clone(),
         failure.clone(),
+        scope.clone(),
         space,
         writable,
     );
@@ -194,6 +260,7 @@ fn operations(
                 let mut child_path = path.clone();
                 child_path.push(name.into());
 
+                let child_scope = CallScope::default();
                 let child_ops = operations(
                     shared.clone(),
                     observations.clone(),
@@ -204,12 +271,12 @@ fn operations(
                     CallContext {
                         determinism: None,
                         auth: auth.clone(),
+                        scope: child_scope.clone(),
                     },
                 );
 
                 let failed = failure.clone();
-
-                Ok(ModuleCall::new(
+                let call = ModuleCall::new(
                     target.bundle,
                     "invoke",
                     json!({"name":target.local_name,"args":args}),
@@ -217,7 +284,10 @@ fn operations(
                     move |error| {
                         *failed.lock().expect("failure lock") = Some(error);
                     },
-                ))
+                );
+                Ok(scope
+                    .clone()
+                    .nest(child_scope, shared.clone(), target.mutation, call))
             })();
 
             if let Err(error) = &resolved {
@@ -237,13 +307,20 @@ mod database_queries;
 
 pub(crate) mod worker;
 
+fn is_failure(value: &Json) -> bool {
+    value.get("failed") == Some(&Json::Bool(true))
+        && value.get("kind").is_some_and(Json::is_string)
+        && value.get("data").is_some()
+}
+
 async fn finish_transaction(
     tx: Transaction,
     result: Result<Json, String>,
+    mutation: bool,
     observed: &mut Observations,
 ) -> Result<Json, String> {
     match result {
-        Ok(value) => match Box::pin(tx.commit()).await {
+        Ok(value) if !mutation || !is_failure(&value) => match Box::pin(tx.commit()).await {
             Ok(()) => Ok(value),
             Err(error) => {
                 observed.conflict |= error.is_retryable_conflict();
@@ -253,13 +330,17 @@ async fn finish_transaction(
                 ))
             }
         },
-        Err(error) => match Box::pin(tx.rollback()).await {
-            Ok(()) => Err(error),
+        result => match Box::pin(tx.rollback()).await {
+            Ok(()) => result,
             Err(rollback) => {
                 // A failed rollback is not evidence that replay is safe.
                 observed.conflict = false;
 
-                Err(format!("{error}; rollback failed: {rollback}"))
+                let message = format!("transaction rollback failed: {rollback}");
+                Err(match result {
+                    Ok(_) => message,
+                    Err(error) => format!("{error}; {message}"),
+                })
             }
         },
     }

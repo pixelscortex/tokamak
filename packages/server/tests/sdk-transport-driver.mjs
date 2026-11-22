@@ -295,6 +295,12 @@ export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "w
     const client = new TokamakClient(transport);
     const { api } = await import(join(root, "internal-test/src/server/_generated/api.ts"));
     const { api: caller } = await import(join(root, "internal-caller/src/server/_generated/api.ts"));
+    assert.deepEqual(await client.mutation(api.ops.addTogether, { title: "discard", decline: true }), {
+      failed: true,
+      kind: "Declined",
+      data: { title: "discard" },
+    });
+    assert.deepEqual(await client.query(api.ops.list, {}), [], "returned failure left a row");
     const success = await client.action(api.ops.add, { title: "cat" });
     assert.deepEqual(success, { title: "CAT" });
     assert.equal(isFailure(success), false);
@@ -324,6 +330,7 @@ export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "w
     assert.deepEqual(functions.sort(), [
       "internal-caller/probe:read",
       "internal-test/ops:add",
+      "internal-test/ops:addAroundFailure",
       "internal-test/ops:addTogether",
       "internal-test/ops:list",
     ]);
@@ -339,6 +346,22 @@ export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "w
     );
     assert.equal(privateSubscription.terminal, true);
     assert.match(privateSubscription.error.message, /registered query/);
+    assert.deepEqual(await client.mutation(api.ops.addAroundFailure, { recover: false }), {
+      failed: true,
+      kind: "Declined",
+      data: { title: "nested discard" },
+    });
+    assert.deepEqual(await client.query(api.ops.list, {}), ["CAT", "dog"], "propagated failure left rows");
+    const kept = ["CAT", "dog", "before", "sibling", "after Declined"].sort();
+    const recovered = await client.mutation(api.ops.addAroundFailure, { recover: true });
+    assert.deepEqual(recovered.sort(), kept, "handled failure must hide the child writes before returning");
+    assert.deepEqual((await client.query(api.ops.list, {})).sort(), kept);
+    assert.deepEqual(await client.action(api.ops.add, { title: "fox", decline: true }), {
+      failed: true,
+      kind: "Declined",
+      data: { title: "FOX" },
+    });
+    assert.deepEqual((await client.query(api.ops.list, {})).sort(), [...kept, "FOX"].sort());
     server.kill("SIGTERM");
     assert.equal(await within(server.exited, "internal fixture server shutdown"), 0);
     server = undefined;

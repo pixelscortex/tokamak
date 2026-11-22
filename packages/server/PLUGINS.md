@@ -132,9 +132,12 @@ mode, actions retain their existing nested query and mutation support. Nested
 calls from queries or mutations and `ctx.runAction` require packaged plugins.
 
 Every callee gets its own namespace and the host supplies the caller's identity.
-Queries and mutations called by an outer mutation share its transaction, so all
-writes commit together or none do. Returning `fail(kind, data)` does not roll
-back writes: the result is a JSON value.
+Queries and mutations called by an outer mutation share its transaction. A
+mutation returning `fail(kind, data)` rolls back its writes and returns the
+typed failure. A nested mutation rolls back only its own writes, including
+those of its callees. If the caller handles the failure, its writes can still
+commit. If it returns the failure, its writes roll back too. An action returning
+`fail` does not undo mutations it already called; actions are not transactional.
 Native failures poison the whole transaction even if plugin code catches them.
 Queries cannot call mutations, including queries invoked within a mutation.
 Read dependencies accumulate transitively for subscription invalidation.

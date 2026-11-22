@@ -167,8 +167,12 @@ The action's caller receives the inferred result. For an object success like
 `{ title }`, `if (result.failed && result.kind === "TooLong")` narrows to the
 failure and makes `result.data.max` a number. Use `isFailure(result)` from
 `@tokamak/sdk` to distinguish failures from any success, including a string or
-`null`. A returned `fail` is a JSON value and does not roll back writes. Throw
-for unexpected errors.
+`null`. A mutation that returns `fail` rolls back its writes and still returns
+the typed failure. If a nested `ctx.runMutation` returns `fail`, only that
+callee's writes roll back. The caller can handle it and commit its own writes,
+or return the failure to roll back the caller's writes too. Actions are not
+transactional: returning `fail` from an action does not undo mutations it
+already called. Throw for unexpected errors.
 
 ## Local functions
 

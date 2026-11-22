@@ -5,6 +5,7 @@ pub(super) fn register(
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
+    scope: CallScope,
     space: DataSpace,
     writable: bool,
 ) {
@@ -23,6 +24,7 @@ pub(super) fn register(
         let space = space.clone();
 
         let failure = failure.clone();
+        let scope = scope.clone();
         ops.register_async(operation, move |payload| {
             let shared = shared.clone();
 
@@ -31,10 +33,12 @@ pub(super) fn register(
             let space = space.clone();
 
             let failure = failure.clone();
+            let scope = scope.clone();
             // This future is polled directly, never detached on another executor.
             // Runtime retirement drops it before replying; taking the Option below
             // revokes even retained callbacks before commit/rollback can start.
             Box::pin(async move {
+                let _scope = scope.enter().await?;
                 let mut guard = shared.lock().await;
 
                 let tx = guard.as_mut().ok_or("invocation transaction is finished")?;
