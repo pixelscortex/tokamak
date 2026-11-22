@@ -1,0 +1,19 @@
+packages/build/src/auth-dependencies.ts
+  s_0a399312e8f8f5::t_4293b13c21ce40 31-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47900ceadc59da4cb5219b31bc981a6b69ae7486",
+  "prompts": {},
+  "sessions": {
+    "s_0a399312e8f8f5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2021c-f7a0-7b22-bbef-8f3ad91e0903",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
