@@ -1,0 +1,108 @@
+e2e/browser/ai.spec.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 4-6,16-28,69-198
+packages/sdk/README.md
+  s_f6e69910f6f024::t_5cf6ea5703fece 207-209
+e2e/browser/desktop.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 30,114-121
+packages/sdk/src/functions.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 13,146-147,320-324,473
+plugins/ai/README.md
+  s_f6e69910f6f024::t_5cf6ea5703fece 18-21,29-31,46-49,58,60,67-80,83
+plugins/ai/src/client/lib/queue.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-66
+e2e/fake-agent/replays/no-steer.jsonl
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-4
+plugins/ai/src/client/lib/turn.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 2-7,11-12,16-18,25,37,41-51,59,64,68-77
+plugins/ai/src/server/run.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 5-6,13,34-35,45,56-60,62-76,78,80-81,83-119,148,166,171-173
+plugins/chat/src/client/ui/composer.tsx
+  s_f6e69910f6f024::t_5cf6ea5703fece 7,19,47-57
+packages/sdk/src/host.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 99
+e2e/fake-agent/replays/steer.jsonl
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-9
+e2e/fake-agent/replays/ignore-stop.jsonl
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-7
+packages/sdk/worker/process.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 52-58,60,62,127
+plugins/ai/src/client/api.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 8-9,11,20-27
+plugins/ai/src/client/lib/turn-controls.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-68
+plugins/ai/src/client/ui/agent-row.tsx
+  s_f6e69910f6f024::t_5cf6ea5703fece 1,3-4,6,9,18-19,30,33-54,79-88
+plugins/ai/src/turn-shared.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-12
+plugins/chat/src/server/schema.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 29
+plugins/chat/src/client/lib/sent.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 44-65
+packages/sdk/worker/entry.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 2,50-58,61-75,95,98
+e2e/fake-agent/program.mjs
+  s_f6e69910f6f024::t_5cf6ea5703fece 21,26-27,114-143
+  s_f6e69910f6f024::t_4c159e4097e9f3 144
+plugins/ai/src/client/lib/turn-settings.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-19
+plugins/chat/src/client/lib/send.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 4,16,21,28-32,37,52-54
+  s_f6e69910f6f024::t_9f5e6985c8f3be 55
+plugins/chat/src/client/pages/chat.tsx
+  s_f6e69910f6f024::t_5cf6ea5703fece 154,196
+plugins/ai/src/server/turns.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1,3-5,26-105,108-110,112-113,119-120,123,125-129,133-139,145,147-244,253,258-276,282,289,291,295-296,301,305,316-323,325
+plugins/chat/src/server/replies/replies.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 44-52,59-60
+plugins/ai/src/server/_generated/api.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 5,7-8,10,12-18,25-27,32,34-35,37,39-45,48-50
+plugins/chat/src/client/ui/message.tsx
+  s_f6e69910f6f024::t_5cf6ea5703fece 1,41-51,54-62
+e2e/fake-agent/replays/stop.jsonl
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-5
+plugins/ai/src/server/schema.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 9,31,44-47,54,60-63
+plugins/chat/src/server/_generated/plugin.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 4-8,27-29
+plugins/ai/src/server/controls.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-121
+e2e/fake-agent/agents/fake-agent/src/server/agent.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 26-27,40-42
+plugins/chat/README.md
+  s_f6e69910f6f024::t_5cf6ea5703fece 36-38,41-43,67-71
+  s_f6e69910f6f024::t_f8bde454fda3bd 72
+plugins/chat/src/client/api.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 12-13
+plugins/chat/src/server/api.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 2-8
+plugins/chat/src/server/messages/messages.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-2,31-32,36-37,39-40,42-119
+plugins/ai/src/contracts.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 29,44-47
+plugins/ai/src/client/ui/turn-controls.tsx
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-61
+plugins/ai/src/turn-timing.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 1
+packages/server/tests/ai-turns-driver.mjs
+  s_f6e69910f6f024::t_5cf6ea5703fece 8,11,21-24,27-29,106,128-293,318-322,339-341,344-350
+packages/sdk/src/local.ts
+  s_f6e69910f6f024::t_5cf6ea5703fece 21-22
+plugins/ai/src/client/ui/turn-steers.tsx
+  s_f6e69910f6f024::t_5cf6ea5703fece 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e3f399f6c373e6022cfcd4abc1b9f91a9cadb7bc",
+  "prompts": {},
+  "sessions": {
+    "s_f6e69910f6f024": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-f67f-75c0-a829-9883ea5cdc85",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
