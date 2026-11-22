@@ -50,7 +50,7 @@ export function agentTurns({ h, client, agent, model, effort, timeout }) {
       void running.catch(() => {});
       const cleanup = [];
       try {
-        const controls = during && turnControls(context, running, cleanup);
+        const controls = during && turnControls(context, running, cleanup, timeout);
         if (controls) await during(controls);
         const report = await storedReply(context, await running, state);
         assert.equal(controls?.answeredCount ?? 0, answers, `${label}: permission questions answered`);
@@ -62,14 +62,14 @@ export function agentTurns({ h, client, agent, model, effort, timeout }) {
   };
 }
 
-function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanup) {
+function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanup, timeout) {
   const watch = (fn, inputs) => watchQuery(client, fn, inputs, cleanup);
   let replies, messages, questions;
   const answered = new Set();
   async function wait(watcher, what, match) {
     return match(
       await Promise.race([
-        watcher.until(what, match),
+        watcher.until(what, match, timeout),
         running.then((result) => {
           throw new Error(`${label} ended before ${what}: ${JSON.stringify(result)}`);
         }),
