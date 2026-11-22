@@ -1,0 +1,20 @@
+packages/server/tests/plugins.rs
+  s_0a399312e8f8f5::t_42a4f91e3da1f4 223,236-278,696,721-735,1121,1145-1181,1198
+  s_0a399312e8f8f5::t_4934b58051db3c 1182-1184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1504e0745c3c27c9f3c43fc7ee1536cedb5a0ff7",
+  "prompts": {},
+  "sessions": {
+    "s_0a399312e8f8f5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2021c-f7a0-7b22-bbef-8f3ad91e0903",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
