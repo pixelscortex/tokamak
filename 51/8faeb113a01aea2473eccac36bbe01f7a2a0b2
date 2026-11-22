@@ -1,9 +1,9 @@
-plugins/codex/src/server/info.ts
-  s_dd6ee6eb6de096::t_e3baf20e2e493f 64-65
-plugins/codex/src/server/turn.ts
-  s_dd6ee6eb6de096::t_55017a58c2558b 36-38,41
 plugins/codex/tests/check-replay-privacy.mjs
-  s_dd6ee6eb6de096::t_f4203c699d1db3 13,62-63,66
+  s_13922ebd3d9eea::t_0a859783d56c3f 13,62-63,66
+plugins/codex/src/server/info.ts
+  s_13922ebd3d9eea::t_0a859783d56c3f 64-65
+plugins/codex/src/server/turn.ts
+  s_13922ebd3d9eea::t_0a859783d56c3f 36-38,41
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -11,13 +11,13 @@ plugins/codex/tests/check-replay-privacy.mjs
   "base_commit_sha": "518faeb113a01aea2473eccac36bbe01f7a2a0b2",
   "prompts": {},
   "sessions": {
-    "s_dd6ee6eb6de096": {
+    "s_13922ebd3d9eea": {
       "agent_id": {
         "tool": "codex",
-        "id": "01a2016e-c6ec-7ff3-a3da-1ca374d8e514",
-        "model": "unknown"
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
       },
-      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
     }
   }
 }
