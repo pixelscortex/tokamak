@@ -1,0 +1,19 @@
+plugins/codex/src/server/approvals.ts
+  s_13922ebd3d9eea::t_e3e7a600f2378c 50-51,68,86,89-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2327f997f61a50f70bfff75f09e727b8111623cf",
+  "prompts": {},
+  "sessions": {
+    "s_13922ebd3d9eea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-e4dd-7201-ac9f-8107fdd61563",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
