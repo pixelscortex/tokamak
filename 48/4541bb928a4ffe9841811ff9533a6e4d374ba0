@@ -1,0 +1,19 @@
+plugins/claude/tests/turns.mjs
+  s_0eedb15a6f462e::t_9914659ecc01c2 430,432,436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "484541bb928a4ffe9841811ff9533a6e4d374ba0",
+  "prompts": {},
+  "sessions": {
+    "s_0eedb15a6f462e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20328-e363-7f00-bf24-82ac4cc811da",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
