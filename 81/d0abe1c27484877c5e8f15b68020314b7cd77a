@@ -1,0 +1,27 @@
+e2e/browser/sign-in.spec.ts
+  s_0bb9cb1d8d8ab2::t_b2eb37919239ff 136,155-164
+  s_0bb9cb1d8d8ab2::t_14c5a380d8641f 171-174,176,178,192
+  s_0bb9cb1d8d8ab2::t_511564a7a2d365 175
+app/src/host/members.ts
+  s_0bb9cb1d8d8ab2::t_4ed32fb0a33a1a 15
+app/src/shell/members.tsx
+  s_0bb9cb1d8d8ab2::t_14c5a380d8641f 82-83,86
+  s_0bb9cb1d8d8ab2::t_4ed32fb0a33a1a 51,54,61,70-71,73,75,78-81,84-85,87-93,96,196-211,214-246,248,266,270,274-281,284-287,296-297,351,353
+  s_0bb9cb1d8d8ab2::t_b2eb37919239ff 56-60,184-189,212-213,272-273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "81d0abe1c27484877c5e8f15b68020314b7cd77a",
+  "prompts": {},
+  "sessions": {
+    "s_0bb9cb1d8d8ab2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20133-3950-7e51-b212-4b1bc15c47e0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
