@@ -1,0 +1,91 @@
+packages/build/src/descriptor.ts
+  s_c7470711f4ad55::t_38b8de8091c03f 10-13
+packages/sdk/src/client.ts
+  s_c7470711f4ad55::t_21b17698ea1a02 8-12,59-64,70
+  s_c7470711f4ad55::t_5dcfa0b137be63 35-38,65-69
+  s_c7470711f4ad55::t_b10e88dc96ad0e 71-73
+packages/sdk/tools/placement.mjs
+  s_c7470711f4ad55::t_68ecb4e44564b2 5,10
+  s_c7470711f4ad55::t_ee7afa1147f691 1-4,6-9,11-20,27-30,33-43,45-57,59,62-63,65,68-70,73-75,81,83,94,101,126-127,168,170-172,177-191,198-213
+  s_c7470711f4ad55::t_8691356f56982a 58,60-61,64,66-67,71-72,76-80,82,84-93,95-99,102,104-113,119-125,128-132,137-167,169
+  s_c7470711f4ad55::t_a134a6750e13b3 21-26,44
+  s_c7470711f4ad55::t_5dcfa0b137be63 31-32,100,103,114-118,133-136,173-176,192-197
+packages/sdk/src/local.ts
+  s_c7470711f4ad55::t_5dcfa0b137be63 17-20
+  s_c7470711f4ad55::t_d65327ef587903 1-16
+packages/build/src/vite.ts
+  s_c7470711f4ad55::t_191f8d96d0151a 59-60,109-110,193-196
+  s_c7470711f4ad55::t_5dcfa0b137be63 87-89
+  s_c7470711f4ad55::t_a134a6750e13b3 33,50-58,192,197,205-209
+  s_c7470711f4ad55::t_8691356f56982a 4,49,103-105
+  s_c7470711f4ad55::t_38b8de8091c03f 9,31-32,138,166-177
+packages/sdk/tools/bundle.mjs
+  s_c7470711f4ad55::t_2019d5578b829f 19-20,40,68-69,75-81,100-102,118,120-124,128-131,135-138,143-146,278-280,283,286-290
+  s_c7470711f4ad55::t_ec5dc921eba83f 9
+  s_c7470711f4ad55::t_a134a6750e13b3 66-67,73-74
+  s_c7470711f4ad55::t_5dcfa0b137be63 70-72,105-114,125-127,139-142,274-277,281-282,284-285,291-292
+  s_c7470711f4ad55::t_f5205d8f4e3ca2 117,119
+  s_c7470711f4ad55::t_68ecb4e44564b2 5,60
+packages/build/src/exports.ts
+  s_c7470711f4ad55::t_bd38417922005d 63
+  s_c7470711f4ad55::t_21b17698ea1a02 64-65
+packages/build/tests/local.test.mjs
+  s_c7470711f4ad55::t_5dcfa0b137be63 25-27,34-35,38-42,49-53,62-64,68-69,79-81,87-88,97-99,103-104
+  s_c7470711f4ad55::t_6a053ad38370a0 1,3-24,29-31,36-37,43-45,47,54-58
+  s_c7470711f4ad55::t_7bd6a0935a2d7e 28,32-33
+  s_c7470711f4ad55::t_952398a338da90 48
+  s_c7470711f4ad55::t_c1c4fb2594c785 59-61,65-67,70-78,82-86,89-96,100-102,105-109
+  s_c7470711f4ad55::t_8a3ea12e89397f 2,46
+packages/sdk/worker/entry.ts
+  s_c7470711f4ad55::t_952398a338da90 7,9,39,42,60,62,65,93
+packages/build/tests/run.sh
+  s_c7470711f4ad55::t_f5205d8f4e3ca2 3
+packages/build/src/artifact-bundle.ts
+  s_c7470711f4ad55::t_a134a6750e13b3 12,23
+  s_c7470711f4ad55::t_50e7adda83d5b7 24-33
+packages/sdk/worker/process.ts
+  s_c7470711f4ad55::t_952398a338da90 1-53,63-73
+  s_c7470711f4ad55::t_5dcfa0b137be63 54-62
+packages/sdk/README.md
+  s_c7470711f4ad55::t_56759e386a19ea 144-175
+packages/server/src/plugins/manifest.rs
+  s_c7470711f4ad55::t_c19cd47df3ec2e 78-79,201-205
+packages/sdk/src/functions.ts
+  s_c7470711f4ad55::t_d65327ef587903 13,15-16,54,63-66,70-71,133-135,171-172,191,193,208,215,271
+  s_c7470711f4ad55::t_5dcfa0b137be63 88-94,136-155
+  s_c7470711f4ad55::t_bd38417922005d 67-69,174,183-186,190
+  s_c7470711f4ad55::t_a5bc85aea01fdf 173,175-182,187-189
+  s_c7470711f4ad55::t_7e3906c31e6fdb 192
+packages/sdk/src/host.ts
+  s_c7470711f4ad55::t_d65327ef587903 72
+  s_c7470711f4ad55::t_bd38417922005d 55
+packages/build/src/client-surface.ts
+  s_c7470711f4ad55::t_8691356f56982a 10-13,15,83-87,90,134,149
+  s_c7470711f4ad55::t_a134a6750e13b3 14
+packages/sdk/tools/worker.mjs
+  s_c7470711f4ad55::t_5dcfa0b137be63 8-17,70-74,89-127,137-139,155-160
+  s_c7470711f4ad55::t_3deb0143a11192 5,47,69,75-76,130-134,136,150-151,154,169
+  s_c7470711f4ad55::t_9b4848a788978b 77-88,128-129
+packages/sdk/src/index.ts
+  s_c7470711f4ad55::t_d65327ef587903 21,36,40
+  s_c7470711f4ad55::t_21b17698ea1a02 69
+packages/sdk/tools/plugin-boundary.mjs
+  s_c7470711f4ad55::t_a9887a296317fc 22-27
+  s_c7470711f4ad55::t_5dcfa0b137be63 39-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aff8fdaa510d69ad25278554d8a5901e53b294d3",
+  "prompts": {},
+  "sessions": {
+    "s_c7470711f4ad55": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-1f45-7500-b6a5-f24919e0c3a6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
