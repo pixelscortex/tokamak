@@ -174,11 +174,19 @@ async function lostServer() {
   });
   void running.catch(() => {});
   const turns = h.watch(desk, ai.turns.list, { threadId });
-  await turns.until("running turn", (list) => list[0]?.state === "running");
+  const [turn] = await turns.until("running turn", (list) => list[0]?.state === "running");
   const pids = await within(async () =>
     JSON.parse(await readFile(join(folder, "process-tree.json"), "utf8")),
   );
   assert.equal(pids.length, 3);
+  // Let the agent's first write land before testing heartbeat loss. A failed
+  // reply write stops the agent independently of the heartbeat deadline.
+  await h
+    .watch(desk, chat.messages.list, { threadId })
+    .until(
+      "partial reply saved",
+      (list) => replyOf(turn)(list)?.parts[0]?.text === "Partial reply from a stuck agent.",
+    );
   await h.halt(address);
   const cutOff = Date.now();
   await Bun.sleep(SILENCE_MS - BEAT_MS);
