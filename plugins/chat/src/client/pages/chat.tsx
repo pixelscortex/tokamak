@@ -130,7 +130,8 @@ function NewThread(props: { client: TokamakClient }): JSX.Element {
   return (
     <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 overflow-y-auto p-12">
       <Empty folders={folders()} folder={newFolder()} onFolder={pickFolder} />
-      <div class="flex w-full max-w-read flex-col gap-2">
+      {/* The same column as an open thread's composer, so it does not change width on the first Send. */}
+      <div class="flex w-full max-w-thread flex-col gap-2">
         <ErrorLine />
         <Composer
           threadId={undefined}
