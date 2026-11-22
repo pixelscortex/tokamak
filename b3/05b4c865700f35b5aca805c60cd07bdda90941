@@ -1,0 +1,47 @@
+.oxlintrc.json
+  s_c81ddbe6819468::t_890e4894c9532a 53-54
+app/tests/fixtures/integration/src/client/api.tsx
+  s_c81ddbe6819468::t_53bd44f8447dbc 28-36,102
+app/tests/fixtures/other-draft/src/client/api.tsx
+  s_c81ddbe6819468::t_2273da2e2fea6e 18
+package.json
+  s_c81ddbe6819468::t_9b29fcfb85a61a 41
+packages/build/tests/fixtures/window-plugin/src/main.tsx
+  s_c81ddbe6819468::t_0faffc6ab97bbf 8,15,23
+packages/sdk/tests/web/component-wrapper-lifecycle.test.tsx
+  s_c81ddbe6819468::t_81030158ecc641 31-33,89
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_c81ddbe6819468::t_1d5bd5efcd2df0 13
+packages/ui/lint/fixtures/class-expressions.tsx
+  s_c81ddbe6819468::t_7774f7173fa3d5 1-14
+packages/ui/lint/fixtures/fixed-control-sizes.tsx
+  s_c81ddbe6819468::t_c82e65dfb14c1a 5,8,11-12
+packages/ui/lint/fixtures/text-style-in-button.tsx
+  s_c81ddbe6819468::t_eab5295d16190d 23-33
+packages/ui/lint/oxlint.json
+  s_c81ddbe6819468::t_eab623394f3d74 48-57
+packages/ui/lint/plugin.js
+  s_c81ddbe6819468::t_ea8cfbfa18bc7c 37-43,45-51,202-296,298-301,352-361,365-367,378-380,386
+packages/ui/tests/lint.test.ts
+  s_c81ddbe6819468::t_8d776416e14d42 7-11,14-15,34-37,43,51-66
+plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
+  s_c81ddbe6819468::t_52fc67c7b8ae17 48-52,54
+wiki/content/docs/design/index.mdx
+  s_c81ddbe6819468::t_7340b83a479a12 361-363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b305b4c865700f35b5aca805c60cd07bdda90941",
+  "prompts": {},
+  "sessions": {
+    "s_c81ddbe6819468": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203cd-c270-7943-8517-6f76d8e6093c",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+    }
+  }
+}
