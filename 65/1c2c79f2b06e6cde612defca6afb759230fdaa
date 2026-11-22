@@ -1,0 +1,23 @@
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_5017df894b25cd::t_2e95945947a2f4 1-12,14-31,35-173
+  s_5017df894b25cd::t_da485a0ee5c30a 13,32-34
+packages/server/tests/code-snapshots-driver.mjs
+  s_5017df894b25cd::t_2e95945947a2f4 17,34-43
+  s_5017df894b25cd::t_fea63fed06c049 184,186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "651c2c79f2b06e6cde612defca6afb759230fdaa",
+  "prompts": {},
+  "sessions": {
+    "s_5017df894b25cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20148-60e7-76e0-952f-eb902bf2d771",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
