@@ -1,0 +1,60 @@
+plugins/chat/src/client/ui/composer.tsx
+  s_416ef60618c0ac::t_4e1d2b65596dd3 1-66
+plugins/chat/src/client/lib/icons.ts
+  s_416ef60618c0ac::t_b7ef3e6e5d447c 1,8-11,13,15-20
+plugins/chat/src/server/threads/threads.ts
+  s_416ef60618c0ac::t_db040515024a0d 11-76
+plugins/chat/src/client/lib/folders.ts
+  s_416ef60618c0ac::t_344adb04d49950 1-13
+plugins/chat/src/client/lib/state.ts
+  s_416ef60618c0ac::t_8acad82f7e5dd5 1-31
+plugins/chat/src/client/ui/empty.tsx
+  s_416ef60618c0ac::t_0d9b1722e722cc 1-24,26-54,59-65,67-121,124-128,132-143
+  s_416ef60618c0ac::t_a6db4b3a49a9ba 25
+  s_416ef60618c0ac::t_1d21993bd5163d 55-58,130
+  s_416ef60618c0ac::t_f64b716f6dc22e 66,122-123,129,131
+plugins/chat/src/client/lib/api.ts
+  s_416ef60618c0ac::t_344adb04d49950 1,4,6-10,13-14
+plugins/chat/src/client/ui/thread-header.tsx
+  s_416ef60618c0ac::t_6a1a212e3506f9 60-66,103-127
+  s_416ef60618c0ac::t_1d21993bd5163d 141-142,146-147
+  s_416ef60618c0ac::t_b4ab5e9eecf9eb 1-39,41-56,58,67-69,128-140,143-145,148-156
+  s_416ef60618c0ac::t_dcdb07aac8e29b 57,59,70-102
+  s_416ef60618c0ac::t_a6db4b3a49a9ba 40
+plugins/chat/src/server/messages/messages.ts
+  s_416ef60618c0ac::t_db040515024a0d 37-38
+plugins/chat/src/client/ui/thread-list.tsx
+  s_416ef60618c0ac::t_b4ab5e9eecf9eb 1-64
+plugins/chat/src/client/_generated/components.d.ts
+  s_416ef60618c0ac::t_6a1a212e3506f9 1-39
+plugins/chat/src/client/api.ts
+  s_416ef60618c0ac::t_33105f40cddda9 1-11
+plugins/chat/src/client/pages/chat.tsx
+  s_416ef60618c0ac::t_33105f40cddda9 1-74,79-234
+  s_416ef60618c0ac::t_1d21993bd5163d 75-78
+plugins/chat/src/client/ui/message.tsx
+  s_416ef60618c0ac::t_4e1d2b65596dd3 1-34,36-44
+  s_416ef60618c0ac::t_1d21993bd5163d 35
+plugins/chat/src/client/lib/own-folder.ts
+  s_416ef60618c0ac::t_33105f40cddda9 1-11
+plugins/chat/src/client/lib/time.ts
+  s_416ef60618c0ac::t_344adb04d49950 1-25
+plugins/chat/src/server/schema.ts
+  s_416ef60618c0ac::t_c2f62065086a90 9,12-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e646a64fc28470ab6f3fa7f5233947d489edc6ea",
+  "prompts": {},
+  "sessions": {
+    "s_416ef60618c0ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a23bd7be-0bbf-42e7-99fd-e89dbc063cfd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
