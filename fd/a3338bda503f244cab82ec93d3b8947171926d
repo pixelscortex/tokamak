@@ -1,0 +1,21 @@
+e2e/paper-html.ts
+  s_6a0ecf07ed0118::t_ff2ac4bd4807d0 133-135,166-167,180-188
+e2e/browser/screen-tree.ts
+  s_6a0ecf07ed0118::t_e65eff57466f35 65-67,82-96,129-130,137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fda3338bda503f244cab82ec93d3b8947171926d",
+  "prompts": {},
+  "sessions": {
+    "s_6a0ecf07ed0118": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0d4e556-5f25-465f-ae93-1e3d6ee74690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
