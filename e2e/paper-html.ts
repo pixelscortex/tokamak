@@ -109,7 +109,8 @@ function look(style: Readonly<Record<string, string>>): string[] {
   add("box-shadow", style["box-shadow"]);
   add("opacity", style.opacity);
   add("filter", style.filter);
-  if (style.overflow === "hidden" || style.overflow === "clip") out.push("overflow:hidden");
+  // A scroller clips like a hidden overflow; its scrollbar is not drawn.
+  if (/hidden|clip|auto|scroll/.test(style.overflow ?? "")) out.push("overflow:hidden");
   return out;
 }
 
@@ -189,6 +190,19 @@ function render(node: ScreenNode, origin: { x: number; y: number }, inherited: S
     return `<div layer-name="${attr(node.name ?? node.tag)}" style="${[at, size, ...look(node.style)].join(";")}">${text}</div>`;
   }
   const inner = children(node, node.box, node);
+  // A focus ring is an outline outside the box; draw it as its own ring before the element.
+  const ringWidth = Number.parseFloat(node.style["outline-width"] ?? "0");
+  if (node.style["outline-style"] && node.style["outline-style"] !== "none" && ringWidth > 0) {
+    const gap = Number.parseFloat(node.style["outline-offset"] ?? "0") + ringWidth;
+    const radius = Number.parseFloat(node.style["border-top-left-radius"] ?? "0");
+    const ring = [
+      `position:absolute;left:${px(node.box.x - origin.x - gap)};top:${px(node.box.y - origin.y - gap)}`,
+      `width:${px(node.box.w + gap * 2)};height:${px(node.box.h + gap * 2)}`,
+      `border:${ringWidth}px solid ${hex(node.style["outline-color"] ?? "")}`,
+      `border-radius:${px(radius ? radius + gap : 0)}`,
+    ].join(";");
+    return `<div layer-name="focus ring" style="${ring}"></div><div${node.name ? ` layer-name="${attr(node.name)}"` : ""} style="${[at, size, ...look(node.style)].join(";")}">${inner}</div>`;
+  }
   return `<div${node.name ? ` layer-name="${attr(node.name)}"` : ""} style="${[at, size, ...look(node.style)].join(";")}">${inner}</div>`;
 }
 

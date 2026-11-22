@@ -57,6 +57,10 @@ export async function screenTree(page: Page): Promise<ScreenNode> {
       "overflow",
       "text-overflow",
       "filter",
+      "outline-style",
+      "outline-width",
+      "outline-color",
+      "outline-offset",
     ];
     const hidden = (element: Element, style: CSSStyleDeclaration) => {
       if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0)
@@ -94,6 +98,28 @@ export async function screenTree(page: Page): Promise<ScreenNode> {
       space.setEnd(node, lead);
       return space.getBoundingClientRect().width > 0 ? ` ${collapsed.trim()}` : collapsed.trim();
     }
+    /**
+     * A text as drawn. A text cut with an ellipsis keeps the characters that
+     * fit before the "…", as the browser shows it.
+     */
+    function textNode(node: Text, element: Element, style: CSSStyleDeclaration, text: string) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const whole = box(range.getBoundingClientRect());
+      const clip = element.getBoundingClientRect();
+      if (style.textOverflow !== "ellipsis" || whole.x + whole.w <= clip.right + 0.5)
+        return { tag: "#text", box: whole, style: {}, text, children: [] };
+      const ellipsis = Number.parseFloat(style.fontSize) * 0.6;
+      let fits = 0;
+      for (let end = 1; end <= node.length; end++) {
+        range.setStart(node, 0);
+        range.setEnd(node, end);
+        if (range.getBoundingClientRect().right + ellipsis > clip.right) break;
+        fits = end;
+      }
+      const cut = `${(node.textContent ?? "").slice(0, fits).trimEnd()}…`;
+      return { tag: "#text", box: { ...whole, w: clip.right - whole.x }, style: {}, text: cut, children: [] };
+    }
     function walk(element: Element): unknown {
       const style = getComputedStyle(element);
       if (hidden(element, style)) return null;
@@ -130,13 +156,7 @@ export async function screenTree(page: Page): Promise<ScreenNode> {
           if (!raw.trim()) continue;
           const range = document.createRange();
           range.selectNodeContents(child);
-          children.push({
-            tag: "#text",
-            box: box(range.getBoundingClientRect()),
-            style: {},
-            text: shown(child as Text, raw, style.whiteSpace),
-            children: [],
-          });
+          children.push(textNode(child as Text, element, style, shown(child as Text, raw, style.whiteSpace)));
         } else if (child.nodeType === Node.ELEMENT_NODE) {
           const walked = walk(child as Element);
           if (walked) children.push(walked);
