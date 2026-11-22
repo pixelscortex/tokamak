@@ -1,0 +1,45 @@
+packages/server/tests/fixtures/internal/src/server/ops.ts
+  s_8f13dd997b35ed::t_ad749ac80c357b 45-46
+  s_8f13dd997b35ed::t_71b799b79aa107 21-28,34,36,39,47-50,56-66,68-69
+  s_8f13dd997b35ed::t_a246e8ea73fd2a 67
+packages/sdk/src/functions.ts
+  s_8f13dd997b35ed::t_5c86734545a191 76
+packages/server/PLUGINS.md
+  s_8f13dd997b35ed::t_5c86734545a191 135-140
+packages/engine/src/bridge.rs
+  s_8f13dd997b35ed::t_2ce79d9be9a1c5 22-23,39,56,60-79,318-322,354-360
+packages/server/src/host/database_operations.rs
+  s_8f13dd997b35ed::t_5dbed9dd6c402a 8,27,36,41
+packages/server/src/host.rs
+  s_8f13dd997b35ed::t_5dbed9dd6c402a 9,104,143-162,214-218,230,263,274
+  s_8f13dd997b35ed::t_1aa903b632bcdc 163-176,180-191,195-202,279,287
+  s_8f13dd997b35ed::t_9b268502b16955 177-179,192-194,288-290
+  s_8f13dd997b35ed::t_be38f449d030ab 130,310-315,319,323,333-334,339-343
+packages/server/src/plugin-skill.md
+  s_8f13dd997b35ed::t_5c86734545a191 21-23
+packages/sdk/README.md
+  s_8f13dd997b35ed::t_5c86734545a191 170-175
+packages/server/tests/sdk-transport-driver.mjs
+  s_8f13dd997b35ed::t_71b799b79aa107 333,349-364
+  s_8f13dd997b35ed::t_da33d156f3df6d 298-303
+packages/server/src/data/transaction/savepoints.rs
+  s_8f13dd997b35ed::t_2ce79d9be9a1c5 1-46
+packages/server/src/data/transaction.rs
+  s_8f13dd997b35ed::t_2ce79d9be9a1c5 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "480d78f85e31f70037d672736fec412004c600c7",
+  "prompts": {},
+  "sessions": {
+    "s_8f13dd997b35ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2032b-5319-7bd3-a063-7fdd9219e767",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
