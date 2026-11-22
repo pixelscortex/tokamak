@@ -1,0 +1,19 @@
+AGENTS.md
+  s_6a0ecf07ed0118::t_c97b02d6e8ea80 9-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f1760c456ace462e829a34f3ce94f505640e082",
+  "prompts": {},
+  "sessions": {
+    "s_6a0ecf07ed0118": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0d4e556-5f25-465f-ae93-1e3d6ee74690",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
