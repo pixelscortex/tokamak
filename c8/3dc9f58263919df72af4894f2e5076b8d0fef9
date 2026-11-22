@@ -1,0 +1,51 @@
+bun.lock
+  s_c81ddbe6819468::t_fd2ece6bf5b0de 223-225
+package.json
+  s_c81ddbe6819468::t_21925c17109bda 41-44
+packages/ui/lint/fixtures/fixed-control-sizes.tsx
+  s_c81ddbe6819468::t_f3047c453c9c05 1-21
+packages/ui/lint/fixtures/raw-button.tsx
+  s_c81ddbe6819468::t_cbf1bb9303a568 1-8
+packages/ui/lint/fixtures/text-style-in-button.tsx
+  s_c81ddbe6819468::t_4ad25a15e3ec5a 1-24
+packages/ui/lint/oxlint.json
+  s_4ccc9a2575a981::t_19d81dc5ac8e01 31,39,46-49
+packages/ui/lint/plugin.js
+  s_c81ddbe6819468::t_1e1acac5b7bf39 190-295,298-304
+patches/@shadcn%2Flint@0.2.5.patch
+  s_c81ddbe6819468::t_340b0cd3eb19dc 1-30
+.oxlintrc.json
+  s_c81ddbe6819468::t_76c8137da1eaee 52-58
+packages/ui/lint/fixtures/negative-margin-primitive.tsx
+  s_c81ddbe6819468::t_29b229f31cdbd7 1-8
+packages/ui/lint/fixtures/negative-margin.tsx
+  s_c81ddbe6819468::t_5f8ffe5f6347d0 1-6
+packages/ui/tests/lint.test.ts
+  s_c81ddbe6819468::t_be9af9096dd7f0 30-48,61-62
+wiki/content/docs/design/index.mdx
+  s_c81ddbe6819468::t_404214fea86f91 361-364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c83dc9f58263919df72af4894f2e5076b8d0fef9",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_c81ddbe6819468": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203cd-c270-7943-8517-6f76d8e6093c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
