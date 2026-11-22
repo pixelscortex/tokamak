@@ -1,0 +1,102 @@
+packages/sdk/component-parts.tsx
+  s_f4331c2d925ceb::t_f7a865f471a807 1-11,13-18,44-45,50-51,59-61,68-83,90-99
+  s_f4331c2d925ceb::t_e49f21f75bdd7b 124-130,132-133,135-137
+  s_f4331c2d925ceb::t_bfa6aed4ac2b37 131,134
+  s_f4331c2d925ceb::t_bb8b637973a803 49
+  s_f4331c2d925ceb::t_fda5dbffad1b9c 12,19-24,36,39-41,123
+  s_f4331c2d925ceb::t_09fe26a75ded28 25-29,31-35,42-43,47-48,52-58,62-66,84-89,100-122
+  s_f4331c2d925ceb::t_3b449d7b79147d 30,37-38,46,67
+packages/build/src/component-parts.ts
+  s_f4331c2d925ceb::t_3b449d7b79147d 14,75,176-177,180,183-186,191,200,202-203,209,212,218-228,233-251
+  s_f4331c2d925ceb::t_435348362738d4 193-194
+  s_f4331c2d925ceb::t_e249293ce060f3 1-13,15-30,37-60,64-74,76-91,95-98,111-113,119-142,144-154,157-175,178-179,181-182,210-211,213-217,229-232,252-266
+  s_f4331c2d925ceb::t_0f1df71895c40f 61-63
+  s_f4331c2d925ceb::t_f7a865f471a807 31-35,92-94,99-110,114-116,155-156,187-190,197-199,204-208
+  s_f4331c2d925ceb::t_83e2467b8bf495 36,117-118,143,192,195-196,201,267
+packages/sdk/tests/web/component-actions.test.tsx
+  s_f4331c2d925ceb::t_f9a853c1b0e742 262,265,296
+  s_f4331c2d925ceb::t_f7a865f471a807 20-28,31-37,43-44,46-49,61-65,89-131,137-141,145-147,183-194,197-204,217-234,238-245,248-250,267-279,282,284,287-294
+  s_f4331c2d925ceb::t_8c78c92748edd5 17,259-261,263-264,266,285-286,295,297-299
+  s_f4331c2d925ceb::t_6a11d90df5570f 2-4,18,45,50-51,58-60,66-75,256-257,300-301
+  s_f4331c2d925ceb::t_e49f21f75bdd7b 1,5-16,19,29-30,38-42,52-57,76-88,132-136,142-144,148-182,195-196,205-216,235-237,246-247,251-255,258
+  s_f4331c2d925ceb::t_f9e93c5c6832a0 280-281,283
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_f4331c2d925ceb::t_8c78c92748edd5 12,14,16-18
+  s_f4331c2d925ceb::t_6a11d90df5570f 1-7
+  s_f4331c2d925ceb::t_435348362738d4 13,15
+  s_f4331c2d925ceb::t_e49f21f75bdd7b 8-11
+packages/sdk/tests/web/fixtures/parts/owner/package.json
+  s_f4331c2d925ceb::t_f7a865f471a807 1-5
+packages/build/src/artifact-bundle.ts
+  s_f4331c2d925ceb::t_fda5dbffad1b9c 43
+packages/sdk/tools/plugin-boundary.mjs
+  s_f4331c2d925ceb::t_e249293ce060f3 207-208
+packages/build/tests/components.test.mjs
+  s_f4331c2d925ceb::t_e8e45ee69bf203 29,44,47-54,59-65
+  s_f4331c2d925ceb::t_f7a865f471a807 95-97
+  s_f4331c2d925ceb::t_451e2858d8b877 1-3,5,7-10,18-20,34-37,39-43,45,55-58,66,124
+  s_f4331c2d925ceb::t_813af65a52267f 4,6,11-17,21-28,30-33,38,46,67-94,98-123
+packages/sdk/src/contributions.ts
+  s_f4331c2d925ceb::t_09fe26a75ded28 5
+packages/build/README.md
+  s_f4331c2d925ceb::t_f7a865f471a807 109-153
+packages/sdk/client.tsx
+  s_f4331c2d925ceb::t_3b449d7b79147d 24,182,213-229
+  s_f4331c2d925ceb::t_09fe26a75ded28 20,41,102,104,106,112,119-125,132-133,139-144,149,151,154,161,164,172-176,185-187,194-201,205-211,230-239,241-245,249-251
+  s_f4331c2d925ceb::t_bb8b637973a803 19
+  s_f4331c2d925ceb::t_009bc85d2381d4 18,21-23,25-40,62-65,69,75,78-93
+  s_f4331c2d925ceb::t_f7a865f471a807 70-73,177-181,183-184,202-204,240,246-248
+  s_f4331c2d925ceb::t_fda5dbffad1b9c 351-352
+  s_f4331c2d925ceb::t_8de8c10e8aad2a 61,212
+packages/sdk/vitest.config.ts
+  s_f4331c2d925ceb::t_e49f21f75bdd7b 4,18
+  s_f4331c2d925ceb::t_87fcf9d6754643 9,15
+  s_f4331c2d925ceb::t_f7a865f471a807 10-13
+  s_f4331c2d925ceb::t_6a11d90df5570f 20-22
+  s_f4331c2d925ceb::t_8ad8dfadf8f0e2 14
+  s_f4331c2d925ceb::t_1ac02079286056 19
+packages/sdk/tsconfig.solid.json
+  s_f4331c2d925ceb::t_e49f21f75bdd7b 4-5
+packages/build/src/contributions.ts
+  s_f4331c2d925ceb::t_f7a865f471a807 64-67,347-353,371-372
+  s_f4331c2d925ceb::t_fda5dbffad1b9c 22,76-78,86-93,340-343,346,354-357,361,363-364,368,370,373-381
+  s_f4331c2d925ceb::t_0f1df71895c40f 2,7,48-58,68,80-85,344,358-360,362,365-367,369,382,385-411
+  s_f4331c2d925ceb::t_bb8448a3d6e11c 59-63,69,79,345,383-384,412-413
+packages/build/src/client-surface.ts
+  s_f4331c2d925ceb::t_e249293ce060f3 2,15,20-25,54,67,87
+packages/sdk/tests/web/fixtures/parts/owner/plugin.ts
+  s_f4331c2d925ceb::t_87fcf9d6754643 1-2
+packages/sdk/component-actions.ts
+  s_f4331c2d925ceb::t_fda5dbffad1b9c 45
+  s_f4331c2d925ceb::t_009bc85d2381d4 1-44,46-53,57-95,101-136
+  s_f4331c2d925ceb::t_f7a865f471a807 54-56,96-100
+  s_f4331c2d925ceb::t_09fe26a75ded28 137-140
+packages/sdk/tests/web/fixtures/parts/owner/tsconfig.json
+  s_f4331c2d925ceb::t_87fcf9d6754643 1-2,6-7
+  s_f4331c2d925ceb::t_6a11d90df5570f 3-5
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_f4331c2d925ceb::t_f9a853c1b0e742 1,33-34,39
+  s_f4331c2d925ceb::t_52843845c16a74 11
+  s_f4331c2d925ceb::t_e49f21f75bdd7b 21-24,29,40-41
+  s_f4331c2d925ceb::t_87fcf9d6754643 3-10,12-16,20
+  s_f4331c2d925ceb::t_f7a865f471a807 17-19,25-28
+  s_f4331c2d925ceb::t_8c78c92748edd5 2,30-32,35-38
+packages/build/tests/run.sh
+  s_f4331c2d925ceb::t_75b50877dc3ba2 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0ca6227a397d61ca4b236614b34d56918d93ba6",
+  "prompts": {},
+  "sessions": {
+    "s_f4331c2d925ceb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-28ed-7d33-aee7-6ad1bb1bd4d1",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
