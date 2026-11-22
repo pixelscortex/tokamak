@@ -1,0 +1,99 @@
+GLOSSARY.md
+  s_eed82efa8a9122::t_d51129530d0bf3 64
+app/src/shell/members.tsx
+  s_eed82efa8a9122::t_f832ec14588546 219
+e2e/browser/sign-in.spec.ts
+  s_eed82efa8a9122::t_1384de44268427 192
+e2e/fake-agent/agent-turn.mjs
+  s_eed82efa8a9122::t_7b2f629732e44b 53,65,72
+e2e/fake-agent/replays/codex/accept.jsonl
+  s_eed82efa8a9122::t_954a228c732e99 1-2,7-31
+e2e/fake-agent/replays/codex/acceptForSession.jsonl
+  s_eed82efa8a9122::t_3cf56208805ce4 1-2,7-24
+e2e/fake-agent/replays/codex/cancel.jsonl
+  s_eed82efa8a9122::t_c3d384d55e0342 1,6-18
+e2e/fake-agent/replays/codex/decline.jsonl
+  s_eed82efa8a9122::t_81e27c2d0a0868 1,6-22
+e2e/fake-agent/replays/codex/helper-approval.jsonl
+  s_eed82efa8a9122::t_f051a1a01528e8 1-2,7-14,16-41
+packages/engine/src/bridge.rs
+  s_eed82efa8a9122::t_005b3326e634bb 22-23,39,56,60-79,318-322,354-360
+packages/sdk/README.md
+  s_eed82efa8a9122::t_b834ddf58a2e65 170-175
+packages/sdk/src/functions.ts
+  s_eed82efa8a9122::t_5aa2cec7fc976e 76,86
+packages/server/PLUGINS.md
+  s_eed82efa8a9122::t_1fe10f9665e45a 135-140,197-199,219-224
+packages/server/src/data/transaction.rs
+  s_eed82efa8a9122::t_61050610774465 17
+packages/server/src/data/transaction/savepoints.rs
+  s_eed82efa8a9122::t_db6bf4a021e6f6 1-49
+packages/server/src/host.rs
+  s_eed82efa8a9122::t_7e30ac479d2571 6,10,105,131,144-205,217-221,233,266,277,282,290-293,316,320-329,331-333,338-342
+packages/server/src/host/database_operations.rs
+  s_eed82efa8a9122::t_bcce1112df1680 8,27,36,41
+packages/server/src/identity/devices.rs
+  s_eed82efa8a9122::t_f1c896ba9e0419 80-87,191,193-200,202-205,207-228,242-244,344-349
+packages/server/src/plugin-skill.md
+  s_eed82efa8a9122::t_fc75e9164ea623 21-23
+packages/server/src/protocol.rs
+  s_eed82efa8a9122::t_0928b628379eac 7-15
+packages/server/src/service/command_loop.rs
+  s_eed82efa8a9122::t_56199204841ff1 115,124-128
+packages/server/src/service/plugin_control.rs
+  s_eed82efa8a9122::t_824fd580e7f3b2 160,167-168
+packages/server/src/service/sign_in.rs
+  s_eed82efa8a9122::t_a0cc6d70dd218b 3,234,236-238,240-245,321,358-366
+packages/server/src/websocket/members.rs
+  s_eed82efa8a9122::t_f430890d1cc1d0 129-134
+packages/server/tests/ai-liveness-driver.mjs
+  s_eed82efa8a9122::t_3c22a17158a22f 23-24,177,182-189,194
+packages/server/tests/auth-driver.mjs
+  s_eed82efa8a9122::t_a3d022b1aad615 140-153,239,241-246,254-256,259-260,264,267,294,316,326,330,389-420,424-425,466,472,485
+packages/server/tests/fixtures/internal/src/server/ops.ts
+  s_eed82efa8a9122::t_8c5529e11ca470 21-28,33-40,42,44,47,53-58,64-77
+packages/server/tests/sdk-transport-driver.mjs
+  s_eed82efa8a9122::t_5413e9f1ca0cfd 29,32,298-303,333,336,350-372
+plugins/ai/src/client/lib/choices.ts
+  s_eed82efa8a9122::t_0552d06bc204ea 1
+plugins/ai/src/client/lib/turn-controls.ts
+  s_eed82efa8a9122::t_22019a14321c70 2-3,7,16-30
+plugins/ai/src/client/lib/turn.ts
+  s_eed82efa8a9122::t_06d2134e685c6a 2
+plugins/ai/src/client/ui/agent-row.tsx
+  s_eed82efa8a9122::t_7164f78c5a8283 24,96-102
+plugins/ai/src/client/ui/permission-card.tsx
+  s_eed82efa8a9122::t_4356a82bb89dd7 16-18
+plugins/ai/src/server/_functions.ts
+  s_eed82efa8a9122::t_d7c0ed0b33c35c 1
+plugins/ai/src/server/choices.ts
+  s_eed82efa8a9122::t_98b3213e975fcc 3,50-52
+plugins/ai/tests/agent-row.test.tsx
+  s_eed82efa8a9122::t_5149ac74dcdfea 131
+plugins/chat/src/server/_functions.ts
+  s_eed82efa8a9122::t_a985b08ecbc2f0 1-7,15-19
+plugins/chat/src/server/folders/folders.ts
+  s_eed82efa8a9122::t_e38080e2f84451 2,7,23
+plugins/chat/src/server/threads/threads.ts
+  s_eed82efa8a9122::t_75d5e20aa66ad6 1,5,28,88,169
+plugins/claude/tests/turns.mjs
+  s_eed82efa8a9122::t_3ac48c8ebc5d47 54,56,58,60,62,67,229,235,259,273-288,300-304,309-310,363-365,372-373,377-379,385-386,392-394,396,410,425,441,443,447,456,473
+plugins/codex/tests/e2e.mjs
+  s_eed82efa8a9122::t_4872551d3ba052 3,90,120,157,174,191,202,204-205,233-236,245-261,264,267-272,275-276,282-288,290-292,295-300,302-322,331-334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56c200ed5f709367381193631cd02c96f96ef4f2",
+  "prompts": {},
+  "sessions": {
+    "s_eed82efa8a9122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e344ae2c-2a7a-44a3-98c5-88acd00349ae",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
