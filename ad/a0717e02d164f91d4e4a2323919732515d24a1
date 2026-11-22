@@ -1,0 +1,80 @@
+e2e/fake-agent/replays/ask-once.jsonl
+  s_b78d166f675f88::t_92ffe9d8847d3e 1-7
+packages/server/tests/ai-turns-driver.mjs
+  s_b78d166f675f88::t_92ffe9d8847d3e 25,29,129-279,507-539
+plugins/ai/src/client/ui/agent-row.tsx
+  s_b78d166f675f88::t_9abcdf710f9c7a 38-39
+  s_b78d166f675f88::t_4fb7aa50fa1a7a 22
+  s_b78d166f675f88::t_92ffe9d8847d3e 44
+plugins/ai/src/client/ui/permission-card.tsx
+  s_b78d166f675f88::t_92ffe9d8847d3e 1-127
+e2e/fake-agent/README.md
+  s_b78d166f675f88::t_92ffe9d8847d3e 9-12,35-36
+  s_b78d166f675f88::t_e1e549f7351819 19-21
+plugins/ai/README.md
+  s_b78d166f675f88::t_92ffe9d8847d3e 25-32,78-83,86-88,101-102,128-140
+  s_b78d166f675f88::t_e1e549f7351819 84-85
+plugins/ai/src/client/lib/questions.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 1-70
+GLOSSARY.md
+  s_b78d166f675f88::t_92ffe9d8847d3e 66-73
+app/src/plugins/views.tsx
+  s_b78d166f675f88::t_92ffe9d8847d3e 241-242,264,267,269,273-274
+plugins/ai/src/server/turns.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 8,291-346,397-398,409,464-466
+  s_b78d166f675f88::t_f341e6851b5ff5 463
+  s_b78d166f675f88::t_ba359d58f1ef17 467
+plugins/ai/src/server/_functions.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 7-8,13
+plugins/ai/src/client/api.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 5,11,14,22-25
+plugins/ai/src/contracts.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 54-72,76,107-113
+  s_b78d166f675f88::t_3ff919c7fbedcb 53
+e2e/browser/ai.spec.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 199-286
+plugins/ai/src/server/questions.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 1-137
+e2e/fake-agent/agents/factory.ts
+  s_b78d166f675f88::t_e4eb38a62a7f98 26,78-80
+  s_b78d166f675f88::t_e3efde8901e63b 81
+plugins/ai/src/server/run.ts
+  s_b78d166f675f88::t_aa818e5aefa495 68-69,74
+  s_b78d166f675f88::t_92ffe9d8847d3e 10-11,70-73,75-77,97,109,156-183
+packages/ui/src/menu.tsx
+  s_b78d166f675f88::t_7a23c212ee31f6 11-12,27-28
+e2e/fake-agent/replays/ask-session.jsonl
+  s_b78d166f675f88::t_92ffe9d8847d3e 1-15
+plugins/ai/src/server/_generated/api.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 10-11,20,32,34,44-45,54,62,64
+app/src/shell/shortcuts.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 40,45-48
+plugins/ai/src/client/lib/icons.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 5-7
+packages/sdk/client.tsx
+  s_b78d166f675f88::t_92ffe9d8847d3e 351-356
+e2e/fake-agent/program.mjs
+  s_b78d166f675f88::t_92ffe9d8847d3e 24-28,161-167,170-178,184
+plugins/ai/src/server/schema.ts
+  s_b78d166f675f88::t_92ffe9d8847d3e 9-19,85-91
+e2e/fake-agent/harness.mjs
+  s_b78d166f675f88::t_92ffe9d8847d3e 200-201,243-262
+e2e/browser/ai-thread.spec.ts
+  s_b78d166f675f88::t_6aec73f421fa9c 157-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ada0717e02d164f91d4e4a2323919732515d24a1",
+  "prompts": {},
+  "sessions": {
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
