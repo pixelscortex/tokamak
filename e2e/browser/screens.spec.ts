@@ -34,6 +34,7 @@ async function send(page: Page, text: string) {
   await composer(page).fill(text);
   await composer(page).press("Enter");
   await expect(conversation(page).getByText(text, { exact: true })).toBeVisible();
+  await expect(composer(page)).toHaveValue("");
 }
 
 // Each screenshot also writes the drawn tree (screen-tree.ts) for the Paper copy of the app.
@@ -77,6 +78,8 @@ test("chat alone and shell screens", async ({ browser }) => {
     await composer(page).fill("It fails since the token refresh change.");
     await composer(page).press("Enter");
     await expect(conversation(page).getByText("It fails since the token refresh change.")).toBeVisible();
+    // The text stays in the composer until the message has arrived.
+    await expect(composer(page)).toHaveValue("");
     await shot(page, "chat-open-thread");
     await page.getByRole("button", { name: "Thread actions" }).click();
     await shot(page, "chat-thread-menu");
