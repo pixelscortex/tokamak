@@ -30,6 +30,14 @@ export const list = query({
   handler: async (ctx) => (await ctx.runQuery(internal.ops.read, {})).map((row) => row.title),
 });
 
+export const watchEntries = query({
+  handler: async (ctx) => ({
+    titles: (await ctx.runQuery(internal.ops.read, {})).map((row) => row.title),
+    // Make a rerun observable even when it reads the same rows.
+    revision: [Math.random(), Math.random()],
+  }),
+});
+
 export const add = action({
   args: { title: v.string(), decline: v.optional(v.boolean()) },
   handler: async (ctx, args) => {

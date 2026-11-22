@@ -83,6 +83,7 @@ type NarrowFailure<T> = [FailureOf<T>] extends [never] ? T & Failure<string, unk
 
 /** Narrow a result to a failure, including when success is a primitive or null. */
 export function isFailure<T>(value: T): value is NarrowFailure<T> {
+  // Keep this wire shape in sync with the server's failure_kind guard.
   return (
     value !== null &&
     typeof value === "object" &&

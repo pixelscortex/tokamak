@@ -1,5 +1,8 @@
 use super::*;
 
+// This token only holds bookkeeping for a savepoint owned by the transaction.
+// If a scoped call is dropped before it finishes, its ModuleCall error handler
+// poisons the invocation and the owner rolls back the entire transaction.
 #[must_use]
 pub(crate) struct Savepoint {
     written: BTreeSet<Table>,

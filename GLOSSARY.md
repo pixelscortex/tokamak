@@ -61,7 +61,7 @@ The role that controls the workspace and can change other members' roles.
 _Avoid_: Superadmin, root, operator.
 
 **Admin role**:
-The role that can manage ordinary members and sign out their devices.
+The role that can manage ordinary members and sign out both their devices and the admin's own devices.
 _Avoid_: Owner, moderator.
 
 **Member role**:

@@ -3,6 +3,7 @@
 //! embedded engine's large debug futures off the QuickJS worker's native stack.
 
 use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
+use crate::protocol::failure_kind;
 use engine::{Bundle, Determinism, ModuleCall, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
 use std::sync::Arc;
@@ -146,11 +147,13 @@ struct CallContext {
 // A child holds its parent's gate, so siblings and parent DB operations cannot
 // enter its savepoint. The child has its own gate for calls made inside it.
 #[derive(Clone, Default)]
-struct CallScope(Arc<Mutex<bool>>);
+struct CallScope {
+    closed: Arc<Mutex<bool>>,
+}
 
 impl CallScope {
     async fn enter(self) -> Result<OwnedMutexGuard<bool>, String> {
-        let closed = self.0.lock_owned().await;
+        let closed = self.closed.lock_owned().await;
         if *closed {
             return Err("plugin call has already returned".into());
         }
@@ -158,7 +161,7 @@ impl CallScope {
     }
 
     async fn close(self) {
-        *self.0.lock().await = true;
+        *self.closed.lock().await = true;
     }
 
     fn nest(
@@ -192,7 +195,7 @@ impl CallScope {
                     let tx = shared
                         .as_mut()
                         .ok_or("invocation transaction is finished")?;
-                    Box::pin(tx.finish_savepoint(mark, is_failure(&value)))
+                    Box::pin(tx.finish_savepoint(mark, failure_kind(&value).is_some()))
                         .await
                         .map_err(|e| e.to_string())?;
                 }
@@ -307,12 +310,6 @@ mod database_queries;
 
 pub(crate) mod worker;
 
-fn is_failure(value: &Json) -> bool {
-    value.get("failed") == Some(&Json::Bool(true))
-        && value.get("kind").is_some_and(Json::is_string)
-        && value.get("data").is_some()
-}
-
 async fn finish_transaction(
     tx: Transaction,
     result: Result<Json, String>,
@@ -320,16 +317,18 @@ async fn finish_transaction(
     observed: &mut Observations,
 ) -> Result<Json, String> {
     match result {
-        Ok(value) if !mutation || !is_failure(&value) => match Box::pin(tx.commit()).await {
-            Ok(()) => Ok(value),
-            Err(error) => {
-                observed.conflict |= error.is_retryable_conflict();
+        Ok(value) if !mutation || failure_kind(&value).is_none() => {
+            match Box::pin(tx.commit()).await {
+                Ok(()) => Ok(value),
+                Err(error) => {
+                    observed.conflict |= error.is_retryable_conflict();
 
-                Err(format!(
-                    "transaction commit failed (outcome may be unknown): {error}"
-                ))
+                    Err(format!(
+                        "transaction commit failed (outcome may be unknown): {error}"
+                    ))
+                }
             }
-        },
+        }
         result => match Box::pin(tx.rollback()).await {
             Ok(()) => result,
             Err(rollback) => {

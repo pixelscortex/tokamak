@@ -344,7 +344,7 @@ fn active_device_mut<'a>(
 fn can_manage(actor: &User, target: &User) -> bool {
     match actor.role {
         Role::Owner => true,
-        Role::Admin => target.role == Role::Member,
+        Role::Admin => target.role == Role::Member || actor.id == target.id,
         Role::Member => actor.id == target.id,
     }
 }

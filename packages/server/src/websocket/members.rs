@@ -126,18 +126,18 @@ async fn reset(
             return failure(StatusCode::CONFLICT, "AccountNotLinked");
         };
         let _credentials = adapter.credentials.write().await;
+        // Signing in takes the same gate. Persist the sign-out before changing
+        // the password so a device-store failure leaves the reset retryable.
+        if let Err(error) = adapter.identities.revoke_member_devices(&id) {
+            eprintln!("Could not save device sign-out for password reset: {error}");
+            return unavailable();
+        }
         match adapter
             .server
             .reset_member_password(binding, input.password)
             .await
         {
-            Ok(()) => match adapter.identities.revoke_member_devices(&id) {
-                Ok(()) => StatusCode::NO_CONTENT.into_response(),
-                Err(error) => {
-                    eprintln!("Could not save device sign-out after password reset: {error}");
-                    unavailable()
-                }
-            },
+            Ok(()) => StatusCode::NO_CONTENT.into_response(),
             Err(error) => provider_failure(error),
         }
     })

@@ -26,10 +26,10 @@ const within = (promise, label) =>
     }),
   ]);
 
-function observation(client) {
+function observation(client, query = api.probe.list, args = { table: "items" }) {
   const events = [];
   const waiting = [];
-  const stop = client.subscribe(api.probe.list, { table: "items" }, (event) => {
+  const stop = client.subscribe(query, args, (event) => {
     events.push(event);
     waiting.shift()?.(event);
   });
@@ -333,6 +333,7 @@ export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "w
       "internal-test/ops:addAroundFailure",
       "internal-test/ops:addTogether",
       "internal-test/ops:list",
+      "internal-test/ops:watchEntries",
     ]);
     await assert.rejects(ownerTransport.query("internal-test/ops:read", {}), /unknown function/);
     await assert.rejects(
@@ -346,15 +347,22 @@ export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "w
     );
     assert.equal(privateSubscription.terminal, true);
     assert.match(privateSubscription.error.message, /registered query/);
+    const live = observation(client, api.ops.watchEntries, {});
+    assert.deepEqual((await live.next()).titles, ["CAT", "dog"]);
     assert.deepEqual(await client.mutation(api.ops.addAroundFailure, { recover: false }), {
       failed: true,
       kind: "Declined",
       data: { title: "nested discard" },
     });
+    // The server sends updates on this socket before it replies to the mutation.
+    assert.equal(live.events.length, 1, "rolled-back writes must not invalidate the query");
     assert.deepEqual(await client.query(api.ops.list, {}), ["CAT", "dog"], "propagated failure left rows");
     const kept = ["CAT", "dog", "before", "sibling", "after Declined"].sort();
     const recovered = await client.mutation(api.ops.addAroundFailure, { recover: true });
     assert.deepEqual(recovered.sort(), kept, "handled failure must hide the child writes before returning");
+    assert.equal(live.events.length, 2, "the committed writes must update the subscription");
+    assert.deepEqual((await live.next()).titles.sort(), kept);
+    live.stop();
     assert.deepEqual((await client.query(api.ops.list, {})).sort(), kept);
     assert.deepEqual(await client.action(api.ops.add, { title: "fox", decline: true }), {
       failed: true,

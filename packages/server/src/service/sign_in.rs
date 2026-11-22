@@ -1,5 +1,6 @@
 use super::*;
 use crate::identity::{AccountBinding, Identities, Role, User, register_caller};
+use crate::protocol::failure_kind;
 use engine::PendingCall;
 
 /// Outcomes safe for the HTTP adapter to expose without provider exception details.
@@ -230,15 +231,18 @@ impl Server {
             cleanup,
         } = wait.await.map_err(|_| SignInError::Unavailable)??;
         let result = pending.await.map_err(|_| SignInError::Unavailable)?;
-        if result["failed"] == true {
+        if let Some(kind) = failure_kind(&result) {
             // Failure data and unrestricted kinds can contain submitted fields.
-            let kind = result["kind"].as_str().filter(|kind| {
-                !kind.is_empty()
-                    && kind.len() <= 64
-                    && kind.bytes().all(|b| b.is_ascii_alphanumeric())
-            });
+            let safe_kind = !kind.is_empty()
+                && kind.len() <= 64
+                && kind.bytes().all(|b| b.is_ascii_alphanumeric());
             return Err(SignInError::Denied(
-                kind.unwrap_or("SignInFailed").to_owned(),
+                if safe_kind {
+                    kind
+                } else {
+                    "SignInFailed"
+                }
+                .to_owned(),
             ));
         }
         let account = result["accountId"]
@@ -314,7 +318,7 @@ impl Coordinator {
                 Pool::new(PoolConfig {
                     workers: 2,
                     queue_capacity: 2,
-                    limits: self.pool.limits().clone(),
+                    limits: sign_in_limits(self.pool.limits().clone()),
                 })
                 .map_err(|_| SignInError::Unavailable)?,
             ),
@@ -350,4 +354,13 @@ impl Coordinator {
             cleanup,
         })
     }
+}
+
+fn sign_in_limits(mut limits: engine::Limits) -> engine::Limits {
+    // Password hashing in unoptimized builds can exceed the normal call
+    // budget under load. Give only the debug sign-in lane more time.
+    if cfg!(debug_assertions) {
+        limits.call_timeout = limits.call_timeout.max(std::time::Duration::from_secs(5));
+    }
+    limits
 }

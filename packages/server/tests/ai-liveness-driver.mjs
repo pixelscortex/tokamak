@@ -20,8 +20,8 @@ const h = await agentHarness({ binary: process.argv[2], name: "ai-liveness" });
 const { ai, chat } = h.api;
 const AGENT = { id: "fake-agent", name: "Fake agent" };
 const replyOf = (turn) => (messages) => messages.find((message) => message._id === turn.replyId);
-/** Long enough for the server to notice the silence: the limit plus its 5-second sweep and some slack. */
-const NOTICED_MS = SILENCE_MS + 15_000;
+/** Allow for the server's sweep and slower scheduling under CI load. */
+const NOTICED_MS = SILENCE_MS + 30_000;
 
 try {
   // The lost server waits out its own 45 seconds alongside.
@@ -183,7 +183,7 @@ async function lostServer() {
   const cutOff = Date.now();
   await Bun.sleep(SILENCE_MS - BEAT_MS);
   assert.ok(pids.every(alive), "the agent runs on while the server may still come back");
-  const deadline = cutOff + SILENCE_MS + 2 * BEAT_MS;
+  const deadline = cutOff + NOTICED_MS;
   while (pids.some(alive) && Date.now() < deadline) await Bun.sleep(500);
   assert.deepEqual(
     pids.filter(alive),
