@@ -1,0 +1,19 @@
+e2e/browser/code.spec.ts
+  s_e1b186e9a407ce::t_57e82bd7d30a36 148-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "faa2465938d9ec21e374fde132dbec5647ea7636",
+  "prompts": {},
+  "sessions": {
+    "s_e1b186e9a407ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1d10f952-74f9-4ebd-88d0-a4ebae9e3575",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
