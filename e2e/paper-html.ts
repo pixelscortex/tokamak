@@ -174,7 +174,13 @@ function render(node: ScreenNode, origin: { x: number; y: number }, inherited: S
           `<path d="${path.d}" fill="${hex(node.style.color ?? "")}"${path.rule ? ` fill-rule="${path.rule}"` : ""}/>`,
       )
       .join("");
-    return `<svg layer-name="${attr(node.name ?? "icon")}" viewBox="${node.svg.viewBox}" style="${at};${size}">${paths}</svg>`;
+    // A spinning icon was caught mid-turn: its box is the rotated square's. Draw it upright in its slot.
+    const slot = origin as { x: number; y: number; w?: number; h?: number };
+    const spun = slot.w !== undefined && slot.h !== undefined && node.box.w > slot.w + 0.5;
+    const place = spun
+      ? `position:absolute;left:0px;top:0px;width:${px(slot.w!)};height:${px(slot.h!)}`
+      : `${at};${size}`;
+    return `<svg layer-name="${attr(node.name ?? "icon")}" viewBox="${node.svg.viewBox}" style="${place}">${paths}</svg>`;
   }
   if (node.tag === "textarea" || node.tag === "input") {
     const padLeft = Number.parseFloat(node.style["padding-left"] ?? "0");
@@ -189,7 +195,10 @@ function render(node: ScreenNode, origin: { x: number; y: number }, inherited: S
     const text = `<div style="position:absolute;left:${px(padLeft)};top:${px(top)};white-space:pre;${type(node.style).join(";")}">${escape(node.text ?? "")}</div>`;
     return `<div layer-name="${attr(node.name ?? node.tag)}" style="${[at, size, ...look(node.style)].join(";")}">${text}</div>`;
   }
+  const clipping = /hidden|clip|auto|scroll/.test(node.style.overflow ?? "");
+  if (clipping) clips.push(intersect(clips.at(-1), node.box));
   const inner = children(node, node.box, node);
+  if (clipping) clips.pop();
   // A focus ring is an outline outside the box; draw it as its own ring before the element.
   const ringWidth = Number.parseFloat(node.style["outline-width"] ?? "0");
   if (node.style["outline-style"] && node.style["outline-style"] !== "none" && ringWidth > 0) {
@@ -218,9 +227,28 @@ const isTestOnly = (node: ScreenNode) =>
   dropped.some((prefix) => node.name?.startsWith(prefix)) ||
   node.children.some((child) => child.text === "Replayed by the fake agent");
 
+/** The boxes that clip what is drawn inside them; what lies wholly outside the innermost is left out. */
+const clips: ScreenNode["box"][] = [];
+function intersect(outer: ScreenNode["box"] | undefined, box: ScreenNode["box"]): ScreenNode["box"] {
+  if (!outer) return box;
+  const x = Math.max(outer.x, box.x);
+  const y = Math.max(outer.y, box.y);
+  const right = Math.min(outer.x + outer.w, box.x + box.w);
+  const bottom = Math.min(outer.y + outer.h, box.y + box.h);
+  return { x, y, w: Math.max(0, right - x), h: Math.max(0, bottom - y) };
+}
+function outside(box: ScreenNode["box"]): boolean {
+  const clip = clips.at(-1);
+  // A box of no size (display: contents) still holds what it lays out.
+  if (!clip || (box.w === 0 && box.h === 0)) return false;
+  return (
+    box.x >= clip.x + clip.w || box.y >= clip.y + clip.h || box.x + box.w <= clip.x || box.y + box.h <= clip.y
+  );
+}
+
 function children(node: ScreenNode, origin: { x: number; y: number }, styled: ScreenNode): string {
   return node.children
-    .filter((child) => !isTestOnly(child))
+    .filter((child) => !isTestOnly(child) && !outside(child.box))
     .map((child) =>
       child.tag !== "#text" && invisible(child)
         ? children(child, origin, child)
@@ -242,7 +270,8 @@ function find(node: ScreenNode, names: string[]): ScreenNode | undefined {
   return undefined;
 }
 
-const root = find(tree, path ? path.split("/") : []);
+// A whole name first (a branch chip's name holds slashes), then a path of names.
+const root = (path && find(tree, [path])) || find(tree, path ? path.split("/") : []);
 if (!root) throw new Error(`no layer at ${path}`);
 if (flag === "--children") {
   const blocks = root.children.map((child) => render(child, root.box, child.tag === "#text" ? root : child));
