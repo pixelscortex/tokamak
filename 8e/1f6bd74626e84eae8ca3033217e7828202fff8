@@ -1,0 +1,57 @@
+spikes/quickjs-actions/.gitignore
+  s_a255f31f6f19aa::t_6f807fbf19bec9 1-3
+spikes/quickjs-actions/Cargo.lock
+  s_a255f31f6f19aa::t_6807895dca4b47 1-2828
+spikes/quickjs-actions/Cargo.toml
+  s_a255f31f6f19aa::t_9ac2721a130af6 1-38
+spikes/quickjs-actions/MEASUREMENTS.txt
+  s_a255f31f6f19aa::t_1573c3077a33c7 1-18
+spikes/quickjs-actions/REPORT.md
+  s_a255f31f6f19aa::t_4b407ae423a043 1-123
+spikes/quickjs-actions/adapter.ts
+  s_a255f31f6f19aa::t_6c013625cc11af 1-51
+spikes/quickjs-actions/bench.py
+  s_a255f31f6f19aa::t_81c4a6f19803d2 1-337
+spikes/quickjs-actions/fetch_check.py
+  s_a255f31f6f19aa::t_fe78d51562aa6a 1-43
+spikes/quickjs-actions/prepare.mjs
+  s_a255f31f6f19aa::t_e24df9fa021024 1-33
+spikes/quickjs-actions/src/async-scope.js
+  s_a255f31f6f19aa::t_348aee39666f6a 1-42
+spikes/quickjs-actions/src/checks.rs
+  s_a255f31f6f19aa::t_7a03991e036e68 1-322
+spikes/quickjs-actions/src/fetch-check.js
+  s_a255f31f6f19aa::t_5026233fc411d7 1-13
+spikes/quickjs-actions/src/hooks-check.js
+  s_a255f31f6f19aa::t_b768ccab749453 1-10
+spikes/quickjs-actions/src/main.rs
+  s_a255f31f6f19aa::t_bff2a2b1b8781e 1-48
+spikes/quickjs-actions/src/native-check.js
+  s_a255f31f6f19aa::t_160ff2358e2907 1-16
+spikes/quickjs-actions/src/platform.js
+  s_a255f31f6f19aa::t_847eb6c6cefa08 1-35
+spikes/quickjs-actions/src/program-check.js
+  s_a255f31f6f19aa::t_496ce91811efc8 1-36
+spikes/quickjs-actions/src/program.rs
+  s_a255f31f6f19aa::t_3e44dfaf5b4f47 1-287
+spikes/quickjs-actions/src/protocol.rs
+  s_a255f31f6f19aa::t_ac210eb85b77e9 1-228
+spikes/quickjs-actions/src/vm.rs
+  s_a255f31f6f19aa::t_c2cfa72d0a15d0 1-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e1f6bd74626e84eae8ca3033217e7828202fff8",
+  "prompts": {},
+  "sessions": {
+    "s_a255f31f6f19aa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20475-410d-71d2-bac7-4dfafe51bb94",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
