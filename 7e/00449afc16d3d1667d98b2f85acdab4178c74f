@@ -1,0 +1,61 @@
+packages/server/src/plugins/catalog.rs
+  s_844ef8d40d75dc::t_572f0c44fb8c55 92
+  s_844ef8d40d75dc::t_c5ad53b3619d24 1,38,52,66,85,88-91,93-97,103-104
+packages/server/tests/plugins.rs
+  s_844ef8d40d75dc::t_30ebafef85e153 884-892,897-899,983
+  s_844ef8d40d75dc::t_b43cfcf40c00de 867-883,904,932-944,960-965,981
+  s_844ef8d40d75dc::t_a17343e48a9689 893-896,945-959,966-980
+  s_844ef8d40d75dc::t_dabad5121b80eb 982
+packages/server/src/service/mod.rs
+  s_844ef8d40d75dc::t_dc59ac2baf7780 134-138,143
+  s_844ef8d40d75dc::t_d8c9274c02dc89 133
+packages/server/src/service/delivery.rs
+  s_844ef8d40d75dc::t_dc59ac2baf7780 18
+packages/server/src/websocket.rs
+  s_844ef8d40d75dc::t_dc59ac2baf7780 389-391,510
+packages/server/src/service/requests.rs
+  s_844ef8d40d75dc::t_dc59ac2baf7780 40-46,96
+packages/server/src/service/subscriptions.rs
+  s_844ef8d40d75dc::t_dc59ac2baf7780 148
+packages/server/src/service/window_state.rs
+  s_844ef8d40d75dc::t_d8c9274c02dc89 67,82-85,91-95,106
+  s_844ef8d40d75dc::t_47eb9a5c0df033 2-5,12-13,32,56-58,75,86-90,96-105,107-122,130-147,158
+  s_844ef8d40d75dc::t_a17343e48a9689 60-62,123-129
+packages/server/src/service/plugin_control.rs
+  s_844ef8d40d75dc::t_572f0c44fb8c55 132-137
+  s_844ef8d40d75dc::t_dc59ac2baf7780 48,60-62
+  s_844ef8d40d75dc::t_ce3e8e54b74ba3 63
+packages/server/src/service/server.rs
+  s_844ef8d40d75dc::t_a17343e48a9689 113-117
+  s_844ef8d40d75dc::t_dc59ac2baf7780 48,71-75,81,83-86,106-112,118-121
+  s_844ef8d40d75dc::t_24d5c46e1526ff 122-123
+packages/server/tests/identity.rs
+  s_844ef8d40d75dc::t_a17343e48a9689 111-117,156-158
+  s_844ef8d40d75dc::t_1a0079f68bac35 120-126,146-155,159-163
+packages/server/src/plugins/mod.rs
+  s_844ef8d40d75dc::t_c5ad53b3619d24 29
+packages/server/src/service/startup.rs
+  s_844ef8d40d75dc::t_df34ac8138f6ea 106-112,117-118
+  s_844ef8d40d75dc::t_d8c9274c02dc89 113-114,119
+packages/server/src/plugins/dependencies.rs
+  s_844ef8d40d75dc::t_572f0c44fb8c55 80-116
+packages/server/PLUGINS.md
+  s_844ef8d40d75dc::t_9d6718a40a2ed3 47-50
+  s_844ef8d40d75dc::t_77e77e1c227f02 123-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e00449afc16d3d1667d98b2f85acdab4178c74f",
+  "prompts": {},
+  "sessions": {
+    "s_844ef8d40d75dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200e5-9e8d-7ef0-9181-8dba22c295a4",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
