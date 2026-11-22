@@ -1,0 +1,19 @@
+e2e/browser/quit.spec.ts
+  s_24950e0e98659e::t_fa6c2ecdb27030 71,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ed306feed70ee12eb1f950228ae3527b3e1c82ea",
+  "prompts": {},
+  "sessions": {
+    "s_24950e0e98659e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20273-10ec-7111-a026-723dd076066b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
