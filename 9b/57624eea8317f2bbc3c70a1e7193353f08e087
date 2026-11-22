@@ -1,0 +1,23 @@
+plugins/ai/src/client/lib/questions.ts
+  s_0b1d4da3223056::t_f15daedd89234b 29-30
+plugins/ai/src/client/ui/permission-card.tsx
+  s_0b1d4da3223056::t_c2209b152fb222 22-27,31,34-37,69
+plugins/ai/src/server/turns.ts
+  s_0b1d4da3223056::t_f15daedd89234b 129-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9b57624eea8317f2bbc3c70a1e7193353f08e087",
+  "prompts": {},
+  "sessions": {
+    "s_0b1d4da3223056": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cecb09cc-1bef-478d-b542-70ea1e989f72",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
