@@ -1,0 +1,46 @@
+app/src/shell/credential-fields.tsx
+  s_0bb9cb1d8d8ab2::t_1b4f5effff61c5 6-19,30,43
+  s_0bb9cb1d8d8ab2::t_2b00ed2642610e 1-5,20-29,31-42,44-70
+app/src/host/members.ts
+  s_0bb9cb1d8d8ab2::t_1b4f5effff61c5 11-28
+  s_0bb9cb1d8d8ab2::t_4333e184a98b97 1-10,29-42
+app/src/shell/settings-menu.tsx
+  s_0bb9cb1d8d8ab2::t_1b4f5effff61c5 17-22,27,44-46
+  s_0bb9cb1d8d8ab2::t_7f1216f177912b 2-3,12-16
+e2e/browser/sign-in.spec.ts
+  s_0bb9cb1d8d8ab2::t_471a2083ed534d 135-201
+app/src/shell/members.tsx
+  s_0bb9cb1d8d8ab2::t_1b4f5effff61c5 27-300
+  s_0bb9cb1d8d8ab2::t_4a0bc55ff5c21a 1-26,301-315
+app/src/shell/sign-in.tsx
+  s_0bb9cb1d8d8ab2::t_1b4f5effff61c5 32-34,41,44,57-60,65,94-116,118-123,133-139,145-147,154,156-171,199,228-234
+  s_0bb9cb1d8d8ab2::t_e85c7d4a009901 3,12,279
+app/src/host/sign-in.ts
+  s_0bb9cb1d8d8ab2::t_f7cf6e81cea9b9 12,82,85
+app/src/host/snapshots.ts
+  s_0bb9cb1d8d8ab2::t_749ee38309dfe1 1-39
+app/src/router.tsx
+  s_0bb9cb1d8d8ab2::t_69301cc292c2c0 8,25-26
+app/src/shell/devices.tsx
+  s_0bb9cb1d8d8ab2::t_211a6310baf501 6,64
+app/src/shell/icons.ts
+  s_0bb9cb1d8d8ab2::t_e708dab7adb8c1 15-16
+app/src/shell/pages.ts
+  s_0bb9cb1d8d8ab2::t_732cdf54b882b6 25-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4a692267ac1a1c557609336467662abd69ebc18",
+  "prompts": {},
+  "sessions": {
+    "s_0bb9cb1d8d8ab2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20133-3950-7e51-b212-4b1bc15c47e0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
