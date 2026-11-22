@@ -15,14 +15,14 @@ Each plugin with UI has one file, with the same five sections:
 
 Then **Open questions** for anything the code does not settle.
 
-| File                   | Plugin                          | Paper page              |
-| ---------------------- | ------------------------------- | ----------------------- |
-| [shell.md](shell.md)   | The app frame (`app/src/shell`) | `App 1:1 · Shell`       |
-| [chat.md](chat.md)     | `chat`                          | `App 1:1 · Chat plugin` |
-| [ai.md](ai.md)         | `ai`                            | `App 1:1 · AI plugin`   |
-| [code.md](code.md)     | `code`                          | `App 1:1 · Code plugin` |
-| [claude.md](claude.md) | `claude` (data only, no UI)     | none                    |
-| [codex.md](codex.md)   | `codex` (data only, no UI)      | none                    |
+| File                                 | Plugin                          | Paper page              |
+| ------------------------------------ | ------------------------------- | ----------------------- |
+| [shell.md](shell.md)                 | The app frame (`app/src/shell`) | `App 1:1 · Shell`       |
+| [chat.md](chat.md)                   | `chat`                          | `App 1:1 · Chat plugin` |
+| [ai.md](ai.md)                       | `ai`                            | `App 1:1 · AI plugin`   |
+| [code.md](code.md)                   | `code`                          | `App 1:1 · Code plugin` |
+| [claude-plugin.md](claude-plugin.md) | `claude` (data only, no UI)     | none                    |
+| [codex-plugin.md](codex-plugin.md)   | `codex` (data only, no UI)      | none                    |
 
 `basic-auth` draws nothing; its sign-in fields are drawn by the shell's sign-in dialog.
 
@@ -87,6 +87,6 @@ test changes (no app code changed).
 
 ## Open questions
 
-- `claude.md` sits on a case-insensitive disk on macOS, where it is the same
-  file as `CLAUDE.md`, which Claude Code loads as instructions for this
-  folder. Renaming it (for example `claude-agent.md`) would avoid that.
+None. (The `claude` and `codex` files are named `claude-plugin.md` and
+`codex-plugin.md` because on macOS's case-insensitive disk `claude.md` is the
+same file as `CLAUDE.md`, which Claude Code loads as instructions.)
