@@ -1,0 +1,29 @@
+app/vite.config.ts
+  s_0a399312e8f8f5::t_3e780700aab81e 25
+e2e/browser.ts
+  s_0a399312e8f8f5::t_3e780700aab81e 16-17
+app/vitest.config.ts
+  s_0a399312e8f8f5::t_3e780700aab81e 1,5-10
+packages/server/src/plugin-skill.md
+  s_0a399312e8f8f5::t_3dbe25d95f2c9d 29-30,35
+app/tests/fixtures/integration/src/client/api.tsx
+  s_0a399312e8f8f5::t_60696413169f7e 10-14,32-34
+app/scripts/live-check.ts
+  s_0a399312e8f8f5::t_60696413169f7e 1-2,29,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0545410814f81c12c15af30181888c64f4b419c1",
+  "prompts": {},
+  "sessions": {
+    "s_0a399312e8f8f5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2021c-f7a0-7b22-bbef-8f3ad91e0903",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

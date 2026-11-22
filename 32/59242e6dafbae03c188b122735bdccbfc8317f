@@ -1,0 +1,47 @@
+packages/server/Cargo.toml
+  s_0a399312e8f8f5::t_de22d2613eb74b 32-38
+.ci/check.sh
+  s_0a399312e8f8f5::t_19c0fded47f7d3 3,6-7,13-17,23-24,28-32
+  s_0a399312e8f8f5::t_0b3741ef4e9b65 8-12
+e2e/README.md
+  s_0a399312e8f8f5::t_c000b6df86c607 53
+.ci/README.md
+  s_0a399312e8f8f5::t_c000b6df86c607 6-7
+  s_0a399312e8f8f5::t_2c0520320713d8 9,11-14,92,95-96
+packages/server/tests/ai-liveness-driver.mjs
+  s_0a399312e8f8f5::t_c000b6df86c607 11
+e2e/browser/desktop.ts
+  s_0a399312e8f8f5::t_c6dbc1b0f237cc 74-77,92-94,98-101,143-145
+e2e/fake-agent/local.mjs
+  s_0a399312e8f8f5::t_c6dbc1b0f237cc 15-17
+app/tests/identity.test.ts
+  s_0a399312e8f8f5::t_de22d2613eb74b 7-12
+packages/server/tests/ai-turns-driver.mjs
+  s_0a399312e8f8f5::t_de22d2613eb74b 350-357,362-364,373-375,403-406,431-439,444-448,454-458,472-473
+packages/server/tests/ai_turns.rs
+  s_0a399312e8f8f5::t_1ac4fe787fca51 9-14
+app/tests/switching.test.ts
+  s_0a399312e8f8f5::t_de22d2613eb74b 21-24
+app/src/plugins/adapter.ts
+  s_0a399312e8f8f5::t_de22d2613eb74b 58-60
+moon.yml
+  s_0a399312e8f8f5::t_19c0fded47f7d3 45,53-56
+packages/build/src/auth-dependencies.ts
+  s_0a399312e8f8f5::t_4293b13c21ce40 31-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3259242e6dafbae03c188b122735bdccbfc8317f",
+  "prompts": {},
+  "sessions": {
+    "s_0a399312e8f8f5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2021c-f7a0-7b22-bbef-8f3ad91e0903",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    }
+  }
+}

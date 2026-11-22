@@ -1,0 +1,42 @@
+packages/runtime/ROUTING.md
+  s_0a399312e8f8f5::t_f5ce2706c4581c 1-23
+wiki/content/docs/api/client.mdx
+  s_0a399312e8f8f5::t_17758aca370190 45
+  s_0a399312e8f8f5::t_74c5b817fa53bb 55-60
+packages/server/src/data/README.md
+  s_0a399312e8f8f5::t_fa3d6894147e51 107
+wiki/content/docs/api/contracts.mdx
+  s_0a399312e8f8f5::t_2369310590d56c 1-38
+wiki/content/docs/api/database.mdx
+  s_0a399312e8f8f5::t_68faf25f67f7ac 31-40
+wiki/content/docs/api/functions.mdx
+  s_0a399312e8f8f5::t_964ad088842c58 67-122
+wiki/content/docs/api/host.mdx
+  s_0a399312e8f8f5::t_bf9ce20f4ee775 37-42
+wiki/content/docs/api/meta.json
+  s_0a399312e8f8f5::t_114fc01de2e931 6
+wiki/content/docs/api/references.mdx
+  s_0a399312e8f8f5::t_a214041dc153c5 33-38
+wiki/content/docs/api/schema.mdx
+  s_0a399312e8f8f5::t_0dd2620f92278e 37-40
+wiki/content/docs/api/solid.mdx
+  s_0a399312e8f8f5::t_fc5e93f14b1855 24-33
+wiki/content/docs/api/values.mdx
+  s_0a399312e8f8f5::t_e32d463a189793 18-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dce69be5d4f86d2fb061dcd1fc9fe02b5b127575",
+  "prompts": {},
+  "sessions": {
+    "s_0a399312e8f8f5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2021c-f7a0-7b22-bbef-8f3ad91e0903",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
