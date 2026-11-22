@@ -5,7 +5,9 @@ import { expect, test } from "vitest";
 
 const root = resolve(process.cwd(), "../..");
 const lintPaths = (config: string, ...paths: string[]) => {
-  const run = spawnSync("node_modules/.bin/oxlint", ["-c", config, ...paths], {
+  // A fixed output format: oxlint otherwise switches format when it detects an agent's shell,
+  // and the tests count "path:line:col: error" lines.
+  const run = spawnSync("node_modules/.bin/oxlint", ["-f", "agent", "-c", config, ...paths], {
     cwd: root,
     encoding: "utf8",
   });
