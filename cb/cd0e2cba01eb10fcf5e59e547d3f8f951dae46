@@ -1,0 +1,20 @@
+packages/server/tests/ai-turns-driver.mjs
+  s_b78d166f675f88::t_011b47468bc3d4 181-183
+  s_b78d166f675f88::t_ed817fa0ba8dbb 214,222,228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cbcd0e2cba01eb10fcf5e59e547d3f8f951dae46",
+  "prompts": {},
+  "sessions": {
+    "s_b78d166f675f88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ceda5e6b-88a5-411e-8545-3c0d7ea58741",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
