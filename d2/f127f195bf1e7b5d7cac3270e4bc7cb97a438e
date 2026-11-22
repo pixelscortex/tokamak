@@ -1,0 +1,23 @@
+e2e/fake-agent/README.md
+  s_0b1d4da3223056::t_027b6e805bf88c 9-11,19,23-24
+plugins/ai/README.md
+  s_0b1d4da3223056::t_027b6e805bf88c 14-22,49-54,63-64,79-85
+GLOSSARY.md
+  s_0b1d4da3223056::t_ed8aa520407f17 66-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2f127f195bf1e7b5d7cac3270e4bc7cb97a438e",
+  "prompts": {},
+  "sessions": {
+    "s_0b1d4da3223056": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cecb09cc-1bef-478d-b542-70ea1e989f72",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
