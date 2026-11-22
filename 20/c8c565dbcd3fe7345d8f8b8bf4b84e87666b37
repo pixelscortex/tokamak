@@ -1,0 +1,53 @@
+wiki/content/docs/hosting.mdx
+  s_c52545fc8ba0e0::t_51b0f3a024f83a 38-40,82-83
+app/tests/plugins.test.tsx
+  s_c52545fc8ba0e0::t_302c7c02550e55 49,52,69,117-125,133,139-144,154
+packages/build/README.md
+  s_c52545fc8ba0e0::t_801c8e84aa0e8f 48-53
+packages/server/PLUGINS.md
+  s_c52545fc8ba0e0::t_40249f21245521 189-190,209-211
+app/src/host/auth.ts
+  s_c52545fc8ba0e0::t_bab6101ad2b26b 1-11
+app/src/host/chat-machine.ts
+  s_c52545fc8ba0e0::t_0a6378b7f7b21c 3,31
+app/src/host/identity.ts
+  s_c52545fc8ba0e0::t_5e1b73cd04046b 1,8-9,15
+app/src/host/reach.ts
+  s_c52545fc8ba0e0::t_5ac7505c668cdd 1-2,55
+app/src/plugins/adapter.ts
+  s_c52545fc8ba0e0::t_d2a1b1db825027 1,58,74
+app/src/plugins/web-host.ts
+  s_c52545fc8ba0e0::t_580c5dcdcd09be 11,112,183,190-208
+app/src/shell/devices.tsx
+  s_c52545fc8ba0e0::t_caade9dafbdfe1 5,20-51,93-109,111,121
+app/src/shell/session.ts
+  s_c52545fc8ba0e0::t_17e2866ad674dd 6,66
+app/tests/connect.test.tsx
+  s_c52545fc8ba0e0::t_53df6cf62ab92a 98,104
+app/tests/devices.test.tsx
+  s_c52545fc8ba0e0::t_f5ebc3db860513 8-18,24-26,30-31,34-35,38-39,42-46,48-49,52,54,56
+app/tests/identity.test.ts
+  s_c52545fc8ba0e0::t_5fd69e348d8183 5,7,17-18
+app/tests/switching.test.ts
+  s_c52545fc8ba0e0::t_ab76b3454818a3 21,77-78
+packages/server/src/websocket.rs
+  s_c52545fc8ba0e0::t_f46742104b6c02 43-45,200-201,312,315-334,340,342,469-472,513-516,518-519,526,533-546,666-667
+packages/server/tests/auth-driver.mjs
+  s_c52545fc8ba0e0::t_fdff5d9b099871 62,64,91,96,106,158,162,166,172,181,311,332,364,399-405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20c8c565dbcd3fe7345d8f8b8bf4b84e87666b37",
+  "prompts": {},
+  "sessions": {
+    "s_c52545fc8ba0e0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200cb-b588-7412-9a7d-883f0424aac9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
