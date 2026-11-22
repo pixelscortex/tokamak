@@ -1,0 +1,99 @@
+packages/sdk/tests/web/solid.test.tsx
+  s_50ddb902f521ae::t_c0eba8b85d1739 6,8,12,97-132
+  s_50ddb902f521ae::t_ede73069852193 133
+packages/server/tests/fixtures/auth/plugin.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-3
+packages/server/tests/fixtures/auth/package.json
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-5
+packages/server/src/identity.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 1,4-9,16-23,28,36,41-105,193-195,203,234-245,275,293-295,305-325,327,330-333,351-359,394
+packages/server/src/service/requests.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 4,40-41,60,66-74,79,92,96
+packages/sdk/src/functions.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 20-33,94,103,114,172-177,196,207,316,318
+packages/server/src/plugins/manifest.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 120-122
+packages/server/src/service/subscriptions.rs
+  s_50ddb902f521ae::t_7e5e5218304b62 111,158
+  s_50ddb902f521ae::t_c0eba8b85d1739 50,53,58,109-110,112-130,135,145-147,149,151-157,159-176,182
+packages/server/src/service/invocations.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 9,27
+packages/server/PLUGINS.md
+  s_50ddb902f521ae::t_c0eba8b85d1739 46-48,168-177
+  s_50ddb902f521ae::t_37a6c2ce00e8cd 178
+packages/build/tests/boundary.test.mjs
+  s_50ddb902f521ae::t_c0eba8b85d1739 4,234-238
+packages/server/tests/auth-driver.mjs
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-188
+packages/sdk/src/index.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 30,40-41,82
+packages/server/src/service/delivery.rs
+  s_50ddb902f521ae::t_7e5e5218304b62 2,17-19
+packages/server/src/service/session.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 59,144
+packages/server/src/service/action_coordination.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 7,43,112
+packages/server/src/service/plugin_control.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 46,48-54,57,95-97
+plugins/acp/src/server/_local.ts
+  s_50ddb902f521ae::t_7e5e5218304b62 4,7
+packages/server/tests/identity.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 286-299
+packages/sdk/tests/acceptance.test.mjs
+  s_50ddb902f521ae::t_c0eba8b85d1739 7,161-165
+packages/server/src/actions.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 14,30,33,56,66,96,106,112,127,155,165,182,208
+packages/server/tests/build-actions.mjs
+  s_50ddb902f521ae::t_c0eba8b85d1739 191
+packages/server/src/host/worker/tests.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 55-57
+packages/sdk/client.tsx
+  s_50ddb902f521ae::t_c0eba8b85d1739 19
+packages/server/tests/within.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-13
+packages/server/tests/actions-driver.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 10
+packages/sdk/solid.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 8-9,60-67
+packages/server/src/plugins/tests.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 150-161
+packages/sdk/src/auth.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-7
+packages/server/src/host.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 56,68,103,141,153,155,217
+packages/server/src/service/mod.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 112,133-134,136-138,179,188-193,195,230
+packages/server/src/service/server.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 48-49,52-63,65-67,71-79,81,88
+packages/server/src/service/builtin_queries.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-16
+packages/server/tests/actions.rs
+  s_50ddb902f521ae::t_7e5e5218304b62 670
+  s_50ddb902f521ae::t_c0eba8b85d1739 28-29,115,124
+packages/server/src/websocket.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 6,51-61,175,190-191,288,366-368,395-416,499-511
+packages/sdk/README.md
+  s_50ddb902f521ae::t_c0eba8b85d1739 369-391
+packages/server/tests/fixtures/auth/src/server/identity.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 1-17
+packages/server/src/service/command_loop.rs
+  s_50ddb902f521ae::t_c0eba8b85d1739 59,74,84,120
+packages/sdk/src/host.ts
+  s_50ddb902f521ae::t_c0eba8b85d1739 46,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3180670175f6b96f65faae25b97d45ff2f9baf1",
+  "prompts": {},
+  "sessions": {
+    "s_50ddb902f521ae": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-16ad-77a1-b0af-87926414cc06",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
