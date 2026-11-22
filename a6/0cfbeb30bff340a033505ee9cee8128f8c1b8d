@@ -1,0 +1,23 @@
+packages/ui/src/button.tsx
+  s_4ccc9a2575a981::t_b0dc4dafb0908a 57-64,67,80-82
+plugins/ai/src/client/ui/agent-row.tsx
+  s_4ccc9a2575a981::t_449c6da1ab2b1d 156-158,163,278-279,285,288,293-299,301-302,304-306
+plugins/chat/src/client/pages/chat.tsx
+  s_4ccc9a2575a981::t_2f6f3f1a83f650 133-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a60cfbeb30bff340a033505ee9cee8128f8c1b8d",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc9a2575a981": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d694c4-d585-4603-95e4-4d3fea67d517",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
