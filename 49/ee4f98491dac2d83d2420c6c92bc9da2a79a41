@@ -1,0 +1,151 @@
+app/src-tauri/Cargo.toml
+  s_08593c4ba917f0::t_f739c3bd8066b1 17-21
+packages/sdk/tools/worker.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-4,6-21,23-28,37-57,59-62,73-74,77-83,92
+  s_08593c4ba917f0::t_6f6c4e52f8fb14 22,29-35,76
+packages/server/src/host/worker/process.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 25-29,46,53-54,58-60,62,77,116,152,184,215
+packages/build/src/client-surface.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 14-24,62-66,115-117,124,167,182
+  s_08593c4ba917f0::t_af4f8d5deea6b7 2,121
+packages/worker/src/discovery.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-79
+packages/build/src/vite.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 4,9-10,12,26-28,44-57,84-85,102-104,108-109,137,165-176,191-196,204-208
+  s_08593c4ba917f0::t_5950a3186b0817 17
+  s_08593c4ba917f0::t_6f6c4e52f8fb14 86-88
+packages/worker/Cargo.toml
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-20
+packages/sdk/tools/placement.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-6,13-46,52-66,68-179,181-184,186-206,211-213,216-218,224-240
+  s_08593c4ba917f0::t_6f6c4e52f8fb14 47-51,67,180
+  s_08593c4ba917f0::t_5950a3186b0817 7-12,185,207-210,214-215,219-223
+moon.yml
+  s_08593c4ba917f0::t_f739c3bd8066b1 82
+packages/sdk/tools/server-files.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-9
+  s_08593c4ba917f0::t_d14758d3d7bf53 15-18
+packages/worker/src/lib.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-176
+packages/sdk/src/index.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 26,45,49,86
+packages/build/src/contributions.ts
+  s_08593c4ba917f0::t_af4f8d5deea6b7 1-2
+app/src-tauri/src/local.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-420
+packages/build/src/exports.ts
+  s_08593c4ba917f0::t_5950a3186b0817 5
+  s_08593c4ba917f0::t_6f6c4e52f8fb14 69-70
+  s_08593c4ba917f0::t_f739c3bd8066b1 6-7,37,40,55
+packages/sdk/tools/plugin-compiler.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 2-22,69-70
+  s_08593c4ba917f0::t_6f6c4e52f8fb14 58-61
+  s_08593c4ba917f0::t_af4f8d5deea6b7 1,23-57,62-68
+packages/build/src/window-state.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 20-25,122-128,134
+  s_08593c4ba917f0::t_5950a3186b0817 44-50
+  s_08593c4ba917f0::t_2cc8f5d8d87fec 6
+packages/sdk/src/worker-limits.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-3
+Cargo.toml
+  s_08593c4ba917f0::t_f739c3bd8066b1 3
+packages/sdk/tools/server-builtins.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-18
+packages/worker/src/windows.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-260
+packages/runtime/tests/local.test.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-6,9-34,38-66
+  s_08593c4ba917f0::t_5950a3186b0817 7-8,35-37
+packages/sdk/worker/process.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-67,74-101,106-114,118-128
+  s_08593c4ba917f0::t_5950a3186b0817 68-73,102-105,115-117
+packages/sdk/src/local.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-20
+packages/build/tests/run.sh
+  s_08593c4ba917f0::t_af4f8d5deea6b7 3
+packages/build/tests/local.test.mjs
+  s_08593c4ba917f0::t_3226d9cb77f5f4 61-82
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-60,83-135
+packages/sdk/worker/entry.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 7-8,10-12,21-22,38,41,44,48,62,64,67,79,95,100
+packages/server/src/plugins/manifest.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 78-79,204-208
+app/src/host/local.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-23
+packages/sdk/src/client.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 8,11-14,37,39,41,63-74
+  s_08593c4ba917f0::t_9a43a61cb2808c 75-77
+packages/sdk/tools/bundle.mjs
+  s_08593c4ba917f0::t_f739c3bd8066b1 5,9,15-16,20-21,159,165-180,192-197,200-209,212-216,220-230,361-370,374-375,377-378
+  s_08593c4ba917f0::t_af4f8d5deea6b7 12,112
+  s_08593c4ba917f0::t_5950a3186b0817 10,371-373,376
+app/src-tauri/src/server.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 373,382-388
+packages/server/src/host/worker/mod.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 20,112
+README.md
+  s_08593c4ba917f0::t_f739c3bd8066b1 90-97
+app/src-tauri/src/main.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 3,9-15
+app/src/shell/session.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-3,80-81,91,99
+packages/server/Cargo.toml
+  s_08593c4ba917f0::t_f739c3bd8066b1 48
+packages/server/tests/local_functions.rs
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-43
+packages/sdk/src/functions.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 13,15-16,118,128-137,160-166,253-276,291,367
+  s_08593c4ba917f0::t_5950a3186b0817 201-209,215-237
+  s_08593c4ba917f0::t_af4f8d5deea6b7 212-214,299,309,318
+packages/sdk/tools/plugin-boundary.mjs
+  s_08593c4ba917f0::t_d14758d3d7bf53 16,126,128,184,310,319
+  s_08593c4ba917f0::t_f739c3bd8066b1 29-34,55-56,98,121
+  s_08593c4ba917f0::t_5950a3186b0817 320-322
+  s_08593c4ba917f0::t_af4f8d5deea6b7 17,131
+packages/runtime/js/local.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 9-103,108-122,124-127,130-259
+  s_08593c4ba917f0::t_5950a3186b0817 1-8,104-107,123
+  s_08593c4ba917f0::t_fa6d430339161e 128-129
+packages/build/src/descriptor.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 3
+  s_08593c4ba917f0::t_af4f8d5deea6b7 1
+packages/build/src/artifact-bundle.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 12,23-33,83-85
+  s_08593c4ba917f0::t_8568d5454a751a 86
+packages/runtime/moon.yml
+  s_08593c4ba917f0::t_f739c3bd8066b1 16
+packages/sdk/README.md
+  s_08593c4ba917f0::t_6f6c4e52f8fb14 204-205
+  s_08593c4ba917f0::t_f739c3bd8066b1 174-203
+  s_08593c4ba917f0::t_cb003a0efeb179 206
+packages/sdk/src/host.ts
+  s_08593c4ba917f0::t_f739c3bd8066b1 56-58,79
+  s_08593c4ba917f0::t_af4f8d5deea6b7 60
+packages/server/tests/local-functions-driver.mjs
+  s_08593c4ba917f0::t_fa6d430339161e 7,195-197
+  s_08593c4ba917f0::t_f739c3bd8066b1 1-6,8-49,51-62,65-66,68-72,94-118,122-133,136-166,174-194,198-199,207-234,237-247,251-254,258-266
+  s_08593c4ba917f0::t_3226d9cb77f5f4 50,63-64,67,73-93,200-206,235-236
+  s_08593c4ba917f0::t_5950a3186b0817 119-121,134-135,167-173,248-250,255-257
+packages/build/src/plugin-boundary.ts
+  s_08593c4ba917f0::t_d14758d3d7bf53 5,28-29,31-36
+packages/build/src/component-parts.ts
+  s_08593c4ba917f0::t_2cc8f5d8d87fec 5
+Cargo.lock
+  s_08593c4ba917f0::t_68f05dc12a96f4 5323,6760,6763-6766,6771-6780
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49ee4f98491dac2d83d2420c6c92bc9da2a79a41",
+  "prompts": {},
+  "sessions": {
+    "s_08593c4ba917f0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200d9-7801-7082-9df9-21eeaa30c143",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
