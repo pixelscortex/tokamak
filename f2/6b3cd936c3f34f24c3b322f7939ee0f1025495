@@ -1,0 +1,63 @@
+plugins/code/src/server/changes.ts
+  s_99043c518cfc5d::t_904996b27ba6e9 4,12-36,39-43,45-47,53-54,60-61
+plugins/code/src/client/lib/changes.ts
+  s_99043c518cfc5d::t_b31df42aa78be3 88-91
+  s_99043c518cfc5d::t_e804a059a50aca 6-14,17-18,21-34,44-45,64-71,74-75,77-80,83-87,92-93,101,103,106-109,114,117-120,128,153-154,162,165-171,173-184,186-188,195-196,199,204
+plugins/code/src/client/api.tsx
+  s_99043c518cfc5d::t_0ff95df49db10c 6,8,17,69,71-73
+plugins/code/src/shared/text.ts
+  s_99043c518cfc5d::t_67cf1a37a276ac 1-6
+plugins/code/src/local/changes.ts
+  s_99043c518cfc5d::t_b31df42aa78be3 131-135,139-140
+  s_99043c518cfc5d::t_826efeea17c233 2,10-11,30-33,40,44,46-47,108-110,115,121,127-130,136-138,141-143,165-180,183-184,190-193,197-208,210,212-221,224
+plugins/code/src/client/ui/thread-header.tsx
+  s_99043c518cfc5d::t_569a9d85b62f62 42-46
+  s_99043c518cfc5d::t_fba4fca7ea9b8e 4,6,13,21-26,47-50,53-57,60,62-75
+  s_99043c518cfc5d::t_f6ce34108182b8 34-36
+plugins/code/README.md
+  s_99043c518cfc5d::t_9214d2392b9855 27-29,31-35
+plugins/code/src/client/ui/review-panel.tsx
+  s_99043c518cfc5d::t_b31df42aa78be3 61-62,122-123,141
+  s_99043c518cfc5d::t_5493a390b915fa 154
+  s_99043c518cfc5d::t_fbd94b737c54af 5,7,9,15,20-22,25-29,32-33,36,40-42,60,69-83,86,97,109-112,114-115,149,152,164-166,171-175,185-186,203
+plugins/code/src/client/ui/change-card.tsx
+  s_99043c518cfc5d::t_579144da26c245 5,13,19-25,27-38,43-56
+  s_61c7aa4d512211::t_0f6197a52d7590 57-58
+plugins/code/src/local/git.ts
+  s_99043c518cfc5d::t_584c70ba84801b 84-86,88,92-93,99,108
+e2e/browser/code.spec.ts
+  s_99043c518cfc5d::t_a295959c277b28 2,206-213,215-220,226-254
+  s_99043c518cfc5d::t_6a72e3e4a3c42a 255-256
+plugins/code/src/server/hooks.ts
+  s_99043c518cfc5d::t_67cf1a37a276ac 5
+  s_99043c518cfc5d::t_b31df42aa78be3 28
+plugins/code/src/client/ui/counts.tsx
+  s_99043c518cfc5d::t_5aff64007d8e9d 8-12,18-21,25-30
+packages/server/tests/code-changes-driver.mjs
+  s_99043c518cfc5d::t_b31df42aa78be3 136-143,250-254,270-276
+  s_99043c518cfc5d::t_8ad815359b388e 3,26,124,145-148,163,190,217-223,225,230-249,255-256,269,277-279,284,294,304,328
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f26b3cd936c3f34f24c3b322f7939ee0f1025495",
+  "prompts": {},
+  "sessions": {
+    "s_61c7aa4d512211": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a64fc832-ccca-4ded-af65-db4e33f99a94",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_99043c518cfc5d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79d31844-efa8-419c-bba7-87cd6fde4e83",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
