@@ -1,0 +1,29 @@
+packages/server/src/plugins/contracts.rs
+  s_4911f4a479dbca::t_b211495b8802bc 66-70,72,102-169,171,174-183,185
+packages/server/tests/auth-driver.mjs
+  s_4911f4a479dbca::t_a7fcfe554e7dbb 310-323,437-445
+  s_4911f4a479dbca::t_8bd788421efcc6 351-403,446
+app/src/shell/sign-in.tsx
+  s_4911f4a479dbca::t_6d19e6c286f168 196-197
+  s_4911f4a479dbca::t_12a40c68011ab7 86,100
+packages/server/src/plugins/loading.rs
+  s_4911f4a479dbca::t_b211495b8802bc 56-81,151-159,173
+e2e/browser/sign-in.spec.ts
+  s_4911f4a479dbca::t_8bd788421efcc6 51-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a800c67464d62fb01b8298efd6119a5be16d6ac4",
+  "prompts": {},
+  "sessions": {
+    "s_4911f4a479dbca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20109-5a76-7763-b577-cc10280b4252",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
