@@ -1,0 +1,32 @@
+plugins/code/src/server/changes.ts
+  s_99043c518cfc5d::t_936a622d55c75a 1-42
+packages/server/tests/code-changes-driver.mjs
+  s_99043c518cfc5d::t_29eadb1a8428e2 1-119,122-126,129-259
+  s_99043c518cfc5d::t_8284fab9b78db2 120-121,127-128
+plugins/code/src/local/changes.ts
+  s_99043c518cfc5d::t_c8ef741e17d730 1-147,149-184
+  s_99043c518cfc5d::t_936a622d55c75a 148
+packages/server/tests/code_changes.rs
+  s_99043c518cfc5d::t_dcd0b0523a5ebf 1-22
+plugins/code/src/server/_generated/api.ts
+  s_99043c518cfc5d::t_5d5fb14fe50948 4-8,14-16
+plugins/code/src/local/git.ts
+  s_99043c518cfc5d::t_444f83e5e770d3 33-38,45-62,65,83-115
+  s_99043c518cfc5d::t_e723863fbeb19a 116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "272d119e62e09f45191c02c3ab413eae629f5f18",
+  "prompts": {},
+  "sessions": {
+    "s_99043c518cfc5d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79d31844-efa8-419c-bba7-87cd6fde4e83",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
