@@ -1,0 +1,23 @@
+plugins/claude/src/server/events.ts
+  s_f6e69910f6f024::t_3015c3f3407b96 63-69,79,85,103,197-199,206
+plugins/claude/README.md
+  s_f6e69910f6f024::t_3015c3f3407b96 13
+plugins/claude/tests/turns.mjs
+  s_f6e69910f6f024::t_3015c3f3407b96 141-146,164-169,238-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7085b639bec8c2decfde0e471e0641b11c005739",
+  "prompts": {},
+  "sessions": {
+    "s_f6e69910f6f024": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20147-f67f-75c0-a829-9883ea5cdc85",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
