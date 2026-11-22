@@ -106,6 +106,17 @@ async function discovery(client) {
   const ready = await info();
   assert.equal(ready.installed, true);
   assert.ok(ready.models.find((model) => model.id === "sonnet")?.efforts.includes("high"));
+  // Every model Claude offers stays a choice, named by the model it runs: the default (which
+  // follows the account) says it is the default, and the alias it points at keeps its own entry.
+  assert.deepEqual(
+    ready.models.map(({ id, name }) => ({ id, name })),
+    [
+      { id: "default", name: "Opus 5.5 (default)" },
+      { id: "opus", name: "Opus 5.5" },
+      { id: "sonnet", name: "Sonnet 5.5" },
+      { id: "haiku", name: "Haiku 5.5" },
+    ],
+  );
   assert.deepEqual(ready.speeds, []);
   const marker = join(h.home, "claude-status");
   await writeFile(marker, "signed-out");

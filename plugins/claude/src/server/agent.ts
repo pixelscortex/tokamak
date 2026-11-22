@@ -35,16 +35,18 @@ const info = local({
 });
 
 /**
- * A model's name as people know it, never an alias's label: the default
- * ("Default (recommended)", "Use the default model (currently Opus 5.5)")
- * reads "Opus 5.5", and an alias ("Opus", "Opus 5.5 · Best for…") reads
- * "Opus 5.5". Other names are kept ("Claude Fable 5.2"; the window drops
- * "Claude").
+ * A model's name as people know it, never an alias's label. The default
+ * follows the account's setting, so it says which model that is now and that
+ * it is the default ("Default (recommended)", "Use the default model
+ * (currently Opus 5.5)" → "Opus 5.5 (default)"); an alias names its model
+ * ("Opus", "Opus 5.5 · Best for…" → "Opus 5.5"). Other names are kept
+ * ("Claude Fable 5.2"; the window drops "Claude"). Every model stays offered:
+ * the default and the alias it currently points at are different choices.
  */
 export function modelName(model: { displayName: string; description?: unknown }): string {
   const description = typeof model.description === "string" ? model.description : "";
   const current = /\(currently ([^)]+)\)/.exec(description)?.[1]?.trim();
-  if (current) return current;
+  if (current) return `${current} (default)`;
   const head = description.split(" · ")[0]?.trim();
   if (
     head &&
@@ -85,10 +87,7 @@ async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "spe
             efforts: Array.isArray(model.supportedEffortLevels)
               ? model.supportedEffortLevels.filter((level) => typeof level === "string")
               : [],
-          }))
-          // An alias of the model the default already is ("opus" while the default is Opus 5.5)
-          // would read the same as the default; the first keeps the name.
-          .filter((model, index, all) => all.findIndex((other) => other.name === model.name) === index);
+          }));
         // Opus can use fast mode, but account or provider policy can disable it.
         const fast = response?.fast_mode_state;
         return {

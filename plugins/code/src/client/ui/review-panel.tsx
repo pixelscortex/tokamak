@@ -2,7 +2,7 @@ import { For, Match, Show, Switch, createEffect, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
 import { useClient } from "@tokamak/sdk/client";
-import { FileName, Icon, ScrollArea } from "@tokamak/ui";
+import { FileName, Icon, Row, ScrollArea } from "@tokamak/ui";
 import { api } from "../../server/_generated/api";
 import { turnsOf } from "../lib/changes";
 import { fileCodeIcon } from "../lib/icons";
@@ -104,13 +104,16 @@ function TurnReview(props: { number: number; diff: Diff }): JSX.Element {
       </h2>
       {/* The panel's one scroller: diff lines wrap, so nothing inside scrolls sideways. */}
       <ScrollArea class="min-h-0 flex-1">
-        <ul aria-label="Changed files" class="flex shrink-0 flex-col px-3 pt-1 pb-3">
+        <ul aria-label="Changed files" class="flex shrink-0 flex-col px-3 pt-1 pb-3 density-dense">
           <For each={props.diff.files} keyed={(file) => file.path}>
             {(file) => (
-              <li class="flex h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-row text-ink">
-                <Icon path={fileCodeIcon} size={14} class="text-ink-3" />
-                <FileName path={file().path} class="min-w-0 flex-1" />
-                <FileCounts added={file().added} removed={file().removed} />
+              <li>
+                <Row
+                  lead={<Icon path={fileCodeIcon} size={14} />}
+                  trail={<FileCounts added={file().added} removed={file().removed} />}
+                >
+                  <FileName path={file().path} />
+                </Row>
               </li>
             )}
           </For>

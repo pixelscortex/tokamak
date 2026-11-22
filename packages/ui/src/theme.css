@@ -373,6 +373,12 @@
     ::-webkit-scrollbar-thumb:active {
       background-color: var(--color-ink-3);
     }
+    /* ScrollArea draws its own thumb and hides the native bar with scrollbar-width: none,
+       which WebKit before Safari 18.2 (macOS 14 and 15) ignores: hide it here too, or the
+       lane above would draw a second thumb. */
+    [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
+      display: none;
+    }
   }
   /* Engines without the pseudo-elements (Firefox): no inset or radius control there. */
   @supports not selector(::-webkit-scrollbar) {

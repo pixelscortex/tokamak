@@ -110,23 +110,32 @@ async function countsAndDiffsMatchGit(desk, code) {
       );
       await unlink(join(folder, "gone.txt"));
       await writeFile(join(folder, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 0, 3]));
-      // Written by the operating system, not the agent: never part of the turn's change.
+      // Written by the operating system, not the agent: never part of the turn's change, in any
+      // case, and "._agent.txt" only because agent.txt is beside it. "._notes.txt" has no
+      // "notes.txt": it is a file like any other.
       await writeFile(join(folder, ".DS_Store"), Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31, 0]));
+      await writeFile(join(folder, "THUMBS.DB"), Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 1]));
+      await writeFile(join(folder, "._agent.txt"), Buffer.from([0, 5, 0x16, 7, 0, 2, 0, 0]));
+      await writeFile(join(folder, "._notes.txt"), "kept\n");
     },
   });
 
   const expected = numstat(git, threadId, turnId);
-  // agent.txt +1 −1 (the agent), gone.txt −1, logo.png binary, src/table.ts +3 −1; .DS_Store is left out.
+  // agent.txt +1 −1 (the agent), gone.txt −1, logo.png binary, src/table.ts +3 −1, ._notes.txt +1;
+  // .DS_Store, ._agent.txt and THUMBS.DB are left out.
   assert.deepEqual(expected, [
     { path: ".DS_Store", added: "-", removed: "-" },
+    { path: "._agent.txt", added: "-", removed: "-" },
+    { path: "._notes.txt", added: "1", removed: "0" },
+    { path: "THUMBS.DB", added: "-", removed: "-" },
     { path: "agent.txt", added: "1", removed: "1" },
     { path: "gone.txt", added: "0", removed: "1" },
     { path: "logo.png", added: "-", removed: "-" },
     { path: "src/table.ts", added: "3", removed: "1" },
   ]);
   assert.deepEqual(await desk.local(code.changes.forTurn, { threadId, turnId, ranEarlier: [] }), {
-    files: 4,
-    added: 4,
+    files: 5,
+    added: 5,
     removed: 3,
     binary: 1,
     tracking: null,
@@ -134,7 +143,7 @@ async function countsAndDiffsMatchGit(desk, code) {
 
   const diff = await desk.local(code.changes.diff, { threadId, turnId });
   assert.equal(diff.cut, false);
-  assert.equal(diff.added, 4);
+  assert.equal(diff.added, 5);
   assert.equal(diff.removed, 3);
   assert.deepEqual(
     diff.files.map(({ path, added, removed, binary, partial, note }) => ({
@@ -146,6 +155,7 @@ async function countsAndDiffsMatchGit(desk, code) {
       note,
     })),
     [
+      { path: "._notes.txt", added: 1, removed: 0, binary: false, partial: false, note: null },
       { path: "agent.txt", added: 1, removed: 1, binary: false, partial: false, note: null },
       { path: "gone.txt", added: 0, removed: 1, binary: false, partial: false, note: null },
       { path: "logo.png", added: 0, removed: 0, binary: true, partial: false, note: "Binary file" },
@@ -158,7 +168,7 @@ async function countsAndDiffsMatchGit(desk, code) {
     const hunks = patch.slice(patch.findIndex((line) => line.startsWith("@@")));
     assert.deepEqual(file.patch, file.binary ? [] : hunks, `${file.path} matches git diff`);
   }
-  assert.deepEqual(diff.files[3].patch.slice(0, 2), ["@@ -1,6 +1,6 @@", " row 1"]);
+  assert.deepEqual(diff.files[4].patch.slice(0, 2), ["@@ -1,6 +1,6 @@", " row 1"]);
 }
 
 async function quietTurnChangesNothing(desk, code) {

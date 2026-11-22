@@ -91,21 +91,23 @@ with no exemptions.
 
 Tailwind utilities defined with the tokens. Use them as classes.
 
-| Helper                                 | What it does                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------ |
-| `surface-window` … `surface-band`      | Paints a region in one tone and sets `bg-hover` and `bg-selected` inside it.   |
-| `density-roomy`, `-normal`, `-dense`   | Sets row height and padding for rows inside; only tighter inward (linted).     |
-| `h-row`, `px-row`                      | A row's height and inline padding, read from the nearest density.              |
-| `nest-lg/1`                            | Radius and padding on a container; children take `rounded-inner`.              |
-| `rounded-inner`                        | `max(0, container radius − its padding)`: concentric by construction.          |
-| `text-read`, `-row`, `-label`, `-data` | The four type roles; `text-data` is mono.                                      |
-| `focus-ring`                           | The 2 px `brand-text` ring with a 2 px gap, on keyboard focus.                 |
-| `key`                                  | A pressable key: fading fill, `lip`, `highlight`, raised shadow, hover, press. |
-| `lip`, `highlight`                     | The key's parts: the dark bottom edge, the light top edge and inner ring.      |
-| `py-line`                              | Block padding that centres one row line in a 32 px control.                    |
-| `text-trim`                            | Centres text on its cap height where the webview supports it.                  |
-| `link`                                 | `brand-text`, underlined, offset 0.2 em.                                       |
-| `light:`                               | A variant for light-theme-only adjustments.                                    |
+| Helper                                 | What it does                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| `surface-window` … `surface-band`      | Paints a region in one tone and sets `bg-hover` and `bg-selected` inside it.      |
+| `density-roomy`, `-normal`, `-dense`   | Sets row height and padding for rows inside; only tighter inward (linted).        |
+| `h-row`, `px-row`                      | A row's height and inline padding, read from the nearest density.                 |
+| `nest-lg/1`                            | Radius and padding on a container; children take `rounded-inner`.                 |
+| `rounded-inner`                        | `max(0, container radius − its padding)`: concentric by construction.             |
+| `text-read`, `-row`, `-label`, `-data` | The four type roles; `text-data` is mono.                                         |
+| `text-code`, `text-initial`            | Diff code (13 / 20 mono) and the letter in an 18 px initial disc (10 / 12).       |
+| `scroller`, `wrap-code`                | A panel's one native scroller (12 px lane, quiet thumb); code that wraps, 2ch in. |
+| `focus-ring`                           | The 2 px `brand-text` ring with a 2 px gap, on keyboard focus.                    |
+| `key`                                  | A pressable key: fading fill, `lip`, `highlight`, raised shadow, hover, press.    |
+| `lip`, `highlight`                     | The key's parts: the dark bottom edge, the light top edge and inner ring.         |
+| `py-line`                              | Block padding that centres one row line in a 32 px control.                       |
+| `text-trim`                            | Centres text on its cap height where the webview supports it.                     |
+| `link`                                 | `brand-text`, underlined, offset 0.2 em.                                          |
+| `light:`                               | A variant for light-theme-only adjustments.                                       |
 
 ## Tokens
 
@@ -193,14 +195,16 @@ have a job:
 ## Type
 
 Geist for text, Geist Mono for data, both bundled with `@tokamak/ui`. Three
-sizes:
+sizes, plus two narrow roles:
 
-| Role  | Utility      | Size / line | Weight           | Tone             | Used for                                 |
-| ----- | ------------ | ----------- | ---------------- | ---------------- | ---------------------------------------- |
-| Read  | `text-read`  | 16 / 26     | 400, 600 head    | Ink              | Prose only: messages, notes              |
-| Row   | `text-row`   | 14 / 20     | 400, 500 current | Ink or secondary | Rows, buttons, titles in chrome          |
-| Label | `text-label` | 12 / 16     | 500              | Tertiary         | Section labels, tab labels, breadcrumbs  |
-| Data  | `text-data`  | 12 / 16     | 400, mono        | Tertiary         | Counts, ages, timers, ids, path prefixes |
+| Role    | Utility        | Size / line | Weight           | Tone             | Used for                                 |
+| ------- | -------------- | ----------- | ---------------- | ---------------- | ---------------------------------------- |
+| Read    | `text-read`    | 16 / 26     | 400, 600 head    | Ink              | Prose only: messages, notes              |
+| Row     | `text-row`     | 14 / 20     | 400, 500 current | Ink or secondary | Rows, buttons, titles in chrome          |
+| Label   | `text-label`   | 12 / 16     | 500              | Tertiary         | Section labels, tab labels, breadcrumbs  |
+| Data    | `text-data`    | 12 / 16     | 400, mono        | Tertiary         | Counts, ages, timers, ids, path prefixes |
+| Code    | `text-code`    | 13 / 20     | 400, mono        | Ink or secondary | Code lines in a diff only                |
+| Initial | `text-initial` | 10 / 12     | 600              | Secondary        | The letter in an 18 px initial disc      |
 
 - There is no display size. A heading is 16 at weight 600.
 - Emphasis comes from weight or tone before size.
@@ -222,8 +226,10 @@ sizes:
 
 ## Spacing and radii
 
-One spacing scale: 4, 8, 12, 16, 24, 32, 48, 64. One radius scale: 4, 8, 12, 16.
-No other values.
+One spacing scale: 4, 8, 12, 16, 20, 24, 32, 40, 48, 64 (`1 2 3 4 5 6 8 10 12
+16`). 20 is a header or diff line; 40 a file header and a diff's line-number
+lane. Two named sizes off the scale, for marks only: `mark` (14, a small icon in
+a row or chip) and `avatar` (18, an initial disc). One radius scale: 4, 8, 12, 16. No other values; the lint rejects anything else.
 
 - **Nested corners:** inner radius = `max(0, outer radius − the gap)`. Use
   `nest-*` on the container and `rounded-inner` on the child, and it holds by

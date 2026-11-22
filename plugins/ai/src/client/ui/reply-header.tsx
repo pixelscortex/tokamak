@@ -2,7 +2,7 @@ import { Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { useClient } from "@tokamak/sdk/client";
 import type { MessageProps } from "plugin:chat/client";
-import { agents, modelLabel } from "../lib/agents";
+import { modelLabel } from "../lib/agents";
 import { useTurn } from "../lib/replies";
 import { AgentMark } from "./agent-mark";
 
@@ -15,19 +15,7 @@ import { AgentMark } from "./agent-mark";
 export function ReplyHeader(props: MessageProps): JSX.Element {
   const turn = useTurn(useClient(), props);
   const agentName = () => turn()?.agent.name ?? props.message.author?.name;
-  const model = () => {
-    const t = turn();
-    let name = t?.modelName ?? t?.model;
-    // Turns from before agents named the default alias by its model kept "Default (recommended)":
-    // name the model the alias stands for now, as the agent lists it.
-    if (t && name && /^default\b/i.test(name)) {
-      const live = agents()
-        .find((agent) => agent.id === t.agent.id)
-        ?.info.models.find((entry) => entry.id === t.model)?.name;
-      if (live && !/^default\b/i.test(live)) name = live;
-    }
-    return modelLabel(agentName(), name);
-  };
+  const model = () => modelLabel(agentName(), turn()?.modelName ?? turn()?.model);
   return (
     <header role="group" aria-label="Reply from" class="flex h-5 items-center gap-2">
       <AgentMark

@@ -259,3 +259,68 @@ test("plugins with the same state key keep separate drafts in one window", async
   await rail(page).getByRole("link", { name: "OtherDraftView", exact: true }).click();
   await expect(page.getByText("Window draft: Second plugin draft")).toBeVisible();
 });
+
+test("dragged dividers keep their sizes across a reload, and the sidebar and panel stay mounted when hidden", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto(fixtureHome);
+  await connected(page);
+  const sidebar = page.getByRole("complementary", { name: "Sidebar" });
+  const panel = page.getByRole("region", { name: "Panel", exact: true });
+  const width = async (box: typeof sidebar) => (await box.boundingBox())!.width;
+  const press = async (divider: string, key: string) => {
+    await page.getByRole("separator", { name: divider }).focus();
+    for (let n = 0; n < 4; n++) await page.keyboard.press(key);
+  };
+
+  // The dividers move with the keyboard as with the pointer; the sizes are kept on release.
+  await expect(sidebar).toBeVisible();
+  const sidebarBefore = await width(sidebar);
+  await press("Resize sidebar", "ArrowRight");
+  await expect.poll(() => width(sidebar)).toBeGreaterThan(sidebarBefore + 8);
+  const sidebarAfter = await width(sidebar);
+
+  // Hiding the sidebar keeps the same element, so what plugins rendered into it is not mounted again.
+  await page.evaluate(() => {
+    (document.querySelector('aside[aria-label="Sidebar"]') as HTMLElement & { probe?: string }).probe =
+      "kept";
+  });
+  await page.keyboard.press("ControlOrMeta+b");
+  await expect(sidebar).toBeHidden();
+  await page.keyboard.press("ControlOrMeta+b");
+  await expect(sidebar).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (document.querySelector('aside[aria-label="Sidebar"]') as HTMLElement & { probe?: string }).probe,
+    ),
+  ).toBe("kept");
+
+  await rail(page).getByRole("link", { name: "PanelView", exact: true }).click();
+  await expect(panel).toContainText("Fixture panel");
+  const panelBefore = await width(panel);
+  await press("Resize panel", "ArrowLeft");
+  await expect.poll(() => width(panel)).toBeGreaterThan(panelBefore + 8);
+  const panelAfter = await width(panel);
+  // Leaving the panel's view hides the panel; coming back finds the same element.
+  await page.evaluate(() => {
+    (document.querySelector('section[aria-label="Panel"]') as HTMLElement & { probe?: string }).probe =
+      "kept";
+  });
+  await rail(page).getByRole("link", { name: "FixtureView", exact: true }).click();
+  await expect(panel).toBeHidden();
+  await rail(page).getByRole("link", { name: "PanelView", exact: true }).click();
+  await expect(panel).toContainText("Fixture panel");
+  expect(
+    await page.evaluate(
+      () => (document.querySelector('section[aria-label="Panel"]') as HTMLElement & { probe?: string }).probe,
+    ),
+  ).toBe("kept");
+
+  await page.reload();
+  await connected(page);
+  await expect(panel).toContainText("Fixture panel");
+  await expect.poll(() => width(panel)).toBeCloseTo(panelAfter, 0);
+  await rail(page).getByRole("link", { name: "FixtureView", exact: true }).click();
+  await expect.poll(() => width(sidebar)).toBeCloseTo(sidebarAfter, 0);
+});

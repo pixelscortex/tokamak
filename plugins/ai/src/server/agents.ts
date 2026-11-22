@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { local } from "@tokamak/sdk";
 import { agent, type Agent, type Info } from "../contracts";
+import { MAX_ICON_LENGTH } from "../shared/icon";
 
 /** What the agent row shows for an agent whose `info` failed: not usable, like a missing program. */
 const UNKNOWN: Info = {
@@ -24,7 +25,8 @@ export const list = local({
       (await agent.list()).map(async (provider) => ({
         id: provider.id,
         name: provider.name,
-        ...(typeof provider.icon === "string" && { icon: provider.icon }),
+        ...(typeof provider.icon === "string" &&
+          provider.icon.length <= MAX_ICON_LENGTH && { icon: provider.icon }),
         info: await infoOf(provider),
       })),
     ),

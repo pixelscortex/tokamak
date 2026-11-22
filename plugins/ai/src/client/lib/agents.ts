@@ -85,9 +85,12 @@ export function unavailable(agent: AgentEntry): string | undefined {
 
 /**
  * A model's name as people read it, without the agent's name in front:
- * "Claude Fable 5.2" under Claude is "Fable 5.2".
+ * "Claude Fable 5.2" under Claude is "Fable 5.2". Turns from before Claude
+ * named its default by the model stored "Default (recommended)": that reads
+ * "Default", since which model it was then is not known.
  */
-export function modelLabel(agentName: string | undefined, model: string | undefined): string | undefined {
+export function modelLabel(agentName: string | undefined, name: string | undefined): string | undefined {
+  const model = name?.replace(/^(default)\s*\(recommended\)$/i, "$1");
   if (!model) return undefined;
   if (!agentName) return model;
   const prefix = `${agentName} `;

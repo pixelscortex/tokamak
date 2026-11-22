@@ -82,14 +82,55 @@ async function snapshots(ctx: LocalContext, turn: Turn) {
   return before && after ? { before, after } : undefined;
 }
 
+/** Files the operating system writes on its own: Finder's .DS_Store, Windows' Thumbs.db and desktop.ini. */
+const SYSTEM_FILES = new Set([".ds_store", "thumbs.db", "desktop.ini"]);
+
+/** A path's folder ("" at the top) and name. */
+function split(path: string): { folder: string; name: string } {
+  const slash = path.lastIndexOf("/") + 1;
+  return { folder: path.slice(0, slash), name: path.slice(slash) };
+}
+
 /**
- * Files the operating system writes on its own (Finder's .DS_Store and "._"
- * files, Windows' Thumbs.db and desktop.ini). They are never a turn's change:
- * left out of the counts, the card and the review panel.
+ * Which changed files are the operating system's, never the agent's change:
+ * left out of the counts, the card and the review panel. The names match in
+ * any case. A "._name" file (macOS keeps a file's extra data in it on some
+ * drives) counts only beside its "name", which a real file named like that
+ * would not have.
  */
-export function isSystemJunk(path: string): boolean {
-  const name = path.split("/").at(-1) ?? path;
-  return name === ".DS_Store" || name.startsWith("._") || name === "Thumbs.db" || name === "desktop.ini";
+async function systemJunk(
+  ctx: LocalContext,
+  turn: Turn,
+  commits: { before: string; after: string },
+  files: readonly ChangedFile[],
+): Promise<Set<string>> {
+  const junk = new Set(
+    files.filter((file) => SYSTEM_FILES.has(split(file.path).name.toLowerCase())).map((file) => file.path),
+  );
+  const doubles = files.filter(
+    (file) => split(file.path).name.startsWith("._") && split(file.path).name.length > 2,
+  );
+  if (!doubles.length) return junk;
+  const full = (path: string) => (turn.prefix ? `${turn.prefix}/${path}` : path);
+  const sibling = (path: string) => {
+    const { folder, name } = split(path);
+    return folder + name.slice(2);
+  };
+  const present = new Set<string>();
+  for (const commit of [commits.before, commits.after]) {
+    const listed = await readGit(ctx, turn.root, [
+      "ls-tree",
+      "-r",
+      "--name-only",
+      "--full-tree",
+      commit,
+      "--",
+      ...doubles.map((file) => `:(top,literal)${full(sibling(file.path))}`),
+    ]);
+    for (const path of listed) present.add(path);
+  }
+  for (const file of doubles) if (present.has(full(sibling(file.path)))) junk.add(file.path);
+  return junk;
 }
 
 /** `git diff --numstat -z` rows: added, removed and path, NUL-terminated. */
@@ -128,9 +169,9 @@ export async function turnChange(
 ): Promise<TurnChange | null> {
   const saved = await snapshots(ctx, turn);
   if (!saved) return null;
-  const files = (await changedFiles(ctx, turn, saved.before, saved.after)).filter(
-    (file) => !isSystemJunk(file.path),
-  );
+  const all = await changedFiles(ctx, turn, saved.before, saved.after);
+  const junk = await systemJunk(ctx, turn, saved, all);
+  const files = all.filter((file) => !junk.has(file.path));
   const tracking =
     (await ranWithoutGit(ctx, turn, ranEarlier)) && (await startsChain(ctx, turn, saved.before))
       ? await fileCount(ctx, turn, saved.before)
@@ -207,6 +248,7 @@ export async function turnDiff(ctx: LocalContext, turn: Turn): Promise<TurnDiff 
   const saved = await snapshots(ctx, turn);
   if (!saved) return null;
   const files = await changedFiles(ctx, turn, saved.before, saved.after);
+  const junk = await systemJunk(ctx, turn, saved, files);
   // Sections come in the same order as the numstat rows: one per `diff --git` header.
   const sections: Section[] = [];
   let budget = DIFF_LINE_LIMIT;
@@ -240,7 +282,7 @@ export async function turnDiff(ctx: LocalContext, turn: Turn): Promise<TurnDiff 
       };
     })
     // Paired with their sections first: the sections follow every numstat row.
-    .filter((file) => !isSystemJunk(file.path));
+    .filter((file) => !junk.has(file.path));
   return {
     files: shownFiles,
     added: sum(shownFiles, "added"),

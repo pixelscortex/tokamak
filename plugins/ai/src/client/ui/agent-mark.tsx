@@ -2,6 +2,7 @@ import { For } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { agents } from "../lib/agents";
 import { agentIcon } from "../lib/icons";
+import { MAX_ICON_LENGTH } from "../../shared/icon";
 
 interface Mark {
   readonly viewBox: string;
@@ -15,6 +16,8 @@ const rule = (value: string | null): Rule | undefined =>
 /** The stand-in mark: an asterisk, for an agent that gave none. */
 const NEUTRAL: Mark = { viewBox: "0 0 24 24", paths: [{ d: agentIcon }] };
 
+/** Marks parsed so far, by their SVG text; a window sees a handful, so the oldest go past this many. */
+const CACHED = 32;
 const parsed = new Map<string, Mark | null>();
 
 /**
@@ -23,11 +26,12 @@ const parsed = new Map<string, Mark | null>();
  * or colours of its own into the window; the paths are painted in currentColor.
  */
 function parse(svg: string): Mark | null {
+  if (svg.length > MAX_ICON_LENGTH) return null;
   let mark = parsed.get(svg);
   if (mark !== undefined) return mark;
   mark = null;
   const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
-  if (root.localName === "svg") {
+  if (root.localName === "svg" && root.namespaceURI === "http://www.w3.org/2000/svg") {
     const paths = [...root.querySelectorAll("path")].flatMap((path) => {
       const d = path.getAttribute("d");
       if (!d) return [];
@@ -35,8 +39,10 @@ function parse(svg: string): Mark | null {
       const clipRule = rule(path.getAttribute("clip-rule"));
       return [{ d, fillRule, clipRule }];
     });
-    if (paths.length) mark = { viewBox: root.getAttribute("viewBox") ?? "0 0 24 24", paths };
+    const viewBox = root.getAttribute("viewBox") ?? "";
+    if (paths.length) mark = { viewBox: /^[\d\s.,-]+$/.test(viewBox) ? viewBox : "0 0 24 24", paths };
   }
+  if (parsed.size >= CACHED) parsed.delete(parsed.keys().next().value!);
   parsed.set(svg, mark);
   return mark;
 }
