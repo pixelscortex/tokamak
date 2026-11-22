@@ -9,6 +9,9 @@ import {
 import { declaresAccessTo } from "../../sdk/src/plugin";
 import { WORKER_CAPACITY, WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits";
 
+/** How many not-found plugin ids are remembered before the memory is cleared. */
+const RECHECK_CAPACITY = 64;
+
 export interface LocalArtifact {
   id: string;
   entryHash: string;
@@ -60,6 +63,13 @@ export class LocalFunctions implements LocalTransport {
   /** The catalog read in flight, shared by every call that needs it. */
   private loading?: { generation: number; promise: Promise<boolean> };
   private closed = false;
+  /**
+   * Plugins looked up and not found, with the generation the catalog was
+   * read again for. One extra read per plugin and generation, so a caller
+   * asking for a plugin that truly has no local functions cannot flood the
+   * connection with catalog pages.
+   */
+  private readonly rechecked = new Map<string, number>();
 
   constructor(
     private readonly server: ServerConnection,
@@ -97,7 +107,18 @@ export class LocalFunctions implements LocalTransport {
     if (this.closed) throw new Error("Local functions closed");
     const manifest = this.catalog.find((entry) => entry.plugin.id === id);
     const artifact = manifest && this.artifact(manifest);
-    if (!artifact) throw new Error(`Plugin ${id} has no local functions`);
+    if (!artifact) {
+      // The caller may know about this plugin before this catalog does: an
+      // install or reload answers its request before the "plugins changed"
+      // notice reaches this connection. Read the catalog once more before
+      // saying the plugin has nothing to run.
+      if (this.rechecked.get(id) !== this.generation) {
+        if (this.rechecked.size >= RECHECK_CAPACITY) this.rechecked.clear();
+        this.rechecked.set(id, ++this.generation);
+        return this.invoke(name, args, signal);
+      }
+      throw new Error(`Plugin ${id} has no local functions`);
+    }
     let worker = this.workers.get(id);
     if (!worker) {
       if (this.workers.size >= WORKER_CAPACITY) throw new Error("Local plugin worker limit reached");

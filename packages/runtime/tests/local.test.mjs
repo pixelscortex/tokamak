@@ -104,3 +104,44 @@ test("many local calls at once read the plugin catalog once, and again only afte
     await functions.close();
   }
 });
+
+test("a plugin installed before its notice arrives is found, and a missing one costs one extra catalog read", async () => {
+  const alpha = {
+    plugin: { id: "alpha" },
+    entries: { local: { entry: "entry", code: "code" } },
+    hashes: { entry: "entry", code: "alpha-v1" },
+  };
+  let catalog = { plugins: [] };
+  let reads = 0;
+  const server = {
+    plugins: async () => {
+      reads++;
+      return catalog;
+    },
+    onPluginsChanged: () => () => {},
+  };
+  const functions = new LocalFunctions(server, async ({ id }, receive) => ({
+    async send(message) {
+      receive({ type: "result", id: message.id, value: id });
+    },
+    async close() {},
+  }));
+  const client = new TokamakClient(server, functions);
+  const a = createApi("alpha");
+  const missing = createApi("missing");
+  try {
+    // The catalog is read while alpha is not installed yet.
+    await expect(client.local(missing.jobs.run, {})).rejects.toThrow("no local functions");
+    const afterFirstMiss = reads;
+    // Asking again for a plugin that is not there reads nothing more.
+    await expect(client.local(missing.jobs.run, {})).rejects.toThrow("no local functions");
+    expect(reads).toBe(afterFirstMiss);
+
+    // alpha is installed; no "plugins changed" notice has reached this connection.
+    catalog = { plugins: [alpha] };
+    await expect(client.local(a.jobs.run, {})).resolves.toBe("alpha");
+    expect(reads).toBe(afterFirstMiss + 1);
+  } finally {
+    await functions.close();
+  }
+});
