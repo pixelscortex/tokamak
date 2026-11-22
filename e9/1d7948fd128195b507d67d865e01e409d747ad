@@ -1,0 +1,97 @@
+plugins/claude/src/server/wire.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-178
+e2e/fake-agent/replays/claude-refuse.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-18
+plugins/claude/src/server/_generated/internal.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-4
+e2e/fake-agent/replays/claude-steer-tools.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-21
+plugins/ai/src/client/lib/agents.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 73,76,90
+plugins/claude/src/server/tsconfig.json
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-10
+plugins/claude/tests/replay.mjs
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-66
+plugins/claude/src/server/_generated/api.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-4
+app/src-tauri/src/local.rs
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 330-331,334-335,337-340,453,455-458,463-464,473-476,478-481
+e2e/fake-agent/replays/claude-steer.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-96
+e2e/fake-agent/replays/claude-stop-asking.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-16
+e2e/fake-agent/replays/claude-cancel.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-13
+e2e/fake-agent/replays/claude-resume.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-11
+e2e/fake-agent/replays/claude-todo-list.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-134
+packages/server/tests/claude_turns.rs
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-18
+e2e/fake-agent/replays/claude-lost.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-3
+.ci/check.sh
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 3,17-18
+plugins/ai/src/server/run.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 40-44
+plugins/claude/plugin.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-3
+plugins/claude/README.md
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-27
+plugins/ai/src/client/lib/turn.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 29-35
+plugins/claude/src/server/permissions.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-131
+plugins/claude/tests/observe.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-96
+e2e/fake-agent/replays/claude-stop.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-13
+plugins/claude/tests/turns.mjs
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-396
+plugins/claude/tests/replay-privacy.mjs
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-60
+plugins/ai/src/contracts.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 11-12
+plugins/claude/src/server/run.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-36
+e2e/fake-agent/replays/claude-stop-tools.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-11
+plugins/claude/src/server/events.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-235
+e2e/fake-agent/replays/claude-info.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-3
+e2e/fake-agent/replays/claude-scope.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-23
+e2e/fake-agent/replays/claude-permit.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-28
+e2e/fake-agent/replays/claude-plan.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-27
+plugins/claude/src/server/agent.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-93
+plugins/claude/package.json
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-9
+plugins/claude/src/server/turn.ts
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-182
+e2e/fake-agent/replays/claude-history.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-12
+e2e/fake-agent/replays/claude-hello.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-13
+e2e/fake-agent/replays/claude-remember.jsonl
+  s_dd6ee6eb6de096::t_fbe5e9f93f40dc 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e91d7948fd128195b507d67d865e01e409d747ad",
+  "prompts": {},
+  "sessions": {
+    "s_dd6ee6eb6de096": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2016e-c6ec-7ff3-a3da-1ca374d8e514",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <justkira@JustKiras-MacBook-Pro.local>"
+    }
+  }
+}
