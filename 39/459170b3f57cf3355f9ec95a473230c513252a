@@ -1,0 +1,88 @@
+packages/build/src/artifact-bundle.ts
+  s_c7470711f4ad55::t_2b8dca7ccf4f6e 29,32,83-86
+  s_c7470711f4ad55::t_d1b32ea01386e5 87
+packages/sdk/tools/plugin-compiler.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 1-23
+packages/sdk/src/host.ts
+  s_c7470711f4ad55::t_4f9629c48f4ed2 55-56
+packages/runtime/moon.yml
+  s_c7470711f4ad55::t_591527f13b452a 16
+packages/sdk/worker/process.ts
+  s_c7470711f4ad55::t_8320af9419d3d3 4,37
+  s_c7470711f4ad55::t_1b5893d62eb697 3,7-21,30,36,38-50,52,54,59-70,73,78-100,102-103,106,109,111,118
+packages/sdk/tools/server-builtins.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 1-18
+packages/sdk/tools/bundle.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 20,100-105,123
+  s_c7470711f4ad55::t_81004e0953e08d 19,135,262-278
+packages/build/tests/local.test.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 28-29,75,110-111
+packages/sdk/tools/placement.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 7,9
+  s_c7470711f4ad55::t_5ef565702db0a4 6,10-17,20,29,37,54,71,189-191,195-201,204,210-226
+packages/build/src/exports.ts
+  s_c7470711f4ad55::t_8320af9419d3d3 2-4,34,37,49,63-64
+packages/server/tests/local-functions-driver.mjs
+  s_c7470711f4ad55::t_881112afe38dbc 2,20-29,41,73-74,76,95-108,177-178,180-184,188,190,192-198,213-218
+  s_c7470711f4ad55::t_c714599b65458d 19,30-40,179,202-211
+  s_c7470711f4ad55::t_4f9629c48f4ed2 141,147
+packages/worker/src/windows.rs
+  s_c7470711f4ad55::t_4f9629c48f4ed2 1,47,62,110
+  s_c7470711f4ad55::t_8320af9419d3d3 122,165,169-170
+packages/sdk/worker/entry.ts
+  s_c7470711f4ad55::t_4f9629c48f4ed2 8,10-12,21-22,38,48,79,100
+packages/runtime/tests/local.test.mjs
+  s_c7470711f4ad55::t_f861c87a365adf 1-63
+packages/build/src/vite.ts
+  s_c7470711f4ad55::t_2b8dca7ccf4f6e 12,53-54,140,173
+  s_c7470711f4ad55::t_c714599b65458d 9
+packages/worker/src/lib.rs
+  s_c7470711f4ad55::t_8320af9419d3d3 23
+  s_c7470711f4ad55::t_c714599b65458d 34-40
+  s_c7470711f4ad55::t_4f9629c48f4ed2 21-22,24-33,41-43,58,62,67,113-114,155,161,165
+packages/sdk/tools/worker.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 4,16-30,32,37,42,44
+  s_c7470711f4ad55::t_a9104c5f8fde27 1-3,45
+app/src-tauri/src/local.rs
+  s_c7470711f4ad55::t_c714599b65458d 13,321-322
+  s_c7470711f4ad55::t_f4345f1d97449e 52,56-57,59,64,68,115,153,158,214,267-268,290-292,312,315-320,323-419
+  s_c7470711f4ad55::t_8320af9419d3d3 62-63,114
+  s_c7470711f4ad55::t_0c193fb02f8e38 420
+packages/sdk/src/worker-limits.ts
+  s_c7470711f4ad55::t_1b5893d62eb697 1-3
+packages/build/src/descriptor.ts
+  s_c7470711f4ad55::t_2b8dca7ccf4f6e 3
+README.md
+  s_c7470711f4ad55::t_8320af9419d3d3 90-97
+packages/sdk/tools/server-files.mjs
+  s_c7470711f4ad55::t_2b8dca7ccf4f6e 1-9
+packages/sdk/src/functions.ts
+  s_c7470711f4ad55::t_4f9629c48f4ed2 174,187-188,222,228
+packages/runtime/js/local.ts
+  s_c7470711f4ad55::t_591527f13b452a 27,37,41,45-48,57-59,61-65,70-71,82-103,109-112,114-115,117,125-127,183-184
+  s_c7470711f4ad55::t_4f9629c48f4ed2 2,67,119-120,174,177,229
+packages/server/src/host/worker/mod.rs
+  s_c7470711f4ad55::t_8320af9419d3d3 20
+packages/sdk/tools/plugin-boundary.mjs
+  s_c7470711f4ad55::t_8320af9419d3d3 16-19,145-146
+  s_c7470711f4ad55::t_2b8dca7ccf4f6e 15,84,138
+packages/server/src/host/worker/process.rs
+  s_c7470711f4ad55::t_8320af9419d3d3 26,29
+  s_c7470711f4ad55::t_2b8dca7ccf4f6e 77,184,215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39459170b3f57cf3355f9ec95a473230c513252a",
+  "prompts": {},
+  "sessions": {
+    "s_c7470711f4ad55": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-1f45-7500-b6a5-f24919e0c3a6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
