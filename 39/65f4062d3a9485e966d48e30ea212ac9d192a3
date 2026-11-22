@@ -1,0 +1,21 @@
+packages/server/src/service/sign_in.rs
+  s_4911f4a479dbca::t_a8bbc25c5670c9 46
+packages/server/tests/chat_threads.rs
+  s_4911f4a479dbca::t_b74310e8609ec1 8-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3965f4062d3a9485e966d48e30ea212ac9d192a3",
+  "prompts": {},
+  "sessions": {
+    "s_4911f4a479dbca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20109-5a76-7763-b577-cc10280b4252",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
