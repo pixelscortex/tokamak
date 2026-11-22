@@ -1,0 +1,73 @@
+packages/server/tests/fixtures/internal/package.json
+  s_50ddb902f521ae::t_3217afa74d6c0f 1-5
+packages/server/tests/fixtures/internal/src/server/_generated/internal.ts
+  s_50ddb902f521ae::t_d91f3a42d87fe2 1-3
+  s_50ddb902f521ae::t_9bbfe636bfa164 4-13
+packages/server/src/actions.rs
+  s_50ddb902f521ae::t_d0153479288723 176
+packages/server/tests/fixtures/internal/src/server/ops.ts
+  s_50ddb902f521ae::t_8eeda2ab006349 36-39
+  s_50ddb902f521ae::t_3217afa74d6c0f 5,18
+  s_50ddb902f521ae::t_997db8674c3317 1-4,6-17,19-35,40-42
+packages/server/src/host.rs
+  s_50ddb902f521ae::t_d0153479288723 205
+packages/server/src/service/subscriptions.rs
+  s_50ddb902f521ae::t_d0153479288723 106,109,144
+packages/server/src/plugins/mod.rs
+  s_50ddb902f521ae::t_d0153479288723 50
+packages/server/tests/sdk-transport-driver.mjs
+  s_50ddb902f521ae::t_c6c49592e7174f 7,120-121,245-248,261,274-281,296,302,307-313
+  s_50ddb902f521ae::t_6562a777e88acc 8,232
+  s_50ddb902f521ae::t_3217afa74d6c0f 234-238,250-260,264-273,286-288,297-301,303-306
+  s_50ddb902f521ae::t_8eeda2ab006349 223,233,291-294,331
+  s_50ddb902f521ae::t_513a2905efa9e9 224-231,239-244,249,262-263,282-285,289-290,295,314-326,330
+packages/server/src/service/startup.rs
+  s_50ddb902f521ae::t_81785650b32f22 229-235
+  s_50ddb902f521ae::t_d0153479288723 132,137-150,175,236,264-265
+  s_50ddb902f521ae::t_f46b499c4d732e 266-267
+packages/server/src/service/requests.rs
+  s_50ddb902f521ae::t_d0153479288723 81
+packages/server/src/service/mod.rs
+  s_50ddb902f521ae::t_d0153479288723 15,31-46,192,206-214,226
+plugins/chat/src/server/threads/threads.ts
+  s_50ddb902f521ae::t_5a449148d5d98b 3,5,15,22
+packages/server/tests/fixtures/internal/src/server/_generated/api.ts
+  s_50ddb902f521ae::t_d91f3a42d87fe2 1-3
+  s_50ddb902f521ae::t_9bbfe636bfa164 4-13
+packages/server/src/plugins/loading.rs
+  s_50ddb902f521ae::t_81785650b32f22 78-80,237-238
+  s_50ddb902f521ae::t_d0153479288723 64-70,77,81,93,181,262
+packages/server/tests/fixtures/internal/src/server/schema.ts
+  s_50ddb902f521ae::t_997db8674c3317 1
+plugins/chat/src/server/_functions.ts
+  s_50ddb902f521ae::t_5a449148d5d98b 11
+packages/server/tests/sdk_transport.rs
+  s_50ddb902f521ae::t_513a2905efa9e9 125-126,139-140
+  s_50ddb902f521ae::t_8eeda2ab006349 127-138
+packages/server/tests/fixtures/internal/plugin.ts
+  s_50ddb902f521ae::t_997db8674c3317 1-2
+plugins/acp/src/server/agents/agents.ts
+  s_50ddb902f521ae::t_5a449148d5d98b 10-13
+packages/server/src/service/delivery.rs
+  s_50ddb902f521ae::t_81785650b32f22 9-14,16-19
+  s_50ddb902f521ae::t_5a449148d5d98b 15,20-23
+plugins/acp/src/server/backend.ts
+  s_50ddb902f521ae::t_3217afa74d6c0f 15-16
+  s_50ddb902f521ae::t_5a449148d5d98b 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ffbe7750ee2b7d72ccd9ec7151f7ddeb8c40363",
+  "prompts": {},
+  "sessions": {
+    "s_50ddb902f521ae": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a200b2-16ad-77a1-b0af-87926414cc06",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
