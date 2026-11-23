@@ -1,0 +1,21 @@
+packages/server/src/host/worker/tests.rs
+  s_2728ffe022d76a::t_535c74b6da9191 21,28-29
+packages/server/src/plugins/artifact.rs
+  s_2728ffe022d76a::t_a706770d015a52 28-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38d083d93a2a4d93a3580575828462738b300abe",
+  "prompts": {},
+  "sessions": {
+    "s_2728ffe022d76a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2084a-aa52-7763-a927-99c45d54ee4f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
