@@ -1,0 +1,29 @@
+packages/build/tests/local.test.mjs
+  s_d22af58b39f448::t_3f8e7cecf08041 9,15,136-218
+packages/sdk/README.md
+  s_d22af58b39f448::t_c3134b5c8fcb98 177-185
+packages/sdk/tools/bundle.mjs
+  s_d22af58b39f448::t_3b2063ac6bf2da 278-284
+packages/sdk/tools/plugin-boundary.mjs
+  s_d22af58b39f448::t_d42e9165f9e056 348
+packages/sdk/tools/server-builtins.mjs
+  s_d22af58b39f448::t_c6b8df9c6181fa 2-36,47-50,52
+packages/sdk/tools/worker.mjs
+  s_d22af58b39f448::t_86f46305cb3137 6,103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b5744374c9296896acb0ada6e7c40c6391e77ba8",
+  "prompts": {},
+  "sessions": {
+    "s_d22af58b39f448": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a207b3-2c20-7a12-bd20-01c991beee60",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
