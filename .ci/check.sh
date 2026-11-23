@@ -87,7 +87,7 @@ case "$1" in
     # Server and host suites are split below; no Tauri bundle is built here.
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked --workspace --lib --exclude tokamak-worker --exclude server
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-worker -p tokamak-runner
-    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-plugin-host --test protocol --test programs
+    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-plugin-host --bins --test protocol --test programs
 
     # Replay traffic reaches the real server and database in both runs. Compare
     # the stored content and order across runtimes, excluding wall-clock times.

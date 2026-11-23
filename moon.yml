@@ -134,7 +134,7 @@ tasks:
       cache: false
       mutex: "cargo"
   lint-cloud-rust:
-    command: "cargo clippy --locked --no-default-features -p server -p tokamak-plugin-host --all-targets --target-dir target/cloud -- -D warnings"
+    command: "cargo clippy --locked --no-default-features -p server -p tokamak-plugin-host -p tokamak-worker --all-targets --target-dir target/cloud -- -D warnings"
     options:
       cache: false
       mutex: "cargo"
