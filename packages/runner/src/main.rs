@@ -10,6 +10,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
 };
+use tokamak_worker::LocalRuntime;
 use tokio_util::sync::CancellationToken;
 
 struct Config {
@@ -147,6 +148,15 @@ async fn signals(stop: CancellationToken) -> std::io::Result<()> {
     Ok(())
 }
 
+async fn check_local_runtime() -> anyhow::Result<()> {
+    if LocalRuntime::selected().map_err(anyhow::Error::msg)? == LocalRuntime::QuickJs {
+        LocalRuntime::require_local_host(&std::env::current_exe()?)
+            .await
+            .map_err(anyhow::Error::msg)?;
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let Some(config) = Config::read()? else {
@@ -154,9 +164,10 @@ async fn main() -> anyhow::Result<()> {
     };
     let stop = CancellationToken::new();
     let token = access(&config, stop.clone())?;
+    check_local_runtime().await?;
     signals(stop.clone()).await?;
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
-    let address = listener.local_addr()?;
+    let ws = format!("ws://{}/ws", listener.local_addr()?);
     let plugins = config.plugins.canonicalize()?;
     let app_data = config
         .data
@@ -205,7 +216,6 @@ async fn main() -> anyhow::Result<()> {
             }
             Err(error) => return Err(error.into()),
         };
-    let ws = format!("ws://{address}/ws");
     local.observe(backend.server(), &ws).await?;
     let control = match owner.publish(&ws) {
         Ok(control) => control,

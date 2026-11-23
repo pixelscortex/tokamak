@@ -1,6 +1,7 @@
 use super::*;
+use crate::host::process_frames::{operation_reply, oversized, read_frame, write_messages};
 use tokio::{
-    io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt, BufReader},
     task::JoinSet,
 };
 
@@ -72,9 +73,6 @@ fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
     input
         .try_send(value)
         .map_err(|_| "Worker write queue full or closed".into())
-}
-pub(in crate::host) fn oversized(value: &Value) -> Result<bool, String> {
-    Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= WORKER_FRAME_BYTES)
 }
 struct Control<'a> {
     input: &'a mpsc::Sender<Value>,
@@ -165,33 +163,6 @@ async fn run(
         }
     }
 }
-// fill_buf is cancellation-safe. Keep the partial frame across select branches.
-pub(in crate::host) async fn read_frame(
-    output: &mut (impl AsyncBufRead + Unpin),
-    frame: &mut Vec<u8>,
-) -> Result<Option<Vec<u8>>, String> {
-    loop {
-        let bytes = output.fill_buf().await.map_err(|e| e.to_string())?;
-        if bytes.is_empty() {
-            return if frame.is_empty() {
-                Ok(None)
-            } else {
-                Err("Incomplete worker message".into())
-            };
-        }
-        let end = bytes.iter().position(|b| *b == b'\n');
-        let count = end.map_or(bytes.len(), |n| n + 1);
-        if frame.len() + count > WORKER_FRAME_BYTES {
-            return Err("Worker message exceeds 1 MiB limit".into());
-        }
-        frame.extend_from_slice(&bytes[..count]);
-        output.consume(count);
-        if end.is_some() {
-            return Ok(Some(std::mem::take(frame)));
-        }
-    }
-}
-
 async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) {
     let mut chunk = [0u8; 4096];
     while let Ok(n) = stderr.read(&mut chunk).await {
@@ -203,30 +174,6 @@ async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) 
             String::from_utf8_lossy(&chunk[..n])
         ));
     }
-}
-
-pub(in crate::host) async fn write_messages(
-    mut input: tokio::process::ChildStdin,
-    mut outgoing: mpsc::Receiver<Value>,
-) -> Result<(), String> {
-    while let Some(message) = outgoing.recv().await {
-        let mut bytes = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
-        bytes.push(b'\n');
-        if bytes.len() > WORKER_FRAME_BYTES {
-            return Err("Worker message exceeds 1 MiB limit".into());
-        }
-        tokio::time::timeout(Duration::from_secs(5), async {
-            input.write_all(&bytes).await?;
-            // Tokio's Windows pipe writes can finish in its blocking pool.
-            #[cfg(windows)]
-            input.flush().await?;
-            Ok::<_, std::io::Error>(())
-        })
-        .await
-        .map_err(|_| "Worker stdin stalled")?
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
 }
 
 fn fail_pending_calls(id: &str, error: &str, calls: BTreeMap<u64, Call>) {
@@ -250,27 +197,4 @@ fn forward_operation_result(
     }
 
     Ok(())
-}
-
-pub(in crate::host) fn operation_reply(
-    route: Option<(u64, u64)>,
-    op: u64,
-    result: Result<Value, String>,
-) -> Result<Value, String> {
-    let mut message = json!({"type":"opResult","id":op});
-    if let Some((slot, call)) = route {
-        message["slot"] = json!(slot);
-        message["call"] = json!(call);
-    }
-    match result {
-        Ok(value) => message["value"] = value,
-        Err(error) => message["error"] = json!(error),
-    }
-    if oversized(&message)? {
-        if let Some(object) = message.as_object_mut() {
-            object.remove("value");
-        }
-        message["error"] = json!("Host operation result exceeds 1 MiB worker limit");
-    }
-    Ok(message)
 }

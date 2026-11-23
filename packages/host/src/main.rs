@@ -1,40 +1,89 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod action_process;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod builtins;
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
 mod fs;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
 mod modules;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod pipe;
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
 mod programs;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
 mod protocol;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
 mod runtime;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
 mod timers;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod watchdog;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    let code = std::env::args_os()
-        .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
-    if code == "--actions" {
-        return action_process::run().await;
+    let mut args = std::env::args_os().skip(1);
+    match args.next().as_deref() {
+        Some(mode) if mode == "--capabilities" => {
+            if cfg!(feature = "local-runtime") {
+                println!("actions local");
+            } else {
+                println!("actions");
+            }
+            Ok(())
+        }
+        Some(mode) if mode == "--actions" => action_process::run().await,
+        Some(mode) if mode == "--inspect-actions" => {
+            let bundle = args
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Expected a server bundle path"))?;
+            action_process::inspect::run(std::path::Path::new(&bundle)).await
+        }
+        #[cfg(feature = "local-runtime")]
+        Some(mode) if mode == "--local-plugin" => local_plugin::run(args).await,
+        #[cfg(feature = "local-runtime")]
+        Some(code) => protocol::run(std::path::Path::new(code)).await,
+        #[cfg(feature = "local-runtime")]
+        None => anyhow::bail!("Expected a local function bundle path"),
+        #[cfg(not(feature = "local-runtime"))]
+        _ => anyhow::bail!("This host runs only server actions"),
     }
-    if code == "--inspect-actions" {
-        let bundle = std::env::args_os()
-            .nth(2)
-            .ok_or_else(|| anyhow::anyhow!("Expected a server bundle path"))?;
-        return action_process::inspect::run(std::path::Path::new(&bundle)).await;
+}
+
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
+mod local_plugin {
+    pub(super) async fn run(
+        mut args: impl Iterator<Item = std::ffi::OsString>,
+    ) -> anyhow::Result<()> {
+        let _plugin = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Expected a local plugin ID"))?;
+        let bundle = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
+        super::protocol::run(std::path::Path::new(&bundle)).await
     }
-    if code == "--local-plugin" {
-        let bundle = std::env::args_os()
-            .nth(3)
-            .ok_or_else(|| anyhow::anyhow!("Expected a plugin and a local function bundle path"))?;
-        return protocol::run(std::path::Path::new(&bundle)).await;
-    }
-    protocol::run(std::path::Path::new(&code)).await
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]

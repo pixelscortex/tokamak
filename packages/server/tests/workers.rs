@@ -18,7 +18,7 @@ fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 fn quickjs() -> bool {
-    tokamak_worker::LocalRuntime::selected().unwrap() == tokamak_worker::LocalRuntime::QuickJs
+    server::action_runtime().unwrap() == "quickjs"
 }
 
 fn artifacts(legacy: bool) -> &'static BTreeMap<String, String> {

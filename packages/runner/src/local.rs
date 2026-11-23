@@ -206,7 +206,7 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         env.insert("PATH".into(), path.to_string_lossy().into_owned());
     }
     let cwd = local.plugins.parent().unwrap_or(&local.plugins);
-    let (mut process, runtime) = Process::launch_local(&entry, &code, cwd, &env, &paths)?;
+    let (mut process, _) = Process::launch_local(&entry, &code, cwd, &env, &paths)?;
     let (input, output, mut stderr) = process.pipes()?;
     let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
         let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
@@ -223,10 +223,31 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         result = relay => result,
     };
     process.stop().await;
-    result.map_err(|reason| match runtime {
-        LocalRuntime::QuickJs => format!("Plugin host closed: {reason}"),
-        LocalRuntime::Bun => reason,
-    })
+    result
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn stderr_tail(mut input: impl AsyncRead + Unpin) -> String {
+    use std::collections::VecDeque;
+    use tokio::io::AsyncReadExt;
+
+    const STDERR_BYTES: usize = 4096;
+    const STDERR_LINES: usize = 8;
+    let mut tail = VecDeque::with_capacity(STDERR_BYTES);
+    let mut chunk = [0; STDERR_BYTES];
+    while let Ok(count) = input.read(&mut chunk).await {
+        if count == 0 {
+            break;
+        }
+        let discard = (tail.len() + count).saturating_sub(STDERR_BYTES);
+        tail.drain(..discard);
+        tail.extend(&chunk[..count]);
+    }
+    let text = String::from_utf8_lossy(tail.make_contiguous());
+    let text = text.trim_end();
+    let start = text.match_indices('\n').rev().nth(STDERR_LINES - 1);
+    let text = start.map_or(text, |(index, _)| &text[index + 1..]);
+    text[text.ceil_char_boundary(text.len().saturating_sub(STDERR_BYTES))..].to_owned()
 }
 
 async fn relay(

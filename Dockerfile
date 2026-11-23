@@ -19,18 +19,20 @@ RUN proto install bun && proto install rust
 COPY . .
 RUN proto run bun -- install --frozen-lockfile --network-concurrency=16 --verbose
 RUN proto run bun -- run --cwd app build \
-    && proto run bun -- packages/build/src/build.ts plugins/chat
-RUN proto run rust -- build --locked --release -p server -p tokamak-plugin-host
+    && proto run bun -- packages/build/src/build.ts plugins/chat \
+    && proto run bun -- packages/build/src/stage-server-plugin.ts plugins/chat/dist /src/cloud-plugins/chat
+RUN bash .ci/check.sh cloud-graph \
+    && proto run rust -- build --locked --release --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --create-home tokamak \
     && mkdir /data && chown tokamak:tokamak /data
-COPY --from=build /src/target/release/tokamak-server /usr/local/bin/tokamak-server
-COPY --from=build /src/target/release/tokamak-plugin-host /usr/local/bin/tokamak-plugin-host
+COPY --from=build /src/target/cloud/release/tokamak-server /usr/local/bin/tokamak-server
+COPY --from=build /src/target/cloud/release/tokamak-plugin-host /usr/local/bin/tokamak-plugin-host
 COPY --from=build /src/app/dist /opt/tokamak/web
-COPY --from=build /src/plugins/chat/dist /opt/tokamak/plugins/chat
+COPY --from=build /src/cloud-plugins /opt/tokamak/plugins
 ENV PORT=3000 TOKAMAK_WEB_DIR=/opt/tokamak/web
 USER tokamak
 EXPOSE ${PORT}

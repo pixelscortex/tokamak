@@ -1,24 +1,31 @@
 //! Launch and contain the Runner and its plugin processes.
+#[cfg(feature = "local-runtime")]
 mod discovery;
 mod logs;
 mod restart;
+#[cfg(feature = "local-runtime")]
 pub mod runner;
 mod runtime;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "local-runtime"))]
 mod windows;
 
+#[cfg(feature = "local-runtime")]
 pub use discovery::{resolve, search_paths};
 pub use logs::send as log;
 pub use restart::{HEALTHY_UPTIME, RestartBackoff};
-pub use runtime::{LocalRuntime, configured_action_heap_bytes, configured_heap_bytes};
+pub use runtime::configured_action_heap_bytes;
+#[cfg(feature = "local-runtime")]
+pub use runtime::{LocalRuntime, configured_heap_bytes};
+#[cfg(any(feature = "local-runtime", not(windows)))]
+use std::collections::BTreeMap;
+use std::path::Path;
 #[cfg(not(windows))]
 use std::process::Stdio;
-use std::{collections::BTreeMap, path::Path};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "local-runtime"))]
 type WorkerChild = windows::Child;
-#[cfg(not(windows))]
+#[cfg(not(all(windows, feature = "local-runtime")))]
 type WorkerChild = Child;
 #[cfg(windows)]
 type Containment = std::os::windows::io::OwnedHandle;
@@ -30,18 +37,22 @@ pub const WORKER_FRAME_BYTES: usize = 1024 * 1024;
 /// Bound the local worker registry and both lanes' write queues.
 pub const WORKER_CAPACITY: usize = 128;
 
+#[cfg(any(feature = "local-runtime", not(windows)))]
 #[derive(Clone, Copy)]
 pub enum Lane {
     Action,
+    #[cfg(feature = "local-runtime")]
     Local,
 }
 
+#[cfg(any(feature = "local-runtime", not(windows)))]
 impl Lane {
     fn env(self) -> (&'static str, &'static str) {
         (
             "TOKAMAK_WORKER_LANE",
             match self {
                 Self::Action => "action",
+                #[cfg(feature = "local-runtime")]
                 Self::Local => "local",
             },
         )
@@ -56,6 +67,7 @@ pub struct Process {
 }
 
 impl Process {
+    #[cfg(feature = "local-runtime")]
     fn launch_runner(path: &Path, args: &[&std::ffi::OsStr]) -> Result<Self, String> {
         #[cfg(windows)]
         let (child, containment, guardian) = {
@@ -71,6 +83,7 @@ impl Process {
         Ok(Self::contained(child, containment, guardian))
     }
 
+    #[cfg(feature = "local-runtime")]
     pub fn launch_local(
         entry: &Path,
         code: &Path,
@@ -105,7 +118,10 @@ impl Process {
         Ok((process, runtime))
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(all(
+        feature = "local-runtime",
+        any(target_os = "macos", target_os = "linux")
+    ))]
     pub fn launch_plugin(
         plugin: &str,
         code: &Path,
@@ -142,7 +158,7 @@ impl Process {
         } else {
             executable
         };
-        LocalRuntime::host_path(&executable)
+        runtime::host_path(&executable)
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -201,6 +217,7 @@ impl Process {
         Err("The action process is available on macOS and Linux".into())
     }
 
+    #[cfg(feature = "local-runtime")]
     pub fn launch(
         bun: &Path,
         entry: &Path,
@@ -220,6 +237,7 @@ impl Process {
         Ok(Self::contained(child, containment, guardian))
     }
 
+    #[cfg(any(feature = "local-runtime", not(windows)))]
     fn contained(
         child: WorkerChild,
         containment: Containment,
@@ -261,7 +279,7 @@ impl Process {
 
     pub async fn stop(&mut self) {
         drop(self.containment.take());
-        #[cfg(not(windows))]
+        #[cfg(not(all(windows, feature = "local-runtime")))]
         let _ = self.child.kill().await;
         let _ = self.child.wait().await;
         if let Some(mut guardian) = self.guardian.take() {

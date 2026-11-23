@@ -176,6 +176,7 @@ pub async fn serve_with_identities(
     serve_inner(listener, server, shutdown, access, web, identities, None).await
 }
 
+#[cfg(feature = "local-runtime")]
 /// Adds the Runner's local worker socket to the authenticated loopback listener.
 pub async fn serve_runner(
     listener: TcpListener,
@@ -328,6 +329,10 @@ fn routes(
             .route("/shutdown", post(stop))
             .route("/plugins/{id}/reload", post(reload_plugin));
     }
+    #[cfg(not(feature = "local-runtime"))]
+    {
+        app = app.route(RUNNER_WORKER_PATH, get(refuse_local_worker));
+    }
     let mut app = app
         .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
         .with_state(adapter.clone());
@@ -347,6 +352,25 @@ fn routes(
         )
     } else {
         app
+    }
+}
+
+#[cfg(not(feature = "local-runtime"))]
+async fn refuse_local_worker(
+    upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> Response {
+    const REASON: &str = "This server has no local runtime";
+    match upgrade {
+        Ok(upgrade) => upgrade
+            .protocols([WS_PROTOCOL])
+            .on_upgrade(|mut socket| async move {
+                // A browser WebSocket cannot read an HTTP rejection body. Use the
+                // Runner's startup refusal frame so a misdirected caller sees why.
+                let refusal = serde_json::json!({"type": "closed", "reason": REASON});
+                let _ = socket.send(Message::Text(refusal.to_string().into())).await;
+                let _ = socket.send(Message::Close(None)).await;
+            }),
+        Err(_) => (StatusCode::NOT_IMPLEMENTED, REASON).into_response(),
     }
 }
 
@@ -391,7 +415,7 @@ async fn authorize(
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
     let members_route = adapter.hosted && members::matches_path(path);
-    let worker_route = adapter.runner_control.is_some() && path == Some(RUNNER_WORKER_PATH);
+    let worker_route = path == Some(RUNNER_WORKER_PATH);
     let browser_route = worker_route
         || members_route
         || request.uri().path() == "/account"

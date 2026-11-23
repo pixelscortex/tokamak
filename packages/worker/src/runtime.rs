@@ -1,14 +1,17 @@
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
+#[cfg(any(feature = "local-runtime", target_os = "linux", target_os = "macos"))]
+use std::path::{Path, PathBuf};
 
+#[cfg(feature = "local-runtime")]
+use std::ffi::OsStr;
+
+#[cfg(feature = "local-runtime")]
 #[derive(Debug, PartialEq, Eq)]
 pub enum LocalRuntime {
     Bun,
     QuickJs,
 }
 
+#[cfg(feature = "local-runtime")]
 impl LocalRuntime {
     pub fn name(&self) -> &'static str {
         match self {
@@ -25,21 +28,62 @@ impl LocalRuntime {
     }
 
     pub fn host_path(executable: &Path) -> Result<PathBuf, String> {
-        let path = std::env::var_os("TOKAMAK_PLUGIN_HOST").map_or_else(
-            || executable.with_file_name("tokamak-plugin-host"),
-            PathBuf::from,
-        );
-        let missing = || format!("Could not find the plugin host at {}", path.display());
-        let resolved = path
-            .canonicalize()
-            .map_err(|error| format!("{}: {error}", missing()))?;
-        if !resolved.is_file() {
-            return Err(missing());
+        host_path(executable)
+    }
+
+    /// Resolve and verify the host before a QuickJS Runner starts listening.
+    pub async fn require_local_host(executable: &Path) -> Result<PathBuf, String> {
+        let path = Self::host_path(executable)?;
+        let failure = |reason: &str| {
+            format!(
+                "Runner requires a plugin host with local capability at {}: {reason}",
+                path.display()
+            )
+        };
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::process::Command::new(&path)
+                .arg("--capabilities")
+                .stdin(std::process::Stdio::null())
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .map_err(|_| failure("capability check timed out"))?
+        .map_err(|error| failure(&error.to_string()))?;
+        if !output.status.success() {
+            return Err(failure(&format!(
+                "capability check exited with {}",
+                output.status
+            )));
         }
-        Ok(resolved)
+        if !String::from_utf8_lossy(&output.stdout)
+            .split_ascii_whitespace()
+            .any(|name| name == "local")
+        {
+            return Err(failure("host did not advertise local capability"));
+        }
+        Ok(path)
     }
 }
 
+#[cfg(any(feature = "local-runtime", target_os = "linux", target_os = "macos"))]
+pub(super) fn host_path(executable: &Path) -> Result<PathBuf, String> {
+    let path = std::env::var_os("TOKAMAK_PLUGIN_HOST").map_or_else(
+        || executable.with_file_name("tokamak-plugin-host"),
+        PathBuf::from,
+    );
+    let missing = || format!("Could not find the plugin host at {}", path.display());
+    let resolved = path
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", missing()))?;
+    if !resolved.is_file() {
+        return Err(missing());
+    }
+    Ok(resolved)
+}
+
+#[cfg(feature = "local-runtime")]
 pub fn configured_heap_bytes(variable: &str) -> Result<usize, String> {
     heap_bytes(variable, 256)
 }
@@ -61,6 +105,7 @@ fn heap_bytes(variable: &str, default_mib: usize) -> Result<usize, String> {
         .ok_or_else(|| format!("{variable} must be a positive integer in MiB"))
 }
 
+#[cfg(feature = "local-runtime")]
 fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String> {
     if !supported {
         return Ok(LocalRuntime::Bun);
@@ -74,7 +119,7 @@ fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "local-runtime"))]
 mod tests {
     use super::{LocalRuntime, select};
     use std::ffi::OsStr;

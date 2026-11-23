@@ -24,7 +24,7 @@ pub async fn run() -> Result<()> {
     std::thread::spawn(move || {
         let result = (|| -> Result<()> {
             let mut reader = io::stdin().lock();
-            while let Some(frame) = crate::protocol::read_frame(&mut reader)? {
+            while let Some(frame) = crate::pipe::read_frame(&mut reader)? {
                 if frame["type"] == "shutdown" || input.blocking_send(frame).is_err() {
                     break;
                 }
@@ -34,7 +34,7 @@ pub async fn run() -> Result<()> {
         if let Err(error) = result {
             eprintln!("input: {error:#}");
         }
-        crate::protocol::shutdown();
+        crate::pipe::shutdown();
     });
 
     let output = Arc::new(Output::start());

@@ -96,6 +96,12 @@ than in a standalone module.
 
 ## Action process
 
+The cloud Server ships the same executable name built with
+`--no-default-features --target-dir target/cloud`. That variant accepts `--actions` and
+`--inspect-actions`. It shares the action engine and protocol with the full
+host. The local dispatcher, filesystem modules, program launcher and JavaScript
+`process` global aren't compiled into it.
+
 When QuickJS is selected, the server looks for `tokamak-plugin-host`
 at startup, next to its executable unless `TOKAMAK_PLUGIN_HOST` overrides that
 path. It starts one action process in `--actions` mode on the first action call.

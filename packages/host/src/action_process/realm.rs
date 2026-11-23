@@ -143,7 +143,7 @@ async fn install_builtins(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
     // Let the native exports capture their own constructors before the engine
     // installs the web globals used by fetch and its request types.
     for name in ["node:crypto", "node:url"] {
-        let (_, evaluated) = crate::modules::load_builtin(ctx.clone(), name)?.eval()?;
+        let (_, evaluated) = crate::builtins::load_builtin(ctx.clone(), name)?.eval()?;
         evaluated.into_future::<()>().await?;
     }
     Ok(())

@@ -34,6 +34,12 @@ checks its registration and re-checks that the requested method is declared
 for plain data. Workspace operations in the provider still go through the
 calling window, with that window's signed-in member and device.
 
+Install the Runner on desktops, real machines and sandboxes. For Docker or a
+cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).
+Keep the Runner's full plugin host separate from the Server's actions-only host.
+On macOS and Linux, a QuickJS Runner checks for `local` in the output of
+`tokamak-plugin-host --capabilities` before it starts listening.
+
 To run a workspace from a terminal:
 
 ```sh

@@ -4,7 +4,9 @@ mod session;
 
 pub(super) use session::connection;
 
-use super::{Artifact, TIMEOUT, artifact, artifact_folder, client_env, snapshot, write};
+use super::{
+    Artifact, TIMEOUT, artifact, artifact_folder, client_env, snapshot, stderr_tail, write,
+};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use std::{
@@ -509,7 +511,7 @@ impl Host {
         let id = &build.artifact.id;
         let cwd = pool.plugins.parent().unwrap_or(&pool.plugins);
         let mut process = Process::launch_plugin(id, &code, cwd, &pool.env)?;
-        let (input, output, mut stderr) = process.pipes()?;
+        let (input, output, stderr) = process.pipes()?;
         let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
         let host = Arc::new(Self {
             id: id.clone(),
@@ -529,9 +531,7 @@ impl Host {
         pool.tasks.spawn(async move {
             let _code = code;
             let _permit = permit;
-            let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
-                let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
-            }));
+            let mut stderr = AbortOnDropHandle::new(tokio::spawn(stderr_tail(stderr)));
             let mut output = FramedRead::new(
                 BufReader::new(output),
                 LinesCodec::new_with_max_length(WORKER_FRAME_BYTES - 1),
@@ -544,17 +544,27 @@ impl Host {
                 }
                 Err::<(), String>("plugin host output closed".into())
             };
-            let reason = tokio::select! {
+            let mut reason = tokio::select! {
+                biased;
+                () = slot.retired.cancelled() => slot.retirement().into(),
+                () = running.stopping.cancelled() => "Runner stopped".into(),
                 reason = process.exited() => reason,
                 error = write(input, outgoing) => error,
                 error = read => error.err().unwrap_or_else(|| "plugin host output closed".into()),
-                () = slot.retired.cancelled() => slot.retirement().into(),
-                () = running.stopping.cancelled() => "Runner stopped".into(),
             };
             let _ = running.stopped_at.set(Instant::now());
+            running.stopping.cancel();
+            process.stop().await;
+            // Reaping closes the host's pipe; a descendant holding it open
+            // must not hold up delivery of the failure to callers.
+            if let Ok(Ok(tail)) = tokio::time::timeout(Duration::from_secs(1), &mut stderr).await
+                && !tail.is_empty()
+            {
+                reason.push_str(":\n");
+                reason.push_str(&tail);
+            }
             running.stop(reason);
             lock(&running.calls).active.clear();
-            process.stop().await;
             running.ended.cancel();
         });
         Ok(host)
@@ -663,6 +673,16 @@ impl Host {
 
     fn error(&self) -> String {
         self.label(self.reason.get().map_or("host stopped", String::as_str))
+    }
+
+    async fn call_error(&self, error: String) -> String {
+        // A host can fail before accepting its first invoke. Wait for its
+        // bounded diagnostic just as we do for already accepted calls.
+        if self.stopping.is_cancelled() || self.writes.is_closed() {
+            self.ended.cancelled().await;
+            return self.error();
+        }
+        error
     }
 
     fn label(&self, reason: &str) -> String {

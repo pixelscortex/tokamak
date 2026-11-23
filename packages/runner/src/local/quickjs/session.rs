@@ -363,7 +363,10 @@ async fn run(
     ancestors: &[String],
     turn: Option<&Turn<'_>>,
 ) -> Result<Value, String> {
-    let mut call = host.begin(frame)?;
+    let mut call = match host.begin(frame) {
+        Ok(call) => call,
+        Err(error) => return Err(host.call_error(error).await),
+    };
     let mut operations = FuturesUnordered::new();
     loop {
         tokio::select! {
@@ -382,7 +385,9 @@ async fn run(
                 };
                 reply["id"] = json!(id);
                 reply["type"] = json!("opResult");
-                call.host.send(&reply)?;
+                if let Err(error) = host.send(&reply) {
+                    return Err(host.call_error(error).await);
+                }
             }
         }
     }

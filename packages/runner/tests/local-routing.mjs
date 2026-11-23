@@ -386,6 +386,15 @@ await writeFile(
   fakeHost,
   `#!/bin/sh
 [ "$1" = --local-plugin ] || exec "$(dirname "$0")/real-host" "$@"
+case "$2" in
+  diagnostic-provider)
+    echo 'Discard this older diagnostic' >&2
+    for n in 1 2 3 4 5 6 7; do echo "Retained stderr line $n" >&2; done
+    echo 'Last provider startup diagnostic' >&2
+    exit 1 ;;
+  routed-alpha) ;;
+  *) exec "$(dirname "$0")/real-host" "$@" ;;
+esac
 read -r invoke
 printf '%s\\n' '{"type":"op","call":1,"id":1,"plugin":"routed-beta","name":"test.forged","payload":{}}'
 read -r reply
@@ -420,6 +429,30 @@ try {
     console.log("Runner refused an alpha host operation claiming beta's identity before forwarding it");
   } finally {
     await driver.close();
+  }
+  const provider = await installLocal(
+    join(simulatedPlugins, "diagnostic-provider"),
+    "diagnostic-provider",
+    "export const functions = {};",
+  );
+  const caller = await installLocal(
+    join(simulatedPlugins, "diagnostic-caller"),
+    "diagnostic-caller",
+    `export const functions = {call: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) =>
+      ctx.op("local.contract.call", {plugin: "diagnostic-provider", owner: "diagnostic-caller",
+        name: "probe", registration: "provider", method: "info", args: []}) }};`,
+  );
+  const routed = await rawWindow(simulated, caller, (frame, worker) => worker.route(frame.id, provider, []));
+  try {
+    await assert.rejects(routed.invoke("call", null), (error) => {
+      assert.match(error.message, /Plugin diagnostic-provider.*(?:closed|exited)/);
+      assert.match(error.message, /Retained stderr line 1/);
+      assert.match(error.message, /Last provider startup diagnostic/);
+      assert.doesNotMatch(error.message, /Discard this older diagnostic/);
+      return true;
+    });
+  } finally {
+    await routed.close();
   }
 } finally {
   assert.equal(await simulated.stop(), 0);

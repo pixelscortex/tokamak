@@ -300,7 +300,7 @@ impl Supervisor {
             "path":source.path(),"workerEntry":source.worker_entry,"heap":self.heap,
             "permissions":ops.network_permissions(),"network":options.anonymous.is_none(),
         });
-        if super::worker::process::oversized(&frame)? {
+        if super::process_frames::oversized(&frame)? {
             return Err("Worker invocation exceeds 1 MiB limit".into());
         }
         let (reply, result) = oneshot::channel();
