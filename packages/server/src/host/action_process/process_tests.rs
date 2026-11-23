@@ -10,6 +10,8 @@ while IFS= read -r line; do
     case "$line" in
         *'"type":"ping"'*)
             printf '{"type":"pong","id":%s}\n' "$(field id)" ;;
+        *'"fn":"sign-in"'*'"network":false'*)
+            printf '{"type":"op","id":%s,"slot":%s,"call":%s,"name":"sign-in","payload":null}\n' "$(field id)" "$(field slot)" "$(field id)" ;;
         *'"fn":"echo"'*)
             printf '{"type":"result","id":%s,"slot":%s,"value":"ok"}\n' "$(field id)" "$(field slot)" ;;
         *'"fn":"hold"'*)
@@ -25,6 +27,8 @@ while IFS= read -r line; do
         *'"type":"opResult"'*'"error"'*|*'"error"'*'"type":"opResult"'*)
             printf '{"type":"result","id":%s,"slot":%s,"error":"%s"}\n' \
                 "$(field call)" "$(field slot)" "$(printf '%s\n' "$line" | /usr/bin/sed -E 's/.*"error":"([^"]*)".*/\1/')" ;;
+        *'"type":"opResult"'*'"value":"anonymous"'*)
+            printf '{"type":"result","id":%s,"slot":%s,"value":"anonymous"}\n' "$(field call)" "$(field slot)" ;;
     esac
 done
 "#;
@@ -64,6 +68,8 @@ fn hold() -> (Arc<OpRegistry>, mpsc::UnboundedReceiver<()>) {
         }
     })
     .unwrap();
+    ops.register_sync("sign-in", |_| Ok(json!("anonymous")))
+        .unwrap();
     (Arc::new(ops), receive)
 }
 
@@ -196,6 +202,28 @@ async fn full_plugin_call_and_operation_shares_leave_room_for_another_plugin() {
     assert_eq!(error, "Plugin saturated reached its action call limit (64)");
     echo(&supervisor, peer.clone()).await;
 
+    let timeout = Duration::from_secs(15);
+    let sign_in = supervisor.try_sign_in(timeout).expect("sign-in slot");
+    assert_eq!(
+        supervisor
+            .invoke_with(
+                plugin.clone(),
+                "sign-in".into(),
+                Value::Null,
+                ops.clone(),
+                sign_in
+            )
+            .await
+            .unwrap(),
+        "anonymous"
+    );
+    assert_eq!(
+        supervisor.slots.available_permits(),
+        WORKER_CAPACITY - PLUGIN_CAPACITY
+    );
+
+    assert_anonymous_limit(&supervisor, &ops, &mut entered, timeout).await;
+
     waiting.shutdown().await;
     let error = supervisor
         .invoke(plugin, "burst".into(), Value::Null, ops)
@@ -207,4 +235,39 @@ async fn full_plugin_call_and_operation_shares_leave_room_for_another_plugin() {
     );
     echo(&supervisor, peer).await;
     supervisor.stop().await;
+}
+
+async fn assert_anonymous_limit(
+    supervisor: &Arc<Supervisor>,
+    ops: &Arc<OpRegistry>,
+    entered: &mut mpsc::UnboundedReceiver<()>,
+    timeout: Duration,
+) {
+    let mut anonymous = tokio::task::JoinSet::new();
+    for index in 0..ANONYMOUS_CAPACITY {
+        let sign_in = supervisor.try_sign_in(timeout).expect("sign-in slot");
+        let (supervisor, ops) = (supervisor.clone(), ops.clone());
+        let provider = source(&format!("provider-{index}"));
+        anonymous.spawn(async move {
+            supervisor
+                .invoke_with(provider, "hold".into(), Value::Null, ops, sign_in)
+                .await
+        });
+    }
+    tokio::time::timeout(Duration::from_secs(5), async {
+        for _ in 0..ANONYMOUS_CAPACITY {
+            entered.recv().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        supervisor.slots.available_permits(),
+        WORKER_CAPACITY - PLUGIN_CAPACITY - ANONYMOUS_CAPACITY
+    );
+    assert!(
+        supervisor.try_sign_in(timeout).is_none(),
+        "fifth sign-in was admitted"
+    );
+    anonymous.shutdown().await;
 }

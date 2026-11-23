@@ -160,7 +160,7 @@ impl Broker<'_> {
                     return Ok(());
                 }
                 self.plugins
-                    .entry(call.slot)
+                    .entry(call.source.slot)
                     .or_insert_with(|| call.source.name.clone());
                 let frame = std::mem::take(&mut call.frame);
                 self.calls.insert(call.id, call);
@@ -169,48 +169,28 @@ impl Broker<'_> {
             Command::Cancel(id) => {
                 if let Some(call) = self.calls.remove(&id) {
                     call.active.cancel();
-                    if call.slot == call.source.slot {
-                        send(
-                            self.outgoing,
-                            json!({"type":"cancel","slot":call.slot,"id":id}),
-                        )
-                        .await?;
-                    } else {
-                        self.drop_slot(call.slot).await?;
-                    }
+                    send(
+                        self.outgoing,
+                        json!({"type":"cancel","slot":call.source.slot,"id":id}),
+                    )
+                    .await?;
                 }
                 Ok(())
             }
             Command::Retire(slot) => {
-                let mut private_slots = Vec::new();
-                self.calls.retain(|_, call| {
-                    if call.source.slot != slot {
-                        return true;
-                    }
-                    if call.slot != slot {
-                        private_slots.push(call.slot);
-                    }
-                    false
-                });
-                for private in private_slots {
-                    self.drop_slot(private).await?;
+                self.calls.retain(|_, call| call.source.slot != slot);
+                if self.plugins.remove(&slot).is_some() {
+                    send(self.outgoing, json!({"type":"drop","slot":slot})).await?;
                 }
-                self.drop_slot(slot).await
+                Ok(())
             }
         }
-    }
-
-    async fn drop_slot(&mut self, slot: u64) -> Result<(), String> {
-        if self.plugins.remove(&slot).is_some() {
-            send(self.outgoing, json!({"type":"drop","slot":slot})).await?;
-        }
-        Ok(())
     }
 
     async fn message(&mut self, message: Value) -> Result<(), String> {
         let slot = number(&message, "slot")?;
         match message["type"].as_str() {
-            Some("result") => self.result(slot, message).await,
+            Some("result") => self.result(slot, message),
             Some("op") => self.operation(slot, message).await,
             Some("log") => {
                 if let Some(plugin) = self.plugins.get(&slot) {
@@ -226,10 +206,10 @@ impl Broker<'_> {
         }
     }
 
-    async fn result(&mut self, slot: u64, message: Value) -> Result<(), String> {
+    fn result(&mut self, slot: u64, message: Value) -> Result<(), String> {
         let id = number(&message, "id")?;
         if let std::collections::hash_map::Entry::Occupied(entry) = self.calls.entry(id)
-            && entry.get().slot == slot
+            && entry.get().source.slot == slot
         {
             let call = entry.remove();
             call.active.cancel();
@@ -243,9 +223,6 @@ impl Broker<'_> {
             } else {
                 Ok(message.get("value").cloned().unwrap_or(Value::Null))
             };
-            if slot != call.source.slot {
-                self.drop_slot(slot).await?;
-            }
             let _ = call.reply.send(result);
         }
         Ok(())
@@ -254,10 +231,9 @@ impl Broker<'_> {
     async fn operation(&mut self, slot: u64, message: Value) -> Result<(), String> {
         let id = number(&message, "call")?;
         let op = number(&message, "id")?;
-        let authorized = self
-            .calls
-            .get(&id)
-            .filter(|call| call.slot == slot && is_active(call) && message.get("plugin").is_none());
+        let authorized = self.calls.get(&id).filter(|call| {
+            call.source.slot == slot && is_active(call) && message.get("plugin").is_none()
+        });
         let Some(call) = authorized else {
             return send(
                 self.outgoing,
@@ -265,7 +241,13 @@ impl Broker<'_> {
             )
             .await;
         };
-        let Ok(permit) = call.source.operations.clone().try_acquire_owned() else {
+        // A sign-in action also needs host operations to check credentials.
+        let operations = if call.anonymous_permit.is_some() {
+            &call.source.anonymous_operations
+        } else {
+            &call.source.operations
+        };
+        let Ok(permit) = operations.clone().try_acquire_owned() else {
             return send(
                 self.outgoing,
                 op_error(
@@ -312,7 +294,7 @@ impl Broker<'_> {
 
     async fn forward_op_result(&self, (id, op, result, _permit): OpResult) -> Result<(), String> {
         if let Some(call) = self.calls.get(&id).filter(|call| is_active(call)) {
-            let reply = operation_reply(Some((call.slot, id)), op, result)?;
+            let reply = operation_reply(Some((call.source.slot, id)), op, result)?;
             send(self.outgoing, reply).await?;
         }
         Ok(())

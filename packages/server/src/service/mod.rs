@@ -265,7 +265,6 @@ struct Coordinator {
     action_pool: Option<Arc<Pool>>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
-    sign_in_slots: Arc<tokio::sync::Semaphore>,
     sign_in_pool: Option<Pool>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
     commands: mpsc::WeakSender<Command>,

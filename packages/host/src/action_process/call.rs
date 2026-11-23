@@ -18,11 +18,16 @@ use rquickjs::{
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use super::{Output, number, output::LogShare, realm::Realm};
+use super::{
+    Output,
+    heap::{Heap, OUT_OF_MEMORY},
+    number,
+    output::LogShare,
+    realm::Realm,
+};
 use crate::{modules, runtime::Watchdog};
 
 const LOAD_TIMEOUT: Duration = Duration::from_secs(6);
-pub(super) const OUT_OF_MEMORY: &str = "Server action ran out of memory";
 
 pub(super) struct Bridge {
     pub slot: u64,
@@ -36,7 +41,7 @@ pub(super) struct CallOutput {
     pub id: u64,
     pub bridge: Option<Arc<Bridge>>,
     pub result: RefCell<Option<Value>>,
-    finished: Cell<bool>,
+    pub exhausted: Rc<Cell<bool>>,
 }
 
 impl CallOutput {
@@ -50,7 +55,6 @@ impl CallOutput {
 
     pub fn finish(&self, frame: Value) {
         self.result.replace(Some(frame));
-        self.finished.set(true);
     }
 }
 
@@ -93,9 +97,13 @@ pub(super) async fn run(
     }
     .await;
 
+    // A result may have committed side effects before the last job unwinds.
+    if let Some(frame) = output.result.take() {
+        return Ok(Some(frame));
+    }
     runtime.check_watchdog()?;
     result?;
-    Ok(output.result.take())
+    Ok(None)
 }
 
 pub(super) async fn inspect(source: &str, heap: usize, worker_entry: bool) -> Result<()> {
@@ -113,16 +121,17 @@ struct ActionRuntime {
 
 impl ActionRuntime {
     async fn new(heap: usize, stop: Arc<AtomicBool>, output: Rc<CallOutput>) -> Result<Self> {
-        let runtime = AsyncRuntime::new().map_err(|_| anyhow!(OUT_OF_MEMORY))?;
-        runtime.set_memory_limit(heap).await;
+        // Track real allocation failures even when QuickJS cannot allocate an
+        // exception object. The budget covers the arenas backing the JS heap.
+        let runtime = AsyncRuntime::new_with_alloc(Heap::new(heap, output.exhausted.clone()))
+            .map_err(|_| anyhow!(OUT_OF_MEMORY))?;
         runtime.set_loader(Builtins, Builtins).await;
         let watchdog = Rc::new(Watchdog::default());
         let check = watchdog.clone();
         let retired = stop.clone();
-        let finished = output.clone();
         runtime
             .set_interrupt_handler(Some(Box::new(move || {
-                retired.load(Ordering::Acquire) || finished.finished.get() || check.interrupt()
+                retired.load(Ordering::Acquire) || check.interrupt()
             })))
             .await;
         Ok(Self {
@@ -157,7 +166,9 @@ impl ActionRuntime {
     }
 
     fn done(&self) -> bool {
-        self.output.finished.get() || self.stop.load(Ordering::Acquire) || self.watchdog.tripped()
+        self.output.result.borrow().is_some()
+            || self.stop.load(Ordering::Acquire)
+            || self.watchdog.tripped()
     }
 
     fn check_watchdog(&self) -> Result<()> {
@@ -186,7 +197,13 @@ impl ActionRuntime {
                             return Ok(false);
                         }
                         Err(error) => {
-                            return Err(error.0.with(super::realm::pending_job_error).await);
+                            if self.output.result.borrow().is_some() {
+                                return Ok(true);
+                            }
+                            return Err(error
+                                .0
+                                .with(|ctx| super::realm::pending_job_error(ctx, &self.output))
+                                .await);
                         }
                     }
                 }

@@ -1,8 +1,9 @@
 //! One pipe pair for the process; each running call owns its JavaScript thread.
 mod call;
+mod calls;
+mod heap;
 pub(crate) mod inspect;
 mod output;
-mod queue;
 mod realm;
 
 use std::{io, sync::Arc};
@@ -38,12 +39,12 @@ pub async fn run() -> Result<()> {
 
     let output = Arc::new(Output::start());
     let (complete, mut completed) = mpsc::unbounded_channel();
-    let mut queue = queue::Queue::new(output.clone(), complete);
+    let mut calls = calls::Calls::new(output.clone(), complete);
     loop {
         let frame = tokio::select! {
             biased;
-            Some((key, id)) = completed.recv() => {
-                queue.finished(key, id);
+            Some(key) = completed.recv() => {
+                calls.finished(key);
                 continue;
             }
             frame = frames.recv() => {
@@ -58,10 +59,10 @@ pub async fn run() -> Result<()> {
 
         let slot = number(&frame, "slot")?;
         match frame["type"].as_str() {
-            Some("drop") => queue.retire(slot),
-            Some("invoke") => queue.invoke(slot, number(&frame, "id")?, frame),
-            Some("cancel") => queue.cancel(slot, number(&frame, "id")?),
-            Some("opResult") => queue.op_result(slot, number(&frame, "call")?, frame),
+            Some("drop") => calls.retire(slot),
+            Some("invoke") => calls.invoke(slot, number(&frame, "id")?, frame),
+            Some("cancel") => calls.cancel(slot, number(&frame, "id")?),
+            Some("opResult") => calls.op_result(slot, number(&frame, "call")?, frame),
             _ => anyhow::bail!("Invalid action process message"),
         }
     }

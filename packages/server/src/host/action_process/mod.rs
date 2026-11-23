@@ -30,6 +30,7 @@ use crate::plugins::Asset;
 const DEADLINE: Duration = Duration::from_secs(3600);
 const HEALTHY_UPTIME: Duration = Duration::from_secs(60);
 const PLUGIN_CAPACITY: usize = WORKER_CAPACITY / 2;
+const ANONYMOUS_CAPACITY: usize = 4;
 const BASE_DELAY: Duration = Duration::from_millis(250);
 const MAX_DELAY: Duration = Duration::from_secs(30);
 static NEXT_SLOT: AtomicU64 = AtomicU64::new(0);
@@ -48,6 +49,7 @@ pub(crate) struct Source {
     retired: CancellationToken,
     calls: Arc<Semaphore>,
     operations: Arc<Semaphore>,
+    anonymous_operations: Arc<Semaphore>,
 }
 
 impl Source {
@@ -83,6 +85,7 @@ impl Source {
             retired: CancellationToken::new(),
             calls: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
             operations: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
+            anonymous_operations: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
         })
     }
 
@@ -108,14 +111,14 @@ enum Command {
 
 struct Call {
     id: u64,
-    slot: u64,
     source: Arc<Source>,
     frame: Value,
     ops: Arc<OpRegistry>,
     reply: oneshot::Sender<Result<Value, String>>,
     active: CancellationToken,
     _permit: OwnedSemaphorePermit,
-    _plugin_permit: OwnedSemaphorePermit,
+    _plugin_permit: Option<OwnedSemaphorePermit>,
+    anonymous_permit: Option<OwnedSemaphorePermit>,
     _cancel_on_drop: tokio_util::sync::DropGuard,
 }
 
@@ -166,15 +169,15 @@ impl Default for Timing {
 }
 
 pub(crate) struct InvocationOptions {
-    pub(crate) timeout: Duration,
-    pub(crate) anonymous: bool,
+    timeout: Duration,
+    anonymous: Option<OwnedSemaphorePermit>,
 }
 
 impl Default for InvocationOptions {
     fn default() -> Self {
         Self {
             timeout: DEADLINE,
-            anonymous: false,
+            anonymous: None,
         }
     }
 }
@@ -185,6 +188,7 @@ pub(crate) struct Supervisor {
     current: ArcSwapOption<Running>,
     closed: CancellationToken,
     slots: Arc<Semaphore>,
+    anonymous_slots: Arc<Semaphore>,
     next: AtomicU64,
     heap: usize,
     host: PathBuf,
@@ -203,6 +207,7 @@ impl Supervisor {
             current: ArcSwapOption::empty(),
             closed: CancellationToken::new(),
             slots: Arc::new(Semaphore::new(WORKER_CAPACITY)),
+            anonymous_slots: Arc::new(Semaphore::new(ANONYMOUS_CAPACITY)),
             next: AtomicU64::new(0),
             heap,
             host,
@@ -273,6 +278,14 @@ impl Supervisor {
             .await
     }
 
+    pub(crate) fn try_sign_in(&self, timeout: Duration) -> Option<InvocationOptions> {
+        let permit = self.anonymous_slots.clone().try_acquire_owned().ok()?;
+        Some(InvocationOptions {
+            timeout,
+            anonymous: Some(permit),
+        })
+    }
+
     pub(crate) async fn invoke_with(
         &self,
         source: Arc<Source>,
@@ -281,12 +294,16 @@ impl Supervisor {
         ops: Arc<OpRegistry>,
         options: InvocationOptions,
     ) -> Result<Value, String> {
-        let plugin_permit = source.calls.clone().try_acquire_owned().map_err(|_| {
-            format!(
-                "Plugin {} reached its action call limit ({PLUGIN_CAPACITY})",
-                source.name
-            )
-        })?;
+        let plugin_permit = if options.anonymous.is_some() {
+            None
+        } else {
+            Some(source.calls.clone().try_acquire_owned().map_err(|_| {
+                format!(
+                    "Plugin {} reached its action call limit ({PLUGIN_CAPACITY})",
+                    source.name
+                )
+            })?)
+        };
         let permit = self
             .slots
             .clone()
@@ -299,16 +316,11 @@ impl Supervisor {
             () = tokio::time::sleep_until(end) => return Err("Plugin action deadline exceeded".into()),
             result = self.process() => result?,
         };
-        let slot = if options.anonymous {
-            NEXT_SLOT.fetch_add(1, Ordering::Relaxed) + 1
-        } else {
-            source.slot
-        };
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let frame = json!({
-            "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,"pluginName":source.name,
+            "type":"invoke","slot":source.slot,"id":id,"fn":name,"args":args,"pluginName":source.name,
             "path":source.path(),"workerEntry":source.worker_entry,"heap":self.heap,
-            "permissions":ops.network_permissions(),"network":!options.anonymous,
+            "permissions":ops.network_permissions(),"network":options.anonymous.is_none(),
         });
         if super::worker::process::oversized(&frame)? {
             return Err("Worker invocation exceeds 1 MiB limit".into());
@@ -319,7 +331,6 @@ impl Supervisor {
             .commands
             .send(Command::Invoke(Box::new(Call {
                 id,
-                slot,
                 source: source.clone(),
                 frame,
                 ops,
@@ -327,6 +338,7 @@ impl Supervisor {
                 active: active.clone(),
                 _permit: permit,
                 _plugin_permit: plugin_permit,
+                anonymous_permit: options.anonymous,
                 _cancel_on_drop: active.clone().drop_guard(),
             })))
             .map_err(|_| "Action process exited before invocation")?;

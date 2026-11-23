@@ -441,6 +441,25 @@ actions.
 Declare `net:<hostname>` for every host you fetch from; Bun did not enforce
 these grants for worker plugins.
 
+The server runs up to 64 signed-in calls per plugin and 128 total, with no
+queue. Anonymous sign-in counts toward the total and has four slots across all
+plugins outside the per-plugin limit; a fifth request is refused as busy. A
+`runtime: "worker"` plugin could run up to 128 calls at once on Bun and runs up
+to 64 with QuickJS.
+
+The default QuickJS heap limit is 64 MiB per call. The process-wide worst case
+is 128 times that limit (8 GiB by default), if every call fills its heap. The
+Linux allocator may keep some freed memory per thread. Every call compiles its
+action bundle again, as the server's engine did for default actions. In a
+release build on an Apple M4 Pro, 100 sequential calls took 0.569 s with a
+trivial bundle and 12.343 s with a 1.30 MB bundle of 9,976 distinct functions
+(5.69 and 123.43 ms per call, respectively). Compilation counts toward the
+one-second default sign-in budget.
+
+At each startup, the plugin host evaluates each plugin's action bundle once in
+a separate process with no permissions, no network and no host operations. A
+bundle that needs network access to load fails this check.
+
 Queries, mutations, and the top-level code of modules they import, including
 modules shared with actions, still run in the server. Action definitions,
 helpers, and imports used only by actions are not loaded by the server. The

@@ -5,6 +5,7 @@ import type { FunctionRegistry } from "../src/functions";
 // Capture these before plugin module initialization can modify the realm.
 const { stringify, parse } = JSON;
 const { setPrototypeOf } = Object;
+const string = String;
 function emit(send: (json: string) => void, message: object) {
   send(stringify(setPrototypeOf(message, null)));
 }
@@ -31,8 +32,12 @@ export function initialize(send: (json: string) => void, nextOp: () => number, f
         }
       },
       errorMessage(error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return error === null || message === "out of memory" ? "Server action ran out of memory" : message;
+        if (error instanceof Error) return error.message;
+        try {
+          return `Server action threw ${string(error)}`;
+        } catch {
+          return "Server action threw [unprintable value]";
+        }
       },
       errorStack(error) {
         return error instanceof Error ? error.stack?.slice(0, 32768) : undefined;

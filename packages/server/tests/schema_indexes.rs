@@ -1320,6 +1320,11 @@ fn changed_skipped_build_reports_inspection_failure_without_blocking_reload() {
                 .contains("Invalid plugin schema")
         );
 
+        // Explicitly retry the skipped plugin while it still fails inspection.
+        let retry = server.reload_plugin("alpha".into()).await.unwrap();
+        assert_eq!(plugin_ids(&retry), ["beta"]);
+        assert_eq!(retry["skipped"], catalog["skipped"]);
+
         installation.install(&ALPHA_ADDED);
         let catalog = server.reload_plugin("beta".into()).await.unwrap();
         assert_eq!(plugin_ids(&catalog), ["alpha", "beta"]);

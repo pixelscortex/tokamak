@@ -46,3 +46,30 @@ functions.heap = action(async () => {
   const retained = [];
   while (true) retained.push(new Uint8Array(64 * 1024).fill(1));
 });
+
+functions.retireAtInterrupt = action((fail) => {
+  const remove = Map.prototype.delete;
+  Map.prototype.delete = function (key) {
+    // Cross QuickJS's interrupt polling threshold during retirement.
+    for (let iteration = 0; iteration < 20000; iteration++) {}
+    console.info("retired");
+    if (fail) throw new Error("after result");
+    return remove.call(this, key);
+  };
+  return "recorded";
+});
+
+functions.throwValue = action((kind) => {
+  switch (kind) {
+    case "null":
+      throw null;
+    case "undefined":
+      throw undefined;
+    case "number":
+      throw 1;
+    case "object":
+      throw { error: true };
+    default:
+      throw new Error("out of memory");
+  }
+});

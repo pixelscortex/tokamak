@@ -347,25 +347,11 @@ impl Coordinator {
                 .get(&target.owner)
                 .ok_or(SignInError::Unavailable)?
                 .clone();
-            let permit = self
-                .sign_in_slots
-                .clone()
-                .try_acquire_owned()
-                .map_err(|_| SignInError::Busy)?;
             let timeout = sign_in_limits(self.pool.limits().clone()).call_timeout;
+            let options = process.try_sign_in(timeout).ok_or(SignInError::Busy)?;
             Box::pin(async move {
-                let _permit = permit;
                 process
-                    .invoke_with(
-                        source,
-                        name,
-                        arguments,
-                        Arc::new(ops),
-                        crate::host::action_process::InvocationOptions {
-                            timeout,
-                            anonymous: true,
-                        },
-                    )
+                    .invoke_with(source, name, arguments, Arc::new(ops), options)
                     .await
             })
         } else {

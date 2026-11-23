@@ -202,3 +202,54 @@ async fn cancelled_worker_fetches_release_their_resources() {
     .await
     .expect("cancelled worker fetches left HTTP connections open");
 }
+
+#[tokio::test]
+async fn action_errors_distinguish_thrown_values_from_heap_exhaustion() {
+    let mut process = Process::start();
+    for (id, (kind, expected)) in [
+        ("null", "Server action threw null"),
+        ("undefined", "Server action threw undefined"),
+        ("number", "Server action threw 1"),
+        ("object", "Server action threw [object Object]"),
+        ("error", "out of memory"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        process
+            .invoke(1, id as u64 + 1, "throwValue", json!(kind), BUNDLE)
+            .await;
+        let result = process.next().await;
+        assert_eq!(result["error"], expected, "{result}");
+        assert!(!result.to_string().contains("tokamak:actions:"), "{result}");
+        if kind == "error" {
+            assert!(
+                result["stack"]
+                    .as_str()
+                    .unwrap()
+                    .contains("tokamak-action.js:"),
+                "{result}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn inspecting_an_action_module_that_throws_null_reports_the_value() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/action-throw-null.js");
+    let output = tokio::time::timeout(
+        Duration::from_secs(20),
+        Command::new(env!("CARGO_BIN_EXE_tokamak-plugin-host"))
+            .arg("--inspect-actions")
+            .arg(path)
+            .env("TOKAMAK_ACTION_INSPECT", "67108864:false")
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(output.status.success());
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["error"], "Server action threw null");
+}

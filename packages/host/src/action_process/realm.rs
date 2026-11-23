@@ -9,22 +9,19 @@ use engine::{
     web::{self, WebHost, WebLease},
 };
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CaughtError, Ctx, Exception, Function, Module, Object, Persistent,
-    Promise, prelude::Func,
+    AsyncContext, AsyncRuntime, CaughtError, Coerced, Ctx, Exception, FromJs, Function, Module,
+    Object, Persistent, Promise, prelude::Func,
 };
 use serde_json::Value;
 
-use super::{
-    BUNDLE,
-    call::{CallOutput, OUT_OF_MEMORY},
-    number,
-};
+use super::{BUNDLE, call::CallOutput, heap::OUT_OF_MEMORY, number};
 
 pub(super) type InvocationPromise = Persistent<Promise<'static>>;
 
 pub(super) struct Realm {
     dispatch: Persistent<Function<'static>>,
     context: AsyncContext,
+    output: Rc<CallOutput>,
     _web: WebLease,
     _web_invocation: Invocation,
 }
@@ -49,6 +46,7 @@ impl Realm {
             }
         })?;
         let invocation = Invocation::unbounded();
+        let call_output = output.clone();
         let dispatch = context
             .async_with(async |ctx| {
                 let run = async {
@@ -70,6 +68,7 @@ impl Realm {
                     let logging: Function = entry.get("logging")?;
                     let initialize: Function = entry.get("initialize")?;
                     let bridge = output.bridge.clone();
+                    let output = call_output.clone();
                     let send = Function::new(ctx.clone(), move |ctx: Ctx<'_>, line: String| {
                         send(&output, &line)
                             .map_err(|e| Exception::throw_message(&ctx, &e.to_string()))
@@ -89,13 +88,14 @@ impl Realm {
                     Ok::<_, rquickjs::Error>(Persistent::save(&ctx, dispatch))
                 }
                 .await;
-                run.map_err(|error| js_error(&ctx, error))
+                run.map_err(|error| js_error(&ctx, error, &call_output))
             })
             .await?;
 
         Ok(Self {
             dispatch,
             context,
+            output,
             _web: lease,
             _web_invocation: invocation,
         })
@@ -120,7 +120,7 @@ impl Realm {
                 let promise = promise.clone().restore(&ctx)?;
                 match promise.result::<()>() {
                     None => Ok(()),
-                    Some(Err(error)) => Err(js_error(&ctx, error)),
+                    Some(Err(error)) => Err(js_error(&ctx, error, &self.output)),
                     Some(Ok(())) => Err(anyhow!("Plugin action completed without a result")),
                 }
             })
@@ -132,7 +132,7 @@ impl Realm {
             .clone()
             .restore(ctx)
             .and_then(|dispatch| dispatch.call((frame.to_string(),)))
-            .map_err(|error| js_error(ctx, error))
+            .map_err(|error| js_error(ctx, error, &self.output))
     }
 }
 
@@ -149,27 +149,37 @@ async fn install_builtins(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
     Ok(())
 }
 
-pub(super) fn pending_job_error(ctx: Ctx<'_>) -> anyhow::Error {
-    js_error(&ctx, rquickjs::Error::Exception)
+pub(super) fn pending_job_error(ctx: Ctx<'_>, output: &CallOutput) -> anyhow::Error {
+    js_error(&ctx, rquickjs::Error::Exception, output)
 }
 
-fn js_error(ctx: &Ctx<'_>, error: rquickjs::Error) -> anyhow::Error {
-    match CaughtError::from_error(ctx, error) {
-        CaughtError::Error(rquickjs::Error::Allocation) => anyhow!(OUT_OF_MEMORY),
-        CaughtError::Exception(error) if error.message().as_deref() == Some("out of memory") => {
-            anyhow!(OUT_OF_MEMORY)
-        }
-        // QuickJS may be too short of memory to construct its InternalError.
-        CaughtError::Value(value) if value.is_null() => anyhow!(OUT_OF_MEMORY),
-        error => anyhow!("{error}"),
+fn js_error(ctx: &Ctx<'_>, error: rquickjs::Error, output: &CallOutput) -> anyhow::Error {
+    if output.exhausted.get() || matches!(error, rquickjs::Error::Allocation) {
+        return anyhow!(OUT_OF_MEMORY);
     }
+    match CaughtError::from_error(ctx, error) {
+        CaughtError::Value(value) => {
+            let text = Coerced::<String>::from_js(ctx, value)
+                .map_or_else(|_| "[unprintable value]".to_owned(), |text| text.0);
+            anyhow!("Server action threw {text}")
+        }
+        error => anyhow!("{}", strip_wrapper_frames(&error.to_string())),
+    }
+}
+
+fn strip_wrapper_frames(stack: &str) -> String {
+    stack
+        .lines()
+        .filter(|line| !(line.trim_start().starts_with("at ") && line.contains("tokamak:actions:")))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn send(call: &CallOutput, line: &str) -> Result<()> {
     let Some(bridge) = &call.bridge else {
         return Ok(());
     };
-    let frame: Value = serde_json::from_str(line)?;
+    let mut frame: Value = serde_json::from_str(line)?;
 
     match frame["type"].as_str() {
         Some("op") => {
@@ -182,6 +192,12 @@ fn send(call: &CallOutput, line: &str) -> Result<()> {
         Some("result") => {
             ensure!(number(&frame, "id")? == call.id, "Invalid action result id");
             if call.result.borrow().is_none() {
+                if frame["error"].is_string() && call.exhausted.get() {
+                    frame["error"] = OUT_OF_MEMORY.into();
+                    frame["stack"] = Value::Null;
+                } else if let Some(stack) = frame["stack"].as_str() {
+                    frame["stack"] = strip_wrapper_frames(stack).into();
+                }
                 call.finish(frame);
             }
             Ok(())

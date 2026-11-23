@@ -235,7 +235,6 @@ impl Server {
             action_pool,
             action_process,
             legacy_action_source,
-            sign_in_slots: Arc::new(tokio::sync::Semaphore::new(4)),
             sign_in_pool: None,
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
