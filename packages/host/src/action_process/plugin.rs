@@ -41,7 +41,7 @@ impl Thread {
             .and_then(|bytes| usize::try_from(bytes).ok())
             .filter(|bytes| *bytes > 0)
             .context("Invalid action heap limit")?;
-        let persistent = frame["persistent"] == true;
+        let worker_entry = frame["workerEntry"] == true;
         // The server admits calls and host operations before sending frames.
         // A busy runtime must never put backpressure on the dispatcher.
         let (requests, receive) = mpsc::unbounded_channel();
@@ -60,7 +60,7 @@ impl Thread {
 
         std::thread::Builder::new()
             .name("tokamak-action-js".into())
-            .spawn(move || start_thread(&path, heap, persistent, bridge, stop, receive))?;
+            .spawn(move || start_thread(&path, heap, worker_entry, bridge, stop, receive))?;
         Ok(Self { requests, retired })
     }
 
@@ -80,7 +80,7 @@ impl Drop for Thread {
 fn start_thread(
     path: &std::path::Path,
     heap: usize,
-    persistent: bool,
+    worker_entry: bool,
     bridge: Bridge,
     stop: Arc<AtomicBool>,
     mut receive: mpsc::UnboundedReceiver<Value>,
@@ -97,7 +97,7 @@ fn start_thread(
             Plugin {
                 source,
                 heap,
-                persistent,
+                worker_entry,
             },
             executor,
         ))
@@ -121,7 +121,7 @@ fn start_thread(
 struct Plugin {
     source: String,
     heap: usize,
-    persistent: bool,
+    worker_entry: bool,
 }
 
 async fn run_plugin(
@@ -223,7 +223,6 @@ impl PluginRuntime {
         plugin: &Plugin,
     ) {
         let mut realms = HashMap::<u64, Realm>::new();
-        let mut root = None;
         let mut frame = Some(first);
 
         loop {
@@ -232,7 +231,7 @@ impl PluginRuntime {
             }
 
             if let Some(message) = frame.take() {
-                if let Err(error) = self.dispatch(message, plugin, &mut realms, &mut root).await {
+                if let Err(error) = self.dispatch(message, plugin, &mut realms).await {
                     eprintln!("dispatch: {error:#}");
                 }
             } else {
@@ -267,77 +266,67 @@ impl PluginRuntime {
         frame: Value,
         plugin: &Plugin,
         realms: &mut HashMap<u64, Realm>,
-        root: &mut Option<Realm>,
     ) -> Result<()> {
         let id = number(&frame, "id")?;
         match frame["type"].as_str() {
             Some("invoke") => {
+                let permissions: Vec<String> =
+                    serde_json::from_value(frame["permissions"].clone())?;
                 self.active.borrow_mut().insert(id);
                 let network = frame["network"] != false;
-                // Sign-in retains its private realm and disabled web effects.
-                let shared = plugin.persistent && network;
-                if !shared || root.is_none() {
-                    let permissions: Vec<String> =
-                        serde_json::from_value(frame["permissions"].clone())?;
-                    let start = Realm::new(
-                        &self.runtime,
-                        &plugin.source,
-                        &permissions,
-                        self.realm_config(),
-                        plugin.persistent,
-                        network,
-                    );
-                    let outcome = tokio::time::timeout(
-                        std::time::Duration::from_secs(6),
-                        self.watched(start),
-                    )
-                    .await;
-                    match outcome {
-                        Ok(Ok(realm)) if shared => *root = Some(realm),
-                        Ok(Ok(realm)) => {
-                            realms.insert(id, realm);
-                        }
-                        _ if self.watchdog.tripped() => return Ok(()),
-                        Ok(Err(error)) => {
-                            self.fail(id, &error.to_string());
-                            return Ok(());
-                        }
-                        Err(_) => {
-                            self.fail(id, "Plugin action bundle initialization timed out");
-                            return Ok(());
-                        }
+                let start = Realm::new(
+                    &self.runtime,
+                    &plugin.source,
+                    &permissions,
+                    self.realm_config(),
+                    plugin.worker_entry,
+                    network,
+                );
+                let outcome =
+                    tokio::time::timeout(std::time::Duration::from_secs(6), self.watched(start))
+                        .await;
+                let realm = match outcome {
+                    Ok(Ok(realm)) => realm,
+                    _ if self.watchdog.tripped() => return Ok(()),
+                    Ok(Err(error)) => {
+                        self.fail(id, &error.to_string());
+                        return Ok(());
                     }
-                }
-
-                let Some(realm) = realms.get(&id).or(root.as_ref()) else {
-                    return Ok(());
+                    Err(_) => {
+                        self.fail(id, "Plugin action bundle initialization timed out");
+                        return Ok(());
+                    }
                 };
+
                 if let Err(error) = self.watched(realm.dispatch(frame)).await
                     && !self.watchdog.tripped()
                 {
                     self.fail(id, &error.to_string());
-                    realms.remove(&id);
+                    drop(realm);
+                    self.runtime.run_gc().await;
+                } else {
+                    realms.insert(id, realm);
                 }
             }
             Some("cancel") => {
                 let active = self.active.borrow_mut().remove(&id);
-                if active {
-                    if let Some(realm) = realms.get(&id).or(root.as_ref()) {
-                        let _ = self.watched(realm.dispatch(frame)).await;
-                    }
-                    realms.remove(&id);
+                if active && let Some(realm) = realms.remove(&id) {
+                    let _ = self.watched(realm.dispatch(frame)).await;
+                    drop(realm);
+                    self.runtime.run_gc().await;
                 }
             }
             Some("opResult") => {
                 let call = number(&frame, "call")?;
                 let active = self.active.borrow().contains(&call);
                 if active
-                    && let Some(realm) = realms.get(&call).or(root.as_ref())
+                    && let Some(realm) = realms.get(&call)
                     && let Err(error) = self.watched(realm.dispatch(frame)).await
                     && !self.watchdog.tripped()
                 {
                     self.fail(call, &error.to_string());
                     realms.remove(&call);
+                    self.runtime.run_gc().await;
                 }
             }
             _ => anyhow::bail!("Invalid plugin action message"),

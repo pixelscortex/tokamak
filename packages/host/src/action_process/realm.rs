@@ -41,7 +41,7 @@ impl Realm {
         source: &str,
         permissions: &[String],
         config: Config,
-        node_modules: bool,
+        worker_entry: bool,
         network: bool,
     ) -> Result<Self> {
         let web = WebHost::new(permissions.to_vec())?;
@@ -52,9 +52,8 @@ impl Realm {
         let dispatch = context
             .async_with(async |ctx| {
                 let run = async {
-                    // Full Node module support is needed for the bundle originally built for Bun.
-                    // Default bundles are portable and get a fresh realm for each invocation.
-                    if node_modules {
+                    // Worker entries were built for Bun and may depend on these globals.
+                    if worker_entry {
                         install_builtins(&ctx).await?;
                     }
                     let capability = install_ops(&ctx, operations, &invocation)?;

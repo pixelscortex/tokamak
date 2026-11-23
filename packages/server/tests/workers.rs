@@ -156,7 +156,12 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
         );
     }
     let second = fixture.call("state", json!({})).await.unwrap();
-    assert_eq!(second["count"], 2);
+    let expected_count = if quickjs() {
+        1
+    } else {
+        2
+    };
+    assert_eq!(second["count"], expected_count);
     assert_eq!(first["pid"], second["pid"]);
     assert_eq!(
         fixture
@@ -169,16 +174,9 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     let fast = fixture.start("echo", json!({"value":"fast","delay":0}));
     assert_eq!(fixture.result().await, (fast, Ok(json!("fast"))));
     assert_eq!(fixture.result().await, (slow, Ok(json!("slow"))));
-    fixture.call("remember", json!({})).await.unwrap();
-    assert!(
-        fixture
-            .call("stale", json!({}))
-            .await
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .contains("stale invocation")
-    );
+    if !quickjs() {
+        check_bun_stale_invocation(&mut fixture).await;
+    }
     let env_error = fixture.call("envDenied", json!({})).await.unwrap_err();
     assert!(env_error.contains("env:WORKER_UNGRANTED"), "{env_error}");
     if quickjs() {
@@ -207,6 +205,19 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     );
     assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
     fixture.close().await;
+}
+
+async fn check_bun_stale_invocation(fixture: &mut Fixture) {
+    fixture.call("remember", json!({})).await.unwrap();
+    assert!(
+        fixture
+            .call("stale", json!({}))
+            .await
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("stale invocation")
+    );
 }
 
 async fn check_action_process_errors(fixture: &mut Fixture) {
@@ -363,7 +374,11 @@ async fn disable_kills_worker_and_children_and_fails_stuck_calls() {
 async fn oversized_messages_fail_only_their_invocation() {
     let mut fixture = Fixture::new().await;
     let first = fixture.call("state", json!({})).await.unwrap();
-    let waiting = fixture.start("waitForLarge", json!({}));
+    let waiting = if quickjs() {
+        fixture.start("echo", json!({"value":"waiting","delay":50}))
+    } else {
+        fixture.start("waitForLarge", json!({}))
+    };
     let large = fixture.start("large", json!({}));
     let results = BTreeMap::from([fixture.result().await, fixture.result().await]);
     let error = results[&large].as_ref().unwrap_err();
@@ -381,7 +396,12 @@ async fn oversized_messages_fail_only_their_invocation() {
     );
     let second = fixture.call("state", json!({})).await.unwrap();
     assert_eq!(first["pid"], second["pid"]);
-    assert_eq!(second["count"], 2);
+    let expected_count = if quickjs() {
+        1
+    } else {
+        2
+    };
+    assert_eq!(second["count"], expected_count);
     fixture.close().await;
 }
 

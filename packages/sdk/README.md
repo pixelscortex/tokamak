@@ -426,9 +426,11 @@ or process exit. Bun must be installed on the host. See the root README's
 [worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
 
 With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, all plugins' actions run in one action
-process, with a separate QuickJS runtime for each plugin. Concurrent calls in a
-worker plugin still share module state. There is no `process` or `process.env`;
-use `await ctx.env(name)` and declare `env:<name>`, as in default actions.
+process, with a separate QuickJS runtime for each plugin. Every action call
+starts with fresh module state, including calls to `runtime: "worker"` plugins
+that kept module state between calls on Bun. There is no `process` or
+`process.env`; use `await ctx.env(name)` and declare `env:<name>`, as in default
+actions.
 Declare `net:<hostname>` for every host you fetch from; Bun did not enforce
 these grants for worker plugins.
 

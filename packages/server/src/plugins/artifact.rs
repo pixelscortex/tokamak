@@ -121,7 +121,7 @@ impl Artifact {
         &self,
         id: &str,
     ) -> Result<Arc<crate::host::action_process::Source>, Error> {
-        let (code, bundle, persistent) = if let Some(entry) = &self.manifest.entries.worker {
+        let (code, bundle, worker_entry) = if let Some(entry) = &self.manifest.entries.worker {
             let source = self.assets[&entry.code].backend_text(&entry.code)?;
             let map = self.assets[&entry.map].backend_text(&entry.map)?;
             let bundle =
@@ -141,7 +141,10 @@ impl Artifact {
             (self.assets[&entry.code].clone(), bundle, false)
         };
         Ok(crate::host::action_process::Source::plugin(
-            id, code, bundle, persistent,
+            id,
+            code,
+            bundle,
+            worker_entry,
         ))
     }
 

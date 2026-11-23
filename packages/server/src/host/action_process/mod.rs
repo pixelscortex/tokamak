@@ -44,7 +44,7 @@ pub(crate) struct Source {
     slot: u64,
     code: Snapshot,
     bundle: Arc<Bundle>,
-    persistent: bool,
+    worker_entry: bool,
     retired: CancellationToken,
     calls: Arc<Semaphore>,
     operations: Arc<Semaphore>,
@@ -55,9 +55,9 @@ impl Source {
         name: &str,
         code: Arc<Asset>,
         bundle: Arc<Bundle>,
-        persistent: bool,
+        worker_entry: bool,
     ) -> Arc<Self> {
-        Self::new(name.into(), Snapshot::Artifact(code), bundle, persistent)
+        Self::new(name.into(), Snapshot::Artifact(code), bundle, worker_entry)
     }
 
     pub(crate) fn legacy(bundle: Arc<Bundle>) -> Result<Arc<Self>, crate::Error> {
@@ -73,13 +73,13 @@ impl Source {
         ))
     }
 
-    fn new(name: String, code: Snapshot, bundle: Arc<Bundle>, persistent: bool) -> Arc<Self> {
+    fn new(name: String, code: Snapshot, bundle: Arc<Bundle>, worker_entry: bool) -> Arc<Self> {
         Arc::new(Self {
             name,
             slot: NEXT_SLOT.fetch_add(1, Ordering::Relaxed) + 1,
             code,
             bundle,
-            persistent,
+            worker_entry,
             retired: CancellationToken::new(),
             calls: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
             operations: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
@@ -301,7 +301,7 @@ impl Supervisor {
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let frame = json!({
             "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,"pluginName":source.name,
-            "path":source.path(),"persistent":source.persistent,"heap":self.heap,
+            "path":source.path(),"workerEntry":source.worker_entry,"heap":self.heap,
             "permissions":ops.network_permissions(),"network":!options.anonymous,
         });
         if super::worker::process::oversized(&frame)? {

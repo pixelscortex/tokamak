@@ -4,7 +4,7 @@ use std::{path::Path, process::Stdio, time::Duration};
 
 use serde_json::{Value, json};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Lines},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
@@ -44,7 +44,7 @@ impl Process {
             .join(bundle);
         self.send(json!({
             "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,
-            "path":path,"permissions":[],"persistent":true,"heap":6 * 1024 * 1024,
+            "path":path,"permissions":["net:127.0.0.1"],"workerEntry":true,"heap":6 * 1024 * 1024,
         }))
         .await;
     }
@@ -101,7 +101,7 @@ async fn heap_exhaustion_fails_only_the_owning_action() {
         "{failure}"
     );
     process.invoke(1, 3, "count", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["value"], 2);
+    assert_eq!(process.next().await["value"], 1);
     process.invoke(2, 4, "count", Value::Null, BUNDLE).await;
     assert_eq!(process.next().await["value"], 1);
 }
@@ -152,12 +152,58 @@ async fn control_backlog_does_not_delay_another_plugin_or_dispatcher_ping() {
         process.send(json!({"type":"ping","id":8})).await;
         assert_eq!(process.next().await, json!({"type":"pong","id":8}));
         process.invoke(2, 3, "count", Value::Null, BUNDLE).await;
-        assert_eq!(process.next().await["value"], 2);
+        assert_eq!(process.next().await["value"], 1);
     })
     .await
     .expect("plugin 1's backlog stalled the dispatcher");
 
     assert_eq!(process.next().await["id"], 2);
     process.invoke(2, 4, "count", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["value"], 3);
+    assert_eq!(process.next().await["value"], 1);
+}
+
+#[tokio::test]
+async fn cancelled_worker_fetches_release_their_resources() {
+    let mut process = Process::start();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let mut hung = Vec::new();
+
+    for id in 1..=100 {
+        process
+            .invoke(1, id, "fetch", json!(url), "action-builtins.js")
+            .await;
+        let (peer, _) = tokio::select! {
+            result = process.next() => panic!("hung fetch {id} completed: {result}"),
+            accepted = listener.accept() => accepted.unwrap(),
+        };
+        // Keep the peer open without sending headers so only cancellation can end the fetch.
+        hung.push(peer);
+        process
+            .send(json!({"type":"cancel","slot":1,"id":id}))
+            .await;
+    }
+
+    process
+        .invoke(1, 101, "timerThenFetch", json!(url), "action-builtins.js")
+        .await;
+    let (mut peer, _) = tokio::select! {
+        result = process.next() => panic!("timer/fetch failed before reaching the peer: {result}"),
+        accepted = listener.accept() => accepted.unwrap(),
+    };
+    peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+        .await
+        .unwrap();
+    assert_eq!(
+        process.next().await,
+        json!({"type":"result","slot":1,"id":101,"value":"ok"})
+    );
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        for mut peer in hung {
+            peer.read_to_end(&mut Vec::new()).await.unwrap();
+        }
+    })
+    .await
+    .expect("cancelled worker fetches left HTTP connections open");
 }

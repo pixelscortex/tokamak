@@ -80,10 +80,10 @@ actions and standalone features before enabling QuickJS.
 The action process uses the engine's web implementation and the manifest's
 `net:` grants, including for `runtime: "worker"` plugins whose fetches Bun
 did not check. Worker plugins have no `process` or `process.env`; use
-`await ctx.env(name)` with the manifest's `env:<name>` grant. Calls in one
-worker plugin still share module state. Default bundles get a fresh realm and
-web resource lease for each call. Worker bundles currently share one web
-resource table until reload.
+`await ctx.env(name)` with the manifest's `env:<name>` grant.
+Each action call starts with fresh module state and its own web resources,
+which are released when the call ends. This also applies to `runtime: "worker"`
+plugins, which kept module state between calls on Bun.
 
 All plugins' actions share one process. Separate QuickJS runtimes isolate the
 plugins, and the server trusts the action process to label host operations with
