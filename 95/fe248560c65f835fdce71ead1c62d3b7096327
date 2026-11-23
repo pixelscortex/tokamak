@@ -1,0 +1,173 @@
+packages/sdk/worker/action-process.ts
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 1-12,14-19,21-40,42
+  s_a4f79139b6f53a::t_cb0bb350b086c2 13,20,41
+packages/host/src/runtime.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 38,44,51-55
+packages/host/src/modules.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 117,130-149
+packages/server/src/host/worker/process.rs
+  s_a4f79139b6f53a::t_24fd12e94e82da 76,169,208
+README.md
+  s_a4f79139b6f53a::t_8bdc6ba28bc93d 73-80
+packages/host/src/protocol.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 159,203
+packages/server/src/host/action_process/mod.rs
+  s_a4f79139b6f53a::t_22b172d56bd5fa 102,255
+  s_a4f79139b6f53a::t_24fd12e94e82da 1-8,10-64,66-101,103-164,167-237,239-254,256-262,264-337
+  s_a4f79139b6f53a::t_ab1abc6a76cfc7 9,65,165-166,238,263
+packages/server/tests/build-worker.mjs
+  s_a4f79139b6f53a::t_7c92ba7be01b1c 38-45
+packages/server/tests/actions.rs
+  s_a4f79139b6f53a::t_0b6e1b78939bd7 334-414,616-617,627-629,635,654
+  s_a4f79139b6f53a::t_a4bc3efdffcfea 590-591,599-601,610-615,618-626,630-634,636-653,655
+packages/host/src/action_process/mod.rs
+  s_a4f79139b6f53a::t_cc96add07eb8ac 1-18,20-79,81-104,113-138
+  s_a4f79139b6f53a::t_24fd12e94e82da 19
+  s_a4f79139b6f53a::t_1ce4530fff3e1b 105-112
+  s_a4f79139b6f53a::t_0817c165c78871 80
+packages/sdk/worker/dispatch.ts
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 20,79-87
+packages/worker/src/lib.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 90-117
+  s_a4f79139b6f53a::t_24fd12e94e82da 118-122
+packages/engine/src/bridge.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 120
+packages/server/src/plugins/artifact.rs
+  s_a4f79139b6f53a::t_039250bc2b0eb6 3-5,8,14,23-29,45-46,48-53,88,90-92,94-102,104-124,126-127
+  s_a4f79139b6f53a::t_73d320ab45a5c0 47,89,93,103,125,128-135
+packages/sdk/tools/worker.mjs
+  s_a4f79139b6f53a::t_1ce4530fff3e1b 17,50-51
+  s_a4f79139b6f53a::t_62af5b8706209e 53-65
+packages/sdk/tools/bundle.mjs
+  s_a4f79139b6f53a::t_1ce4530fff3e1b 244-271,273-279,281-286,288-298,300
+  s_a4f79139b6f53a::t_dfc5ba4962b283 164-169,287,299,343
+packages/server/tests/build-actions.mjs
+  s_a4f79139b6f53a::t_039250bc2b0eb6 62-63
+packages/host/build.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 12-13,15-23,25,29,35
+  s_a4f79139b6f53a::t_c418a32d565bbb 14,24
+packages/server/src/host/worker/mod.rs
+  s_a4f79139b6f53a::t_24fd12e94e82da 2
+packages/server/src/host.rs
+  s_a4f79139b6f53a::t_24fd12e94e82da 377-378
+packages/build/src/vite.ts
+  s_a4f79139b6f53a::t_1ce4530fff3e1b 183-191
+packages/server/src/plugins/loading.rs
+  s_a4f79139b6f53a::t_039250bc2b0eb6 14,16,23-24,26-31,33-34,42-43,53,61-64,101-102,105-135,140,158-172,204-205,269,283,432
+  s_a4f79139b6f53a::t_793b943cdd136a 32,268,270-282,284-285,421-431,433-442
+packages/host/src/main.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 2-3,20-22
+packages/server/src/host/worker/tests.rs
+  s_a4f79139b6f53a::t_039250bc2b0eb6 41
+packages/server/src/host/action_process/transport.rs
+  s_a4f79139b6f53a::t_22b172d56bd5fa 1-4,6-61,69-72,74-75,77,79-82,84-87,95-163,166-169,172,174,187,193-204,206-210,215,219-227,231-270
+  s_a4f79139b6f53a::t_fdb59c6c999429 5,62-68,73,76,78,83,88-94,164-165,170-171,173,175-186,188-192,205,211-214,216-218,228-230
+packages/server/tests/fixtures/worker/src/server/actions.ts
+  s_a4f79139b6f53a::t_8bdc6ba28bc93d 94-96
+  s_a4f79139b6f53a::t_7c92ba7be01b1c 13-15,51-52,100-103
+  s_a4f79139b6f53a::t_bc4eabf86377ed 62-63,104-109
+packages/server/tests/worker-lifecycle-driver.mjs
+  s_a4f79139b6f53a::t_7c92ba7be01b1c 3,6,62-68,71-73,75-98
+  s_a4f79139b6f53a::t_91978978be67e1 69-70,74
+packages/server/tests/workers.rs
+  s_a4f79139b6f53a::t_fe01ecf1457824 178,204-214,447,450
+  s_a4f79139b6f53a::t_7c92ba7be01b1c 19-22,26-31,53,57-63,84,140-150,190,192-193,216-223,231,252-253,256-296,305-320,414-418,433,442,451
+  s_a4f79139b6f53a::t_8bdc6ba28bc93d 175-177,179
+  s_cf246d9a3dfec1::t_92b4dd023cf56d 191,215,224-230,232-251,254-255,434-435,443-446,448-449,452
+packages/host/Cargo.toml
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 9
+packages/server/tests/fixtures/actions/b/src/server/ops.ts
+  s_a4f79139b6f53a::t_8bdc6ba28bc93d 7-15
+packages/server/src/plugins/mod.rs
+  s_a4f79139b6f53a::t_039250bc2b0eb6 40
+packages/engine/src/web/mod.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 53,112
+packages/sdk/README.md
+  s_a4f79139b6f53a::t_8bdc6ba28bc93d 257-258
+packages/host/src/action_process/plugin.rs
+  s_a4f79139b6f53a::t_cc96add07eb8ac 1-2,4-7,9-13,15-33,35-38,45,47-56,58-77,83,98,103,105-108,110-114,116-122,124-129,132-143,145-151,155-161,175-178,181-191,193-197,199-216,218-224,226-231,239-240,246-248,250-252,254-268,271-279,283-289,293-309,311,316-321,325-326,337-340,344,347-349
+  s_a4f79139b6f53a::t_24fd12e94e82da 3,115,162-174,198,217,232,280-281,290-291
+  s_a4f79139b6f53a::t_1ce4530fff3e1b 44
+  s_a4f79139b6f53a::t_6e83982075e47a 8,14,34,39-43,46,57,78-82,84-97,99-102,104,109,123,130-131,144,152-154,179-180,192,225,233-238,241-245,249,253,269-270,282,292,310,312-315,322-324,327-336,341-343,345-346
+packages/engine/src/types.rs
+  s_a4f79139b6f53a::t_6cebe00e83bbdc 10,14-33
+  s_a4f79139b6f53a::t_cbac0e16f7f2ab 42
+.ci/release-macos.sh
+  s_a4f79139b6f53a::t_a0991b5cf7ae4a 21
+.github/workflows/ci.yml
+  s_a4f79139b6f53a::t_e8f4e9a12cc928 186
+Cargo.lock
+  s_a4f79139b6f53a::t_b6c037fd3b5fe1 7666
+Dockerfile
+  s_a4f79139b6f53a::t_3b356186832824 23,31
+moon.yml
+  s_a4f79139b6f53a::t_0f4624b61e8354 79,86-88
+packages/host/DEPENDENCIES.md
+  s_a4f79139b6f53a::t_2d3a6a3d02fcf1 27-28
+packages/host/README.md
+  s_a4f79139b6f53a::t_45cc4aa7f5b2b9 4,48-68
+packages/host/src/action_process/realm.rs
+  s_a4f79139b6f53a::t_aac3563f644071 1-157
+packages/host/tests/action-builtins.js
+  s_a4f79139b6f53a::t_98fb59ef0f590d 1-17
+packages/host/tests/action-file-import.js
+  s_a4f79139b6f53a::t_d6286d8a458642 1-2
+packages/host/tests/action-fixture.js
+  s_a4f79139b6f53a::t_69714e1fc1fb2b 1-19
+packages/host/tests/actions.rs
+  s_a4f79139b6f53a::t_656c6f82da2a79 1-136
+packages/sdk/tests/acceptance.test.mjs
+  s_a4f79139b6f53a::t_0fc219b28546e5 130-135
+packages/server/src/actions.rs
+  s_a4f79139b6f53a::t_419958221338ed 24-29,35,72,145,155,195,201,206-209,215-251
+packages/server/src/main.rs
+  s_a4f79139b6f53a::t_fb62461eaa9777 233-252,257,273,276,354
+packages/server/src/plugins/catalog.rs
+  s_a4f79139b6f53a::t_f90997a32b23cd 7,10-14,22,26-30,37,46,84
+packages/server/src/service/action_coordination.rs
+  s_a4f79139b6f53a::t_25a076954f270f 4-15,53,63-116,120,135-136,156-162,199-203,212-219
+packages/server/src/service/mod.rs
+  s_a4f79139b6f53a::t_b3c8639ccbb74c 265-268
+packages/server/src/service/plugin_control.rs
+  s_a4f79139b6f53a::t_91654962e8ca99 189-193,201-208,211-221,234,238,258-293
+packages/server/src/service/sign_in.rs
+  s_a4f79139b6f53a::t_2a26a9f65f4d93 4,84-85,89,321,327,335-389
+packages/server/src/service/startup.rs
+  s_a4f79139b6f53a::t_7bc8104c2521a8 6,13,32-46,48,104-105,112,133-135,137-141,167,174,187,194,215-221,244-246,332-377
+packages/server/tests/actions-driver.ts
+  s_a4f79139b6f53a::t_847d84cfcc3c27 254
+packages/server/tests/build-feature.mjs
+  s_a4f79139b6f53a::t_8e475bab4da80a 28,48-49
+packages/server/tests/fixtures/actions/b/api.ts
+  s_a4f79139b6f53a::t_9503b50419de7b 1
+packages/server/tests/helpers/actions_dns.rs
+  s_a4f79139b6f53a::t_517038749db4bd 74-86
+packages/server/tests/sdk_transport.rs
+  s_a4f79139b6f53a::t_636a79003e048f 153,158-160
+packages/server/tests/support/sdk.rs
+  s_a4f79139b6f53a::t_8adc23150464a3 65-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "95fe248560c65f835fdce71ead1c62d3b7096327",
+  "prompts": {},
+  "sessions": {
+    "s_a4f79139b6f53a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2081e-89ad-78b3-a883-25d4b4ebae5c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_cf246d9a3dfec1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0db98003-7c44-4541-94c3-cabbb5a3aacd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
