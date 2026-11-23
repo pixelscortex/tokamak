@@ -3,7 +3,7 @@ import { join, sep } from "node:path";
 import { functionPlacement, lanes, placementTransform, registrySource } from "./placement.mjs";
 import { bunPluginBoundary } from "./plugin-boundary.mjs";
 import { contractTarget } from "./contracts.mjs";
-import { serverBuiltins } from "./server-builtins.mjs";
+import { serverBuiltins, workerBuiltins } from "./server-builtins.mjs";
 
 export async function workerSources({
   root,
@@ -72,7 +72,7 @@ export async function workerSources({
       header,
     }),
     plugins: [
-      serverBuiltins("worker-server-builtins"),
+      serverBuiltins("worker-server-builtins", pluginRoot, "queries and mutations"),
       ...(placement ? [placementTransform(placement, lanes.descriptor)] : []),
     ],
   };
@@ -101,6 +101,7 @@ export async function buildWorkerBundles({ root, sdkRoot, pluginRoot, name, sour
       naming: asset,
       env: "disable",
       plugins: [
+        ...(asset === name + ".js" ? [workerBuiltins(pluginRoot, name === "local")] : []),
         bunPluginBoundary(pluginRoot, { publicOnly: name === "local" }),
         ...plugins,
         {

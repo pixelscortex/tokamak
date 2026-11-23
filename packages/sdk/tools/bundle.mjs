@@ -15,7 +15,7 @@ import { definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plu
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 import { functionPlacement, lanes, placedModules, placementTransform, registrySource } from "./placement.mjs";
 import { contractEntry, contractManifest } from "./contracts.mjs";
-import { isFileOrProcessModule, serverBuiltins } from "./server-builtins.mjs";
+import { serverBuiltins } from "./server-builtins.mjs";
 
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const quote = JSON.stringify;
@@ -220,18 +220,12 @@ export async function bundleFeature(folder, namespace, worker = false) {
     } else {
       workerPlugins = [
         ...(placement ? [placementTransform(placement, lanes.server)] : []),
-        serverBuiltins("server-local-boundary"),
+        serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions"),
       ];
     }
     await Bun.write(entry, source);
 
     const hasLocal = local.length > 0 || providers.some((p) => p.place === "local");
-    await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
-    if (namespace !== undefined)
-      await Bun.write(
-        join(root, "dist/contracts.json"),
-        JSON.stringify(contractManifest(pluginRoot, namespace, providers)),
-      );
     if (hasLocal) {
       await buildWorkerBundles({
         root,
@@ -281,6 +275,13 @@ export async function bundleFeature(folder, namespace, worker = false) {
       ],
     });
     if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
+    // Report unsupported imports before TypeScript reports missing Node declarations.
+    await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
+    if (namespace !== undefined)
+      await Bun.write(
+        join(root, "dist/contracts.json"),
+        JSON.stringify(contractManifest(pluginRoot, namespace, providers)),
+      );
     const chunks = built.outputs.filter((output) => output.kind !== "sourcemap");
     if (chunks.length !== 1 || !built.outputs.some((output) => output.kind === "sourcemap"))
       throw new Error("Feature build must produce exactly one ESM file and its source map");
@@ -387,7 +388,7 @@ async function checkFeature(root, temporary, generated, files, entry, worker, pr
     if (
       /Property 'proc' does not exist on type .*?(?:Query|Mutation|Action)Context/.test(diagnostics) ||
       [...diagnostics.matchAll(/Cannot find module '([^']+)'/g)].some(([, path]) =>
-        isFileOrProcessModule(path),
+        /^(?:node:)?fs\/promises$/.test(path),
       )
     )
       advice.push(useLocal);

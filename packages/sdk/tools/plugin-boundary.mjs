@@ -345,7 +345,7 @@ export function bunPluginBoundary(root, { publicOnly = false } = {}) {
     setup(build) {
       bunPluginReferences(root, { publicOnly }).setup(build);
       build.onResolve({ filter: /.*/, namespace: "file" }, ({ path, importer }) => {
-        if (!importer || !isAbsolute(importer) || isBuiltin(path)) return;
+        if (!importer || !isAbsolute(importer) || path.startsWith("node:") || isBuiltin(path)) return;
         assertWindowSide(importer, path);
         const target = Bun.resolveSync(path, dirname(importer));
         if (publicOnly && isInternalReferenceModule(canonical(target)))
