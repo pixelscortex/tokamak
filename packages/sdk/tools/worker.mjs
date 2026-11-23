@@ -86,6 +86,7 @@ export async function buildWorkerBundles({ root, sdkRoot, pluginRoot, name, sour
       (await Bun.file(join(sdkRoot, "worker/entry.ts")).text())
         .replace('"./process"', JSON.stringify(join(sdkRoot, "worker/process.ts")))
         .replace('"./contracts"', JSON.stringify(join(sdkRoot, "worker/contracts.ts")))
+        .replace('"./invocation-host"', JSON.stringify(join(sdkRoot, "worker/invocation-host.ts")))
         .replaceAll("../src/", sdkRoot.split(sep).join("/") + "/src/"),
       "none",
     ],

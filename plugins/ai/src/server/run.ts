@@ -44,7 +44,7 @@ export const turn = local({
     // The labels `turns:begin` records are checked here, against what the provider offers.
     const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
     agentId = queued?.agent.id ?? agentId;
-    const provider = await agent.get(agentId);
+    const provider = await agent.get(agentId, ctx);
     if (!provider) return fail("NoAgent", { agentId });
     const info = await infoOf(provider);
     if (!info.installed)
@@ -67,7 +67,7 @@ export const turn = local({
     });
     if (isFailure(begun)) return begun;
     const { turnId, prompt, history, sessionId } = begun;
-    const hooks = hooksFor({ threadId: threadId as Id<"threads">, turnId, folder });
+    const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
     const writer = turnWriter(ctx, turnId);
     // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
     // device), so "Always allow this session" answers hold across turns exactly while the session does.
@@ -97,12 +97,12 @@ export const turn = local({
         ending = { state: "failed", error: lost };
       } else {
         try {
-          const result = await ctx.withPrograms((kill) => {
+          const result = await ctx.withPrograms((kill, scoped) => {
             // A write the server refused twice: stop the agent's programs now, as Force stop does.
             void writer.broke.then(() => control.forceStop());
             return control.run(
               () =>
-                provider.start({
+                agent.get(agentId, scoped).start({
                   folder,
                   prompt,
                   ...settings,

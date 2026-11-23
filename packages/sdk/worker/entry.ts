@@ -1,9 +1,8 @@
 // Stdout belongs exclusively to the worker protocol, including during imports.
-import { AsyncLocalStorage } from "node:async_hooks";
 import { format } from "node:util";
 import { pathToFileURL } from "node:url";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
-import type { HostBridge } from "../src/host";
+import { invocationHost } from "./invocation-host";
 import type { JsonValue } from "../src/values";
 import { workerContracts } from "./contracts";
 import type { Provider } from "../src/internal/contracts";
@@ -32,7 +31,7 @@ const root = (await import(pathToFileURL(process.argv[2]!).href)) as {
   contractProviders?: Record<string, Provider<"local">>;
 };
 const { functions } = root;
-const withContracts = workerContracts(root, kind);
+const contracts = kind === "local" ? workerContracts(root) : undefined;
 
 function retire(id: number) {
   calls.delete(id);
@@ -46,34 +45,9 @@ async function invoke(id: number, name: string, args: JsonValue) {
   if (calls.has(id) || calls.size >= WORKER_CAPACITY) throw new Error("Worker invocation capacity exceeded");
   const controller = new AbortController();
   calls.set(id, controller);
-  const processes = kind === "local" ? invocationProcesses(controller.signal) : undefined;
-  // Agent cancellation must leave outer work, such as follow-up snapshots, able to start programs.
-  type Programs = ReturnType<typeof invocationProcesses>;
-  const scope = new AsyncLocalStorage<Programs>();
-  const scopes = new Set<Programs>();
-  let closing = false;
-  async function closePrograms() {
-    closing = true;
-    await Promise.all([processes?.close(), ...Array.from(scopes, (inner) => inner.close())]);
-  }
-  const host = (plugin?: string): HostBridge => ({
-    signal: controller.signal,
-    proc: processes && ((...args) => (scope.getStore() ?? processes).start(...args)),
-    withPrograms:
-      processes &&
-      (async (run) => {
-        if (closing || controller.signal.aborted) throw new Error("Local function cancelled");
-        if (scope.getStore()) throw new Error("Program scopes cannot nest");
-        const inner = invocationProcesses(controller.signal);
-        scopes.add(inner);
-        try {
-          return await scope.run(inner, () => run(() => inner.close("SIGKILL")));
-        } finally {
-          await inner.close();
-          scopes.delete(inner);
-        }
-      }),
-    op(name, payload) {
+  const invocation = invocationHost(
+    controller.signal,
+    (plugin) => (name, payload) => {
       if (!calls.has(id) || controller.signal.aborted)
         throw new Error("stale invocation: host operation refused");
       if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
@@ -88,14 +62,16 @@ async function invoke(id: number, name: string, args: JsonValue) {
         }
       });
     },
-  });
+    kind === "local" ? () => invocationProcesses(controller.signal) : undefined,
+    contracts,
+  );
   try {
     if (functions[name]?.kind !== kind) throw new Error(`Unknown worker ${kind} function: ${name}`);
-    const value = await withContracts(host, () => invokeFunction(functions, { name, args }, host()));
-    await closePrograms();
+    const value = await invokeFunction(functions, { name, args }, invocation.host());
+    await invocation.close();
     send({ type: "result", id, value });
   } catch (error) {
-    await closePrograms();
+    await invocation.close();
     send({ type: "result", id, error: error instanceof Error ? error.message : String(error) });
   } finally {
     retire(id);

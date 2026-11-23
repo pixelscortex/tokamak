@@ -207,9 +207,13 @@ one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
 a signal. The invocation stays alive until the handler settles. To cancel
 from the window, pass `{ signal }` to `client.local`; the worker stops programs
 still running for that invocation. Use `node:fs/promises` for local files.
-Use `ctx.withPrograms(async (stopPrograms) => { … })` to group the programs
-started in one part of an invocation. Calling `stopPrograms()` ends those
-process groups without cancelling the invocation or its other programs.
+Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
+started through `scoped.proc` and providers selected with `scoped`. Calling
+`forceStop()` ends those process groups without cancelling the invocation
+or its other programs. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
+local functions and server actions so the lookup follows the caller across awaits.
+Queries and mutations still use `contract.list()` and `contract.get(id)`.
+
 Local functions have no database context. Use `ctx.runQuery`,
 `ctx.runMutation`, or `ctx.runAction` with references from the public `api` to
 call the connected server. Only server functions can use `_generated/internal`.

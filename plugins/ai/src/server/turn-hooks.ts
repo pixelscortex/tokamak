@@ -1,5 +1,5 @@
 import { errorText } from "../shared/turn-shared";
-import { isFailure } from "@tokamak/sdk";
+import { isFailure, type LocalContext } from "@tokamak/sdk";
 import { turnHooks, type TurnHooks, type TurnInfo } from "../contracts";
 
 const HOOK_DEADLINE_MS = 60_000;
@@ -7,7 +7,7 @@ const BEFORE_TIMEOUT = "The turn could not start: a before hook timed out.";
 const AFTER_TIMEOUT = "Couldn't save this turn's code";
 
 /** Keeps the provider list and live turn info for the two phases of one turn. */
-export function hooksFor(turn: Omit<TurnInfo, "signal">) {
+export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
   const controller = new AbortController();
   const info: TurnInfo = { ...turn, signal: controller.signal };
   let hooks: readonly TurnHooks[] = [];
@@ -32,7 +32,7 @@ export function hooksFor(turn: Omit<TurnInfo, "signal">) {
   return {
     async before(): Promise<string | undefined> {
       try {
-        hooks = await withinDeadline(() => turnHooks.list(), BEFORE_TIMEOUT);
+        hooks = await withinDeadline(() => turnHooks.list(ctx), BEFORE_TIMEOUT);
         for (const hook of hooks) {
           if (!hook.before) continue;
           const result = await withinDeadline(() => hook.before?.(info), BEFORE_TIMEOUT);

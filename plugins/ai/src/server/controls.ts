@@ -1,4 +1,3 @@
-import { AsyncResource } from "node:async_hooks";
 import { fail, type AuthContext } from "@tokamak/sdk";
 import type { Run } from "../contracts";
 import { errorText, isSendersDevice } from "../shared/turn-shared";
@@ -51,12 +50,11 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
   const control = {
     sender: { id: auth.user.id, device: auth.device.id },
     onSteer(handler: Steer) {
-      // Keep the agent's process and contract scope when another invocation calls the handler.
-      steer = AsyncResource.bind(handler);
+      steer = handler;
       releaseSteers();
     },
     onStop(handler: Stop) {
-      stop = AsyncResource.bind(handler);
+      stop = handler;
       if (stopReady) sendStop();
     },
     steer(text: string, record: () => Promise<unknown>) {
