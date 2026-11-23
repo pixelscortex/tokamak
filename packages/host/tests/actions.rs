@@ -5,6 +5,7 @@ use std::{path::Path, process::Stdio, time::Duration};
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Lines},
+    net::{TcpListener, TcpStream},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
@@ -162,10 +163,25 @@ async fn control_backlog_does_not_delay_another_plugin_or_dispatcher_ping() {
     assert_eq!(process.next().await["value"], 1);
 }
 
+async fn receive_http_request(listener: &TcpListener) -> TcpStream {
+    let (peer, _) = listener.accept().await.unwrap();
+    let mut reader = BufReader::new(peer);
+    let mut line = String::new();
+
+    // Wait for the GET before replying or cancelling; accept alone only observes TCP setup.
+    loop {
+        line.clear();
+        assert_ne!(reader.read_line(&mut line).await.unwrap(), 0);
+        if line == "\r\n" {
+            return reader.into_inner();
+        }
+    }
+}
+
 #[tokio::test]
 async fn cancelled_worker_fetches_release_their_resources() {
     let mut process = Process::start();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/", listener.local_addr().unwrap());
     let mut hung = Vec::new();
 
@@ -173,9 +189,9 @@ async fn cancelled_worker_fetches_release_their_resources() {
         process
             .invoke(1, id, "fetch", json!(url), "action-builtins.js")
             .await;
-        let (peer, _) = tokio::select! {
+        let peer = tokio::select! {
             result = process.next() => panic!("hung fetch {id} completed: {result}"),
-            accepted = listener.accept() => accepted.unwrap(),
+            peer = receive_http_request(&listener) => peer,
         };
         // Keep the peer open without sending headers so only cancellation can end the fetch.
         hung.push(peer);
@@ -187,9 +203,9 @@ async fn cancelled_worker_fetches_release_their_resources() {
     process
         .invoke(1, 101, "timerThenFetch", json!(url), "action-builtins.js")
         .await;
-    let (mut peer, _) = tokio::select! {
+    let mut peer = tokio::select! {
         result = process.next() => panic!("timer/fetch failed before reaching the peer: {result}"),
-        accepted = listener.accept() => accepted.unwrap(),
+        peer = receive_http_request(&listener) => peer,
     };
     peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
         .await
