@@ -9,7 +9,7 @@ anyhow = "1"
 libc = "0.2"
 rquickjs = { version = "=0.14.0", features = ["futures", "loader"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
-tokio = { version = "1.54.1", features = ["fs", "macros", "rt", "sync", "time"] }
+tokio = { version = "1.54.1", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 tokamak-worker = { path = "../worker" }
 llrt_abort = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }

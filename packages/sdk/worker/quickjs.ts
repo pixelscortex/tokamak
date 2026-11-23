@@ -1,5 +1,7 @@
 import { workerDispatch, type WorkerMessage } from "./dispatch";
 import { installConsole } from "./quickjs-console";
+import { invocationProcesses } from "./program-scope";
+import { quickJsPrograms, type NativeSpawn } from "./quickjs-process";
 import { workerContracts } from "./contracts";
 import type { FunctionRegistry } from "../src/functions";
 import type { Provider } from "../src/internal/contracts";
@@ -8,6 +10,7 @@ export async function initialize(
   send: (json: string) => void,
   nextOp: () => number,
   bundle: string,
+  spawn: NativeSpawn,
 ): Promise<(frame: string) => void> {
   const emit = (message: object) => send(JSON.stringify(message));
   const logger = console;
@@ -17,15 +20,12 @@ export async function initialize(
     functions: FunctionRegistry;
     contractProviders?: Record<string, Provider<"local">>;
   };
-  const unavailable = (): never => {
-    throw new Error("Programs are not available on the QuickJS host yet");
-  };
   const dispatch = workerDispatch(
     "local",
     root.functions,
     emit,
     nextOp,
-    () => ({ start: unavailable, scope: unavailable, close: async () => {} }),
+    (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     workerContracts(root, (path) => import(path)),
     {
       abort(controller) {
