@@ -107,11 +107,13 @@ case "$1" in
     TOKAMAK_PLUGIN_RUNTIME=bun cargo test --locked -p tokamak-runner --test lifecycle graceful_quit
 
     # Run the QuickJS replays through the Runner instead of adding a third pass.
+    # The Bun supervisor units already ran in the Bun lane above.
     export TOKAMAK_TEST_RUNNER=1
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --lib --bins \
       --test ai_liveness --test ai_threads --test ai_turns --test chat_threads --test claude_turns \
       --test code_changes --test code_snapshots --test codex_turns --test local_functions \
-      --test actions --test identity --test plugins --test runner_routing --test service --test workers
+      --test actions --test identity --test plugins --test runner_routing --test service --test workers \
+      -- --skip host::worker::tests::
 
     # The lifecycle executable exercises launch_runner; the Runner itself
     # launches plugins, not other Runners.
