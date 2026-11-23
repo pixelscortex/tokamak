@@ -1,8 +1,7 @@
 # Plugin host
 
 The plugin host runs a plugin's local functions on QuickJS on macOS and Linux.
-Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` to opt in. Bun stays the default; the
-setting does not select a runtime for server actions. The client looks for
+Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` to opt in. Bun stays the default. The client looks for
 `tokamak-plugin-host` next to its executable. For development, run
 `cargo build --locked -p tokamak-plugin-host` and set `TOKAMAK_PLUGIN_HOST`
 if the executable lives elsewhere.
@@ -45,5 +44,26 @@ LLRT supplies Buffer, web streams, the abort and URL APIs, text encoders and
 decoders, and HTTP/1.1 fetch with rustls and WebPKI roots. This host does not
 supply `structuredClone`: LLRT implements it privately in its full VM rather
 than in a standalone module.
+
+## Action process
+
+With the same setting, the server starts one action process on the first action
+call. It runs the same executable in `--actions` mode. The process has a
+separate QuickJS runtime and watchdog per plugin, and no file or program
+capability. The server still owns every database and identity operation and
+provides the manifest's network grants. The action process uses the engine's
+web implementation, including DNS and redirect checks. Default bundles get a
+fresh realm and web resource lease per call. Bundles built for Bun retain one
+realm and web resource table per plugin; reload retires both.
+
+Build artifacts include a separate transaction bundle so the server does not
+evaluate the action module, even to inspect metadata. Rebuild older default
+artifacts or standalone features before enabling QuickJS. The server uses the
+configured engine heap limit (64 MiB by default) for each plugin runtime.
+Actions can await for up to one hour. Five seconds without yielding interrupts
+the affected runtime. Process exits fail outstanding actions and subsequent
+calls restart it after delays of 250 ms, 500 ms, and so on, capped at 30 seconds.
+One completed call after 60 seconds of uptime resets the delay. Server shutdown
+stops the process and the launcher also contains it if the server dies.
 
 See [Dependencies](DEPENDENCIES.md) for versions and licenses.

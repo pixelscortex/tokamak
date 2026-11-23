@@ -62,7 +62,14 @@ pub fn bundle() -> Arc<Bundle> {
                     built["code"].as_str().unwrap(),
                     Some(built["map"].as_str().unwrap()),
                 )
-                .unwrap(),
+                .unwrap()
+                .with_transactions(
+                    Bundle::new(
+                        built["transactions"].as_str().unwrap(),
+                        Some(built["transactionMap"].as_str().unwrap()),
+                    )
+                    .unwrap(),
+                ),
             )
         })
         .clone()

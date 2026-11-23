@@ -117,7 +117,7 @@ impl OpRegistry {
         self.2 = permissions;
     }
 
-    pub(crate) fn network_permissions(&self) -> Vec<String> {
+    pub fn network_permissions(&self) -> Vec<String> {
         self.2.clone()
     }
 

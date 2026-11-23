@@ -38,6 +38,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
         Catalog::read(&directory.path().join("plugins")).unwrap(),
         &pool,
         crate::plugins::StartupPolicy::Strict,
+        false,
     )
     .await
     .unwrap();

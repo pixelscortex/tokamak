@@ -87,6 +87,39 @@ impl Process {
         Ok((process, runtime))
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn launch_actions() -> Result<Self, String> {
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        // Cargo integration tests run from the target directory's deps folder.
+        let executable = if executable.parent().and_then(Path::file_name) == Some("deps".as_ref()) {
+            executable
+                .parent()
+                .ok_or("Action process executable directory missing")?
+                .with_file_name("tokamak-server")
+        } else {
+            executable
+        };
+        let host = LocalRuntime::host_path(&executable)?;
+        let cwd = host
+            .parent()
+            .ok_or("Action process executable directory missing")?;
+        let (child, containment, guardian) = launch(
+            &host,
+            None,
+            Path::new("--actions"),
+            cwd,
+            &BTreeMap::new(),
+            Lane::Action,
+            None,
+        )?;
+        Ok(Self::contained(child, containment, guardian))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub fn launch_actions() -> Result<Self, String> {
+        Err("The action process is available on macOS and Linux".into())
+    }
+
     pub fn launch(
         bun: &Path,
         entry: &Path,

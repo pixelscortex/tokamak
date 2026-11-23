@@ -183,7 +183,7 @@ jobs:
       - run: |
           moon run workspace:build-release
           mkdir -p .ci-results
-          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak-server
+          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak-server tokamak-plugin-host
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: server-linux-${{ matrix.arch }}

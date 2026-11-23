@@ -1,7 +1,7 @@
 use super::*;
 use crate::identity::{AccountBinding, Identities, Role, User, register_caller};
 use crate::protocol::failure_kind;
-use engine::PendingCall;
+use std::{future::Future, pin::Pin};
 
 /// Outcomes safe for the HTTP adapter to expose without provider exception details.
 pub(crate) enum SignInError {
@@ -81,10 +81,12 @@ struct ProviderCall {
     plugin: Option<String>,
 }
 
+type SignInFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
+
 struct Prepared {
     plugin: String,
     method: String,
-    pending: PendingCall,
+    pending: SignInFuture,
     cleanup: Option<MemberAccountCleanup>,
 }
 
@@ -310,48 +312,79 @@ impl Coordinator {
         } else {
             None
         };
-        // Put anonymous work on its own bounded lane so it cannot take up the
-        // workers serving signed-in devices or inherit a session's authority.
-        let pool = match &mut self.sign_in_pool {
-            Some(pool) => pool,
-            slot => slot.insert(
-                Pool::new(PoolConfig {
-                    workers: 2,
-                    queue_capacity: 2,
-                    limits: sign_in_limits(self.pool.limits().clone()),
-                })
-                .map_err(|_| SignInError::Unavailable)?,
-            ),
-        };
-
         let mut ops = OpRegistry::new();
         register_caller(None, &mut ops).map_err(|_| SignInError::Unavailable)?;
         engine::register_password_crypto(&mut ops).map_err(|_| SignInError::Unavailable)?;
         crate::actions::register_nested_calls(
             &mut ops,
             self.commands.clone(),
-            Some(loaded),
+            Some(loaded.clone()),
             Some(target.owner.clone()),
             Arc::new(crate::environment::Snapshot::new(None, None)),
             None,
         )
         .map_err(|_| SignInError::Unavailable)?;
-        let pending = pool
-            .submit(
-                target.bundle,
-                "invoke",
-                serde_json::json!({"name": target.local_name, "args": call.arguments}),
-                Arc::new(ops),
-            )
-            .map_err(|error| match error {
-                engine::Error::Overloaded => SignInError::Busy,
-                _ => SignInError::Unavailable,
-            })?;
+        let pending = self.sign_in_action(&loaded, &target, call.arguments, ops)?;
         Ok(Prepared {
             plugin: target.owner,
             method: call.method,
             pending,
             cleanup,
+        })
+    }
+    fn sign_in_action(
+        &mut self,
+        loaded: &crate::plugins::Loaded,
+        target: &crate::plugins::Target,
+        arguments: Json,
+        ops: engine::OpRegistry,
+    ) -> Result<SignInFuture, SignInError> {
+        let name = target.local_name.clone();
+        Ok(if let Some(process) = &self.action_process {
+            let process = process.clone();
+            let source = loaded
+                .action_sources
+                .get(&target.owner)
+                .ok_or(SignInError::Unavailable)?
+                .clone();
+            let permit = self
+                .sign_in_slots
+                .clone()
+                .try_acquire_owned()
+                .map_err(|_| SignInError::Busy)?;
+            Box::pin(async move {
+                let _permit = permit;
+                process
+                    .invoke_anonymous(source, name, arguments, Arc::new(ops))
+                    .await
+            })
+        } else {
+            // Put anonymous work on its own bounded lane so it cannot take up the
+            // workers serving signed-in devices or inherit a session's authority.
+            let pool = match &mut self.sign_in_pool {
+                Some(pool) => pool,
+                slot => slot.insert(
+                    Pool::new(PoolConfig {
+                        workers: 2,
+                        queue_capacity: 2,
+                        limits: sign_in_limits(self.pool.limits().clone()),
+                    })
+                    .map_err(|_| SignInError::Unavailable)?,
+                ),
+            };
+
+            let pending = pool
+                .submit(
+                    target.bundle.clone(),
+                    "invoke",
+                    serde_json::json!({"name": name, "args": arguments}),
+                    Arc::new(ops),
+                )
+                .map_err(|error| match error {
+                    engine::Error::Overloaded => SignInError::Busy,
+                    _ => SignInError::Unavailable,
+                })?;
+            Box::pin(async move { pending.await.map_err(|error| error.to_string()) })
         })
     }
 }

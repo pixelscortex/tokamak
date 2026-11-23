@@ -127,7 +127,12 @@ test("invocation snapshots arguments and normalizes only void results", async ()
 // alone cannot prove discovery, linked maps, dispatch, or usable UI references.
 test("moon bundles one importable ESM feature with canonical CRUD/query dispatch and typed API", async () => {
   succeeds(run(["moon", "run", "sdk:bundle", "--", "packages/sdk/tests/fixtures/feature"]));
-  expect((await readdir(join(feature, "dist"))).sort()).toEqual(["bundle.js", "bundle.js.map"]);
+  expect((await readdir(join(feature, "dist"))).sort()).toEqual([
+    "bundle.js",
+    "bundle.js.map",
+    "transactions.js",
+    "transactions.js.map",
+  ]);
   const source = await readFile(join(feature, "dist/bundle.js"), "utf8");
   expect(source).toContain("sourceMappingURL=bundle.js.map");
   expect(new Bun.Transpiler({ loader: "js" }).scan(source).imports).toEqual([]);

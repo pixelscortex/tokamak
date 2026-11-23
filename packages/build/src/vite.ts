@@ -180,6 +180,15 @@ export function tokamak(
             entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
           }
           entries.server = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
+          const transactions = resolve(server, "dist/transactions.js");
+          if (plugin.runtime !== "worker" && existsSync(transactions)) {
+            for (const name of ["transactions.js", "transactions.js.map"])
+              this.emitFile({
+                type: "asset",
+                fileName: name,
+                source: await readFile(resolve(server, "dist", name), "utf8"),
+              });
+          }
           if (hasLocal) {
             for (const name of ["local.js", "local.js.map", "local-entry.js"]) {
               let source = await readFile(resolve(server, "dist", name), "utf8");

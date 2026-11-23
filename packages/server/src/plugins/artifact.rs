@@ -1,13 +1,17 @@
 use super::*;
 
+pub(super) const TRANSACTIONS: &str = "transactions.js";
+pub(super) const TRANSACTIONS_MAP: &str = "transactions.js.map";
+
 impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
-        Self::read_reusing(directory, None)
+        Self::read_reusing(directory, None, false)
     }
 
     pub(super) fn read_reusing(
         directory: &Path,
         previous: Option<&Artifact>,
+        quickjs: bool,
     ) -> Result<Self, Error> {
         let root = directory
             .canonicalize()
@@ -16,6 +20,13 @@ impl Artifact {
         let manifest = Manifest::read(&root)?;
 
         let names = manifest.validate()?;
+        let transactions = [TRANSACTIONS, TRANSACTIONS_MAP];
+        if quickjs
+            && (manifest.hashes.contains_key(TRANSACTIONS)
+                != manifest.hashes.contains_key(TRANSACTIONS_MAP))
+        {
+            return Err(invalid("Incomplete transaction bundle"));
+        }
 
         let mut assets = BTreeMap::new();
 
@@ -29,6 +40,15 @@ impl Artifact {
                 name.clone(),
                 asset(&root, name, &manifest.hashes, previous, whole_backend)?,
             );
+        }
+
+        if quickjs && manifest.hashes.contains_key(TRANSACTIONS) {
+            for name in transactions {
+                assets.insert(
+                    name.to_owned(),
+                    asset(&root, name, &manifest.hashes, previous, true)?,
+                );
+            }
         }
 
         let bundle = manifest
@@ -63,6 +83,54 @@ impl Artifact {
             assets,
             permissions,
         })
+    }
+
+    pub(super) fn transactions(&self) -> Result<Option<Arc<Bundle>>, Error> {
+        if let (Some(code), Some(map)) = (
+            self.assets.get(TRANSACTIONS),
+            self.assets.get(TRANSACTIONS_MAP),
+        ) {
+            return Bundle::new(
+                code.backend_text(TRANSACTIONS)?,
+                Some(&map.backend_text(TRANSACTIONS_MAP)?),
+            )
+            .map(|bundle| Some(Arc::new(bundle)))
+            .map_err(|error| invalid(error.to_string()));
+        }
+        if self.bundle.is_some() && self.manifest.entries.worker.is_none() {
+            return Err(invalid(
+                "QuickJS actions require a transaction bundle; rebuild this plugin",
+            ));
+        }
+        Ok(self.bundle.clone())
+    }
+
+    pub(super) fn action_source(
+        &self,
+        id: &str,
+    ) -> Result<Arc<crate::host::action_process::Source>, Error> {
+        let (code, bundle, persistent) = if let Some(entry) = &self.manifest.entries.worker {
+            let source = self.assets[&entry.code].backend_text(&entry.code)?;
+            let map = self.assets[&entry.map].backend_text(&entry.map)?;
+            let bundle =
+                Bundle::new(source, Some(&map)).map_err(|error| invalid(error.to_string()))?;
+            (self.assets[&entry.code].clone(), Arc::new(bundle), true)
+        } else {
+            let entry = self
+                .manifest
+                .entries
+                .server
+                .as_ref()
+                .ok_or_else(|| invalid("Missing server action bundle"))?;
+            let bundle = self
+                .bundle
+                .clone()
+                .ok_or_else(|| invalid("Missing server action bundle"))?;
+            (self.assets[&entry.code].clone(), bundle, false)
+        };
+        Ok(crate::host::action_process::Source::plugin(
+            id, code, bundle, persistent,
+        ))
     }
 
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,

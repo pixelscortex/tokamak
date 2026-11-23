@@ -73,7 +73,7 @@ fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
         .try_send(value)
         .map_err(|_| "Worker write queue full or closed".into())
 }
-fn oversized(value: &Value) -> Result<bool, String> {
+pub(in crate::host) fn oversized(value: &Value) -> Result<bool, String> {
     Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= WORKER_FRAME_BYTES)
 }
 struct Control<'a> {
@@ -166,7 +166,7 @@ async fn run(
     }
 }
 // fill_buf is cancellation-safe. Keep the partial frame across select branches.
-async fn read_frame(
+pub(in crate::host) async fn read_frame(
     output: &mut (impl AsyncBufRead + Unpin),
     frame: &mut Vec<u8>,
 ) -> Result<Option<Vec<u8>>, String> {
@@ -205,7 +205,7 @@ async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) 
     }
 }
 
-async fn write_messages(
+pub(in crate::host) async fn write_messages(
     mut input: tokio::process::ChildStdin,
     mut outgoing: mpsc::Receiver<Value>,
 ) -> Result<(), String> {

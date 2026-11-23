@@ -35,12 +35,14 @@ try {
     "worker.js.map",
   ])
     files[name] = await readFile(join(temporary, "dist", name), "utf8");
-  // Exercise worker teardown with an artifact that predates the Node import check.
-  files["worker.js"] += '\nimport { spawn as fixtureSpawn } from "node:child_process";\n';
-  files["worker.js"] += 'import { writeFileSync as fixtureWriteFile } from "node:fs";\n';
-  const manifest = JSON.parse(files["manifest.json"]);
-  manifest.hashes["worker.js"] = createHash("sha256").update(files["worker.js"]).digest("hex");
-  files["manifest.json"] = JSON.stringify(manifest);
+  if (!process.argv.includes("--portable")) {
+    // Exercise worker teardown with an artifact that predates the Node import check.
+    files["worker.js"] += '\nimport { spawn as fixtureSpawn } from "node:child_process";\n';
+    files["worker.js"] += 'import { writeFileSync as fixtureWriteFile } from "node:fs";\n';
+    const manifest = JSON.parse(files["manifest.json"]);
+    manifest.hashes["worker.js"] = createHash("sha256").update(files["worker.js"]).digest("hex");
+    files["manifest.json"] = JSON.stringify(manifest);
+  }
   console.log(JSON.stringify(files));
 } finally {
   await rm(temporary, { force: true, recursive: true });

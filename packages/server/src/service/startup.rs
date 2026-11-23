@@ -3,12 +3,14 @@ use crate::plugins::StartupPolicy;
 
 struct Startup {
     bundle: Option<Arc<Bundle>>,
+    legacy_action_bundle: Option<Arc<Bundle>>,
     space: DataSpace,
     descriptor: Json,
     kinds: BTreeMap<String, FunctionKind>,
     single_bundle_private: BTreeSet<String>,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
+    quickjs: bool,
 }
 
 impl Server {
@@ -27,8 +29,23 @@ impl Server {
         bundle: Arc<Bundle>,
         space: DataSpace,
     ) -> Result<Self, Error> {
+        let quickjs = match quickjs_actions() {
+            Ok(quickjs) => quickjs,
+            Err(error) => return Err(startup_error(&mut database, error).await),
+        };
+        let (transactions, legacy_action_bundle) = if quickjs {
+            let Some(transactions) = bundle.transactions() else {
+                let error = Error::Invalid(
+                    "QuickJS actions require a transaction bundle; rebuild the feature".into(),
+                );
+                return Err(startup_error(&mut database, error).await);
+            };
+            (transactions, Some(bundle))
+        } else {
+            (bundle, None)
+        };
         let inspected = async {
-            let inspected = inspect(&pool, bundle.clone()).await?;
+            let inspected = inspect(&pool, transactions.clone()).await?;
 
             let schema = crate::schema::Schema::parse(&inspected.descriptor["schema"])?;
 
@@ -84,13 +101,15 @@ impl Server {
             database,
             pool,
             Startup {
-                bundle: Some(bundle),
+                bundle: Some(transactions),
+                legacy_action_bundle,
                 space,
                 descriptor,
                 kinds,
                 single_bundle_private,
                 plugins: None,
                 plugin_root: None,
+                quickjs,
             },
         )
         .await
@@ -111,10 +130,15 @@ impl Server {
         root: &std::path::Path,
         policy: StartupPolicy,
     ) -> Result<Self, Error> {
-        let loaded = match crate::plugins::Catalog::read_at_startup(root, database.directory()) {
-            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy).await,
-            Err(error) => Err(error),
+        let quickjs = match quickjs_actions() {
+            Ok(quickjs) => quickjs,
+            Err(error) => return Err(startup_error(&mut database, error).await),
         };
+        let loaded =
+            match crate::plugins::Catalog::read_at_startup(root, database.directory(), quickjs) {
+                Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy, quickjs).await,
+                Err(error) => Err(error),
+            };
 
         let loaded = match loaded {
             Ok(mut loaded) => {
@@ -140,12 +164,14 @@ impl Server {
             pool,
             Startup {
                 bundle: None,
+                legacy_action_bundle: None,
                 space: DataSpace::default(),
                 descriptor: loaded.descriptor.clone(),
                 kinds,
                 single_bundle_private: BTreeSet::new(),
                 plugins: Some(loaded),
                 plugin_root: Some(root.to_owned()),
+                quickjs,
             },
         )
         .await
@@ -158,12 +184,14 @@ impl Server {
     ) -> Result<Self, Error> {
         let Startup {
             bundle,
+            legacy_action_bundle,
             space,
             descriptor,
             kinds,
             single_bundle_private,
             plugins,
             plugin_root,
+            quickjs,
         } = startup;
         let state = async {
             Box::pin(window_state::initialize(&database, plugins.is_some()))
@@ -184,14 +212,13 @@ impl Server {
         if let Err(error) = state {
             return Err(startup_error(&mut database, error).await);
         }
-        let action_pool = match Pool::new_actions(PoolConfig {
-            limits: pool.limits().clone(),
-            ..PoolConfig::default()
-        }) {
-            Ok(pool) => Arc::new(pool),
-            Err(error) => {
-                return Err(startup_error(&mut database, Error::Invalid(error.to_string())).await);
-            }
+        let ActionStartup {
+            action_pool,
+            action_process,
+            legacy_action_source,
+        } = match ActionStartup::new(quickjs, &pool, legacy_action_bundle.as_ref(), &kinds) {
+            Ok(startup) => startup,
+            Err(error) => return Err(startup_error(&mut database, error).await),
         };
 
         let changes = database.subscribe(); // Before any initial subscription run.
@@ -214,6 +241,9 @@ impl Server {
             plugin_root,
             changes,
             action_pool,
+            action_process,
+            legacy_action_source,
+            sign_in_slots: Arc::new(tokio::sync::Semaphore::new(4)),
             sign_in_pool: None,
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
@@ -297,5 +327,51 @@ async fn startup_error(database: &mut Database, error: Error) -> Error {
     match Box::pin(database.close()).await {
         Ok(()) => error,
         Err(close) => Error::Invalid(format!("{error}; startup cleanup failed: {close}")),
+    }
+}
+
+fn quickjs_actions() -> Result<bool, Error> {
+    tokamak_worker::LocalRuntime::selected()
+        .map(|runtime| runtime == tokamak_worker::LocalRuntime::QuickJs)
+        .map_err(Error::Invalid)
+}
+
+struct ActionStartup {
+    action_pool: Option<Arc<Pool>>,
+    action_process: Option<Arc<crate::host::action_process::Supervisor>>,
+    legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
+}
+
+impl ActionStartup {
+    fn new(
+        quickjs: bool,
+        pool: &Pool,
+        bundle: Option<&Arc<Bundle>>,
+        kinds: &BTreeMap<String, FunctionKind>,
+    ) -> Result<Self, Error> {
+        if quickjs {
+            let legacy_action_source = bundle
+                .filter(|_| kinds.values().any(|kind| *kind == FunctionKind::Action))
+                .map(|bundle| crate::host::action_process::Source::legacy(bundle.clone()))
+                .transpose()?;
+            return Ok(Self {
+                action_pool: None,
+                action_process: Some(crate::host::action_process::Supervisor::new(
+                    pool.limits().heap_bytes,
+                )),
+                legacy_action_source,
+            });
+        }
+
+        let pool = Pool::new_actions(PoolConfig {
+            limits: pool.limits().clone(),
+            ..PoolConfig::default()
+        })
+        .map_err(|error| Error::Invalid(error.to_string()))?;
+        Ok(Self {
+            action_pool: Some(Arc::new(pool)),
+            action_process: None,
+            legacy_action_source: None,
+        })
     }
 }

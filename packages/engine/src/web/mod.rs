@@ -50,7 +50,7 @@ impl Resources {
 
 /// Owned by the invocation, independently of JS/native promise reference cycles.
 /// Dropping an invocation future also retires resources without running JS cleanup.
-pub(crate) struct WebLease(Arc<Mutex<Resources>>);
+pub struct WebLease(Arc<Mutex<Resources>>);
 impl Drop for WebLease {
     fn drop(&mut self) {
         let mut resources = self.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -109,7 +109,7 @@ impl WebHost {
         })
     }
 
-    pub(crate) fn lease(&self) -> WebLease {
+    pub fn lease(&self) -> WebLease {
         WebLease(self.resources.clone())
     }
 

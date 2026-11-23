@@ -21,12 +21,18 @@ pub(crate) struct NestedCall {
     pub reply: oneshot::Sender<Result<Json, String>>,
 }
 
+#[derive(Clone)]
+pub(crate) struct Execution {
+    pub limits: Limits,
+    pub process: Option<Arc<crate::host::action_process::Supervisor>>,
+}
+
 pub(crate) fn operations(
     commands: mpsc::WeakSender<Command>,
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
-    limits: Limits,
+    execution: Execution,
     path: Vec<String>,
     auth: Option<crate::identity::AuthContext>,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
@@ -63,7 +69,7 @@ pub(crate) fn operations(
             loaded.clone(),
             owner.clone(),
             commands,
-            limits,
+            execution,
             path,
             auth,
         )?;
@@ -136,7 +142,7 @@ fn register_plugin_call(
     loaded: Arc<Loaded>,
     owner: String,
     commands: mpsc::WeakSender<Command>,
-    limits: Limits,
+    execution: Execution,
     path: Vec<String>,
     auth: Option<crate::identity::AuthContext>,
 ) -> Result<(), engine::Error> {
@@ -146,7 +152,7 @@ fn register_plugin_call(
         let loaded = catalog.clone();
         let owner = caller.clone();
         let commands = commands.clone();
-        let limits = limits.clone();
+        let execution = execution.clone();
         let mut path = path.clone();
         let auth = auth.clone();
         async move {
@@ -186,41 +192,60 @@ fn register_plugin_call(
                 Some(&target.owner),
             ));
             let worker = loaded.workers.get(&target.owner).cloned();
+            let source = loaded.action_sources.get(&target.owner).cloned();
             let ops = operations(
                 commands,
                 Some(loaded),
                 Some(target.owner),
                 environment.clone(),
-                limits.clone(),
+                execution.clone(),
                 path,
                 auth,
             )
             .map_err(|e| e.to_string())?;
-            if let Some(worker) = worker {
-                return worker
-                    .invoke(target.local_name, args, ops)
-                    .await
-                    .map_err(|e| environment.redact(e));
-            }
-            // A separate, invocation-owned lane avoids recursive waits on the
-            // bounded root action pool. Dropping it cancels the child on reload.
-            let pool = Pool::new_actions(PoolConfig {
-                workers: 1,
-                queue_capacity: 1,
-                limits,
-            })
-            .map_err(|e| e.to_string())?;
-            let pending = pool
-                .submit(
-                    target.bundle,
-                    "invoke",
-                    serde_json::json!({"name": target.local_name, "args": args}),
-                    ops,
-                )
-                .map_err(|e| e.to_string())?;
-            pending.await.map_err(|e| environment.redact(e.to_string()))
+            execution
+                .invoke_nested_action(source, worker, target.bundle, target.local_name, args, ops)
+                .await
+                .map_err(|error| environment.redact(error))
         }
     })?;
 
     Ok(())
+}
+
+impl Execution {
+    async fn invoke_nested_action(
+        self,
+        source: Option<Arc<crate::host::action_process::Source>>,
+        worker: Option<Arc<crate::host::worker::Supervisor>>,
+        bundle: Arc<engine::Bundle>,
+        name: String,
+        args: Json,
+        ops: Arc<OpRegistry>,
+    ) -> Result<Json, String> {
+        if let Some(process) = self.process {
+            let source = source.ok_or("Plugin action has no action process bundle")?;
+            return process.invoke(source, name, args, ops).await;
+        }
+        if let Some(worker) = worker {
+            return worker.invoke(name, args, ops).await;
+        }
+        // A separate, invocation-owned lane avoids recursive waits on the
+        // bounded root action pool. Dropping it cancels the child on reload.
+        let pool = Pool::new_actions(PoolConfig {
+            workers: 1,
+            queue_capacity: 1,
+            limits: self.limits,
+        })
+        .map_err(|e| e.to_string())?;
+        let pending = pool
+            .submit(
+                bundle,
+                "invoke",
+                serde_json::json!({"name": name, "args": args}),
+                ops,
+            )
+            .map_err(|e| e.to_string())?;
+        pending.await.map_err(|error| error.to_string())
+    }
 }

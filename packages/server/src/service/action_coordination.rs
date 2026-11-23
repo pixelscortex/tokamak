@@ -1,6 +1,18 @@
 use super::*;
 
 impl Coordinator {
+    fn action_execution(&self) -> crate::actions::Execution {
+        crate::actions::Execution {
+            limits: self
+                .action_pool
+                .as_ref()
+                .unwrap_or(&self.pool)
+                .limits()
+                .clone(),
+            process: self.action_process.clone(),
+        }
+    }
+
     pub(super) fn start_action(
         &mut self,
         session: u64,
@@ -38,7 +50,7 @@ impl Coordinator {
             self.plugins.clone(),
             owner.clone(),
             environment.clone(),
-            self.action_pool.limits().clone(),
+            self.action_execution(),
             vec![name.clone()],
             Some(auth),
         ) {
@@ -48,10 +60,64 @@ impl Coordinator {
                 return;
             }
         };
+        if let Some(process) = &self.action_process {
+            let source = match (&self.plugins, &owner) {
+                (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
+                _ => self.legacy_action_source.clone(),
+            };
+            let Some(source) = source else {
+                self.respond(
+                    session,
+                    id,
+                    Err("Plugin action has no action process bundle".into()),
+                );
+                return;
+            };
+            let process = process.clone();
+            self.action_jobs.spawn(async move {
+                (
+                    session,
+                    id,
+                    process
+                        .invoke(source, local_name, args, ops)
+                        .await
+                        .map_err(|error| environment.redact(error)),
+                )
+            });
+            return;
+        }
+
+        self.start_in_process_or_bun(
+            session,
+            id,
+            bundle,
+            local_name,
+            owner.as_deref(),
+            args,
+            ops,
+            environment,
+        );
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Dispatch uses the already prepared invocation snapshot"
+    )]
+    fn start_in_process_or_bun(
+        &mut self,
+        session: u64,
+        id: u64,
+        bundle: Arc<Bundle>,
+        local_name: String,
+        owner: Option<&str>,
+        args: Json,
+        ops: Arc<engine::OpRegistry>,
+        environment: Arc<crate::environment::Snapshot>,
+    ) {
         let worker = self
             .plugins
             .as_ref()
-            .and_then(|p| owner.as_ref().and_then(|owner| p.workers.get(owner)))
+            .and_then(|p| owner.and_then(|owner| p.workers.get(owner)))
             .cloned();
         if let Some(worker) = worker {
             self.action_jobs.spawn(async move {
@@ -66,7 +132,8 @@ impl Coordinator {
             });
             return;
         }
-        match self.action_pool.submit(
+        let pool = self.action_pool.as_ref().expect("in-process action lane");
+        match pool.submit(
             bundle,
             "invoke",
             serde_json::json!({"name":local_name,"args":args}),
@@ -86,7 +153,13 @@ impl Coordinator {
     }
 
     pub(super) async fn stop_actions(&mut self) {
-        self.action_pool.cancel_actions();
+        if let Some(pool) = &self.action_pool {
+            pool.cancel_actions();
+        }
+        if let Some(process) = &self.action_process {
+            process.stop().await;
+        }
+
         if let Some(loaded) = &self.plugins {
             for worker in loaded.workers.values() {
                 worker.stop().await;
@@ -123,7 +196,11 @@ impl Coordinator {
 
     fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
         let actual = match (&self.plugins, &call.generation, &call.owner) {
-            (Some(current), Some(generation), Some(owner)) if Arc::ptr_eq(current, generation) => {
+            (Some(current), Some(generation), Some(owner))
+                if Arc::ptr_eq(current, generation)
+                    || (self.action_process.is_some()
+                        && current.same_action_source(generation, owner)) =>
+            {
                 let target = current.target(
                     owner,
                     &call.name,
@@ -131,6 +208,14 @@ impl Coordinator {
                     &[],
                     call.contract.as_deref(),
                 )?;
+
+                if !Arc::ptr_eq(current, generation)
+                    && !current.same_plugin(generation, &target.owner)
+                {
+                    return Err(
+                        "nested action target belongs to a retired plugin generation".into(),
+                    );
+                }
 
                 if call.auth.is_none() {
                     target.check_anonymous_scope(owner)?;

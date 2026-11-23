@@ -70,6 +70,14 @@ and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
 for reserved signing inputs; signing, notarization and publishing are absent.
 
+## QuickJS plugin runtime
+
+Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` on macOS or Linux to run server actions
+in the shared [action process](packages/host/README.md#action-process) and local
+functions in the plugin host. Place `tokamak-plugin-host` alongside the server
+or set `TOKAMAK_PLUGIN_HOST` to its path. Rebuild plugins before switching an
+existing installation. Queries and mutations stay in the server.
+
 ## Plugin workers
 
 A plugin opts its actions into Bun with `runtime: "worker"` in `definePlugin`.

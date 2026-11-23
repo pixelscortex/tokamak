@@ -10,9 +10,9 @@ let retained: (() => Promise<unknown>) | undefined;
 export const state = action({
   handler: () => ({
     count: ++count,
-    pid: process.pid,
-    cwd: process.cwd(),
-    secret: process.env.WORKER_UNGRANTED ?? null,
+    pid: typeof process === "undefined" ? null : process.pid,
+    cwd: typeof process === "undefined" ? null : process.cwd(),
+    secret: typeof process === "undefined" ? null : (process.env.WORKER_UNGRANTED ?? null),
   }),
 });
 export const echo = action({
@@ -48,7 +48,8 @@ export const crash = action({ handler: () => process.exit(7) });
 export const stuck = action({ handler: () => new Promise(() => {}) });
 export const cpu = action({
   handler: () => {
-    fixtureWriteFile("cpu-started", "");
+    if (typeof process !== "undefined") fixtureWriteFile("cpu-started", "");
+    else console.info("action process entered CPU loop");
     for (;;) {}
   },
 });
@@ -58,7 +59,8 @@ export const flood = action({
     for (let i = 0; i < 4096; i++) {
       if (stderr) process.stderr.write("x".repeat(8192) + "\n");
       else console.log("x".repeat(8192));
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      if (typeof process === "undefined") await Promise.resolve();
+      else await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return "flooded";
   },
@@ -89,6 +91,19 @@ export const child = action({
   },
 });
 export const envDenied = action({ handler: (ctx) => ctx.env("WORKER_UNGRANTED") });
+export const networkDenied = action({
+  handler: async () => (await fetch("http://127.0.0.1:1")).text(),
+});
 export const dbDenied = action({ handler: (ctx) => (ctx as unknown as { db: unknown }).db ?? null });
 // A mixed module must not pull this file's Node actions into QuickJS.
 export const pure = query({ handler: () => "QuickJS" });
+
+export const thrown = action({
+  handler: () => {
+    throw new Error("action error sentinel");
+  },
+});
+
+export const logMarker = action({
+  handler: () => console.info("action process log marker"),
+});

@@ -76,13 +76,16 @@ tasks:
       cache: false
       mutex: "cargo"
   build-release:
-    command: "cargo build --locked --release --package server --bin tokamak-server --target-dir target"
+    command: "cargo build --locked --release -p server -p tokamak-plugin-host --target-dir target"
     # The server depends on engine, not the UI/app/plugin bundles. Keep an
     # unrelated frontend change from forcing another release link.
     inputs:
       - "/packages/server/**/*"
       - "/packages/engine/**/*"
       - "/packages/worker/**/*"
+      - "/packages/host/**/*"
+      - "/packages/sdk/src/**/*"
+      - "/packages/sdk/worker/**/*"
       - "/Cargo.toml"
       - "/Cargo.lock"
       - "/rust-toolchain.toml"

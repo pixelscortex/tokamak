@@ -251,7 +251,7 @@ try {
           }),
           `${host} address rejection`,
         ),
-        /error sending request/,
+        /no permitted public addresses/,
       );
     }
     assert.deepEqual(hits, [], "hostname grants must not reach non-public connected addresses");

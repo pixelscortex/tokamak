@@ -7663,6 +7663,7 @@ name = "tokamak-plugin-host"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "engine",
  "libc",
  "llrt_abort",
  "llrt_buffer",

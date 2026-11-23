@@ -1,4 +1,6 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod action_process;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod fs;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod modules;
@@ -15,6 +17,9 @@ async fn main() -> anyhow::Result<()> {
     let code = std::env::args_os()
         .nth(1)
         .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
+    if code == "--actions" {
+        return action_process::run().await;
+    }
     protocol::run(std::path::Path::new(&code)).await
 }
 

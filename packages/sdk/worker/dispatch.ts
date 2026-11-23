@@ -17,6 +17,7 @@ export function workerDispatch(
   contracts?: Parameters<typeof invocationHost>[3],
   options?: {
     errorMessage(error: unknown): string;
+    errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
   },
 ) {
@@ -75,7 +76,15 @@ export function workerDispatch(
       await invocation.close();
       const message =
         options?.errorMessage(error) ?? (error instanceof Error ? error.message : String(error));
-      if (calls.get(id) === controller) send({ type: "result", id, error: message });
+      if (calls.get(id) === controller) {
+        let stack: string | undefined;
+        try {
+          stack = options?.errorStack?.(error);
+        } catch {
+          // Error properties may have user-defined getters.
+        }
+        send({ type: "result", id, error: message, ...(stack === undefined ? {} : { stack }) });
+      }
     } finally {
       if (calls.get(id) === controller) retire(id);
     }

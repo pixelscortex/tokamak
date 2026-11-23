@@ -230,11 +230,31 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     }))
 }
 
+fn read_standalone_bundle(path: &Path) -> Result<Bundle, Box<dyn std::error::Error>> {
+    let source = std::fs::read_to_string(path)?;
+    if tokamak_worker::LocalRuntime::selected()? != tokamak_worker::LocalRuntime::QuickJs {
+        return Ok(Bundle::new(source, None)?);
+    }
+    let mut map_path = path.as_os_str().to_owned();
+    map_path.push(".map");
+    let map = std::fs::read_to_string(map_path).ok();
+    let bundle = Bundle::new(source, map.as_deref())?;
+    let transactions = path.with_file_name("transactions.js");
+    let source = std::fs::read_to_string(&transactions).map_err(|error| {
+        format!(
+            "QuickJS actions require {}: {error}; rebuild the feature",
+            transactions.display()
+        )
+    })?;
+    let map = std::fs::read_to_string(path.with_file_name("transactions.js.map"))?;
+    Ok(bundle.with_transactions(Bundle::new(source, Some(&map))?))
+}
+
 async fn start_backend(
     data: PathBuf,
     javascript: PoolConfig,
     plugins: Option<PathBuf>,
-    source: Option<String>,
+    source: Option<Bundle>,
     hosted: bool,
 ) -> Result<(Backend, String), Box<dyn std::error::Error>> {
     let result = if let Some(root) = plugins {
@@ -250,10 +270,10 @@ async fn start_backend(
         (backend, hash)
     } else {
         let source = source.expect("validated legacy source");
-        let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+        let hash = format!("{:x}", Sha256::digest(source.source().as_bytes()));
         let backend = Backend::start(BackendConfig {
             storage: Storage::Disk(data),
-            bundle: Arc::new(Bundle::new(source, None)?),
+            bundle: Arc::new(source),
             javascript,
         })
         .await?;
@@ -331,7 +351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if bundle.is_some() == plugins.is_some() {
         return Err("Specify exactly one of --plugins or --bundle".into());
     }
-    let source = bundle.map(std::fs::read_to_string).transpose()?;
+    let source = bundle.as_deref().map(read_standalone_bundle).transpose()?;
     let token = if let Some(directory) = &local {
         data = directory.join("store");
         Some(capability(directory)?)

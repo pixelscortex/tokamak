@@ -4,6 +4,15 @@ export const publicRead = query({ handler: () => "public" });
 export const callerQuery = query({ handler: (ctx) => ctx.auth.user });
 export const callerMutation = mutation({ handler: (ctx) => ctx.auth.user });
 export const callerAction = action({ handler: (ctx) => ctx.auth.user });
+export const waitThroughReload = action({
+  handler: async (ctx) => {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    return ctx.runQuery(b.ops.publicRead, {});
+  },
+});
+const b = createApi<{ ops: { publicRead: import("@tokamak/sdk").FunctionReference<"query", {}, string> } }>(
+  "b",
+);
 export const privateRead = query({ handler: () => "private" });
 export const privateWrite = mutation({ handler: (ctx) => ctx.db.insert("private", { value: "denied" }) });
 export const deniedFetch = action({

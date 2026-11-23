@@ -254,6 +254,8 @@ The bundle task writes:
 
 - `FEATURE/dist/bundle.js`: one self-contained ESM module.
 - `FEATURE/dist/bundle.js.map`: linked source map with source contents.
+- `FEATURE/dist/transactions.js` and its map: the companion for the QuickJS action process.
+  It contains queries, mutations and inspection metadata.
 - `FEATURE/_generated/api.ts`: typed public references.
 - `FEATURE/_generated/internal.ts`: references for the plugin's server code.
 
