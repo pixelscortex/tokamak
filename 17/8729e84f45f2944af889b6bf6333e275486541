@@ -1,0 +1,54 @@
+packages/sdk/src/host.ts
+  s_bce31a02275fd7::t_626ff415ce863b 98-101
+packages/sdk/worker/contracts.ts
+  s_bce31a02275fd7::t_626ff415ce863b 8-34,36-40,45,48
+  s_bce31a02275fd7::t_897d8d3d1bff1c 7
+  s_bce31a02275fd7::t_46ee36cdcadabd 2,6
+packages/sdk/worker/entry.ts
+  s_bce31a02275fd7::t_626ff415ce863b 5,34,48-50,65-67,70-71,74
+packages/sdk/src/internal/contracts.ts
+  s_bce31a02275fd7::t_626ff415ce863b 22-23,26-33,110-111,118-120,124,184-185
+plugins/ai/src/server/run.ts
+  s_bce31a02275fd7::t_1988dec857edc2 355-356
+  s_bce31a02275fd7::t_17f607ee172b74 47,70,100-102,107
+packages/sdk/src/functions.ts
+  s_bce31a02275fd7::t_626ff415ce863b 14-17,19,116,123,132,154,158,263,288,321-329,473-475,480,482-485
+  s_bce31a02275fd7::t_cae78e770b1687 18
+packages/sdk/src/local.ts
+  s_bce31a02275fd7::t_626ff415ce863b 22-24
+packages/sdk/worker/invocation-host.ts
+  s_bce31a02275fd7::t_626ff415ce863b 1-14,16-24,28-53
+  s_bce31a02275fd7::t_897d8d3d1bff1c 15,25-27
+packages/sdk/README.md
+  s_bce31a02275fd7::t_fd299c2dde2ae9 210-214
+packages/sdk/tools/worker.mjs
+  s_bce31a02275fd7::t_d0656d69e2a5b8 89
+packages/server/tests/contracts-driver.mjs
+  s_bce31a02275fd7::t_69a1d5c3aed490 100-101,103,107,115,124
+plugins/ai/README.md
+  s_bce31a02275fd7::t_3a8f862cbe6a0e 116
+plugins/ai/src/server/agents.ts
+  s_bce31a02275fd7::t_e055885bb8aa40 23,25
+plugins/ai/src/server/controls.ts
+  s_bce31a02275fd7::t_d64f84acfcae7f 53,57
+plugins/ai/src/server/turn-hooks.ts
+  s_bce31a02275fd7::t_6258fe7c97496c 2,10,35
+plugins/chat/src/server/threads/threads.ts
+  s_bce31a02275fd7::t_249cb41a4b807c 145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "178729e84f45f2944af889b6bf6333e275486541",
+  "prompts": {},
+  "sessions": {
+    "s_bce31a02275fd7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20739-20ad-71e0-9966-c7a7cb98d952",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
