@@ -158,7 +158,7 @@ async fn run(
                             (call_id, op, result)
                         });
                     }
-                    Some("log") => logs::send(format!("Plugin {id} [{}]: {}", message["level"].as_str().unwrap_or("info"), message["text"].as_str().unwrap_or(""))),
+                    Some("log") => tokamak_worker::log(format!("Plugin {id} [{}]: {}", message["level"].as_str().unwrap_or("info"), message["text"].as_str().unwrap_or(""))),
                     _ => return Err("Invalid worker message".into()),
                 }
             }
@@ -198,7 +198,7 @@ async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) 
         if n == 0 {
             break;
         }
-        logs::send(format!(
+        tokamak_worker::log(format!(
             "Plugin {label}: {}",
             String::from_utf8_lossy(&chunk[..n])
         ));

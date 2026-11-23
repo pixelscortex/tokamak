@@ -5,14 +5,38 @@ use std::{
     time::{Duration, Instant},
 };
 
+use tokamak_worker::LocalRuntime;
+
 #[test]
-fn local_process_lines_reach_live_server_queries_and_the_program_can_be_stopped() {
+fn local_functions_reach_the_live_server_on_the_configured_runtime() {
+    run(LocalRuntime::selected().expect("valid local function runtime"));
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn local_functions_reach_the_live_server_on_the_other_runtime() {
+    let other = match LocalRuntime::selected().expect("valid local function runtime") {
+        LocalRuntime::Bun => LocalRuntime::QuickJs,
+        LocalRuntime::QuickJs => LocalRuntime::Bun,
+    };
+    run(other);
+}
+
+fn run(runtime: LocalRuntime) {
+    let host = (runtime == LocalRuntime::QuickJs).then(|| {
+        LocalRuntime::host_path(Path::new(env!("CARGO_BIN_EXE_tokamak-server")))
+            .expect("build tokamak-plugin-host before running this test")
+    });
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut command = Command::new("bun");
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
+    }
+    command.env_remove("TOKAMAK_TEST_PLUGIN_HOST");
+    if let Some(host) = host {
+        command.env("TOKAMAK_TEST_PLUGIN_HOST", host);
     }
     let mut child = command
         .arg("packages/server/tests/local-functions-driver.mjs")

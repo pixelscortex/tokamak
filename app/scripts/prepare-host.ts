@@ -16,8 +16,7 @@ run("cargo", [
   "--locked",
   "-p",
   "server",
-  "--bin",
-  "tokamak-server",
+  ...(process.platform === "win32" ? [] : ["-p", "tokamak-plugin-host"]),
   ...(release ? ["--release"] : []),
 ]);
 {
@@ -32,6 +31,12 @@ run("cargo", [
     `${root}target/${release ? "release" : "debug"}/tokamak-server${suffix}`,
     `${directory}/tokamak-server-${target}${suffix}`,
   );
+  if (process.platform !== "win32") {
+    await cp(
+      `${root}target/${release ? "release" : "debug"}/tokamak-plugin-host`,
+      `${directory}/tokamak-plugin-host-${target}`,
+    );
+  }
   await rm(`${directory}/plugins`, { recursive: true, force: true });
   await installStarterPlugins(`${directory}/plugins`);
 }

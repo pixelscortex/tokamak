@@ -5,7 +5,11 @@ fn main() {
         "dist/tokamak-server-{target}{}",
         std::env::consts::EXE_SUFFIX
     );
-    if !std::path::Path::new(&sidecar).is_file() {
+    let plugin_host = format!("dist/tokamak-plugin-host-{target}");
+    let host_required = target.contains("apple-darwin") || target.contains("-linux-");
+    if !std::path::Path::new(&sidecar).is_file()
+        || (host_required && !std::path::Path::new(&plugin_host).is_file())
+    {
         // Cargo checks need no packaged artifacts; the Tauri hooks prepare them before bundling.
         let mut config: serde_json::Value =
             serde_json::from_str(&std::env::var("TAURI_CONFIG").unwrap_or_else(|_| "{}".into()))

@@ -1,4 +1,4 @@
-//! Never let a blocked server stderr pipe hold up worker supervision.
+//! Never let a blocked stderr pipe hold up worker supervision.
 use std::{
     io::Write,
     sync::{
@@ -49,7 +49,7 @@ impl Logs {
         }
     }
 }
-pub(super) fn send(line: String) {
+pub fn send(line: String) {
     static LOGS: OnceLock<Logs> = OnceLock::new();
     LOGS.get_or_init(|| Logs::new(std::io::stderr())).send(line);
 }

@@ -16,6 +16,10 @@ let server;
 let transport;
 let local;
 let stop;
+let worker;
+const host = process.env.TOKAMAK_TEST_PLUGIN_HOST;
+const logs = [];
+
 const grandchildPidFiles = new Set();
 async function waitForFile(path) {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -106,6 +110,26 @@ try {
         }
       },
     });
+    export const roundTrip = local({
+      args: { file: v.string(), number: v.number() },
+      handler: async (ctx, { file, number }) => {
+        const text = await readFile(file, "utf8");
+        await ctx.runMutation(api.turn.save, { text });
+        const rows = await ctx.runQuery(api.turn.lines, {});
+        console.info("local round trip", text);
+        return { found: rows.some((row) => row.text === text), number };
+      },
+    });
+    export const slow = local({
+      handler: async (ctx) => {
+        console.info("slow call started");
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return ctx.runMutation(api.turn.save, { text: "cancelled call wrote a row" });
+      },
+    });
+    export const programScope = local({
+      handler: (ctx) => ctx.withPrograms(() => { throw new Error("entered program scope"); }),
+    });
     export const identity = local({ handler: (ctx) => ({ auth: ctx.auth }) });
     export const stop = local({
       handler: () => {
@@ -164,30 +188,36 @@ try {
   });
   transport = new WebSocketTransport(socket);
   local = new LocalFunctions(transport, async (_target, message, closed) => {
-    const worker = Bun.spawn([process.execPath, join(dist, "local-entry.js"), join(dist, "local.js")], {
+    const command = host ? [host] : [process.execPath, join(dist, "local-entry.js")];
+    const processHandle = Bun.spawn([...command, join(dist, "local.js")], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "inherit",
       cwd: scratch,
       env: { ...process.env, TOKAMAK_WORKER_LANE: "local" },
     });
+    worker = processHandle;
     void (async () => {
       try {
-        for await (const line of createInterface({ input: Readable.fromWeb(worker.stdout) }))
-          message(JSON.parse(line));
-        closed("Local worker exited");
+        for await (const line of createInterface({ input: Readable.fromWeb(processHandle.stdout) })) {
+          const frame = JSON.parse(line);
+          if (frame.type === "log") logs.push(frame.text);
+          message(frame);
+        }
+        closed(host ? "Plugin host exited" : "Local worker exited");
       } catch (error) {
         closed(String(error));
       }
     })();
     return {
       async send(value) {
-        worker.stdin.write(JSON.stringify(value) + "\n");
+        processHandle.stdin.write(JSON.stringify(value) + "\n");
+        processHandle.stdin.flush();
       },
       async close() {
-        worker.kill();
-        worker.stdin.end();
-        await worker.exited;
+        processHandle.kill();
+        processHandle.stdin.end();
+        await processHandle.exited;
       },
     };
   });
@@ -204,50 +234,102 @@ try {
   await assert.rejects(client.local(api.turn.blocked, { target: "secret" }), /unknown function/i);
   await assert.rejects(client.local(api.turn.blocked, { target: "format" }), /unknown function/i);
   await assert.rejects(client.local(api.turn.blocked, { target: "report" }), /function kind does not match/i);
-  const rows = Promise.withResolvers();
-  stop = client.subscribe(api.turn.lines, {}, (event) => {
-    if ("error" in event) rows.reject(event.error);
-    else if (event.value.length === 2) rows.resolve(event.value.map((row) => row.text));
-  });
-  const start = (label, options) => {
-    const heartbeat = join(scratch, label + ".heartbeat");
-    grandchildPidFiles.add(heartbeat + ".pid");
-    const running = client.local(api.turn.run, { bun: process.execPath, file: fake, heartbeat }, options);
-    void running.catch(() => {});
-    return { heartbeat, running };
-  };
-  const { heartbeat, running } = start("stop");
-  const done = Promise.withResolvers();
-  void running.then(() => done.reject(new Error("Program exited before the stop call")), done.reject);
-  assert.deepEqual(await Promise.race([rows.promise, done.promise]), ["one", "two"]);
-  await waitForFile(heartbeat);
-  await client.local(api.turn.stop, {});
-  await expectHeartbeatStopped(heartbeat);
-  assert.notEqual(await running, 0);
+  const file = join(scratch, "local-input.txt");
+  await writeFile(file, "local text");
+  const number = 0.018920700000000002;
+  assert.deepEqual(await client.local(api.turn.roundTrip, { file, number }), { found: true, number });
+  assert.ok(logs.includes("local round trip local text"));
 
-  const controller = new AbortController();
-  const cancelled = start("cancel", { signal: controller.signal });
-  await waitForFile(cancelled.heartbeat);
-  controller.abort();
-  await assert.rejects(cancelled.running, /cancel/i);
-  await expectHeartbeatStopped(cancelled.heartbeat);
+  async function waitForSlowCall() {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const index = logs.indexOf("slow call started");
+      if (index >= 0) {
+        logs.splice(index, 1);
+        return;
+      }
+      await Bun.sleep(10);
+    }
+    assert.fail("Local function did not start");
+  }
+
+  const abort = new AbortController();
+  const slow = client.local(api.turn.slow, {}, { signal: abort.signal });
+  void slow.catch(() => {});
+  await waitForSlowCall();
+  abort.abort();
+  await assert.rejects(slow, /cancel|stale invocation: host operation refused/i);
+  await Bun.sleep(250);
+  assert.deepEqual(
+    (await client.query(api.turn.lines, {})).map(({ text }) => text),
+    ["local text"],
+  );
+  console.log(
+    `${host ? "QuickJS" : "Bun"}: read a file, wrote and queried a live row, received a log, and cancelled a stale write`,
+  );
+
+  if (host) {
+    await assert.rejects(
+      client.local(api.turn.run, { bun: process.execPath, file: fake, heartbeat: "" }),
+      /Programs are not available on the QuickJS host yet/,
+    );
+    await assert.rejects(
+      client.local(api.turn.programScope, {}),
+      /Programs are not available on the QuickJS host yet/,
+    );
+    const interrupted = client.local(api.turn.slow, {});
+    void interrupted.catch(() => {});
+    await waitForSlowCall();
+    worker.kill("SIGKILL");
+    await assert.rejects(interrupted, /Plugin host exited/);
+    assert.deepEqual(await client.local(api.turn.identity, {}), { auth });
+  }
+
+  if (!host) {
+    const rows = Promise.withResolvers();
+    stop = client.subscribe(api.turn.lines, {}, (event) => {
+      if ("error" in event) rows.reject(event.error);
+      else if (event.value.length === 3)
+        rows.resolve(event.value.map((row) => row.text).filter((text) => text !== "local text"));
+    });
+    const start = (label, options) => {
+      const heartbeat = join(scratch, label + ".heartbeat");
+      grandchildPidFiles.add(heartbeat + ".pid");
+      const running = client.local(api.turn.run, { bun: process.execPath, file: fake, heartbeat }, options);
+      void running.catch(() => {});
+      return { heartbeat, running };
+    };
+    const { heartbeat, running } = start("stop");
+    const done = Promise.withResolvers();
+    void running.then(() => done.reject(new Error("Program exited before the stop call")), done.reject);
+    assert.deepEqual(await Promise.race([rows.promise, done.promise]), ["one", "two"]);
+    await waitForFile(heartbeat);
+    await client.local(api.turn.stop, {});
+    await expectHeartbeatStopped(heartbeat);
+    assert.notEqual(await running, 0);
+
+    const controller = new AbortController();
+    const cancelled = start("cancel", { signal: controller.signal });
+    await waitForFile(cancelled.heartbeat);
+    controller.abort();
+    await assert.rejects(cancelled.running, /cancel/i);
+    await expectHeartbeatStopped(cancelled.heartbeat);
+    // Windows uses the desktop job object rather than the POSIX watchdog.
+    if (process.platform !== "win32") {
+      const retired = start("retire");
+      await waitForFile(retired.heartbeat);
+      await local.close();
+      await assert.rejects(retired.running, /retired/i);
+      await expectHeartbeatStopped(retired.heartbeat);
+    }
+    console.log(
+      "read two live rows and verified process-tree cleanup on stop, cancellation, and worker retirement",
+    );
+  }
   await assert.rejects(transport.action("local-test/turn:run", {}), /unknown function/i);
   await assert.rejects(transport.query("local-test/turn:run", {}), /unknown function/i);
   await assert.rejects(transport.mutation("local-test/turn:run", {}), /unknown function/i);
   const { revision } = await transport.plugins();
   await assert.rejects(transport.pluginAsset("local-test", "local.js", revision), /asset/i);
-  // The headless launcher can kill Bun outright on POSIX. Production Windows
-  // uses the desktop's enclosing job object rather than the POSIX watchdog.
-  if (process.platform !== "win32") {
-    const retired = start("retire");
-    await waitForFile(retired.heartbeat);
-    await local.close();
-    await assert.rejects(retired.running, /retired/i);
-    await expectHeartbeatStopped(retired.heartbeat);
-  }
-  console.log(
-    "read two live rows and verified process-tree cleanup on stop, cancellation, and worker retirement",
-  );
 } finally {
   for (const pidFile of grandchildPidFiles) {
     const pid = Number(await readFile(pidFile, "utf8").catch(() => ""));

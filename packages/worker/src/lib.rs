@@ -1,9 +1,13 @@
-//! Containment for the Bun worker in both the server and the client.
+//! Launch and contain plugin processes in the server and the client.
 mod discovery;
+mod logs;
+mod runtime;
 #[cfg(windows)]
 mod windows;
 
 pub use discovery::{resolve, search_paths};
+pub use logs::send as log;
+pub use runtime::LocalRuntime;
 #[cfg(not(windows))]
 use std::process::Stdio;
 use std::{collections::BTreeMap, path::Path};
@@ -49,6 +53,28 @@ pub struct Process {
 }
 
 impl Process {
+    pub fn launch_local(
+        entry: &Path,
+        code: &Path,
+        cwd: &Path,
+        env: &BTreeMap<String, String>,
+        search: &[std::path::PathBuf],
+    ) -> Result<(Self, LocalRuntime), String> {
+        let runtime = LocalRuntime::selected()?;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if runtime == LocalRuntime::QuickJs {
+            let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+            let host = LocalRuntime::host_path(&executable)?;
+            let (child, containment, guardian) = launch(&host, None, code, cwd, env, Lane::Local)?;
+            return Ok((Self::contained(child, containment, guardian), runtime));
+        }
+
+        let bun = resolve("bun", search)
+            .ok_or("Local functions need Bun: install from https://bun.sh")?;
+        let process = Self::launch(&bun, entry, code, cwd, env, Lane::Local)?;
+        Ok((process, runtime))
+    }
+
     pub fn launch(
         bun: &Path,
         entry: &Path,
@@ -58,20 +84,28 @@ impl Process {
         lane: Lane,
     ) -> Result<Self, String> {
         #[cfg(windows)]
-        let (child, containment, mut guardian) = {
+        let (child, containment, guardian) = {
             let (child, job) = windows::spawn(bun, entry, code, cwd, env, lane)
                 .map_err(|error| error.to_string())?;
             (child, job, None::<Child>)
         };
         #[cfg(not(windows))]
-        let (child, containment, mut guardian) = launch(bun, entry, code, cwd, env, lane)?;
+        let (child, containment, guardian) = launch(bun, Some(entry), code, cwd, env, lane)?;
+        Ok(Self::contained(child, containment, guardian))
+    }
+
+    fn contained(
+        child: WorkerChild,
+        containment: Containment,
+        mut guardian: Option<Child>,
+    ) -> Self {
         let input = guardian.as_mut().and_then(|child| child.stdin.take());
-        Ok(Self {
+        Self {
             child,
             containment: Some(containment),
             guardian,
             _guardian_input: input,
-        })
+        }
     }
 
     pub fn pipes(&mut self) -> Result<(ChildStdin, ChildStdout, ChildStderr), String> {
@@ -147,17 +181,17 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
 
 #[cfg(not(windows))]
 fn launch(
-    bun: &Path,
-    entry: &Path,
+    executable: &Path,
+    entry: Option<&Path>,
     code: &Path,
     cwd: &Path,
     env: &BTreeMap<String, String>,
     lane: Lane,
 ) -> Result<(WorkerChild, Group, Option<Child>), String> {
-    let mut command = tokio::process::Command::new(bun);
+    let mut command = tokio::process::Command::new(executable);
     #[cfg(unix)]
     command.process_group(0);
-    command.arg(entry).arg(code);
+    command.args(entry).arg(code);
     let (lane_key, lane_value) = lane.env();
     let child = command
         .env_clear()
