@@ -69,10 +69,14 @@ fn fixture() -> &'static Path {
 }
 
 async fn socket(address: &str, token: Option<&str>) -> Result<Socket, Error> {
+    socket_from(address, token, "tauri://localhost").await
+}
+
+async fn socket_from(address: &str, token: Option<&str>, origin: &str) -> Result<Socket, Error> {
     let mut request = address.into_client_request().unwrap();
     request
         .headers_mut()
-        .insert("origin", "tauri://localhost".parse().unwrap());
+        .insert("origin", origin.parse().unwrap());
     if let Some(token) = token {
         request.headers_mut().insert(
             "sec-websocket-protocol",
@@ -170,7 +174,18 @@ async fn desktop_runner_starts_one_workspace_and_closes_it_on_shutdown() {
 #[tokio::test]
 async fn workspace_and_local_worker_refuse_missing_or_wrong_secret() {
     let temporary = tempfile::tempdir().unwrap();
-    let runner = Runner::start(BINARY.into(), temporary.path().into(), fixture().into());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let install = tempfile::tempdir().unwrap();
+    let manifest = copy_fixture(install.path());
+    let runner = Runner::start(
+        BINARY.into(),
+        temporary.path().into(),
+        install.path().into(),
+    );
     let endpoint = timeout(DEADLINE, runner.endpoint()).await.unwrap().unwrap();
     for address in [&endpoint.ws, &worker_address(&endpoint.ws)] {
         for token in [None, Some(SECRET)] {
@@ -179,6 +194,254 @@ async fn workspace_and_local_worker_refuse_missing_or_wrong_secret() {
         }
         assert!(socket(address, Some(&endpoint.token)).await.is_ok());
     }
+    let worker = worker_address(&endpoint.ws);
+    let foreign = socket_from(&worker, Some(&endpoint.token), "https://other.invalid").await;
+    assert!(matches!(foreign, Err(Error::Http(response)) if response.status() == 403));
+
+    let control_file = temporary.path().join("runner.control");
+    let discovery_file = temporary.path().join("runner.json");
+    let control = std::fs::read_to_string(&control_file).unwrap();
+    assert_ne!(control, endpoint.token);
+    let discovery: Value =
+        serde_json::from_slice(&std::fs::read(&discovery_file).unwrap()).unwrap();
+    assert_eq!(discovery["url"], endpoint.ws);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        assert_eq!(
+            temporary.path().metadata().unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        for path in [&control_file, &discovery_file] {
+            assert_eq!(path.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+        }
+    }
+
+    assert_http_authorization(&endpoint, &control).await;
+    reload_fixture(&endpoint, &control, &manifest).await;
+    for address in [&endpoint.ws, &worker] {
+        assert!(
+            matches!(socket(address, Some(&control)).await, Err(Error::Http(response)) if response.status() == 401)
+        );
+    }
+    // Use the application credential after control reload: the new catalog
+    // still supports running the action.
+    action(&mut socket(&endpoint.ws, Some(&endpoint.token)).await.unwrap()).await;
+    runner.shutdown().await;
+    assert!(!control_file.exists());
+    assert!(!discovery_file.exists());
+}
+
+async fn assert_http_authorization(endpoint: &tokamak_worker::runner::Endpoint, control: &str) {
+    let routes = [
+        ("GET", "/health"),
+        ("GET", "/account"),
+        ("POST", "/account"),
+        ("GET", "/plugins"),
+        ("GET", "/plugins/runner-fixture/revision/assets/index.js"),
+        ("POST", "/shutdown"),
+        ("POST", "/plugins/runner-fixture/reload"),
+    ];
+    for (method, path) in routes {
+        for token in [None, Some(SECRET)] {
+            assert_eq!(
+                request(endpoint, method, path, token).await.status(),
+                401,
+                "{method} {path}"
+            );
+        }
+        if !matches!(path, "/plugins" | "/plugins/runner-fixture/reload") {
+            assert_eq!(
+                request(endpoint, method, path, Some(control))
+                    .await
+                    .status(),
+                401,
+                "{method} {path}"
+            );
+        }
+    }
+    for (method, path) in [
+        ("HEAD", "/plugins"),
+        ("GET", "/plugins/runner-fixture/reload"),
+    ] {
+        assert_eq!(
+            request(endpoint, method, path, Some(control))
+                .await
+                .status(),
+            401,
+            "{method} {path}"
+        );
+    }
+}
+
+fn copy_fixture(install: &Path) -> PathBuf {
+    let dist = install.join("dist");
+    std::fs::create_dir(&dist).unwrap();
+    for item in std::fs::read_dir(fixture().join("dist")).unwrap() {
+        let item = item.unwrap();
+        if item.file_type().unwrap().is_file() {
+            std::fs::copy(item.path(), dist.join(item.file_name())).unwrap();
+        }
+    }
+    dist.join("manifest.json")
+}
+
+async fn reload_fixture(
+    endpoint: &tokamak_worker::runner::Endpoint,
+    control: &str,
+    manifest: &Path,
+) {
+    let list = request(endpoint, "GET", "/plugins", Some(control)).await;
+    assert_eq!(list.status(), 200);
+    let before = list.json::<Value>().await.unwrap();
+    assert_eq!(before["plugins"][0]["plugin"]["id"], "runner-fixture");
+    let mut next: Value = serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+    next["plugin"]["version"] = json!("1.0.1");
+    std::fs::write(manifest, next.to_string()).unwrap();
+    let reload = request(
+        endpoint,
+        "POST",
+        "/plugins/runner-fixture/reload",
+        Some(control),
+    )
+    .await;
+    assert_eq!(reload.status(), 200);
+    let output = reload.json::<Value>().await.unwrap();
+    assert_eq!(output["plugins"][0]["plugin"]["version"], "1.0.1");
+    assert_ne!(output["revision"], before["revision"]);
+}
+
+async fn request(
+    endpoint: &tokamak_worker::runner::Endpoint,
+    method: &str,
+    path: &str,
+    token: Option<&str>,
+) -> reqwest::Response {
+    let client = server::local_endpoint::client(DEADLINE).unwrap();
+    let request = client.request(method.parse().unwrap(), format!("{}{path}", endpoint.http));
+    let request = if let Some(token) = token {
+        request.bearer_auth(token)
+    } else {
+        request
+    };
+    request.send().await.unwrap()
+}
+
+#[tokio::test]
+async fn store_conflict_names_the_owner_and_does_not_retry_after_release() {
+    let temp = tempfile::tempdir().unwrap();
+    let first = Runner::start(BINARY.into(), temp.path().into(), fixture().into());
+    let endpoint = timeout(DEADLINE, first.endpoint()).await.unwrap().unwrap();
+    let expected_pid = request(&endpoint, "GET", "/health", Some(&endpoint.token))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap()["pid"]
+        .as_u64()
+        .unwrap();
+    let second = Runner::start(BINARY.into(), temp.path().into(), fixture().into());
+    let error = timeout(DEADLINE, second.endpoint())
+        .await
+        .unwrap()
+        .err()
+        .unwrap();
+    assert!(
+        error.contains(&format!(
+            "Store is in use by tokamak-runner (PID {expected_pid})"
+        )),
+        "{error}"
+    );
+    first.shutdown().await;
+    tokio::time::sleep(Duration::from_millis(900)).await;
+    assert_eq!(
+        second.endpoint().await.err().as_deref(),
+        Some(error.as_str())
+    );
+    second.shutdown().await;
+    let replacement = Runner::start(BINARY.into(), temp.path().into(), fixture().into());
+    let replacement_endpoint = timeout(DEADLINE, replacement.endpoint())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(replacement_endpoint.token, endpoint.token);
+    replacement.shutdown().await;
+}
+
+#[tokio::test]
+async fn replaces_an_authenticated_legacy_desktop_server_holding_the_store() {
+    use axum::{
+        Router,
+        http::{HeaderMap, StatusCode},
+        routing::{get, post},
+    };
+    use std::fs::OpenOptions;
+    use tokio_util::sync::CancellationToken;
+
+    let temp = tempfile::tempdir().unwrap();
+    let lock = OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create_new(true)
+        .open(temp.path().join("server-owner.lock"))
+        .unwrap();
+    lock.try_lock().unwrap();
+    let token = temp.path().join("server.token");
+    std::fs::write(&token, SECRET).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let identity = json!({
+        "pid": std::process::id(),
+        "url": format!("ws://{}/ws", listener.local_addr().unwrap()),
+        "buildId": SECRET,
+        "bundleHash": SECRET,
+    });
+    let ready = temp.path().join("server.json");
+    std::fs::write(&ready, identity.to_string()).unwrap();
+    let stopped = CancellationToken::new();
+    let shutdown = stopped.clone();
+    let legacy = tokio::spawn(async move {
+        let authorized = |headers: &HeaderMap| {
+            headers
+                .get("authorization")
+                .is_some_and(|value| value == format!("Bearer {SECRET}").as_str())
+        };
+        let app = Router::new()
+            .route(
+                "/health",
+                get(move |headers: HeaderMap| async move {
+                    if authorized(&headers) {
+                        Ok(identity.to_string())
+                    } else {
+                        Err(StatusCode::UNAUTHORIZED)
+                    }
+                }),
+            )
+            .route(
+                "/shutdown",
+                post(move |headers: HeaderMap| async move {
+                    if !authorized(&headers) {
+                        return StatusCode::UNAUTHORIZED;
+                    }
+                    shutdown.cancel();
+                    StatusCode::NO_CONTENT
+                }),
+            );
+        axum::serve(listener, app)
+            .with_graceful_shutdown(stopped.cancelled_owned())
+            .await
+            .unwrap();
+        std::fs::remove_file(ready).unwrap();
+        drop(lock);
+    });
+    let runner = Runner::start(BINARY.into(), temp.path().into(), fixture().into());
+    let endpoint = timeout(DEADLINE, runner.endpoint()).await.unwrap().unwrap();
+    assert!(!temp.path().join("server.json").exists());
+    legacy.await.unwrap();
+    action(&mut socket(&endpoint.ws, Some(&endpoint.token)).await.unwrap()).await;
     runner.shutdown().await;
 }
 
@@ -281,9 +544,21 @@ async fn a_killed_runner_disconnects_and_is_restarted_with_a_new_secret() {
     let first = timeout(DEADLINE, runner.endpoint()).await.unwrap().unwrap();
     let mut client = socket(&first.ws, Some(&first.token)).await.unwrap();
     let pid = runner_pid(&first).await;
+    let first_control = std::fs::read_to_string(temp.path().join("runner.control")).unwrap();
     signal(pid, libc::SIGKILL);
     let closed = timeout(DEADLINE, client.next()).await.unwrap();
     assert!(!matches!(closed, Some(Ok(Message::Text(_)))));
+    // Wait for the supervisor to observe the exit, before the replacement can be ready.
+    timeout(DEADLINE, async {
+        loop {
+            if runner.endpoint().await.is_err() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
     let again = timeout(DEADLINE, async {
         loop {
             if let Ok(endpoint) = runner.endpoint().await
@@ -297,6 +572,10 @@ async fn a_killed_runner_disconnects_and_is_restarted_with_a_new_secret() {
     .await
     .unwrap();
     assert_ne!(runner_pid(&again).await, pid);
+    assert_ne!(
+        std::fs::read_to_string(temp.path().join("runner.control")).unwrap(),
+        first_control
+    );
     let mut client = socket(&again.ws, Some(&again.token)).await.unwrap();
     action(&mut client).await;
     runner.shutdown().await;
@@ -312,6 +591,13 @@ async fn force_killing_the_supervisor_leaves_no_runner_plugin_or_program() {
         supervise_child(PathBuf::from(directory)).await;
         return;
     }
+    for runtime in ["quickjs", "bun"] {
+        assert_no_orphans(runtime).await;
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn assert_no_orphans(runtime: &str) {
     let temp = tempfile::tempdir().unwrap();
     let mut parent = Command::new(std::env::current_exe().unwrap())
         .args([
@@ -321,7 +607,7 @@ async fn force_killing_the_supervisor_leaves_no_runner_plugin_or_program() {
         ])
         .env("TOKAMAK_TEST_SUPERVISOR", temp.path())
         .env("TOKAMAK_TEST_FIXTURE", fixture())
-        .env_remove("TOKAMAK_PLUGIN_RUNTIME")
+        .env("TOKAMAK_PLUGIN_RUNTIME", runtime)
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -337,6 +623,11 @@ async fn force_killing_the_supervisor_leaves_no_runner_plugin_or_program() {
         );
     }
     parent.kill().await.unwrap();
+    assert_no_running_pids(pids).await;
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn assert_no_running_pids(pids: Vec<u32>) {
     timeout(DEADLINE, async {
         while pids.iter().any(|&pid| alive(pid)) {
             tokio::time::sleep(Duration::from_millis(25)).await;
@@ -357,49 +648,82 @@ async fn force_killing_the_supervisor_leaves_no_runner_plugin_or_program() {
 async fn supervise_child(directory: PathBuf) {
     let plugin = PathBuf::from(std::env::var_os("TOKAMAK_TEST_FIXTURE").unwrap());
     let runner = Runner::start(BINARY.into(), directory.clone(), plugin);
+    let (pids, _client, _worker) = process_tree(&runner, &directory).await;
+    std::fs::write(directory.join("writing"), json!(pids).to_string()).unwrap();
+    std::fs::rename(directory.join("writing"), directory.join("ready")).unwrap();
+    std::future::pending::<()>().await;
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[tokio::test]
+async fn graceful_quit_reaps_the_workspace_action_local_plugin_and_program() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Runner::start(BINARY.into(), temp.path().into(), fixture().into());
+    let (pids, _client, _worker) = process_tree(&runner, temp.path()).await;
+    assert!(pids.iter().copied().all(alive), "{pids:?}");
+    timeout(DEADLINE, runner.shutdown()).await.unwrap();
+    assert_no_running_pids(pids).await;
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Socket, Socket) {
     let endpoint = timeout(DEADLINE, runner.endpoint()).await.unwrap().unwrap();
     let pid = runner_pid(&endpoint).await;
     let mut client = socket(&endpoint.ws, Some(&endpoint.token)).await.unwrap();
     action(&mut client).await;
+    let before_local = child_commands(pid);
     let mut worker = open_worker(&endpoint.ws, &endpoint.token).await;
     let program = directory.join("program");
     invoke(&mut client, &mut worker, "stay", &program).await;
     let program: u32 = wait_for_file(&program).await.trim().parse().unwrap();
 
+    let children = child_commands(pid);
+    let host = |line: &str| {
+        line.split_whitespace()
+            .any(|part| part.ends_with("/tokamak-plugin-host"))
+    };
+    let quickjs =
+        tokamak_worker::LocalRuntime::selected().unwrap() == tokamak_worker::LocalRuntime::QuickJs;
+    let action = before_local
+        .iter()
+        .find(|(_, cmd)| {
+            if quickjs {
+                host(cmd) && cmd.ends_with(" --actions")
+            } else {
+                cmd.ends_with(".mjs")
+            }
+        })
+        .unwrap()
+        .0;
+    let local = children
+        .iter()
+        .find(|(pid, cmd)| {
+            if quickjs {
+                host(cmd) && cmd.ends_with(".mjs")
+            } else {
+                cmd.ends_with(".mjs") && !before_local.iter().any(|(before, _)| before == pid)
+            }
+        })
+        .unwrap()
+        .0;
+    (vec![pid, action, local, program], client, worker)
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn child_commands(pid: u32) -> Vec<(u32, String)> {
     let processes = std::process::Command::new("ps")
         .args(["-axo", "pid=,ppid=,command="])
         .output()
         .unwrap();
     let processes = String::from_utf8(processes.stdout).unwrap();
-    let children: Vec<_> = processes
+    processes
         .lines()
         .filter_map(|line| {
             let mut fields = line.split_whitespace();
             let child = fields.next()?.parse::<u32>().ok()?;
-            (fields.next()?.parse::<u32>().ok()? == pid).then_some((child, line))
+            (fields.next()?.parse::<u32>().ok()? == pid).then_some((child, line.to_owned()))
         })
-        .collect();
-    let host = |line: &str| {
-        line.split_whitespace()
-            .any(|part| part.ends_with("/tokamak-plugin-host"))
-    };
-    let action = children
-        .iter()
-        .find(|(_, cmd)| host(cmd) && cmd.ends_with(" --actions"))
-        .unwrap()
-        .0;
-    let local = children
-        .iter()
-        .find(|(_, cmd)| host(cmd) && cmd.ends_with(".mjs"))
-        .unwrap()
-        .0;
-    std::fs::write(
-        directory.join("writing"),
-        json!([pid, action, local, program]).to_string(),
-    )
-    .unwrap();
-    std::fs::rename(directory.join("writing"), directory.join("ready")).unwrap();
-    std::future::pending::<()>().await;
+        .collect()
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

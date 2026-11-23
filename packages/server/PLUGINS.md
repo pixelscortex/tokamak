@@ -17,8 +17,8 @@ cargo build --locked -p server -p tokamak-plugin-host --bin tokamak-server --bin
 target/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
 ```
 
-The local directory requires the same private `server.token` as the client
-launcher. Never pass the token in arguments. The app ships Chat, AI, Code,
+Legacy `--local-dir` mode requires a private `server.token`. Never pass a token
+in arguments. The app ships Chat, AI, Code,
 Claude, Codex and Password sign-in as its starter set.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
@@ -31,7 +31,14 @@ TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin rel
 Create writes a descriptor, a sample query and a skill file in a new folder.
 Run `proto run bun -- install` in the checkout to link the SDK before building it.
 
-The control CLI validates loopback discovery, uses bearer authentication, disables
+To target a running desktop Runner, point `TOKAMAK_SERVER_DIR` at its private
+data directory. The CLI finds the address in `runner.json` and reads
+`runner.control`. The Runner rotates the credential on every start and removes
+both files on clean exit. This credential can only list and reload plugins; it
+cannot read workspace data or UI assets, open a socket, or stop the Runner.
+The CLI falls back to legacy server discovery when there is no `runner.json`.
+
+The CLI validates loopback discovery, uses bearer authentication, disables
 proxies and redirects, and does not replay requests. The server exposes:
 
 - `GET /plugins`: live manifest/function metadata and generation revision.

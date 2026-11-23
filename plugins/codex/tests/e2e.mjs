@@ -1,7 +1,7 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
 import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
-import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
@@ -44,7 +44,7 @@ try {
 
   const { ai } = h.api;
   const binary = process.argv[2];
-  const runner = real && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
+  const runner = binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
   const address = runner ? undefined : await h.serve("server");
   const connectClient = async (env) => {
     if (address)
@@ -52,12 +52,12 @@ try {
         cleanup,
         launch: localLauncher(h.selection, (id) => join(h.plugins, id), env),
       });
-    const dir = await h.folder("live-runners");
+    const dir = await h.folder("runners");
     const instance = await startRunner({
       binary,
       plugins: h.plugins,
       directory: join(dir, crypto.randomUUID()),
-      env,
+      env: { ...env, TOKAMAK_OWNER_NAME: "Sam" },
     });
     cleanup.push(instance.stop);
     return connect(instance.endpoint.ws, {
@@ -82,10 +82,10 @@ try {
     return codex.info;
   };
 
-  if (!runner) {
-    const missing = await connectClient({ ...inherited, PATH: h.home });
-    assert.equal((await info(missing)).installed, false);
-  }
+  const missingPath = runner ? await missingCodexPath() : h.home;
+  const missing = await connectClient({ ...inherited, PATH: missingPath });
+  assert.equal((await info(missing)).installed, false);
+  passed("missing Codex reports not installed");
   if (real) {
     await mkdir(codexHome);
     const signedOut = await connectClient({ ...inherited, PATH: process.env.PATH });
@@ -380,6 +380,28 @@ function shellQuote(value) {
   return "'" + value.replaceAll("'", "'\"'\"'") + "'";
 }
 
+async function missingCodexPath() {
+  const bin = await h.folder("missing-codex-bin");
+  if (h.selection.runtime === "bun") await symlink(bunPath(), join(bin, "bun"));
+  // The temporary home hides user installs. If the machine also has a
+  // system-wide Codex, mask it with the exit status of a missing executable
+  // so the offline test never calls the real program.
+  for (const system of ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"]) {
+    if (
+      await access(system).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      const absent = join(bin, "codex");
+      await writeFile(absent, "#!/bin/sh\nexit 127\n");
+      await chmod(absent, 0o755);
+      break;
+    }
+  }
+  return bin;
+}
+
 async function replayExecutable() {
   const replay = join(workspace, "e2e/fake-agent/program.mjs");
   await writeFile(
@@ -395,12 +417,13 @@ case "$1" in
     esac
     ;;
   app-server)
-    case "\${PWD##*/}" in
-      home)
-        if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
-        ;;
-      *) tape="\${PWD##*/}" ;;
-    esac
+    # Discovery runs from HOME with the direct launcher and from the plugin
+    # root's parent with Runner. A turn has its own explicit working folder.
+    if [ "$PWD" = "$HOME" ] || [ "$PWD/home" = "$HOME" ]; then
+      if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
+    else
+      tape="\${PWD##*/}"
+    fi
     exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
     ;;
   *) exit 2 ;;

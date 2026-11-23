@@ -6,7 +6,17 @@ pub fn selected() -> LocalRuntime {
     LocalRuntime::selected().expect("valid local function runtime")
 }
 
-pub fn driver(mut command: Command, script: &str, runtime: &LocalRuntime) -> Command {
+#[allow(dead_code)] // Each integration test includes only the entry point it needs.
+pub fn driver(command: Command, script: &str, runtime: &LocalRuntime) -> Command {
+    driver_for(command, script, runtime, false)
+}
+
+pub fn driver_for(
+    mut command: Command,
+    script: &str,
+    runtime: &LocalRuntime,
+    runner: bool,
+) -> Command {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let host = (*runtime == LocalRuntime::QuickJs).then(|| {
         let server = Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
@@ -29,9 +39,15 @@ pub fn driver(mut command: Command, script: &str, runtime: &LocalRuntime) -> Com
         assert!(status.success(), "building tokamak-plugin-host for local integration tests failed: {status}");
         LocalRuntime::host_path(server).expect("tokamak-plugin-host was built but is missing beside tokamak-server; set TOKAMAK_PLUGIN_HOST to its path")
     });
+    let server = Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
+    let executable = if runner {
+        server.with_file_name(format!("tokamak-runner{}", std::env::consts::EXE_SUFFIX))
+    } else {
+        server.to_owned()
+    };
     command
         .arg(script)
-        .arg(env!("CARGO_BIN_EXE_tokamak-server"))
+        .arg(executable)
         .current_dir(root)
         .env_remove("TOKAMAK_TEST_PLUGIN_HOST");
     if let Some(host) = host {

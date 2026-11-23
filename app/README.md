@@ -14,12 +14,18 @@ The Tauri hooks build the starter set and the [Runner](../packages/runner/README
 plus the plugin host on macOS and Linux. The app starts one Runner and the window
 connects to it automatically. The app restarts the Runner if it exits; the
 window shows its existing disconnected state and Retry connects to the new port.
-Quitting the app stops the Runner and its plugin processes and programs.
 `TOKAMAK_SERVER_DIR` still selects the store directory. Development uses the
 workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR` overrides
 the installation. Runner startup errors go to `runner.log` beside the store.
-If an earlier desktop version left its server running, stop that server before
-opening the new app on the same store.
+The Runner replaces a verified server left running by a previous desktop
+version. If another Runner owns the store, the app reports the conflict; close
+the other process before relaunching this app.
+
+## When the app quits
+
+The local server used to keep running after the window closed; quitting the app
+now stops the Runner and its plugins and programs, and keeping the Runner alive
+is planned for later.
 
 For browser development, use two terminals:
 
@@ -89,7 +95,7 @@ Plugin typechecking first generates Chat's server API with the SDK bundler.
 Direct Cargo checks do not require bundled sidecars or plugin resources: the
 Tauri build script omits absent packaging inputs. Tauri dev/build hooks prepare
 the actual Runner binary and plugin resources before launching or bundling.
-Release builds package the server as an external binary. No signing is required
+Release builds package the Runner as an external binary. No signing is required
 for this local build. The CSP permits loopback HTTP/styles and WebSockets, blob
 modules and a hashed import map, with no eval. Keep the Vite Solid runtime alias:
 mixing development and production runtimes can produce a blank window.
@@ -115,21 +121,15 @@ TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" proto run bun -- app/scri
 The rebuild installs the complete artifact, then explicitly asks the running
 server to reload it. The selected view changes revision without restarting the
 window or server. There is no file watcher. Restore the source afterward.
-For browser verification against that same private server, stop Tauri dev
-(Ctrl+C; the server stays running), then:
+For browser verification, start a separate disposable Runner, with its own
+store and the same plugin builds:
 
 ```sh
-TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" proto run bun -- app/scripts/integration-browser.ts
+TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/browser" proto run bun -- app/scripts/integration-browser.ts
 ```
 
-Open port 1420, repeat thread creation and fixture selection, then repeat the
-rebuild/reload command above. This helper reads the disposable discovery and
-token into Vite's development environment without printing the capability.
-
-Verified locally on macOS arm64 with the unsigned release app and its release
-sidecar: Chat threads loaded; FixtureView rendered; creating a thread updated
-both host and fixture queries; rebuild/install plus explicit reload swapped the
-selected revision without restarting. Vite against the same private server also
-passed, including authenticated stylesheet loading and preservation of the
-browser document across reload. Screenshot and accessibility captures are kept
-locally under `app/.dev/integration/proof`. Windows/Linux were not exercised.
+Open port 1420, repeat thread creation and fixture selection, then run the same
+rebuild/reload command with `TOKAMAK_SERVER_DIR` pointing at the browser store.
+The helper checks the fixture through the CLI and gives Vite only the secret
+for the Runner it starts. The desktop Runner's `runner.control` credential
+allows plugin list and reload; it cannot connect a browser to that workspace.

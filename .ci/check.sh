@@ -42,13 +42,15 @@ case "$1" in
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
 
+    # Run the QuickJS replays through the Runner instead of adding a third pass.
+    export TOKAMAK_TEST_RUNNER=1
     # The workspace library pass already ran the server library's unit tests.
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --bins \
       --test actions --test ai_liveness --test ai_threads --test ai_turns \
       --test chat_threads --test claude_turns --test code_changes --test code_snapshots \
       --test codex_turns --test data --test data_cancellation --test data_indexes \
       --test identity --test local_functions --test plugins --test schema_indexes \
-      --test sdk_transport --test service --test workers
+      --test runner_routing --test sdk_transport --test service --test workers
     ;;
   *) exit 2 ;;
 esac

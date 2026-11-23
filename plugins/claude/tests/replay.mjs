@@ -32,8 +32,9 @@ if (args[0] === "--version") {
   assert.ok(args.includes("-p"));
   assert.equal(flag("--input-format"), "stream-json");
   assert.equal(flag("--output-format"), "stream-json");
-  let replay = basename(process.cwd());
-  if (!replay.startsWith("claude-")) replay = "claude-info";
+  // Model discovery does not select a thread folder. The Runner can start
+  // from any directory, including one whose name starts with "claude-".
+  let replay = args.includes("--strict-mcp-config") ? "claude-info" : basename(process.cwd());
   if (replay.startsWith("claude-resistant-")) replay = "claude-resistant";
   if (replay.startsWith("claude-hello-")) replay = "claude-hello";
   if (replay === "claude-hello" && flag("--resume")) {

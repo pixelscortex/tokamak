@@ -32,6 +32,7 @@ use tokio::{
     sync::Semaphore,
 };
 
+use subtle::ConstantTimeEq as _;
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 pub use crate::web::HostedWeb;
@@ -62,7 +63,7 @@ struct Adapter {
     access: Option<LocalAccess>,
     origins: Arc<Vec<String>>,
     hosted: bool,
-    runner: bool,
+    runner_control: Option<Arc<str>>,
     identities: Arc<Identities>,
     profile_updates: Arc<tokio::sync::Mutex<()>>,
     // Keep management permission checks and writes ordered while a provider runs.
@@ -181,6 +182,7 @@ pub async fn serve_runner(
     server: Arc<Server>,
     shutdown: impl Future<Output = ()> + Send + 'static,
     access: LocalAccess,
+    control: String,
     worker: axum::routing::MethodRouter,
 ) -> io::Result<()> {
     let identities = Arc::new(Identities::local(Some(&access.token)));
@@ -191,7 +193,7 @@ pub async fn serve_runner(
         Some(access),
         None,
         identities,
-        Some(worker),
+        Some((control, worker)),
     )
     .await
 }
@@ -203,9 +205,11 @@ async fn serve_inner(
     access: Option<LocalAccess>,
     web: Option<HostedWeb>,
     identities: Arc<Identities>,
-    worker: Option<axum::routing::MethodRouter>,
+    runner: Option<(String, axum::routing::MethodRouter)>,
 ) -> io::Result<()> {
-    let runner = worker.is_some();
+    let (runner_control, worker) = runner.map_or((None, None), |(control, worker)| {
+        (Some(Arc::from(control)), Some(worker))
+    });
     if web.is_some()
         && access
             .as_ref()
@@ -234,7 +238,7 @@ async fn serve_inner(
     let adapter = Adapter {
         server,
         hosted,
-        runner,
+        runner_control,
         identities: identities.clone(),
         profile_updates: Arc::default(),
         member_edits: Arc::default(),
@@ -387,7 +391,7 @@ async fn authorize(
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
     let members_route = adapter.hosted && members::matches_path(path);
-    let worker_route = adapter.runner && path == Some(RUNNER_WORKER_PATH);
+    let worker_route = adapter.runner_control.is_some() && path == Some(RUNNER_WORKER_PATH);
     let browser_route = worker_route
         || members_route
         || request.uri().path() == "/account"
@@ -427,6 +431,19 @@ async fn authorize(
             .get("authorization")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "));
+        // A control credential authorizes exactly these operations and never
+        // establishes a workspace identity or authenticates a socket.
+        if matches!(
+            (request.method(), path),
+            (&Method::GET, Some("/plugins")) | (&Method::POST, Some("/plugins/{id}/reload"))
+        ) && bearer
+            .zip(adapter.runner_control.as_deref())
+            .is_some_and(|(actual, expected)| {
+                bool::from(actual.as_bytes().ct_eq(expected.as_bytes()))
+            })
+        {
+            return with_origin(next.run(request).await, origin);
+        }
         let actual = bearer.or(socket_bearer.as_deref()).unwrap_or_default();
         let Some(auth) = adapter.identities.authenticate(actual) else {
             // An allowed origin may read the 401, so a client can tell a rejected

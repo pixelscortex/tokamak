@@ -1,5 +1,6 @@
 mod artifact;
 mod local;
+mod ownership;
 
 use engine::PoolConfig;
 use server::{Backend, data::Storage, websocket};
@@ -163,10 +164,54 @@ async fn main() -> anyhow::Result<()> {
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or(Path::new("."))
         .canonicalize()?;
+    let data = app_data.join(
+        config
+            .data
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Expected a store folder"))?,
+    );
+    if config.desktop {
+        ownership::private_directory(&app_data)?;
+    }
+    ownership::private_directory(&data)?;
+    let data = data.canonicalize()?;
+    let directory = if config.desktop {
+        &app_data
+    } else {
+        &data
+    };
+    let legacy = (config.desktop || config.data.file_name().is_some_and(|name| name == "store"))
+        .then_some(app_data.as_path());
+    let owner = match ownership::Owner::claim(data.clone(), directory, legacy, &stop).await? {
+        ownership::Claim::Owned(owner) => owner,
+        ownership::Claim::Stopped => return Ok(()),
+        ownership::Claim::Busy(holder) => return store_in_use(config.desktop, holder),
+    };
+    if stop.is_cancelled() {
+        return Ok(());
+    }
+
     let local = local::Local::new(plugins.clone(), app_data);
     let backend =
-        Backend::start_plugins(Storage::Disk(config.data), PoolConfig::default(), &plugins).await?;
+        match Backend::start_plugins(Storage::Disk(config.data), PoolConfig::default(), &plugins)
+            .await
+        {
+            Ok(backend) => backend,
+            // A server started directly with --data may hold SurrealKV's lock
+            // without participating in desktop store ownership.
+            Err(error) if error.to_string().contains("is already locked by another") => {
+                return store_in_use(config.desktop, None);
+            }
+            Err(error) => return Err(error.into()),
+        };
     let ws = format!("ws://{address}/ws");
+    let control = match owner.publish(&ws) {
+        Ok(control) => control,
+        Err(error) => {
+            backend.close().await?;
+            return Err(error);
+        }
+    };
     println!("Tokamak listening on {ws}");
     let serving = websocket::serve_runner(
         listener,
@@ -176,6 +221,7 @@ async fn main() -> anyhow::Result<()> {
             token,
             identity: serde_json::json!({ "url": ws, "pid": std::process::id() }),
         },
+        control,
         local.route(),
     )
     .await;
@@ -184,4 +230,16 @@ async fn main() -> anyhow::Result<()> {
     serving?;
     closed?;
     Ok(())
+}
+
+fn store_in_use(desktop: bool, holder: Option<(u32, &'static str)>) -> anyhow::Result<()> {
+    let detail = holder.map_or_else(String::new, |(pid, program)| {
+        format!(" by {program} (PID {pid})")
+    });
+    let message =
+        format!("Store is in use{detail}. Close the process before starting this Runner again.");
+    if desktop {
+        println!("{}{message}", tokamak_worker::runner::STORE_BUSY);
+    }
+    Err(anyhow::Error::msg(message))
 }

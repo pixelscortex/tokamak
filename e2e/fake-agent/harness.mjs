@@ -29,6 +29,7 @@ import {
   installFakeAgent,
   localLauncher,
   selectedRuntime,
+  startRunner,
 } from "./local.mjs";
 
 export { bunPath, fakeAgents, installFakeAgent, localLauncher, selectedRuntime };
@@ -182,6 +183,29 @@ export async function connect(
   return new TokamakClient(transport, part);
 }
 
+/** Observe or hold the same worker frames regardless of the wire transport. */
+function observeWorker(launch, observe) {
+  if (!observe) return launch;
+  return async (artifact, receive, close) => {
+    const worker = await launch(
+      artifact,
+      (frame) => {
+        observe(artifact.id, frame, "fromWorker");
+        receive(frame);
+      },
+      close,
+    );
+    return {
+      load: (provider) => worker.load(provider),
+      close: () => worker.close(),
+      async send(frame) {
+        await observe(artifact.id, frame, "toWorker");
+        return worker.send(frame);
+      },
+    };
+  };
+}
+
 /** Subscribes to one query; `until(label, predicate, ms?)` waits for rows that match. */
 export function watchQuery(client, reference, args, cleanup) {
   let latest;
@@ -278,6 +302,8 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
   const windows = new Map();
   /** Each started server by its address, so a test can halt one. */
   const running = new Map();
+  const runners = new Map();
+  const useRunner = basename(binary).startsWith("tokamak-runner");
   const home = join(scratch, "home");
   const bin = join(scratch, "bin");
   const plugins = join(scratch, "plugins");
@@ -357,6 +383,18 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
      */
     async serve(label, { shared = false, pluginsDir = plugins } = {}) {
       if (shared) await installBasicAuth(pluginsDir);
+      if (useRunner) {
+        assert.ok(!shared, "A Runner serves a private workspace");
+        const runner = await startRunner({
+          binary,
+          plugins: pluginsDir,
+          directory: join(scratch, label),
+          env: { ...localEnv, TOKAMAK_OWNER_NAME: "Sam" },
+        });
+        cleanup.push(runner.stop);
+        runners.set(runner.endpoint.ws, runner);
+        return runner.endpoint.ws;
+      }
       let child;
       const address = await startServer({
         binary,
@@ -395,19 +433,25 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
     async connect(address, { token, local = false, pluginsDir = plugins, onClose, env, observe } = {}) {
       const own = [];
       try {
+        const runner = runners.get(address);
+        const launch =
+          local && runner
+            ? observeWorker(runner.launch, observe)
+            : local
+              ? localLauncher(
+                  selection,
+                  (id) => join(pluginsDir, id),
+                  Object.fromEntries(
+                    Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
+                  ),
+                  observe,
+                )
+              : undefined;
+        if (runner && local && env) throw new Error("Runner environment must be set when it starts");
         const client = await connect(address, {
-          token,
+          token: token ?? runner?.endpoint.token,
           onClose,
-          launch: local
-            ? localLauncher(
-                selection,
-                (id) => join(pluginsDir, id),
-                Object.fromEntries(
-                  Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
-                ),
-                observe,
-              )
-            : undefined,
+          launch,
           cleanup: own,
         });
         windows.set(client, own);

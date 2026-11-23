@@ -110,6 +110,22 @@ test("quitting while an agent works asks first; Cancel keeps it, Stop and quit l
     });
     const turns = await reopened.query(ai.turns.list, { threadId });
     expect(turns.map((turn) => turn.state)).toEqual(["stopped", "stopped", "stopped"]);
+
+    // The original page has lost its connection. Reopen the thread as a
+    // person would after relaunching, then check the saved labels on screen.
+    await page.reload();
+    await page.getByRole("navigation", { name: "Chat threads" }).getByText("Keep going").click();
+    await expect(page.getByRole("region", { name: "Chat" })).toHaveAttribute("data-thread-id", threadId);
+    for (const text of [
+      "First follow-up",
+      "Second follow-up",
+      "Partial reply from a stuck agent. Stop received.",
+    ]) {
+      await expect(conversation(page).getByRole("article").filter({ hasText: text })).toContainText(
+        "Stopped",
+      );
+    }
+    await expect(conversation(page)).not.toContainText("Interrupted");
   } finally {
     for (const close of cleanup) close();
     await context.close();

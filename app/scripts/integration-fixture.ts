@@ -23,11 +23,20 @@ for (const [id, plugin] of [
 }
 if (process.argv.includes("--reload")) {
   const result = spawnSync(
-    `${root}/target/debug/tokamak-server`,
-    ["plugin", "reload", "integration-fixture"],
-    {
-      stdio: "inherit",
-    },
+    "cargo",
+    [
+      "run",
+      "--locked",
+      "-p",
+      "server",
+      "--bin",
+      "tokamak-server",
+      "--",
+      "plugin",
+      "reload",
+      "integration-fixture",
+    ],
+    { cwd: root, stdio: "inherit" },
   );
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
