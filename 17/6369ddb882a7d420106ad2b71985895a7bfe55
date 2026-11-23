@@ -1,0 +1,66 @@
+packages/host/src/action_process/call.rs
+  s_c1fdfcd835e5df::t_04982c2f9d301f 1-66,68-176,179-183,186-193,195-196,198-235
+  s_c1fdfcd835e5df::t_b59d28124eebf9 67,177-178,184-185,194,197
+README.md
+  s_c1fdfcd835e5df::t_8125b03bf5e28d 84-88
+packages/host/README.md
+  s_c1fdfcd835e5df::t_c8bf5b3700931b 77-81,87-121
+packages/host/src/action_process/inspect.rs
+  s_c1fdfcd835e5df::t_ca340d468fdb3e 1,10-11,19,21-32
+packages/host/src/action_process/mod.rs
+  s_c1fdfcd835e5df::t_85ac71abf8bc47 1-2,5,8,20-21,40-53,61-64,71-78,85-110
+packages/host/src/action_process/queue.rs
+  s_c1fdfcd835e5df::t_2be0839be983de 1-277
+packages/host/src/action_process/realm.rs
+  s_c1fdfcd835e5df::t_308f4492583e61 12-13,18-20,23,37,44-50,72,74,82-87,92,104-112,114-117,120-125,129-136,152-164,166-171,177,180,183-185,189
+packages/host/tests/action-fixture.js
+  s_c1fdfcd835e5df::t_20e68b3e48d589 20-46
+packages/host/tests/action_process/isolation.rs
+  s_c1fdfcd835e5df::t_05b1aade50bfda 1-167
+packages/host/tests/actions.rs
+  s_c1fdfcd835e5df::t_b430324d58beac 13,31,46-57,60,86-87
+packages/sdk/README.md
+  s_c1fdfcd835e5df::t_fd6059082bc96c 429-430,486-487
+packages/sdk/worker/action-process.ts
+  s_c1fdfcd835e5df::t_d55298da85eec3 25,35
+packages/sdk/worker/dispatch.ts
+  s_c1fdfcd835e5df::t_a558491eff82e9 22,98-101
+packages/server/src/host/action_process/inspection.rs
+  s_c1fdfcd835e5df::t_4082c0d58e3b64 9-27,29,33-37,41-42,45,47
+packages/server/src/host/action_process/mod.rs
+  s_c1fdfcd835e5df::t_a1c13bd47b0960 89-94
+packages/server/src/host/action_process/process_tests.rs
+  s_c1fdfcd835e5df::t_f0ab7ce634b63d 8,88-89,103,115,127-144
+packages/server/src/host/action_process/transport.rs
+  s_c1fdfcd835e5df::t_96d7a8b6a85c95 46,113,115-119,127-135
+packages/server/src/plugins/artifact.rs
+  s_c1fdfcd835e5df::t_5a0c6a0153507b 120,143-145
+packages/server/src/plugins/loading.rs
+  s_c1fdfcd835e5df::t_417196e5c4f1d4 66-67,170
+packages/server/src/service/startup.rs
+  s_c1fdfcd835e5df::t_dbadb9ccea7df6 2,6,50-59,61-64,68-75,98,160,180,211,325-355,368,371
+packages/server/tests/auth-driver.mjs
+  s_c1fdfcd835e5df::t_5232b1d940b1a2 27,766,789-803,805-807
+packages/server/tests/workers.rs
+  s_c1fdfcd835e5df::t_487dba816ceaca 8,72-73,119-138,262,267,272-277,279-292,517-543,545-546,550,553
+packages/worker/src/lib.rs
+  s_c1fdfcd835e5df::t_f9c6897631aed8 10,111,114-125,129-134,138-147,152-157
+packages/worker/src/runtime.rs
+  s_c1fdfcd835e5df::t_141da0cf30dfda 37-44,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "176369ddb882a7d420106ad2b71985895a7bfe55",
+  "prompts": {},
+  "sessions": {
+    "s_c1fdfcd835e5df": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2088f-4218-74e2-9030-e8173bccdb69",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
