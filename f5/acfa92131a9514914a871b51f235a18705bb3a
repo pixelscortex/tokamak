@@ -1,0 +1,72 @@
+packages/host/README.md
+  s_06613db2b9bc99::t_d4c0f069170e8d 79
+packages/server/tests/runner-routing.mjs
+  s_06613db2b9bc99::t_033dce9a52721e 55-57
+packages/server/PLUGINS.md
+  s_06613db2b9bc99::t_d4c0f069170e8d 21-24
+packages/worker/src/runtime.rs
+  s_06613db2b9bc99::t_91e81ad6a9ff2f 33-54,59,64-67
+  s_06613db2b9bc99::t_89747ec3cba6b2 55-58,60-63
+.ci/check.sh
+  s_06613db2b9bc99::t_033dce9a52721e 76
+  s_06613db2b9bc99::t_89747ec3cba6b2 15-53,67,75,77-82,111,113-114,116-120,122-125,127-138,140,143
+  s_06613db2b9bc99::t_7272dfce72ca46 83-85,141-142
+  s_06613db2b9bc99::t_358fba7dabddc4 121
+packages/server/Cargo.toml
+  s_06613db2b9bc99::t_a6e8ed5f84a1ed 33-34
+packages/runner/src/main.rs
+  s_06613db2b9bc99::t_a6e8ed5f84a1ed 13
+  s_06613db2b9bc99::t_30646d33aa69a5 151-159,167
+.github/workflows/ci.yml
+  s_06613db2b9bc99::t_033dce9a52721e 57-58
+packages/host/Cargo.toml
+  s_06613db2b9bc99::t_a6e8ed5f84a1ed 32
+.ci/README.md
+  s_06613db2b9bc99::t_d4c0f069170e8d 6,9-14
+packages/runner/README.md
+  s_06613db2b9bc99::t_d4c0f069170e8d 12-13
+packages/server/tests/support/local_runtime.rs
+  s_06613db2b9bc99::t_a6e8ed5f84a1ed 27-37,48,65,84-85,88-90,92-97,100-103
+  s_06613db2b9bc99::t_89747ec3cba6b2 40-47,50-55,58-64,104-108,111-113
+packages/host/src/main.rs
+  s_06613db2b9bc99::t_91e81ad6a9ff2f 45-52
+packages/runner/src/local.rs
+  s_06613db2b9bc99::t_91e81ad6a9ff2f 18,26,36-37,148-149,162-192
+  s_06613db2b9bc99::t_89747ec3cba6b2 193-195
+README.md
+  s_06613db2b9bc99::t_d4c0f069170e8d 69-70,86-92,99-102
+packages/runner/tests/lifecycle.rs
+  s_06613db2b9bc99::t_cb1a8a83b567c6 116-121,138-186,195-206,211-218,223-225,233
+  s_06613db2b9bc99::t_89747ec3cba6b2 187-194,207-210,219-222,226-232
+  s_06613db2b9bc99::t_b9bea1886577f1 234
+moon.yml
+  s_06613db2b9bc99::t_033dce9a52721e 136-140
+packages/server/tests/README.md
+  s_06613db2b9bc99::t_d4c0f069170e8d 43-63
+packages/worker/Cargo.toml
+  s_06613db2b9bc99::t_a6e8ed5f84a1ed 15-16
+packages/server/tests/actions.rs
+  s_06613db2b9bc99::t_7272dfce72ca46 638
+packages/engine/Cargo.toml
+  s_06613db2b9bc99::t_a6e8ed5f84a1ed 10-11
+Dockerfile
+  s_06613db2b9bc99::t_033dce9a52721e 25,32-33
+.ci/release-macos.sh
+  s_06613db2b9bc99::t_033dce9a52721e 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5acfa92131a9514914a871b51f235a18705bb3a",
+  "prompts": {},
+  "sessions": {
+    "s_06613db2b9bc99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20a22-67d7-7ec3-afd1-f700e15c076f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
