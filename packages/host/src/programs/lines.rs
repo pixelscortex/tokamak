@@ -20,6 +20,10 @@ impl<R: AsyncRead + Unpin> Lines<R> {
         }
     }
 
+    pub fn take_failed_source(&mut self) -> Option<R> {
+        self.source.take()
+    }
+
     pub async fn read(&mut self) -> io::Result<Vec<String>> {
         if std::mem::take(&mut self.too_long) {
             return Err(io::Error::other("Program output line exceeds 1 MiB"));
@@ -59,7 +63,6 @@ impl<R: AsyncRead + Unpin> Lines<R> {
                 part
             };
             if self.tail.len() + part.len() > WORKER_FRAME_BYTES {
-                self.source = None;
                 self.tail.clear();
                 self.too_long = true;
                 break;

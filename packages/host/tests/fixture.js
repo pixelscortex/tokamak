@@ -251,9 +251,41 @@ Object.assign(functions, {
     const program = ctx.proc([
       "/bin/sh",
       "-c",
-      '/usr/bin/awk \'BEGIN { for (i=0; i<=1048576; i++) printf "x"; print "" }\'',
+      `/usr/bin/awk 'BEGIN { for (i=0; i<=1048576; i++) printf "x"; print "" }'
+        echo ready >&2
+        read -r line
+        echo after-read
+        echo "received $line" >&2
+        read -r line`,
     ]);
-    for await (const line of program.stdout) throw new Error(`Unexpected output: ${line.length} bytes`);
+    const outputError = await program.stdout.next().then(
+      () => null,
+      (error) => error.message,
+    );
+    const ready = (await program.stderr.next()).value;
+    program.write("probe\n");
+    const reply = (await program.stderr.next()).value;
+    program.stop("SIGKILL");
+    return [outputError, ready, reply, await program.exited];
+  }),
+  inputQueue: local(async (_, ctx) => {
+    const program = ctx.proc([
+      "/bin/sh",
+      "-c",
+      "trap 'echo stopped >&2; exit 42' TERM; echo ready >&2; /bin/sleep 30 & wait",
+    ]);
+    await program.stderr.next();
+
+    const chunk = new Uint8Array(1024 * 1024);
+    let accepted = 0;
+    let message = null;
+    try {
+      for (; accepted < 65; accepted++) program.write(chunk);
+    } catch (error) {
+      message = error.message;
+    }
+    program.stop();
+    return [accepted, message, (await program.stderr.next()).value, await program.exited];
   }),
   immediate: local(async (_, ctx) => {
     const order = [];

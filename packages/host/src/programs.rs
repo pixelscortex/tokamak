@@ -66,13 +66,7 @@ impl Programs {
         let (program, stdout, stderr) = match Program::spawn(argv, cwd, env) {
             Ok(program) => program,
             Err(error) => {
-                handle.set(
-                    "error",
-                    format!(
-                        "Could not start program {:?}: {error}",
-                        argv.first().map_or("", String::as_str)
-                    ),
-                )?;
+                handle.set("error", error.to_string())?;
                 return Ok(handle);
             }
         };
@@ -86,8 +80,8 @@ impl Programs {
 
         // These closures are capabilities for this exact program. No plugin
         // receives the registry, a lookup operation or a program identifier.
-        handle.set("stdout", reader(ctx, stdout)?)?;
-        handle.set("stderr", reader(ctx, stderr)?)?;
+        handle.set("stdout", reader(ctx, stdout, program.clone())?)?;
+        handle.set("stderr", reader(ctx, stderr, program.clone())?)?;
         let running = program.clone();
         handle.set(
             "exit",
@@ -118,8 +112,9 @@ impl Programs {
                 // SAFETY: Copy before doing anything that could re-enter JS.
                 let bytes = unsafe { bytes.as_bytes() }
                     .ok_or_else(|| Exception::throw_type(&ctx, "Expected a live byte array"))?;
-                running.write(bytes);
-                Ok::<_, rquickjs::Error>(())
+                running
+                    .write(bytes)
+                    .map_err(|error| Exception::throw_message(&ctx, error))
             }),
         )?;
         handle.set("closeInput", Func::from(move || program.close_input()))?;
@@ -127,19 +122,25 @@ impl Programs {
     }
 }
 
-fn reader<'js>(ctx: &Ctx<'js>, pipe: impl AsyncRead + Unpin + 'static) -> Result<Function<'js>> {
+fn reader<'js>(
+    ctx: &Ctx<'js>,
+    pipe: impl AsyncRead + Unpin + Send + 'static,
+    program: Arc<Program>,
+) -> Result<Function<'js>> {
     let lines = Rc::new(Mutex::new(Lines::new(pipe)));
     Function::new(
         ctx.clone(),
         Async(move |ctx: Ctx<'js>| {
             let lines = lines.clone();
+            let program = program.clone();
             async move {
-                lines
-                    .lock()
-                    .await
-                    .read()
-                    .await
-                    .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))
+                let mut lines = lines.lock().await;
+                lines.read().await.map_err(|error| {
+                    if let Some(pipe) = lines.take_failed_source() {
+                        program.hold_failed_output(pipe);
+                    }
+                    Exception::throw_message(&ctx, &error.to_string())
+                })
             }
         }),
     )

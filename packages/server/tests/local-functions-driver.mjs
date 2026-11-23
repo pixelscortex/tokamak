@@ -153,6 +153,18 @@ try {
         return [stdout.filter((line) => line === "line").length, stdout.slice(-2), stderr, code];
       },
     });
+    export const programStartFailure = local({
+      args: { command: v.string(), cwd: v.string() },
+      handler: async (ctx, { command, cwd }) => {
+        const child = ctx.proc([command], { cwd });
+        const read = async (stream: AsyncIterable<string>) => {
+          const lines = [];
+          for await (const line of stream) lines.push(line);
+          return lines;
+        };
+        return Promise.all([read(child.stdout), read(child.stderr), child.exited]);
+      },
+    });
     export const identity = local({ handler: (ctx) => ({ auth: ctx.auth }) });
     export const stop = local({
       handler: () => {
@@ -313,6 +325,44 @@ try {
     ["stderr", '["one argument","$literal"]'],
     42,
   ]);
+
+  if (process.platform !== "win32") {
+    {
+      const command = "tokamak-tkm239-missing-command";
+      const [stdout, stderr, code] = await client.local(api.turn.programStartFailure, {
+        command,
+        cwd: scratch,
+      });
+      assert.deepEqual(stdout, []);
+      assert.equal(stderr.length, 1);
+      assert.ok(stderr[0].includes(command), stderr);
+      assert.equal(code, 127);
+    }
+
+    {
+      const command = join(scratch, "non-executable");
+      await writeFile(command, "#!/bin/sh\nexit 0\n", { mode: 0o600 });
+      const [stdout, stderr, code] = await client.local(api.turn.programStartFailure, {
+        command,
+        cwd: scratch,
+      });
+      assert.deepEqual(stdout, []);
+      assert.ok(
+        stderr.some((line) => line.includes(command)),
+        stderr,
+      );
+      if (host) assert.equal(stderr.length, 1);
+      assert.equal(code, 126);
+    }
+
+    await assert.rejects(
+      client.local(api.turn.programStartFailure, {
+        command: "/bin/sh",
+        cwd: join(scratch, "missing-cwd"),
+      }),
+      host ? /Could not use working directory/ : /ENOENT/,
+    );
+  }
 
   {
     const rows = Promise.withResolvers();

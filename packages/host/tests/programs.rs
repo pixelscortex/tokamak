@@ -114,6 +114,7 @@ async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
     reap_orphans_on_linux();
     let mut parent = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "parent_fixture", "--ignored", "--nocapture"])
+        .env("TOKAMAK_PROGRAM_PARENT_FIXTURE", "1")
         .env("TOKAMAK_PLUGIN_RUNTIME", "quickjs")
         .env(
             "TOKAMAK_PLUGIN_HOST",
@@ -143,6 +144,10 @@ async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
 #[tokio::test]
 #[ignore = "subprocess fixture for the launcher death test"]
 async fn parent_fixture() {
+    if std::env::var_os("TOKAMAK_PROGRAM_PARENT_FIXTURE").is_none() {
+        return;
+    }
+
     let bundle = fixture();
     let (mut worker, runtime) = Process::launch_local(
         &bundle,
@@ -165,12 +170,27 @@ async fn parent_fixture() {
 }
 
 #[tokio::test]
-async fn output_lines_over_one_mib_fail_the_stream() {
+async fn output_lines_over_one_mib_fail_only_the_stream() {
     let mut host = Host::start();
     host.invoke(1, "longLine", Value::Null).await;
     assert_eq!(
-        host.receive().await["error"],
-        "Program output line exceeds 1 MiB"
+        host.receive().await["value"],
+        json!([
+            "Program output line exceeds 1 MiB",
+            "ready",
+            "received probe",
+            137
+        ])
+    );
+}
+
+#[tokio::test]
+async fn input_queue_overflow_leaves_the_program_running() {
+    let mut host = Host::start();
+    host.invoke(1, "inputQueue", Value::Null).await;
+    assert_eq!(
+        host.receive().await["value"],
+        json!([64, "Program input queue exceeds 64 MiB", "stopped", 42])
     );
 }
 

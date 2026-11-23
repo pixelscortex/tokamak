@@ -36,7 +36,13 @@ programs.
 
 The host reads program output on demand and delivers buffered lines in
 batches. An unread stream backs up into the program's pipe. Lines exceeding
-1 MiB cause that stream to fail.
+1 MiB cause that stream to fail. Its pipe stays open and unread until the
+program stops.
+
+The host caps queued stdin at 64 MiB per program. A write beyond the limit
+throws `Program input queue exceeds 64 MiB` and leaves the program running.
+Bun buffers without this limit; the host cap prevents plugins that write
+faster than the program reads from growing the queue without bound.
 
 The QuickJS heap defaults to 256 MiB. Override it with the positive integer
 `TOKAMAK_PLUGIN_HOST_HEAP_MIB`. The launcher passes that setting to the host.

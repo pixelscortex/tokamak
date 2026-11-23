@@ -7,23 +7,29 @@ use std::{
 };
 
 use tokio::{
-    io::AsyncWriteExt,
+    io::{AsyncRead, AsyncWriteExt},
     process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
-    sync::{mpsc, watch},
+    sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc, watch},
 };
 
+const INPUT_QUEUE_BYTES: u32 = 64 * 1024 * 1024;
+
 pub type Exit = Result<i32, String>;
+type Input = (Vec<u8>, OwnedSemaphorePermit);
 
 pub struct Program {
     group: i32,
     control: Mutex<Control>,
+    input_budget: Arc<Semaphore>,
+    stop_input: Notify,
     exit: watch::Receiver<Option<Exit>>,
     done: watch::Receiver<bool>,
 }
 
 struct Control {
     guardian: Option<ChildStdin>,
-    input: Option<mpsc::UnboundedSender<Vec<u8>>>,
+    input: Option<mpsc::UnboundedSender<Input>>,
+    failed_outputs: Vec<Box<dyn AsyncRead + Unpin + Send>>,
     group_live: bool,
 }
 
@@ -42,19 +48,7 @@ impl Program {
             .id()
             .ok_or_else(|| io::Error::other("Missing guardian PID"))? as i32;
         let liveness = guardian.stdin.take();
-        let mut command = Command::new(executable);
-        command.process_group(group).args(args);
-        if let Some(cwd) = cwd {
-            command.current_dir(cwd);
-        }
-        if let Some(env) = env {
-            command.env_clear().envs(env);
-        }
-        let child = command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
+        let child = spawn_child(executable, args, cwd.as_deref(), env.as_ref(), group);
 
         let mut child = match child {
             Ok(child) => child,
@@ -80,7 +74,7 @@ impl Program {
             .take()
             .ok_or_else(|| io::Error::other("Missing program stdin"))?;
 
-        let (input, writes) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (input, writes) = mpsc::unbounded_channel();
         let (exit, exited) = watch::channel(None);
         let (done, finished) = watch::channel(false);
         let program = Arc::new(Self {
@@ -88,8 +82,11 @@ impl Program {
             control: Mutex::new(Control {
                 guardian: liveness,
                 input: Some(input),
+                failed_outputs: Vec::new(),
                 group_live: true,
             }),
+            input_budget: Arc::new(Semaphore::new(INPUT_QUEUE_BYTES as usize)),
+            stop_input: Notify::new(),
             exit: exited,
             done: finished,
         });
@@ -105,12 +102,29 @@ impl Program {
         Ok((program, stdout, stderr))
     }
 
-    pub fn write(&self, bytes: &[u8]) {
+    pub fn write(&self, bytes: &[u8]) -> Result<(), &'static str> {
+        let control = self.control.lock().expect("program control");
         if !bytes.is_empty()
-            && let Some(input) = &self.control.lock().expect("program control").input
+            && let Some(input) = &control.input
             && !input.is_closed()
         {
-            let _ = input.send(bytes.to_vec());
+            let limit = "Program input queue exceeds 64 MiB";
+            let size = u32::try_from(bytes.len()).map_err(|_| limit)?;
+            let permit = self
+                .input_budget
+                .clone()
+                .try_acquire_many_owned(size)
+                .map_err(|_| limit)?;
+            let _ = input.send((bytes.to_vec(), permit));
+        }
+        Ok(())
+    }
+
+    pub fn hold_failed_output(&self, pipe: impl AsyncRead + Unpin + Send + 'static) {
+        let mut control = self.control.lock().expect("program control");
+        if control.group_live {
+            // Keep the pipe open independently of the failed JS iterator.
+            control.failed_outputs.push(Box::new(pipe));
         }
     }
 
@@ -127,6 +141,8 @@ impl Program {
             control.group_live = false;
         }
         control.guardian.take();
+        self.stop_input.notify_one();
+        control.input.take();
     }
 
     pub async fn exited(&self) -> Exit {
@@ -146,6 +162,66 @@ impl Program {
     pub fn finished(&self) -> bool {
         *self.done.borrow()
     }
+}
+
+fn spawn_child(
+    executable: &str,
+    args: &[String],
+    cwd: Option<&str>,
+    env: Option<&HashMap<String, String>>,
+    group: i32,
+) -> io::Result<Child> {
+    let spawn = |mut command: Command| {
+        command.process_group(group);
+        if let Some(cwd) = cwd {
+            command.current_dir(cwd);
+        }
+        if let Some(env) = env {
+            command.env_clear().envs(env);
+        }
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+    };
+
+    let mut command = Command::new(executable);
+    command.args(args);
+    spawn(command).or_else(|error| {
+        let (code, reason) = match error.raw_os_error() {
+            Some(libc::ENOENT | libc::ENOTDIR) => ("127", "not found"),
+            Some(libc::EACCES | libc::ENOEXEC | libc::EPERM | libc::EISDIR) => {
+                ("126", "Permission denied")
+            }
+            _ => return Err(error),
+        };
+
+        // Report an exec failure through the program's stderr and status.
+        // Using the same cwd also distinguishes a failed chdir from exec.
+        let mut fallback = Command::new("/bin/sh");
+        fallback.args([
+            "-c",
+            r#"printf '%s: exec: %s: %s\n' "$0" "$1" "$2" >&2; exit "$3""#,
+            "tokamak-program",
+            executable,
+            reason,
+            code,
+        ]);
+        spawn(fallback).map_err(|error| {
+            if let Some(cwd) = cwd
+                && matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENOENT | libc::ENOTDIR | libc::EACCES | libc::EPERM)
+                )
+            {
+                return io::Error::other(format!(
+                    "Could not use working directory {cwd:?}: {error}"
+                ));
+            }
+            error
+        })
+    })
 }
 
 fn spawn_guardian() -> io::Result<Child> {
@@ -183,17 +259,29 @@ async fn drive(
     program: Arc<Program>,
     mut child: Child,
     mut guardian: Child,
-    stdin: ChildStdin,
-    writes: mpsc::UnboundedReceiver<Vec<u8>>,
+    mut stdin: ChildStdin,
+    mut writes: mpsc::UnboundedReceiver<Input>,
     exit: watch::Sender<Option<Exit>>,
     done: watch::Sender<bool>,
 ) {
     let wait_child = async {
         let status = tokio::select! {
-            status = child.wait() => status,
-            _ = drive_input(stdin, writes) => child.wait().await,
+            biased;
+            status = child.wait() => Some(status),
+            _ = program.stop_input.notified() => None,
+            _ = drive_input(&mut stdin, &mut writes) => {
+                drop(stdin);
+                None
+            }
         };
-        program.close_input();
+        drop(writes);
+
+        // During stop, leave stdin open so EOF cannot preempt the TERM handler.
+        let status = match status {
+            Some(status) => status,
+            None => child.wait().await,
+        };
+
         // A program can exit while a descendant still holds its pipes.
         program.stop(false);
         let code = status
@@ -207,17 +295,19 @@ async fn drive(
     };
     let wait_group = async {
         let _ = guardian.wait().await;
-        program.control.lock().expect("program control").group_live = false;
+        let mut control = program.control.lock().expect("program control");
+        control.group_live = false;
+        control.failed_outputs.clear();
     };
     tokio::join!(wait_child, wait_group);
     done.send_replace(true);
 }
 
 async fn drive_input(
-    mut stdin: ChildStdin,
-    mut writes: mpsc::UnboundedReceiver<Vec<u8>>,
+    stdin: &mut ChildStdin,
+    writes: &mut mpsc::UnboundedReceiver<Input>,
 ) -> io::Result<()> {
-    while let Some(bytes) = writes.recv().await {
+    while let Some((bytes, _permit)) = writes.recv().await {
         stdin.write_all(&bytes).await?;
     }
     Ok(())
