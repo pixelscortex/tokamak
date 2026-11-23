@@ -1,0 +1,63 @@
+packages/host/src/action_process/realm.rs
+  s_d018601463dbc5::t_97546ed9311030 197
+  s_d018601463dbc5::t_27208432aed189 12-13,17,24,49,71,91,98,123,135,152-153,156-159,161-164,166,170-177,182,195-196,198-200
+packages/host/tests/action-fixture.js
+  s_d018601463dbc5::t_97546ed9311030 64-73
+  s_d018601463dbc5::t_63558274e8777c 49-63,74-75
+packages/server/src/plugins/artifact.rs
+  s_d018601463dbc5::t_e4555e60ed63bd 120,143-146,148
+  s_d018601463dbc5::t_2efd3b10946958 147
+packages/server/src/host/action_process/process_tests.rs
+  s_d018601463dbc5::t_1c7d4e35f8239b 71-72
+  s_d018601463dbc5::t_97546ed9311030 205-210,212-226,239-272
+  s_d018601463dbc5::t_9f0ed7229b8297 13-14,30-31,211,273
+packages/host/tests/action_process/isolation.rs
+  s_d018601463dbc5::t_73b41ebfbb5d8e 186-188
+  s_d018601463dbc5::t_db84abe17b54d2 37-39,132,134-135,137-138,146,148,151-153,155,157-185,189-273
+packages/server/src/plugins/loading.rs
+  s_d018601463dbc5::t_e4555e60ed63bd 2,4-34,89,93,95-99,101-114,140-172,174,180-181,185,199,209,220-240,242-281,287,289,297-298,300,303
+  s_d018601463dbc5::t_7a1d22553689e7 1,90-92,241
+packages/host/README.md
+  s_d018601463dbc5::t_73b41ebfbb5d8e 83-90,113-121,124-137
+  s_d018601463dbc5::t_87e9e1dcf8fc62 122-123
+packages/sdk/README.md
+  s_d018601463dbc5::t_73b41ebfbb5d8e 444-462
+packages/host/src/action_process/call.rs
+  s_d018601463dbc5::t_3f3d462ec196a4 21-27,44,100-103,106,124-127,134,169-171,200-206
+packages/host/src/action_process/calls.rs
+  s_d018601463dbc5::t_b95733109189ba 2,16,18,20,24,27-28,31,35,53-94,98-99,103,105-106,114-116,122-123,148
+packages/host/src/action_process/heap.rs
+  s_d018601463dbc5::t_e4faa14347a380 1-85
+packages/host/src/action_process/mod.rs
+  s_d018601463dbc5::t_73b4ef94fc9a14 3-4,42,46-47,62-65
+packages/host/tests/action-throw-null.js
+  s_d018601463dbc5::t_86ba718f3deb41 1-2
+packages/host/tests/actions.rs
+  s_d018601463dbc5::t_9b83d201ee519c 205-255
+packages/sdk/worker/action-process.ts
+  s_d018601463dbc5::t_5dd671ce492cd4 8,35-40
+packages/server/src/host/action_process/mod.rs
+  s_d018601463dbc5::t_ab123847c8b343 33,52,88,120-121,172-173,180,191,210,281-288,297-306,321,323,341
+packages/server/src/host/action_process/transport.rs
+  s_d018601463dbc5::t_51af0ceb28457c 163,172-176,181-183,185,193,209,212,234-236,244-250,297
+packages/server/src/service/sign_in.rs
+  s_d018601463dbc5::t_103fbe2813b325 351,354
+packages/server/tests/schema_indexes.rs
+  s_d018601463dbc5::t_a03c9018c9d149 1323-1327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41d8142b63bc7dbee98ee10ba5b3ca29fe5dfd53",
+  "prompts": {},
+  "sessions": {
+    "s_d018601463dbc5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208b6-e9f7-72b0-b968-f9da73a51cd1",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
