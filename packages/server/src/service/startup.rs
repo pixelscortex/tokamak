@@ -1,14 +1,16 @@
 use super::*;
-use crate::plugins::StartupPolicy;
+use crate::{host::action_process::Source, plugins::StartupPolicy};
 
 struct Startup {
     bundle: Option<Arc<Bundle>>,
+    legacy_action_source: Option<Arc<Source>>,
     space: DataSpace,
     descriptor: Json,
     kinds: BTreeMap<String, FunctionKind>,
     single_bundle_private: BTreeSet<String>,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
+    quickjs: bool,
 }
 
 impl Server {
@@ -27,42 +29,50 @@ impl Server {
         bundle: Arc<Bundle>,
         space: DataSpace,
     ) -> Result<Self, Error> {
+        let quickjs = match quickjs_actions() {
+            Ok(quickjs) => quickjs,
+            Err(error) => return Err(startup_error(&mut database, error).await),
+        };
+        let (transactions, legacy_action_bundle) = if quickjs {
+            let Some(transactions) = bundle.transactions() else {
+                let error = Error::Invalid(
+                    "QuickJS actions require a transaction bundle; rebuild the feature".into(),
+                );
+                return Err(startup_error(&mut database, error).await);
+            };
+            (transactions, Some(bundle))
+        } else {
+            (bundle, None)
+        };
         let inspected = async {
-            let inspected = inspect(&pool, bundle.clone()).await?;
+            let inspected = inspect(&pool, transactions.clone()).await?;
 
-            let schema = crate::schema::Schema::parse(&inspected.descriptor["schema"])?;
-
-            let mut tx = Box::pin(database.begin())
-                .await
-                .map_err(|e| Error::Invalid(e.to_string()))?;
-
-            match Box::pin(schema.apply(&mut tx, &space, true)).await {
-                Ok(reset) => {
-                    Box::pin(tx.commit())
-                        .await
-                        .map_err(|e| Error::Invalid(e.to_string()))?;
-                    if let Some(reason) = reset {
-                        crate::schema::log_reset(&reason);
-                    }
+            let legacy_action_source = match legacy_action_bundle {
+                Some(bundle)
+                    if inspected
+                        .kinds
+                        .values()
+                        .any(|kind| *kind == FunctionKind::Action) =>
+                {
+                    let source = Source::legacy(bundle)?;
+                    source.inspect().await?;
+                    Some(source)
                 }
-                Err(error) => {
-                    Box::pin(tx.rollback()).await.map_err(|e| {
-                        Error::Invalid(format!("{error}; schema rollback failed: {e}"))
-                    })?;
-
-                    return Err(error);
-                }
-            }
-
-            Ok(inspected)
+                _ => None,
+            };
+            initialize_standalone_schema(&mut database, &space, &inspected.descriptor).await?;
+            Ok((inspected, legacy_action_source))
         }
         .await;
 
-        let InspectedBundle {
-            mut descriptor,
-            kinds,
-            visibility,
-        } = match inspected {
+        let (
+            InspectedBundle {
+                mut descriptor,
+                kinds,
+                visibility,
+            },
+            legacy_action_source,
+        ) = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
                 return Err(startup_error(&mut database, error).await);
@@ -84,13 +94,15 @@ impl Server {
             database,
             pool,
             Startup {
-                bundle: Some(bundle),
+                bundle: Some(transactions),
+                legacy_action_source,
                 space,
                 descriptor,
                 kinds,
                 single_bundle_private,
                 plugins: None,
                 plugin_root: None,
+                quickjs,
             },
         )
         .await
@@ -111,10 +123,15 @@ impl Server {
         root: &std::path::Path,
         policy: StartupPolicy,
     ) -> Result<Self, Error> {
-        let loaded = match crate::plugins::Catalog::read_at_startup(root, database.directory()) {
-            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy).await,
-            Err(error) => Err(error),
+        let quickjs = match quickjs_actions() {
+            Ok(quickjs) => quickjs,
+            Err(error) => return Err(startup_error(&mut database, error).await),
         };
+        let loaded =
+            match crate::plugins::Catalog::read_at_startup(root, database.directory(), quickjs) {
+                Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy, quickjs).await,
+                Err(error) => Err(error),
+            };
 
         let loaded = match loaded {
             Ok(mut loaded) => {
@@ -140,12 +157,14 @@ impl Server {
             pool,
             Startup {
                 bundle: None,
+                legacy_action_source: None,
                 space: DataSpace::default(),
                 descriptor: loaded.descriptor.clone(),
                 kinds,
                 single_bundle_private: BTreeSet::new(),
                 plugins: Some(loaded),
                 plugin_root: Some(root.to_owned()),
+                quickjs,
             },
         )
         .await
@@ -158,12 +177,14 @@ impl Server {
     ) -> Result<Self, Error> {
         let Startup {
             bundle,
+            legacy_action_source,
             space,
             descriptor,
             kinds,
             single_bundle_private,
             plugins,
             plugin_root,
+            quickjs,
         } = startup;
         let state = async {
             Box::pin(window_state::initialize(&database, plugins.is_some()))
@@ -184,14 +205,12 @@ impl Server {
         if let Err(error) = state {
             return Err(startup_error(&mut database, error).await);
         }
-        let action_pool = match Pool::new_actions(PoolConfig {
-            limits: pool.limits().clone(),
-            ..PoolConfig::default()
-        }) {
-            Ok(pool) => Arc::new(pool),
-            Err(error) => {
-                return Err(startup_error(&mut database, Error::Invalid(error.to_string())).await);
-            }
+        let ActionStartup {
+            action_pool,
+            action_process,
+        } = match ActionStartup::new(quickjs, &pool) {
+            Ok(startup) => startup,
+            Err(error) => return Err(startup_error(&mut database, error).await),
         };
 
         let changes = database.subscribe(); // Before any initial subscription run.
@@ -214,6 +233,8 @@ impl Server {
             plugin_root,
             changes,
             action_pool,
+            action_process,
+            legacy_action_source,
             sign_in_pool: None,
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
@@ -297,5 +318,70 @@ async fn startup_error(database: &mut Database, error: Error) -> Error {
     match Box::pin(database.close()).await {
         Ok(()) => error,
         Err(close) => Error::Invalid(format!("{error}; startup cleanup failed: {close}")),
+    }
+}
+
+async fn initialize_standalone_schema(
+    database: &mut Database,
+    space: &DataSpace,
+    descriptor: &Json,
+) -> Result<(), Error> {
+    let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
+
+    let mut tx = Box::pin(database.begin())
+        .await
+        .map_err(|e| Error::Invalid(e.to_string()))?;
+
+    match Box::pin(schema.apply(&mut tx, space, true)).await {
+        Ok(reset) => {
+            Box::pin(tx.commit())
+                .await
+                .map_err(|e| Error::Invalid(e.to_string()))?;
+            if let Some(reason) = reset {
+                crate::schema::log_reset(&reason);
+            }
+        }
+        Err(error) => {
+            Box::pin(tx.rollback())
+                .await
+                .map_err(|e| Error::Invalid(format!("{error}; schema rollback failed: {e}")))?;
+
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+fn quickjs_actions() -> Result<bool, Error> {
+    tokamak_worker::LocalRuntime::selected()
+        .map(|runtime| runtime == tokamak_worker::LocalRuntime::QuickJs)
+        .map_err(Error::Invalid)
+}
+
+struct ActionStartup {
+    action_pool: Option<Arc<Pool>>,
+    action_process: Option<Arc<crate::host::action_process::Supervisor>>,
+}
+
+impl ActionStartup {
+    fn new(quickjs: bool, pool: &Pool) -> Result<Self, Error> {
+        if quickjs {
+            let host = tokamak_worker::Process::action_host_path().map_err(Error::Invalid)?;
+            let heap = tokamak_worker::configured_action_heap_bytes().map_err(Error::Invalid)?;
+            return Ok(Self {
+                action_pool: None,
+                action_process: Some(crate::host::action_process::Supervisor::new(host, heap)),
+            });
+        }
+
+        let pool = Pool::new_actions(PoolConfig {
+            limits: pool.limits().clone(),
+            ..PoolConfig::default()
+        })
+        .map_err(|error| Error::Invalid(error.to_string()))?;
+        Ok(Self {
+            action_pool: Some(Arc::new(pool)),
+            action_process: None,
+        })
     }
 }

@@ -18,14 +18,15 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        serde_json::from_str(
+        let mut variants: BTreeMap<String, BTreeMap<String, String>> = serde_json::from_str(
             String::from_utf8(output.stdout)
                 .unwrap()
                 .lines()
                 .last()
                 .unwrap(),
         )
-        .unwrap()
+        .unwrap();
+        variants.remove("legacy").unwrap()
     });
     let directory = tempfile::tempdir().unwrap();
     let plugin = directory.path().join("plugins/worker-test");
@@ -38,6 +39,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Supervisor>) {
         Catalog::read(&directory.path().join("plugins")).unwrap(),
         &pool,
         crate::plugins::StartupPolicy::Strict,
+        false,
     )
     .await
     .unwrap();

@@ -7,9 +7,30 @@ use std::{fmt, sync::Arc, time::Duration};
 pub struct Bundle {
     pub(crate) source: Arc<str>,
     pub(crate) map: Option<sourcemap::SourceMap>,
+    transactions: Option<Arc<Bundle>>,
 }
 
 impl Bundle {
+    /// The verified portable bundle, for isolated process transport.
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Attach the companion that contains only queries, mutations and inspection exports.
+    pub fn with_transactions(mut self, transactions: Self) -> Self {
+        self.transactions = Some(Arc::new(transactions));
+        self
+    }
+
+    pub fn transactions(&self) -> Option<Arc<Self>> {
+        self.transactions.clone()
+    }
+
+    /// Translate an error emitted by the action process.
+    pub fn remap_stack(&self, stack: &str, name: &str) -> String {
+        crate::source_map::remap_named(stack, self, false, name)
+    }
+
     pub fn new(source: impl Into<Arc<str>>, source_map: Option<&str>) -> Result<Self, Error> {
         let map = source_map
             .map(|text| sourcemap::SourceMap::from_reader(text.as_bytes()))
@@ -18,6 +39,7 @@ impl Bundle {
         Ok(Self {
             source: source.into(),
             map,
+            transactions: None,
         })
     }
 }

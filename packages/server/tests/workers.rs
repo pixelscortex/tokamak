@@ -5,6 +5,7 @@ use server::{
     Event, Server,
     data::{Database, Storage},
 };
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -16,9 +17,13 @@ use std::{
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
-fn artifacts() -> &'static BTreeMap<String, String> {
-    static FILES: OnceLock<BTreeMap<String, String>> = OnceLock::new();
-    FILES.get_or_init(|| {
+fn quickjs() -> bool {
+    tokamak_worker::LocalRuntime::selected().unwrap() == tokamak_worker::LocalRuntime::QuickJs
+}
+
+fn artifacts(legacy: bool) -> &'static BTreeMap<String, String> {
+    static FILES: OnceLock<BTreeMap<String, BTreeMap<String, String>>> = OnceLock::new();
+    &FILES.get_or_init(|| {
         let output = Command::new("bun")
             .arg("packages/server/tests/build-worker.mjs")
             .current_dir(root())
@@ -38,36 +43,41 @@ fn artifacts() -> &'static BTreeMap<String, String> {
                 .unwrap(),
         )
         .unwrap()
-    })
+    })[if legacy {
+        "legacy"
+    } else {
+        "portable"
+    }]
 }
 struct Fixture {
     directory: tempfile::TempDir,
     server: Server,
     session: server::Session,
     next: u64,
+    _exclusive: Option<tokio::sync::MutexGuard<'static, ()>>,
 }
 impl Fixture {
     async fn new() -> Self {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("plugins/worker-test");
-        std::fs::create_dir_all(&path).unwrap();
-        for (name, text) in artifacts() {
-            std::fs::write(path.join(name), text).unwrap();
-        }
-        let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
-        let server = Server::load_plugins(
-            Database::open(Storage::Memory).await.unwrap(),
-            pool,
-            &directory.path().join("plugins"),
-        )
-        .await
-        .unwrap();
+        Self::with_legacy_artifact(!quickjs()).await
+    }
+
+    async fn with_legacy_artifact(legacy: bool) -> Self {
+        static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+        let exclusive = if quickjs() {
+            Some(SERIAL.lock().await)
+        } else {
+            None
+        };
+
+        let directory = install_fixture(legacy);
+        let server = load_fixture(&directory).await.unwrap();
         let session = server.connect().await.unwrap();
         Self {
             directory,
             server,
             session,
             next: 0,
+            _exclusive: exclusive,
         }
     }
     fn start(&mut self, name: &str, args: Value) -> u64 {
@@ -106,6 +116,26 @@ impl Fixture {
         self.server.close().await.unwrap();
     }
 }
+fn install_fixture(legacy: bool) -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("plugins/worker-test");
+    std::fs::create_dir_all(&path).unwrap();
+    for (name, text) in artifacts(legacy) {
+        std::fs::write(path.join(name), text).unwrap();
+    }
+    directory
+}
+
+async fn load_fixture(directory: &tempfile::TempDir) -> Result<Server, server::Error> {
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    Server::load_plugins(
+        Database::open(Storage::Memory).await.unwrap(),
+        pool,
+        &directory.path().join("plugins"),
+    )
+    .await
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     let mut fixture = Fixture::new().await;
@@ -123,14 +153,24 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     assert_eq!(fixture.result().await.1.unwrap(), json!("QuickJS"));
     assert_eq!(first["count"], 1);
     assert_eq!(first["secret"], Value::Null);
-    assert!(
-        first["cwd"]
-            .as_str()
-            .unwrap()
-            .ends_with("plugin-data/worker-test")
-    );
+    if quickjs() {
+        assert_eq!(first["pid"], Value::Null);
+        assert_eq!(first["cwd"], Value::Null);
+    } else {
+        assert!(
+            first["cwd"]
+                .as_str()
+                .unwrap()
+                .ends_with("plugin-data/worker-test")
+        );
+    }
     let second = fixture.call("state", json!({})).await.unwrap();
-    assert_eq!(second["count"], 2);
+    let expected_count = if quickjs() {
+        1
+    } else {
+        2
+    };
+    assert_eq!(second["count"], expected_count);
     assert_eq!(first["pid"], second["pid"]);
     assert_eq!(
         fixture
@@ -143,23 +183,14 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     let fast = fixture.start("echo", json!({"value":"fast","delay":0}));
     assert_eq!(fixture.result().await, (fast, Ok(json!("fast"))));
     assert_eq!(fixture.result().await, (slow, Ok(json!("slow"))));
-    fixture.call("remember", json!({})).await.unwrap();
-    assert!(
-        fixture
-            .call("stale", json!({}))
-            .await
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .contains("stale invocation")
-    );
-    assert!(
-        fixture
-            .call("envDenied", json!({}))
-            .await
-            .unwrap_err()
-            .contains("env:WORKER_UNGRANTED")
-    );
+    if !quickjs() {
+        check_bun_stale_invocation(&mut fixture).await;
+    }
+    let env_error = fixture.call("envDenied", json!({})).await.unwrap_err();
+    assert!(env_error.contains("env:WORKER_UNGRANTED"), "{env_error}");
+    if quickjs() {
+        check_action_process_errors(&mut fixture).await;
+    }
     assert_eq!(
         fixture.call("dbDenied", json!({})).await.unwrap(),
         Value::Null
@@ -170,6 +201,10 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
             .await
             .is_err()
     );
+    if quickjs() {
+        check_action_process_recovery(fixture).await;
+        return;
+    }
     assert!(
         fixture
             .call("crash", json!({}))
@@ -180,6 +215,124 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
     fixture.close().await;
 }
+
+async fn check_bun_stale_invocation(fixture: &mut Fixture) {
+    fixture.call("remember", json!({})).await.unwrap();
+    assert!(
+        fixture
+            .call("stale", json!({}))
+            .await
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("stale invocation")
+    );
+}
+
+async fn check_action_process_errors(fixture: &mut Fixture) {
+    let thrown = fixture.call("thrown", json!({})).await.unwrap_err();
+    assert!(
+        thrown.contains("action error sentinel") && thrown.contains("actions.ts:"),
+        "{thrown}"
+    );
+    let error = fixture.call("networkDenied", json!({})).await.unwrap_err();
+    assert!(error.contains("requires net:127.0.0.1"), "{error}");
+}
+
+async fn check_action_process_recovery(mut fixture: Fixture) {
+    let pid = action_process_pid(std::process::id());
+    let waiting = fixture.start("stuck", json!({}));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    kill(pid);
+    let (id, result) = fixture.result().await;
+    assert_eq!(id, waiting);
+    assert!(result.unwrap_err().contains("Action process exited"));
+    fixture.next += 1;
+    fixture
+        .session
+        .sender()
+        .request(Request::Query {
+            id: fixture.next,
+            name: "worker-test/actions:pure".into(),
+            args: json!({}),
+        })
+        .unwrap();
+    assert_eq!(fixture.result().await.1.unwrap(), "QuickJS");
+    let mut previous = pid;
+    for minimum in [200, 450, 950, 1950, 3950] {
+        let restart = std::time::Instant::now();
+        assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
+        assert!(
+            restart.elapsed() >= Duration::from_millis(minimum),
+            "restart did not back off for at least {minimum} ms"
+        );
+        let next = action_process_pid(std::process::id());
+        assert_ne!(previous, next);
+        previous = next;
+        let waiting = fixture.start("stuck", json!({}));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        kill(next);
+        let (id, result) = fixture.result().await;
+        assert_eq!(id, waiting);
+        assert!(result.unwrap_err().contains("Action process exited"));
+    }
+
+    // The next restart waits eight seconds; reload must finish independently.
+    let waiting = fixture.start("stuck", json!({}));
+    tokio::time::sleep(Duration::from_millis(40)).await;
+    tokio::time::timeout(
+        Duration::from_millis(2500),
+        fixture.server.reload_plugin("worker-test".into()),
+    )
+    .await
+    .expect("reload waited for action process back-off")
+    .unwrap();
+    let (id, result) = fixture.result().await;
+    assert_eq!(id, waiting);
+    assert!(result.unwrap_err().contains("cancelled by reload"));
+    fixture.close().await;
+    assert!(!alive(previous));
+}
+
+#[cfg(unix)]
+fn action_process_pid(parent: u32) -> u64 {
+    let processes = Command::new("ps")
+        .args(["-axo", "pid=,ppid=,command="])
+        .output()
+        .unwrap();
+    assert!(processes.status.success());
+    let processes = String::from_utf8(processes.stdout).unwrap();
+    processes
+        .lines()
+        .find_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields.next()?.parse::<u64>().ok()?;
+            let owner = fields.next()?.parse::<u32>().ok()?;
+            (owner == parent && line.contains("tokamak-plugin-host --actions")).then_some(pid)
+        })
+        .unwrap_or_else(|| panic!("no action process child of {parent}"))
+}
+
+#[cfg(not(unix))]
+fn action_process_pid(_: u32) -> u64 {
+    unreachable!("the action process is unavailable on this platform")
+}
+
+#[cfg(unix)]
+fn kill(pid: u64) {
+    assert_eq!(unsafe { libc::kill(pid as i32, libc::SIGKILL) }, 0);
+}
+
+#[cfg(not(unix))]
+fn kill(_: u64) {
+    unreachable!("the action process is unavailable on this platform")
+}
+
+#[cfg(not(unix))]
+fn alive(_: u64) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn alive(pid: u64) -> bool {
     unsafe { libc::kill(pid as i32, 0) == 0 }
@@ -188,6 +341,22 @@ fn alive(pid: u64) -> bool {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn disable_kills_worker_and_children_and_fails_stuck_calls() {
     let mut fixture = Fixture::new().await;
+    if quickjs() {
+        fixture.call("state", json!({})).await.unwrap();
+        let pid = action_process_pid(std::process::id());
+        fixture.start("stuck", json!({}));
+        std::fs::remove_dir_all(fixture.directory.path().join("plugins/worker-test")).unwrap();
+        fixture
+            .server
+            .reload_plugin("worker-test".into())
+            .await
+            .unwrap();
+        assert!(fixture.result().await.1.unwrap_err().contains("cancelled"));
+        assert!(alive(pid));
+        fixture.close().await;
+        assert!(!alive(pid));
+        return;
+    }
     let pids = fixture.call("child", json!({})).await.unwrap();
     assert!(alive(pids["child"].as_u64().unwrap()));
     fixture.start("cpu", json!({}));
@@ -212,7 +381,11 @@ async fn disable_kills_worker_and_children_and_fails_stuck_calls() {
 async fn oversized_messages_fail_only_their_invocation() {
     let mut fixture = Fixture::new().await;
     let first = fixture.call("state", json!({})).await.unwrap();
-    let waiting = fixture.start("waitForLarge", json!({}));
+    let waiting = if quickjs() {
+        fixture.start("echo", json!({"value":"waiting","delay":50}))
+    } else {
+        fixture.start("waitForLarge", json!({}))
+    };
     let large = fixture.start("large", json!({}));
     let results = BTreeMap::from([fixture.result().await, fixture.result().await]);
     let error = results[&large].as_ref().unwrap_err();
@@ -230,7 +403,12 @@ async fn oversized_messages_fail_only_their_invocation() {
     );
     let second = fixture.call("state", json!({})).await.unwrap();
     assert_eq!(first["pid"], second["pid"]);
-    assert_eq!(second["count"], 2);
+    let expected_count = if quickjs() {
+        1
+    } else {
+        2
+    };
+    assert_eq!(second["count"], expected_count);
     fixture.close().await;
 }
 
@@ -248,7 +426,7 @@ fn worker_lifecycle(scenario: &str) {
     let directory = tempfile::tempdir().unwrap();
     let plugins = directory.path().join("plugins/worker-test");
     std::fs::create_dir_all(&plugins).unwrap();
-    for (name, text) in artifacts() {
+    for (name, text) in artifacts(!quickjs()) {
         std::fs::write(plugins.join(name), text).unwrap();
     }
     let mut server = ServerGuard(
@@ -281,6 +459,11 @@ fn worker_lifecycle(scenario: &str) {
         .arg(url)
         .arg(server.0.id().to_string())
         .arg(scenario)
+        .arg(if quickjs() {
+            "quickjs"
+        } else {
+            "bun"
+        })
         .current_dir(root())
         .output()
         .unwrap();
@@ -295,12 +478,26 @@ fn worker_lifecycle(scenario: &str) {
             if scenario == "logs" {
                 assert!(status.success(), "{status}");
             }
+            if quickjs() && scenario == "logs" {
+                assert_action_log(server.0.stderr.take().unwrap());
+            }
             return;
         }
         std::thread::sleep(Duration::from_millis(20));
     }
     panic!("server did not shut down promptly");
 }
+#[cfg(unix)]
+fn assert_action_log(mut stderr: std::process::ChildStderr) {
+    use std::io::Read;
+    let mut logs = String::new();
+    stderr.read_to_string(&mut logs).unwrap();
+    assert!(
+        logs.contains("Plugin worker-test [info]: action process log marker"),
+        "{logs}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn worker_logs_cannot_block_invocation_or_shutdown() {
@@ -310,4 +507,49 @@ fn worker_logs_cannot_block_invocation_or_shutdown() {
 #[test]
 fn busy_worker_and_children_die_with_server() {
     worker_lifecycle("parent-death");
+}
+
+#[tokio::test]
+async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
+    if !quickjs() {
+        return;
+    }
+    let directory = install_fixture(true);
+    let error = load_fixture(&directory).await.err().unwrap().to_string();
+    assert!(
+        error.contains("Module is not allowed in the action process: node:child_process"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn quickjs_rejects_a_reload_if_the_action_module_throws_during_evaluation() {
+    if !quickjs() {
+        return;
+    }
+
+    let mut fixture = Fixture::new().await;
+    let path = fixture.directory.path().join("plugins/worker-test");
+    let code = path.join("worker.js");
+    let mut source = std::fs::read_to_string(&code).unwrap();
+    source.push_str("\nthrow new Error('broken action module on reload');");
+    std::fs::write(code, &source).unwrap();
+
+    let manifest_path = path.join("manifest.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["hashes"]["worker.js"] = json!(format!("{:x}", Sha256::digest(source.as_bytes())));
+    std::fs::write(manifest_path, manifest.to_string()).unwrap();
+
+    let error = fixture
+        .server
+        .reload_plugin("worker-test".into())
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("broken action module on reload"),
+        "{error}"
+    );
+    assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
+    fixture.close().await;
 }

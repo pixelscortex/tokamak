@@ -161,7 +161,12 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace, worker = false) {
+export async function bundleFeature(
+  folder,
+  namespace,
+  worker = false,
+  splitActions = namespace !== undefined,
+) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
@@ -236,45 +241,63 @@ export async function bundleFeature(folder, namespace, worker = false) {
         plugins: [placementTransform(placement, lanes.local)],
       });
     }
-    const built = await Bun.build({
-      entrypoints: ["tokamak-feature:entry"],
-      target: "browser",
-      format: "esm",
-      splitting: false,
-      sourcemap: "linked",
-      naming: "bundle.js",
-      outdir: join(root, "dist"),
-      packages: "bundle",
-      env: "disable",
-      allowUnresolved: [],
-      plugins: [
-        bunPluginBoundary(pluginRoot),
-        ...workerPlugins,
-        {
-          name: "stable-feature-entry",
-          setup(build) {
-            build.onResolve({ filter: /^tokamak-feature:entry$/ }, () => ({
-              path: "entry",
-              namespace: "tokamak-feature",
-            }));
-            build.onLoad({ filter: /.*/, namespace: "tokamak-feature" }, () => ({
-              contents: source,
-              loader: "ts",
-              resolveDir: root,
-            }));
+    async function buildServer(naming, contents, plugins) {
+      const built = await Bun.build({
+        entrypoints: ["tokamak-feature:entry"],
+        target: "browser",
+        format: "esm",
+        splitting: false,
+        sourcemap: "linked",
+        naming,
+        outdir: join(root, "dist"),
+        packages: "bundle",
+        env: "disable",
+        allowUnresolved: [],
+        plugins: [
+          bunPluginBoundary(pluginRoot),
+          ...plugins,
+          {
+            name: "stable-feature-entry",
+            setup(build) {
+              build.onResolve({ filter: /^tokamak-feature:entry$/ }, () => ({
+                path: "entry",
+                namespace: "tokamak-feature",
+              }));
+              build.onLoad({ filter: /.*/, namespace: "tokamak-feature" }, () => ({
+                contents,
+                loader: "ts",
+                resolveDir: root,
+              }));
+            },
           },
-        },
-        {
-          name: "portable-sdk",
-          setup(build) {
-            build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
-              path: join(sdkRoot, "src/index.ts"),
-            }));
+          {
+            name: "portable-sdk",
+            setup(build) {
+              build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
+                path: join(sdkRoot, "src/index.ts"),
+              }));
+            },
           },
-        },
-      ],
-    });
-    if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
+        ],
+      });
+      if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
+      return built;
+    }
+    const built = await buildServer("bundle.js", source, workerPlugins);
+    if (splitActions && !worker) {
+      const descriptor = await workerSources({
+        root,
+        files,
+        modules,
+        hasSchema,
+        sdkRoot,
+        header,
+        pluginRoot,
+        placement: split ? placement : undefined,
+        emitAction: false,
+      });
+      await buildServer("transactions.js", descriptor.source, descriptor.plugins);
+    }
     // Report unsupported imports before TypeScript reports missing Node declarations.
     await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
     if (namespace !== undefined)
@@ -317,7 +340,7 @@ if (import.meta.main) {
   const feature = resolve(sdkRoot, "../..", process.argv[2]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker");
+  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker", true);
 }
 
 async function scanFiles(root) {

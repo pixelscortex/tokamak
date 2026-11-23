@@ -3,7 +3,7 @@ import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
 import { declaresAccessTo } from "../../sdk/src/plugin";
 import { dirname, relative, resolve, sep } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
@@ -129,6 +129,9 @@ export function tokamak(
         if (options.backend !== false) {
           // SDK discovery/checking is Bun-only. Invoke its existing pinned entry
           // even if Vite itself was launched through Node's standard CLI.
+          const transactions = resolve(server, "dist/transactions.js");
+          await rm(transactions, { force: true });
+          await rm(`${transactions}.map`, { force: true });
           const bundled = spawnSync(
             "proto",
             [
@@ -180,6 +183,14 @@ export function tokamak(
             entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
           }
           entries.server = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
+          if (plugin.runtime !== "worker" && existsSync(transactions)) {
+            for (const name of ["transactions.js", "transactions.js.map"])
+              this.emitFile({
+                type: "asset",
+                fileName: name,
+                source: await readFile(resolve(server, "dist", name), "utf8"),
+              });
+          }
           if (hasLocal) {
             for (const name of ["local.js", "local.js.map", "local-entry.js"]) {
               let source = await readFile(resolve(server, "dist", name), "utf8");

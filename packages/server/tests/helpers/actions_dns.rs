@@ -71,27 +71,19 @@ fn isolated(name: &str, test: impl AsyncFnOnce(&Resolver)) {
     );
     let stdout = installation.0.join("stdout.log");
     let stderr = installation.0.join("stderr.log");
-    let mut child = Child(
-        Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", &format!("dns::{name}"), "--nocapture"])
-            .env("TKM45_DNS_CHILD", &installation.0)
-            .env("TKM45_TEST_ARTIFACTS", artifact_cache)
-            .env("TKM45_DNS_LOG", installation.0.join("dns.log"))
-            .env("TKM45_DNS_RELEASE", installation.0.join("release"))
-            .env("TKM45_TEST_CONNECT_LOG", installation.0.join("connect.log"))
-            .env(
-                if cfg!(target_os = "macos") {
-                    "DYLD_INSERT_LIBRARIES"
-                } else {
-                    "LD_PRELOAD"
-                },
-                library,
-            )
-            .stdout(std::fs::File::create(&stdout).unwrap())
-            .stderr(std::fs::File::create(&stderr).unwrap())
-            .spawn()
-            .unwrap(),
-    );
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--exact", &format!("dns::{name}"), "--nocapture"])
+        .env("TKM45_DNS_CHILD", &installation.0)
+        .env("TKM45_TEST_ARTIFACTS", artifact_cache)
+        .env("TKM45_DNS_LOG", installation.0.join("dns.log"))
+        .env("TKM45_DNS_RELEASE", installation.0.join("release"))
+        .env("TKM45_TEST_CONNECT_LOG", installation.0.join("connect.log"))
+        .env(resolver_environment(), &library)
+        .stdout(std::fs::File::create(&stdout).unwrap())
+        .stderr(std::fs::File::create(&stderr).unwrap());
+    configure_action_process_resolver(&mut command, &installation.0, &library);
+    let mut child = Child(command.spawn().unwrap());
     let start = Instant::now();
     let status = loop {
         if let Some(status) = child.0.try_wait().unwrap() {

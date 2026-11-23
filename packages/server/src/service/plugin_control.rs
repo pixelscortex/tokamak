@@ -186,8 +186,11 @@ impl Coordinator {
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
-        let catalog =
-            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
+        let catalog = crate::plugins::Catalog::read_reusing(
+            root,
+            self.plugins.as_ref().map(|p| &p.catalog),
+            self.action_process.is_some(),
+        )?;
 
         if !catalog.plugins.contains_key(id)
             && !catalog.removed_plugins.iter().any(|removed| removed == id)
@@ -195,18 +198,27 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        let mut candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
-                .await?;
+        let mut candidate = crate::plugins::Loaded::load_reusing(
+            catalog,
+            &self.pool,
+            self.plugins.as_deref(),
+            self.action_process.is_some(),
+            id,
+        )
+        .await?;
         // Each generation gets a fresh action lane; build it before the swap so
         // a pool failure leaves the current generation fully intact.
-        let action_pool = Arc::new(
-            Pool::new_actions(PoolConfig {
-                limits: self.pool.limits().clone(),
-                ..PoolConfig::default()
-            })
-            .map_err(|e| Error::Invalid(e.to_string()))?,
-        );
+        let action_pool = if self.action_process.is_none() {
+            Some(Arc::new(
+                Pool::new_actions(PoolConfig {
+                    limits: self.pool.limits().clone(),
+                    ..PoolConfig::default()
+                })
+                .map_err(|e| Error::Invalid(e.to_string()))?,
+            ))
+        } else {
+            None
+        };
         Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
         Box::pin(window_state::remove_plugins(
             &self.database,
@@ -219,35 +231,11 @@ impl Coordinator {
             .persist_install_order(self.database.directory())?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
-        // Cancel old-generation actions so a reload cannot leave revoked network
-        // grants running in old worlds; the old pool tears down detached.
-        self.action_pool.cancel_actions();
-        if let Some(previous) = &self.plugins {
-            for worker in previous.workers.values() {
-                worker.stop().await;
-            }
-        }
+        self.retire_actions_for_reload(&candidate).await;
         self.action_pool = action_pool;
         self.kinds = candidate.client_kinds();
 
-        let mut changed = std::collections::BTreeSet::new();
-
-        if let Some(previous) = &self.plugins {
-            for (id, artifact) in &previous.catalog.plugins {
-                if candidate.catalog.plugins.get(id).is_none_or(|next| {
-                    serde_json::to_value(&artifact.manifest).ok()
-                        != serde_json::to_value(&next.manifest).ok()
-                }) {
-                    changed.insert(id.clone());
-                }
-            }
-
-            for id in candidate.catalog.plugins.keys() {
-                if !previous.catalog.plugins.contains_key(id) {
-                    changed.insert(id.clone());
-                }
-            }
-        }
+        let changed = self.changed_plugins(&candidate);
         self.plugins = Some(Arc::new(candidate));
 
         let catalog = self.metadata()?;
@@ -265,6 +253,42 @@ impl Coordinator {
         self.invalidate(None);
         self.refresh().await;
         self.metadata()
+    }
+
+    fn changed_plugins(
+        &self,
+        candidate: &crate::plugins::Loaded,
+    ) -> std::collections::BTreeSet<String> {
+        let Some(previous) = &self.plugins else {
+            return Default::default();
+        };
+        previous
+            .catalog
+            .plugins
+            .keys()
+            .chain(candidate.catalog.plugins.keys())
+            .filter(|id| !candidate.same_plugin(previous, id))
+            .cloned()
+            .collect()
+    }
+
+    async fn retire_actions_for_reload(&self, candidate: &crate::plugins::Loaded) {
+        if let Some(pool) = &self.action_pool {
+            pool.cancel_actions();
+        }
+        let Some(previous) = &self.plugins else {
+            return;
+        };
+        for worker in previous.workers.values() {
+            worker.stop().await;
+        }
+        if let Some(process) = &self.action_process {
+            for (id, source) in &previous.action_sources {
+                if !candidate.same_action_source(previous, id) {
+                    process.retire(source);
+                }
+            }
+        }
     }
 
     pub(super) fn asset_page(

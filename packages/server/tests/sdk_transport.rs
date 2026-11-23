@@ -150,13 +150,14 @@ fn startup_failure_and_cancelled_repeated_shutdown_release_disk() {
         std::fs::create_dir_all(&directory).unwrap();
         let storage = Storage::Disk(directory.join("db"));
         let mut invalid = config(storage.clone());
-        invalid.bundle = Arc::new(
+        let broken = || {
             Bundle::new(
                 "export function describe() { throw new Error('TKM7 startup sentinel'); }",
                 None,
             )
-            .unwrap(),
-        );
+            .unwrap()
+        };
+        invalid.bundle = Arc::new(broken().with_transactions(broken()));
         let failure = Backend::start(invalid)
             .await
             .err()

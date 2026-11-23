@@ -73,7 +73,7 @@ fn write(input: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
         .try_send(value)
         .map_err(|_| "Worker write queue full or closed".into())
 }
-fn oversized(value: &Value) -> Result<bool, String> {
+pub(in crate::host) fn oversized(value: &Value) -> Result<bool, String> {
     Ok(serde_json::to_vec(value).map_err(|e| e.to_string())?.len() >= WORKER_FRAME_BYTES)
 }
 struct Control<'a> {
@@ -166,7 +166,7 @@ async fn run(
     }
 }
 // fill_buf is cancellation-safe. Keep the partial frame across select branches.
-async fn read_frame(
+pub(in crate::host) async fn read_frame(
     output: &mut (impl AsyncBufRead + Unpin),
     frame: &mut Vec<u8>,
 ) -> Result<Option<Vec<u8>>, String> {
@@ -205,7 +205,7 @@ async fn forward_stderr(label: String, mut stderr: tokio::process::ChildStderr) 
     }
 }
 
-async fn write_messages(
+pub(in crate::host) async fn write_messages(
     mut input: tokio::process::ChildStdin,
     mut outgoing: mpsc::Receiver<Value>,
 ) -> Result<(), String> {
@@ -246,15 +246,31 @@ fn forward_operation_result(
     if let Ok((call, op, result)) = result
         && calls.get(&call).is_some_and(|c| !c.active.is_cancelled())
     {
-        let mut message = match result {
-            Ok(value) => json!({"type":"opResult","id":op,"value":value}),
-            Err(error) => json!({"type":"opResult","id":op,"error":error}),
-        };
-        if oversized(&message)? {
-            message = json!({"type":"opResult","id":op,"error":"Host operation result exceeds 1 MiB worker limit"});
-        }
-        write(input, message)?;
+        write(input, operation_reply(None, op, result)?)?;
     }
 
     Ok(())
+}
+
+pub(in crate::host) fn operation_reply(
+    route: Option<(u64, u64)>,
+    op: u64,
+    result: Result<Value, String>,
+) -> Result<Value, String> {
+    let mut message = json!({"type":"opResult","id":op});
+    if let Some((slot, call)) = route {
+        message["slot"] = json!(slot);
+        message["call"] = json!(call);
+    }
+    match result {
+        Ok(value) => message["value"] = value,
+        Err(error) => message["error"] = json!(error),
+    }
+    if oversized(&message)? {
+        if let Some(object) = message.as_object_mut() {
+            object.remove("value");
+        }
+        message["error"] = json!("Host operation result exceeds 1 MiB worker limit");
+    }
+    Ok(message)
 }

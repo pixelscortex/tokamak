@@ -1,4 +1,37 @@
+use tokio::task::JoinSet;
+
 use super::*;
+use crate::{
+    host::{action_process::Source, worker::Supervisor},
+    service::{FunctionKind, InspectedBundle},
+};
+
+const ACTION_INSPECTIONS: usize = 8;
+
+struct Prepared {
+    worker: Option<Arc<Supervisor>>,
+    server: Option<PreparedServer>,
+}
+
+struct PreparedServer {
+    bundle: Arc<Bundle>,
+    inspected: InspectedBundle,
+    space: DataSpace,
+    source: Option<Arc<Source>>,
+    inspect_source: bool,
+}
+
+impl Prepared {
+    async fn check_actions(self) -> Result<Self, Error> {
+        if let Some(server) = &self.server
+            && server.inspect_source
+            && let Some(source) = &server.source
+        {
+            source.inspect().await?;
+        }
+        Ok(self)
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StartupPolicy {
@@ -11,16 +44,27 @@ impl Loaded {
         catalog: Catalog,
         pool: &engine::Pool,
         policy: StartupPolicy,
+        quickjs: bool,
     ) -> Result<Self, Error> {
-        Self::load_with_policy(catalog, pool, None, policy).await
+        Self::load_with_policy(catalog, pool, None, policy, quickjs, None).await
     }
 
     pub async fn load_reusing(
         catalog: Catalog,
         pool: &engine::Pool,
         previous: Option<&Self>,
+        quickjs: bool,
+        reloaded: &str,
     ) -> Result<Self, Error> {
-        Self::load_with_policy(catalog, pool, previous, StartupPolicy::Strict).await
+        Self::load_with_policy(
+            catalog,
+            pool,
+            previous,
+            StartupPolicy::Strict,
+            quickjs,
+            Some(reloaded),
+        )
+        .await
     }
 
     async fn load_with_policy(
@@ -28,6 +72,8 @@ impl Loaded {
         pool: &engine::Pool,
         previous: Option<&Self>,
         policy: StartupPolicy,
+        quickjs: bool,
+        reloaded: Option<&str>,
     ) -> Result<Self, Error> {
         let mut loaded = Self {
             catalog,
@@ -37,20 +83,35 @@ impl Loaded {
             inspected: BTreeMap::new(),
             contracts: BTreeMap::new(),
             workers: BTreeMap::new(),
+            action_sources: BTreeMap::new(),
             skipped: BTreeMap::new(),
         };
-        for id in loaded.catalog.order.clone() {
-            if let Some(reason) = loaded.skipped_dependency(&id) {
-                loaded.skip(id, reason);
-                continue;
+        if quickjs && reloaded.is_none() {
+            let mut checked = Self::check_startup_actions(&loaded.catalog, pool).await?;
+            for (index, id) in loaded.catalog.order.clone().into_iter().enumerate() {
+                let prepared = checked.remove(&index).expect("plugin preparation result");
+                loaded.apply_plugin(id, prepared, policy, previous)?;
             }
-            if let Err(error) = loaded.prepare_plugin(&id, pool, previous).await {
-                if policy == StartupPolicy::Strict
-                    && !previous.is_some_and(|old| old.skipped.contains_key(&id))
-                {
-                    return Err(error);
+        } else {
+            for id in loaded.catalog.order.clone() {
+                if let Some(reason) = loaded.skipped_dependency(&id) {
+                    loaded.skip(id, reason);
+                    continue;
                 }
-                loaded.skip(id, error.to_string());
+                let prepared = Self::prepare_plugin(
+                    &loaded.catalog,
+                    &id,
+                    pool,
+                    previous,
+                    quickjs,
+                    reloaded == Some(id.as_str()),
+                )
+                .await;
+                let prepared = match prepared {
+                    Ok(prepared) => prepared.check_actions().await,
+                    Err(error) => Err(error),
+                };
+                loaded.apply_plugin(id, prepared, policy, previous)?;
             }
         }
         loaded.remove_skipped()?;
@@ -76,54 +137,156 @@ impl Loaded {
         Ok(loaded)
     }
 
+    async fn check_startup_actions(
+        catalog: &Catalog,
+        pool: &engine::Pool,
+    ) -> Result<BTreeMap<usize, Result<Prepared, Error>>, Error> {
+        let mut checks = JoinSet::new();
+        let mut ordered = BTreeMap::new();
+        // Describe transactions serially through the server's pool, while
+        // independent action inspections run in separate processes.
+        for (index, id) in catalog.order.iter().enumerate() {
+            if checks.len() == ACTION_INSPECTIONS
+                && let Some(result) = checks.join_next().await
+            {
+                let (index, prepared) =
+                    result.map_err(|error: tokio::task::JoinError| invalid(error.to_string()))?;
+                ordered.insert(index, prepared);
+            }
+
+            match Self::prepare_plugin(catalog, id, pool, None, true, false).await {
+                Ok(prepared) => {
+                    checks.spawn(async move { (index, prepared.check_actions().await) });
+                }
+                Err(error) => {
+                    ordered.insert(index, Err(error));
+                }
+            }
+        }
+        while let Some(result) = checks.join_next().await {
+            let (index, prepared) = result.map_err(|error| invalid(error.to_string()))?;
+            ordered.insert(index, prepared);
+        }
+        Ok(ordered)
+    }
+
     async fn prepare_plugin(
-        &mut self,
+        catalog: &Catalog,
         id: &str,
         pool: &engine::Pool,
         previous: Option<&Self>,
-    ) -> Result<(), Error> {
-        let artifact = &self.catalog.plugins[id];
-        let worker = prepare_worker(&self.catalog, id, artifact)?;
-        if let Some(bundle) = &artifact.bundle {
-            let cached = previous
-                .filter(|old| {
-                    old.catalog
-                        .plugins
-                        .get(id)
-                        .and_then(|p| p.bundle.as_ref())
-                        .is_some_and(|old| Arc::ptr_eq(old, bundle))
-                })
-                .and_then(|old| old.inspected.get(id));
+        quickjs: bool,
+        reloaded: bool,
+    ) -> Result<Prepared, Error> {
+        let artifact = &catalog.plugins[id];
+        let worker = if quickjs {
+            None
+        } else {
+            prepare_worker(catalog, id, artifact)?
+        };
+        let unchanged = previous.filter(|old| {
+            old.catalog.plugins.get(id).is_some_and(|old| {
+                old.manifest.hashes == artifact.manifest.hashes
+                    && serde_json::to_value(&old.manifest).ok()
+                        == serde_json::to_value(&artifact.manifest).ok()
+            })
+        });
+        let server_bundle = if quickjs {
+            artifact.transactions().await?
+        } else {
+            artifact.bundle.clone()
+        };
+        let server = if let Some(bundle) = server_bundle {
+            let cached = if quickjs {
+                unchanged.and_then(|old| old.inspected.get(id))
+            } else {
+                previous
+                    .filter(|old| {
+                        old.catalog
+                            .plugins
+                            .get(id)
+                            .and_then(|p| p.bundle.as_ref())
+                            .is_some_and(|old| Arc::ptr_eq(old, &bundle))
+                    })
+                    .and_then(|old| old.inspected.get(id))
+            };
             let inspected = match cached {
                 Some(value) => value.clone(),
                 None => crate::service::inspect(pool, bundle.clone()).await?,
             };
-            for name in &artifact.manifest.public_functions {
-                let explanation = match inspected.visibility.get(name) {
-                    Some(Visibility::Public) => continue,
-                    Some(Visibility::Internal) => "is internal and cannot be exported",
-                    Some(Visibility::PluginOnly) => {
-                        "is plugin-only and cannot be exported to windows"
-                    }
-                    None => "is not a backend function",
-                };
-                return Err(invalid(format!("Function {id}/{name} {explanation}")));
-            }
-            for name in &artifact.manifest.plugin_functions {
-                if inspected.visibility.get(name) != Some(&Visibility::PluginOnly) {
-                    return Err(invalid(format!("Missing plugin-only function {id}/{name}")));
-                }
-            }
+            validate_exports(id, &artifact.manifest, &inspected)?;
             validate_maintenance(artifact, Some(&inspected.kinds))?;
             let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+            let (source, inspect_source) = if quickjs
+                && inspected
+                    .kinds
+                    .values()
+                    .any(|kind| *kind == FunctionKind::Action)
+            {
+                let prior = unchanged
+                    .filter(|_| !reloaded)
+                    .and_then(|old| old.action_sources.get(id));
+                match prior {
+                    Some(source) => (Some(source.clone()), false),
+                    None => (Some(artifact.action_source(id)?), true),
+                }
+            } else {
+                (None, false)
+            };
+            Some(PreparedServer {
+                bundle,
+                inspected,
+                space,
+                source,
+                inspect_source,
+            })
+        } else {
+            validate_maintenance(artifact, None)?;
+            None
+        };
+        Ok(Prepared { worker, server })
+    }
+
+    fn apply_plugin(
+        &mut self,
+        id: String,
+        prepared: Result<Prepared, Error>,
+        policy: StartupPolicy,
+        previous: Option<&Self>,
+    ) -> Result<(), Error> {
+        if let Some(reason) = self.skipped_dependency(&id) {
+            self.skip(id, reason);
+            return Ok(());
+        }
+
+        let Prepared { worker, server } = match prepared {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                if policy == StartupPolicy::Strict
+                    && !previous.is_some_and(|old| old.skipped.contains_key(&id))
+                {
+                    return Err(error);
+                }
+                self.skip(id, error.to_string());
+                return Ok(());
+            }
+        };
+        if let Some(PreparedServer {
+            bundle,
+            inspected,
+            space,
+            source,
+            ..
+        }) = server
+        {
             for (local_name, kind) in &inspected.kinds {
                 let name = format!("{id}/{local_name}");
                 self.targets.insert(
                     name,
                     Target {
-                        owner: id.to_owned(),
+                        owner: id.clone(),
                         local_name: local_name.clone(),
-                        mutation: *kind == crate::service::FunctionKind::Mutation,
+                        mutation: *kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
                         kind: *kind,
                         bundle: bundle.clone(),
@@ -131,12 +294,13 @@ impl Loaded {
                     },
                 );
             }
-            self.inspected.insert(id.to_owned(), inspected);
-        } else {
-            validate_maintenance(artifact, None)?;
+            if let Some(source) = source {
+                self.action_sources.insert(id.clone(), source);
+            }
+            self.inspected.insert(id.clone(), inspected);
         }
         if let Some(worker) = worker {
-            self.workers.insert(id.to_owned(), worker);
+            self.workers.insert(id, worker);
         }
         Ok(())
     }
@@ -162,6 +326,8 @@ impl Loaded {
         self.catalog.update_metadata()?;
         self.targets
             .retain(|_, target| !skipped.contains_key(&target.owner));
+        self.action_sources
+            .retain(|id, _| !skipped.contains_key(id));
         self.workers.retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
         Ok(())
@@ -222,6 +388,24 @@ impl Loaded {
         metadata["schema"] = self.descriptor["schema"].clone();
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(())
+    }
+
+    pub(crate) fn same_action_source(&self, previous: &Self, plugin: &str) -> bool {
+        self.action_sources
+            .get(plugin)
+            .zip(previous.action_sources.get(plugin))
+            .is_some_and(|(current, previous)| Arc::ptr_eq(current, previous))
+    }
+
+    pub(crate) fn same_plugin(&self, previous: &Self, plugin: &str) -> bool {
+        self.catalog
+            .plugins
+            .get(plugin)
+            .zip(previous.catalog.plugins.get(plugin))
+            .is_some_and(|(current, previous)| {
+                serde_json::to_value(&current.manifest).ok()
+                    == serde_json::to_value(&previous.manifest).ok()
+            })
     }
 
     pub fn client_kinds(&self) -> BTreeMap<String, crate::service::FunctionKind> {
@@ -357,6 +541,28 @@ fn prepare_worker(
         &artifact.manifest.plugin.permissions,
     )
     .map(Some)
+}
+
+fn validate_exports(
+    id: &str,
+    manifest: &Manifest,
+    inspected: &crate::service::InspectedBundle,
+) -> Result<(), Error> {
+    for name in &manifest.public_functions {
+        let explanation = match inspected.visibility.get(name) {
+            Some(Visibility::Public) => continue,
+            Some(Visibility::Internal) => "is internal and cannot be exported",
+            Some(Visibility::PluginOnly) => "is plugin-only and cannot be exported to windows",
+            None => "is not a backend function",
+        };
+        return Err(invalid(format!("Function {id}/{name} {explanation}")));
+    }
+    for name in &manifest.plugin_functions {
+        if inspected.visibility.get(name) != Some(&Visibility::PluginOnly) {
+            return Err(invalid(format!("Missing plugin-only function {id}/{name}")));
+        }
+    }
+    Ok(())
 }
 
 fn validate_maintenance(

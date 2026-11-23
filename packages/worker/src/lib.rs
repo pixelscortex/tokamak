@@ -7,7 +7,7 @@ mod windows;
 
 pub use discovery::{resolve, search_paths};
 pub use logs::send as log;
-pub use runtime::LocalRuntime;
+pub use runtime::{LocalRuntime, configured_action_heap_bytes, configured_heap_bytes};
 #[cfg(not(windows))]
 use std::process::Stdio;
 use std::{collections::BTreeMap, path::Path};
@@ -87,6 +87,77 @@ impl Process {
         Ok((process, runtime))
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn action_host_path() -> Result<std::path::PathBuf, String> {
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        // Cargo integration tests run from the target directory's deps folder.
+        let executable = if executable.parent().and_then(Path::file_name) == Some("deps".as_ref()) {
+            executable
+                .parent()
+                .ok_or("Action process executable directory missing")?
+                .with_file_name("tokamak-server")
+        } else {
+            executable
+        };
+        LocalRuntime::host_path(&executable)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub fn action_host_path() -> Result<std::path::PathBuf, String> {
+        Err("The action process is available on macOS and Linux".into())
+    }
+
+    pub fn launch_actions(host: &Path) -> Result<Self, String> {
+        Self::launch_action_host(host, None, Path::new("--actions"), None)
+    }
+
+    pub fn inspect_actions(
+        host: &Path,
+        code: &Path,
+        action: Option<(usize, bool)>,
+    ) -> Result<Self, String> {
+        let options = action.map(|(heap, worker_entry)| format!("{heap}:{worker_entry}"));
+        Self::launch_action_host(
+            host,
+            Some(Path::new("--inspect-actions")),
+            code,
+            options.as_deref().map(std::ffi::OsStr::new),
+        )
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn launch_action_host(
+        host: &Path,
+        mode: Option<&Path>,
+        code: &Path,
+        inspection: Option<&std::ffi::OsStr>,
+    ) -> Result<Self, String> {
+        let cwd = host
+            .parent()
+            .ok_or("Action process executable directory missing")?;
+        let (child, containment, guardian) = launch(
+            host,
+            mode,
+            code,
+            cwd,
+            &BTreeMap::new(),
+            Lane::Action,
+            inspection.map(|options| ("TOKAMAK_ACTION_INSPECT", options)),
+        )
+        .map_err(|error| format!("Launch {}: {error}", host.display()))?;
+        Ok(Self::contained(child, containment, guardian))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn launch_action_host(
+        _: &Path,
+        _: Option<&Path>,
+        _: &Path,
+        _: Option<&std::ffi::OsStr>,
+    ) -> Result<Self, String> {
+        Err("The action process is available on macOS and Linux".into())
+    }
+
     pub fn launch(
         bun: &Path,
         entry: &Path,
@@ -118,6 +189,11 @@ impl Process {
             guardian,
             _guardian_input: input,
         }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn id(&self) -> Option<u32> {
+        self.child.id()
     }
 
     pub fn pipes(&mut self) -> Result<(ChildStdin, ChildStdout, ChildStderr), String> {

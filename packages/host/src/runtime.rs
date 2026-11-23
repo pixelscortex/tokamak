@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Exception, Function, Module, Object,
     Persistent, Promise, prelude::Func,
@@ -23,33 +23,28 @@ const YIELD_LIMIT: Duration = Duration::from_secs(5);
 const HEAP_ENV: &str = "TOKAMAK_PLUGIN_HOST_HEAP_MIB";
 
 pub fn heap_bytes() -> Result<usize> {
-    let Some(value) = std::env::var_os(HEAP_ENV) else {
-        return Ok(256 * 1024 * 1024);
-    };
-    value
-        .to_str()
-        .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|mib| *mib != 0)
-        .and_then(|mib| mib.checked_mul(1024 * 1024))
-        .with_context(|| format!("{HEAP_ENV} must be a positive integer in MiB"))
+    tokamak_worker::configured_heap_bytes(HEAP_ENV).map_err(anyhow::Error::msg)
 }
 
 #[derive(Default)]
-struct Watchdog {
+pub(crate) struct Watchdog {
     deadline: Cell<Option<Instant>>,
     tripped: Cell<bool>,
 }
 
 impl Watchdog {
-    fn poll<T>(&self, run: impl FnOnce() -> T) -> T {
+    pub(crate) fn poll<T>(&self, run: impl FnOnce() -> T) -> T {
         self.deadline.set(Some(Instant::now() + YIELD_LIMIT));
         let result = run();
         self.deadline.set(None);
         result
     }
 
-    fn interrupt(&self) -> bool {
+    pub(crate) fn tripped(&self) -> bool {
+        self.tripped.get()
+    }
+
+    pub(crate) fn interrupt(&self) -> bool {
         if self.deadline.get().is_some_and(|end| Instant::now() >= end) {
             self.tripped.set(true);
         }

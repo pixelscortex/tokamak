@@ -97,9 +97,10 @@ writes and schema migrations remain deferred.
 
 ## Actions
 
-`action({...})` (also returned by `createFunctions`) runs on a separate worker
-lane, with a heap cap and no load/call deadline. Actions keep the real clock and
-randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
+`action({...})` (also returned by `createFunctions`) runs separately from
+queries and mutations. The default runtime caps the heap and has no load or call
+deadline. See [plugin action runtimes](#plugin-action-runtimes) for the optional
+QuickJS action process. Actions keep the real clock and randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
 call rejoins the serialized coordinator and owns its own transaction. The action
 itself is never retried; external effects and earlier mutations remain after a
 later failure. Queries and mutations cannot call actions or fetch.
@@ -261,6 +262,8 @@ The bundle task writes:
 
 - `FEATURE/dist/bundle.js`: one self-contained ESM module.
 - `FEATURE/dist/bundle.js.map`: linked source map with source contents.
+- `FEATURE/dist/transactions.js` and its map: the companion for the QuickJS action process.
+  It contains queries, mutations and inspection metadata.
 - `FEATURE/_generated/api.ts`: typed public references.
 - `FEATURE/_generated/internal.ts`: references for the plugin's server code.
 
@@ -420,7 +423,7 @@ The SDK changes do not link JavaScript bundles into the native binary. Native
 size measurements therefore measure the inherited host only; real QuickJS and
 SurrealDB integration remains for the host issues and their tests.
 
-## Plugin actions in Bun
+## Plugin action runtimes
 
 Set `runtime: "worker"` in `definePlugin` to build actions for a long-lived Bun
 process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
@@ -428,6 +431,43 @@ process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
 `ctx.signal` observes cancellation. Module state persists until reload, disable,
 or process exit. Bun must be installed on the host. See the root README's
 [worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
+
+With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, all plugins' actions run in one action
+process. Every action call has its own QuickJS runtime and starts with fresh
+module state, including calls to `runtime: "worker"` plugins
+that kept module state between calls on Bun. There is no `process` or
+`process.env`; use `await ctx.env(name)` and declare `env:<name>`, as in default
+actions.
+Declare `net:<hostname>` for every host you fetch from; Bun did not enforce
+these grants for worker plugins.
+
+The server runs up to 64 signed-in calls per plugin and 128 total, with no
+queue. Anonymous sign-in counts toward the total and has four slots across all
+plugins outside the per-plugin limit; a fifth request is refused as busy. A
+`runtime: "worker"` plugin could run up to 128 calls at once on Bun and runs up
+to 64 with QuickJS.
+
+The default QuickJS heap limit is 64 MiB per call. The process-wide worst case
+is 128 times that limit (8 GiB by default), if every call fills its heap. The
+Linux allocator may keep some freed memory per thread. Every call compiles its
+action bundle again, as the server's engine did for default actions. In a
+release build on an Apple M4 Pro, 100 sequential calls took 0.569 s with a
+trivial bundle and 12.343 s with a 1.30 MB bundle of 9,976 distinct functions
+(5.69 and 123.43 ms per call, respectively). Compilation counts toward the
+one-second default sign-in budget.
+
+At each startup, the plugin host evaluates each plugin's action bundle once in
+a separate process with no permissions, no network and no host operations. A
+bundle that needs network access to load fails this check.
+
+Queries, mutations, and the top-level code of modules they import, including
+modules shared with actions, still run in the server. Action definitions,
+helpers, and imports used only by actions are not loaded by the server. The
+server trusts the action process to identify which call owns each host
+operation. A memory-safety bug in QuickJS could expose other plugins' network
+permissions and in-flight calls in the action process. The server itself does
+not run those actions. See [Plugin host](../host/README.md#action-process)
+for deadlines, limits, and recovery.
 
 ## Web client entries
 
@@ -469,7 +509,8 @@ Queries, mutations and actions receive `ctx.auth.user` (`id`, `name`, and
 `name`). Nested calls keep the same caller on signed-in requests. Before
 sign-in, an `auth.method` action and its nested calls are anonymous:
 `ctx.auth` throws, and nested calls can only access private queries and mutations
-of that provider.
+of that provider. With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, the short sign-in
+time budget includes starting the call's QuickJS runtime and evaluating the bundle.
 
 In a window component, call `auth.me()` during setup. It returns a live object
 with `id`, `name`, `role`, and `device`. Read the fields in reactive code so they

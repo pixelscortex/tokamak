@@ -1,0 +1,273 @@
+//! Exercise the supervisor with a real process and the action pipe protocol.
+
+use std::os::unix::fs::PermissionsExt;
+
+use super::*;
+
+const PEER: &str = r#"#!/bin/sh
+field() { value=${line#*\"$1\":}; printf "%s" "${value%%[!0-9]*}"; }
+while IFS= read -r line; do
+    case "$line" in
+        *'"type":"ping"'*)
+            printf '{"type":"pong","id":%s}\n' "$(field id)" ;;
+        *'"fn":"sign-in"'*'"network":false'*)
+            printf '{"type":"op","id":%s,"slot":%s,"call":%s,"name":"sign-in","payload":null}\n' "$(field id)" "$(field slot)" "$(field id)" ;;
+        *'"fn":"echo"'*)
+            printf '{"type":"result","id":%s,"slot":%s,"value":"ok"}\n' "$(field id)" "$(field slot)" ;;
+        *'"fn":"hold"'*)
+            printf '{"type":"op","id":%s,"slot":%s,"call":%s,"name":"hold","payload":null}\n' "$(field id)" "$(field slot)" "$(field id)" ;;
+        *'"fn":"burst"'*)
+            id=$(field id)
+            slot=$(field slot)
+            op=1
+            while [ "$op" -le 65 ]; do
+                printf '{"type":"op","id":%s,"slot":%s,"call":%s,"name":"hold","payload":null}\n' "$op" "$slot" "$id"
+                op=$((op + 1))
+            done ;;
+        *'"type":"opResult"'*'"error"'*|*'"error"'*'"type":"opResult"'*)
+            printf '{"type":"result","id":%s,"slot":%s,"error":"%s"}\n' \
+                "$(field call)" "$(field slot)" "$(printf '%s\n' "$line" | /usr/bin/sed -E 's/.*"error":"([^"]*)".*/\1/')" ;;
+        *'"type":"opResult"'*'"value":"anonymous"'*)
+            printf '{"type":"result","id":%s,"slot":%s,"value":"anonymous"}\n' "$(field call)" "$(field slot)" ;;
+    esac
+done
+"#;
+
+fn setup(timing: Timing) -> (tempfile::TempDir, Arc<Supervisor>) {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("action-peer");
+    std::fs::write(&path, PEER).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    (
+        directory,
+        Supervisor::with_timing(path, 256 * 1024 * 1024, timing),
+    )
+}
+
+fn source(name: &str) -> Arc<Source> {
+    Source::new(
+        name.into(),
+        Snapshot::Legacy(tempfile::NamedTempFile::new().unwrap()),
+        Arc::new(Bundle::new(String::new(), None).unwrap()),
+        true,
+    )
+}
+
+fn signal(process: &Running, signal: libc::c_int) {
+    assert_eq!(unsafe { libc::kill(process.pid as i32, signal) }, 0);
+}
+
+fn hold() -> (Arc<OpRegistry>, mpsc::UnboundedReceiver<()>) {
+    let (send, receive) = mpsc::unbounded_channel();
+    let mut ops = OpRegistry::new();
+    ops.register_async("hold", move |_| {
+        let send = send.clone();
+        async move {
+            send.send(()).unwrap();
+            std::future::pending().await
+        }
+    })
+    .unwrap();
+    ops.register_sync("sign-in", |_| Ok(json!("anonymous")))
+        .unwrap();
+    (Arc::new(ops), receive)
+}
+
+async fn echo(supervisor: &Supervisor, source: Arc<Source>) {
+    assert_eq!(
+        supervisor
+            .invoke(
+                source,
+                "echo".into(),
+                Value::Null,
+                Arc::new(OpRegistry::new())
+            )
+            .await
+            .unwrap(),
+        "ok"
+    );
+}
+
+#[tokio::test]
+async fn stopped_child_fails_running_calls_and_is_replaced() {
+    let (_directory, supervisor) = setup(Timing {
+        ping: Duration::from_millis(500),
+        unresponsive: Duration::from_secs(2),
+        ..Timing::default()
+    });
+    let source = source("waiting");
+    let (ops, mut entered) = hold();
+    let waiting = tokio::spawn({
+        let supervisor = supervisor.clone();
+        let source = source.clone();
+        async move {
+            supervisor
+                .invoke(source, "hold".into(), Value::Null, ops)
+                .await
+        }
+    });
+    if tokio::time::timeout(Duration::from_secs(8), entered.recv())
+        .await
+        .unwrap()
+        .is_none()
+    {
+        panic!(
+            "test invocation failed to start: {:?}",
+            waiting.await.unwrap()
+        );
+    }
+    let old = supervisor.process().await.unwrap();
+    signal(&old, libc::SIGSTOP);
+    let error = tokio::time::timeout(Duration::from_secs(9), waiting)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error, "Action process is unresponsive: heartbeat timed out");
+
+    echo(&supervisor, source).await;
+    assert_ne!(supervisor.process().await.unwrap().pid, old.pid);
+    supervisor.stop().await;
+}
+
+#[tokio::test]
+async fn heartbeat_allows_a_healthy_child_to_reply_after_a_server_pause() {
+    let (_directory, supervisor) = setup(Timing {
+        ping: Duration::from_millis(500),
+        unresponsive: Duration::from_secs(2),
+        ..Timing::default()
+    });
+    let source = source("paused");
+    echo(&supervisor, source.clone()).await;
+    let process = supervisor.process().await.unwrap();
+
+    // Pause the current-thread server executor, leaving the peer running.
+    std::thread::sleep(Duration::from_millis(2250));
+    echo(&supervisor, source).await;
+    assert_eq!(supervisor.process().await.unwrap().pid, process.pid);
+    supervisor.stop().await;
+}
+
+#[tokio::test]
+async fn healthy_idle_child_resets_backoff_without_completing_a_call() {
+    let (_directory, supervisor) = setup(Timing {
+        healthy: Duration::from_millis(300),
+        ..Timing::default()
+    });
+    let first = supervisor.process().await.unwrap();
+    signal(&first, libc::SIGKILL);
+    first.ended.cancelled().await;
+
+    let healthy = supervisor.process().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(350)).await;
+    signal(&healthy, libc::SIGKILL);
+    healthy.ended.cancelled().await;
+    assert_ne!(supervisor.process().await.unwrap().pid, healthy.pid);
+    assert_eq!(
+        supervisor.restart.lock().await.retry_at,
+        healthy
+            .stopped_at
+            .get()
+            .map(|stopped| *stopped + BASE_DELAY)
+    );
+    supervisor.stop().await;
+}
+
+#[tokio::test]
+async fn full_plugin_call_and_operation_shares_leave_room_for_another_plugin() {
+    let (_directory, supervisor) = setup(Timing::default());
+    let plugin = source("saturated");
+    let peer = source("peer");
+    let (ops, mut entered) = hold();
+    let mut waiting = tokio::task::JoinSet::new();
+    for _ in 0..PLUGIN_CAPACITY {
+        let (supervisor, plugin, ops) = (supervisor.clone(), plugin.clone(), ops.clone());
+        waiting.spawn(async move {
+            supervisor
+                .invoke(plugin, "hold".into(), Value::Null, ops)
+                .await
+        });
+    }
+    tokio::time::timeout(Duration::from_secs(5), async {
+        for _ in 0..PLUGIN_CAPACITY {
+            entered.recv().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    let error = supervisor
+        .invoke(plugin.clone(), "echo".into(), Value::Null, ops.clone())
+        .await
+        .unwrap_err();
+    assert_eq!(error, "Plugin saturated reached its action call limit (64)");
+    echo(&supervisor, peer.clone()).await;
+
+    let timeout = Duration::from_secs(15);
+    let sign_in = supervisor.try_sign_in(timeout).expect("sign-in slot");
+    assert_eq!(
+        supervisor
+            .invoke_with(
+                plugin.clone(),
+                "sign-in".into(),
+                Value::Null,
+                ops.clone(),
+                sign_in
+            )
+            .await
+            .unwrap(),
+        "anonymous"
+    );
+    assert_eq!(
+        supervisor.slots.available_permits(),
+        WORKER_CAPACITY - PLUGIN_CAPACITY
+    );
+
+    assert_anonymous_limit(&supervisor, &ops, &mut entered, timeout).await;
+
+    waiting.shutdown().await;
+    let error = supervisor
+        .invoke(plugin, "burst".into(), Value::Null, ops)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error,
+        "Plugin saturated reached its host operation limit (64)"
+    );
+    echo(&supervisor, peer).await;
+    supervisor.stop().await;
+}
+
+async fn assert_anonymous_limit(
+    supervisor: &Arc<Supervisor>,
+    ops: &Arc<OpRegistry>,
+    entered: &mut mpsc::UnboundedReceiver<()>,
+    timeout: Duration,
+) {
+    let mut anonymous = tokio::task::JoinSet::new();
+    for index in 0..ANONYMOUS_CAPACITY {
+        let sign_in = supervisor.try_sign_in(timeout).expect("sign-in slot");
+        let (supervisor, ops) = (supervisor.clone(), ops.clone());
+        let provider = source(&format!("provider-{index}"));
+        anonymous.spawn(async move {
+            supervisor
+                .invoke_with(provider, "hold".into(), Value::Null, ops, sign_in)
+                .await
+        });
+    }
+    tokio::time::timeout(Duration::from_secs(5), async {
+        for _ in 0..ANONYMOUS_CAPACITY {
+            entered.recv().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        supervisor.slots.available_permits(),
+        WORKER_CAPACITY - PLUGIN_CAPACITY - ANONYMOUS_CAPACITY
+    );
+    assert!(
+        supervisor.try_sign_in(timeout).is_none(),
+        "fifth sign-in was admitted"
+    );
+    anonymous.shutdown().await;
+}

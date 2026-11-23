@@ -14,6 +14,7 @@ export async function workerSources({
   header,
   pluginRoot,
   placement,
+  emitAction = true,
 }) {
   const paths = files.map((file) => join(root, file));
   placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root });
@@ -46,21 +47,22 @@ export async function workerSources({
           args: { kind: "any" },
           visibility: Visibility.Internal,
         });
-  await buildWorkerBundles({
-    root,
-    sdkRoot,
-    pluginRoot,
-    source: registrySource({
+  if (emitAction)
+    await buildWorkerBundles({
       root,
-      modules: actions,
-      providers: providers.filter((p) => p.methods.some((m) => m.kind === "action")),
-      lane: lanes.worker,
-      worker: true,
-      header,
-    }),
-    name: "worker",
-    plugins: placement ? [placementTransform(placement, lanes.worker)] : [],
-  });
+      sdkRoot,
+      pluginRoot,
+      source: registrySource({
+        root,
+        modules: actions,
+        providers: providers.filter((p) => p.methods.some((m) => m.kind === "action")),
+        lane: lanes.worker,
+        worker: true,
+        header,
+      }),
+      name: "worker",
+      plugins: placement ? [placementTransform(placement, lanes.worker)] : [],
+    });
   return {
     source: registrySource({
       root,

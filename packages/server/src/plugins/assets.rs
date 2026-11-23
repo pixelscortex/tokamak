@@ -220,10 +220,10 @@ fn artifact_path(root: &Path, name: &str) -> Result<PathBuf, Error> {
         return Err(invalid("Artifact paths must stay inside their directory"));
     }
 
-    let path = root
-        .join(relative)
+    let requested = root.join(relative);
+    let path = requested
         .canonicalize()
-        .map_err(|e| invalid(e.to_string()))?;
+        .map_err(|e| invalid(format!("Read {}: {e}", requested.display())))?;
 
     if !path.starts_with(root) {
         return Err(invalid("Artifact symlink escapes its directory"));

@@ -19,7 +19,9 @@ export function workerDispatch(
   ) => ReturnType<NonNullable<Parameters<typeof invocationHost>[2]>>,
   contracts?: Parameters<typeof invocationHost>[3],
   options?: {
+    observeInvocation?: boolean;
     errorMessage(error: unknown): string;
+    errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
   },
 ) {
@@ -79,14 +81,24 @@ export function workerDispatch(
       await invocation.close();
       const message =
         options?.errorMessage(error) ?? (error instanceof Error ? error.message : String(error));
-      if (calls.get(id) === call) send({ type: "result", id, error: message });
+      if (calls.get(id) === call) {
+        let stack: string | undefined;
+        try {
+          stack = options?.errorStack?.(error);
+        } catch {
+          // Error properties may have user-defined getters.
+        }
+        send({ type: "result", id, error: message, ...(stack === undefined ? {} : { stack }) });
+      }
     } finally {
       if (calls.get(id) === call) retire(id);
     }
   }
   return (message: WorkerMessage) => {
-    if (message.type === "invoke") void invoke(message.id, message.fn, message.args);
-    else if (message.type === "opResult") {
+    if (message.type === "invoke") {
+      const invocation = invoke(message.id, message.fn, message.args);
+      if (options?.observeInvocation) return invocation;
+    } else if (message.type === "opResult") {
       const op = pending.get(message.id);
       pending.delete(message.id);
       if (op) {

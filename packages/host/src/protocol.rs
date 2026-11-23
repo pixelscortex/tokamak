@@ -156,7 +156,7 @@ fn id(value: &Value) -> Result<u64> {
         .context("Invalid worker frame id")
 }
 
-fn read_frame(reader: &mut impl BufRead) -> Result<Option<Value>> {
+pub(crate) fn read_frame(reader: &mut impl BufRead) -> Result<Option<Value>> {
     let mut line = Vec::new();
     loop {
         let buffer = reader.fill_buf()?;
@@ -200,7 +200,7 @@ fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
     Ok(())
 }
 
-fn shutdown() -> ! {
+pub(crate) fn shutdown() -> ! {
     // The launcher makes the host the process group leader.
     unsafe {
         libc::kill(-libc::getpid(), libc::SIGKILL);

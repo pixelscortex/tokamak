@@ -70,12 +70,22 @@ and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
 for reserved signing inputs; signing, notarization and publishing are absent.
 
+## QuickJS plugin runtime
+
+Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` on macOS or Linux to run server actions
+in the shared [action process](packages/host/README.md#action-process) and local
+functions in the plugin host. Place `tokamak-plugin-host` alongside the server
+or set `TOKAMAK_PLUGIN_HOST` to its path. Rebuild plugins before switching an
+existing installation. Queries and mutations stay in the server.
+
 ## Plugin workers
 
 A plugin opts its actions into Bun with `runtime: "worker"` in `definePlugin`.
-Queries and mutations continue to run in QuickJS. Each opted-in plugin has one
-lazy, long-lived worker, preserving module state between actions. Bun must be
-installed on the machine; a missing executable produces
+Queries and mutations continue to run in QuickJS. With the default runtime,
+each opted-in plugin has one lazy Bun worker that preserves module state between
+actions. With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, every action gets fresh module
+state in its own QuickJS runtime in the action process. For Bun workers, Bun
+must be installed on the machine; a missing executable produces
 `Plugin <id> needs Bun: install from https://bun.sh`.
 
 The build emits a separate Bun action bundle and a generic SDK worker entry.
