@@ -155,7 +155,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             return Ok(None);
         }
         if flag == "--plugin-runtime" {
-            println!("{}", tokamak_worker::LocalRuntime::selected()?.name());
+            println!("{}", server::action_runtime()?);
             return Ok(None);
         }
         if flag == "--local-path" {
@@ -213,7 +213,7 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
 
 fn read_standalone_bundle(path: &Path) -> Result<Bundle, Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(path)?;
-    if tokamak_worker::LocalRuntime::selected()? != tokamak_worker::LocalRuntime::QuickJs {
+    if server::action_runtime()? != "quickjs" {
         return Ok(Bundle::new(source, None)?);
     }
     let mut map_path = path.as_os_str().to_owned();

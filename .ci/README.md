@@ -7,10 +7,11 @@ three fast jobs on every PR, and `.ci/check.sh` holds their commands:
   plus a byte-for-byte comparison of copied contract declarations against their owners.
 - `typescript`: type checks, plugin build tests, window component tests, and the web build.
 - `rust`: Rust unit tests and the host and worker suites on the default runtime.
-  The server runs only `claude_turns`, `codex_turns`, `local_functions`, and
-  `workers` on Bun first, then every server integration target and the server
-  binary unit tests on the QuickJS default. The turn replays use fake agents:
-  Bun writes the references, and QuickJS requires them and compares stored turns.
+  The Runner and its local suites cover QuickJS and the Bun fallback. The cloud
+  Server runs the server-only suites and the shared-server routing test with an
+  independent Runner. CI checks that the cloud dependency graph excludes the
+  local runtime. The turn replays use fake agents: Bun writes the references,
+  and QuickJS compares the stored turns against them.
 
 Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
 or the browser suite:
@@ -30,7 +31,8 @@ tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
 
 Run `bash .ci/release-macos.sh` on macOS arm64 for a manual local release, or
 manually dispatch the **Unsigned macOS release** workflow. The Tauri hook builds
-the release server sidecar and Chat resources before bundling. Outputs are
+the Runner and starter resources before bundling. The script then builds the
+cloud Server and actions-only host for the standalone archive. Outputs are
 `.ci-results/macos-arm64/Tokamak.app`, `Tokamak-macos-arm64.zip`, the standalone
 `server-macos-arm64.tar.gz`, and `SHA256SUMS.txt`. The zip preserves macOS bundle
 metadata. Actions artifacts wrap the directory for download; use the inner zip

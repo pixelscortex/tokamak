@@ -1,14 +1,17 @@
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
+#[cfg(any(feature = "local-runtime", target_os = "linux", target_os = "macos"))]
+use std::path::{Path, PathBuf};
 
+#[cfg(feature = "local-runtime")]
+use std::ffi::OsStr;
+
+#[cfg(feature = "local-runtime")]
 #[derive(Debug, PartialEq, Eq)]
 pub enum LocalRuntime {
     Bun,
     QuickJs,
 }
 
+#[cfg(feature = "local-runtime")]
 impl LocalRuntime {
     pub fn name(&self) -> &'static str {
         match self {
@@ -25,21 +28,27 @@ impl LocalRuntime {
     }
 
     pub fn host_path(executable: &Path) -> Result<PathBuf, String> {
-        let path = std::env::var_os("TOKAMAK_PLUGIN_HOST").map_or_else(
-            || executable.with_file_name("tokamak-plugin-host"),
-            PathBuf::from,
-        );
-        let missing = || format!("Could not find the plugin host at {}", path.display());
-        let resolved = path
-            .canonicalize()
-            .map_err(|error| format!("{}: {error}", missing()))?;
-        if !resolved.is_file() {
-            return Err(missing());
-        }
-        Ok(resolved)
+        host_path(executable)
     }
 }
 
+#[cfg(any(feature = "local-runtime", target_os = "linux", target_os = "macos"))]
+pub(super) fn host_path(executable: &Path) -> Result<PathBuf, String> {
+    let path = std::env::var_os("TOKAMAK_PLUGIN_HOST").map_or_else(
+        || executable.with_file_name("tokamak-plugin-host"),
+        PathBuf::from,
+    );
+    let missing = || format!("Could not find the plugin host at {}", path.display());
+    let resolved = path
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", missing()))?;
+    if !resolved.is_file() {
+        return Err(missing());
+    }
+    Ok(resolved)
+}
+
+#[cfg(feature = "local-runtime")]
 pub fn configured_heap_bytes(variable: &str) -> Result<usize, String> {
     heap_bytes(variable, 256)
 }
@@ -61,6 +70,7 @@ fn heap_bytes(variable: &str, default_mib: usize) -> Result<usize, String> {
         .ok_or_else(|| format!("{variable} must be a positive integer in MiB"))
 }
 
+#[cfg(feature = "local-runtime")]
 fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String> {
     if !supported {
         return Ok(LocalRuntime::Bun);
@@ -74,7 +84,7 @@ fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "local-runtime"))]
 mod tests {
     use super::{LocalRuntime, select};
     use std::ffi::OsStr;

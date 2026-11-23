@@ -27,9 +27,8 @@ Launch the desktop app:
 proto run bun -- run app
 ```
 
-The host builds Chat and the server, starts or reuses the local server and
-connects automatically. New thread creates a Chat thread. No external agent
-is started. See [app/README.md](app/README.md) for browser development and checks.
+The app builds the starter set, starts the Runner, and connects automatically.
+New thread creates a Chat thread. No external agent is started. See [app/README.md](app/README.md) for browser development and checks.
 
 ## Packages
 
@@ -65,30 +64,44 @@ Server/engine tests and SDK/build/app tests cover the runtime. Run
 disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 
 Ready pull requests run the Linux TypeScript, Rust, and lint checks. The Rust
-check runs Rust unit tests and the host and worker suites on the default. It
-runs only `claude_turns`, `codex_turns`, `local_functions`, and `workers` on Bun,
-then runs every server integration target once and the server binary unit tests
-on the QuickJS default. QuickJS requires and compares the Bun turn references.
+check builds both variants. It runs the local suites on the QuickJS default and
+exercises the Bun fallback, comparing the stored turn replays across runtimes.
+Suites that need only server functions run against the cloud Server build.
 Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
 and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
 for reserved signing inputs; signing, notarization and publishing are absent.
 
-## QuickJS plugin runtime
+## Build for a machine or the cloud
 
-On macOS and Linux, QuickJS runs local functions in the plugin host and server
-actions in the action process by default. Ship `tokamak-plugin-host` alongside
-the app and server, or set `TOKAMAK_PLUGIN_HOST` to its path. Bun is still
-needed to build plugins from source. Installed builds can run without it.
+Build the **Runner** for the desktop app, real machines and sandboxes. On macOS
+and Linux, ship the full `tokamak-plugin-host` beside it. Do not run the Runner
+in Docker. On Windows, build only `tokamak-runner`; it uses Bun.
 
-`TOKAMAK_PLUGIN_RUNTIME=bun` restores the previous runtime behavior. It is a
-temporary fallback that will be removed. An empty value is an error on macOS
-and Linux. Windows ignores the variable and uses Bun. Restart
-the app and server after changing the setting. Run
-`tokamak-server --plugin-runtime` in the same environment to see the selected
-runtime. Rebuild older plugin artifacts before switching to QuickJS. See the
-[plugin runtime guide](packages/sdk/README.md#plugin-runtimes) for supported
-modules, environment, permissions, and limits.
+```sh
+cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
+```
+
+Build the **Server** for cloud hosts such as Railway or Hetzner. The build omits
+the local runtime and the Bun fallback. Its `tokamak-plugin-host` only runs and
+inspects server actions. Use a separate output directory so it cannot replace
+the Runner's full host. The [Dockerfile](Dockerfile) ships this pair and keeps
+the existing entrypoint, environment, ports and data directory.
+
+```sh
+cargo build --locked --release --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
+```
+
+On macOS and Linux, ship the host beside its matching executable, or set
+`TOKAMAK_PLUGIN_HOST` to that host's path. Bun is needed to build plugins from
+source. The QuickJS builds can run installed artifacts without Bun; rebuild old
+artifacts that lack QuickJS companions.
+
+For the Runner only, `TOKAMAK_PLUGIN_RUNTIME=bun` selects the temporary Bun
+fallback. An empty value is an error on macOS and Linux. Windows ignores the
+variable and uses Bun. Run `tokamak-runner --plugin-runtime` to see the selected
+runtime. See the [plugin runtime guide](packages/sdk/README.md#plugin-runtimes)
+for supported modules, permissions and limits.
 
 ## Bun fallback workers
 

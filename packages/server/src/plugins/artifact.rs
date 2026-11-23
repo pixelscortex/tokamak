@@ -38,6 +38,11 @@ impl Artifact {
         let mut assets = BTreeMap::new();
 
         for name in names {
+            #[cfg(not(feature = "local-runtime"))]
+            if omit_runner_asset(&manifest, name)? {
+                continue;
+            }
+
             let whole_backend = manifest
                 .entries
                 .server
@@ -160,4 +165,36 @@ impl Artifact {
             .then(|| self.assets.get(name).cloned())
             .flatten()
     }
+}
+
+#[cfg(not(feature = "local-runtime"))]
+fn omit_runner_asset(manifest: &Manifest, name: &str) -> Result<bool, Error> {
+    let entries = &manifest.entries;
+    let runner_only = entries.local.as_ref().is_some_and(|local| {
+        [
+            local.entry.as_str(),
+            local.code.as_str(),
+            local.map.as_str(),
+        ]
+        .contains(&name)
+    }) || entries
+        .worker
+        .as_ref()
+        .is_some_and(|worker| worker.entry == name);
+    if runner_only {
+        // The Runner still needs the original build ID and hashes to match its
+        // own installation. The Server needs only this metadata.
+        super::assets::relative_asset_path(name)?;
+        if !manifest.hashes.get(name).is_some_and(|hash| {
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        }) {
+            return Err(invalid(format!(
+                "Missing or invalid hash for {name}; rebuild it"
+            )));
+        }
+    }
+    Ok(runner_only)
 }

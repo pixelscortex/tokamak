@@ -1,5 +1,5 @@
 //! Generic process actions. Database authority stays in invocation-bound ops.
-pub(super) mod process;
+mod process;
 
 use crate::plugins::Asset;
 use engine::OpRegistry;
@@ -16,7 +16,7 @@ use std::{
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
-use tokamak_worker::{Lane, WORKER_CAPACITY, WORKER_FRAME_BYTES};
+use tokamak_worker::{Lane, WORKER_CAPACITY};
 const GRACE: Duration = Duration::from_millis(500);
 // Actions may wait for human permission for 30 minutes. This is a wall deadline,
 // independent of the much shorter deterministic query/mutation CPU budget.

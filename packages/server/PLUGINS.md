@@ -13,9 +13,20 @@ and typed API references. Do not author the artifact manifest by hand.
 
 ```sh
 proto run bun -- packages/build/src/build.ts path/to/plugins/notes
-cargo build --locked -p server -p tokamak-plugin-host --bin tokamak-server --bin tokamak-plugin-host --jobs 2
-target/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
+cargo build --locked --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
+target/cloud/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
 ```
+
+The Server runs queries, mutations and actions. Use the [Runner](../runner/README.md)
+for local functions. A request to the Server's `/local-worker` endpoint is
+refused with “This server has no local runtime”. Plain HTTP requests return 501;
+WebSocket callers receive the reason in the startup refusal. Keep the matching
+actions-only host alongside `tokamak-server`, or set `TOKAMAK_PLUGIN_HOST` to it.
+To package a plugin for the Server, run
+`proto run bun -- packages/build/src/stage-server-plugin.ts <built-dist> <destination>`
+with a new destination. The Server doesn't open local bundles or Bun launchers.
+Staging omits those files but keeps the manifest and hashes so the Runner can
+match its own installed copy.
 
 Legacy `--local-dir` mode requires a private `server.token`. Never pass a token
 in arguments. The app ships Chat, AI, Code,
@@ -23,9 +34,9 @@ Claude, Codex and Password sign-in as its starter set.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
-target/debug/tokamak-server plugin create plugins/acme.notes
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin reload acme.notes
+target/cloud/debug/tokamak-server plugin create plugins/acme.notes
+TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plugin list
+TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plugin reload acme.notes
 ```
 
 Create writes a descriptor, a sample query and a skill file in a new folder.

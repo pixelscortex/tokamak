@@ -15,6 +15,8 @@ path = "src/bin/export-protocol.rs"
 required-features = ["protocol-codegen"]
 
 [features]
+default = ["local-runtime"]
+local-runtime = ["tokamak-worker/local-runtime"]
 protocol-codegen = ["dep:ts-rs"]
 
 [dependencies]
@@ -52,7 +54,7 @@ surrealdb-idx = { version = "=4.0.0", default-features = false, features = ["vec
 surrealdb-kvs = { version = "=4.0.0", default-features = false }
 surrealdb-kvs-any = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 engine = { path = "../engine" }
-tokamak-worker = { path = "../worker" }
+tokamak-worker = { path = "../worker", default-features = false }
 # Decode the plugin host's JSON frames without changing their JavaScript numbers.
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 tokio = { version = "1.54.1", default-features = false, features = [
@@ -75,3 +77,40 @@ tokio-tungstenite = { version = "0.29.0", default-features = false, features = [
 
 [lints]
 workspace = true
+
+
+[[test]]
+name = "ai_liveness"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "ai_threads"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "ai_turns"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "chat_threads"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "claude_turns"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "code_changes"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "code_snapshots"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "codex_turns"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "local_functions"
+required-features = ["local-runtime"]

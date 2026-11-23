@@ -191,6 +191,7 @@ fn register_plugin_call(
                 Some(&loaded),
                 Some(&target.owner),
             ));
+            #[cfg(feature = "local-runtime")]
             let worker = loaded.workers.get(&target.owner).cloned();
             let source = loaded.action_sources.get(&target.owner).cloned();
             let ops = operations(
@@ -204,7 +205,15 @@ fn register_plugin_call(
             )
             .map_err(|e| e.to_string())?;
             execution
-                .invoke_nested_action(source, worker, target.bundle, target.local_name, args, ops)
+                .invoke_nested_action(
+                    source,
+                    #[cfg(feature = "local-runtime")]
+                    worker,
+                    target.bundle,
+                    target.local_name,
+                    args,
+                    ops,
+                )
                 .await
                 .map_err(|error| environment.redact(error))
         }
@@ -217,7 +226,7 @@ impl Execution {
     async fn invoke_nested_action(
         self,
         source: Option<Arc<crate::host::action_process::Source>>,
-        worker: Option<Arc<crate::host::worker::Supervisor>>,
+        #[cfg(feature = "local-runtime")] worker: Option<Arc<crate::host::worker::Supervisor>>,
         bundle: Arc<engine::Bundle>,
         name: String,
         args: Json,
@@ -227,6 +236,7 @@ impl Execution {
             let source = source.ok_or("Plugin action has no action process bundle")?;
             return process.invoke(source, name, args, ops).await;
         }
+        #[cfg(feature = "local-runtime")]
         if let Some(worker) = worker {
             return worker.invoke(name, args, ops).await;
         }

@@ -1,16 +1,20 @@
 use std::{path::Path, process::Command};
 
+#[cfg(feature = "local-runtime")]
 use tokamak_worker::LocalRuntime;
 
+#[cfg(feature = "local-runtime")]
 pub fn selected() -> LocalRuntime {
     LocalRuntime::selected().expect("valid local function runtime")
 }
 
+#[cfg(feature = "local-runtime")]
 #[allow(dead_code)] // Each integration test includes only the entry point it needs.
 pub fn driver(command: Command, script: &str, runtime: &LocalRuntime) -> Command {
     driver_for(command, script, runtime, false)
 }
 
+#[cfg(feature = "local-runtime")]
 pub fn driver_for(
     mut command: Command,
     script: &str,

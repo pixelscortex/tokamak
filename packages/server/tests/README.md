@@ -40,11 +40,12 @@ QuickJS on macOS and Linux, where an empty value is an error. Windows ignores
 [plugin runtime guide](../../sdk/README.md#plugin-runtimes) for the differences.
 
 Run the Linux Rust CI sequence locally with `bash .ci/check.sh rust` on macOS
-or Linux. It builds the host, runs Rust unit tests and the host and worker
-suites on the default, then runs only `claude_turns`, `codex_turns`,
-`local_functions`, and `workers` on Bun. If that pass succeeds, it runs every
-server integration target once on the default, plus the server binary unit
-tests. The server library unit tests run only in the workspace library pass.
+or Linux. It builds the Runner and full host, covers both local runtimes,
+then builds the cloud Server and actions-only host for the server-only suites.
+The shared-server routing test uses a separate full host for its Runner. If
+you run that test directly with `--no-default-features`, set
+`TOKAMAK_TEST_RUNNER_HOST` to the absolute path of a full host binary and build
+the actions-only host beside the test's `tokamak-server`.
 
 Bun writes the Claude and Codex reference files to a shared temporary directory.
 QuickJS requires those files and compares the final text, thinking, usage,

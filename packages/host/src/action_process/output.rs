@@ -66,7 +66,7 @@ impl Output {
                     .and_then(|()| stdout.flush())
                     .is_err()
                 {
-                    crate::protocol::shutdown();
+                    crate::pipe::shutdown();
                 }
 
                 queued.lock().expect("action process output").written(line);
