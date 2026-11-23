@@ -33,6 +33,19 @@ impl LocalRuntime {
     }
 }
 
+pub fn configured_heap_bytes(variable: &str) -> Result<usize, String> {
+    let Some(value) = std::env::var_os(variable) else {
+        return Ok(256 * 1024 * 1024);
+    };
+    value
+        .to_str()
+        .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|mib| *mib != 0)
+        .and_then(|mib| mib.checked_mul(1024 * 1024))
+        .ok_or_else(|| format!("{variable} must be a positive integer in MiB"))
+}
+
 fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String> {
     if !supported || value.is_none() || value == Some(OsStr::new("bun")) {
         Ok(LocalRuntime::Bun)

@@ -350,15 +350,16 @@ impl ActionStartup {
         kinds: &BTreeMap<String, FunctionKind>,
     ) -> Result<Self, Error> {
         if quickjs {
+            let host = tokamak_worker::Process::action_host_path().map_err(Error::Invalid)?;
+            let heap = tokamak_worker::configured_heap_bytes("TOKAMAK_ACTION_HEAP_MIB")
+                .map_err(Error::Invalid)?;
             let legacy_action_source = bundle
                 .filter(|_| kinds.values().any(|kind| *kind == FunctionKind::Action))
                 .map(|bundle| crate::host::action_process::Source::legacy(bundle.clone()))
                 .transpose()?;
             return Ok(Self {
                 action_pool: None,
-                action_process: Some(crate::host::action_process::Supervisor::new(
-                    pool.limits().heap_bytes,
-                )),
+                action_process: Some(crate::host::action_process::Supervisor::new(host, heap)),
                 legacy_action_source,
             });
         }

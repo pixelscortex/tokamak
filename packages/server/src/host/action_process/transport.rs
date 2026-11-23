@@ -7,13 +7,13 @@ use tokio::{
 use tokio_util::task::AbortOnDropHandle;
 
 use super::*;
-use crate::host::worker::process::{oversized, read_frame, write_messages};
+use crate::host::worker::process::{operation_reply, read_frame, write_messages};
 
-type OpResult = (u64, u64, Result<Value, String>);
+type OpResult = (u64, u64, Result<Value, String>, OwnedSemaphorePermit);
 
-pub(super) fn start(runtime: &Handle) -> Result<Arc<Running>, String> {
+pub(super) fn start(runtime: &Handle, host: &Path, timing: Timing) -> Result<Arc<Running>, String> {
     let _entered = runtime.enter();
-    let mut child = tokamak_worker::Process::launch_actions()
+    let mut child = tokamak_worker::Process::launch_actions(host)
         .map_err(|error| format!("Action process could not start: {error}"))?;
     let (input, output, stderr) = child.pipes()?;
     let (commands, receive) = mpsc::unbounded_channel();
@@ -21,7 +21,9 @@ pub(super) fn start(runtime: &Handle) -> Result<Arc<Running>, String> {
         commands,
         stop: CancellationToken::new(),
         ended: CancellationToken::new(),
-        healthy: AtomicBool::new(false),
+        stopped_at: OnceLock::new(),
+        #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+        pid: child.id().ok_or("Action process has no PID")?,
         started: Instant::now(),
     });
 
@@ -32,35 +34,37 @@ pub(super) fn start(runtime: &Handle) -> Result<Arc<Running>, String> {
         let _stderr = AbortOnDropHandle::new(tokio::spawn(drain_stderr(stderr)));
         let (outgoing, writes) = mpsc::channel(WORKER_CAPACITY * 2);
         let mut calls = HashMap::new();
+        let (pong, answers) = tokio::sync::watch::channel((0, running.started));
         let error = tokio::select! {
             biased;
             () = running.stop.cancelled() => "Action process stopped".into(),
             error = child.exited() => format!("Action process exited: {error}"),
             result = write_messages(input, writes) =>
                 format!("Action process exited: {}", result.err().unwrap_or_else(|| "stdin closed".into())),
-            result = exchange(&running, &outgoing, BufReader::new(output), receive, &mut calls) =>
+            error = heartbeat(&outgoing, answers, timing) => error,
+            result = exchange(&outgoing, BufReader::new(output), receive, &mut calls, pong) =>
                 format!("Action process exited: {}", result.err().unwrap_or_else(|| "stdout closed".into())),
         };
-        child.stop().await;
+        let _ = running.stopped_at.set(Instant::now());
         running.stop.cancel();
 
         for (_, call) in calls {
             call.active.cancel();
             let _ = call.reply.send(Err(error.clone()));
         }
+        child.stop().await;
     });
     Ok(process)
 }
 
 async fn exchange(
-    process: &Running,
     outgoing: &mpsc::Sender<Value>,
     mut output: BufReader<tokio::process::ChildStdout>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     calls: &mut HashMap<u64, Box<Call>>,
+    pong: tokio::sync::watch::Sender<(u64, Instant)>,
 ) -> Result<(), String> {
     let mut broker = Broker {
-        process,
         outgoing,
         calls,
         ops: JoinSet::new(),
@@ -70,24 +74,65 @@ async fn exchange(
     loop {
         tokio::select! {
             command = commands.recv() => match command {
-                Some(command) => broker.command(command)?,
+                Some(command) => broker.command(command).await?,
                 None => return Ok(()),
             },
             Some(result) = broker.ops.join_next() => {
                 if let Ok(result) = result {
-                    broker.forward_op_result(result)?;
+                    broker.forward_op_result(result).await?;
                 }
             }
             frame = read_frame(&mut output, &mut buffer) => {
                 let Some(frame) = frame? else { return Ok(()) };
-                broker.message(serde_json::from_slice(&frame).map_err(|e| e.to_string())?)?;
+                let message: Value = serde_json::from_slice(&frame).map_err(|e| e.to_string())?;
+                if message["type"] == "pong" {
+                    let id = number(&message, "id")?;
+                    pong.send_if_modified(|answer| {
+                        if id <= answer.0 {
+                            return false;
+                        }
+                        *answer = (id, Instant::now());
+                        true
+                    });
+                } else {
+                    broker.message(message).await?;
+                }
+            }
+        }
+    }
+}
+
+async fn heartbeat(
+    outgoing: &mpsc::Sender<Value>,
+    mut answers: tokio::sync::watch::Receiver<(u64, Instant)>,
+    timing: Timing,
+) -> String {
+    let mut ticks = tokio::time::interval_at(Instant::now() + timing.ping, timing.ping);
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut id = 0;
+    loop {
+        let (_, last) = *answers.borrow_and_update();
+        tokio::select! {
+            biased;
+            answer = answers.changed() => {
+                if answer.is_err() {
+                    return "Action process exited: heartbeat channel closed".into();
+                }
+            }
+            () = tokio::time::sleep_until(last + timing.unresponsive) => {
+                return "Action process is unresponsive: heartbeat timed out".into();
+            }
+            _ = ticks.tick() => {
+                id += 1;
+                // A stopped child may have filled its pipe. Keep the deadline
+                // running even if a ping cannot currently be queued.
+                let _ = outgoing.try_send(json!({"type":"ping","id":id}));
             }
         }
     }
 }
 
 struct Broker<'a> {
-    process: &'a Running,
     outgoing: &'a mpsc::Sender<Value>,
     calls: &'a mut HashMap<u64, Box<Call>>,
     ops: JoinSet<OpResult>,
@@ -95,7 +140,7 @@ struct Broker<'a> {
 }
 
 impl Broker<'_> {
-    fn command(&mut self, command: Command) -> Result<(), String> {
+    async fn command(&mut self, command: Command) -> Result<(), String> {
         match command {
             Command::Invoke(mut call) => {
                 if !is_active(&call) {
@@ -103,37 +148,58 @@ impl Broker<'_> {
                     return Ok(());
                 }
                 self.plugins
-                    .entry(call.source.slot)
+                    .entry(call.slot)
                     .or_insert_with(|| call.source.name.clone());
                 let frame = std::mem::take(&mut call.frame);
                 self.calls.insert(call.id, call);
-                send(self.outgoing, frame)
+                send(self.outgoing, frame).await
             }
             Command::Cancel(id) => {
                 if let Some(call) = self.calls.remove(&id) {
                     call.active.cancel();
-                    send(
-                        self.outgoing,
-                        json!({"type":"cancel","slot":call.source.slot,"id":id}),
-                    )?;
+                    if call.slot == call.source.slot {
+                        send(
+                            self.outgoing,
+                            json!({"type":"cancel","slot":call.slot,"id":id}),
+                        )
+                        .await?;
+                    } else {
+                        self.drop_slot(call.slot).await?;
+                    }
                 }
                 Ok(())
             }
             Command::Retire(slot) => {
-                if self.plugins.remove(&slot).is_some() {
-                    self.calls.retain(|_, call| call.source.slot != slot);
-                    send(self.outgoing, json!({"type":"drop","slot":slot}))?;
+                let mut private_slots = Vec::new();
+                self.calls.retain(|_, call| {
+                    if call.source.slot != slot {
+                        return true;
+                    }
+                    if call.slot != slot {
+                        private_slots.push(call.slot);
+                    }
+                    false
+                });
+                for private in private_slots {
+                    self.drop_slot(private).await?;
                 }
-                Ok(())
+                self.drop_slot(slot).await
             }
         }
     }
 
-    fn message(&mut self, message: Value) -> Result<(), String> {
+    async fn drop_slot(&mut self, slot: u64) -> Result<(), String> {
+        if self.plugins.remove(&slot).is_some() {
+            send(self.outgoing, json!({"type":"drop","slot":slot})).await?;
+        }
+        Ok(())
+    }
+
+    async fn message(&mut self, message: Value) -> Result<(), String> {
         let slot = number(&message, "slot")?;
         match message["type"].as_str() {
-            Some("result") => self.result(slot, message),
-            Some("op") => self.operation(slot, message),
+            Some("result") => self.result(slot, message).await,
+            Some("op") => self.operation(slot, message).await,
             Some("log") => {
                 if let Some(plugin) = self.plugins.get(&slot) {
                     tokamak_worker::log(format!(
@@ -148,16 +214,13 @@ impl Broker<'_> {
         }
     }
 
-    fn result(&mut self, slot: u64, message: Value) -> Result<(), String> {
+    async fn result(&mut self, slot: u64, message: Value) -> Result<(), String> {
         let id = number(&message, "id")?;
         if let std::collections::hash_map::Entry::Occupied(entry) = self.calls.entry(id)
-            && entry.get().source.slot == slot
+            && entry.get().slot == slot
         {
             let call = entry.remove();
             call.active.cancel();
-            if self.process.started.elapsed() >= HEALTHY_UPTIME {
-                self.process.healthy.store(true, Ordering::Release);
-            }
             let result = if let Some(error) = message["error"].as_str() {
                 let mut error = error.to_owned();
                 if let Some(stack) = message["stack"].as_str().filter(|stack| !stack.is_empty()) {
@@ -168,28 +231,49 @@ impl Broker<'_> {
             } else {
                 Ok(message.get("value").cloned().unwrap_or(Value::Null))
             };
+            if slot != call.source.slot {
+                self.drop_slot(slot).await?;
+            }
             let _ = call.reply.send(result);
         }
         Ok(())
     }
 
-    fn operation(&mut self, slot: u64, message: Value) -> Result<(), String> {
+    async fn operation(&mut self, slot: u64, message: Value) -> Result<(), String> {
         let id = number(&message, "call")?;
         let op = number(&message, "id")?;
-        let authorized = self.calls.get(&id).filter(|call| {
-            call.source.slot == slot && is_active(call) && message.get("plugin").is_none()
-        });
+        let authorized = self
+            .calls
+            .get(&id)
+            .filter(|call| call.slot == slot && is_active(call) && message.get("plugin").is_none());
         let Some(call) = authorized else {
             return send(
                 self.outgoing,
                 op_error(slot, id, op, "stale invocation: host operation refused"),
-            );
+            )
+            .await;
+        };
+        let Ok(permit) = call.source.operations.clone().try_acquire_owned() else {
+            return send(
+                self.outgoing,
+                op_error(
+                    slot,
+                    id,
+                    op,
+                    &format!(
+                        "Plugin {} reached its host operation limit ({PLUGIN_CAPACITY})",
+                        call.source.name
+                    ),
+                ),
+            )
+            .await;
         };
         if self.ops.len() >= WORKER_CAPACITY {
             return send(
                 self.outgoing,
                 op_error(slot, id, op, "Action process operation capacity exceeded"),
-            );
+            )
+            .await;
         }
         let name = message["name"]
             .as_str()
@@ -209,27 +293,15 @@ impl Broker<'_> {
                 () = retired.cancelled() => Err("stale invocation".into()),
                 result = registry.dispatch(&name, payload) => result,
             };
-            (id, op, result)
+            (id, op, result, permit)
         });
         Ok(())
     }
 
-    fn forward_op_result(&self, (id, op, result): OpResult) -> Result<(), String> {
+    async fn forward_op_result(&self, (id, op, result, _permit): OpResult) -> Result<(), String> {
         if let Some(call) = self.calls.get(&id).filter(|call| is_active(call)) {
-            let slot = call.source.slot;
-            let mut reply = match result {
-                Ok(value) => json!({"type":"opResult","slot":slot,"call":id,"id":op,"value":value}),
-                Err(error) => op_error(slot, id, op, &error),
-            };
-            if oversized(&reply)? {
-                reply = op_error(
-                    slot,
-                    id,
-                    op,
-                    "Host operation result exceeds 1 MiB worker limit",
-                );
-            }
-            send(self.outgoing, reply)?;
+            let reply = operation_reply(Some((call.slot, id)), op, result)?;
+            send(self.outgoing, reply).await?;
         }
         Ok(())
     }
@@ -239,10 +311,11 @@ fn is_active(call: &Call) -> bool {
     !call.active.is_cancelled() && !call.source.retired.is_cancelled()
 }
 
-fn send(outgoing: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
+async fn send(outgoing: &mpsc::Sender<Value>, value: Value) -> Result<(), String> {
     outgoing
-        .try_send(value)
-        .map_err(|_| "Action process write queue full or closed".into())
+        .send(value)
+        .await
+        .map_err(|_| "Action process write queue closed".into())
 }
 
 fn op_error(slot: u64, id: u64, op: u64, error: &str) -> Value {

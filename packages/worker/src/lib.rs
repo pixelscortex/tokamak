@@ -7,7 +7,7 @@ mod windows;
 
 pub use discovery::{resolve, search_paths};
 pub use logs::send as log;
-pub use runtime::LocalRuntime;
+pub use runtime::{LocalRuntime, configured_heap_bytes};
 #[cfg(not(windows))]
 use std::process::Stdio;
 use std::{collections::BTreeMap, path::Path};
@@ -88,7 +88,7 @@ impl Process {
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub fn launch_actions() -> Result<Self, String> {
+    pub fn action_host_path() -> Result<std::path::PathBuf, String> {
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         // Cargo integration tests run from the target directory's deps folder.
         let executable = if executable.parent().and_then(Path::file_name) == Some("deps".as_ref()) {
@@ -99,24 +99,35 @@ impl Process {
         } else {
             executable
         };
-        let host = LocalRuntime::host_path(&executable)?;
+        LocalRuntime::host_path(&executable)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub fn action_host_path() -> Result<std::path::PathBuf, String> {
+        Err("The action process is available on macOS and Linux".into())
+    }
+
+    pub fn launch_actions(host: &Path) -> Result<Self, String> {
+        Self::launch_action_host(host, None, Path::new("--actions"))
+    }
+
+    pub fn inspect_actions(host: &Path, code: &Path) -> Result<Self, String> {
+        Self::launch_action_host(host, Some(Path::new("--inspect-actions")), code)
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn launch_action_host(host: &Path, mode: Option<&Path>, code: &Path) -> Result<Self, String> {
         let cwd = host
             .parent()
             .ok_or("Action process executable directory missing")?;
-        let (child, containment, guardian) = launch(
-            &host,
-            None,
-            Path::new("--actions"),
-            cwd,
-            &BTreeMap::new(),
-            Lane::Action,
-            None,
-        )?;
+        let (child, containment, guardian) =
+            launch(host, mode, code, cwd, &BTreeMap::new(), Lane::Action, None)
+                .map_err(|error| format!("Launch {}: {error}", host.display()))?;
         Ok(Self::contained(child, containment, guardian))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    pub fn launch_actions() -> Result<Self, String> {
+    fn launch_action_host(_: &Path, _: Option<&Path>, _: &Path) -> Result<Self, String> {
         Err("The action process is available on macOS and Linux".into())
     }
 
@@ -151,6 +162,11 @@ impl Process {
             guardian,
             _guardian_input: input,
         }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn id(&self) -> Option<u32> {
+        self.child.id()
     }
 
     pub fn pipes(&mut self) -> Result<(ChildStdin, ChildStdout, ChildStderr), String> {

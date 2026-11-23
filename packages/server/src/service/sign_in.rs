@@ -352,10 +352,20 @@ impl Coordinator {
                 .clone()
                 .try_acquire_owned()
                 .map_err(|_| SignInError::Busy)?;
+            let timeout = sign_in_limits(self.pool.limits().clone()).call_timeout;
             Box::pin(async move {
                 let _permit = permit;
                 process
-                    .invoke_anonymous(source, name, arguments, Arc::new(ops))
+                    .invoke_with(
+                        source,
+                        name,
+                        arguments,
+                        Arc::new(ops),
+                        crate::host::action_process::InvocationOptions {
+                            timeout,
+                            anonymous: true,
+                        },
+                    )
                     .await
             })
         } else {

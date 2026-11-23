@@ -85,7 +85,7 @@ impl Artifact {
         })
     }
 
-    pub(super) fn transactions(&self) -> Result<Option<Arc<Bundle>>, Error> {
+    pub(super) async fn transactions(&self) -> Result<Option<Arc<Bundle>>, Error> {
         if let (Some(code), Some(map)) = (
             self.assets.get(TRANSACTIONS),
             self.assets.get(TRANSACTIONS_MAP),
@@ -97,7 +97,12 @@ impl Artifact {
             .map(|bundle| Some(Arc::new(bundle)))
             .map_err(|error| invalid(error.to_string()));
         }
-        if self.bundle.is_some() && self.manifest.entries.worker.is_none() {
+        if let Some(entry) = self.manifest.entries.server.as_ref()
+            && self.manifest.entries.worker.is_none()
+            && crate::host::action_process::inspect_legacy(self.assets[&entry.code].path())
+                .await
+                .map_err(invalid)?
+        {
             return Err(invalid(
                 "QuickJS actions require a transaction bundle; rebuild this plugin",
             ));

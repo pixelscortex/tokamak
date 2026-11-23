@@ -15,14 +15,13 @@ use rquickjs::{
     loader::{ImportAttributes, Loader, Resolver},
 };
 use serde_json::Value;
-use tokamak_worker::WORKER_CAPACITY;
 use tokio::sync::mpsc;
 
 use super::{Output, number, realm::Realm};
 use crate::{modules, runtime::Watchdog};
 
 pub(super) struct Thread {
-    requests: mpsc::Sender<Value>,
+    requests: mpsc::UnboundedSender<Value>,
     retired: Arc<AtomicBool>,
 }
 
@@ -36,37 +35,67 @@ impl Thread {
         let path = frame["path"]
             .as_str()
             .context("Missing action bundle path")?;
-        let plugin = Plugin {
-            source: std::fs::read_to_string(path).context("Reading verified action bundle")?,
-            heap: usize::try_from(number(frame, "heap")?)?,
-            persistent: frame["persistent"] == true,
-        };
-        let (requests, receive) = mpsc::channel(WORKER_CAPACITY);
+        let path = std::path::PathBuf::from(path);
+        let heap = usize::try_from(number(frame, "heap")?)?;
+        let persistent = frame["persistent"] == true;
+        // The server admits calls and host operations before sending frames.
+        // A busy runtime must never put backpressure on the dispatcher.
+        let (requests, receive) = mpsc::unbounded_channel();
         let retired = Arc::new(AtomicBool::new(false));
-        let bridge = Bridge { slot, output, next };
+        let bridge = Bridge {
+            slot,
+            output,
+            next,
+            logs: Default::default(),
+        };
         let stop = retired.clone();
 
-        // Native HTTP cancellation must run while JavaScript is busy.
-        let executor = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .max_blocking_threads(4)
-            .enable_all()
-            .build()?;
         std::thread::Builder::new()
             .name("tokamak-action-js".into())
-            .spawn(move || executor.block_on(run_plugin(plugin, bridge, stop, receive)))?;
+            .spawn(move || {
+                let setup = || -> Result<_> {
+                    let source =
+                        std::fs::read_to_string(path).context("Reading verified action bundle")?;
+                    // Native HTTP cancellation must run while JavaScript is busy.
+                    let executor = tokio::runtime::Builder::new_multi_thread()
+                        .worker_threads(1)
+                        .max_blocking_threads(4)
+                        .enable_all()
+                        .build()?;
+                    Ok((
+                        Plugin {
+                            source,
+                            heap,
+                            persistent,
+                        },
+                        executor,
+                    ))
+                };
+
+                match setup() {
+                    Ok((plugin, executor)) => {
+                        executor.block_on(run_plugin(plugin, bridge, stop, receive))
+                    }
+                    Err(error) => {
+                        let mut receive = receive;
+                        receive.close();
+                        while let Some(frame) = receive.blocking_recv() {
+                            if frame["type"] == "invoke"
+                                && let Ok(id) = number(&frame, "id")
+                            {
+                                bridge.output.error(slot, id, &format!("{error:#}"));
+                            }
+                        }
+                    }
+                }
+            })?;
         Ok(Self { requests, retired })
     }
 
     pub fn send(&self, frame: Value) -> Result<()> {
         self.requests
-            .try_send(frame)
+            .send(frame)
             .map_err(|e| anyhow::anyhow!("{e}"))
-    }
-
-    pub async fn control(&self, frame: Value) {
-        // Control frames must not be lost. Yield to the other plugins' threads.
-        let _ = self.requests.send(frame).await;
     }
 }
 
@@ -86,7 +115,7 @@ async fn run_plugin(
     plugin: Plugin,
     bridge: Bridge,
     stop: Arc<AtomicBool>,
-    mut receive: mpsc::Receiver<Value>,
+    mut receive: mpsc::UnboundedReceiver<Value>,
 ) {
     let bridge = Rc::new(bridge);
     while let Some(first) = receive.recv().await {
@@ -110,6 +139,7 @@ pub(super) struct Bridge {
     pub slot: u64,
     pub output: Arc<Output>,
     pub next: Arc<AtomicU64>,
+    pub logs: super::output::LogShare,
 }
 
 pub(super) type Active = Rc<RefCell<HashSet<u64>>>;
@@ -175,7 +205,7 @@ impl PluginRuntime {
     async fn run(
         self,
         first: Value,
-        receive: &mut mpsc::Receiver<Value>,
+        receive: &mut mpsc::UnboundedReceiver<Value>,
         mut completions: mpsc::UnboundedReceiver<u64>,
         plugin: &Plugin,
     ) {
@@ -190,7 +220,7 @@ impl PluginRuntime {
 
             if let Some(message) = frame.take() {
                 if let Err(error) = self.dispatch(message, plugin, &mut realms, &mut root).await {
-                    eprintln!("Action process dispatch: {error:#}");
+                    eprintln!("dispatch: {error:#}");
                 }
             } else {
                 tokio::select! {

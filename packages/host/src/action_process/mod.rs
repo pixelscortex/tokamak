@@ -1,17 +1,21 @@
 //! One pipe pair for the process; JavaScript stays on the owning plugin's thread.
+pub(crate) mod inspect;
+mod output;
 mod plugin;
 mod realm;
 
 use std::{
     collections::HashMap,
-    io::{self, Write},
-    sync::{Arc, Mutex, atomic::AtomicU64},
+    io,
+    sync::{Arc, atomic::AtomicU64},
 };
 
-use anyhow::{Context, Result, ensure};
-use serde_json::{Value, json};
-use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
+use anyhow::{Context, Result};
+use serde_json::Value;
+use tokamak_worker::WORKER_CAPACITY;
 use tokio::sync::mpsc;
+
+use output::Output;
 
 pub(super) const BUNDLE: &str = "tokamak-action.js";
 
@@ -28,32 +32,20 @@ pub async fn run() -> Result<()> {
             Ok(())
         })();
         if let Err(error) = result {
-            eprintln!("Action process input: {error:#}");
+            eprintln!("input: {error:#}");
         }
         crate::protocol::shutdown();
     });
 
-    let (writer, mut outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
-    let bytes = Arc::new(Mutex::new(0));
-    let queued = bytes.clone();
-    std::thread::spawn(move || {
-        let mut stdout = io::stdout().lock();
-        while let Some(line) = outgoing.blocking_recv() {
-            if stdout
-                .write_all(&line)
-                .and_then(|()| stdout.flush())
-                .is_err()
-            {
-                crate::protocol::shutdown();
-            }
-            *queued.lock().expect("action process output") -= line.len();
-        }
-    });
-
-    let output = Arc::new(Output { writer, bytes });
+    let output = Arc::new(Output::start());
     let next_op = Arc::new(AtomicU64::new(0));
     let mut plugins = HashMap::<u64, plugin::Thread>::new();
     while let Some(frame) = frames.recv().await {
+        if frame["type"] == "ping" {
+            output.pong(number(&frame, "id")?)?;
+            continue;
+        }
+
         let slot = number(&frame, "slot")?;
         match frame["type"].as_str() {
             Some("drop") => {
@@ -74,60 +66,18 @@ pub async fn run() -> Result<()> {
                     }
                 }
                 if plugins[&slot].send(frame).is_err() {
-                    output.error(
-                        slot,
-                        id,
-                        "Plugin action capacity exceeded or runtime stopped",
-                    );
+                    output.error(slot, id, "Plugin action runtime stopped");
                 }
             }
             Some("cancel" | "opResult") => {
                 if let Some(plugin) = plugins.get(&slot) {
-                    plugin.control(frame).await;
+                    let _ = plugin.send(frame);
                 }
             }
             _ => anyhow::bail!("Invalid action process message"),
         }
     }
     Ok(())
-}
-
-struct Output {
-    writer: mpsc::UnboundedSender<Vec<u8>>,
-    bytes: Arc<Mutex<usize>>,
-}
-
-impl Output {
-    fn send(&self, slot: u64, mut frame: Value) -> Result<()> {
-        frame["slot"] = json!(slot);
-        let mut line = serde_json::to_vec(&frame)?;
-        line.push(b'\n');
-        ensure!(
-            line.len() <= WORKER_FRAME_BYTES,
-            if frame["type"] == "result" {
-                "result too large (1 MiB limit)"
-            } else {
-                "Action message exceeds 1 MiB limit"
-            }
-        );
-        let mut bytes = self.bytes.lock().expect("action process output");
-        if frame["type"] == "log" && *bytes >= 4 * WORKER_FRAME_BYTES {
-            return Ok(());
-        }
-        ensure!(
-            *bytes < 4 * WORKER_FRAME_BYTES || frame["type"] == "result",
-            "Action process output queue is full"
-        );
-        *bytes += line.len();
-        self.writer
-            .send(line)
-            .context("Action process output closed")
-    }
-
-    fn error(&self, slot: u64, id: u64, error: &str) {
-        let error: String = error.chars().take(8192).collect();
-        let _ = self.send(slot, json!({"type":"result","id":id,"error":error}));
-    }
 }
 
 fn number(frame: &Value, key: &str) -> Result<u64> {

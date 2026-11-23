@@ -20,15 +20,14 @@ fn quickjs() -> bool {
     tokamak_worker::LocalRuntime::selected().unwrap() == tokamak_worker::LocalRuntime::QuickJs
 }
 
-fn artifacts() -> &'static BTreeMap<String, String> {
-    static FILES: OnceLock<BTreeMap<String, String>> = OnceLock::new();
-    FILES.get_or_init(|| {
-        let mut build = Command::new("bun");
-        build.arg("packages/server/tests/build-worker.mjs");
-        if quickjs() {
-            build.arg("--portable");
-        }
-        let output = build.current_dir(root()).output().unwrap();
+fn artifacts(legacy: bool) -> &'static BTreeMap<String, String> {
+    static FILES: OnceLock<BTreeMap<String, BTreeMap<String, String>>> = OnceLock::new();
+    &FILES.get_or_init(|| {
+        let output = Command::new("bun")
+            .arg("packages/server/tests/build-worker.mjs")
+            .current_dir(root())
+            .output()
+            .unwrap();
         assert!(
             output.status.success(),
             "{}\n{}",
@@ -43,7 +42,11 @@ fn artifacts() -> &'static BTreeMap<String, String> {
                 .unwrap(),
         )
         .unwrap()
-    })
+    })[if legacy {
+        "legacy"
+    } else {
+        "portable"
+    }]
 }
 struct Fixture {
     directory: tempfile::TempDir,
@@ -54,6 +57,10 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
+        Self::with_legacy_artifact(!quickjs()).await
+    }
+
+    async fn with_legacy_artifact(legacy: bool) -> Self {
         static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
         let exclusive = if quickjs() {
             Some(SERIAL.lock().await)
@@ -64,7 +71,7 @@ impl Fixture {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("plugins/worker-test");
         std::fs::create_dir_all(&path).unwrap();
-        for (name, text) in artifacts() {
+        for (name, text) in artifacts(legacy) {
             std::fs::write(path.join(name), text).unwrap();
         }
         let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
@@ -234,6 +241,20 @@ async fn check_action_process_recovery(mut fixture: Fixture) {
     let mut previous = pid;
     for (index, minimum) in [200, 450, 950].into_iter().enumerate() {
         let restart = std::time::Instant::now();
+        if index == 2 {
+            let waiting = fixture.start("stuck", json!({}));
+            tokio::time::sleep(Duration::from_millis(40)).await;
+            tokio::time::timeout(
+                Duration::from_millis(300),
+                fixture.server.reload_plugin("worker-test".into()),
+            )
+            .await
+            .expect("reload waited for action process back-off")
+            .unwrap();
+            let (id, result) = fixture.result().await;
+            assert_eq!(id, waiting);
+            assert!(result.unwrap_err().contains("cancelled by reload"));
+        }
         assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
         assert!(
             restart.elapsed() >= Duration::from_millis(minimum),
@@ -378,7 +399,7 @@ fn worker_lifecycle(scenario: &str) {
     let directory = tempfile::tempdir().unwrap();
     let plugins = directory.path().join("plugins/worker-test");
     std::fs::create_dir_all(&plugins).unwrap();
-    for (name, text) in artifacts() {
+    for (name, text) in artifacts(!quickjs()) {
         std::fs::write(plugins.join(name), text).unwrap();
     }
     let mut server = ServerGuard(
@@ -459,4 +480,21 @@ fn worker_logs_cannot_block_invocation_or_shutdown() {
 #[test]
 fn busy_worker_and_children_die_with_server() {
     worker_lifecycle("parent-death");
+}
+
+#[tokio::test]
+async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
+    if !quickjs() {
+        return;
+    }
+    let mut fixture = Fixture::with_legacy_artifact(true).await;
+    let error = fixture
+        .call("echo", json!({"value":1,"delay":0}))
+        .await
+        .unwrap_err();
+    assert!(
+        error.contains("Module is not allowed in the action process: node:child_process"),
+        "{error}"
+    );
+    fixture.close().await;
 }

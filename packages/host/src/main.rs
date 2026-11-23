@@ -20,6 +20,12 @@ async fn main() -> anyhow::Result<()> {
     if code == "--actions" {
         return action_process::run().await;
     }
+    if code == "--inspect-actions" {
+        let bundle = std::env::args_os()
+            .nth(2)
+            .ok_or_else(|| anyhow::anyhow!("Expected a server bundle path"))?;
+        return action_process::inspect::run(std::path::Path::new(&bundle)).await;
+    }
     protocol::run(std::path::Path::new(&code)).await
 }
 

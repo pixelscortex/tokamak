@@ -44,6 +44,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 ts-rs = { version = "12.0.1", optional = true, default-features = false, features = ["serde-json-impl"] }
 # Direct storage/catalog/index APIs are pinned together: their contracts are internal.
 anyhow = "1"
+arc-swap = "1.9.3"
 uuid = { version = "1", features = ["v4"] }
 surrealdb-types = { version = "=4.0.0", default-features = false }
 surrealdb-datastore = { version = "=4.0.0", default-features = false }

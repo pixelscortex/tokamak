@@ -35,15 +35,15 @@ try {
     "worker.js.map",
   ])
     files[name] = await readFile(join(temporary, "dist", name), "utf8");
-  if (!process.argv.includes("--portable")) {
-    // Exercise worker teardown with an artifact that predates the Node import check.
-    files["worker.js"] += '\nimport { spawn as fixtureSpawn } from "node:child_process";\n';
-    files["worker.js"] += 'import { writeFileSync as fixtureWriteFile } from "node:fs";\n';
-    const manifest = JSON.parse(files["manifest.json"]);
-    manifest.hashes["worker.js"] = createHash("sha256").update(files["worker.js"]).digest("hex");
-    files["manifest.json"] = JSON.stringify(manifest);
-  }
-  console.log(JSON.stringify(files));
+  // Keep both variants so the same old artifact exercises Bun teardown and
+  // QuickJS's refusal of imports that the current builder would not allow.
+  const legacy = { ...files };
+  legacy["worker.js"] += '\nimport { spawn as fixtureSpawn } from "node:child_process";\n';
+  legacy["worker.js"] += 'import { writeFileSync as fixtureWriteFile } from "node:fs";\n';
+  const manifest = JSON.parse(legacy["manifest.json"]);
+  manifest.hashes["worker.js"] = createHash("sha256").update(legacy["worker.js"]).digest("hex");
+  legacy["manifest.json"] = JSON.stringify(manifest);
+  console.log(JSON.stringify({ portable: files, legacy }));
 } finally {
   await rm(temporary, { force: true, recursive: true });
 }

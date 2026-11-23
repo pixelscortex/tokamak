@@ -6,6 +6,12 @@ export const functions = {
     await new Promise((resolve) => setTimeout(resolve, ms));
     return "done";
   }),
+  spin: action((ms) => {
+    console.info("spin started");
+    const end = Date.now() + ms;
+    while (Date.now() < end) {}
+    return "done";
+  }),
   count: action(() => ++count),
   loop: action(() => {
     console.info("loop started");

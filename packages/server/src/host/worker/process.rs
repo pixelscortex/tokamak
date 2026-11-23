@@ -246,15 +246,31 @@ fn forward_operation_result(
     if let Ok((call, op, result)) = result
         && calls.get(&call).is_some_and(|c| !c.active.is_cancelled())
     {
-        let mut message = match result {
-            Ok(value) => json!({"type":"opResult","id":op,"value":value}),
-            Err(error) => json!({"type":"opResult","id":op,"error":error}),
-        };
-        if oversized(&message)? {
-            message = json!({"type":"opResult","id":op,"error":"Host operation result exceeds 1 MiB worker limit"});
-        }
-        write(input, message)?;
+        write(input, operation_reply(None, op, result)?)?;
     }
 
     Ok(())
+}
+
+pub(in crate::host) fn operation_reply(
+    route: Option<(u64, u64)>,
+    op: u64,
+    result: Result<Value, String>,
+) -> Result<Value, String> {
+    let mut message = json!({"type":"opResult","id":op});
+    if let Some((slot, call)) = route {
+        message["slot"] = json!(slot);
+        message["call"] = json!(call);
+    }
+    match result {
+        Ok(value) => message["value"] = value,
+        Err(error) => message["error"] = json!(error),
+    }
+    if oversized(&message)? {
+        if let Some(object) = message.as_object_mut() {
+            object.remove("value");
+        }
+        message["error"] = json!("Host operation result exceeds 1 MiB worker limit");
+    }
+    Ok(message)
 }

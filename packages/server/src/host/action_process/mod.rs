@@ -1,22 +1,26 @@
 //! Server-owned admission, cancellation and restart policy for the action process.
+mod inspection;
 mod transport;
+
+pub(crate) use inspection::inspect_legacy;
 
 use std::{
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 
+use arc_swap::ArcSwapOption;
 use engine::{Bundle, OpRegistry};
 use serde_json::{Value, json};
 use tokamak_worker::WORKER_CAPACITY;
 use tokio::{
     runtime::Handle,
-    sync::{Mutex, Semaphore, mpsc, oneshot},
+    sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc, oneshot},
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
@@ -25,6 +29,7 @@ use crate::plugins::Asset;
 
 const DEADLINE: Duration = Duration::from_secs(3600);
 const HEALTHY_UPTIME: Duration = Duration::from_secs(60);
+const PLUGIN_CAPACITY: usize = WORKER_CAPACITY / 2;
 const BASE_DELAY: Duration = Duration::from_millis(250);
 const MAX_DELAY: Duration = Duration::from_secs(30);
 static NEXT_SLOT: AtomicU64 = AtomicU64::new(0);
@@ -41,6 +46,8 @@ pub(crate) struct Source {
     bundle: Arc<Bundle>,
     persistent: bool,
     retired: CancellationToken,
+    calls: Arc<Semaphore>,
+    operations: Arc<Semaphore>,
 }
 
 impl Source {
@@ -74,6 +81,8 @@ impl Source {
             bundle,
             persistent,
             retired: CancellationToken::new(),
+            calls: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
+            operations: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
         })
     }
 
@@ -93,12 +102,14 @@ enum Command {
 
 struct Call {
     id: u64,
+    slot: u64,
     source: Arc<Source>,
     frame: Value,
     ops: Arc<OpRegistry>,
     reply: oneshot::Sender<Result<Value, String>>,
     active: CancellationToken,
-    _permit: tokio::sync::OwnedSemaphorePermit,
+    _permit: OwnedSemaphorePermit,
+    _plugin_permit: OwnedSemaphorePermit,
     _cancel_on_drop: tokio_util::sync::DropGuard,
 }
 
@@ -106,7 +117,9 @@ struct Running {
     commands: mpsc::UnboundedSender<Command>,
     stop: CancellationToken,
     ended: CancellationToken,
-    healthy: AtomicBool,
+    stopped_at: OnceLock<Instant>,
+    #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+    pid: u32,
     started: Instant,
 }
 
@@ -129,6 +142,37 @@ impl Restart {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Timing {
+    ping: Duration,
+    unresponsive: Duration,
+    healthy: Duration,
+}
+
+impl Default for Timing {
+    fn default() -> Self {
+        Self {
+            ping: Duration::from_secs(10),
+            unresponsive: Duration::from_secs(30),
+            healthy: HEALTHY_UPTIME,
+        }
+    }
+}
+
+pub(crate) struct InvocationOptions {
+    pub(crate) timeout: Duration,
+    pub(crate) anonymous: bool,
+}
+
+impl Default for InvocationOptions {
+    fn default() -> Self {
+        Self {
+            timeout: DEADLINE,
+            anonymous: false,
+        }
+    }
+}
+
 #[derive(Default)]
 struct State {
     process: Option<Arc<Running>>,
@@ -138,56 +182,88 @@ struct State {
 pub(crate) struct Supervisor {
     runtime: Handle,
     state: Mutex<State>,
+    current: ArcSwapOption<Running>,
     closed: CancellationToken,
     slots: Arc<Semaphore>,
     next: AtomicU64,
     heap: usize,
+    host: PathBuf,
+    timing: Timing,
 }
 
 impl Supervisor {
-    pub(crate) fn new(heap: usize) -> Arc<Self> {
+    pub(crate) fn new(host: PathBuf, heap: usize) -> Arc<Self> {
+        Self::with_timing(host, heap, Timing::default())
+    }
+
+    fn with_timing(host: PathBuf, heap: usize, timing: Timing) -> Arc<Self> {
         Arc::new(Self {
             runtime: Handle::current(),
             state: Mutex::default(),
+            current: ArcSwapOption::empty(),
             closed: CancellationToken::new(),
             slots: Arc::new(Semaphore::new(WORKER_CAPACITY)),
             next: AtomicU64::new(0),
             heap,
+            host,
+            timing,
         })
     }
 
     async fn process(&self) -> Result<Arc<Running>, String> {
-        let mut state = self.state.lock().await;
-        if self.closed.is_cancelled() {
-            return Err("Action process stopped".into());
-        }
-        if let Some(process) = &state.process {
-            if !process.stop.is_cancelled()
-                && !process.ended.is_cancelled()
-                && !process.commands.is_closed()
+        loop {
+            let mut state = self.state.lock().await;
+            if self.closed.is_cancelled() {
+                return Err("Action process stopped".into());
+            }
+
+            if let Some(process) = &state.process {
+                if !process.stop.is_cancelled()
+                    && !process.ended.is_cancelled()
+                    && !process.commands.is_closed()
+                {
+                    return Ok(process.clone());
+                }
+                if !process.ended.is_cancelled() {
+                    let ended = process.ended.clone();
+                    drop(state);
+                    ended.cancelled().await;
+                    continue;
+                }
+                let stopped = process
+                    .stopped_at
+                    .get()
+                    .copied()
+                    .unwrap_or_else(Instant::now);
+                let healthy = stopped.duration_since(process.started) >= self.timing.healthy;
+                state.restart.failed(stopped, healthy);
+                state.process = None;
+                self.current.store(None);
+            }
+
+            if let Some(retry) = state
+                .restart
+                .retry_at
+                .filter(|retry| *retry > Instant::now())
             {
-                return Ok(process.clone());
+                drop(state);
+                tokio::select! {
+                    () = self.closed.cancelled() => return Err("Action process stopped".into()),
+                    () = tokio::time::sleep_until(retry) => {}
+                }
+                continue;
             }
-            process.ended.cancelled().await;
-            let healthy = process.healthy.load(Ordering::Acquire);
-            state.restart.failed(Instant::now(), healthy);
-            state.process = None;
-        }
-        if let Some(retry) = state.restart.retry_at {
-            tokio::select! {
-                () = self.closed.cancelled() => return Err("Action process stopped".into()),
-                () = tokio::time::sleep_until(retry) => {}
-            }
-        }
-        let started = transport::start(&self.runtime);
-        match started {
-            Ok(process) => {
-                state.process = Some(process.clone());
-                Ok(process)
-            }
-            Err(error) => {
-                state.restart.failed(Instant::now(), false);
-                Err(error)
+
+            match transport::start(&self.runtime, &self.host, self.timing) {
+                Ok(process) => {
+                    state.process = Some(process.clone());
+                    self.current.store(Some(process.clone()));
+                    return Ok(process);
+                }
+                Err(error) => {
+                    state.restart.failed(Instant::now(), false);
+                    return Err(error);
+                }
             }
         }
     }
@@ -199,43 +275,46 @@ impl Supervisor {
         args: Value,
         ops: Arc<OpRegistry>,
     ) -> Result<Value, String> {
-        self.invoke_with_web(source, name, args, ops, true).await
+        self.invoke_with(source, name, args, ops, InvocationOptions::default())
+            .await
     }
 
-    pub(crate) async fn invoke_anonymous(
+    pub(crate) async fn invoke_with(
         &self,
         source: Arc<Source>,
         name: String,
         args: Value,
         ops: Arc<OpRegistry>,
+        options: InvocationOptions,
     ) -> Result<Value, String> {
-        self.invoke_with_web(source, name, args, ops, false).await
-    }
-
-    async fn invoke_with_web(
-        &self,
-        source: Arc<Source>,
-        name: String,
-        args: Value,
-        ops: Arc<OpRegistry>,
-        network: bool,
-    ) -> Result<Value, String> {
+        let plugin_permit = source.calls.clone().try_acquire_owned().map_err(|_| {
+            format!(
+                "Plugin {} reached its action call limit ({PLUGIN_CAPACITY})",
+                source.name
+            )
+        })?;
         let permit = self
             .slots
             .clone()
             .try_acquire_owned()
             .map_err(|_| "Action process invocation capacity exceeded")?;
-        let end = tokio::time::Instant::now() + DEADLINE;
+        let end = Instant::now() + options.timeout;
         let process = tokio::select! {
             biased;
             () = source.retired.cancelled() => return Err("Plugin action cancelled by reload".into()),
+            () = tokio::time::sleep_until(end) => return Err("Plugin action deadline exceeded".into()),
             result = self.process() => result?,
+        };
+        let slot = if options.anonymous {
+            NEXT_SLOT.fetch_add(1, Ordering::Relaxed) + 1
+        } else {
+            source.slot
         };
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let frame = json!({
-            "type":"invoke","slot":source.slot,"id":id,"fn":name,"args":args,
+            "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,
             "path":source.path(),"persistent":source.persistent,"heap":self.heap,
-            "permissions":ops.network_permissions(),"network":network,
+            "permissions":ops.network_permissions(),"network":!options.anonymous,
         });
         if super::worker::process::oversized(&frame)? {
             return Err("Worker invocation exceeds 1 MiB limit".into());
@@ -246,12 +325,14 @@ impl Supervisor {
             .commands
             .send(Command::Invoke(Box::new(Call {
                 id,
+                slot,
                 source: source.clone(),
                 frame,
                 ops,
                 reply,
                 active: active.clone(),
                 _permit: permit,
+                _plugin_permit: plugin_permit,
                 _cancel_on_drop: active.clone().drop_guard(),
             })))
             .map_err(|_| "Action process exited before invocation")?;
@@ -265,23 +346,24 @@ impl Supervisor {
         let result = tokio::select! {
             biased;
             () = source.retired.cancelled() => return Err("Plugin action cancelled by reload".into()),
-            result = result => result.map_err(|_| "Action process exited before replying")?,
             () = tokio::time::sleep_until(end) => return Err("Plugin action deadline exceeded".into()),
+            result = result => result.map_err(|_| "Action process exited before replying")?,
         };
         lease.armed = false;
         result
     }
 
-    pub(crate) async fn retire(&self, source: &Source) {
+    pub(crate) fn retire(&self, source: &Source) {
         source.retired.cancel();
-        if let Some(process) = &self.state.lock().await.process {
+        if let Some(process) = self.current.load_full() {
             let _ = process.commands.send(Command::Retire(source.slot));
         }
     }
 
     pub(crate) async fn stop(&self) {
         self.closed.cancel();
-        if let Some(process) = &self.state.lock().await.process {
+        let process = self.state.lock().await.process.clone();
+        if let Some(process) = process {
             process.stop.cancel();
             process.ended.cancelled().await;
         }
@@ -335,3 +417,6 @@ mod tests {
         assert_eq!(restart.retry_at, Some(now + BASE_DELAY));
     }
 }
+
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+mod process_tests;

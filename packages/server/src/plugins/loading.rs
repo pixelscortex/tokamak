@@ -115,7 +115,7 @@ impl Loaded {
             })
         });
         let server_bundle = if quickjs {
-            artifact.transactions()?
+            artifact.transactions().await?
         } else {
             artifact.bundle.clone()
         };

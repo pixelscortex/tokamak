@@ -151,7 +151,7 @@ fn send(config: &Config, line: &str) -> Result<()> {
             }
             Ok(())
         }
-        Some("log") => output.send(slot, frame),
+        Some("log") => output.log(slot, frame, &config.bridge.logs),
         _ => anyhow::bail!("Invalid action process output"),
     }
 }

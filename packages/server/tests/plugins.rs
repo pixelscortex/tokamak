@@ -31,7 +31,14 @@ impl Installation {
         for id in ["a", "b"] {
             let target = path.join(id);
             std::fs::create_dir(&target).unwrap();
-            for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+            for file in [
+                "manifest.json",
+                "bundle.js",
+                "bundle.js.map",
+                "api.ts",
+                "transactions.js",
+                "transactions.js.map",
+            ] {
                 std::fs::copy(source.join(id).join("dist").join(file), target.join(file)).unwrap();
             }
         }
@@ -183,11 +190,16 @@ fn reload_is_atomic_preserves_storage_and_rejects_partial_or_invalid_installatio
                 .await
                 .unwrap();
             let original = server.plugins().await.unwrap()["revision"].clone();
-            let path = installation.0.join("b/bundle.js");
-            let source = std::fs::read_to_string(&path).unwrap();
-            assert!(source.contains("child failure"));
-            let changed = source.replace("child failure", "reloaded child failure");
-            std::fs::write(&path, &changed).unwrap();
+            let change = |name: &str| {
+                let path = installation.0.join("b").join(name);
+                let source = std::fs::read_to_string(&path).unwrap();
+                assert!(source.contains("child failure"));
+                let changed = source.replace("child failure", "reloaded child failure");
+                std::fs::write(path, &changed).unwrap();
+                format!("{:x}", Sha256::digest(changed.as_bytes()))
+            };
+            let bundle = change("bundle.js");
+            let transactions = change("transactions.js");
             assert!(
                 server
                     .reload_plugin("b".into())
@@ -198,8 +210,8 @@ fn reload_is_atomic_preserves_storage_and_rejects_partial_or_invalid_installatio
             );
             assert_eq!(server.plugins().await.unwrap()["revision"], original);
             installation.change("b", |manifest| {
-                manifest["hashes"]["bundle.js"] =
-                    format!("{:x}", Sha256::digest(changed.as_bytes())).into()
+                manifest["hashes"]["bundle.js"] = bundle.into();
+                manifest["hashes"]["transactions.js"] = transactions.into();
             });
             let started = std::time::Instant::now();
             let reloaded = server.reload_plugin("b".into()).await.unwrap();
@@ -296,7 +308,7 @@ fn standalone_binary_exposes_only_authenticated_plugin_controls_and_cli() {
             .arg("--plugins")
             .arg(&installation.0)
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::inherit())
             .spawn()
             .unwrap(),
     );
@@ -1235,4 +1247,51 @@ fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
         std::fs::read_to_string(folder.join("SKILL.md")).unwrap(),
         skill
     );
+}
+
+#[tokio::test]
+async fn quickjs_allows_an_old_transaction_only_artifact_and_refuses_an_old_action_artifact() {
+    if tokamak_worker::LocalRuntime::selected().unwrap() != tokamak_worker::LocalRuntime::QuickJs {
+        return;
+    }
+
+    let installation = Installation::new();
+    installation.change("b", |manifest| {
+        for name in ["transactions.js", "transactions.js.map"] {
+            manifest["hashes"].as_object_mut().unwrap().remove(name);
+        }
+    });
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(
+        Database::open(Storage::Memory).await.unwrap(),
+        pool,
+        &installation.0,
+    )
+    .await
+    .unwrap();
+    let mut session = server.connect().await.unwrap();
+    assert_eq!(
+        call(&mut session, 1, "b/ops:list", json!({}))
+            .await
+            .unwrap(),
+        json!([])
+    );
+
+    let source =
+        r#"export const describe = () => ({schema:{},functions:[{name:"job",kind:"action"}]});"#;
+    std::fs::write(installation.0.join("b/bundle.js"), source).unwrap();
+    installation.change("b", |manifest| {
+        manifest["hashes"]["bundle.js"] = format!("{:x}", Sha256::digest(source)).into();
+    });
+    let error = server
+        .reload_plugin("b".into())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("require a transaction bundle; rebuild this plugin"),
+        "{error}"
+    );
+    drop(session);
+    server.close().await.unwrap();
 }

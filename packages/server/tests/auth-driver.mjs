@@ -703,13 +703,22 @@ async function verifySignIn(probe) {
     JSON.stringify({ extends: join(workspace, "tsconfig.json") }),
   );
   const alternateMethod = `
-    import { createApi, fail, internalAction, provide, query, v, type FunctionReference } from "@tokamak/sdk";
+    import type {} from "@tokamak/sdk/web";
+    import { action, createApi, fail, internalAction, provide, query, v, type FunctionReference } from "@tokamak/sdk";
     type ReadRef = FunctionReference<"query", Record<string, never>, unknown>;
     import * as auth from "plugin:auth/contracts";
     export const exposed = query({ handler: () => "public" });
+    export const alive = action({
+      async handler() {
+        await new Promise((resolve) => setTimeout(resolve, 5500));
+        return "alive";
+      },
+    });
     const signIn = internalAction({
       args: { passcode: v.string() },
       async handler(ctx, { passcode }) {
+        if (passcode === "hang") await new Promise(() => {});
+        if (passcode === "spin") while (true) {}
         try { void ctx.auth.user; return fail("UnexpectedCaller", null); } catch {}
         if (passcode === "own" || passcode === "peer") {
           try {
@@ -730,6 +739,7 @@ async function verifySignIn(probe) {
   `;
   const alternateFile = join(alternate, "src/server/method.ts");
   await writeFile(alternateFile, alternateMethod);
+  await writeFile(join(alternate, "src/server/api.ts"), 'export { alive } from "./method";');
   buildDirectory(alternate);
   await serve(binary, root, plugins, true, async (address) => {
     for (const [passcode, kind] of [
@@ -745,6 +755,26 @@ async function verifySignIn(probe) {
       assert.equal(response.status, 401);
       assert.equal((await response.json()).kind, kind);
     }
+    if (process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs") {
+      const signIn = (passcode) =>
+        request(address, "/auth/sign-in", {
+          method: "passcode",
+          fields: { passcode },
+          deviceName: "Test client",
+        });
+      const started = performance.now();
+      assert.equal((await within(signIn("hang"), "anonymous deadline", 6100)).status, 503);
+      assert.ok(performance.now() - started >= 800, "sign-in kept its call budget");
+
+      await withClient(address, ownerToken, async (client) => {
+        const signed = client.action(createApi("alternate-auth").method.alive, {});
+        await Bun.sleep(150);
+        const spins = signIn("spin");
+        const [value, response] = await Promise.all([signed, spins]);
+        assert.equal(response.status, 503);
+        assert.equal(value, "alive");
+      });
+    }
   });
   await writeFile(alternateFile, alternateMethod.replace('"password"', '"number" as never'));
   buildDirectory(alternate);
@@ -756,10 +786,10 @@ async function verifySignIn(probe) {
     assert.equal((await signIn(address, "sam")).status, 200);
   });
   assert.match(malformedLogs, /Skipping plugin alternate-auth: .*requires a form/);
-  await writeFile(
-    join(basicAuth, "src/server/method.ts"),
-    'export {}; throw new Error("Broken basic-auth");',
-  );
+  // Startup evaluates transactions. Break that side of the provider so
+  // recovery is exercised even when the action module is loaded lazily.
+  const accounts = join(basicAuth, "src/server/accounts.ts");
+  await writeFile(accounts, (await readFile(accounts, "utf8")) + '\nthrow new Error("Broken basic-auth");');
   buildDirectory(basicAuth);
   const brokenLogs = await serve(binary, root, plugins, true, async (address) => {
     await discovery(address, { methods: [], ownerSetup: false });

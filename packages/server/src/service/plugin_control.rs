@@ -285,7 +285,7 @@ impl Coordinator {
         if let Some(process) = &self.action_process {
             for (id, source) in &previous.action_sources {
                 if !candidate.same_action_source(previous, id) {
-                    process.retire(source).await;
+                    process.retire(source);
                 }
             }
         }

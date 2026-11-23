@@ -134,3 +134,30 @@ async fn action_modules_supply_the_four_builtins_without_files_or_programs() {
         json!({"process":"undefined","proc":"undefined"})
     );
 }
+
+#[tokio::test]
+async fn control_backlog_does_not_delay_another_plugin_or_dispatcher_ping() {
+    let mut process = Process::start();
+    process.invoke(2, 1, "count", Value::Null, BUNDLE).await;
+    assert_eq!(process.next().await["value"], 1);
+    process.invoke(1, 2, "spin", json!(2000), BUNDLE).await;
+    assert_eq!(process.next().await["text"], "spin started");
+
+    tokio::time::timeout(Duration::from_millis(200), async {
+        for id in 100..500 {
+            process
+                .send(json!({"type":"cancel","slot":1,"id":id}))
+                .await;
+        }
+        process.send(json!({"type":"ping","id":8})).await;
+        assert_eq!(process.next().await, json!({"type":"pong","id":8}));
+        process.invoke(2, 3, "count", Value::Null, BUNDLE).await;
+        assert_eq!(process.next().await["value"], 2);
+    })
+    .await
+    .expect("plugin 1's backlog stalled the dispatcher");
+
+    assert_eq!(process.next().await["id"], 2);
+    process.invoke(2, 4, "count", Value::Null, BUNDLE).await;
+    assert_eq!(process.next().await["value"], 3);
+}
