@@ -1,0 +1,92 @@
+packages/worker/src/lib.rs
+  s_567d9228d6ade1::t_85af6f5fe8c722 68-78,80,105,202,209-212
+  s_567d9228d6ade1::t_c5fbc0665df8c7 79
+packages/sdk/worker/dispatch.ts
+  s_567d9228d6ade1::t_fd94272088e33d 18-19,21,73,76-78,80
+  s_567d9228d6ade1::t_7fd7829f78668b 20,93-97,103
+packages/host/src/timers.js
+  s_567d9228d6ade1::t_fd94272088e33d 17-25,27,32-40
+  s_567d9228d6ade1::t_f6a5af9484f92f 9,15-16,28,31,41-43,48-49
+  s_567d9228d6ade1::t_499dbfaf7df03b 4,26
+packages/host/src/runtime.rs
+  s_567d9228d6ade1::t_f6a5af9484f92f 161
+  s_567d9228d6ade1::t_2aa3fc94dd23f1 2,5,16-18,21-58,65,70-71,75,77,79,82-83,85,89-91,95-108,113,117-120,124-129,135-144,153,163,174-176
+packages/server/tests/local_functions.rs
+  s_567d9228d6ade1::t_85af6f5fe8c722 26,28-46
+packages/host/DEPENDENCIES.md
+  s_567d9228d6ade1::t_fd94272088e33d 4-5,8,19,24
+packages/host/src/modules.rs
+  s_567d9228d6ade1::t_f6a5af9484f92f 13,16-72,77,93-94,98-101,106,122
+  s_567d9228d6ade1::t_88e6deb5ab1d0a 1-8,123-128
+app/src-tauri/build.rs
+  s_567d9228d6ade1::t_85af6f5fe8c722 10-11,13-17
+  s_567d9228d6ade1::t_623164f059cd62 12
+packages/host/src/fs/handle.rs
+  s_567d9228d6ade1::t_f6a5af9484f92f 1-28,30-143,146-159
+  s_567d9228d6ade1::t_4e4af728f37bdf 29,144-145
+packages/worker/Cargo.toml
+  s_567d9228d6ade1::t_fd94272088e33d 21-23
+packages/sdk/worker/quickjs-console.ts
+  s_567d9228d6ade1::t_fd94272088e33d 5,21-26,41-44
+  s_567d9228d6ade1::t_f6a5af9484f92f 1-4,6-20,27-40,45-56,58-59,61,64-68
+  s_567d9228d6ade1::t_0be21c0950554d 57,60,62-63
+app/src-tauri/src/local.rs
+  s_567d9228d6ade1::t_85af6f5fe8c722 121,162,210,231-233
+packages/host/src/fs.rs
+  s_567d9228d6ade1::t_b8e835feaceaab 1-16,18-72,75,81-85,87,89-92,106,108-138,141-143,152-161,163,166-167,169-171,176-181,183-189,198,203,210-215,227,230-231,234-279,281-292,294-347,349-357,361-368,372-378
+  s_567d9228d6ade1::t_85af6f5fe8c722 17,93-98,100-105,172-175,358-360
+  s_567d9228d6ade1::t_2d77436b6e5dfc 73-74,76-80,86,88,99,107,139-140,144-151,162,164-165,168,182,190-197,199-202,204-209,216-226,228-229,232-233,280,293,348,369-371
+packages/host/src/fs/errors.rs
+  s_567d9228d6ade1::t_b8e835feaceaab 1-2,4-22,24-45,47-72,74-126
+  s_567d9228d6ade1::t_5fa1df68b5846d 3,23,46,73
+packages/worker/tests/launch_local.rs
+  s_567d9228d6ade1::t_fd94272088e33d 1-89
+packages/host/src/fs/copy.rs
+  s_567d9228d6ade1::t_b8e835feaceaab 1-4,6-44,46-59,61-64,66-67,69-72,74-94,96-127,131-132,134-137,142-144,147-184
+  s_567d9228d6ade1::t_4372976791e9a5 5,45,60,65,68,73,95,128-130,133,138-141,145-146
+packages/host/Cargo.toml
+  s_567d9228d6ade1::t_f6a5af9484f92f 22
+  s_567d9228d6ade1::t_9a6ef49f645e9d 9,30-32
+packages/sdk/worker/quickjs.ts
+  s_567d9228d6ade1::t_fd94272088e33d 30,43-49
+  s_567d9228d6ade1::t_f6a5af9484f92f 2
+  s_567d9228d6ade1::t_90422bdd4565da 13-14,29,31-42,50
+packages/host/src/main.rs
+  s_567d9228d6ade1::t_f6a5af9484f92f 2-3,9
+  s_567d9228d6ade1::t_039b09a33079ce 10
+packages/host/tests/fixture.js
+  s_567d9228d6ade1::t_fd94272088e33d 39,55-123
+  s_567d9228d6ade1::t_d474bb6cd978dd 1,11-12,19-38,40-54,124-145,168
+packages/host/src/fs.js
+  s_567d9228d6ade1::t_f6a5af9484f92f 1-2,4-21,23-29,31-53,55-96,98-102,109-110,115-118,121-137,139-158,185
+  s_567d9228d6ade1::t_fd94272088e33d 30,159-160,191-207
+  s_567d9228d6ade1::t_9f86b4b6ff0d70 22,103-108,111,113,119-120,138,161-164,167-184,186-190,208,210
+Cargo.lock
+  s_567d9228d6ade1::t_b772709d4ca250 3632-3644,3653-3663,3737-3749,7666,7675
+packages/host/README.md
+  s_567d9228d6ade1::t_35ea42e4292cc5 4-47
+packages/host/src/protocol.rs
+  s_567d9228d6ade1::t_1d780c5b713f93 14,17-19,22-24,29-31,54,57-62,66,70,92-98,101-104,108-142,177-178,180-191,196-203,222-223,229,236,238,240-241,243-253,256,258-261,266-267
+packages/host/src/timers.rs
+  s_567d9228d6ade1::t_36d2bcb9a95a2b 1-41
+packages/host/tests/protocol.rs
+  s_567d9228d6ade1::t_c85ed46c91bb44 20-30,54,77,79-82,86-89,91-109,111-123,127,129-130,132-158,163,168-171,230,237,239-242,246-275,279,286-289,297-299,302-434
+packages/host/tests/provider.js
+  s_567d9228d6ade1::t_2a1e9c433b999d 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2689461e62b0dacb907fa71a8db831074abc17d",
+  "prompts": {},
+  "sessions": {
+    "s_567d9228d6ade1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a207f4-84d2-78d3-94a6-9cd60478de82",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
