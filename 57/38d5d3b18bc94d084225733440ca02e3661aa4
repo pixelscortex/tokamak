@@ -1,0 +1,21 @@
+packages/runner/Cargo.toml
+  s_c6e8801a8af172::t_0027b571d82bbc 19-27
+plugins/codex/tests/e2e.mjs
+  s_c6e8801a8af172::t_d45ec1926b77f6 4-5,390-391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5738d5d3b18bc94d084225733440ca02e3661aa4",
+  "prompts": {},
+  "sessions": {
+    "s_c6e8801a8af172": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a209bf-4d81-7fa0-8593-8080b66bb48a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
