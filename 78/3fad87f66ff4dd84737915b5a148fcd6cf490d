@@ -1,0 +1,41 @@
+packages/worker/src/runtime.rs
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 65-68,71-72,83,90-91,93,98-109,111
+  s_e6f2c00b397f14::t_a0a37fda0bc316 110
+packages/sdk/README.md
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 399-402
+.ci/README.md
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 9-13
+packages/server/tests/README.md
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 37-40,42-47,49-53
+.ci/check.sh
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 28-30,36-45
+  s_e6f2c00b397f14::t_de261010303a86 26-27
+packages/host/README.md
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 5-6
+packages/server/PLUGINS.md
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 16,267
+packages/engine/Cargo.toml
+  s_e6f2c00b397f14::t_4888d8f41ab9fb 11
+README.md
+  s_e6f2c00b397f14::t_5c46488cbb6e8e 68-72,85-86
+packages/engine/src/lib.rs
+  s_e6f2c00b397f14::t_659d7d695e06b1 29-39
+packages/server/src/lib.rs
+  s_e6f2c00b397f14::t_8d2b566db9b5ee 24-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "783fad87f66ff4dd84737915b5a148fcd6cf490d",
+  "prompts": {},
+  "sessions": {
+    "s_e6f2c00b397f14": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-1a50-7b80-ba81-70be459a4cf5",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
