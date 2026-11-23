@@ -1,0 +1,23 @@
+packages/sdk/README.md
+  s_bead5d35bc54c0::t_6f571f7c05eb1b 553-556
+packages/server/src/plugin-skill.md
+  s_bead5d35bc54c0::t_bf10e33235049a 44-47
+plugins/ai/src/server/run.ts
+  s_bead5d35bc54c0::t_1cfe0fb92ce9f9 105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "abf56509ff066eef0f51e24496bcfc143a5d8ac1",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
