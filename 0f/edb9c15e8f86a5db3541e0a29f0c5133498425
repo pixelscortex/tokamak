@@ -1,0 +1,19 @@
+packages/runner/src/local.rs
+  s_f5a108db34b8db::t_a6a103a0196f0c 26-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0fedb9c15e8f86a5db3541e0a29f0c5133498425",
+  "prompts": {},
+  "sessions": {
+    "s_f5a108db34b8db": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20a22-c433-7422-842b-5068df2475bc",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
