@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
-import { symlinkSync } from "node:fs";
+import { existsSync, symlinkSync } from "node:fs";
 import { authCaller, TokamakClient, WebSocketTransport } from "../../sdk/src/index.ts";
 import { LocalFunctions } from "../../runtime/js/local.ts";
 
@@ -19,6 +19,17 @@ let stop;
 let worker;
 let heldOperation;
 const host = process.env.TOKAMAK_TEST_PLUGIN_HOST;
+const withoutBun = process.argv.includes("--without-bun");
+const runtimeEnv = { ...process.env };
+if (withoutBun) {
+  const path = join(scratch, "empty-path");
+  await mkdir(path);
+  assert.ok(!existsSync(join(path, "bun")));
+  assert.ok(host, "The smoke test needs the shipped plugin host");
+  delete runtimeEnv.TOKAMAK_PLUGIN_RUNTIME;
+  runtimeEnv.PATH = path;
+  runtimeEnv.HOME = scratch;
+}
 const logs = [];
 
 const grandchildPidFiles = new Set();
@@ -45,7 +56,7 @@ async function expectHeartbeatStopped(path) {
   assert.fail("grandchild still running");
 }
 await mkdir(src, { recursive: true });
-try {
+acceptance: try {
   symlinkSync(join(import.meta.dir, "../../../app/node_modules"), join(plugin, "node_modules"), "dir");
   await writeFile(join(plugin, "package.json"), '{"name":"local-test","type":"module"}');
   await writeFile(
@@ -77,6 +88,8 @@ try {
     export const lines = query({ handler: ({ db }) => db.query("lines").collect() });
     export const secret = internalQuery({ handler: () => "private" });
     export const summary = query({ handler: (ctx) => ctx.runQuery(internal.turn.secret, {}) });
+    export const runtimeProbe = action({ handler: () => "Bun" in globalThis });
+    export const localRuntimeProbe = local({ handler: () => "Bun" in globalThis });
     export const format = internalAction({ handler: () => fail("NoReport", { count: 0 }) });
     export const report = action({ handler: (ctx) => ctx.runAction(internal.turn.format, {}) });
     export const inspect = local({
@@ -202,9 +215,11 @@ try {
     [process.argv[2], "--plugins", dist, "--data", join(scratch, "db"), "--listen", "127.0.0.1:0"],
     {
       stdout: "pipe",
-      stderr: "inherit",
+      stderr: withoutBun ? "pipe" : "inherit",
+      env: runtimeEnv,
     },
   );
+  const diagnostics = withoutBun ? new Response(server.stderr).text() : undefined;
   const reader = server.stdout.getReader();
   const decoder = new TextDecoder();
   let announcement = "";
@@ -225,11 +240,12 @@ try {
   local = new LocalFunctions(transport, async (_target, message, closed) => {
     const command = host ? [host] : [process.execPath, join(dist, "local-entry.js")];
     const processHandle = Bun.spawn([...command, join(dist, "local.js")], {
+      detached: !!host,
       stdin: "pipe",
       stdout: "pipe",
       stderr: "inherit",
       cwd: scratch,
-      env: { ...process.env, TOKAMAK_WORKER_LANE: "local" },
+      env: { ...runtimeEnv, TOKAMAK_WORKER_LANE: "local" },
     });
     worker = processHandle;
     void (async () => {
@@ -274,6 +290,15 @@ try {
     summary: "private",
     report: { failed: true, kind: "NoReport", data: { count: 0 } },
   });
+  assert.equal(await client.action(api.turn.runtimeProbe, {}), !host);
+  assert.equal(await client.local(api.turn.localRuntimeProbe, {}), !host);
+  if (withoutBun) {
+    server.kill();
+    assert.equal(await server.exited, 0);
+    assert.doesNotMatch(await diagnostics, /needs Bun|Bun.*(missing|not found)/i);
+    console.log("Default QuickJS: local function and server action passed with an empty PATH.");
+    break acceptance;
+  }
   await assert.rejects(client.local(api.turn.blocked, { target: "secret" }), /unknown function/i);
   await assert.rejects(client.local(api.turn.blocked, { target: "format" }), /unknown function/i);
   await assert.rejects(client.local(api.turn.blocked, { target: "report" }), /function kind does not match/i);

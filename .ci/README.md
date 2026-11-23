@@ -6,7 +6,11 @@ three fast jobs on every PR, and `.ci/check.sh` holds their commands:
 - `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied),
   plus a byte-for-byte comparison of copied contract declarations against their owners.
 - `typescript`: type checks, plugin build tests, window component tests, and the web build.
-- `rust`: Rust unit tests and the offline Rust integration suites, including fake agents.
+- `rust`: Rust unit tests and the host and worker suites on the default runtime.
+  The server runs only `claude_turns`, `codex_turns`, `local_functions`, and
+  `workers` on Bun first, then every server integration target and the server
+  binary unit tests on the QuickJS default. The turn replays use fake agents:
+  Bun writes the references, and QuickJS requires them and compares stored turns.
 
 Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
 or the browser suite:

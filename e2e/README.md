@@ -66,7 +66,7 @@ this browser suite.
 Build the server binary, then run the starter smoke in a disposable directory:
 
 ```sh
-CARGO_BUILD_JOBS=2 cargo build --locked -p server --bin tokamak-server
+CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
 proto run bun -- e2e/starter.mjs
 ```
 

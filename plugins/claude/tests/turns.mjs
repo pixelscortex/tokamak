@@ -110,7 +110,7 @@ function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
   ]) {
     if (process.env[key]) env[key] = process.env[key];
   }
-  return connect(address, { cleanup, launch: localLauncher((id) => join(h.plugins, id), env) });
+  return connect(address, { cleanup, launch: localLauncher(h.selection, (id) => join(h.plugins, id), env) });
 }
 
 async function installReplay() {
@@ -344,7 +344,7 @@ async function reports(run) {
   if (!live) {
     const writes = wire.writes(progress.row._id);
     console.log(`Claude to-do writes: ${writes}`);
-    if (process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs") assert.ok(writes === 2 || writes === 3);
+    if (h.selection.runtime === "quickjs") assert.ok(writes === 2 || writes === 3);
     else assert.equal(writes, 2);
     await parity.capture("claude-todo", progress);
   }

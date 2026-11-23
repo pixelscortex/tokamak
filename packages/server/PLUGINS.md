@@ -13,7 +13,7 @@ and typed API references. Do not author the artifact manifest by hand.
 
 ```sh
 proto run bun -- packages/build/src/build.ts path/to/plugins/notes
-cargo build --locked -p server --bin tokamak-server --jobs 2
+cargo build --locked -p server -p tokamak-plugin-host --bin tokamak-server --bin tokamak-plugin-host --jobs 2
 target/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
 ```
 
@@ -264,9 +264,10 @@ which defined the contract may list or invoke those registrations. A reload
 rebuilds the active registrations; an optional provider stays installed when
 its contract owner is absent. The client catalog only carries registrations
 needed by the local part. The client snapshots matching installed provider
-bundles into the defining plugin's Bun worker so local contracts can pass
-JavaScript objects containing callbacks without serializing them. Removing or
-changing a loaded provider retires the importing worker to unload its module.
+bundles into the defining plugin's local runtime (the QuickJS host or the Bun
+worker) so local contracts can pass JavaScript objects containing callbacks without
+serializing them. Removing or changing a loaded provider unloads the importing
+plugin's local module.
 The catalog verifies the provider's declaration hash against the owner's.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export

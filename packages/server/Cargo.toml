@@ -53,7 +53,8 @@ surrealdb-kvs = { version = "=4.0.0", default-features = false }
 surrealdb-kvs-any = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 engine = { path = "../engine" }
 tokamak-worker = { path = "../worker" }
-serde_json = "1.0.154"
+# Decode the plugin host's JSON frames without changing their JavaScript numbers.
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 tokio = { version = "1.54.1", default-features = false, features = [
   "rt-multi-thread",
   "macros",

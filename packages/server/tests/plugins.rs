@@ -1252,6 +1252,9 @@ fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
 #[tokio::test]
 async fn quickjs_allows_an_old_transaction_only_artifact_and_refuses_an_old_action_artifact() {
     if tokamak_worker::LocalRuntime::selected().unwrap() != tokamak_worker::LocalRuntime::QuickJs {
+        eprintln!(
+            "Skipping old action artifact rejection: the Bun fallback still loads these artifacts"
+        );
         return;
     }
 

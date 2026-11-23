@@ -26,3 +26,14 @@ pub use serde_json::Value as Json;
 /// Maximum serialized UTF-8 request/event payload shared by native and WebSocket
 /// hosts. Native routing envelopes are separate, bounded mailbox overhead.
 pub const MAX_WIRE_MESSAGE_BYTES: usize = 1024 * 1024;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn plugin_json_number_round_trips_exactly() {
+        let text = "0.018920700000000002";
+        let value: serde_json::Value = serde_json::from_str(text).unwrap();
+
+        assert_eq!(serde_json::to_string(&value).unwrap(), text);
+    }
+}

@@ -173,7 +173,7 @@ const root = await mkdtemp(resolve("target/e2e/run-"));
 let feature: string | undefined;
 try {
   command([process.execPath, "check", "--no-script", "--project", "e2e/tsconfig.json"]);
-  command(["cargo", "build", "--locked", "--package", "server", "--bin", "tokamak-server", "--jobs", "2"]);
+  command(["cargo", "build", "--locked", "--package", "server", "-p", "tokamak-plugin-host", "--jobs", "2"]);
   feature = await buildFeature({
     source: resolve("packages/server/tests/fixtures/record/src/server"),
     parent: root,

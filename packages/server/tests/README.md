@@ -33,25 +33,24 @@ There are no added dependencies or enlarged native stacks.
 ## Agent turns on both local runtimes
 
 The Claude, Codex, AI, chat and code acceptance tests use a real server and
-database. Their test client starts Bun by default and the plugin host with
-`TOKAMAK_PLUGIN_RUNTIME=quickjs` on macOS and Linux. The Rust test launcher
-finds or builds the host beside the server; use `TOKAMAK_PLUGIN_HOST` to
-override that path.
+database. The test launcher uses the Rust runtime selector: unset means
+QuickJS on macOS and Linux, where an empty value is an error. Windows ignores
+`TOKAMAK_PLUGIN_RUNTIME` and uses Bun. On macOS and Linux, set the variable to
+`bun` to exercise the temporary fallback. See the
+[plugin runtime guide](../../sdk/README.md#plugin-runtimes) for the differences.
 
-To compare stored Claude and Codex turns, run both suites with the same
-temporary directory. Bun writes a reference and QuickJS checks the final
-text, thinking, usage, session, state, tasks, plan and ordered reports against
-it. The Rust CI job does this automatically.
+Run the Linux Rust CI sequence locally with `bash .ci/check.sh rust` on macOS
+or Linux. It builds the host, runs Rust unit tests and the host and worker
+suites on the default, then runs only `claude_turns`, `codex_turns`,
+`local_functions`, and `workers` on Bun. If that pass succeeds, it runs every
+server integration target once on the default, plus the server binary unit
+tests. The server library unit tests run only in the workspace library pass.
 
-```sh
-parity_dir=$(mktemp -d)
-TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=bun CI=1 \
-  cargo test --locked -p server --test claude_turns --test codex_turns -- --nocapture
-TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=quickjs CI=1 \
-  cargo test --locked -p server --test claude_turns --test codex_turns -- --nocapture
-rm -f "$parity_dir/claude.json" "$parity_dir/codex.json"
-rmdir "$parity_dir"
-```
+Bun writes the Claude and Codex reference files to a shared temporary directory.
+QuickJS requires those files and compares the final text, thinking, usage,
+session, state, tasks, plan and ordered reports. The local functions suite also
+runs a server, a local function and an action with the setting unset and an
+empty PATH.
 
 ## Codex replay
 

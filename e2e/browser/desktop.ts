@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { BrowserContext } from "@playwright/test";
-import { installFakeAgent, localLauncher } from "../fake-agent/local.mjs";
+import { installFakeAgent, localLauncher, selectedRuntime } from "../fake-agent/local.mjs";
 
 type Launched = Awaited<ReturnType<ReturnType<typeof localLauncher>>>;
 /** The arguments of the window's Tauri commands, as the app sends them (app/src/host). */
@@ -24,7 +24,7 @@ interface DesktopWindow {
 /**
  * Makes the app in `context` run as the desktop app does: the window's Tauri
  * calls are answered by this test process, which starts each plugin's real
- * local part (Bun, the installed build) with the desktop's short environment
+ * local part (the installed build) with the desktop's short environment
  * and every fake agent's command on its PATH. Returns the person's home folder
  * and the PATH folder holding those commands (unlink one to "uninstall" it).
  */
@@ -44,7 +44,8 @@ export async function asDesktop(context: BrowserContext): Promise<{
   const bin = join(scratch, "bin");
   await mkdir(home);
   await installFakeAgent(bin);
-  const launch = localLauncher((id: string) => join(plugins, id, "dist"), {
+  const binary = resolve(import.meta.dirname, "../../target/debug/tokamak-server");
+  const launch = localLauncher(selectedRuntime(binary), (id: string) => join(plugins, id, "dist"), {
     HOME: home,
     TOKAMAK_APP_DATA_DIR: join(scratch, "app-data"),
     PATH: `${bin}:/usr/bin:/bin`,

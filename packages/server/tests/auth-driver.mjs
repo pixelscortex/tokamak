@@ -1,4 +1,4 @@
-import { installBasicAuth, signInMember } from "../../../e2e/fake-agent/harness.mjs";
+import { installBasicAuth, selectedRuntime, signInMember } from "../../../e2e/fake-agent/harness.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -76,6 +76,7 @@ async function serve(binary, root, plugin, shared, check, extraEnv = {}) {
   });
   const stderr = new Response(child.stderr).text();
   const lines = createInterface({ input: Readable.fromWeb(child.stdout) });
+  let failed = false;
   try {
     const address = await within(
       new Promise((resolve, reject) => {
@@ -89,6 +90,9 @@ async function serve(binary, root, plugin, shared, check, extraEnv = {}) {
       timeoutMs,
     );
     await within(check(address, dir), "auth scenario", timeoutMs);
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     child.kill("SIGTERM");
     try {
@@ -99,6 +103,7 @@ async function serve(binary, root, plugin, shared, check, extraEnv = {}) {
         await child.exited;
       }
       lines.close();
+      if (failed) console.error(await stderr);
     }
   }
   return stderr;
@@ -755,7 +760,7 @@ async function verifySignIn(probe) {
       assert.equal(response.status, 401);
       assert.equal((await response.json()).kind, kind);
     }
-    if (process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs") {
+    if (selectedRuntime(binary).runtime === "quickjs") {
       const signIn = (passcode) =>
         request(address, "/auth/sign-in", {
           method: "passcode",

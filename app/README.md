@@ -10,7 +10,8 @@ proto run bun -- install --frozen-lockfile
 proto run bun -- run app
 ```
 
-The Tauri hooks build Chat and the server. The host starts or reuses the server
+The Tauri hooks build the starter set, the server, and the plugin host on macOS
+and Linux. The app starts or reuses the server
 and connects automatically. Retry repeats endpoint discovery. Closing the window
 leaves the server running; `proto run bun -- run server:stop` stops it.
 `TOKAMAK_SERVER_DIR` selects a separate store/discovery directory. Development

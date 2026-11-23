@@ -12,6 +12,7 @@ let counter = 0;
 
 export const functions = {
   echo: local((value) => value),
+  parseJson: local((text) => JSON.parse(text)),
   pathConstants: local(() => [
     sep,
     delimiter,

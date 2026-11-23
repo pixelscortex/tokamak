@@ -1,6 +1,6 @@
 // End to end for chat on the new API: the real tokamak-server binary, the real
 // chat build, two real WebSocket clients ("windows") and chat's real local part
-// in Bun. Checks what a person sees: thread rows, messages, live updates in a
+// on the selected runtime. Checks what a person sees: thread rows, messages, live updates in a
 // second window, folders, and the "No folder" thread's own folder on disk.
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
@@ -11,6 +11,7 @@ import {
   connect as connectWindow,
   copySource,
   localLauncher,
+  selectedRuntime,
   startServer,
   installBasicAuth,
   signInMember,
@@ -20,6 +21,7 @@ import {
 
 const binary = process.argv[2];
 assert.ok(binary, "Expected the path to the tokamak-server binary");
+const selection = selectedRuntime(binary);
 const target = join(import.meta.dir, "../target");
 await mkdir(target, { recursive: true });
 const scratch = await mkdtemp(join(target, "chat-threads-"));
@@ -54,7 +56,7 @@ async function checkTranscriptLimits(client, api) {
 }
 
 function localPart(dist, home) {
-  return localLauncher(() => dist, {
+  return localLauncher(selection, () => dist, {
     HOME: home,
     TOKAMAK_APP_DATA_DIR: join(home, "app-data"),
     PATH: process.env.PATH,

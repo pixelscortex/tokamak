@@ -11,6 +11,17 @@ mod support;
 use support::{Host, fixture};
 
 #[tokio::test]
+async fn json_from_plugin_code_preserves_fractional_payloads() {
+    let mut host = Host::start();
+    host.invoke(1, "parseJson", json!("{\"cost\":0.018920700000000002}"))
+        .await;
+    assert_eq!(
+        host.receive().await["value"],
+        json!({ "cost": 0.018920700000000002 })
+    );
+}
+
+#[tokio::test]
 async fn node_path_exports_posix_constants_by_name_and_on_its_default() {
     let mut host = Host::start();
     host.invoke(1, "pathConstants", json!(null)).await;

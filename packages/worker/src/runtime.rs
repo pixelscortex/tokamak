@@ -10,6 +10,13 @@ pub enum LocalRuntime {
 }
 
 impl LocalRuntime {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Bun => "bun",
+            Self::QuickJs => "quickjs",
+        }
+    }
+
     pub fn selected() -> Result<Self, String> {
         select(
             std::env::var_os("TOKAMAK_PLUGIN_RUNTIME").as_deref(),
@@ -55,12 +62,15 @@ fn heap_bytes(variable: &str, default_mib: usize) -> Result<usize, String> {
 }
 
 fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String> {
-    if !supported || value.is_none() || value == Some(OsStr::new("bun")) {
-        Ok(LocalRuntime::Bun)
-    } else if value == Some(OsStr::new("quickjs")) {
-        Ok(LocalRuntime::QuickJs)
-    } else {
-        Err("TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs".into())
+    if !supported {
+        return Ok(LocalRuntime::Bun);
+    }
+
+    match value {
+        Some(value) if value == "bun" => Ok(LocalRuntime::Bun),
+        None => Ok(LocalRuntime::QuickJs),
+        Some(value) if value == "quickjs" => Ok(LocalRuntime::QuickJs),
+        _ => Err("TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs".into()),
     }
 }
 
@@ -70,20 +80,33 @@ mod tests {
     use std::ffi::OsStr;
 
     #[test]
-    fn local_runtime_selection_used_by_the_desktop_launcher() {
-        assert_eq!(select(None, true), Ok(LocalRuntime::Bun));
+    fn supported_platform_selects_quickjs_by_default_and_validates_overrides() {
+        assert_eq!(select(None, true), Ok(LocalRuntime::QuickJs));
         assert_eq!(select(Some(OsStr::new("bun")), true), Ok(LocalRuntime::Bun));
         assert_eq!(
             select(Some(OsStr::new("quickjs")), true),
             Ok(LocalRuntime::QuickJs)
         );
-        assert_eq!(
-            select(Some(OsStr::new("quickjs")), false),
-            Ok(LocalRuntime::Bun)
-        );
-        assert_eq!(
-            select(Some(OsStr::new("other")), true).unwrap_err(),
-            "TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs"
-        );
+
+        for value in ["other", "", "Bun", "QuickJS", " bun", "quickjs "] {
+            assert_eq!(
+                select(Some(OsStr::new(value)), true).unwrap_err(),
+                "TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs"
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_platform_always_selects_bun() {
+        for value in [
+            None,
+            Some("bun"),
+            Some("quickjs"),
+            Some("other"),
+            Some(""),
+            Some(" Bun "),
+        ] {
+            assert_eq!(select(value.map(OsStr::new), false), Ok(LocalRuntime::Bun));
+        }
     }
 }
