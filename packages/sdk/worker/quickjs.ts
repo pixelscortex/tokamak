@@ -1,4 +1,5 @@
 import { workerDispatch, type WorkerMessage } from "./dispatch";
+import { installConsole } from "./quickjs-console";
 import { workerContracts } from "./contracts";
 import type { FunctionRegistry } from "../src/functions";
 import type { Provider } from "../src/internal/contracts";
@@ -9,17 +10,8 @@ export async function initialize(
   bundle: string,
 ): Promise<(frame: string) => void> {
   const emit = (message: object) => send(JSON.stringify(message));
-  for (const level of ["log", "info", "warn", "error", "debug"] as const) {
-    console[level] = (...args: unknown[]) =>
-      emit({
-        type: "log",
-        level,
-        text: args
-          .map((arg) => String(arg))
-          .join(" ")
-          .slice(0, 8192),
-      });
-  }
+  const logger = console;
+  installConsole(logger, emit);
 
   const root = (await import(bundle)) as {
     functions: FunctionRegistry;
@@ -34,9 +26,28 @@ export async function initialize(
     emit,
     nextOp,
     () => ({ start: unavailable, scope: unavailable, close: async () => {} }),
-    workerContracts(root, async () => {
-      throw new Error("Loading another plugin's local contracts is not available on the QuickJS host yet");
-    }),
+    workerContracts(root, (path) => import(path)),
+    {
+      abort(controller) {
+        try {
+          controller.abort();
+        } catch (error) {
+          // LLRT can propagate a listener exception out of abort().
+          try {
+            logger.error(error);
+          } catch {
+            // Logging must not prevent the dispatcher from rejecting pending operations.
+          }
+        }
+      },
+      errorMessage(error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // QuickJS can reject with null if it cannot allocate its own InternalError.
+        return error === null || message === "out of memory"
+          ? "Plugin local function ran out of memory"
+          : message;
+      },
+    },
   );
   return (frame) => dispatch(JSON.parse(frame) as WorkerMessage);
 }

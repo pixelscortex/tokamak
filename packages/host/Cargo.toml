@@ -6,6 +6,7 @@ publish.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 anyhow = "1"
+libc = "0.2"
 rquickjs = { version = "=0.14.0", features = ["futures", "loader"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 tokio = { version = "1.54.1", features = ["fs", "macros", "rt", "sync", "time"] }
@@ -18,7 +19,7 @@ llrt_fetch = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5
   "tls-ring",
   "webpki-roots",
 ] }
-llrt_fs = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
+llrt_util = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_os = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_path = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_stream_web = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
@@ -26,3 +27,6 @@ llrt_url = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a596
 
 [lints]
 workspace = true
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dev-dependencies]
+tokio = { version = "1.54.1", features = ["io-util", "process"] }

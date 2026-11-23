@@ -65,7 +65,19 @@ impl Process {
         if runtime == LocalRuntime::QuickJs {
             let executable = std::env::current_exe().map_err(|error| error.to_string())?;
             let host = LocalRuntime::host_path(&executable)?;
-            let (child, containment, guardian) = launch(&host, None, code, cwd, env, Lane::Local)?;
+            let mut env = env.clone();
+            const HEAP_ENV: &str = "TOKAMAK_PLUGIN_HOST_HEAP_MIB";
+            let heap = std::env::var_os(HEAP_ENV);
+            env.remove(HEAP_ENV);
+            let (child, containment, guardian) = launch(
+                &host,
+                None,
+                code,
+                cwd,
+                &env,
+                Lane::Local,
+                heap.as_deref().map(|value| (HEAP_ENV, value)),
+            )?;
             return Ok((Self::contained(child, containment, guardian), runtime));
         }
 
@@ -90,7 +102,7 @@ impl Process {
             (child, job, None::<Child>)
         };
         #[cfg(not(windows))]
-        let (child, containment, guardian) = launch(bun, Some(entry), code, cwd, env, lane)?;
+        let (child, containment, guardian) = launch(bun, Some(entry), code, cwd, env, lane, None)?;
         Ok(Self::contained(child, containment, guardian))
     }
 
@@ -187,16 +199,18 @@ fn launch(
     cwd: &Path,
     env: &BTreeMap<String, String>,
     lane: Lane,
+    extra: Option<(&str, &std::ffi::OsStr)>,
 ) -> Result<(WorkerChild, Group, Option<Child>), String> {
     let mut command = tokio::process::Command::new(executable);
     #[cfg(unix)]
     command.process_group(0);
     command.args(entry).arg(code);
     let (lane_key, lane_value) = lane.env();
+    command.env_clear().envs(env).env(lane_key, lane_value);
+    if let Some((key, value)) = extra {
+        command.env(key, value);
+    }
     let child = command
-        .env_clear()
-        .envs(env)
-        .env(lane_key, lane_value)
         .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

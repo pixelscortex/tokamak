@@ -115,11 +115,10 @@ pub async fn local_worker_start(
             let mut stderr = stderr;
             let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
         }));
-        let log_plugin = (runtime == LocalRuntime::QuickJs).then_some(plugin_id.as_str());
         let closed = tokio::select! {
             _ = stop.cancelled() => "Local worker stopped".into(),
             error = process.exited() => error,
-            error = read(output, &events, log_plugin) => error,
+            error = read(output, &events, &plugin_id) => error,
             error = write(input, outgoing) => error,
         };
         process.stop().await;
@@ -160,7 +159,7 @@ pub async fn local_worker_load(
         .to_owned();
     let mut registry = workers.0.lock().map_err(|error| error.to_string())?;
     let worker = registry.get_mut(&id).ok_or("Local worker closed")?;
-    // Bun opens the exact verified copy and caches its modules by file URL.
+    // Keep the verified bundle available for the worker until it exits.
     worker.provider_assets.push(code);
     Ok(path)
 }
@@ -208,7 +207,7 @@ pub async fn local_worker_close(
 async fn read(
     output: impl tokio::io::AsyncRead + Unpin,
     events: &Channel<Value>,
-    log_plugin: Option<&str>,
+    plugin: &str,
 ) -> String {
     let mut output = BufReader::new(output);
     let mut line = Vec::new();
@@ -229,11 +228,9 @@ async fn read(
         };
         // Logs are not part of the request channel.
         if message["type"] == "log" {
-            if let Some(plugin) = log_plugin {
-                let level = message["level"].as_str().unwrap_or("info");
-                let text = message["text"].as_str().unwrap_or("");
-                tokamak_worker::log(format!("Plugin {plugin} [{level}]: {text}"));
-            }
+            let level = message["level"].as_str().unwrap_or("info");
+            let text = message["text"].as_str().unwrap_or("");
+            tokamak_worker::log(format!("Plugin {plugin} [{level}]: {text}"));
             continue;
         }
         if events

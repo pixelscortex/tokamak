@@ -1,9 +1,13 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod fs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod modules;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod protocol;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod runtime;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod timers;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[tokio::main(flavor = "current_thread")]

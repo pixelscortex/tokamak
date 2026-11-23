@@ -15,6 +15,10 @@ export function workerDispatch(
   allocateOp: () => number,
   createPrograms?: (signal: AbortSignal) => ReturnType<NonNullable<Parameters<typeof invocationHost>[2]>>,
   contracts?: Parameters<typeof invocationHost>[3],
+  options?: {
+    errorMessage(error: unknown): string;
+    abort(controller: AbortController): void;
+  },
 ) {
   const calls = new Map<number, AbortController>();
   const pending = new Map<
@@ -66,12 +70,14 @@ export function workerDispatch(
       if (functions[name]?.kind !== kind) throw new Error(`Unknown worker ${kind} function: ${name}`);
       const value = await invokeFunction(functions, { name, args }, invocation.host());
       await invocation.close();
-      send({ type: "result", id, value });
+      if (calls.get(id) === controller) send({ type: "result", id, value });
     } catch (error) {
       await invocation.close();
-      send({ type: "result", id, error: error instanceof Error ? error.message : String(error) });
+      const message =
+        options?.errorMessage(error) ?? (error instanceof Error ? error.message : String(error));
+      if (calls.get(id) === controller) send({ type: "result", id, error: message });
     } finally {
-      retire(id);
+      if (calls.get(id) === controller) retire(id);
     }
   }
   return (message: WorkerMessage) => {
@@ -84,12 +90,17 @@ export function workerDispatch(
         else op.resolve(message.value);
       }
     } else if (message.type === "cancel") {
-      calls.get(message.id)?.abort();
+      const controller = calls.get(message.id);
+      if (controller) {
+        if (options) options.abort(controller);
+        else controller.abort();
+      }
       for (const [id, op] of pending)
         if (op.call === message.id) {
           pending.delete(id);
           op.reject(new Error(`Plugin ${kind} function cancelled`));
         }
+      if (options) calls.delete(message.id);
     } else throw new Error("Invalid worker message");
   };
 }

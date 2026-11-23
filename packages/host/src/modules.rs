@@ -1,18 +1,80 @@
-use std::path::PathBuf;
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
+
+use anyhow::Context;
 
 use rquickjs::{
     Ctx, Exception, Module, Result,
     loader::{ImportAttributes, Loader, Resolver},
-    module::{Declarations, Declared, Exports, ModuleDef},
-    prelude::{Async, Func},
+    module::Declared,
 };
 
-pub struct Resolve(pub String);
+use crate::fs::NativeFs;
+
+#[derive(Clone)]
+pub struct Bundles {
+    root: Rc<str>,
+    providers: Rc<RefCell<HashMap<String, PathBuf>>>,
+}
+
+impl Bundles {
+    pub fn new(code: &Path) -> anyhow::Result<Self> {
+        let code = code
+            .canonicalize()
+            .context("Resolving local function bundle")?;
+        let root = code
+            .to_str()
+            .context("Local function bundle path is not UTF-8")?;
+        Ok(Self {
+            root: Rc::from(root),
+            providers: Rc::default(),
+        })
+    }
+
+    pub fn root(&self) -> &str {
+        &self.root
+    }
+
+    pub fn allow_candidates(&self, candidates: &[serde_json::Value]) {
+        for path in candidates
+            .iter()
+            .filter(|candidate| candidate["own"] == false)
+            .filter_map(|candidate| candidate["path"].as_str())
+        {
+            self.allow(path);
+        }
+    }
+
+    fn allow(&self, path: &str) {
+        let code = Path::new(path);
+        if code.is_absolute()
+            && let Ok(resolved) = code.canonicalize()
+        {
+            self.providers
+                .borrow_mut()
+                .insert(path.to_owned(), resolved);
+        }
+    }
+
+    fn path(&self, name: &str) -> Option<PathBuf> {
+        if name == self.root() {
+            Some(PathBuf::from(name))
+        } else {
+            self.providers.borrow().get(name).cloned()
+        }
+    }
+}
+
+pub struct Resolve(pub Bundles);
 
 impl Resolver for Resolve {
     fn resolve<'js>(
         &mut self,
-        _: &Ctx<'js>,
+        ctx: &Ctx<'js>,
         base: &str,
         name: &str,
         _: Option<ImportAttributes<'js>>,
@@ -28,17 +90,20 @@ impl Resolver for Resolve {
         if matches!(
             name,
             "node:path" | "node:fs/promises" | "node:os" | "node:crypto" | "node:url"
-        ) || (base == "tokamak:entry" && name == self.0)
-            || (base == "node:fs/promises" && matches!(name, "tokamak:fs" | "tokamak:fs-extra"))
+        ) || (base == "tokamak:entry" && self.0.path(name).is_some())
+            || (base == "node:fs/promises" && name == "tokamak:fs")
         {
             Ok(name.to_owned())
         } else {
-            Err(rquickjs::Error::new_resolving(base, name))
+            Err(Exception::throw_reference(
+                ctx,
+                &format!("Module is not allowed on the plugin host: {name} (imported from {base})"),
+            ))
         }
     }
 }
 
-pub struct Load(pub PathBuf);
+pub struct Load(pub Bundles);
 
 impl Loader for Load {
     fn load<'js>(
@@ -54,102 +119,14 @@ impl Loader for Load {
             "node:crypto" => Module::declare_def::<llrt_crypto::CryptoModule, _>(ctx, name),
             "node:url" => Module::declare_def::<llrt_url::UrlModule, _>(ctx, name),
             "node:fs/promises" => Module::declare(ctx, name, include_str!("fs.js")),
-            "tokamak:fs" => Module::declare_def::<llrt_fs::FsPromisesModule, _>(ctx, name),
-            "tokamak:fs-extra" => Module::declare_def::<ExtraFs, _>(ctx, name),
-            _ if self.0.to_str() == Some(name) => {
-                Module::declare(ctx, name, std::fs::read(&self.0)?)
+            "tokamak:fs" => Module::declare_def::<NativeFs, _>(ctx, name),
+            _ => {
+                let path = self
+                    .0
+                    .path(name)
+                    .ok_or_else(|| rquickjs::Error::new_loading(name))?;
+                Module::declare(ctx, name, std::fs::read(path)?)
             }
-            _ => Err(rquickjs::Error::new_loading(name)),
         }
-    }
-}
-
-struct ExtraFs;
-
-impl ModuleDef for ExtraFs {
-    fn declare(declarations: &Declarations) -> Result<()> {
-        declarations
-            .declare("realpath")?
-            .declare("unlink")?
-            .declare("copyFile")?
-            .declare("mkdirAll")?;
-        Ok(())
-    }
-
-    fn evaluate<'js>(_: &Ctx<'js>, exports: &Exports<'js>) -> Result<()> {
-        exports.export("realpath", Func::from(Async(realpath)))?;
-        exports.export("unlink", Func::from(Async(unlink)))?;
-        exports.export("copyFile", Func::from(Async(copy_file)))?;
-        exports.export("mkdirAll", Func::from(Async(mkdir_all)))?;
-        Ok(())
-    }
-}
-
-async fn realpath(ctx: Ctx<'_>, path: String) -> Result<String> {
-    let path = tokio::fs::canonicalize(path)
-        .await
-        .map_err(|error| io_exception(&ctx, error))?;
-    path.into_os_string()
-        .into_string()
-        .map_err(|_| Exception::throw_message(&ctx, "Path is not UTF-8"))
-}
-
-async fn unlink(ctx: Ctx<'_>, path: String) -> Result<()> {
-    tokio::fs::remove_file(path)
-        .await
-        .map_err(|error| io_exception(&ctx, error))
-}
-
-async fn mkdir_all(ctx: Ctx<'_>, path: String) -> Result<()> {
-    tokio::fs::create_dir_all(path)
-        .await
-        .map_err(|error| io_exception(&ctx, error))
-}
-
-async fn copy_file(
-    ctx: Ctx<'_>,
-    from: String,
-    to: String,
-    preserve_timestamps: bool,
-) -> Result<()> {
-    let copy = tokio::task::spawn_blocking(move || {
-        let times = if preserve_timestamps {
-            let metadata = std::fs::metadata(&from)?;
-            Some(
-                std::fs::FileTimes::new()
-                    .set_accessed(metadata.accessed()?)
-                    .set_modified(metadata.modified()?),
-            )
-        } else {
-            None
-        };
-        std::fs::copy(from, &to)?;
-        if let Some(times) = times {
-            std::fs::File::open(to)?.set_times(times)?;
-        }
-        Ok(())
-    });
-    copy.await
-        .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))?
-        .map_err(|error| io_exception(&ctx, error))
-}
-
-fn io_exception(ctx: &Ctx<'_>, error: std::io::Error) -> rquickjs::Error {
-    let code = match error.kind() {
-        std::io::ErrorKind::NotFound => "ENOENT",
-        std::io::ErrorKind::PermissionDenied => "EACCES",
-        std::io::ErrorKind::AlreadyExists => "EEXIST",
-        std::io::ErrorKind::IsADirectory => "EISDIR",
-        std::io::ErrorKind::NotADirectory => "ENOTDIR",
-        _ => "EIO",
-    };
-    let exception = (|| {
-        let exception = Exception::from_message(ctx.clone(), &error.to_string())?;
-        exception.as_object().set("code", code)?;
-        Ok::<_, rquickjs::Error>(exception)
-    })();
-    match exception {
-        Ok(exception) => exception.throw(),
-        Err(error) => error,
     }
 }

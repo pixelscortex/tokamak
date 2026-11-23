@@ -4,7 +4,6 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
     thread,
-    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -12,34 +11,24 @@ use serde_json::{Value, json};
 use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::sync::mpsc;
 
-use crate::runtime::Runtime;
+use crate::{modules::Bundles, runtime::Runtime};
 
 const OUTPUT_BYTES: usize = 4 * WORKER_FRAME_BYTES;
-pub const DEADLINE: Duration = Duration::from_secs(5);
-
-struct Call {
-    deadline: Option<Instant>,
-    cancelled: bool,
-}
+const CANCELLED: &str = "Plugin local function cancelled";
+const DID_NOT_YIELD: &str =
+    "Plugin local function did not yield for 5 seconds; QuickJS runtime reset";
 
 #[derive(Default)]
-pub struct State {
-    calls: HashMap<u64, Call>,
+struct State {
+    calls: HashMap<u64, bool>,
+    contract_ops: HashMap<u64, u64>,
     queued_bytes: usize,
-    stopped: bool,
 }
 
 impl State {
-    pub fn interrupt(&self) -> bool {
-        self.stopped
-            || self.calls.values().any(|call| {
-                call.deadline
-                    .is_some_and(|end| call.cancelled || end <= Instant::now())
-            })
-    }
-
-    fn deadline(&self) -> Option<Instant> {
-        self.calls.values().filter_map(|call| call.deadline).min()
+    fn retire(&mut self, id: u64) {
+        self.calls.remove(&id);
+        self.contract_ops.retain(|_, call| *call != id);
     }
 }
 
@@ -62,20 +51,23 @@ impl Output {
             Some("op") => {
                 let call = id(&frame["call"])?;
                 ensure!(
-                    state.calls.get(&call).is_some_and(|call| !call.cancelled
-                        && call.deadline.is_some_and(|end| end > Instant::now())),
+                    state.calls.get(&call) == Some(&false),
                     "stale invocation: host operation refused"
                 );
+                if frame["name"] == "local.contracts" {
+                    let op = id(&frame["id"])?;
+                    self.enqueue(&mut state, line)?;
+                    state.contract_ops.insert(op, call);
+                    return Ok(());
+                }
             }
             Some("result") => {
                 let call = id(&frame["id"])?;
-                if state.calls.get(&call).is_none_or(|call| {
-                    call.cancelled || call.deadline.is_none_or(|end| end <= Instant::now())
-                }) {
+                if state.calls.get(&call) != Some(&false) {
                     return Ok(());
                 }
                 self.enqueue(&mut state, line)?;
-                state.calls.remove(&call);
+                state.retire(call);
                 return Ok(());
             }
             Some("log") => {}
@@ -97,31 +89,56 @@ impl Output {
         Ok(())
     }
 
+    fn result(&self, state: &mut State, id: u64, error: &str) -> Result<()> {
+        self.enqueue(
+            state,
+            json!({ "type": "result", "id": id, "error": error }).to_string(),
+        )
+    }
+
     fn stop_calls(&self) -> Result<()> {
         let mut state = self.state.lock().expect("protocol state");
-        let now = Instant::now();
-        let started: Vec<_> = state
-            .calls
-            .iter()
-            .filter_map(|(id, call)| call.deadline.map(|_| *id))
-            .collect();
-        for id in started {
-            let Some(call) = state.calls.remove(&id) else {
-                continue;
-            };
-            let error = if call.cancelled {
-                "Plugin local function cancelled"
-            } else if call.deadline.is_some_and(|end| end <= now) {
-                "Plugin local function deadline exceeded"
-            } else {
-                "Plugin local function stopped when its QuickJS runtime was reset"
-            };
-            self.enqueue(
-                &mut state,
-                json!({ "type": "result", "id": id, "error": error }).to_string(),
-            )?;
+        let started = std::mem::take(&mut state.calls);
+        state.contract_ops.clear();
+        for id in started.into_keys() {
+            self.result(&mut state, id, DID_NOT_YIELD)?;
         }
         Ok(())
+    }
+
+    fn prepare(&self, frame: &Value, bundles: &Bundles) -> Result<bool> {
+        let mut state = self.state.lock().expect("protocol state");
+        let id = id(&frame["id"])?;
+        match frame["type"].as_str() {
+            Some("invoke") => {
+                if state.calls.contains_key(&id) {
+                    bail!("Duplicate worker invocation");
+                }
+                if state.calls.len() >= WORKER_CAPACITY {
+                    self.result(&mut state, id, "Worker invocation capacity exceeded")?;
+                    return Ok(false);
+                }
+                state.calls.insert(id, false);
+            }
+            Some("cancel") => {
+                let Some(cancelled) = state.calls.get_mut(&id) else {
+                    return Ok(false);
+                };
+                *cancelled = true;
+                self.result(&mut state, id, CANCELLED)?;
+            }
+            Some("opResult") => {
+                if let Some(call) = state.contract_ops.remove(&id)
+                    && state.calls.get(&call) == Some(&false)
+                    && frame["error"].is_null()
+                    && let Some(candidates) = frame["value"].as_array()
+                {
+                    bundles.allow_candidates(candidates);
+                }
+            }
+            _ => bail!("Invalid worker message"),
+        }
+        Ok(true)
     }
 }
 
@@ -157,48 +174,31 @@ fn read_frame(reader: &mut impl BufRead) -> Result<Option<Value>> {
 fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
     let mut reader = io::stdin().lock();
     while let Some(frame) = read_frame(&mut reader)? {
-        match frame["type"].as_str() {
-            Some("shutdown") => break,
-            Some("invoke") => {
-                let id = id(&frame["id"])?;
-                {
-                    let mut state = state.lock().expect("protocol state");
-                    ensure!(
-                        !state.calls.contains_key(&id),
-                        "Duplicate worker invocation"
-                    );
-                    ensure!(
-                        state.calls.len() < WORKER_CAPACITY,
-                        "Worker invocation capacity exceeded"
-                    );
-                    state.calls.insert(
-                        id,
-                        Call {
-                            deadline: None,
-                            cancelled: false,
-                        },
-                    );
-                }
-                send.try_send(frame)
-                    .context("Worker input queue full or closed")?;
-            }
-            Some("opResult") => {
-                id(&frame["id"])?;
-                send.try_send(frame)
-                    .context("Worker input queue full or closed")?;
-            }
-            Some("cancel") => {
-                let id = id(&frame["id"])?;
-                if let Some(call) = state.lock().expect("protocol state").calls.get_mut(&id) {
-                    call.cancelled = true;
-                }
-                send.try_send(frame)
-                    .context("Worker input queue full or closed")?;
-            }
-            _ => bail!("Invalid worker message"),
+        if frame["type"] == "shutdown" {
+            break;
         }
+        if frame["type"] == "cancel"
+            && let Some(call) = state
+                .lock()
+                .expect("protocol state")
+                .calls
+                .get_mut(&id(&frame["id"])?)
+        {
+            // Refuse new output for this call even if JS is still unwinding a job.
+            *call = true;
+        }
+        send.blocking_send(frame)
+            .context("Worker input queue closed")?;
     }
     Ok(())
+}
+
+fn shutdown() -> ! {
+    // The launcher makes the host the process group leader.
+    unsafe {
+        libc::kill(-libc::getpid(), libc::SIGKILL);
+    }
+    std::process::exit(0);
 }
 
 fn write_output(state: Shared, mut output: mpsc::UnboundedReceiver<String>) -> io::Result<()> {
@@ -219,78 +219,52 @@ fn background(result: Result<()>) {
 }
 
 pub async fn run(code: &Path) -> Result<()> {
+    let heap = crate::runtime::heap_bytes()?;
+    let bundles = Bundles::new(code)?;
     let state = Shared::default();
     let (input, mut frames) = mpsc::channel(WORKER_CAPACITY);
     let reader_state = state.clone();
     thread::spawn(move || {
         background(read_input(&reader_state, &input));
-        reader_state.lock().expect("protocol state").stopped = true;
+        shutdown();
     });
     // Payload bytes include the frame currently blocked on stdout.
     let (writer, output) = mpsc::unbounded_channel();
     let writer_state = state.clone();
     thread::spawn(move || background(write_output(writer_state, output).map_err(Into::into)));
 
-    let output = Arc::new(Output {
-        state: state.clone(),
-        writer,
-    });
+    let output = Arc::new(Output { state, writer });
     let next_op = std::rc::Rc::new(std::cell::Cell::new(0_u64));
-    let mut runtime = Runtime::new(code, state.clone(), output.clone(), next_op.clone()).await?;
+    let mut runtime = Runtime::new(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
     loop {
-        if state.lock().expect("protocol state").stopped {
-            return Ok(());
-        }
-        if state.lock().expect("protocol state").interrupt() {
+        // Poll JS before taking another input frame so a busy pipe cannot starve it.
+        let dispatch = tokio::select! {
+            biased;
+            () = runtime.drive() => Ok(()),
+            frame = frames.recv() => {
+                let Some(frame) = frame else { return Ok(()) };
+                if output.prepare(&frame, &bundles)? {
+                    let dispatched = runtime.dispatch(frame.to_string()).await;
+                    if frame["type"] == "cancel" {
+                        output.state.lock().expect("protocol state").retire(id(&frame["id"])?);
+                    }
+                    dispatched
+                } else {
+                    Ok(())
+                }
+            }
+        };
+
+        if runtime.interrupted() {
             output.stop_calls()?;
             drop(runtime);
-            runtime = Runtime::new(code, state.clone(), output.clone(), next_op.clone()).await?;
-        }
-        let deadline = state.lock().expect("protocol state").deadline();
-        let received = tokio::select! {
-            biased;
-            frame = frames.recv() => frame,
-            () = until(deadline) => continue,
-            () = runtime.drive() => bail!("QuickJS runtime closed"),
-        };
-        let Some(frame) = received else {
-            return Ok(());
-        };
-        match frame["type"].as_str() {
-            Some("invoke") => {
-                let id = id(&frame["id"])?;
-                let mut state = state.lock().expect("protocol state");
-                let call = state
-                    .calls
-                    .get_mut(&id)
-                    .context("Missing admitted invocation")?;
-                if call.cancelled {
-                    state.calls.remove(&id);
-                    output.enqueue(&mut state, json!({ "type": "result", "id": id, "error": "Plugin local function cancelled" }).to_string())?;
-                    continue;
-                }
-                call.deadline = Some(Instant::now() + DEADLINE);
-            }
-            Some("cancel") if !state.lock().expect("protocol state").interrupt() => continue,
-            _ => {}
-        }
-
-        let dispatch = if state.lock().expect("protocol state").interrupt() {
-            Ok(())
+            runtime = Runtime::new(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
         } else {
-            runtime.dispatch(frame.to_string()).await
-        };
-        if !state.lock().expect("protocol state").interrupt() {
             dispatch?;
         }
-    }
-}
 
-async fn until(deadline: Option<Instant>) {
-    if let Some(deadline) = deadline {
-        tokio::time::sleep_until(deadline.into()).await;
-    } else {
-        std::future::pending::<()>().await;
+        // Let Tokio wake due timers and I/O before processing more buffered frames.
+        tokio::task::yield_now().await;
     }
 }
 

@@ -3294,16 +3294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "junction"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cde48f36530cbd91b65f050101e6c056d6eb743cea2a8f0f19beef69c6742ff8"
-dependencies = [
- "scopeguard",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "keccak"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3597,22 +3587,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "llrt_fs"
-version = "0.10.0-beta"
-source = "git+https://github.com/awslabs/llrt?rev=02833ca09748424a5960e37133530e24ccccae58#02833ca09748424a5960e37133530e24ccccae58"
-dependencies = [
- "either",
- "junction",
- "llrt_buffer",
- "llrt_encoding",
- "llrt_path",
- "llrt_utils",
- "rand 0.10.3",
- "rquickjs",
- "tokio",
-]
-
-[[package]]
 name = "llrt_hooking"
 version = "0.10.0-beta"
 source = "git+https://github.com/awslabs/llrt?rev=02833ca09748424a5960e37133530e24ccccae58#02833ca09748424a5960e37133530e24ccccae58"
@@ -3656,11 +3630,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "llrt_logging"
+version = "0.10.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=02833ca09748424a5960e37133530e24ccccae58#02833ca09748424a5960e37133530e24ccccae58"
+dependencies = [
+ "itoa",
+ "llrt_json",
+ "llrt_numbers",
+ "llrt_utils",
+ "rquickjs",
+ "ryu",
+]
+
+[[package]]
 name = "llrt_net_policy"
 version = "0.10.0-beta"
 source = "git+https://github.com/awslabs/llrt?rev=02833ca09748424a5960e37133530e24ccccae58#02833ca09748424a5960e37133530e24ccccae58"
 dependencies = [
  "url",
+]
+
+[[package]]
+name = "llrt_numbers"
+version = "0.10.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=02833ca09748424a5960e37133530e24ccccae58#02833ca09748424a5960e37133530e24ccccae58"
+dependencies = [
+ "itoa",
+ "llrt_utils",
+ "rquickjs",
+ "ryu",
 ]
 
 [[package]]
@@ -3734,6 +3732,19 @@ dependencies = [
  "llrt_utils",
  "rquickjs",
  "url",
+]
+
+[[package]]
+name = "llrt_util"
+version = "0.10.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=02833ca09748424a5960e37133530e24ccccae58#02833ca09748424a5960e37133530e24ccccae58"
+dependencies = [
+ "llrt_context",
+ "llrt_encoding",
+ "llrt_logging",
+ "llrt_stream_web",
+ "llrt_utils",
+ "rquickjs",
 ]
 
 [[package]]
@@ -7652,15 +7663,16 @@ name = "tokamak-plugin-host"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "llrt_abort",
  "llrt_buffer",
  "llrt_crypto",
  "llrt_fetch",
- "llrt_fs",
  "llrt_os",
  "llrt_path",
  "llrt_stream_web",
  "llrt_url",
+ "llrt_util",
  "rquickjs",
  "serde_json",
  "tokamak-worker",
