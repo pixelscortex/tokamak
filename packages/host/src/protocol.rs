@@ -77,11 +77,15 @@ impl Output {
     }
 
     fn enqueue(&self, state: &mut State, line: String) -> Result<()> {
-        let bytes = line.len() + 1;
         ensure!(
-            state.queued_bytes + bytes <= OUTPUT_BYTES,
+            state.queued_bytes + line.len() < OUTPUT_BYTES,
             "Worker output queue exceeds 4 MiB limit"
         );
+        self.write(state, line)
+    }
+
+    fn write(&self, state: &mut State, line: String) -> Result<()> {
+        let bytes = line.len() + 1;
         self.writer
             .send(line)
             .context("Worker output queue closed")?;
@@ -89,8 +93,11 @@ impl Output {
         Ok(())
     }
 
+    /// The host's own answers skip the queue limit: a plugin that filled the
+    /// queue must not stop the host from refusing or ending a call. Input
+    /// back-pressure already bounds how many of these can be waiting.
     fn result(&self, state: &mut State, id: u64, error: &str) -> Result<()> {
-        self.enqueue(
+        self.write(
             state,
             json!({ "type": "result", "id": id, "error": error }).to_string(),
         )

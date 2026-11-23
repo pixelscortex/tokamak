@@ -276,6 +276,42 @@ async fn full_input_queue_waits_and_over_capacity_invocations_fail_individually(
 }
 
 #[tokio::test]
+async fn a_full_output_queue_does_not_stop_the_host_answering() {
+    let mut host = Host::start();
+    host.invoke(1, "flood", json!({})).await;
+
+    // Nothing reads stdout here, so the plugin's log lines fill the queue.
+    // A debug build needs most of a second to write them all.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    host.send(json!({ "type": "cancel", "id": 1 })).await;
+
+    // Let the host handle the cancel while the queue is still full.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    loop {
+        let frame = host.receive().await;
+        if frame["type"] == "result" {
+            assert_eq!(frame["id"], 1);
+            assert_eq!(frame["error"], "Plugin local function cancelled");
+            break;
+        }
+    }
+
+    host.send(json!({ "type": "invoke", "id": 2, "fn": "echo", "args": "still here" }))
+        .await;
+    loop {
+        let frame = host.receive().await;
+        if frame["type"] == "op" {
+            host.send(json!({ "type": "opResult", "id": frame["id"], "value": null }))
+                .await;
+        } else if frame["type"] == "result" {
+            assert_eq!(frame["value"], "still here");
+            break;
+        }
+    }
+}
+
+#[tokio::test]
 async fn approved_provider_runs_in_the_caller_realm() {
     let mut host = Host::start();
     host.invoke(1, "providers", json!({})).await;

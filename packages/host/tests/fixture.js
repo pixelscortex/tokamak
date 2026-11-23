@@ -32,6 +32,22 @@ export const functions = {
     return "slept";
   }),
   counter: local(() => counter),
+  flood: local(async () => {
+    const line = "x".repeat(8000);
+    // More than the 4 MiB output queue holds while nothing reads it.
+    for (let i = 0; i < 700; i++) {
+      try {
+        console.info(line);
+      } catch {}
+    }
+    // Short lines use up the room the long ones left, so not even a result fits.
+    for (let i = 0; i < 400; i++) {
+      try {
+        console.info("");
+      } catch {}
+    }
+    await new Promise(() => {});
+  }),
   pending: local(async (_, ctx) => {
     ctx.signal.addEventListener("abort", () => {
       console.info("signal aborted");
