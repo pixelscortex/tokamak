@@ -1,7 +1,9 @@
 import { action, query, v } from "@tokamak/sdk";
-import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { api } from "./_generated/api";
+
+declare const fixtureSpawn: typeof import("node:child_process").spawn;
+declare const fixtureWriteFile: typeof import("node:fs").writeFileSync;
+
 let count = 0;
 let releaseLarge: (() => void) | undefined;
 let retained: (() => Promise<unknown>) | undefined;
@@ -46,7 +48,7 @@ export const crash = action({ handler: () => process.exit(7) });
 export const stuck = action({ handler: () => new Promise(() => {}) });
 export const cpu = action({
   handler: () => {
-    writeFileSync("cpu-started", "");
+    fixtureWriteFile("cpu-started", "");
     for (;;) {}
   },
 });
@@ -82,7 +84,7 @@ export const cooperative = action({
 });
 export const child = action({
   handler: () => {
-    const child = spawn("/bin/sleep", ["60"], { stdio: "ignore" });
+    const child = fixtureSpawn("/bin/sleep", ["60"], { stdio: "ignore" });
     return { worker: process.pid, child: child.pid };
   },
 });
