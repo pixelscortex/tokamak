@@ -120,6 +120,14 @@ _Avoid_: Interceptors, middleware, callbacks (when referring to the extension po
 A named agreement a plugin defines about what another plugin can provide.
 _Avoid_: Provider lookup, service name, interface (when referring to the agreement itself).
 
+**Plugin process**:
+A process the Runner starts on demand to run one installed build of a plugin's local part. While turns and turn hooks pass live objects, it can also load the provider code they need.
+_Avoid_: Worker (when referring to the QuickJS process), action process.
+
+**Plain-data method**:
+A local contract method declared to take and return only JSON data. On QuickJS, calls to another plugin's plain-data method run in that provider's plugin process.
+_Avoid_: Remote method (which can also mean a call to a shared server).
+
 **Page**:
 A screen at a route in the window, declared with `view`. Its components expose the elements other plugins can extend.
 _Avoid_: Component (when the screen is meant), pane.

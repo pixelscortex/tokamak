@@ -835,7 +835,20 @@ fn alive(pid: u32) -> bool {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn plain_contracts_route_between_persistent_plugin_processes() {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/local-routing.mjs");
+    routing_test("local-routing.mjs");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn production_agent_info_uses_dedicated_hosts_and_reuses_live_imports() {
+    routing_test("agent-routing.mjs");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn routing_test(name: &str) {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join(name);
     let output = std::process::Command::new("proto")
         .args(["run", "bun", "--"])
         .arg(script)

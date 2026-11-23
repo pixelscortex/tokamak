@@ -73,10 +73,12 @@ export function contractDeclarations(entry) {
         if (data.kind === ts.SyntaxKind.TrueKeyword) dataMethods = true;
         else if (
           ts.isArrayLiteralExpression(data) &&
+          data.elements.length > 0 &&
           data.elements.every((name) => ts.isStringLiteralLike(name) && contractName.test(name.text))
         )
           dataMethods = data.elements.map((name) => name.text);
-        else throw new Error(`${entry}: dataMethods must be true or an array of literal method names`);
+        else
+          throw new Error(`${entry}: dataMethods must be true or a nonempty array of literal method names`);
       }
       contracts.push({
         exported: name.text,

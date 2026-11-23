@@ -87,11 +87,20 @@ export interface Provider<P extends ContractPlace> {
   readonly implementation: Readonly<Record<string, unknown>>;
 }
 
+type MethodKey<T> = {
+  [K in keyof T]-?: [NonNullable<T[K]>] extends [never]
+    ? never
+    : NonNullable<T[K]> extends (...args: never[]) => unknown
+      ? K
+      : never;
+}[keyof T] &
+  string;
+
 export function contract<T extends object>(
   name: string,
   options: {
     place: "local";
-    dataMethods?: true | readonly (keyof T & string)[];
+    dataMethods?: true | readonly [MethodKey<T>, ...MethodKey<T>[]];
   },
 ): Contract<T, "local">;
 export function contract<T extends object>(

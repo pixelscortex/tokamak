@@ -22,11 +22,11 @@ function deferred<T>() {
 
 /** The socket belongs to the local Runner, even if the window uses a shared workspace. */
 export function runnerLauncher(endpoint: () => Promise<RunnerEndpoint>): LaunchLocalWorker {
-  return async (artifact, receive, closed) => {
+  return async (artifact, receive, closed, live) => {
     const { ws, token } = await endpoint();
     if (!token) throw new Error("Missing Runner secret");
     const socket = new WebSocket(new URL("/local-worker", ws), ["tokamak", `tokamak.bearer.${token}`]);
-    const worker = new RunnerWorker(socket, artifact, receive, closed);
+    const worker = new RunnerWorker(socket, artifact, receive, closed, live);
     await worker.ready;
     return worker;
   };
@@ -51,10 +51,11 @@ class RunnerWorker {
     artifact: LocalArtifact,
     private readonly receive: (message: JsonValue) => void,
     private readonly closed: (reason: string) => void,
+    live: LocalArtifact[] | undefined,
   ) {
     socket.addEventListener("open", () => {
       try {
-        this.write({ type: "start", artifact });
+        this.write({ type: "start", artifact, live });
       } catch (error) {
         this.finish(String(error));
       }
@@ -123,12 +124,12 @@ class RunnerWorker {
     this.write({ type: "write", message });
   }
 
-  async route(id: number, artifact: LocalArtifact) {
-    this.write({ type: "route", id, artifact });
+  async route(id: number, artifact: LocalArtifact, live: LocalArtifact[]) {
+    this.write({ type: "route", id, artifact, live });
   }
 
-  async retire(artifact: LocalArtifact) {
-    if (this.routed) this.write({ type: "retire", artifact });
+  async retire(artifact: LocalArtifact, live: LocalArtifact[], changed: string) {
+    if (this.routed) this.write({ type: "retire", artifact, live, changed });
   }
 
   async load(artifact: LocalArtifact) {

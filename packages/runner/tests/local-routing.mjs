@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { build, connect, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/start-runner.ts";
 import { authCaller, createApi } from "../../sdk/src/index.ts";
+import { editBundle, inspectHosts, installLocal, rawWindow, reload, until } from "./support/routing.mjs";
 
 const binary = process.argv[2];
 const scratch = await mkdtemp(join(workspace, "target/local-routing-"));
@@ -27,7 +28,7 @@ async function plugin(id, source, contract = "") {
     export default definePlugin(${JSON.stringify({
       id,
       version: "1.0.0",
-      ...(id !== owner && id !== crash ? { depends: [owner] } : {}),
+      ...(id !== owner ? { depends: [owner] } : {}),
     })});
   `,
   );
@@ -50,16 +51,29 @@ await plugin(
     handler: (ctx, { id, path }) => probe.get(id, ctx).hold(path),
   });
   export const badArgs = local({
-    handler: (ctx) => probe.get("${alpha}", ctx).hold((() => {}) as unknown as string),
+    handler: (ctx) => probe.get("custom-alpha", ctx).hold((() => {}) as unknown as string),
   });
-  export const badResult = local({ handler: (ctx) => probe.get("${alpha}", ctx).badResult() });
+  const nested = () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown);
+  export const badResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).badResult() });
+  export const deepArgs = local({ handler: (ctx) => probe.get("custom-alpha", ctx).echo(nested()) });
+  export const largeArgs = local({ handler: (ctx) => probe.get("custom-alpha", ctx).echo("🙂".repeat(300_000)) });
+  export const deepResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).deepResult() });
+  export const largeResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).largeResult() });
+  export const thrown = local({ handler: (ctx) => probe.get("custom-alpha", ctx).thrown() });
+  export const checkBad = local({ handler: (ctx) => probe.get("custom-crash", ctx).identify() });
+  export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
 `,
   `
   import { contract, type AuthContext } from "@tokamak/sdk";
   export const probe = contract<{
+    id?: string;
     identify(): Promise<AuthContext>;
     hold(path: string): Promise<string>;
     badResult(): Promise<string>;
+    echo(value: unknown): Promise<unknown>;
+    deepResult(): Promise<unknown>;
+    largeResult(): Promise<string>;
+    thrown(): Promise<void>;
   }>("probe", { place: "local", dataMethods: true });
 `,
 );
@@ -87,70 +101,60 @@ function provider(id) {
       },
     });
     export default provide(probe, {
-      identify, hold,
+      id: "custom-alpha", identify, hold,
       badResult: async () => (() => {}) as unknown as string,
+      echo: async (value) => value,
+      deepResult: async () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown),
+      largeResult: async () => "🙂".repeat(300_000),
+      thrown: async () => { throw new Error("original provider exception"); },
     });
   `;
 }
 
 await plugin(alpha, provider(alpha));
-await plugin(beta, provider(beta));
-await plugin(
-  crash,
-  `
-  import { local } from "@tokamak/sdk";
-  export const ping = local({ handler: () => 1 });
-`,
-);
-
-async function editBundle(id, extra) {
-  const dist = join(plugins, id, "dist");
-  const file = join(dist, "local.js");
-  const code = (await readFile(file, "utf8")) + "\n" + extra;
+const distFor = (id) => join(plugins, id, "dist");
+const cloneProvider = async (id) => {
+  const dist = distFor(id);
+  await cp(distFor(alpha), dist, { recursive: true });
   const path = join(dist, "manifest.json");
   const manifest = await Bun.file(path).json();
+  manifest.plugin.id = id;
+  await writeFile(path, JSON.stringify(manifest));
+  const file = join(dist, "local.js");
+  const code = (await readFile(file, "utf8"))
+    .replaceAll(alpha, id)
+    .replaceAll("custom-alpha", `custom-${id.slice("routed-".length)}`);
   manifest.hashes["local.js"] = createHash("sha256").update(code).digest("hex");
   await writeFile(file, code);
   await writeFile(path, JSON.stringify(manifest));
-}
-await editBundle(crash, 'throw new Error("startup fixture crash");');
+};
+await cloneProvider(beta);
+await cloneProvider(crash);
+await editBundle(distFor(crash), 'throw new Error("startup fixture crash");');
 
 const runner = await startRunner({ binary, plugins, directory, env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs" } });
 const cleanup = [];
-const alive = (pid) => {
-  // An orphan reaped by the launcher can briefly be a zombie on Linux.
-  const state = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
-    .stdout.toString()
-    .trim();
-  return state && !state.startsWith("Z");
-};
-async function until(description, predicate) {
-  const deadline = performance.now() + 10_000;
-  while (performance.now() < deadline) {
-    if (await predicate()) return;
-    await Bun.sleep(20);
-  }
-  throw new Error(`Timed out: ${description}`);
-}
 
 try {
-  const { ws, token, http } = runner.endpoint;
-  const response = await fetch(http + "/health", { headers: { Authorization: "Bearer " + token } });
-  const { pid: runnerPid } = await response.json();
-  const pids = () => {
-    const ps = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,command="]).stdout.toString();
-    return Object.fromEntries(
-      ps.split("\n").flatMap((line) => {
-        const match = /^\s*(\d+)\s+(\d+)\s+.*tokamak-plugin-host --local-plugin (\S+) /.exec(line);
-        return match && Number(match[2]) === runnerPid ? [[match[3], Number(match[1])]] : [];
-      }),
+  const { ws, token } = runner.endpoint;
+  const hosts = await inspectHosts(runner);
+  const pids = () =>
+    Object.fromEntries(
+      hosts()
+        .filter(({ id }) => id !== crash)
+        .map(({ id, pid }) => [id, pid]),
     );
+  const alive = (pid) => {
+    const state = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+      .stdout.toString()
+      .trim();
+    return state && !state.startsWith("Z");
   };
   const client = await connect(ws, { token, launch: runner.launch, cleanup });
   const api = createApi(owner).probe;
   const auth = await client.query(authCaller, {});
-  assert.deepEqual(await client.local(api.identify, { id: alpha }), auth);
-  assert.deepEqual(await client.local(api.identify, { id: beta }), auth);
+  assert.deepEqual(await client.local(api.identify, { id: "custom-alpha" }), auth);
+  assert.deepEqual(await client.local(api.identify, { id: "custom-beta" }), auth);
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());
   assert.equal(new Set(Object.values(initial)).size, 3);
@@ -158,10 +162,16 @@ try {
 
   await assert.rejects(client.local(api.badArgs, {}), /routed-owner\/probe\.hold arguments/);
   await assert.rejects(client.local(api.badResult, {}), /routed-owner\/probe\.badResult result/);
+  await assert.rejects(client.local(api.deepArgs, {}), /probe\.echo arguments.*nesting limit/);
+  await assert.rejects(client.local(api.largeArgs, {}), /probe\.echo arguments.*size limit/);
+  await assert.rejects(client.local(api.deepResult, {}), /probe\.deepResult result.*nesting limit/);
+  await assert.rejects(client.local(api.largeResult, {}), /probe\.largeResult result.*size limit/);
+  await assert.rejects(client.local(api.thrown, {}), /Plugin routed-alpha: original provider exception/);
+  assert.deepEqual(pids(), initial, "data boundary failures must not kill any warmed host");
 
   const begin = async (id, name, signal) => {
     const path = join(scratch, name);
-    const result = client.local(api.hold, { id, path }, { signal });
+    const result = client.local(api.hold, { id: `custom-${id.slice("routed-".length)}`, path }, { signal });
     void result.catch(() => {});
     await until(name + " started", () => Bun.file(path + ".started").exists());
     return { path, result };
@@ -181,7 +191,14 @@ try {
   await assert.rejects(first.result, /Plugin routed-alpha process/);
   await writeFile(second.path + ".release", "");
   assert.equal(await second.result, beta);
-  assert.deepEqual(await client.local(api.identify, { id: alpha }), auth);
+  await until(
+    "alpha recovers",
+    async () =>
+      await client.local(api.identify, { id: "custom-alpha" }).then(
+        () => true,
+        () => false,
+      ),
+  );
   const afterCrash = pids();
   assert.notEqual(afterCrash[alpha], initial[alpha]);
   assert.equal(afterCrash[beta], initial[beta]);
@@ -191,39 +208,185 @@ try {
   // Disconnect one window and attach a new one without losing the idle processes.
   for (const close of cleanup.splice(0).reverse()) await close();
   const next = await connect(ws, { token, launch: runner.launch, cleanup });
-  assert.deepEqual(await next.local(api.identify, { id: alpha }), auth);
+  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
   assert.deepEqual(pids(), afterCrash);
 
-  await editBundle(alpha, "/* replacement local artifact */");
-  const control = (await readFile(join(directory, "runner.control"), "utf8")).trim();
-  const reload = await fetch(http + "/plugins/" + alpha + "/reload", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + control },
-  });
-  assert.equal(reload.status, 200, await reload.text());
+  await editBundle(distFor(alpha), "/* replacement local artifact */");
+  await reload(runner, directory, alpha);
   await until("reloaded alpha stopped", () => !alive(afterCrash[alpha]));
-  assert.deepEqual(await next.local(api.identify, { id: alpha }), auth);
+  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
   const afterReload = pids();
   assert.notEqual(afterReload[alpha], afterCrash[alpha]);
   assert.equal(afterReload[beta], initial[beta]);
   assert.equal(afterReload[owner], initial[owner]);
   console.log("Closing the window kept all three PIDs; reloading alpha replaced only alpha");
 
-  const ping = createApi(crash).probe.ping;
-  const delays = [];
-  for (const minimum of [0, 225, 475, 975]) {
-    const start = performance.now();
-    await assert.rejects(next.local(ping, {}), /Plugin routed-crash process/);
-    const elapsed = Math.round(performance.now() - start);
-    assert.ok(elapsed >= minimum, `startup crash took ${elapsed} ms, expected at least ${minimum}`);
-    delays.push(elapsed);
+  // The first lookup has no cached description for the crashing provider
+  // whose implementation id differs from its plugin id.
+  await Bun.sleep(260);
+  await assert.rejects(next.local(api.checkBad, {}), /custom-crash.*Plugin routed-crash process/);
+  for (const delay of [500, 1000, 2000]) {
+    await Bun.sleep(delay + 25);
+    await assert.rejects(next.local(api.checkBad, {}), /custom-crash.*Plugin routed-crash process/);
   }
-  console.log("Startup crash attempts (ms): " + delays.join(", "));
+  const start = performance.now();
+  assert.deepEqual((await next.local(api.list, {})).sort(), ["custom-alpha", "custom-beta"]);
+  await assert.rejects(next.local(api.checkBad, {}), /routed-crash process: restarting after a crash/);
+  assert.ok(performance.now() - start < 1_500, "lookup waited for the 4 s provider back-off");
+  console.log("Unavailable custom ID preserves the provider error; listings skip its back-off");
 
+  await checkRoutesAndBuilds(runner, hosts);
   assert.equal(await within(runner.stop(), "Runner stop"), 0);
   await until("every host reaped", () => Object.values(afterReload).every((pid) => !alive(pid)));
   console.log("Graceful Runner stop reaped all three local hosts");
 } finally {
   for (const close of cleanup.reverse()) await close();
   await runner.stop();
+}
+
+async function checkRoutesAndBuilds(runner, hosts) {
+  const id = "two-builds";
+  const code = (version) => `
+    export const functions = {
+      ping: { kind: "local", args: { kind: "any" }, invoke: () => ${version} },
+      hold: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.hold", {}) },
+    };
+  `;
+  const old = await installLocal(join(plugins, id), id, code(1));
+  const replacement = await installLocal(join(plugins, id + "-alternate"), id, code(2));
+  const holding = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  const handle = async (_frame, _worker, respond) => {
+    holding.resolve();
+    await release.promise;
+    await respond("old build completed");
+  };
+  const [first, second, latest] = await Promise.all([
+    rawWindow(runner, old, handle),
+    rawWindow(runner, old, handle),
+    rawWindow(runner, replacement, handle),
+  ]);
+  try {
+    assert.deepEqual(await Promise.all([first.invoke("ping", null), second.invoke("ping", null)]), [1, 1]);
+    const oldHosts = () => hosts().filter((host) => host.id === id);
+    assert.equal(oldHosts().length, 1, "simultaneous startup of the same build must reuse a PID");
+    const pid = oldHosts()[0].pid;
+    const busy = second.invoke("hold", null);
+    void busy.catch(() => {});
+    await within(holding.promise, "old build hold");
+    assert.equal(await latest.invoke("ping", null), 2);
+    assert.equal(oldHosts().length, 2, "different local hashes must start a second build");
+    await first.retire(id);
+    release.resolve();
+    assert.equal(await busy, "old build completed");
+    assert.equal(await second.invoke("ping", null), 1);
+    await second.close();
+    await until("unused retired build stopped", () => !oldHosts().some((host) => host.pid === pid));
+    assert.equal(await latest.invoke("ping", null), 2);
+    console.log(
+      "Two windows share one build, a different build coexists, and retirement waits for the last window",
+    );
+  } finally {
+    await Promise.all([first.close(), second.close(), latest.close()]);
+  }
+
+  const chainCode = `
+    const call = (plugins, op) => {
+      const [plugin, ...rest] = plugins;
+      return plugin ? op("local.contract.call", {
+        plugin, owner: "chain", name: "probe", registration: "next", method: "next", args: [rest],
+      }) : "end";
+    };
+    export const functions = {
+      walk: { kind: "local", args: { kind: "any" }, invoke: (args, ctx) => call(args, ctx.op) },
+    };
+    export const contractProviders = {
+      next: {
+        contract: { name: "probe", owner: "chain", place: "local", dataMethods: ["next"] },
+        implementation: { next: { kind: "local", invokeLocal: (args, bridge) => call(args, bridge.op) } },
+      },
+    };
+  `;
+  const chain = await Promise.all(
+    Array.from({ length: 17 }, (_, index) => {
+      const id = `chain-${index}`;
+      return installLocal(join(plugins, id), id, chainCode);
+    }),
+  );
+  const driver = await rawWindow(runner, chain[0], (frame, worker) => {
+    const target = chain.find(({ id }) => id === frame.payload.plugin);
+    assert.ok(target);
+    return worker.route(frame.id, target, []);
+  });
+  try {
+    assert.equal(
+      await driver.invoke(
+        "walk",
+        chain.slice(1, 16).map(({ id }) => id),
+      ),
+      "end",
+    );
+    await assert.rejects(
+      driver.invoke("walk", ["chain-1", "chain-0"]),
+      /cycle or depth limit at plugin chain-0/,
+    );
+    await assert.rejects(
+      driver.invoke(
+        "walk",
+        chain.slice(1).map(({ id }) => id),
+      ),
+      /cycle or depth limit at plugin chain-16/,
+    );
+    assert.equal(
+      hosts().some(({ id }) => id === "chain-16"),
+      false,
+    );
+    console.log("Routed calls reject both cycles and a seventeenth host without launching it");
+  } finally {
+    await driver.close();
+  }
+}
+
+const fakeHost = join(scratch, "fake-host");
+await writeFile(
+  fakeHost,
+  `#!/bin/sh
+[ "$1" = --local-plugin ] || exec "$(dirname "$0")/real-host" "$@"
+read -r invoke
+printf '%s\\n' '{"type":"op","call":1,"id":1,"plugin":"routed-beta","name":"test.forged","payload":{}}'
+read -r reply
+case "$reply" in
+  *"cannot claim plugin identity"*) error="forged identity refused" ;;
+  *) error="forged identity forwarded" ;;
+esac
+printf '{"type":"result","id":1,"error":"%s"}\\n' "$error"
+while read -r request; do :; done
+`,
+  { mode: 0o755 },
+);
+await symlink(
+  process.env.TOKAMAK_PLUGIN_HOST ?? join(binary, "..", "tokamak-plugin-host"),
+  join(scratch, "real-host"),
+);
+const simulatedPlugins = join(scratch, "simulated-plugins");
+await mkdir(simulatedPlugins);
+const simulated = await startRunner({
+  binary,
+  plugins: simulatedPlugins,
+  directory: join(scratch, "impersonation"),
+  env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs", TOKAMAK_PLUGIN_HOST: fakeHost },
+});
+try {
+  const artifact = await installLocal(join(simulatedPlugins, alpha), alpha, "export const functions = {};");
+  const driver = await rawWindow(simulated, artifact, () =>
+    assert.fail("Runner forwarded the forged operation to the window"),
+  );
+  try {
+    await assert.rejects(driver.invoke("anything", null), /forged identity refused/);
+    console.log("Runner refused an alpha host operation claiming beta's identity before forwarding it");
+  } finally {
+    await driver.close();
+  }
+} finally {
+  assert.equal(await simulated.stop(), 0);
 }

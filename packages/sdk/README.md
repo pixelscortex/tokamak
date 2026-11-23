@@ -636,9 +636,15 @@ those calls to the provider's process. For an all-data contract, the lookup
 also reads provider fields and available method names from that process.
 Keep those fields static for a build; the caller can reuse them after a
 process restarts. A value that JSON would change or lose fails with the
-contract and method name. A void result becomes `null` across processes.
+contract and method name. Arguments and results also have size and nesting
+limits. A void result becomes `null` across processes.
 
-Methods that take live objects stay in the caller's realm. Use
+Methods that take live objects stay in the caller's realm. For a mixed
+contract the provider module is also evaluated in that realm, even though its
+plain-data methods run in the provider's separate process. That shared
+evaluation remains until turn and hook calls move (TKM-247 and TKM-248).
+A reload restarts the provider process only when its local bytes change; a
+caller realm also restarts if its live providers change. Use
 `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
 All local methods receive the calling member and device in their context. A

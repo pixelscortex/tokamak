@@ -46,13 +46,14 @@ export type LaunchLocalWorker = (
   artifact: LocalArtifact,
   receive: (message: JsonValue) => void,
   closed: (reason: string) => void,
+  live?: LocalArtifact[],
 ) => Promise<{
   send(message: JsonValue): Promise<void>;
   close(): Promise<void>;
   load?(artifact: LocalArtifact): Promise<string>;
   routed?: boolean;
-  route?(id: number, artifact: LocalArtifact): Promise<void>;
-  retire?(artifact: LocalArtifact): Promise<void>;
+  route?(id: number, artifact: LocalArtifact, live: LocalArtifact[]): Promise<void>;
+  retire?(artifact: LocalArtifact, live: LocalArtifact[], changed: string): Promise<void>;
 }>;
 
 type ServerConnection = ClientTransport & {
@@ -66,6 +67,7 @@ export class LocalFunctions implements LocalTransport {
   private readonly unlisten: () => void;
   private generation = 0;
   private catalog: Manifest[] = [];
+  private live = new Map<string, LocalArtifact[]>();
   /** The generation `catalog` was read for; -1 before the first read. */
   private loaded = -1;
   /** The catalog read in flight, shared by every call that needs it. */
@@ -137,6 +139,13 @@ export class LocalFunctions implements LocalTransport {
       const current = new LocalWorker(
         this.launch,
         artifact,
+        this.live.get(id) ?? [],
+        (candidate) => {
+          const manifest = this.catalog.find(({ plugin }) => plugin.id === candidate.id);
+          return manifest && sameArtifact(candidate, this.artifact(manifest))
+            ? (this.live.get(candidate.id) ?? [])
+            : undefined;
+        },
         (caller, operation, payload) => this.serverCall(caller ?? id, operation, payload),
         (caller, host, key, load, allow, routed) =>
           this.contractProviders(caller ?? id, host ?? id, key, load, allow, routed),
@@ -162,20 +171,66 @@ export class LocalFunctions implements LocalTransport {
     const { plugins } = (await this.server.plugins()) as unknown as { plugins: Manifest[] };
     if (this.closed || generation !== this.generation) return false;
     const previous = this.catalog;
+    const previousLive = this.live;
     this.catalog = plugins;
+    this.live = this.liveProfiles();
     this.loaded = generation;
     const artifacts = new Map(plugins.map((manifest) => [manifest.plugin.id, this.artifact(manifest)]));
     // Routed providers may have been used without opening their own window socket.
     const workers = [...this.workers.values()];
     for (const manifest of previous) {
       const old = this.artifact(manifest);
-      if (old && !sameArtifact(old, artifacts.get(old.id)))
-        for (const worker of workers) void worker.retireArtifact(old).catch(() => {});
+      if (!old) continue;
+      const live = previousLive.get(old.id) ?? [];
+      const changed = !sameArtifact(old, artifacts.get(old.id))
+        ? old.id
+        : changedProvider(live, this.live.get(old.id) ?? []);
+      if (changed)
+        for (const worker of workers) void worker.retireArtifact(old, live, changed).catch(() => {});
     }
-    for (const worker of workers) {
-      if (!worker.matchesCatalog(artifacts)) void worker.close("Local plugin generation retired");
-    }
+    for (const worker of workers)
+      void worker.catalogChange(artifacts, this.live.get(worker.artifact.id) ?? []).catch(() => {});
     return true;
+  }
+
+  // Mixed and live-only providers can themselves look up live providers.
+  // A host is shared only by windows with the same reachable live builds.
+  private liveProfiles(): Map<string, LocalArtifact[]> {
+    const imports = new Map<string, Map<string, LocalArtifact>>();
+    const owners = new Map(this.catalog.map((manifest) => [manifest.plugin.id, manifest]));
+    for (const manifest of this.catalog) {
+      const artifact = this.artifact(manifest);
+      if (!artifact) continue;
+      for (const { owner, name, place, declarationHash } of manifest.contractProviders ?? []) {
+        if (place !== "local" || owner === artifact.id || !declaresAccessTo(manifest.plugin, owner)) continue;
+        const declaration = owners
+          .get(owner)
+          ?.contracts?.find(
+            (entry) =>
+              entry.place === "local" && entry.name === name && entry.declarationHash === declarationHash,
+          );
+        if (!declaration || declaration.dataMethods === true) continue;
+        const providers = imports.get(owner) ?? new Map();
+        providers.set(artifact.id, artifact);
+        imports.set(owner, providers);
+      }
+    }
+    return new Map(
+      [...imports.keys()].map((id) => {
+        const seen = new Set([id]);
+        const live: LocalArtifact[] = [];
+        const collect = (owner: string) => {
+          for (const artifact of imports.get(owner)?.values() ?? []) {
+            if (seen.has(artifact.id)) continue;
+            seen.add(artifact.id);
+            live.push(artifact);
+            collect(artifact.id);
+          }
+        };
+        collect(id);
+        return [id, live];
+      }),
+    );
   }
 
   private async contractProviders(
@@ -215,16 +270,18 @@ export class LocalFunctions implements LocalTransport {
       if (!artifact) continue;
       const own = plugin === worker;
       const dataMethods = routed && !own ? declaration.dataMethods : undefined;
-      const path = own || dataMethods === true ? "" : await load(artifact);
+      const live = !own && dataMethods !== true;
+      const path = live ? await load(artifact) : "";
       for (const { registration } of registrations) {
         if (dataMethods) allow(caller, name, registration, artifact, dataMethods);
         providers.push({
           plugin,
           registration,
           path,
+          ...(live && routed && { artifact: { ...artifact } }),
           own,
           owner: caller,
-          ...(dataMethods && { dataMethods, build: artifact.codeHash }),
+          ...(dataMethods && { dataMethods, build: `${artifact.entryHash}:${artifact.codeHash}` }),
         });
       }
     }
@@ -271,6 +328,15 @@ function sameArtifact(a: LocalArtifact, b: LocalArtifact | undefined) {
   return a.entryHash === b?.entryHash && a.codeHash === b.codeHash;
 }
 
+function changedProvider(previous: LocalArtifact[], next: LocalArtifact[]) {
+  return (
+    previous.find(
+      (artifact) =>
+        !next.some((candidate) => artifact.id === candidate.id && sameArtifact(artifact, candidate)),
+    ) ?? next.find((candidate) => !previous.some((artifact) => candidate.id === artifact.id))
+  )?.id;
+}
+
 function routeKey(plugin: string, owner: string, name: string, registration: string) {
   return JSON.stringify([plugin, owner, name, registration]);
 }
@@ -294,6 +360,8 @@ class LocalWorker {
   constructor(
     launch: LaunchLocalWorker,
     readonly artifact: LocalArtifact,
+    private readonly live: LocalArtifact[],
+    private readonly profileOf: (artifact: LocalArtifact) => LocalArtifact[] | undefined,
     private readonly serverCall: (
       caller: string | undefined,
       op: string,
@@ -323,6 +391,7 @@ class LocalWorker {
       (reason) => {
         void this.close(reason);
       },
+      live,
     ).then((worker) => {
       this.routed = worker.routed === true;
       return worker;
@@ -418,7 +487,9 @@ class LocalWorker {
             throw new Error(`Invalid local contract route for ${owner}/${name}.${method ?? "describe"}`);
           if (this.calls.get(frame.call) === call && !call.cancelled) {
             call.providers.add(plugin);
-            await worker.route!(frame.id, route.artifact);
+            const live = this.profileOf(route.artifact);
+            if (!live) throw new Error(`Plugin ${plugin} local build retired`);
+            await worker.route!(frame.id, route.artifact, live);
           }
           return;
         }
@@ -429,7 +500,7 @@ class LocalWorker {
                 frame.host,
                 frame.payload,
                 async (artifact) => {
-                  const path = await this.loadProvider(artifact);
+                  const path = worker.routed ? "" : await this.loadProvider(artifact);
                   call.providers.add(artifact.id);
                   return path;
                 },
@@ -455,20 +526,26 @@ class LocalWorker {
     }
   }
 
-  matchesCatalog(artifacts: ReadonlyMap<string, LocalArtifact | undefined>): boolean {
+  async catalogChange(artifacts: ReadonlyMap<string, LocalArtifact | undefined>, live: LocalArtifact[]) {
+    // The catalog can change before the socket has reported which runtime it uses.
+    await this.endpoint;
     const matches = (artifact: LocalArtifact) => sameArtifact(artifact, artifacts.get(artifact.id));
-    if (!matches(this.artifact)) return false;
-    if (this.routed) {
-      for (const [id, { artifact }] of this.loaded) if (!matches(artifact)) this.loaded.delete(id);
-      return true;
+    if (!matches(this.artifact)) {
+      void this.close(
+        this.routed ? `Plugin ${this.artifact.id} local build retired` : "Local plugin generation retired",
+      );
+    } else if (this.routed) {
+      const changed = changedProvider(this.live, live);
+      if (changed)
+        void this.close(`Plugin ${this.artifact.id}: live provider ${changed} changed; local realm retired`);
+    } else if ([...this.loaded.values()].some(({ artifact }) => !matches(artifact))) {
+      // Bun caches imported modules. Closing the worker releases the provider and its tasks.
+      void this.close("Local plugin generation retired");
     }
-    // Bun caches imported modules. Closing this worker releases an imported
-    // provider as well as any tasks it left running.
-    return [...this.loaded.values()].every(({ artifact }) => matches(artifact));
   }
 
-  async retireArtifact(artifact: LocalArtifact) {
-    await (await this.endpoint).retire?.(artifact);
+  async retireArtifact(artifact: LocalArtifact, live: LocalArtifact[], changed: string) {
+    await (await this.endpoint).retire?.(artifact, live, changed);
   }
 
   private loadProvider(artifact: LocalArtifact): Promise<string> {

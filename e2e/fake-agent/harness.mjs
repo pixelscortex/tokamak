@@ -83,6 +83,17 @@ export async function copySource(from, into, modules) {
   );
 }
 
+async function copyAgentSources(scratch) {
+  const sources = join(scratch, "sources");
+  for (const id of ["chat", "ai"])
+    await copySource(
+      join(workspace, "plugins", id),
+      join(sources, id),
+      join(workspace, "plugins", id, "node_modules"),
+    );
+  return sources;
+}
+
 /**
  * Builds chat, ai and every fake agent and installs copies of their builds at
  * `install(id)`, by default `<scratch>/plugins/<id>`. Fake agents build beside
@@ -91,13 +102,7 @@ export async function copySource(from, into, modules) {
 export async function buildAgentPlugins(scratch, install = (id) => join(scratch, "plugins", id)) {
   build(join(workspace, "plugins/chat"));
   build(join(workspace, "plugins/ai"));
-  const sources = join(scratch, "sources");
-  for (const id of ["chat", "ai"])
-    await copySource(
-      join(workspace, "plugins", id),
-      join(sources, id),
-      join(workspace, "plugins", id, "node_modules"),
-    );
+  const sources = await copyAgentSources(scratch);
   const builds = [
     ["chat", join(workspace, "plugins/chat/dist")],
     ["ai", join(workspace, "plugins/ai/dist")],
@@ -186,7 +191,7 @@ export async function connect(
 /** Observe or hold the same worker frames regardless of the wire transport. */
 function observeWorker(launch, observe) {
   if (!observe) return launch;
-  return async (artifact, receive, close) => {
+  return async (artifact, receive, close, live) => {
     const worker = await launch(
       artifact,
       (frame) => {
@@ -194,11 +199,12 @@ function observeWorker(launch, observe) {
         receive(frame);
       },
       close,
+      live,
     );
     return {
       routed: worker.routed,
-      route: (id, provider) => worker.route(id, provider),
-      retire: (provider) => worker.retire(provider),
+      route: (id, provider, live) => worker.route(id, provider, live),
+      retire: (provider, live, changed) => worker.retire(provider, live, changed),
       load: (provider) => worker.load(provider),
       close: () => worker.close(),
       async send(frame) {
@@ -312,7 +318,12 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
   const plugins = join(scratch, "plugins");
   await mkdir(home);
   await installFakeAgent(bin, await fakeAgents());
-  await buildAgentPlugins(scratch);
+  const fixtures = process.env.TOKAMAK_AGENT_FIXTURES;
+  if (fixtures) {
+    await cp(fixtures, plugins, { recursive: true });
+    // Some tests build an additional plugin against these public source declarations.
+    await copyAgentSources(scratch);
+  } else await buildAgentPlugins(scratch);
   // The desktop's short list (HOME, USER, LANG, … and PATH); nothing else reaches agents.
   const localEnv = {
     TOKAMAK_APP_DATA_DIR: join(scratch, "app-data"),

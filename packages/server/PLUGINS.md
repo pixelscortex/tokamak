@@ -270,12 +270,21 @@ the provider's database, grants and the authenticated caller. Only the plugin
 which defined the contract may list or invoke those registrations. A reload
 rebuilds the active registrations; an optional provider stays installed when
 its contract owner is absent. The client catalog only carries registrations
-needed by the local part. The client snapshots matching installed provider
-bundles into the defining plugin's local runtime (the QuickJS host or the Bun
-worker) so local contracts can pass JavaScript objects containing callbacks without
-serializing them. Removing or changing a loaded provider unloads the importing
-plugin's local module.
-The catalog verifies the provider's declaration hash against the owner's.
+needed by the local part. The catalog verifies the provider's declaration hash
+against the owner's. The declaring plugin can mark a local contract with
+`dataMethods: true` or a nonempty list such as `dataMethods: ["info"]`.
+For those methods, the window authorizes the provider and method using the
+catalog, and the QuickJS Runner routes the JSON arguments and result between
+the two plugin processes. The provider handles the call with the caller's
+signed-in member and device. Live methods, including turn start and turn
+hooks, run in the caller's realm and can pass objects with callbacks. Bun
+continues to use the caller's worker for all local contract methods.
+
+The QuickJS Runner reuses one verified snapshot of each live provider per
+caller realm. When that provider's local bytes change, windows switch to a
+new realm and the old one is retired once no connected window uses it. Its
+modules and background work end with the process. A reload with identical
+local bytes and live providers keeps the existing process.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

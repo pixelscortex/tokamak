@@ -46,7 +46,7 @@ pub(super) struct Local {
     pool: quickjs::Pool,
 }
 
-#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "camelCase")]
 struct Artifact {
     id: String,
@@ -57,11 +57,29 @@ struct Artifact {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Request {
-    Start { artifact: Artifact },
-    Write { message: Value },
-    Load { id: u32, artifact: Artifact },
-    Route { id: u64, artifact: Artifact },
-    Retire { artifact: Artifact },
+    Start {
+        artifact: Artifact,
+        #[serde(default)]
+        live: Vec<Artifact>,
+    },
+    Write {
+        message: Value,
+    },
+    Load {
+        id: u32,
+        artifact: Artifact,
+    },
+    Route {
+        id: u64,
+        artifact: Artifact,
+        #[serde(default)]
+        live: Vec<Artifact>,
+    },
+    Retire {
+        artifact: Artifact,
+        live: Vec<Artifact>,
+        changed: String,
+    },
     Close,
 }
 
@@ -130,22 +148,21 @@ async fn upgrade(State(local): State<Local>, ws: WebSocketUpgrade) -> Response {
 
 async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String> {
     let started = async {
-        let Some(Request::Start {
-            artifact: requested,
-        }) = receive(socket).await?
-        else {
+        let Some(Request::Start { artifact, live }) = receive(socket).await? else {
             return Err("Expected a local worker artifact".into());
         };
-        Ok::<_, String>(requested)
+        Ok::<_, String>((artifact, live))
     };
-    let requested = tokio::select! {
+    let (requested, live) = tokio::select! {
         _ = local.stopping.cancelled() => return Ok(()),
         result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
     };
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     if LocalRuntime::selected()? == LocalRuntime::QuickJs {
-        return quickjs::connection(socket, &local.pool, requested).await;
+        return quickjs::connection(socket, &local.pool, quickjs::Build::new(requested, live)?)
+            .await;
     }
+    drop(live);
     let Artifact {
         id: plugin,
         entry_hash,
@@ -232,12 +249,12 @@ async fn relay(
                 }
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
-                Some(Request::Route { id, artifact }) => {
-                    drop((id, artifact));
+                Some(Request::Route { id, artifact, live }) => {
+                    drop((id, artifact, live));
                     return Err("Bun does not route local contract calls".into());
                 }
-                Some(Request::Retire { artifact }) => {
-                    drop(artifact);
+                Some(Request::Retire { artifact, live, changed }) => {
+                    drop((artifact, live, changed));
                     return Err("Bun local workers belong to their socket".into());
                 }
             },

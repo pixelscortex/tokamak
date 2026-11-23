@@ -35,14 +35,17 @@ For live methods the host still imports the verified provider bundle in the
 same realm. The agent contract mixes both kinds: `info` runs in the provider's
 process, and `start` still receives the live turn in `ai`'s process. The bundle
 is available there for provider discovery and live calls. Turn hooks also
-stay in that realm. Changing an imported provider gives new calls a new
-module path; old module instances can remain in memory until that host exits
-or resets. Imports from other paths are refused.
+stay in that realm. The Runner reuses the same verified snapshot in that
+realm across windows. When the provider's local bytes change, callers switch
+to a fresh process; the old realm ends once no window uses it. Imports from
+other paths are refused.
 
-A process exit fails its active calls with the plugin's name. The next call
-starts it again after 250 ms, doubling with repeated crashes up to 30 seconds.
-A run of at least 60 seconds resets the delay. Reloading a changed local
-artifact retires only its own process.
+A process exit fails its active calls with the plugin's name. Its next start
+is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run
+of at least 60 seconds resets the delay. Routed calls fail immediately during
+that delay so a lookup can continue with other providers. Reload retires
+changed builds and realms with changed live providers; unchanged local bytes
+reuse the existing process.
 
 Local functions can start up to 256 live programs per host with `proc` and
 `withPrograms`. Programs get their own process groups. On macOS and Linux a

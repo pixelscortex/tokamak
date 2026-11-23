@@ -1,6 +1,6 @@
 // Compile actual generated refs: exact result, argument, kind, and table inference
 // must survive module discovery, aliasing, optional fields, and async void.
-import { TokamakClient, type ArgsOf, type ResultOf, type FunctionReference, type Id, type Doc, type ModelFromSchema } from '@tokamak/sdk';
+import { contract, TokamakClient, type ArgsOf, type ResultOf, type FunctionReference, type Id, type Doc, type ModelFromSchema } from '@tokamak/sdk';
 import { api } from '../feature/_generated/api';
 import schema from '../feature/schema';
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -20,3 +20,17 @@ export async function consume(client: TokamakClient) {
     if ('value' in event) { const done: boolean | undefined = event.value.first?.done; void done; }
   });
 }
+
+interface MixedContract {
+  readonly id: string;
+  readonly missing: null;
+  info?(): Promise<string>;
+  start(report: (text: string) => void): Promise<void>;
+}
+export const mixed = contract<MixedContract>('mixed', { place: 'local', dataMethods: ['info'] });
+// @ts-expect-error A data field is not a method.
+contract<MixedContract>('field', { place: 'local', dataMethods: ['id'] });
+// @ts-expect-error A list of plain-data methods cannot be empty.
+contract<MixedContract>('empty', { place: 'local', dataMethods: [] });
+// @ts-expect-error A null data field is not a method either.
+contract<MixedContract>('nullField', { place: 'local', dataMethods: ['missing'] });

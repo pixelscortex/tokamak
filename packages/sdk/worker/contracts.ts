@@ -1,13 +1,22 @@
 import { pathToFileURL } from "node:url";
-import {
-  contractData,
-  type ContractEntry,
-  type ContractScope,
-  type Provider,
-} from "../src/internal/contracts";
+import { type ContractEntry, type ContractScope, type Provider } from "../src/internal/contracts";
 import type { AuthContext, FunctionDefinition } from "../src/functions";
 import { callHost, type HostBridge, type HostOperations } from "../src/host";
-import { jsonSnapshot, type JsonValue } from "../src/values";
+import { assertJson, type JsonValue } from "../src/values";
+
+import { WORKER_FRAME_BYTES } from "../src/worker-limits";
+
+// Leave room for the operation and invocation envelopes in both directions.
+const MAX_DATA_BYTES = WORKER_FRAME_BYTES - 16 * 1024;
+const MAX_DATA_DEPTH = 100;
+
+function wireData(value: unknown, label: string): JsonValue {
+  assertJson(value, label, undefined, MAX_DATA_DEPTH);
+  const text = JSON.stringify(value);
+  if (text.length > MAX_DATA_BYTES || new TextEncoder().encode(text).length > MAX_DATA_BYTES)
+    throw new Error(`${label} exceeds the plain-data size limit`);
+  return JSON.parse(text) as JsonValue;
+}
 
 type ProviderModule = { contractProviders?: Record<string, Provider<"local">> };
 export type ContractInvocation = {
@@ -50,7 +59,10 @@ export function dataContracts(root: ProviderModule) {
       const methods = Object.entries(definition)
         .filter(([, value]) => typeof value === "function" || localMethod(value))
         .map(([member]) => member);
-      return { data: contractData(definition, methods), methods };
+      const data = Object.fromEntries(
+        Object.entries(definition).filter(([member]) => !methods.includes(member)),
+      );
+      return wireData({ data, methods }, `Local contract ${owner}/${name}.describe result`);
     }
     const label = `Local contract ${owner}/${name}.${method}`;
     if (!Object.hasOwn(definition, method) || !dataMethod(declared, method))
@@ -65,7 +77,7 @@ export function dataContracts(root: ProviderModule) {
     const handler = implementation[method];
     if (typeof handler !== "function") throw new Error(`${label} is not a method`);
     const result = await handler(...args);
-    return jsonSnapshot(result === undefined ? null : result, `${label} result`);
+    return wireData(result === undefined ? null : result, `${label} result`);
   };
 }
 
@@ -88,6 +100,7 @@ export function workerContracts(
         const auth = await callHost(bridge, "auth.current", {});
         if (!auth) throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
+        const unavailable: { plugin: string; lastId: JsonValue | undefined; error: unknown }[] = [];
         const resolve = async ({
           plugin,
           registration,
@@ -104,7 +117,7 @@ export function workerContracts(
               callHost(bridge, "local.contract.call", {
                 ...target,
                 method,
-                args: jsonSnapshot(
+                args: wireData(
                   args,
                   `Local contract ${owner}/${key.name}.${method} arguments`,
                 ) as JsonValue[],
@@ -124,15 +137,22 @@ export function workerContracts(
                 ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
               });
             } catch (error) {
-              if (selected === plugin) throw error;
+              unavailable.push({ plugin, lastId: cached?.value.data.id, error });
               return;
             }
           } else {
-            const module = own ? root : await load(path);
-            const { implementation: definition } = checkedProvider(module, target);
-            implementation = bindProvider(definition, host(own ? undefined : plugin), auth, (member) =>
-              !own && dataMethod(dataMethods, member) ? remote(member) : undefined,
-            );
+            try {
+              const module = own ? root : await load(path);
+              const { implementation: definition } = checkedProvider(module, target);
+              implementation = bindProvider(definition, host(own ? undefined : plugin), auth, (member) =>
+                !own && dataMethod(dataMethods, member) ? remote(member) : undefined,
+              );
+            } catch (error) {
+              // A mixed provider can fail to import too. Other agents are still usable.
+              if (!dataMethods || own) throw error;
+              unavailable.push({ plugin, lastId: undefined, error });
+              return;
+            }
           }
           return { plugin, implementation };
         };
@@ -147,6 +167,16 @@ export function workerContracts(
           if (typeof id !== "string" || !id || entries.has(id))
             throw new Error(`Invalid or duplicate provider id for ${key.name}: ${id}`);
           entries.set(id, { id, implementation });
+        }
+        if (selected !== undefined && !entries.has(selected) && unavailable.length) {
+          const named = unavailable.find(({ plugin, lastId }) => selected === (lastId ?? plugin));
+          if (named) throw named.error;
+          // On first discovery an unavailable provider hasn't told us its
+          // implementation id yet. Report the discovery failures instead of
+          // claiming that the requested id does not exist.
+          throw new Error(
+            `Could not resolve ${key.name} provider ${selected}: ${unavailable.map(({ plugin, error }) => `${plugin}: ${error}`).join("; ")}`,
+          );
         }
         return [...entries.values()];
       },

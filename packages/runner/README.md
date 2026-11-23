@@ -2,12 +2,25 @@
 
 The Runner combines a workspace server and the local runtime in one program. It
 owns the server's action process and up to 128 QuickJS local plugin processes.
-Each local process starts on its first call and stays alive until reload,
-process exit or Runner shutdown. A window socket carries calls and their
-workspace operations; closing the socket cancels its calls. The Runner routes
-plain-data contract calls to the provider's process, and the window continues
-to resolve contracts and answer workspace operations on its signed-in
-connection. With the Bun fallback, each worker socket still owns its process.
+Each local process starts on its first call and stays up until its build is
+retired, it exits, or the Runner shuts down. The registry distinguishes a
+plugin's ID and its two local bundle hashes. It also separates realms that
+need different builds of live providers. Windows that use the same build and
+live profile share a process. A retired build stops when the last window
+using it releases it. Closing a window cancels its calls; an unchanged
+process stays up across reconnects. With the Bun fallback, each worker socket
+still owns its process.
+
+A window is a trusted Runner client. It checks `local.contract.call` against
+the signed-in workspace's catalog: who owns the contract, whether the
+provider declared access to the owner, and whether the method appears in
+`dataMethods`. The Runner verifies the installed artifact ID and hashes
+before starting a process or making a provider snapshot available to a live
+realm. It permits operations to claim only the process's own plugin ID or an
+ID for which that process received a verified live snapshot. The provider
+checks its registration and re-checks that the requested method is declared
+for plain data. Workspace operations in the provider still go through the
+calling window, with that window's signed-in member and device.
 
 To run a workspace from a terminal:
 
@@ -44,3 +57,28 @@ the desktop, the Runner takes over a store held by a Tokamak server after
 verifying the server's identity and waiting for its shutdown to release the
 ownership lock. Started by hand, it never stops another process: it reports the
 store as in use and names the holder.
+
+### Linux memory measurement
+
+The original measurement ran on Linux arm64 in the local Docker image
+`tokamak:tkm-243-checks`. Reproduce it from a committed checkout by overlaying
+the source onto `/src` in that image and building in release mode:
+
+```sh
+git archive HEAD | docker run -i tokamak:tkm-243-checks bash -c '
+  set -e
+  tar xf - -C /src
+  CARGO_BUILD_JOBS=4 cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
+  proto run bun -- packages/runner/tests/measure-linux-memory.mjs target/release/tokamak-runner
+'
+```
+
+The script uses an empty workspace and 100 synthetic plugins with identical
+trivial local code. A host is warmed once: its first invocation completes
+(including the window's auth reply), then it sits idle. The script waits 200 ms
+before sampling one host and 400 ms before sampling 100. It reads
+`/proc/<pid>/smaps_rollup` for each child, sums proportional set size (PSS),
+and reports host and guardian memory separately. PSS apportions shared pages
+among the processes that map them; RSS charges each process for every page it
+maps. The marginal figure subtracts the one-host PSS from the 100-host PSS and
+divides by 99.
