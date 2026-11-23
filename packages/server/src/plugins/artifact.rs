@@ -25,7 +25,14 @@ impl Artifact {
             && (manifest.hashes.contains_key(TRANSACTIONS)
                 != manifest.hashes.contains_key(TRANSACTIONS_MAP))
         {
-            return Err(invalid("Incomplete transaction bundle"));
+            let missing = if manifest.hashes.contains_key(TRANSACTIONS) {
+                TRANSACTIONS_MAP
+            } else {
+                TRANSACTIONS
+            };
+            return Err(invalid(format!(
+                "Incomplete transaction bundle: no hash for {missing}; rebuild this plugin"
+            )));
         }
 
         let mut assets = BTreeMap::new();
