@@ -1,0 +1,27 @@
+packages/sdk/tools/bundle.mjs
+  s_22673d1f8f1cae::t_4d86e23d1298bf 18,223,391
+packages/sdk/tools/worker.mjs
+  s_22673d1f8f1cae::t_4d86e23d1298bf 75,104
+packages/sdk/README.md
+  s_22673d1f8f1cae::t_4d86e23d1298bf 179-197
+packages/sdk/tools/server-builtins.mjs
+  s_22673d1f8f1cae::t_4d86e23d1298bf 2,4-7,10,14-17,19,23-25,34,36,42,49-50
+packages/build/tests/local.test.mjs
+  s_22673d1f8f1cae::t_280dc86f87a535 152,206-256,259,261-265,267,269-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c4fff537b9fe175e2eaf695ffe597cbb222e0073",
+  "prompts": {},
+  "sessions": {
+    "s_22673d1f8f1cae": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a207ce-8b73-7183-8a69-677a5b208a27",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
