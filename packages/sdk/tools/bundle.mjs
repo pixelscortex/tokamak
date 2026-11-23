@@ -226,12 +226,6 @@ export async function bundleFeature(folder, namespace, worker = false) {
     await Bun.write(entry, source);
 
     const hasLocal = local.length > 0 || providers.some((p) => p.place === "local");
-    await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
-    if (namespace !== undefined)
-      await Bun.write(
-        join(root, "dist/contracts.json"),
-        JSON.stringify(contractManifest(pluginRoot, namespace, providers)),
-      );
     if (hasLocal) {
       await buildWorkerBundles({
         root,
@@ -281,6 +275,13 @@ export async function bundleFeature(folder, namespace, worker = false) {
       ],
     });
     if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
+    // Report unsupported imports before TypeScript reports missing Node declarations.
+    await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
+    if (namespace !== undefined)
+      await Bun.write(
+        join(root, "dist/contracts.json"),
+        JSON.stringify(contractManifest(pluginRoot, namespace, providers)),
+      );
     const chunks = built.outputs.filter((output) => output.kind !== "sourcemap");
     if (chunks.length !== 1 || !built.outputs.some((output) => output.kind === "sourcemap"))
       throw new Error("Feature build must produce exactly one ESM file and its source map");

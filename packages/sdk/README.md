@@ -174,6 +174,15 @@ or return the failure to roll back the caller's writes too. Actions are not
 transactional: returning `fail` from an action does not undo mutations it
 already called. Throw for unexpected errors.
 
+## Node modules in the server part
+
+Server actions can import `node:path`, `node:os`, `node:crypto`, and `node:url`.
+Local functions can also import `node:fs/promises`. Both have the globals
+`setTimeout`, `setInterval`, `setImmediate`, and `fetch`; no import is needed.
+The build checks direct imports and imports in dependencies, including bare
+names such as `path`. If a plugin needs real Node, start it with `ctx.proc` in
+a local function.
+
 ## Local functions
 
 `local({ args, handler })` runs in the desktop client's Bun worker. Put it

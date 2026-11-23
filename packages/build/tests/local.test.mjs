@@ -6,13 +6,13 @@ import { join } from "node:path";
 import { test } from "bun:test";
 import { build, built, source } from "./plugin-fixtures.mjs";
 
-async function fixture(run) {
+async function fixture(run, worker = false) {
   const root = await mkdtemp(join(tmpdir(), "tokamak-local-build-"));
   try {
     const folder = await source(root, "local-test", 'export { Window } from "./mixed";', {});
     await writeFile(
       join(folder, "plugin.ts"),
-      'import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "local-test", version: "1.0.0" });',
+      `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "local-test", version: "1.0.0", ${worker ? 'runtime: "worker"' : ""} });`,
     );
     await run(folder);
   } finally {
@@ -131,5 +131,88 @@ test("local handlers cannot access a database directly", async () => {
     assert.match(result.stderr + result.stdout, /Property 'db' does not exist on type 'LocalContext'/);
     assert.match(result.stderr + result.stdout, /Call a server function for database access/);
     assert.doesNotMatch(result.stderr + result.stdout, /Move .* into a local function/);
+  });
+}, 30_000);
+
+test("local functions cannot import node:child_process", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { local } from "@tokamak/sdk";
+      import { spawn } from "node:child_process";
+      export function Window() {}
+      export const run = local({ handler: () => typeof spawn });
+      `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/mixed.ts imports "node:child_process".*local functions.*through proc/,
+    );
+  });
+}, 30_000);
+
+test("server actions cannot import node:fs/promises even when a local function can", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action, local } from "@tokamak/sdk";
+      import { read } from "./helper";
+      export function Window() {}
+      export const readOnServer = action({ handler: read });
+      export const readLocally = local({ handler: read });
+      `,
+    );
+    await writeFile(
+      join(folder, "src/helper.ts"),
+      'export const read = async () => (await import("fs/promises")).readFile("example", "utf8");',
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/helper.ts imports "node:fs\/promises".*server actions.*through proc/,
+    );
+  }, true);
+}, 30_000);
+
+test("local functions cannot require a bare built-in through a helper", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { local } from "@tokamak/sdk";
+      import { load } from "./helper";
+      export function Window() {}
+      export const run = local({ handler: load });
+      `,
+    );
+    await writeFile(
+      join(folder, "src/helper.ts"),
+      'export const load = () => typeof require("child_process").spawn;',
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/helper.ts imports "node:child_process".*local functions.*through proc/,
+    );
+  });
+}, 30_000);
+
+test("the server part's Node module check does not apply to the window", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/main.tsx"),
+      'export const Window = () => import("node:child_process");',
+    );
+    await writeFile(
+      join(folder, "src/local.ts"),
+      'import { local } from "@tokamak/sdk"; export const run = local({ handler: () => "local" });',
+    );
+    built(folder);
   });
 }, 30_000);
