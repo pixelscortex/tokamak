@@ -1,0 +1,36 @@
+packages/host/README.md
+  s_b654b6e1a39b4c::t_cf9531912052be 39-45
+packages/host/src/programs/process.rs
+  s_b654b6e1a39b4c::t_8c9915eccffe05 195
+  s_b654b6e1a39b4c::t_cf9531912052be 18,31,95-97,253,264,274,298
+  s_b654b6e1a39b4c::t_94ef9c8477a515 10,12,15-16,23-24,32,51-65,67-94,98-101,127,135,138-139,155-156,158,161-177,194,252,259-263,265-272,288-290,297,300
+packages/host/tests/programs.rs
+  s_b654b6e1a39b4c::t_cf9531912052be 117,147-150,173,177-193
+packages/server/tests/local-functions-driver.mjs
+  s_b654b6e1a39b4c::t_cf9531912052be 156-167,329-348,353-354,364
+  s_b654b6e1a39b4c::t_5214887365f618 349-352
+  s_b654b6e1a39b4c::t_9dfd98d751bb39 355-363,365-366
+packages/host/tests/fixture.js
+  s_b654b6e1a39b4c::t_cf9531912052be 254-259,265-274,276-288
+  s_b654b6e1a39b4c::t_5214887365f618 261-264,275
+packages/host/src/programs/lines.rs
+  s_b654b6e1a39b4c::t_94ef9c8477a515 23-26
+packages/host/src/programs.rs
+  s_b654b6e1a39b4c::t_94ef9c8477a515 69,83-84,115-117,125-129,135,137-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff2c48f6b8bbc4ffaf488d53ebbc9dab0a334d6d",
+  "prompts": {},
+  "sessions": {
+    "s_b654b6e1a39b4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20840-cdd7-7023-a93d-be7fd586c0ac",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
