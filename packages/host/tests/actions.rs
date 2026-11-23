@@ -96,6 +96,22 @@ async fn action_modules_supply_the_four_builtins_without_files_or_programs() {
     assert_eq!(result["value"][0], 64, "{result}");
     assert_eq!(result["value"][2], "a/b");
     assert_eq!(result["value"][3], "example.com");
+    assert_eq!(
+        result["value"][4],
+        json!({"sep":"/","delimiter":":","joined":"a/b","samePosix":true})
+    );
+
+    process
+        .invoke(4, 4, "modules", Value::Null, "action-native-path-import.js")
+        .await;
+    let result = process.next().await;
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("Module is not allowed in the action process: tokamak:path"),
+        "{result}"
+    );
 
     process
         .invoke(2, 2, "modules", Value::Null, "action-file-import.js")

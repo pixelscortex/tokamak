@@ -25,11 +25,15 @@ pub(super) type LogShare = Arc<Mutex<PluginLogs>>;
 struct Queue {
     bytes: usize,
     logs: usize,
+    results: usize,
 }
 
 impl Queue {
     fn written(&mut self, line: Line) {
         self.bytes -= line.bytes.len();
+        if line.is_result {
+            self.results -= line.bytes.len();
+        }
         if let Some(logs) = line.logs {
             self.logs -= line.bytes.len();
             logs.lock().expect("plugin log share").queued -= line.bytes.len();
@@ -40,6 +44,7 @@ impl Queue {
 struct Line {
     bytes: Vec<u8>,
     logs: Option<LogShare>,
+    is_result: bool,
 }
 
 pub(super) struct Output {
@@ -90,12 +95,14 @@ impl Output {
         frame["slot"] = json!(slot);
         let bytes = encode(&frame)?;
         let mut queue = self.queue.lock().expect("action process output");
+        let is_result = frame["type"] == "result";
         ensure!(
-            queue.bytes - queue.logs + bytes.len() <= QUEUE_BYTES - LOG_BYTES
-                || frame["type"] == "result",
+            is_result
+                || queue.bytes - queue.logs - queue.results + bytes.len()
+                    <= QUEUE_BYTES - LOG_BYTES,
             "Action process output queue is full"
         );
-        self.enqueue(&mut queue, bytes, None)
+        self.enqueue(&mut queue, bytes, None, is_result)
     }
 
     pub fn pong(&self, id: u64) -> Result<()> {
@@ -104,6 +111,7 @@ impl Output {
             &mut self.queue.lock().expect("action process output"),
             bytes,
             None,
+            false,
         )
     }
 
@@ -130,21 +138,34 @@ impl Output {
         }
 
         if let Some(notice) = notice {
-            self.enqueue(&mut queue, notice, Some(share.clone()))?;
+            self.enqueue(&mut queue, notice, Some(share.clone()), false)?;
             plugin.dropped = 0;
         }
-        self.enqueue(&mut queue, bytes, Some(share.clone()))?;
+        self.enqueue(&mut queue, bytes, Some(share.clone()), false)?;
         plugin.queued += total;
         Ok(())
     }
 
-    fn enqueue(&self, queue: &mut Queue, bytes: Vec<u8>, logs: Option<LogShare>) -> Result<()> {
+    fn enqueue(
+        &self,
+        queue: &mut Queue,
+        bytes: Vec<u8>,
+        logs: Option<LogShare>,
+        is_result: bool,
+    ) -> Result<()> {
         let size = bytes.len();
         let is_log = logs.is_some();
         self.writer
-            .send(Line { bytes, logs })
+            .send(Line {
+                bytes,
+                logs,
+                is_result,
+            })
             .context("Action process output closed")?;
         queue.bytes += size;
+        if is_result {
+            queue.results += size;
+        }
         if is_log {
             queue.logs += size;
         }
@@ -174,6 +195,38 @@ fn encode(frame: &Value) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queued_results_do_not_use_the_operation_budget() {
+        let (writer, mut receive) = mpsc::unbounded_channel();
+        let output = Output {
+            writer,
+            queue: Arc::default(),
+            plugins: Mutex::default(),
+        };
+        let payload = "x".repeat(WORKER_FRAME_BYTES - 64);
+        let result = json!({"type":"result","value":payload});
+        let op = json!({"type":"op","payload":payload});
+
+        for _ in 0..4 {
+            output.send(1, result.clone()).unwrap();
+        }
+
+        for _ in 0..3 {
+            output.send(2, op.clone()).unwrap();
+        }
+        assert_eq!(
+            output.send(2, op).unwrap_err().to_string(),
+            "Action process output queue is full"
+        );
+
+        let mut queue = output.queue.lock().unwrap();
+        while let Ok(line) = receive.try_recv() {
+            queue.written(line);
+        }
+        assert_eq!(queue.results, 0);
+        assert_eq!(queue.bytes, 0);
+    }
 
     #[test]
     fn one_plugins_log_flood_leaves_other_traffic_and_reports_recovery() {

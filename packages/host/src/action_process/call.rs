@@ -225,10 +225,14 @@ impl Resolver for Builtins {
     fn resolve<'js>(
         &mut self,
         ctx: &Ctx<'js>,
-        _: &str,
+        base: &str,
         name: &str,
         _: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<String> {
+        if base == "node:path" && name == "tokamak:path" {
+            return Ok(name.to_owned());
+        }
+
         modules::action_builtin(name)
             .map(str::to_owned)
             .ok_or_else(|| {
