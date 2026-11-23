@@ -14,7 +14,8 @@
 // (within, build, copySource, startServer, connect, watchQuery) serve other
 // end-to-end drivers too.
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
@@ -269,6 +270,51 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
   };
 
   return {
+    async assertLocalRuntime() {
+      const folder = join(scratch, "runtime-probe");
+      await mkdir(folder);
+      const entry = await readFile(join(plugins, "ai", "local-entry.js"));
+      const code =
+        'export const functions = { probe: { kind: "local", args: { kind: "any" }, invoke: () => typeof Bun } };';
+      await writeFile(join(folder, "local-entry.js"), entry);
+      await writeFile(join(folder, "local.js"), code);
+
+      const hash = (content) => createHash("sha256").update(content).digest("hex");
+      const launch = localLauncher(() => folder, localEnv);
+      let worker;
+      const result = new Promise((resolve, reject) => {
+        const receive = (frame) => {
+          if (frame.type === "op" && frame.name === "auth.current") {
+            void worker.send({ type: "opResult", id: frame.id, value: null }).catch(reject);
+          } else if (frame.type === "result") {
+            resolve(frame);
+          }
+        };
+        void launch(
+          { id: "runtime-probe", entryHash: hash(entry), codeHash: hash(code) },
+          receive,
+          (reason) => reject(new Error(reason)),
+        )
+          .then((endpoint) => {
+            worker = endpoint;
+            return worker.send({ type: "invoke", id: 1, fn: "probe", args: null });
+          })
+          .catch(reject);
+      });
+
+      try {
+        const runtime = process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs" ? "quickjs" : "bun";
+        const frame = await within(result, `${runtime} local runtime probe`);
+        assert.equal(
+          frame.value,
+          runtime === "quickjs" ? "undefined" : "object",
+          `${runtime} local call returned ${JSON.stringify(frame)}`,
+        );
+      } finally {
+        await worker?.close();
+      }
+    },
+
     scratch,
     home,
     /** Where each fake agent's command sits on the local part's PATH: unlink one to "uninstall" it. */

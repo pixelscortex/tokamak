@@ -1,9 +1,11 @@
 // The local part as the desktop client starts it, and the `fake-agent` command,
 // for any test runtime (Bun or Node): the server harness and the browser suite.
+import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { access, chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
@@ -56,6 +58,7 @@ export function localLauncher(installed, env, observe) {
           join(dirname(process.argv[2]), "tokamak-plugin-host"),
       )
     : undefined;
+
   async function verified(artifact) {
     const root = installed(artifact.id);
     for (const [name, hash] of [
@@ -71,6 +74,17 @@ export function localLauncher(installed, env, observe) {
   }
   return async (artifact, receive, closed) => {
     const root = await verified(artifact);
+    if (host) {
+      assert.equal(basename(host), "tokamak-plugin-host", `Expected the QuickJS plugin host, got ${host}`);
+      assert.ok(
+        await stat(host)
+          .then((file) => file.isFile())
+          .catch(() => false),
+        `Missing plugin host: ${host}`,
+      );
+      await access(host, constants.X_OK);
+    }
+
     const command = host ? [host] : [bunPath(), join(root, "local-entry.js")];
     const worker = spawn(command[0], [...command.slice(1), join(root, "local.js")], {
       detached: quickjs,

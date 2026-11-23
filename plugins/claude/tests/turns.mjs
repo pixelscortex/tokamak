@@ -36,6 +36,7 @@ const longCommand =
 const todo =
   "Use TodoWrite to create a task called Write fixture, state in_progress. Use Write to create todo-smoke.txt with TOKAMAK_TEST as content. Use an Explore helper to check whether this file exists, without reading other files. Mark the task completed with TodoWrite, then say DONE.";
 try {
+  await h.assertLocalRuntime();
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
   if (!live) await installReplay();

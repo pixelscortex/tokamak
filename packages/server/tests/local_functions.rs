@@ -11,7 +11,9 @@ mod local_runtime;
 
 #[test]
 fn local_functions_reach_the_live_server_on_the_configured_runtime() {
-    run(LocalRuntime::selected().expect("valid local function runtime"));
+    if let Some(runtime) = local_runtime::selected() {
+        run(runtime);
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

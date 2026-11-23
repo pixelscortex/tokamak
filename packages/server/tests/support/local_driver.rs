@@ -1,14 +1,14 @@
 use std::process::Command;
 
-use tokamak_worker::LocalRuntime;
-
 #[path = "local_runtime.rs"]
 mod local_runtime;
 
 pub fn run(script: &str) {
     let mut bun = Command::new("proto");
     bun.args(["run", "bun", "--"]);
-    let runtime = LocalRuntime::selected().expect("valid local function runtime");
+    let Some(runtime) = local_runtime::selected() else {
+        return;
+    };
     let output = local_runtime::driver(bun, script, &runtime)
         .output()
         .expect("run the local acceptance driver");

@@ -48,12 +48,14 @@ async function stopAfterWithdrawal({ h, run, caseFolder }) {
     access: "ask",
     state: "stopped",
     async during(turn) {
-      assert.equal((await turn.question()).subject, "touch fixture.txt");
+      const question = await turn.question();
+      assert.equal(question.subject, "touch fixture.txt");
       await h.gate(await caseFolder("withdraw-question"), "withdraw-question");
       // This text comes after control_cancel_request. The next wire message
-      // must be Stop's interrupt, with no answer to the withdrawn request.
+      // must be Stop's interrupt; Stop clears the question held by the local part.
       await turn.firstText();
       await turn.stop();
+      assert.equal((await turn.sendAnswer(question, "approve")).kind, "Expired");
     },
   });
   assert.equal(withdrawn.text, "The tool request was withdrawn.");

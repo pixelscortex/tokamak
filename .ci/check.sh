@@ -34,9 +34,8 @@ case "$1" in
       --test ai_turns --test ai_threads --test ai_liveness --test chat_threads \
       --test code_snapshots --test code_changes --test codex_turns --test claude_turns \
       --test local_functions --test identity --test sdk_transport --test actions --test plugins
-    # Keep the slow liveness suite and unrelated server suites in the first pass.
     TOKAMAK_PLUGIN_RUNTIME=quickjs CI=1 cargo test --locked -p server \
-      --test ai_turns --test ai_threads --test chat_threads \
+      --test ai_turns --test ai_threads --test ai_liveness --test chat_threads \
       --test code_snapshots --test code_changes --test codex_turns --test claude_turns
     ;;
   *) exit 2 ;;

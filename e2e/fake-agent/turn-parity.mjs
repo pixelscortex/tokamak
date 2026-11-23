@@ -37,7 +37,12 @@ export function turnParity(h, suite) {
       const file = join(directory, `${suite}.json`);
       const json = JSON.stringify(samples, null, 2).replaceAll(h.scratch, "<scratch>");
       if (process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs") {
-        const expected = JSON.parse(await readFile(file, "utf8"));
+        const reference = await readFile(file, "utf8").catch((error) => {
+          if (error.code === "ENOENT")
+            throw new Error(`Missing Bun turn parity reference: ${file}`, { cause: error });
+          throw error;
+        });
+        const expected = JSON.parse(reference);
         const actual = JSON.parse(json);
         assert.deepEqual(Object.keys(actual), Object.keys(expected));
         for (const key of Object.keys(expected)) assert.deepEqual(actual[key], expected[key], key);

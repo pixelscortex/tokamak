@@ -36,6 +36,7 @@ const longPrompt = "Write a long reply containing 100 numbered facts about apple
 const planPrompt = "Make a concrete plan for adding a second test marker. Do not edit any files.";
 
 try {
+  await h.assertLocalRuntime();
   build(module);
   await cp(join(module, "dist"), join(h.plugins, "codex"), { recursive: true });
   if (!real) await replayExecutable();

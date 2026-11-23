@@ -2,6 +2,20 @@ use std::{path::Path, process::Command};
 
 use tokamak_worker::LocalRuntime;
 
+pub fn selected() -> Option<LocalRuntime> {
+    if !cfg!(any(target_os = "macos", target_os = "linux"))
+        && std::env::var("TOKAMAK_PLUGIN_RUNTIME").as_deref() == Ok("quickjs")
+    {
+        eprintln!(
+            "Skipping QuickJS local integration test: the plugin host is unavailable on {}",
+            std::env::consts::OS
+        );
+        return None;
+    }
+
+    Some(LocalRuntime::selected().expect("valid local function runtime"))
+}
+
 pub fn driver(mut command: Command, script: &str, runtime: &LocalRuntime) -> Command {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let host = (*runtime == LocalRuntime::QuickJs).then(|| {
