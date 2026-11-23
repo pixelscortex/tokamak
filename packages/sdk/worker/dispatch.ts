@@ -13,14 +13,17 @@ export function workerDispatch(
   functions: FunctionRegistry,
   send: (message: object) => void,
   allocateOp: () => number,
-  createPrograms?: (signal: AbortSignal) => ReturnType<NonNullable<Parameters<typeof invocationHost>[2]>>,
+  createPrograms?: (
+    signal: AbortSignal,
+    call: number,
+  ) => ReturnType<NonNullable<Parameters<typeof invocationHost>[2]>>,
   contracts?: Parameters<typeof invocationHost>[3],
   options?: {
     errorMessage(error: unknown): string;
     abort(controller: AbortController): void;
   },
 ) {
-  const calls = new Map<number, AbortController>();
+  const calls = new Map<number, { controller: AbortController; close(): Promise<void> }>();
   const pending = new Map<
     number,
     { call: number; resolve(value: JsonValue): void; reject(error: Error): void }
@@ -38,11 +41,12 @@ export function workerDispatch(
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Worker invocation capacity exceeded");
     const controller = new AbortController();
-    calls.set(id, controller);
+    const call = { controller, close: (): Promise<void> => invocation.close() };
+    calls.set(id, call);
     const invocation = invocationHost(
       controller.signal,
       (plugin) => (name, payload) => {
-        if (calls.get(id) !== controller || controller.signal.aborted)
+        if (calls.get(id) !== call || controller.signal.aborted)
           throw new Error("stale invocation: host operation refused");
         if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
         return new Promise<JsonValue>((resolve, reject) => {
@@ -63,21 +67,21 @@ export function workerDispatch(
           }
         });
       },
-      createPrograms && (() => createPrograms(controller.signal)),
+      createPrograms && (() => createPrograms(controller.signal, id)),
       contracts,
     );
     try {
       if (functions[name]?.kind !== kind) throw new Error(`Unknown worker ${kind} function: ${name}`);
       const value = await invokeFunction(functions, { name, args }, invocation.host());
       await invocation.close();
-      if (calls.get(id) === controller) send({ type: "result", id, value });
+      if (calls.get(id) === call) send({ type: "result", id, value });
     } catch (error) {
       await invocation.close();
       const message =
         options?.errorMessage(error) ?? (error instanceof Error ? error.message : String(error));
-      if (calls.get(id) === controller) send({ type: "result", id, error: message });
+      if (calls.get(id) === call) send({ type: "result", id, error: message });
     } finally {
-      if (calls.get(id) === controller) retire(id);
+      if (calls.get(id) === call) retire(id);
     }
   }
   return (message: WorkerMessage) => {
@@ -90,10 +94,13 @@ export function workerDispatch(
         else op.resolve(message.value);
       }
     } else if (message.type === "cancel") {
-      const controller = calls.get(message.id);
-      if (controller) {
-        if (options) options.abort(controller);
-        else controller.abort();
+      const call = calls.get(message.id);
+      if (call) {
+        if (options) {
+          options.abort(call.controller);
+          // Abort listeners can throw in LLRT. Always close every scope.
+          void call.close();
+        } else call.controller.abort();
       }
       for (const [id, op] of pending)
         if (op.call === message.id) {

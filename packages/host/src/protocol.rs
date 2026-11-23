@@ -243,14 +243,25 @@ pub async fn run(code: &Path) -> Result<()> {
     let output = Arc::new(Output { state, writer });
     let next_op = std::rc::Rc::new(std::cell::Cell::new(0_u64));
     let mut runtime = Runtime::new(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
+    let mut frames_since_immediate = 0;
     loop {
+        // Give arrived input and promise jobs priority over immediates,
+        // but a producer refilling the queue cannot starve the scheduler step.
+        if !runtime.immediates.pending() {
+            frames_since_immediate = 0;
+        }
+        let take_frame = frames_since_immediate < WORKER_CAPACITY;
         // Poll JS before taking another input frame so a busy pipe cannot starve it.
         let dispatch = tokio::select! {
             biased;
             () = runtime.drive() => Ok(()),
-            frame = frames.recv() => {
+            frame = frames.recv(), if take_frame => {
+                frames_since_immediate += 1;
                 let Some(frame) = frame else { return Ok(()) };
                 if output.prepare(&frame, &bundles)? {
+                    if frame["type"] == "cancel" {
+                        runtime.programs.stop_call(id(&frame["id"])?);
+                    }
                     let dispatched = runtime.dispatch(frame.to_string()).await;
                     if frame["type"] == "cancel" {
                         output.state.lock().expect("protocol state").retire(id(&frame["id"])?);
@@ -260,11 +271,16 @@ pub async fn run(code: &Path) -> Result<()> {
                     Ok(())
                 }
             }
+            () = runtime.immediates.ready() => {
+                runtime.immediates.fire();
+                frames_since_immediate = 0;
+                Ok(())
+            }
         };
 
         if runtime.interrupted() {
-            output.stop_calls()?;
             drop(runtime);
+            output.stop_calls()?;
             runtime = Runtime::new(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
         } else {
             dispatch?;

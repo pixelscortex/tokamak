@@ -74,7 +74,19 @@ export const functions = {
     };
     return provider.implementation.run(input);
   }),
-  unapproved: local((path) => import(path)),
+  unapproved: local(async (_, ctx) => {
+    const unapproved = await ctx.op("local.runQuery", {});
+    const iterator = Array.prototype[Symbol.iterator];
+    // Supply the SDK with a provider candidate without approving its path in Rust.
+    Array.prototype[Symbol.iterator] = function () {
+      return iterator.call(this[0]?.fixture === "substitute path" ? unapproved : this);
+    };
+    try {
+      return await ctx.contracts.list({ place: "local", owner: "consumer", name: "fixture" });
+    } finally {
+      Array.prototype[Symbol.iterator] = iterator;
+    }
+  }),
   timerCapacity: local(async () => {
     let armed;
     const rearm = new Promise((resolve) => {
@@ -102,6 +114,8 @@ export const functions = {
   }),
   console: local(() => {
     console.log("%s %d %j %o", "value", "2", { a: 1 }, [3, 4]);
+    console.log("%i %f %O %c tail", "2px", "3.5pt", { nested: [4] }, "color: red");
+    console.log(new Date(0), new Map([["key", 1]]), new Set([2]), new Uint8Array([3, 4]));
     console.dir({ outer: [1, 2] });
     console.trace("test");
     console.warn(new Error("broken"));
@@ -188,3 +202,71 @@ export const functions = {
     }
   }),
 };
+
+async function programTree(proc, path) {
+  const program = proc(["/bin/sh", path, "3"]);
+  const lines = program.stdout[Symbol.asyncIterator]();
+  const pids = [];
+  for (let i = 0; i < 4; i++) {
+    const { value, done } = await lines.next();
+    if (done) throw new Error("Program tree did not start");
+    pids.push(Number(value));
+  }
+  return { program, pids, lines };
+}
+
+Object.assign(functions, {
+  graceful: local(async (_, ctx) => {
+    const program = ctx.proc([
+      "/bin/sh",
+      "-c",
+      "trap 'echo stopped; exit 42' TERM; echo ready; read -r line",
+    ]);
+    const output = [];
+    for await (const line of program.stdout) {
+      output.push(line);
+      if (line === "ready") program.stop();
+    }
+    return [output, await program.exited];
+  }),
+  scopedTree: local(async (path, ctx) => {
+    const outer = ctx.proc(["/bin/cat"]);
+    const result = await ctx.withPrograms(async (forceStop, scope) => {
+      const { program, pids, lines } = await programTree(scope.proc, path);
+      await forceStop();
+      return { pids, code: await program.exited, silent: (await lines.next()).done };
+    });
+    outer.write("outer survived\n");
+    outer.closeInput();
+    const lines = [];
+    for await (const line of outer.stdout) lines.push(line);
+    return { ...result, outer: [lines, await outer.exited] };
+  }),
+  parkTree: local(async (path, ctx) => {
+    const { pids } = await programTree(ctx.proc, path);
+    console.info("tree", ...pids);
+    await new Promise(() => {});
+  }),
+  longLine: local(async (_, ctx) => {
+    const program = ctx.proc([
+      "/bin/sh",
+      "-c",
+      '/usr/bin/awk \'BEGIN { for (i=0; i<=1048576; i++) printf "x"; print "" }\'',
+    ]);
+    for await (const line of program.stdout) throw new Error(`Unexpected output: ${line.length} bytes`);
+  }),
+  immediate: local(async (_, ctx) => {
+    const order = [];
+    const skipped = setImmediate(() => order.push("cleared"));
+    clearImmediate(skipped);
+    const io = ctx.op("local.runQuery", {}).then(() => order.push("io"));
+    // Let the protocol reader queue the answer before the scheduler runs.
+    const end = Date.now() + 75;
+    while (Date.now() < end) {}
+    const timer = new Promise((resolve) => setTimeout(() => resolve(order.push("timer")), 0));
+    const immediate = new Promise((resolve) => setImmediate(() => resolve(order.push("immediate"))));
+    Promise.resolve().then(() => order.push("promise"));
+    await Promise.all([immediate, timer, io]);
+    return order;
+  }),
+});

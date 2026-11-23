@@ -8,10 +8,9 @@
   let next = 0;
   const handles = new WeakMap();
   const timers = new Set();
-  const set = (repeat, callback, delay = 0, ...args) => {
+  const set = (repeat, ms, callback, args) => {
     if (typeof callback !== "function") throw new TypeError("Expected a timer callback");
     const id = ++next;
-    const ms = Math.max(1, Math.min(2147483647, Number(delay) || 0));
     const fire = () => {
       // Keep the first scheduling error synchronous so callers can catch a full timer queue.
       void wait(id, ms)
@@ -43,12 +42,14 @@
     return handle;
   };
 
-  globalThis.setTimeout = set.bind(null, false);
-  globalThis.setInterval = set.bind(null, true);
+  const timer = (repeat, callback, delay = 0, ...args) =>
+    set(repeat, Math.max(1, Math.min(2147483647, Number(delay) || 0)), callback, args);
+  globalThis.setTimeout = timer.bind(null, false);
+  globalThis.setInterval = timer.bind(null, true);
   globalThis.clearTimeout = globalThis.clearInterval = (handle) => {
     const id = typeof handle === "number" ? handle : handles.get(handle);
     if (timers.delete(id)) clear(id);
   };
-  globalThis.setImmediate = (callback, ...args) => set(false, callback, 0, ...args);
+  globalThis.setImmediate = (callback, ...args) => set(false, 0, callback, args);
   globalThis.clearImmediate = globalThis.clearTimeout;
 })();

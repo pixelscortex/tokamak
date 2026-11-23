@@ -1,77 +1,14 @@
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
-use std::{path::Path, process::Stdio, time::Duration};
+use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::json;
 use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
-    process::{Child, ChildStdin, ChildStdout, Command},
-};
+use tokio::{io::AsyncWriteExt, process::Command};
 
-struct Host {
-    child: Child,
-    input: ChildStdin,
-    output: Lines<BufReader<ChildStdout>>,
-}
+mod support;
 
-impl Host {
-    fn start() -> Self {
-        Self::with_heap(None)
-    }
-
-    fn with_heap(heap: Option<&str>) -> Self {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_tokamak-plugin-host"));
-        command.env_remove("TOKAMAK_PLUGIN_HOST_HEAP_MIB");
-        if let Some(heap) = heap {
-            command.env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", heap);
-        }
-        let mut child = command
-            .process_group(0)
-            .arg(fixture())
-            .kill_on_drop(true)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let input = child.stdin.take().unwrap();
-        let output = BufReader::new(child.stdout.take().unwrap()).lines();
-        Self {
-            child,
-            input,
-            output,
-        }
-    }
-
-    async fn send(&mut self, frame: Value) {
-        self.input
-            .write_all(format!("{frame}\n").as_bytes())
-            .await
-            .unwrap();
-    }
-
-    async fn receive(&mut self) -> Value {
-        let line = tokio::time::timeout(Duration::from_secs(12), self.output.next_line())
-            .await
-            .expect("plugin host did not respond")
-            .unwrap()
-            .expect("plugin host exited");
-        serde_json::from_str(&line).unwrap()
-    }
-
-    async fn invoke(&mut self, id: u64, name: &str, args: Value) {
-        self.send(json!({ "type": "invoke", "id": id, "fn": name, "args": args }))
-            .await;
-        let op = self.receive().await;
-        assert_eq!(op["name"], "auth.current");
-        self.send(json!({ "type": "opResult", "id": op["id"], "value": null }))
-            .await;
-    }
-}
-
-fn fixture() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture.js")
-}
+use support::{Host, fixture};
 
 #[tokio::test]
 async fn cancellation_rejects_only_its_operations_and_preserves_module_state() {
@@ -340,21 +277,32 @@ async fn approved_provider_runs_in_the_caller_realm() {
 async fn a_path_from_an_unrelated_operation_is_not_an_approved_module() {
     let mut host = Host::start();
     let path = fixture().with_file_name("provider.js");
-    host.send(json!({ "type": "invoke", "id": 1, "fn": "unapproved", "args": path }))
-        .await;
+    host.invoke(1, "unapproved", json!(null)).await;
+    let unrelated = host.receive().await;
+    assert_eq!(unrelated["name"], "local.runQuery");
+    host.send(json!({
+        "type": "opResult", "id": unrelated["id"],
+        "value": [{ "path": path, "own": false }]
+    }))
+    .await;
+    let candidates = host.receive().await;
+    assert_eq!(candidates["name"], "local.contracts");
+    host.send(json!({
+        "type": "opResult", "id": candidates["id"],
+        "value": [{ "fixture": "substitute path" }]
+    }))
+    .await;
     let auth = host.receive().await;
     assert_eq!(auth["name"], "auth.current");
-    host.send(
-        json!({ "type": "opResult", "id": auth["id"], "value": [{ "path": path, "own": false }] }),
-    )
-    .await;
+    host.send(json!({ "type": "opResult", "id": auth["id"], "value": {} }))
+        .await;
     let result = host.receive().await;
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("Module is not allowed on the plugin host"),
-        "{result}"
+    assert_eq!(
+        result["error"],
+        format!(
+            "Module is not allowed on the plugin host: {} (imported from tokamak:entry)",
+            path.display()
+        ),
     );
 }
 
@@ -427,6 +375,14 @@ async fn console_formats_placeholders_objects_errors_and_traces() {
     let mut host = Host::start();
     host.invoke(1, "console", json!(null)).await;
     assert_eq!(host.receive().await["text"], "value 2 {\"a\":1} [ 3, 4 ]");
+    assert_eq!(
+        host.receive().await["text"],
+        "2 3.5 { nested: [ 4 ] }  tail"
+    );
+    assert_eq!(
+        host.receive().await["text"],
+        r#"1970-01-01T00:00:00.000Z Map(1) { "key" => 1 } Set(1) { 2 } Uint8Array(2) [ 3, 4 ]"#,
+    );
     assert_eq!(host.receive().await["text"], "{ outer: [ 1, 2 ] }");
     assert!(
         host.receive().await["text"]

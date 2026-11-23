@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
@@ -17,6 +17,7 @@ let transport;
 let local;
 let stop;
 let worker;
+let heldOperation;
 const host = process.env.TOKAMAK_TEST_PLUGIN_HOST;
 const logs = [];
 
@@ -97,13 +98,14 @@ try {
     });
     let child: RunningProcess | undefined;
     export const run = local({
-      args: { bun: v.string(), file: v.string(), heartbeat: v.string() },
-      handler: async (ctx, { bun, file, heartbeat }) => {
+      args: { bun: v.string(), file: v.string(), heartbeat: v.string(), hold: v.boolean() },
+      handler: async (ctx, { bun, file, heartbeat, hold }) => {
         const source = await readFile(file, "utf8");
         const running = ctx.proc([bun, "-e", source, heartbeat]);
         child = running;
         try {
-          for await (const text of running.stdout) await ctx.runMutation(api.turn.save, { text });
+          for await (const text of running.stdout)
+            await ctx.runMutation(api.turn.save, { text: hold ? "hold for cancellation" : text });
           return await running.exited;
         } finally {
           child = undefined;
@@ -127,8 +129,29 @@ try {
         return ctx.runMutation(api.turn.save, { text: "cancelled call wrote a row" });
       },
     });
-    export const programScope = local({
-      handler: (ctx) => ctx.withPrograms(() => { throw new Error("entered program scope"); }),
+    export const programIO = local({
+      args: { bun: v.string(), cwd: v.string() },
+      handler: async (ctx, { bun, cwd }) => {
+        const child = ctx.proc([bun, "-e", \`
+          const text = await Bun.stdin.text();
+          process.stdout.write("line\\\\n".repeat(4096));
+          process.stdout.write(process.cwd() + "\\\\r\\\\n" + text);
+          process.stderr.write(process.env.FIXTURE + "\\\\r\\\\n" + JSON.stringify(process.argv.slice(1)));
+          process.exitCode = 42;
+        \`, "one argument", "$literal"], { cwd, env: { FIXTURE: "stderr" } });
+        child.write("stdin ");
+        child.write(new Uint8Array([98, 121, 116, 101, 115]));
+        child.closeInput();
+        const read = async (stream: AsyncIterable<string>) => {
+          const lines = [];
+          for await (const line of stream) lines.push(line);
+          return lines;
+        };
+        const result = await Promise.all([read(child.stdout), read(child.stderr), child.exited]);
+        child.write("already exited");
+        const [stdout, stderr, code] = result;
+        return [stdout.filter((line) => line === "line").length, stdout.slice(-2), stderr, code];
+      },
     });
     export const identity = local({ handler: (ctx) => ({ auth: ctx.auth }) });
     export const stop = local({
@@ -202,6 +225,14 @@ try {
         for await (const line of createInterface({ input: Readable.fromWeb(processHandle.stdout) })) {
           const frame = JSON.parse(line);
           if (frame.type === "log") logs.push(frame.text);
+          if (
+            frame.type === "op" &&
+            frame.name === "local.runMutation" &&
+            frame.payload.args.text === "hold for cancellation"
+          ) {
+            heldOperation.resolve();
+            continue;
+          }
           message(frame);
         }
         closed(host ? "Plugin host exited" : "Local worker exited");
@@ -268,14 +299,6 @@ try {
   );
 
   if (host) {
-    await assert.rejects(
-      client.local(api.turn.run, { bun: process.execPath, file: fake, heartbeat: "" }),
-      /Programs are not available on the QuickJS host yet/,
-    );
-    await assert.rejects(
-      client.local(api.turn.programScope, {}),
-      /Programs are not available on the QuickJS host yet/,
-    );
     const interrupted = client.local(api.turn.slow, {});
     void interrupted.catch(() => {});
     await waitForSlowCall();
@@ -284,17 +307,28 @@ try {
     assert.deepEqual(await client.local(api.turn.identity, {}), { auth });
   }
 
-  if (!host) {
+  assert.deepEqual(await client.local(api.turn.programIO, { bun: process.execPath, cwd: scratch }), [
+    4096,
+    [await realpath(scratch), "stdin bytes"],
+    ["stderr", '["one argument","$literal"]'],
+    42,
+  ]);
+
+  {
     const rows = Promise.withResolvers();
     stop = client.subscribe(api.turn.lines, {}, (event) => {
       if ("error" in event) rows.reject(event.error);
       else if (event.value.length === 3)
         rows.resolve(event.value.map((row) => row.text).filter((text) => text !== "local text"));
     });
-    const start = (label, options) => {
+    const start = (label, options, hold = false) => {
       const heartbeat = join(scratch, label + ".heartbeat");
       grandchildPidFiles.add(heartbeat + ".pid");
-      const running = client.local(api.turn.run, { bun: process.execPath, file: fake, heartbeat }, options);
+      const running = client.local(
+        api.turn.run,
+        { bun: process.execPath, file: fake, heartbeat, hold },
+        options,
+      );
       void running.catch(() => {});
       return { heartbeat, running };
     };
@@ -307,19 +341,23 @@ try {
     await expectHeartbeatStopped(heartbeat);
     assert.notEqual(await running, 0);
 
+    const survivor = start("survivor");
+    await waitForFile(survivor.heartbeat);
     const controller = new AbortController();
-    const cancelled = start("cancel", { signal: controller.signal });
-    await waitForFile(cancelled.heartbeat);
+    heldOperation = Promise.withResolvers();
+    const cancelled = start("cancel", { signal: controller.signal }, true);
+    await Promise.all([waitForFile(cancelled.heartbeat), heldOperation.promise]);
+    const before = await readFile(survivor.heartbeat, "utf8");
     controller.abort();
     await assert.rejects(cancelled.running, /cancel/i);
     await expectHeartbeatStopped(cancelled.heartbeat);
+    assert.notEqual(await readFile(survivor.heartbeat, "utf8"), before, "other call stopped");
+    // This call is still active; close the worker to exercise retirement below.
     // Windows uses the desktop job object rather than the POSIX watchdog.
     if (process.platform !== "win32") {
-      const retired = start("retire");
-      await waitForFile(retired.heartbeat);
       await local.close();
-      await assert.rejects(retired.running, /retired/i);
-      await expectHeartbeatStopped(retired.heartbeat);
+      await assert.rejects(survivor.running, /retired/i);
+      await expectHeartbeatStopped(survivor.heartbeat);
     }
     console.log(
       "read two live rows and verified process-tree cleanup on stop, cancellation, and worker retirement",
