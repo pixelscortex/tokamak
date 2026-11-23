@@ -97,14 +97,14 @@ async function checkReloads() {
       let counter = 0;
       export const localCall = local({
         args: { id: v.string() },
-        handler: async (_ctx, { id }) => {
-          const all = await agent.list();
+        handler: async (ctx, { id }) => {
+          const all = await agent.list(ctx);
           const reports: string[] = [];
-          const selected = await agent.get(id);
+          const selected = await agent.get(id, ctx);
           const assertIdentity = () => {
             if (selected?.info() !== "local") throw new Error("Provider lost its caller");
           };
-          const result = selected && await agent.get(id).start({
+          const result = selected && await agent.get(id, ctx).start({
             report: async (text) => { reports.push(text); assertIdentity(); },
           });
           return { ids: all.map((provider) => provider.id), result: result ?? null, reports, calls: ++counter };
@@ -112,7 +112,7 @@ async function checkReloads() {
       });
       export const hooks = local({
         args: { folder: v.string() },
-        handler: async (_ctx, t) => Promise.all((await turnHooks.list()).map((p) => p.before?.(t))),
+        handler: async (ctx, t) => Promise.all((await turnHooks.list(ctx)).map((p) => p.before?.(t))),
       });
       export const list = query({ handler: async () => {
         const all = await service.list();
@@ -121,8 +121,9 @@ async function checkReloads() {
       } });
       export const invoke = action({
         args: { id: v.string() },
-        handler: async (_ctx, { id }) => (await (await service.get(id))?.call({ text: "hello" })) ?? null,
+        handler: async (ctx, { id }) => (await (await service.get(id, ctx))?.call({ text: "hello" })) ?? null,
       });
+      export const withoutContext = action({ handler: () => service.list() });
     `,
   });
   const ownerDeclaration = join(scratch, owner, "src/contracts.ts");
@@ -242,6 +243,7 @@ async function checkReloads() {
   assert.deepEqual(await client.local(api.main.hooks, { folder: scratch }), [true]);
   assert.deepEqual(await client.query(api.main.list, {}), [["alpha", "alpha"]]);
   assert.equal(await client.action(api.main.invoke, { id: "one" }), "alpha:hello:local");
+  await assert.rejects(client.action(api.main.withoutContext, {}), /pass ctx/);
   assert.deepEqual(await client.local(api.main.localCall, { id: "one" }), {
     ids: ["one"],
     result: "alpha",

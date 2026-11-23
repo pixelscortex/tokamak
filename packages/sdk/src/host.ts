@@ -95,7 +95,10 @@ export interface HostBridge {
   readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
   readonly proc?: import("./local").LocalProcess;
-  readonly withPrograms?: import("./local").WithPrograms;
+  readonly contracts?: import("./internal/contracts").ContractScope;
+  readonly withPrograms?: <T>(
+    run: (forceStop: () => Promise<void>, host: HostBridge) => Promise<T>,
+  ) => Promise<T>;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
   op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;
 }

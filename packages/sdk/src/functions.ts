@@ -11,7 +11,12 @@ import { jsonSnapshot } from "./values";
 import { functionName, type FunctionReference } from "./api";
 import { callHost } from "./host";
 import type { LocalProcess, WithPrograms } from "./local";
-import { withServerContracts } from "./internal/contracts";
+import {
+  contractScope,
+  serverContracts,
+  withServerContracts,
+  type ContractContext,
+} from "./internal/contracts";
 import { Visibility } from "./visibility";
 
 export type ServerFunctionKind = "query" | "mutation" | "action";
@@ -108,14 +113,14 @@ type RunFunction<K extends FunctionKind> = <A, R>(
   args: NoInfer<A>,
 ) => Promise<R>;
 
-export interface QueryContext<M extends DataModel> {
+export interface QueryContext<M extends DataModel> extends ContractContext {
   readonly auth: AuthContext;
   readonly db: DatabaseReader<M>;
   runQuery: RunFunction<"query">;
   use<T>(api: T): PluginCalls<T, "query">;
 }
 
-export interface MutationContext<M extends DataModel> {
+export interface MutationContext<M extends DataModel> extends ContractContext {
   readonly auth: AuthContext;
   readonly db: DatabaseWriter<M>;
   runQuery: RunFunction<"query">;
@@ -124,7 +129,7 @@ export interface MutationContext<M extends DataModel> {
 }
 
 /** Actions have no database capability; each nested call owns its transaction. */
-export interface ActionContext {
+export interface ActionContext extends ContractContext {
   readonly auth: AuthContext;
   use<T>(api: T): PluginCalls<T, ServerFunctionKind>;
   readonly signal?: HostBridge["signal"];
@@ -146,11 +151,11 @@ export interface ActionContext {
   runAction: RunFunction<"action">;
 }
 
-export interface LocalContext {
+export interface LocalContext extends ContractContext {
   readonly auth: AuthContext;
   readonly signal: NonNullable<HostBridge["signal"]>;
   readonly proc: LocalProcess;
-  /** Contains programs started by this callback and by any local providers it calls. */
+  /** Use the callback context to start programs and select providers owned by this scope. */
   readonly withPrograms: WithPrograms;
   runQuery<A, R>(reference: FunctionReference<"query", A, R>, args: NoInfer<A>): Promise<R>;
   runMutation<A, R>(reference: FunctionReference<"mutation", A, R>, args: NoInfer<A>): Promise<R>;
@@ -255,6 +260,7 @@ function builder<
                   get auth() {
                     return caller();
                   },
+                  [contractScope]: serverContracts(host),
                   use: <T>(api: T) => bindCalls(api, host),
                   signal: host.signal,
                   crypto: Object.freeze({
@@ -279,6 +285,7 @@ function builder<
                       : createDatabase<M>(host, true, schema),
                   runQuery: run("query"),
                   ...(kind === "mutation" ? { runMutation: run("mutation") } : {}),
+                  [contractScope]: serverContracts(host),
                   use: <T>(api: T) => bindCalls(api, host),
                 },
         );
@@ -311,11 +318,15 @@ export function localContext(host: HostBridge, auth: AuthContext): LocalContext 
   return {
     auth,
     proc: host.proc,
-    withPrograms:
-      host.withPrograms ??
-      (() => {
-        throw new Error("Program scopes require the client worker");
-      }),
+    [contractScope]: host.contracts ?? {
+      list() {
+        throw new Error("Local contracts require the client worker");
+      },
+    },
+    withPrograms(run) {
+      if (!host.withPrograms) throw new Error("Program scopes require the client worker");
+      return host.withPrograms((forceStop, scoped) => run(forceStop, localContext(scoped, auth)));
+    },
     signal: host.signal,
     runQuery: (reference, args) => run("local.runQuery", reference, args),
     runMutation: (reference, args) => run("local.runMutation", reference, args),
@@ -459,13 +470,17 @@ export async function invokeFunction(
   const args = jsonSnapshot(request.args, "args");
   validate(registry[request.name].args, args);
   const auth = await callHost(host, "auth.current", {});
-  return withServerContracts(host, () =>
-    registry[request.name].invoke(args, {
+  const definition = registry[request.name];
+  const invoke = () =>
+    definition.invoke(args, {
       auth,
       signal: host.signal,
       proc: host.proc,
       withPrograms: host.withPrograms,
+      contracts: host.contracts,
       op: (name, payload) => host.op(name, payload),
-    }),
-  );
+    });
+  return definition.kind === "query" || definition.kind === "mutation"
+    ? withServerContracts(host, invoke)
+    : invoke();
 }

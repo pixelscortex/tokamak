@@ -41,8 +41,10 @@ generated references in `src/server/_generated/` and component declarations in
 - **Contracts**: export a typed `contract<T>("name")` from `src/contracts.ts`.
   A provider declares the owner in `depends` or `optional`, imports
   `plugin:<id>/contracts`, and exports `provide(key, implementation)`. The
-  owner calls `key.list()` or `key.get(id)`. For a local contract add
-  `{ place: "local" }` and use `local` for members that need a local context.
+  owner calls `key.list(ctx)` or `key.get(id, ctx)` from a local function or
+  server action, and leaves `ctx` out in a query or mutation. For a local
+  contract add `{ place: "local" }` and use `local` for members that need a
+  local context.
   An optional provider may copy the owner's declaration to `contracts/<id>.ts`;
   keep it byte-identical. For membership changes, use `onMember` with the
   event from `plugin:auth/contracts`.
