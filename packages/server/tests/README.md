@@ -30,6 +30,29 @@ Disk scenarios use unique directories under
 ignored `packages/server/target/tkm5-databases` and remove them after awaited shutdown.
 There are no added dependencies or enlarged native stacks.
 
+## Agent turns on both local runtimes
+
+The Claude, Codex, AI, chat and code acceptance tests use a real server and
+database. Their test client starts Bun by default and the plugin host with
+`TOKAMAK_PLUGIN_RUNTIME=quickjs` on macOS and Linux. The Rust test launcher
+finds or builds the host beside the server; use `TOKAMAK_PLUGIN_HOST` to
+override that path.
+
+To compare stored Claude and Codex turns, run both suites with the same
+temporary directory. Bun writes a reference and QuickJS checks the final
+text, thinking, usage, session, state, tasks, plan and ordered reports against
+it. The Rust CI job does this automatically.
+
+```sh
+parity_dir=$(mktemp -d)
+TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=bun CI=1 \
+  cargo test --locked -p server --test claude_turns --test codex_turns -- --nocapture
+TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=quickjs CI=1 \
+  cargo test --locked -p server --test claude_turns --test codex_turns -- --nocapture
+rm -f "$parity_dir/claude.json" "$parity_dir/codex.json"
+rmdir "$parity_dir"
+```
+
 ## Codex replay
 
 `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test codex_turns` builds

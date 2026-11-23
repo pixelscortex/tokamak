@@ -92,6 +92,7 @@ impl Resolver for Resolve {
             "node:path" | "node:fs/promises" | "node:os" | "node:crypto" | "node:url"
         ) || (base == "tokamak:entry" && self.0.path(name).is_some())
             || (base == "node:fs/promises" && name == "tokamak:fs")
+            || (base == "node:path" && name == "tokamak:path")
         {
             Ok(name.to_owned())
         } else {
@@ -114,6 +115,8 @@ impl Loader for Load {
     ) -> Result<Module<'js, Declared>> {
         let ctx = ctx.clone();
         match name {
+            "node:path" => Module::declare(ctx, name, include_str!("path.js")),
+            "tokamak:path" => Module::declare_def::<llrt_path::PathModule, _>(ctx, name),
             name if action_builtin(name).is_some() => load_builtin(ctx, name),
             "node:fs/promises" => Module::declare(ctx, name, include_str!("fs.js")),
             "tokamak:fs" => Module::declare_def::<NativeFs, _>(ctx, name),

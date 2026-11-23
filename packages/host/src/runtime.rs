@@ -64,7 +64,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub async fn new(
+    pub async fn new_local(
         bundles: Bundles,
         heap: usize,
         output: Arc<Output>,
@@ -88,6 +88,11 @@ impl Runtime {
         let immediates = timers::Immediates::default();
         let dispatch = {
             let startup = context.async_with(async |ctx| {
+                // Only local functions receive process; action workers must not expose it.
+                install_process_env(&ctx)
+                    .catch(&ctx)
+                    .map_err(|error| anyhow!("{error}"))?;
+
                 initialize(
                     &ctx,
                     bundle,
@@ -204,6 +209,33 @@ async fn initialize<'js>(
         ctx,
         ready.into_future::<Function>().await?,
     ))
+}
+
+fn install_process_env(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
+    let process = Object::new(ctx.clone())?;
+    let env = Object::new(ctx.clone())?;
+    // The launcher has already limited which variables enter the worker.
+    for (name, value) in std::env::vars_os() {
+        env.prop(
+            name.to_string_lossy().as_ref(),
+            rquickjs::object::Property::from(value.to_string_lossy().as_ref())
+                .writable()
+                .enumerable()
+                .configurable(),
+        )?;
+    }
+    process.set("env", env)?;
+    process.set(
+        "platform",
+        if cfg!(target_os = "macos") {
+            "darwin"
+        } else {
+            "linux"
+        },
+    )?;
+    process.set("versions", Object::new(ctx.clone())?)?;
+
+    ctx.globals().set("process", process)
 }
 
 impl Drop for Runtime {

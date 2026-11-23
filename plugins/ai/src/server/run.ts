@@ -351,6 +351,8 @@ function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
             broken = cause;
             onBroken();
           });
+        // Let buffered agent reports arrive before taking the next write, without delaying the first.
+        if (broken === undefined) await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
       flight = undefined;
     })();

@@ -6,6 +6,20 @@ import { workerContracts } from "./contracts";
 import type { FunctionRegistry } from "../src/functions";
 import type { Provider } from "../src/internal/contracts";
 
+async function loadLocalModule(path: string) {
+  try {
+    return await import(path);
+  } catch (error) {
+    if (
+      error instanceof SyntaxError &&
+      error.message === "Could not find export 'win32' in module 'node:path'"
+    ) {
+      throw new SyntaxError("node:path on the plugin host has no win32", { cause: error });
+    }
+    throw error;
+  }
+}
+
 export async function initialize(
   send: (json: string) => void,
   nextOp: () => number,
@@ -16,7 +30,7 @@ export async function initialize(
   const logger = console;
   installConsole(logger, emit);
 
-  const root = (await import(bundle)) as {
+  const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
     contractProviders?: Record<string, Provider<"local">>;
   };
@@ -26,7 +40,7 @@ export async function initialize(
     emit,
     nextOp,
     (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
-    workerContracts(root, (path) => import(path)),
+    workerContracts(root, loadLocalModule),
     {
       abort(controller) {
         try {

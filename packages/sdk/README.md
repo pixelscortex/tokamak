@@ -199,6 +199,13 @@ or `globalThis.Bun.*`. These fail on first use on the new host.
 
 ## Local functions
 
+On the plugin host, local functions get `process.platform` (`darwin` or
+`linux`), an empty `process.versions` (no `node` entry), and `process.env`,
+an ordinary object with a snapshot of the launch environment. Setting
+`process.env.X` on Bun affects programs started later; on the plugin host it
+only changes the snapshot. Pass `env` to `ctx.proc` to set a program's
+environment.
+
 `local({ args, handler })` runs in the desktop client's Bun worker. Put it
 under the plugin's `src/`; it can share a module with server functions.
 The plugin build emits its own `local.js` and a typed reference in the

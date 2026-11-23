@@ -50,6 +50,12 @@ runs so low that QuickJS cannot run the rejection handler, the call can
 still be cancelled. Process exit fails outstanding calls, and the next call
 starts a new process.
 
+Local functions get `process.platform` (`darwin` or `linux`), an empty
+`process.versions` (no `node` entry), and `process.env`, an ordinary object
+with a snapshot of the short launch environment. On Bun, setting
+`process.env.X` affects programs started later. On the plugin host, it only
+changes the snapshot. Pass `env` to `ctx.proc` to set a program's environment.
+
 The filesystem module supports Node-style error codes and string, file URL
 and byte-array paths. `cp` copies symlinks by default and supports
 `dereference`, `recursive`, `force`, `errorOnExist` and
