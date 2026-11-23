@@ -1,0 +1,46 @@
+packages/host/tests/fixture.js
+  s_b654b6e1a39b4c::t_cf9531912052be 254-259,265-274,276-288
+  s_b654b6e1a39b4c::t_5214887365f618 261-264,275
+packages/host/src/programs.rs
+  s_b654b6e1a39b4c::t_94ef9c8477a515 69,83-84,115-117,125-129,135,137-143
+packages/host/src/programs/lines.rs
+  s_b654b6e1a39b4c::t_94ef9c8477a515 23-26
+packages/server/tests/local-functions-driver.mjs
+  s_b654b6e1a39b4c::t_9dfd98d751bb39 365-366
+  s_b654b6e1a39b4c::t_cf9531912052be 156-167,341,364
+  s_b654b6e1a39b4c::t_58cf81d256068f 329-340,342-363
+packages/host/README.md
+  s_b654b6e1a39b4c::t_cf9531912052be 39-45
+packages/host/src/programs/process.rs
+  s_b654b6e1a39b4c::t_cf9531912052be 18,31,263,274,284,308
+  s_b654b6e1a39b4c::t_94ef9c8477a515 10,12,15-16,23-24,32,77,85,88-89,105-106,108,111-127,144,226,262,269-273,275,277-282,298-300,307,310
+  s_bc90a8a17ca0f7::t_a98aa717a9d205 225,283
+  s_b654b6e1a39b4c::t_8c9915eccffe05 145
+  s_b654b6e1a39b4c::t_a2d8e54519e5cb 51,167-224
+packages/host/tests/programs.rs
+  s_b654b6e1a39b4c::t_cf9531912052be 117,147-150,173,177-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da025e324b3f04b6794616636190142e79282a0c",
+  "prompts": {},
+  "sessions": {
+    "s_b654b6e1a39b4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20840-cdd7-7023-a93d-be7fd586c0ac",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    },
+    "s_bc90a8a17ca0f7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2081d-a941-7952-b3ca-0d36b0986117",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
