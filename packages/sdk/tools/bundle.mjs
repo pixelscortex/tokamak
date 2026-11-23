@@ -15,7 +15,7 @@ import { definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plu
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 import { functionPlacement, lanes, placedModules, placementTransform, registrySource } from "./placement.mjs";
 import { contractEntry, contractManifest } from "./contracts.mjs";
-import { isFileOrProcessModule, serverBuiltins } from "./server-builtins.mjs";
+import { serverBuiltins } from "./server-builtins.mjs";
 
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const quote = JSON.stringify;
@@ -220,7 +220,7 @@ export async function bundleFeature(folder, namespace, worker = false) {
     } else {
       workerPlugins = [
         ...(placement ? [placementTransform(placement, lanes.server)] : []),
-        serverBuiltins("server-local-boundary"),
+        serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions"),
       ];
     }
     await Bun.write(entry, source);
@@ -388,7 +388,7 @@ async function checkFeature(root, temporary, generated, files, entry, worker, pr
     if (
       /Property 'proc' does not exist on type .*?(?:Query|Mutation|Action)Context/.test(diagnostics) ||
       [...diagnostics.matchAll(/Cannot find module '([^']+)'/g)].some(([, path]) =>
-        isFileOrProcessModule(path),
+        /^(?:node:)?fs\/promises$/.test(path),
       )
     )
       advice.push(useLocal);

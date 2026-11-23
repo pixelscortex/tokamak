@@ -149,7 +149,7 @@ test("local functions cannot import node:child_process", async () => {
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr + result.stdout,
-      /src\/mixed.ts imports "node:child_process".*local functions.*through proc/,
+      /Plugin import boundary: src\/mixed\.ts imports "node:child_process".*local functions.*through proc/,
     );
   });
 }, 30_000);
@@ -203,15 +203,71 @@ test("local functions cannot require a bare built-in through a helper", async ()
   });
 }, 30_000);
 
-test("the server part's Node module check does not apply to the window", async () => {
+test("local functions cannot import node:async_hooks", async () => {
   await fixture(async (folder) => {
     await writeFile(
-      join(folder, "src/main.tsx"),
-      'export const Window = () => import("node:child_process");',
+      join(folder, "src/mixed.ts"),
+      `
+      import { local } from "@tokamak/sdk";
+      import { AsyncLocalStorage } from "node:async_hooks";
+      export function Window() {}
+      export const run = local({ handler: () => typeof AsyncLocalStorage });
+      `,
     );
+    const result = build(folder);
+    assert.match(result.stderr + result.stdout, /imports "node:async_hooks".*unavailable in local functions/);
+  });
+}, 30_000);
+
+test("a query importing bare fs gets proc advice only", async () => {
+  await fixture(async (folder) => {
     await writeFile(
-      join(folder, "src/local.ts"),
-      'import { local } from "@tokamak/sdk"; export const run = local({ handler: () => "local" });',
+      join(folder, "src/mixed.ts"),
+      `
+      import { query } from "@tokamak/sdk";
+      import { readFileSync } from "fs";
+      export function Window() {}
+      export const read = query({ handler: () => readFileSync("example", "utf8") });
+      `,
+    );
+    const result = build(folder);
+    assert.match(
+      result.stderr + result.stdout,
+      /imports "node:fs", which is unavailable in queries, mutations and server actions\. A plugin that needs real Node can start it through proc in a local function\./,
+    );
+  });
+}, 30_000);
+
+test("forbidden Bun modules retain their specifier", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import { Database } from "bun:sqlite";
+      export function Window() {}
+      export const read = action({ handler: () => typeof Database });
+      `,
+    );
+    const result = build(folder);
+    assert.match(result.stderr + result.stdout, /imports "bun:sqlite", which is unavailable/);
+  }, true);
+}, 30_000);
+
+test("the server part's Node module check does not apply to the window", async () => {
+  await fixture(async (folder) => {
+    await writeFile(join(folder, "src/main.tsx"), 'export { Window } from "./window";');
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { local } from "@tokamak/sdk";
+      export const run = local({ handler: () => "local" });
+      `,
+    );
+    // The window build accepts a dynamic import of a Node built-in.
+    await writeFile(
+      join(folder, "src/window.ts"),
+      'export const Window = () => import("node:child_process");',
     );
     built(folder);
   });

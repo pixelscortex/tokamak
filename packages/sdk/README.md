@@ -176,12 +176,25 @@ already called. Throw for unexpected errors.
 
 ## Node modules in the server part
 
-Server actions can import `node:path`, `node:os`, `node:crypto`, and `node:url`.
-Local functions can also import `node:fs/promises`. Both have the globals
-`setTimeout`, `setInterval`, `setImmediate`, and `fetch`; no import is needed.
-The build checks direct imports and imports in dependencies, including bare
-names such as `path`. If a plugin needs real Node, start it with `ctx.proc` in
-a local function.
+By default, server actions run in the server's own engine and cannot import any
+Node modules. Only server actions in a plugin with `runtime: "worker"` can import
+`node:path`, `node:os`, `node:crypto`, and `node:url`. Local functions can import
+those four modules plus `node:fs/promises`. Queries and mutations cannot import
+Node modules.
+
+Worker server actions and local functions have the global timers `setTimeout`,
+`setInterval`, and `setImmediate`, as well as the global `fetch`. The host does
+not supply `node:timers`, `node:timers/promises`, or subpaths such as
+`node:path/posix`.
+
+The build checks imports in the server part, including bare names such as
+`path`. An npm dependency that imports a built-in outside the allowed list
+(for example `events`, `buffer`, or `util`) also stops the build. If a plugin
+needs real Node, start it with `ctx.proc` in a local function.
+
+The build does not catch built-ins reached without an import, such as
+`process.getBuiltinModule(...)`, `import.meta.require(...)`, `process.binding(...)`,
+or `globalThis.Bun.*`. These fail on first use on the new host.
 
 ## Local functions
 

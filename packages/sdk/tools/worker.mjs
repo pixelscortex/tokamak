@@ -72,7 +72,7 @@ export async function workerSources({
       header,
     }),
     plugins: [
-      serverBuiltins("worker-server-builtins"),
+      serverBuiltins("worker-server-builtins", pluginRoot, "queries and mutations"),
       ...(placement ? [placementTransform(placement, lanes.descriptor)] : []),
     ],
   };
@@ -101,7 +101,7 @@ export async function buildWorkerBundles({ root, sdkRoot, pluginRoot, name, sour
       naming: asset,
       env: "disable",
       plugins: [
-        ...(asset === name + ".js" ? [workerBuiltins(name === "local")] : []),
+        ...(asset === name + ".js" ? [workerBuiltins(pluginRoot, name === "local")] : []),
         bunPluginBoundary(pluginRoot, { publicOnly: name === "local" }),
         ...plugins,
         {

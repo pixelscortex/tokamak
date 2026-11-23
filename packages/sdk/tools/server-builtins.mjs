@@ -1,21 +1,28 @@
 import { isBuiltin } from "node:module";
-import { fileURLToPath } from "node:url";
+import { isAbsolute, relative } from "node:path";
 
-const actionModules = new Set(["node:path", "node:os", "node:crypto", "node:url"]);
-const aiControls = fileURLToPath(new URL("../../../plugins/ai/src/server/controls.ts", import.meta.url));
+const action = ["node:path", "node:os", "node:crypto", "node:url"];
+
+// The QuickJS host must supply exactly this list.
+export const suppliedNodeModules = { action, local: [...action, "node:fs/promises"] };
 
 function nodeModule(path) {
-  if (path.startsWith("node:")) return path;
+  if (path.startsWith("node:") || path === "bun" || path.startsWith("bun:")) return path;
   if (isBuiltin(path)) return `node:${path}`;
 }
 
-function unavailable(importer, module, lane, advice = "") {
+function unavailable(pluginRoot, importer, module, lane) {
+  const file = isAbsolute(importer) ? relative(pluginRoot, importer) : importer;
+  const advice = module === "node:fs/promises" ? " Move it into a local function." : "";
+
   return new Error(
-    `Plugin import boundary: ${importer} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function.`,
+    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function.`,
   );
 }
 
-export function workerBuiltins(local) {
+export function workerBuiltins(pluginRoot, local) {
+  const supplied = suppliedNodeModules[local ? "local" : "action"];
+
   return {
     name: "worker-node-builtins",
     setup(build) {
@@ -24,33 +31,23 @@ export function workerBuiltins(local) {
         if (!importer || importer === "runtime") return;
 
         const module = nodeModule(path);
-        if (!module || actionModules.has(module)) return;
-        if (local && module === "node:fs/promises") return;
-        // Keep the starter AI plugin's Bun turn controls working during the migration.
-        if (local && module === "node:async_hooks" && importer === aiControls) return;
+        if (!module || supplied.includes(module)) return;
 
-        throw unavailable(importer, module, local ? "local functions" : "server actions");
+        throw unavailable(pluginRoot, importer, module, local ? "local functions" : "server actions");
       });
     },
   };
 }
 
-export function isFileOrProcessModule(path) {
-  return /^(?:node:)?(?:fs(?:\/promises)?|child_process)$/.test(path);
-}
-
-export function serverBuiltins(name) {
+export function serverBuiltins(name, pluginRoot, lane) {
   return {
     name,
     setup(build) {
       build.onResolve({ filter: /.*/ }, ({ path, importer }) => {
         if (!importer) return;
-        const module = nodeModule(path);
-        if (!(module || path === "bun" || path.startsWith("bun:"))) return;
 
-        const advice = isFileOrProcessModule(path) ? " Move it into a local function." : "";
-        if (module) throw unavailable(importer, module, "server functions", advice);
-        throw new Error(`${importer}: ${path} is unavailable in server functions.${advice}`);
+        const module = nodeModule(path);
+        if (module) throw unavailable(pluginRoot, importer, module, lane);
       });
     },
   };
