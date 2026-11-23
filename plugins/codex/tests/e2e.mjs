@@ -13,6 +13,7 @@ import {
   localLauncher,
   workspace,
 } from "../../../e2e/fake-agent/harness.mjs";
+import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
 const real = process.argv[3] === "--real" && !process.env.CI;
@@ -42,10 +43,30 @@ try {
   if (!real) await replayExecutable();
 
   const { ai } = h.api;
-  const address = await h.serve("server");
-  const connectClient = (env) =>
-    connect(address, { cleanup, launch: localLauncher(h.selection, (id) => join(h.plugins, id), env) });
-  const replayClient = await connectClient(inherited);
+  const binary = process.argv[2];
+  const runner = real && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
+  const address = runner ? undefined : await h.serve("server");
+  const connectClient = async (env) => {
+    if (address)
+      return connect(address, {
+        cleanup,
+        launch: localLauncher(h.selection, (id) => join(h.plugins, id), env),
+      });
+    const dir = await h.folder("live-runners");
+    const instance = await startRunner({
+      binary,
+      plugins: h.plugins,
+      directory: join(dir, crypto.randomUUID()),
+      env,
+    });
+    cleanup.push(instance.stop);
+    return connect(instance.endpoint.ws, {
+      cleanup,
+      launch: instance.launch,
+      token: instance.endpoint.token,
+    });
+  };
+  const replayClient = real ? undefined : await connectClient(inherited);
   const agentClient = real
     ? await connectClient({
         ...inherited,
@@ -61,8 +82,10 @@ try {
     return codex.info;
   };
 
-  const missing = await connectClient({ ...inherited, PATH: h.home });
-  assert.equal((await info(missing)).installed, false);
+  if (!runner) {
+    const missing = await connectClient({ ...inherited, PATH: h.home });
+    assert.equal((await info(missing)).installed, false);
+  }
   if (real) {
     await mkdir(codexHome);
     const signedOut = await connectClient({ ...inherited, PATH: process.env.PATH });

@@ -1,7 +1,7 @@
 use super::Lane;
 use std::{
     collections::BTreeMap,
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     io,
     marker::PhantomData,
     os::windows::{
@@ -46,6 +46,25 @@ pub(super) fn spawn(
     env: &BTreeMap<String, String>,
     lane: Lane,
 ) -> io::Result<(Child, OwnedHandle)> {
+    let environment = environment_block(env, lane)?;
+    spawn_contained(
+        bun,
+        &[entry.as_os_str(), code.as_os_str()],
+        Some(cwd),
+        Some(environment),
+    )
+}
+
+pub(super) fn spawn_runner(path: &Path, args: &[&OsStr]) -> io::Result<(Child, OwnedHandle)> {
+    spawn_contained(path, args, None, None)
+}
+
+fn spawn_contained(
+    path: &Path,
+    args: &[&OsStr],
+    cwd: Option<&Path>,
+    environment: Option<Vec<u16>>,
+) -> io::Result<(Child, OwnedHandle)> {
     let (input, stdin) = io::pipe()?;
     let (stdout, output) = io::pipe()?;
     let (stderr, errors) = io::pipe()?;
@@ -59,7 +78,7 @@ pub(super) fn spawn(
         output.as_raw_handle(),
         errors.as_raw_handle(),
     ];
-    let handle = create_process(bun, [entry, code], cwd, env, &job, pipes, lane)?;
+    let handle = create_process(path, args, cwd, environment, &job, pipes)?;
     let exit = spawn_blocking(move || {
         // SAFETY: The process handle is owned by this wait until it completes.
         unsafe {
@@ -101,25 +120,53 @@ fn create_job() -> io::Result<OwnedHandle> {
 }
 
 fn create_process(
-    bun: &Path,
-    [entry, code]: [&Path; 2],
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
+    path: &Path,
+    args: &[&OsStr],
+    cwd: Option<&Path>,
+    environment: Option<Vec<u16>>,
     job: &OwnedHandle,
     pipes: [HANDLE; 3],
-    lane: Lane,
 ) -> io::Result<OwnedHandle> {
-    let application = wide(bun.as_os_str())?;
-    let directory = wide(std::path::absolute(cwd)?.as_os_str())?;
-    let mut command = OsString::new();
-    for path in [bun, entry, code] {
-        // These are file paths, so none can end in a backslash or contain quotes.
-        command.push("\"");
-        command.push(path);
-        command.push("\" ");
+    let application = wide(path.as_os_str())?;
+    let directory = cwd
+        .map(|cwd| wide(std::path::absolute(cwd)?.as_os_str()))
+        .transpose()?;
+    let mut command = Vec::new();
+    for arg in std::iter::once(path.as_os_str()).chain(args.iter().copied()) {
+        // Quote each argument according to the Windows C runtime's argv rules.
+        if !command.is_empty() {
+            command.push(b' ' as u16);
+        }
+        command.push(b'"' as u16);
+        let mut slashes = 0;
+        for unit in arg.encode_wide() {
+            match unit {
+                0 => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Unexpected NUL",
+                    ));
+                }
+                92 => slashes += 1,
+                _ => {
+                    command.extend(std::iter::repeat_n(
+                        92,
+                        slashes
+                            + if unit == 34 {
+                                slashes + 1
+                            } else {
+                                0
+                            },
+                    ));
+                    slashes = 0;
+                    command.push(unit);
+                }
+            }
+        }
+        command.extend(std::iter::repeat_n(92, slashes * 2));
+        command.push(b'"' as u16);
     }
-    let mut command = wide(&command)?;
-    let environment = environment_block(env, lane)?;
+    command.push(0);
     let job_list = [job.as_raw_handle()];
     let mut attributes = Attributes::new()?;
     attributes.add(PROC_THREAD_ATTRIBUTE_JOB_LIST, &job_list)?;
@@ -151,8 +198,10 @@ fn create_process(
                 null(),
                 1,
                 EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
-                environment.as_ptr().cast(),
-                directory.as_ptr(),
+                environment
+                    .as_ref()
+                    .map_or(null(), |value| value.as_ptr().cast()),
+                directory.as_ref().map_or(null(), |value| value.as_ptr()),
                 (&raw const startup).cast(),
                 &mut process,
             ) != 0,

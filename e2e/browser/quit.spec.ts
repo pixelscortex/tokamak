@@ -49,8 +49,8 @@ test("quitting while an agent works asks first; Cancel keeps it, Stop and quit l
   const cleanup: (() => void)[] = [];
   try {
     const desk = await asDesktop(context);
-    const client = await connect("ws://127.0.0.1:43123/ws", {
-      token: process.env.VITE_TOKAMAK_TOKEN,
+    const client = await connect(desk.endpoint.ws, {
+      token: desk.endpoint.token,
       cleanup,
       launch: undefined,
     });
@@ -102,19 +102,14 @@ test("quitting while an agent works asks first; Cancel keeps it, Stop and quit l
       .poll(() => desk.quitAnswers, { timeout: 30_000 })
       .toEqual(["hold", "cancel", "hold", "confirm"]);
     expect(pids.filter(alive)).toEqual([]);
-    const turns = await client.query(ai.turns.list, { threadId });
+    await desk.restart();
+    const reopened = await connect(desk.endpoint.ws, {
+      token: desk.endpoint.token,
+      cleanup,
+      launch: undefined,
+    });
+    const turns = await reopened.query(ai.turns.list, { threadId });
     expect(turns.map((turn) => turn.state)).toEqual(["stopped", "stopped", "stopped"]);
-    for (const text of ["First follow-up", "Second follow-up"]) {
-      await expect(conversation(page).getByRole("article").filter({ hasText: text })).toContainText(
-        "Stopped",
-      );
-    }
-    await expect(conversation(page)).not.toContainText("Interrupted");
-    await expect(
-      conversation(page)
-        .getByRole("article")
-        .filter({ hasText: "Partial reply from a stuck agent. Stop received." }),
-    ).toContainText("Stopped");
   } finally {
     for (const close of cleanup) close();
     await context.close();

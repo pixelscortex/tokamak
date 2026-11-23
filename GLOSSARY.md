@@ -11,16 +11,20 @@ One data store, plugin list, and member list, separate from all other workspaces
 _Avoid_: Space, project, team.
 
 **Client**:
-The window and local part together, connected to a server as a member.
-_Avoid_: Frontend, desktop (when both parts are meant).
+The app a person uses to connect to a server as a member. The desktop client starts a Runner on the person’s computer.
+_Avoid_: Frontend.
 
 **Window**:
 The visible part of the client in which a person works. It calls functions and never changes data or files directly.
 _Avoid_: Client (for the interface alone), frontend, webview.
 
 **Local part**:
-The part of the client that can work with files and programs on the person's computer.
-_Avoid_: Runner, worker, local server.
+The part of a plugin that can work with files and programs on the machine where the Runner runs.
+_Avoid_: Worker, local server.
+
+**Runner**:
+The program that runs a workspace server and its local runtime together. The desktop client starts one; a person can also start one independently.
+_Avoid_: Worker, client.
 
 **Server**:
 The program that runs one workspace and holds its shared data.
@@ -42,7 +46,7 @@ _Avoid_: Remote, cloud server, hub.
 
 **Device**:
 One signed-in client identity for a member on a server.
-_Avoid_: Computer (when referring to the sign-in), session, runner.
+_Avoid_: Computer (when referring to the sign-in), session.
 
 **Device key**:
 A revocable credential that signs in one device as a member.

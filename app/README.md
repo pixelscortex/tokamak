@@ -10,15 +10,16 @@ proto run bun -- install --frozen-lockfile
 proto run bun -- run app
 ```
 
-The Tauri hooks build the starter set, the server, and the plugin host on macOS
-and Linux. The app starts or reuses the server
-and connects automatically. Retry repeats endpoint discovery. Closing the window
-leaves the server running; `proto run bun -- run server:stop` stops it.
-`TOKAMAK_SERVER_DIR` selects a separate store/discovery directory. Development
-uses workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR`
-overrides the installation for disposable integration runs. Stop the server
-before changing installations. Discovery and the private token normally live in
-`~/Library/Application Support/<bundle identifier>` on macOS.
+The Tauri hooks build the starter set and the [Runner](../packages/runner/README.md),
+plus the plugin host on macOS and Linux. The app starts one Runner and the window
+connects to it automatically. The app restarts the Runner if it exits; the
+window shows its existing disconnected state and Retry connects to the new port.
+Quitting the app stops the Runner and its plugin processes and programs.
+`TOKAMAK_SERVER_DIR` still selects the store directory. Development uses the
+workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR` overrides
+the installation. Runner startup errors go to `runner.log` beside the store.
+If an earlier desktop version left its server running, stop that server before
+opening the new app on the same store.
 
 For browser development, use two terminals:
 
@@ -32,7 +33,7 @@ on port 43123, removed on exit. `VITE_TOKAMAK_HTTP` changes the browser endpoint
 a capability for a private local server (development only).
 No external agent runs. Desktop `tokamak_endpoint` returns `{ http, ws, token }`;
 the adapter adds the token to server module, stylesheet and catalog requests,
-and the app adds it to the WebSocket URL. The server allows the Tauri origins
+and the app sends it as a WebSocket subprotocol. The server allows the Tauri origins
 and port 1420 by default; other origins require `TOKAMAK_ALLOWED_ORIGINS`.
 
 ## Shell
@@ -60,7 +61,7 @@ to the window on the channel it registers with `quit_listen`. The window asks
 plugins (`quitBlockers`); with nothing running it answers `quit_confirm` at
 once, else it shows the dialog and answers `quit_hold`, then `quit_cancel` or
 (after Stop and quit) `quit_confirm`. No answer within 3 seconds quits anyway.
-`quit_confirm` closes every local worker, ending each agent program with it,
+`quit_confirm` stops the Runner and its local workers and programs,
 then exits. The main window runs with WebKit's background throttling off
 (`tauri.conf.json`), so a hidden or minimized window still relays its local
 part's sign of life and answers a quit.
@@ -87,7 +88,7 @@ proto run bun -- run --cwd app tauri build --no-sign
 Plugin typechecking first generates Chat's server API with the SDK bundler.
 Direct Cargo checks do not require bundled sidecars or plugin resources: the
 Tauri build script omits absent packaging inputs. Tauri dev/build hooks prepare
-the actual server binary and plugin resources before launching or bundling.
+the actual Runner binary and plugin resources before launching or bundling.
 Release builds package the server as an external binary. No signing is required
 for this local build. The CSP permits loopback HTTP/styles and WebSockets, blob
 modules and a hashed import map, with no eval. Keep the Vite Solid runtime alias:

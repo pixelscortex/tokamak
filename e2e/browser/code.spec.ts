@@ -117,10 +117,9 @@ test("reopening Chat removes local snapshots of a thread deleted elsewhere", asy
     const threadId = await page.getByRole("region", { name: "Chat" }).getAttribute("data-thread-id");
     expect(threadId).toBeTruthy();
     await page.close();
-    await desk.closeWorkers();
 
-    const remote = await connect("ws://127.0.0.1:43123/ws", {
-      token: process.env.VITE_TOKAMAK_TOKEN,
+    const remote = await connect(desk.endpoint.ws, {
+      token: desk.endpoint.token,
       cleanup,
       launch: undefined,
     });

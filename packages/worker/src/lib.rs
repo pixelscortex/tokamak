@@ -1,6 +1,7 @@
-//! Launch and contain plugin processes in the server and the client.
+//! Launch and contain the Runner and its plugin processes.
 mod discovery;
 mod logs;
+pub mod runner;
 mod runtime;
 #[cfg(windows)]
 mod windows;
@@ -53,6 +54,21 @@ pub struct Process {
 }
 
 impl Process {
+    fn launch_runner(path: &Path, args: &[&std::ffi::OsStr]) -> Result<Self, String> {
+        #[cfg(windows)]
+        let (child, containment, guardian) = {
+            let (child, job) = windows::spawn_runner(path, args).map_err(|e| e.to_string())?;
+            (child, job, None)
+        };
+        #[cfg(not(windows))]
+        let (child, containment, guardian) = {
+            let mut command = tokio::process::Command::new(path);
+            command.args(args);
+            spawn_group(command)?
+        };
+        Ok(Self::contained(child, containment, guardian))
+    }
+
     pub fn launch_local(
         entry: &Path,
         code: &Path,
@@ -278,16 +294,23 @@ fn launch(
     extra: Option<(&str, &std::ffi::OsStr)>,
 ) -> Result<(WorkerChild, Group, Option<Child>), String> {
     let mut command = tokio::process::Command::new(executable);
-    #[cfg(unix)]
-    command.process_group(0);
     command.args(entry).arg(code);
     let (lane_key, lane_value) = lane.env();
     command.env_clear().envs(env).env(lane_key, lane_value);
     if let Some((key, value)) = extra {
         command.env(key, value);
     }
+    command.current_dir(cwd);
+    spawn_group(command)
+}
+
+#[cfg(not(windows))]
+fn spawn_group(
+    mut command: tokio::process::Command,
+) -> Result<(WorkerChild, Group, Option<Child>), String> {
+    #[cfg(unix)]
+    command.process_group(0);
     let child = command
-        .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

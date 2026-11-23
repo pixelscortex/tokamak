@@ -34,7 +34,7 @@ To verify with an installed, signed-in Codex, run locally:
 
 ```sh
 CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
-proto run bun -- plugins/codex/tests/e2e.mjs target/debug/tokamak-server --real
+env -u CI -u TOKAMAK_PLUGIN_RUNTIME proto run bun -- plugins/codex/tests/e2e.mjs target/debug/tokamak-runner --real
 ```
 
 The second command makes paid turns against the local Codex login. The work

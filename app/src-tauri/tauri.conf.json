@@ -39,7 +39,7 @@
     "targets": ["app"],
     "macOS": { "minimumSystemVersion": "14.0" },
     "icon": [],
-    "externalBin": ["dist/tokamak-server", "dist/tokamak-plugin-host"],
+    "externalBin": ["dist/tokamak-runner", "dist/tokamak-plugin-host"],
     "resources": {
       "dist/plugins/": "plugins/"
     }

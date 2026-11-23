@@ -26,13 +26,19 @@ case "$1" in
 
     # The worker package suite below covers its library tests.
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked --workspace --lib --exclude tokamak-worker
-    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-plugin-host -p tokamak-worker
+    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-plugin-host -p tokamak-worker -p tokamak-runner
 
     # Replay traffic reaches the real server and database in both runs. Compare
     # the stored content and order across runtimes, excluding wall-clock times.
     TOKAMAK_TURN_PARITY_DIR=$(mktemp -d)
     export TOKAMAK_TURN_PARITY_DIR
-    trap 'rm -f "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; rmdir "$TOKAMAK_TURN_PARITY_DIR"' EXIT
+    cleanup_parity() {
+      for file in "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; do
+        if [[ -f "$file" ]]; then unlink "$file"; fi
+      done
+      rmdir "$TOKAMAK_TURN_PARITY_DIR"
+    }
+    trap cleanup_parity EXIT
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
 

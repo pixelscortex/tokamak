@@ -5,12 +5,12 @@ on macOS and Linux. `TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback that
 will be removed. An empty value is an error on macOS and Linux. Windows ignores
 the variable and uses Bun. See the SDK's
 [plugin runtime guide](../sdk/README.md#plugin-runtimes) for plugin compatibility.
-The client looks for `tokamak-plugin-host` next to its executable. For development, run
+The Runner looks for `tokamak-plugin-host` next to its executable. For development, run
 `cargo build --locked -p tokamak-plugin-host` and set `TOKAMAK_PLUGIN_HOST`
 if the executable lives elsewhere.
 
 Bun bundles the shared SDK dispatcher at build time; the host does not need
-Bun to run. The desktop launcher starts the host in its own process group
+Bun to run. The Runner starts the host in its own process group
 with a guardian. The host kills that group on stdin EOF or shutdown.
 
 The host accepts up to 128 concurrent local calls and uses back-pressure
@@ -22,7 +22,7 @@ Only then does the host reset the runtime: started calls fail and module state
 is lost, while queued invocations run in the new runtime.
 
 Each host runs one QuickJS runtime and realm for its owning plugin. It loads
-verified provider bundles returned by the desktop's `local.contracts`
+verified provider bundles returned by the window's `local.contracts`
 operation in that same realm. Providers can receive live objects and call
 functions directly. Imports from other paths are refused; providers and the
 owning plugin use the same built-in allow list.

@@ -50,8 +50,8 @@ export function selectedRuntime(binary) {
 }
 
 /**
- * Launches a plugin's local worker the way the desktop client does
- * (app/src-tauri/src/local.rs): the installed, hash-checked `local-entry.js`
+ * Launches a plugin's local worker for server-only fixtures
+ * (the Runner implementation is in packages/runner/src/local.rs): the installed, hash-checked `local-entry.js`
  * and `local.js` with the selected runtime and the desktop’s short environment.
  * Programs started with `ctx.proc` inherit exactly that environment.
  * `installed(id)` is the folder holding a plugin's build.
@@ -134,4 +134,54 @@ export function localLauncher({ binary, runtime }, installed, env, observe) {
       },
     };
   };
+}
+
+/** Boots the same private Runner as the desktop, with a disposable workspace. */
+export async function startRunner({ binary, plugins, directory, env }) {
+  const { randomBytes } = await import("node:crypto");
+  const { runnerLauncher } = await import("../../packages/runtime/js/runner.ts");
+  await mkdir(directory, { recursive: true });
+  const token = randomBytes(32).toString("hex");
+  const child = spawn(binary, ["--desktop", "--data", join(directory, "store"), "--plugins", plugins], {
+    env: { ...process.env, ...env },
+    stdio: ["pipe", "pipe", "inherit"],
+    windowsHide: true,
+  });
+  child.stdin.on("error", () => {});
+  const exited = new Promise((resolve) => {
+    child.once("exit", resolve);
+    child.once("error", resolve);
+  });
+  const lines = createInterface({ input: child.stdout });
+  let stopping;
+  function stop() {
+    if (stopping) return stopping;
+    child.stdin.end();
+    const deadline = setTimeout(() => child.kill("SIGKILL"), 5000);
+    return (stopping = exited.finally(() => {
+      clearTimeout(deadline);
+      lines.close();
+    }));
+  }
+  try {
+    const ws = await new Promise((resolve, reject) => {
+      const deadline = setTimeout(() => reject(new Error("Runner readiness timed out")), 30_000);
+      exited.then((status) => {
+        clearTimeout(deadline);
+        reject(new Error(`Runner exited before readiness: ${status}`));
+      });
+      lines.on("line", (line) => {
+        const match = /^Tokamak listening on (ws:\/\/127\.0\.0\.1:\d+\/ws)$/.exec(line);
+        if (!match) return;
+        clearTimeout(deadline);
+        resolve(match[1]);
+      });
+      child.stdin.write(token + "\n");
+    });
+    const endpoint = { ws, http: new URL(ws).origin.replace(/^ws:/, "http:"), token };
+    return { endpoint, launch: runnerLauncher(async () => endpoint), stop };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
 }
