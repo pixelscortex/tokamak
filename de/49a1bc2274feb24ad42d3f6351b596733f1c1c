@@ -1,0 +1,33 @@
+.ci/check.sh
+  s_bead5d35bc54c0::t_ed2f4220a0c465 44-45
+app/README.md
+  s_bead5d35bc54c0::t_b31572dc9ccce6 20-22
+packages/runner/README.md
+  s_bead5d35bc54c0::t_6fc06ffd6c1595 39-43
+packages/runner/src/main.rs
+  s_bead5d35bc54c0::t_aa184fed0844c3 185-186
+packages/runner/src/ownership.rs
+  s_bead5d35bc54c0::t_3e52c9f6f2394e 61,78,144-148,155-159,187-194,199-204,269-287
+packages/runner/tests/lifecycle.rs
+  s_bead5d35bc54c0::t_6a6a28df7c3358 448-497
+packages/server/tests/runner_routing.rs
+  s_bead5d35bc54c0::t_85d23012635956 3-6,10
+packages/server/tests/support/local_runtime.rs
+  s_bead5d35bc54c0::t_3f0eb4bfc918e1 44,58-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "de49a1bc2274feb24ad42d3f6351b596733f1c1c",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
