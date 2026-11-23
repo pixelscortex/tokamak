@@ -1,0 +1,92 @@
+packages/host/src/runtime.rs
+  s_2728ffe022d76a::t_13b5b2a360998c 25
+  s_2728ffe022d76a::t_dd36fa65682486 9
+packages/server/src/service/plugin_control.rs
+  s_2728ffe022d76a::t_a13a28a36dca49 288
+packages/worker/src/lib.rs
+  s_2728ffe022d76a::t_13b5b2a360998c 10,91,102-110,168-169
+  s_2728ffe022d76a::t_7f70cf0b3eb689 111-119,123-125,130,170
+  s_2728ffe022d76a::t_4403f5bbdc8da8 167
+  s_2728ffe022d76a::t_96a5e81457a71b 171
+packages/server/src/service/startup.rs
+  s_2728ffe022d76a::t_180981dd72b1a2 362
+  s_2728ffe022d76a::t_a13a28a36dca49 353-355
+packages/host/src/main.rs
+  s_2728ffe022d76a::t_7f70cf0b3eb689 23-28
+packages/host/src/action_process/plugin.rs
+  s_2728ffe022d76a::t_13b5b2a360998c 24,38-43,55-56,59-64,73-75,79-82,86-91,118,208
+  s_2728ffe022d76a::t_180981dd72b1a2 45-50,57-58,65-72,76-78,83-85,97
+  s_2728ffe022d76a::t_4403f5bbdc8da8 142,223
+packages/host/tests/action-fixture.js
+  s_2728ffe022d76a::t_5356d3368158a2 9-14
+packages/server/src/host/action_process/transport.rs
+  s_2728ffe022d76a::t_180981dd72b1a2 10,12,14,16,24-26,37,44-45,48,55,65,77,82,87-129,143,151,155,160-168,173-184,186,191-198,201-202,217,220,234-236,242,245-248,253-269,275-276,296,301,303-304,314,316-318
+packages/server/src/host/action_process/process_tests.rs
+  s_2728ffe022d76a::t_5356d3368158a2 1-186
+packages/server/tests/workers.rs
+  s_2728ffe022d76a::t_5356d3368158a2 30,244-257
+  s_2728ffe022d76a::t_de2aa483b4321e 23-29,45-49,60-63,74,402,484-500
+packages/server/src/plugins/loading.rs
+  s_2728ffe022d76a::t_7f70cf0b3eb689 118
+packages/host/tests/actions.rs
+  s_2728ffe022d76a::t_5356d3368158a2 137-163
+packages/host/src/action_process/mod.rs
+  s_2728ffe022d76a::t_180981dd72b1a2 69
+  s_2728ffe022d76a::t_7f70cf0b3eb689 2
+  s_2728ffe022d76a::t_4403f5bbdc8da8 3,9-10,13-15,18-19,35,40,44-48,74
+packages/server/src/service/sign_in.rs
+  s_2728ffe022d76a::t_180981dd72b1a2 360-367
+  s_2728ffe022d76a::t_a13a28a36dca49 355,359,368
+packages/server/src/plugins/artifact.rs
+  s_2728ffe022d76a::t_7f70cf0b3eb689 88,100-105
+packages/host/src/action_process/inspect.rs
+  s_2728ffe022d76a::t_7f70cf0b3eb689 1-37
+packages/server/src/host/action_process/mod.rs
+  s_2728ffe022d76a::t_a13a28a36dca49 9,11-12,17,23,32,49-50,84-85,105,111-112,120-122,145-168,173-174,185,190-191,195-199,203,208-209,214-217,219-232,238-241,243,249-254,256-266,282,288,290,295,301,305,308-312,315,317,328,335,350,356,358,365-366
+  s_2728ffe022d76a::t_7f70cf0b3eb689 2,5
+  s_2728ffe022d76a::t_180981dd72b1a2 169-172,233-237,244-248,278-279,291-294
+  s_2728ffe022d76a::t_5356d3368158a2 420-422
+  s_2728ffe022d76a::t_73a9f4f874e9d1 6,175
+packages/server/src/host/worker/process.rs
+  s_2728ffe022d76a::t_180981dd72b1a2 249,254-275
+  s_2728ffe022d76a::t_fd800d1edf2efa 276
+packages/host/src/action_process/output.rs
+  s_2728ffe022d76a::t_4403f5bbdc8da8 1-46,52-79,85-92,99-120,124-149
+  s_2728ffe022d76a::t_180981dd72b1a2 47-51,80-84,93-98,121-123
+packages/server/src/host/action_process/inspection.rs
+  s_2728ffe022d76a::t_7f70cf0b3eb689 1-28
+packages/worker/src/runtime.rs
+  s_2728ffe022d76a::t_13b5b2a360998c 36-48
+packages/host/src/action_process/realm.rs
+  s_2728ffe022d76a::t_4403f5bbdc8da8 154
+packages/server/Cargo.toml
+  s_2728ffe022d76a::t_13b5b2a360998c 47
+Cargo.lock
+  s_2728ffe022d76a::t_5292118288267f 6119
+packages/build/src/vite.ts
+  s_2728ffe022d76a::t_e4d10a2961d9d8 6,132-134
+packages/server/src/plugins/assets.rs
+  s_2728ffe022d76a::t_9616f2bd99c9e2 223-224,226
+packages/server/tests/auth-driver.mjs
+  s_2728ffe022d76a::t_84801059a440fc 706-707,711-716,720-721,742,758-777,789-792
+packages/server/tests/build-worker.mjs
+  s_2728ffe022d76a::t_11084c85a70c3d 38-46
+packages/server/tests/plugins.rs
+  s_2728ffe022d76a::t_a53e70c66f9587 34-41,193-202,213-214,311,1251-1297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b993451a928b373cedbb38733721088639c50be",
+  "prompts": {},
+  "sessions": {
+    "s_2728ffe022d76a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2084a-aa52-7763-a927-99c45d54ee4f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
