@@ -102,6 +102,7 @@ export const turn = local({
             void writer.broke.then(() => control.forceStop());
             return control.run(
               () =>
+                // Selected again with `scoped`, so the agent's programs belong to this scope and Force stop ends them.
                 agent.get(agentId, scoped).start({
                   folder,
                   prompt,

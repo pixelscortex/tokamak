@@ -550,9 +550,10 @@ export default provide(agent, {
 });
 ```
 
-In a function belonging to the defining plugin, call `await agent.list()`,
-`await agent.get(id)` (returns `undefined` when absent), or
-`await agent.get(id).start(run)` for a required method. Use the awaited
+In a local function or server action belonging to the defining plugin, pass
+the handler's `ctx`: call `await agent.list(ctx)`, `await agent.get(id, ctx)`
+(returns `undefined` when absent), or `await agent.get(id, ctx).start(run)`
+for a required method. Queries and mutations leave `ctx` out. Use the awaited
 provider to read data or check optional methods. Lookups use the current
 catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
