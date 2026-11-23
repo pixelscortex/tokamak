@@ -19,9 +19,17 @@ export interface ContractKey {
 export interface Contract<T extends object, P extends ContractPlace = ContractPlace> extends ContractKey {
   readonly [contractBrand]: (shape: T) => T;
   readonly place: P;
-  list(): Promise<readonly BoundProvider<T, P>[]>;
-  get(id: string): ProviderSelection<BoundProvider<T, P>>;
+  list(...context: LookupContext<P>): Promise<readonly BoundProvider<T, P>[]>;
+  get(id: string, ...context: LookupContext<P>): ProviderSelection<BoundProvider<T, P>>;
 }
+
+export interface ContractContext {
+  readonly [contractScope]: ContractScope;
+}
+
+type LookupContext<P extends ContractPlace> = P extends "local"
+  ? [context: ContractContext]
+  : [context?: ContractContext];
 
 type BoundProvider<T, P extends ContractPlace> = {
   [K in keyof T]: NonNullable<T[K]> extends (...args: infer A) => infer R
@@ -99,20 +107,24 @@ export function contractReference<T extends object, P extends ContractPlace>(
 ): Contract<T, P> {
   if (!contractName.test(name)) throw new Error(`Invalid contract name: ${name}`);
   const key = Object.freeze({ name, place, ...(owner === undefined ? {} : { owner }) });
-  const resolve = async (): Promise<readonly ContractEntry[]> => {
-    const scoped = (globalThis as ScopedGlobal)[contractScope]?.() ?? serverScope;
-    if (!scoped) throw new Error("Contract lookup requires a plugin function");
+  const resolve = async (context?: ContractContext): Promise<readonly ContractEntry[]> => {
+    const scoped = context?.[contractScope] ?? (place === "server" ? serverScope : undefined);
+    if (!scoped)
+      throw new Error(
+        "Contract lookup requires a plugin function; pass ctx in local functions and server actions",
+      );
     return scoped.list(key);
   };
   return Object.freeze({
     ...key,
     [contractBrand]: (shape: T) => shape,
-    list: async () => (await resolve()).map(({ implementation }) => implementation as BoundProvider<T, P>),
-    get: (id: string) =>
+    list: async (context?: ContractContext) =>
+      (await resolve(context)).map(({ implementation }) => implementation as BoundProvider<T, P>),
+    get: (id: string, context?: ContractContext) =>
       select(
         id,
         async () =>
-          (await resolve()).find((provider) => provider.id === id)?.implementation as
+          (await resolve(context)).find((provider) => provider.id === id)?.implementation as
             | BoundProvider<T, P>
             | undefined,
       ),
@@ -140,7 +152,6 @@ export interface ContractScope {
   list(key: ContractKey): Promise<readonly ContractEntry[]>;
 }
 
-type ScopedGlobal = typeof globalThis & { [contractScope]?: () => ContractScope | undefined };
 let serverScope: ContractScope | undefined;
 
 export function serverContracts(host: HostBridge): ContractScope {
@@ -173,9 +184,8 @@ export function serverContracts(host: HostBridge): ContractScope {
 }
 
 export function withServerContracts<T>(host: HostBridge, invoke: () => Promise<T>): Promise<T> {
-  // Each QuickJS bundle instance serves one invocation. Bun has concurrent
-  // invocations and supplies its own asynchronous scope from the worker entry.
-  if ((globalThis as ScopedGlobal)[contractScope]) return invoke();
+  // Legacy query/mutation lookup. Their bundle instance serves one invocation.
+  // Concurrent action and local workers carry scope on the handler context.
   const previous = serverScope;
   serverScope = serverContracts(host);
   return invoke().finally(() => {

@@ -113,7 +113,7 @@ export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
 - Register `run.onSteer((text) => …)` to pass a follow-up into the running
   agent session, and `run.onStop(() => …)` to send a graceful interrupt.
   Let `start` settle when the program ends. Force stop kills the process
-  groups started through `ctx.proc` inside the `ctx.withPrograms` scope around `start`.
+  groups started through the scoped `ctx.proc` supplied to `start`.
 - `ctx.proc(argv, { env })` REPLACES the environment, and the local worker
   starts with a short list (HOME, USER, LANG, PATH, …). Leave `env` out to pass
   that list on, or add what the program needs to find its login and settings.

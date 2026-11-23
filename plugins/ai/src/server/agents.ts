@@ -20,9 +20,9 @@ const UNKNOWN: Info = {
  * made meanwhile shows up. `ai` knows agents only through the contract.
  */
 export const list = local({
-  handler: async () =>
+  handler: async (ctx) =>
     Promise.all(
-      (await agent.list()).map(async (provider) => ({
+      (await agent.list(ctx)).map(async (provider) => ({
         id: provider.id,
         name: provider.name,
         ...(typeof provider.icon === "string" &&

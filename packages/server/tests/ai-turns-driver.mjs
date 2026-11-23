@@ -546,9 +546,30 @@ async function steerTurn() {
     "agent ready",
     (list) => replyOf(turn)(list)?.parts[0]?.text === "Ready for steering.",
   );
+  const other = await desk.mutation(chat.threads.start, { text: "Stop this turn", folder: { kind: "own" } });
+  const otherTurns = h.watch(desk, ai.turns.list, { threadId: other.threadId });
+  const otherMessages = h.watch(desk, chat.messages.list, { threadId: other.threadId });
+  const otherRunning = desk.local(ai.run.turn, {
+    threadId: other.threadId,
+    messageId: other.messageId,
+    folder: await h.folder("steering-overlap"),
+    agentId: AGENT.id,
+    model: "stop",
+  });
+  void otherRunning.catch(() => {});
+  const [otherTurn] = await otherTurns.until("second turn running", (list) => list.length === 1);
+  await otherMessages.until(
+    "second agent ready",
+    (list) => replyOf(otherTurn)(list)?.parts[0]?.text === "Partial reply.",
+  );
+
   const text = "Take the other route ✓";
   const followup = "Keep these notes too";
   await desk.local(ai.run.steer, { turnId: turn._id, text });
+  await desk.local(ai.run.stop, { turnId: otherTurn._id });
+  assert.equal((await otherRunning).state, "stopped");
+  const otherTranscript = await desk.query(chat.messages.list, { threadId: other.threadId });
+  assert.equal(replyOf(otherTurn)(otherTranscript).parts[0].text, "Partial reply.stop");
   await desk.local(ai.run.steer, { turnId: turn._id, text: followup });
   assert.equal((await running).state, "done");
   const [done] = await desk.query(ai.turns.list, { threadId: sent.threadId });

@@ -142,7 +142,7 @@ export const removeLocal = local({
     await ctx.runMutation(api.threads.remove, { threadId });
     if (!current) return null;
     const cleaned = await threadDeletedLocal
-      .list()
+      .list(ctx)
       .then(async (hooks) => {
         const event = { threadId, folder: current.folder?.path };
         const results = await Promise.allSettled(hooks.map(async (hook) => hook.after(event)));

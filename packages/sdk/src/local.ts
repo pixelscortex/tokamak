@@ -19,4 +19,6 @@ export type LocalProcess = (
   options?: LocalProcessOptions,
 ) => RunningProcess;
 
-export type WithPrograms = <T>(run: (forceStop: () => Promise<void>) => Promise<T>) => Promise<T>;
+export type WithPrograms = <T>(
+  run: (forceStop: () => Promise<void>, context: import("./functions").LocalContext) => Promise<T>,
+) => Promise<T>;
