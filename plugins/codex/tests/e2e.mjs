@@ -1,5 +1,6 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
+import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
 import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
@@ -35,6 +36,7 @@ const longPrompt = "Write a long reply containing 100 numbered facts about apple
 const planPrompt = "Make a concrete plan for adding a second test marker. Do not edit any files.";
 
 try {
+  await h.assertLocalRuntime();
   build(module);
   await cp(join(module, "dist"), join(h.plugins, "codex"), { recursive: true });
   if (!real) await replayExecutable();
@@ -98,6 +100,15 @@ try {
     timeout: real ? 120_000 : undefined,
   });
   const run = async (tape, prompt, options) => turns.run(await h.folder(tape), prompt, options);
+  const parity = turnParity(h, "codex");
+  const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
+  if (greeting) {
+    assert.equal(greeting.text, "Hello from Codex.");
+    assert.equal(greeting.row.sessionId, "codex-session");
+    assert.deepEqual(greeting.reply.usage, { inputTokens: 18208, cachedInputTokens: 0, outputTokens: 54 });
+    await parity.capture("codex-hello", greeting);
+  }
+
   const recorded = await run(
     "edit",
     real
@@ -174,7 +185,10 @@ try {
   passed("resumed session and plan");
 
   const steerText = "Stop the list and reply exactly: STEERED";
-  const steered = await follow("steer", longPrompt, {
+  const driveSteer = real
+    ? follow
+    : (tape, prompt, options) => run(tape, prompt, { ...options, threadId: greeting.threadId });
+  const steered = await driveSteer("steer", longPrompt, {
     async during(turn) {
       await turn.firstText();
       await turn.steer(steerText);
@@ -188,6 +202,13 @@ try {
       { inputTokens: 21_781, outputTokens: 7, cachedInputTokens: 21_376 },
       "without an earlier usage notification, the first total is the baseline",
     );
+  if (!real) {
+    assert.equal(steered.text, "1. TheSTEERED");
+    assert.equal(steered.row.sessionId, greeting.row.sessionId);
+    await parity.capture("codex-resume", steered);
+    await parity.capture("codex-plan", planned);
+    await parity.verify();
+  }
   passed("steer while streaming");
   const stopped = await follow("stop", longPrompt, {
     state: "stopped",

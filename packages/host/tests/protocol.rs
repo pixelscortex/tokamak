@@ -11,6 +11,35 @@ mod support;
 use support::{Host, fixture};
 
 #[tokio::test]
+async fn node_path_exports_posix_constants_by_name_and_on_its_default() {
+    let mut host = Host::start();
+    host.invoke(1, "pathConstants", json!(null)).await;
+    assert_eq!(
+        host.receive().await["value"],
+        json!(["/", ":", "/", ":", "a/b", true, true])
+    );
+}
+
+#[tokio::test]
+async fn local_code_can_read_and_enumerate_the_launch_environment() {
+    let mut host = Host::with_heap(Some("256"));
+    host.invoke(1, "environment", json!("TOKAMAK_PLUGIN_HOST_HEAP_MIB"))
+        .await;
+    let platform = if cfg!(target_os = "macos") {
+        "darwin"
+    } else {
+        "linux"
+    };
+    assert_eq!(
+        host.receive().await["value"],
+        json!({
+            "value": "256", "enumerable": true, "missing": true,
+            "node": "undefined", "platform": platform, "ownPath": true, "hasPath": true,
+        }),
+    );
+}
+
+#[tokio::test]
 async fn cancellation_rejects_only_its_operations_and_preserves_module_state() {
     let mut host = Host::start();
     host.invoke(1, "sleep", json!(3000)).await;

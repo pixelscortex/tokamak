@@ -86,6 +86,10 @@ function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanu
     return wait(messages, what, (rows) => rows.find((row) => row._id === replyId && predicate(row)));
   }
 
+  function sendAnswer({ turnId, id: questionId }, answer) {
+    return client.local(ai.run.answer, { turnId, questionId, answer });
+  }
+
   return {
     replyUntil,
     messageUntil,
@@ -105,10 +109,10 @@ function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanu
       assert.equal(waiting._id, question.turnId);
       return question;
     },
+    sendAnswer,
     async answer(question, answer) {
-      const { turnId, id: questionId } = question;
-      assert.equal(await client.local(ai.run.answer, { turnId, questionId, answer }), null);
-      answered.add(questionId);
+      assert.equal(await sendAnswer(question, answer), null);
+      answered.add(question.id);
     },
     async stop() {
       const { _id: turnId } = await replyUntil("the running turn", () => true);

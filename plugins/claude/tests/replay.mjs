@@ -1,7 +1,7 @@
 // Stand-in executable on the harness PATH. The production provider still
 // launches "claude" exactly as it does when the real executable is installed.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,10 +34,17 @@ if (args[0] === "--version") {
   assert.equal(flag("--output-format"), "stream-json");
   let replay = basename(process.cwd());
   if (!replay.startsWith("claude-")) replay = "claude-info";
+  if (replay.startsWith("claude-resistant-")) replay = "claude-resistant";
+  if (replay.startsWith("claude-hello-")) replay = "claude-hello";
   if (replay === "claude-hello" && flag("--resume")) {
     assert.equal(flag("--resume"), "ed0f9193-a023-4ab1-a74c-a8bba2877dc3");
     replay = "claude-resume";
   }
+  if (replay === "claude-remember" && flag("--resume")) {
+    assert.equal(flag("--resume"), "be26420d-2d98-4819-8c04-82b6f107764d");
+    replay = "claude-remember-resume";
+  }
+  if (replay === "claude-hello") await writeFile("claude.pid", String(process.pid));
   if (replay === "claude-lost" && !flag("--resume")) replay = "claude-history";
   if (replay === "claude-info") assert.equal(JSON.parse(flag("--settings")).fastMode, true);
   if (replay !== "claude-info") {
@@ -51,6 +58,7 @@ if (args[0] === "--version") {
       "claude-cancel",
       "claude-cancel-continues",
       "claude-remember",
+      "claude-remember-resume",
       "claude-plan",
       "claude-scope",
       "claude-stop-asking",

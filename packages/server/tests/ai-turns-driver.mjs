@@ -20,6 +20,7 @@ const AGENT = { id: "fake-agent", name: "Fake agent" };
 const replyOf = (turn) => (messages) => messages.find((message) => message._id === turn.replyId);
 
 try {
+  await h.assertLocalRuntime();
   await localServer();
   await reportsReachTheReply();
   await steerTurn();

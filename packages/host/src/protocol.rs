@@ -242,7 +242,8 @@ pub async fn run(code: &Path) -> Result<()> {
 
     let output = Arc::new(Output { state, writer });
     let next_op = std::rc::Rc::new(std::cell::Cell::new(0_u64));
-    let mut runtime = Runtime::new(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
+    let mut runtime =
+        Runtime::new_local(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
     let mut frames_since_immediate = 0;
     loop {
         // Give arrived input and promise jobs priority over immediates,
@@ -281,7 +282,8 @@ pub async fn run(code: &Path) -> Result<()> {
         if runtime.interrupted() {
             drop(runtime);
             output.stop_calls()?;
-            runtime = Runtime::new(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
+            runtime =
+                Runtime::new_local(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
         } else {
             dispatch?;
         }
