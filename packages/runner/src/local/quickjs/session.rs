@@ -1,12 +1,10 @@
-use super::{Build, Host, Leases, Pool, Slot, frame_id, lock};
+use super::{Build, Host, Lease, Leases, Pool, frame_id, lock};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
-use futures_util::{StreamExt, stream::FuturesUnordered};
+use futures_util::{StreamExt, future::try_join_all, stream::FuturesUnordered};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    future::Future,
-    pin::Pin,
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -23,13 +21,51 @@ const MAX_DEPTH: usize = 16;
 
 enum Reply {
     Result(Value),
-    Route(Invocation),
+    Route(Arc<Lease>),
 }
 
+// A turn's callback and permission state lives in its original ai realm.
+// The owning invocation registers its server-issued ID until that call ends.
+#[derive(Default)]
+pub(super) struct Turns(HashMap<(Arc<str>, String), TurnRealm>);
+
 #[derive(Clone)]
-struct Invocation {
-    build: Build,
-    slot: Arc<Slot>,
+struct TurnRealm {
+    host: Arc<Host>,
+    _lease: Arc<Lease>,
+}
+
+struct Turn<'a> {
+    pool: &'a Pool,
+    workspace: &'a Arc<str>,
+    id: Mutex<Option<String>>,
+    lease: &'a Arc<Lease>,
+}
+
+impl Turn<'_> {
+    fn bind(&self, id: &str, host: &Arc<Host>) {
+        let mut bound = lock(&self.id);
+        if bound.is_none() {
+            lock(&self.pool.turns).0.insert(
+                (self.workspace.clone(), id.to_owned()),
+                TurnRealm {
+                    host: host.clone(),
+                    _lease: self.lease.clone(),
+                },
+            );
+            *bound = Some(id.to_owned());
+        }
+    }
+}
+
+impl Drop for Turn<'_> {
+    fn drop(&mut self) {
+        if let Some(id) = lock(&self.id).take() {
+            lock(&self.pool.turns)
+                .0
+                .remove(&(self.workspace.clone(), id));
+        }
+    }
 }
 
 struct Pending {
@@ -82,19 +118,19 @@ impl Bridge {
         }
     }
 
-    fn route(&self, id: u64, build: Build) -> Result<(), String> {
+    fn route(&self, id: u64, build: Result<Build, String>) {
         let Some(pending) = lock(&self.pending).remove(&id) else {
-            return Ok(()); // The invocation may have ended.
+            return; // The invocation may have ended.
         };
-        if pending.target.as_deref() != Some(&build.artifact.id) {
-            return Err("Local contract route does not match its host operation".into());
-        }
-        let reply = match self.leases.get(&build) {
-            Ok(slot) => Reply::Route(Invocation { build, slot }),
-            Err(error) => Reply::Result(json!({"error":error})),
-        };
-        let _ = pending.answer.send(reply);
-        Ok(())
+        let route = build.and_then(|build| {
+            if pending.target.as_deref() != Some(&build.artifact.id) {
+                return Err("Local contract route does not match its host operation".into());
+            }
+            self.leases.get(&build).map(Reply::Route)
+        });
+        let _ = pending
+            .answer
+            .send(route.unwrap_or_else(|error| Reply::Result(json!({"error":error}))));
     }
 }
 
@@ -113,20 +149,22 @@ pub(in crate::local) async fn connection(
     socket: &mut WebSocket,
     pool: &Pool,
     build: Build,
+    workspace: String,
 ) -> Result<(), String> {
     let (output, mut outgoing) = mpsc::channel(WORKER_CAPACITY);
+    if workspace.len() > 2048 {
+        return Err("Invalid local worker workspace".into());
+    }
+    let workspace: Arc<str> = workspace.into();
     let bridge = Arc::new(Bridge {
         output,
         next: AtomicU64::new(0),
         pending: Mutex::default(),
-        leases: Leases::new(pool),
+        leases: Leases::new(pool, workspace),
     });
     let mut active = HashMap::<u64, CancellationToken>::new();
     let mut calls = JoinSet::new();
-    let invocation = Invocation {
-        slot: bridge.leases.get(&build)?,
-        build,
-    };
+    bridge.leases.get(&build)?;
     send(socket, json!({"type":"started","routed":true})).await?;
     loop {
         tokio::select! {
@@ -147,18 +185,14 @@ pub(in crate::local) async fn connection(
                                 send(socket, result(id, Some("Local worker invocation capacity exceeded"), Value::Null)).await?;
                                 continue;
                             }
-                            let cancel = CancellationToken::new();
-                            active.insert(id, cancel.clone());
-                            let (invocation, pool, bridge) = (invocation.clone(), pool.clone(), bridge.clone());
-                            calls.spawn(async move {
-                                let label = format!("Plugin {} local function cancelled", invocation.build.artifact.id);
-                                let response = tokio::select! {
-                                    biased;
-                                    () = cancel.cancelled() => Err(label),
-                                    response = invoke(&pool, &bridge, id, &invocation, message, Vec::new()) => response,
-                                };
-                                (id, response)
-                            });
+                            match bridge.leases.get(&build) {
+                                Ok(lease) => {
+                                    let cancel = CancellationToken::new();
+                                    active.insert(id, cancel.clone());
+                                    calls.spawn(root_call(pool.clone(), bridge.clone(), id, lease, message, cancel));
+                                }
+                                Err(error) => send(socket, result(id, Some(&error), Value::Null)).await?,
+                            }
                         }
                         Some("opResult") => bridge.answer(id, Reply::Result(message)),
                         Some("cancel") => {
@@ -169,8 +203,13 @@ pub(in crate::local) async fn connection(
                         _ => return Err("Invalid local worker request".into()),
                     }
                 }
-                Some(Request::Route { id, artifact, live }) => bridge.route(id, Build::new(artifact, live)?)?,
-                Some(Request::Retire { artifact, live, changed }) => bridge.leases.retire(&Build::new(artifact, live)?, &changed),
+                Some(Request::Route { id, artifact, live }) => bridge.route(id, Build::new(artifact, live)),
+                Some(Request::Retire { artifact, live, changed }) => {
+                    // This notification is fire and forget. A malformed profile has no effect.
+                    if let Ok(build) = Build::new(artifact, live) {
+                        bridge.leases.retire(&build, &changed);
+                    }
+                }
                 Some(Request::Load { .. }) => return Err("QuickJS loads providers through local.contracts".into()),
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
@@ -192,55 +231,161 @@ pub(in crate::local) async fn connection(
     }
 }
 
+async fn root_call(
+    pool: Pool,
+    bridge: Arc<Bridge>,
+    root: u64,
+    lease: Arc<Lease>,
+    frame: Value,
+    cancel: CancellationToken,
+) -> (u64, Result<Value, String>) {
+    let label = format!(
+        "Plugin {} local function cancelled",
+        lease.build.artifact.id
+    );
+    let response = tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(label),
+        response = invoke_root(&pool, &bridge, root, &lease, frame) => response,
+    };
+    (root, response)
+}
+
 fn result(id: u64, error: Option<&str>, value: Value) -> Value {
     json!({"type":"message","message":{"type":"result","id":id,"error":error,"value":value}})
 }
 
-fn invoke<'a>(
-    pool: &'a Pool,
-    bridge: &'a Bridge,
+async fn invoke_root(
+    pool: &Pool,
+    bridge: &Bridge,
     root: u64,
-    invocation: &'a Invocation,
+    lease: &Arc<Lease>,
     frame: Value,
-    mut ancestors: Vec<String>,
-) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>> {
-    Box::pin(async move {
-        let artifact = &invocation.build.artifact;
-        if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
-            return Err(format!(
-                "Local contract call cycle or depth limit at plugin {}",
-                artifact.id
-            ));
-        }
-        let routed = !ancestors.is_empty();
-        ancestors.push(artifact.id.clone());
-        let host = pool
-            .host(&invocation.build, &invocation.slot, routed)
-            .await?;
-        let mut call = host.begin(frame)?;
-        let mut operations = FuturesUnordered::new();
-        loop {
-            tokio::select! {
-                frame = call.next() => {
-                    let frame = frame?;
-                    if frame["type"] == "result" {
-                        return Ok(frame);
-                    }
-                    // A crashed or cancelled caller drops its nested work.
-                    operations.push(operation(pool, bridge, root, &ancestors, &host, frame));
-                }
-                Some((id, response)) = operations.next() => {
-                    let mut reply = match response {
-                        Ok(reply) => reply,
-                        Err(error) => json!({"error":error}),
-                    };
-                    reply["id"] = json!(id);
-                    reply["type"] = json!("opResult");
-                    call.host.send(&reply)?;
-                }
+) -> Result<Value, String> {
+    let id = &lease.build.artifact.id;
+    let ancestors = std::slice::from_ref(id);
+    let workspace = &bridge.leases.workspace;
+    let turn = Turn {
+        pool,
+        workspace,
+        id: Mutex::default(),
+        lease,
+    };
+    let name = frame["fn"].as_str().unwrap_or_default();
+    if id == "ai" {
+        if matches!(
+            name,
+            "run:steer" | "run:stop" | "run:forceStop" | "run:answer" | "run:pending"
+        ) && let Some(turn_id) = frame["args"]["turnId"].as_str()
+        {
+            let original = lock(&pool.turns)
+                .0
+                .get(&(workspace.clone(), turn_id.to_owned()))
+                .cloned();
+            if let Some(realm) = original {
+                return run(pool, bridge, root, &realm.host, frame, ancestors, None).await;
             }
         }
-    })
+        if matches!(name, "working:list" | "working:stopAll") {
+            let list = name == "working:list";
+            return working(pool, bridge, root, lease, frame, ancestors, list).await;
+        }
+    }
+    let host = pool.host(&lease.build, &lease.slot, false).await?;
+    let binds_turn = id == "ai" && name == "run:turn";
+    run(
+        pool,
+        bridge,
+        root,
+        &host,
+        frame,
+        ancestors,
+        binds_turn.then_some(&turn),
+    )
+    .await
+}
+
+async fn working(
+    pool: &Pool,
+    bridge: &Bridge,
+    root: u64,
+    lease: &Arc<Lease>,
+    frame: Value,
+    ancestors: &[String],
+    list: bool,
+) -> Result<Value, String> {
+    let current = pool.host(&lease.build, &lease.slot, false).await?;
+    let mut realms = vec![TurnRealm {
+        host: current,
+        _lease: lease.clone(),
+    }];
+    for ((origin, _), realm) in &lock(&pool.turns).0 {
+        if origin == &bridge.leases.workspace
+            && !realms
+                .iter()
+                .any(|other| Arc::ptr_eq(&other.host, &realm.host))
+        {
+            realms.push(realm.clone());
+        }
+    }
+    let calls = realms.iter().map(|realm| {
+        run(
+            pool,
+            bridge,
+            root,
+            &realm.host,
+            frame.clone(),
+            ancestors,
+            None,
+        )
+    });
+    let mut count = 0;
+    let mut turns = Vec::new();
+    for mut reply in try_join_all(calls).await? {
+        if !reply["error"].is_null() {
+            return Ok(reply);
+        }
+        match reply["value"].take() {
+            Value::Array(entries) if list => turns.extend(entries),
+            value if !list => count += value.as_u64().unwrap_or_default(),
+            _ => {}
+        }
+    }
+    Ok(json!({"type":"result", "value":if list { json!(turns) } else { json!(count) }}))
+}
+
+async fn run(
+    pool: &Pool,
+    bridge: &Bridge,
+    root: u64,
+    host: &Arc<Host>,
+    frame: Value,
+    ancestors: &[String],
+    turn: Option<&Turn<'_>>,
+) -> Result<Value, String> {
+    let mut call = host.begin(frame)?;
+    let mut operations = FuturesUnordered::new();
+    loop {
+        tokio::select! {
+            frame = call.next() => {
+                let frame = frame?;
+                if frame["type"] == "result" {
+                    return Ok(frame);
+                }
+                // A crashed or cancelled caller drops its nested work.
+                operations.push(operation(pool, bridge, root, ancestors, host, frame, turn));
+            }
+            Some((id, response)) = operations.next() => {
+                let mut reply = match response {
+                    Ok(reply) => reply,
+                    Err(error) => json!({"error":error}),
+                };
+                reply["id"] = json!(id);
+                reply["type"] = json!("opResult");
+                call.host.send(&reply)?;
+            }
+        }
+    }
 }
 
 async fn operation(
@@ -248,8 +393,9 @@ async fn operation(
     bridge: &Bridge,
     root: u64,
     ancestors: &[String],
-    host: &Host,
+    host: &Arc<Host>,
     mut frame: Value,
+    turn: Option<&Turn<'_>>,
 ) -> (u64, Result<Value, String>) {
     let id = frame["id"].as_u64().unwrap_or_default();
     let result = async {
@@ -259,11 +405,20 @@ async fn operation(
         }
         frame["host"] = json!(host.id);
         let reply = bridge.request(frame.clone(), root).await?;
-        let invocation = match reply {
-            Reply::Route(invocation) => invocation,
+        let lease = match reply {
+            Reply::Route(lease) => lease,
             Reply::Result(mut value) => {
                 if frame["name"] == "local.contracts" && value["error"].is_null() {
-                    host.prepare_providers(pool, &mut value).await?;
+                    host.prepare_providers(&mut value)?;
+                }
+                if let Some(turn) = turn
+                    && frame["name"] == "local.runMutation"
+                    && frame["payload"]["name"] == "ai/turns:begin"
+                    && frame["plugin"].is_null()
+                    && value["error"].is_null()
+                    && let Some(id) = value["value"]["turnId"].as_str()
+                {
+                    turn.bind(id, host);
                 }
                 return Ok(value);
             }
@@ -279,9 +434,19 @@ async fn operation(
             Value::Null
         };
         let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
-        let response = invoke(pool, bridge, root, &invocation, frame, ancestors.to_vec()).await?;
+        let artifact = &lease.build.artifact;
+        if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
+            return Err(format!(
+                "Local contract call cycle or depth limit at plugin {}",
+                artifact.id
+            ));
+        }
+        let mut ancestors = ancestors.to_vec();
+        ancestors.push(artifact.id.clone());
+        let other = pool.host(&lease.build, &lease.slot, true).await?;
+        let response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, None)).await?;
         if let Some(error) = response["error"].as_str() {
-            return Err(format!("Plugin {}: {error}", invocation.build.artifact.id));
+            return Err(format!("Plugin {}: {error}", lease.build.artifact.id));
         }
         Ok(json!({"value":response["value"]}))
     }

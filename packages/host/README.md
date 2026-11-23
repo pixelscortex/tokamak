@@ -36,9 +36,10 @@ same realm. The agent contract mixes both kinds: `info` runs in the provider's
 process, and `start` still receives the live turn in `ai`'s process. The bundle
 is available there for provider discovery and live calls. Turn hooks also
 stay in that realm. The Runner reuses the same verified snapshot in that
-realm across windows. When the provider's local bytes change, callers switch
-to a fresh process; the old realm ends once no window uses it. Imports from
-other paths are refused.
+realm across windows. When its live providers change, new calls use a fresh
+process. The old realm keeps its original provider snapshots and finishes
+admitted calls before stopping. Turn controls still reach that realm by turn
+ID. Imports from other paths are refused.
 
 A process exit fails its active calls with the plugin's name. Its next start
 is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run

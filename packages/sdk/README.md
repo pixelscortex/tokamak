@@ -643,9 +643,14 @@ Methods that take live objects stay in the caller's realm. For a mixed
 contract the provider module is also evaluated in that realm, even though its
 plain-data methods run in the provider's separate process. That shared
 evaluation remains until turn and hook calls move (TKM-247 and TKM-248).
-A reload restarts the provider process only when its local bytes change; a
-caller realm also restarts if its live providers change. Use
-`local({ handler: (ctx, run: Run) => ... })` when a method needs local context
+A reload restarts the provider process only when its local bytes change. If
+the caller's live providers change, new calls use a new realm and admitted
+calls finish in the old one. “Always allow this session” grants in `ai`'s
+module state do not carry to the replacement realm: new turns ask again
+even when resuming the same agent session. This limitation goes away when
+turns and turn hooks move across processes (TKM-247 and TKM-248).
+
+Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
 All local methods receive the calling member and device in their context. A
 matching provider build must be installed on the client. With the Bun

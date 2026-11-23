@@ -6,10 +6,22 @@ Each local process starts on its first call and stays up until its build is
 retired, it exits, or the Runner shuts down. The registry distinguishes a
 plugin's ID and its two local bundle hashes. It also separates realms that
 need different builds of live providers. Windows that use the same build and
-live profile share a process. A retired build stops when the last window
-using it releases it. Closing a window cancels its calls; an unchanged
-process stays up across reconnects. With the Bun fallback, each worker socket
-still owns its process.
+live profile share a process. The window reports its workspace address
+without credentials so the Runner can tell which installation superseded a
+build. A live provider change or addition sends new calls to a fresh realm.
+The original realm retains the admitted calls and their verified provider
+files until those calls finish. Stop, force stop, steer and permission answers
+use the active turn's workspace and turn ID to find its original realm; host
+operations still use the window that made each control call. The quit controls
+include turns in draining realms.
+
+An idle build that the same workspace supersedes can stop as soon as the
+replacement is acquired. Otherwise the Runner sweeps known superseded builds
+on a two-second timer once the last window and call release them, with at least
+two seconds of idle time. At capacity it evicts the least recently used
+unleased process; the limit is reported only when all slots are leased.
+Closing a window cancels its calls; an unchanged process stays up across
+reconnects. With the Bun fallback, each worker socket still owns its process.
 
 A window is a trusted Runner client. It checks `local.contract.call` against
 the signed-in workspace's catalog: who owns the contract, whether the
@@ -68,6 +80,7 @@ the source onto `/src` in that image and building in release mode:
 git archive HEAD | docker run -i tokamak:tkm-243-checks bash -c '
   set -e
   tar xf - -C /src
+  cd /src
   CARGO_BUILD_JOBS=4 cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
   proto run bun -- packages/runner/tests/measure-linux-memory.mjs target/release/tokamak-runner
 '
@@ -82,3 +95,9 @@ and reports host and guardian memory separately. PSS apportions shared pages
 among the processes that map them; RSS charges each process for every page it
 maps. The marginal figure subtracts the one-host PSS from the 100-host PSS and
 divides by 99.
+
+A separate run starts the real `ai`, `claude` and `codex` bundles using replay
+executables on PATH. It opens the agent row so `ai` imports both live provider
+modules and the two provider processes each answer `info`. The script waits
+400 ms after the row returns and reports each host's PSS separately. Neither
+measurement includes the Runner or the agent executables.

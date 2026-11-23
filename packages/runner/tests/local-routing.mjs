@@ -290,6 +290,36 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await Promise.all([first.close(), second.close(), latest.close()]);
   }
 
+  // Shared workspace catalogs are not observed by the Runner's own server.
+  // A disconnected workspace supersedes its old idle build on the next acquire.
+  const remote = "wss://test.invalid/shared";
+  const remoteId = "shared-version";
+  const v1 = await installLocal(join(plugins, remoteId), remoteId, code(1));
+  const firstRemote = await rawWindow(runner, v1, handle, [], remote);
+  let oldRemotePid;
+  try {
+    assert.equal(await firstRemote.invoke("ping", null), 1);
+    oldRemotePid = hosts().find(({ id }) => id === remoteId).pid;
+  } finally {
+    await firstRemote.close();
+  }
+  // Historic use by a different workspace does not pin an unused process.
+  const previousVisitor = await rawWindow(runner, v1, handle, [], "wss://other.test.invalid/ws");
+  assert.equal(await previousVisitor.invoke("ping", null), 1);
+  await previousVisitor.close();
+  assert.ok(hosts().some(({ pid }) => pid === oldRemotePid));
+  const v2 = await installLocal(join(plugins, remoteId), remoteId, code(2));
+  const secondRemote = await rawWindow(runner, v2, handle, [], remote);
+  try {
+    assert.equal(await secondRemote.invoke("ping", null), 2);
+    await until("disconnected shared workspace's old process stopped", () =>
+      hosts().every(({ pid }) => pid !== oldRemotePid),
+    );
+    assert.equal(hosts().filter(({ id }) => id === remoteId).length, 1);
+  } finally {
+    await secondRemote.close();
+  }
+
   const chainCode = `
     const call = (plugins, op) => {
       const [plugin, ...rest] = plugins;
@@ -313,12 +343,16 @@ async function checkRoutesAndBuilds(runner, hosts) {
       return installLocal(join(plugins, id), id, chainCode);
     }),
   );
+  let invalid = true;
   const driver = await rawWindow(runner, chain[0], (frame, worker) => {
     const target = chain.find(({ id }) => id === frame.payload.plugin);
     assert.ok(target);
-    return worker.route(frame.id, target, []);
+    const profile = invalid ? [target] : [];
+    invalid = false;
+    return worker.route(frame.id, target, profile);
   });
   try {
+    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local plugin live profile/);
     assert.equal(
       await driver.invoke(
         "walk",

@@ -22,11 +22,19 @@ function deferred<T>() {
 
 /** The socket belongs to the local Runner, even if the window uses a shared workspace. */
 export function runnerLauncher(endpoint: () => Promise<RunnerEndpoint>): LaunchLocalWorker {
-  return async (artifact, receive, closed, live) => {
+  return async (artifact, receive, closed, live, workspace) => {
     const { ws, token } = await endpoint();
     if (!token) throw new Error("Missing Runner secret");
     const socket = new WebSocket(new URL("/local-worker", ws), ["tokamak", `tokamak.bearer.${token}`]);
-    const worker = new RunnerWorker(socket, artifact, receive, closed, live);
+    const origin = new URL(ws);
+    const worker = new RunnerWorker(
+      socket,
+      artifact,
+      receive,
+      closed,
+      live,
+      workspace ?? origin.origin + origin.pathname,
+    );
     await worker.ready;
     return worker;
   };
@@ -52,10 +60,11 @@ class RunnerWorker {
     private readonly receive: (message: JsonValue) => void,
     private readonly closed: (reason: string) => void,
     live: LocalArtifact[] | undefined,
+    workspace: string | undefined,
   ) {
     socket.addEventListener("open", () => {
       try {
-        this.write({ type: "start", artifact, live });
+        this.write({ type: "start", artifact, live, workspace });
       } catch (error) {
         this.finish(String(error));
       }

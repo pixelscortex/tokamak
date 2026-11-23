@@ -180,7 +180,8 @@ export async function connect(
   const transport = new WebSocketTransport(socket);
   cleanup.push(() => transport.close());
   if (!launch) return new TokamakClient(transport);
-  const part = new LocalFunctions(transport, launch);
+  const url = new URL(address);
+  const part = new LocalFunctions(transport, launch, url.origin + url.pathname);
   cleanup.push(() => part.close());
   socket.addEventListener("close", ({ code }) => {
     if (code === 4001) void part.close();
@@ -191,7 +192,7 @@ export async function connect(
 /** Observe or hold the same worker frames regardless of the wire transport. */
 function observeWorker(launch, observe) {
   if (!observe) return launch;
-  return async (artifact, receive, close, live) => {
+  return async (artifact, receive, close, live, workspace) => {
     const worker = await launch(
       artifact,
       (frame) => {
@@ -200,6 +201,7 @@ function observeWorker(launch, observe) {
       },
       close,
       live,
+      workspace,
     );
     return {
       routed: worker.routed,

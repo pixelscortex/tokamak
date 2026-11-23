@@ -4,19 +4,20 @@ mod session;
 
 pub(super) use session::connection;
 
-use super::{Artifact, TIMEOUT, artifact, client_env, provider, write};
+use super::{Artifact, TIMEOUT, artifact, artifact_folder, client_env, snapshot, write};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    path::PathBuf,
+    collections::{BTreeMap, HashMap, HashSet, hash_map::Entry as HashEntry},
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard, OnceLock},
+    time::Duration,
 };
 use tempfile::TempPath;
 use tokamak_worker::{Process, RestartBackoff, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
     io::BufReader,
-    sync::{Mutex as AsyncMutex, mpsc},
+    sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore, mpsc},
     time::Instant,
 };
 use tokio_util::{
@@ -58,6 +59,7 @@ impl Build {
     }
 }
 
+const IDLE_GRACE: Duration = Duration::from_secs(2);
 const RESTARTING: &str = "restarting after a crash; try again later";
 
 type Slots = HashMap<Build, Entry>;
@@ -69,12 +71,16 @@ pub(super) struct Pool {
     slots: Arc<Mutex<Slots>>,
     stopping: CancellationToken,
     tasks: TaskTracker,
+    processes: Arc<Semaphore>,
+    turns: Arc<Mutex<session::Turns>>,
 }
 
 struct Entry {
     slot: Arc<Slot>,
     users: usize,
     obsolete: Option<String>,
+    workspaces: HashSet<Arc<str>>,
+    last_used: Instant,
 }
 
 #[derive(Default)]
@@ -90,87 +96,143 @@ struct SlotState {
     restart: RestartBackoff,
 }
 
-// Each socket holds one lease per build it has used, including routed builds.
+// A socket remembers the builds it routes to. An invocation also holds its
+// lease, so a catalog update or a disconnected window cannot retire it mid-call.
 struct Leases {
     pool: Pool,
-    used: Mutex<HashMap<Build, Arc<Slot>>>,
+    workspace: Arc<str>,
+    used: Mutex<HashMap<Build, Arc<Lease>>>,
+}
+
+struct Lease {
+    slots: Arc<Mutex<Slots>>,
+    build: Build,
+    slot: Arc<Slot>,
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        let mut slots = lock(&self.slots);
+        if let HashEntry::Occupied(mut registered) = slots.entry(self.build.clone()) {
+            let entry = registered.get_mut();
+            entry.users -= 1;
+            if entry.users == 0 {
+                entry.last_used = Instant::now();
+                // A socket that never invoked anything need not keep a slot.
+                if entry.empty() {
+                    registered.remove();
+                }
+            }
+        }
+    }
 }
 
 impl Leases {
-    fn new(pool: &Pool) -> Self {
+    fn new(pool: &Pool, workspace: Arc<str>) -> Self {
         Self {
             pool: pool.clone(),
+            workspace,
             used: Mutex::default(),
         }
     }
 
-    fn get(&self, build: &Build) -> Result<Arc<Slot>, String> {
+    fn get(&self, build: &Build) -> Result<Arc<Lease>, String> {
         let mut used = lock(&self.used);
-        if let Some(slot) = used.get(build) {
-            return Ok(slot.clone());
+        if let Some(lease) = used.get(build) {
+            return Ok(lease.clone());
         }
         let mut slots = lock(&self.pool.slots);
-        if slots.len() >= WORKER_CAPACITY && !slots.contains_key(build) {
-            return Err(format!(
-                "Plugin {} process: local plugin process limit reached",
-                build.artifact.id
-            ));
+        slots.retain(|other, entry| {
+            if other == build || other.artifact.id != build.artifact.id {
+                return true;
+            }
+            entry.supersede(&self.workspace, || {
+                "superseded by another local plugin build".into()
+            });
+            if entry.users == 0 && entry.obsolete.is_some() {
+                entry.stop();
+                return false;
+            }
+            true
+        });
+        if !slots.contains_key(build) {
+            evict_idle(&mut slots, WORKER_CAPACITY)
+                .map_err(|reason| format!("Plugin {} process: {reason}", build.artifact.id))?;
         }
         let entry = slots.entry(build.clone()).or_insert_with(|| Entry {
             slot: Arc::default(),
             users: 0,
             obsolete: None,
+            workspaces: HashSet::new(),
+            last_used: Instant::now(),
         });
+        entry.workspaces.insert(self.workspace.clone());
+        entry.obsolete = None;
         entry.users += 1;
-        used.insert(build.clone(), entry.slot.clone());
-        Ok(entry.slot.clone())
+        let lease = Arc::new(Lease {
+            slots: self.pool.slots.clone(),
+            build: build.clone(),
+            slot: entry.slot.clone(),
+        });
+        used.insert(build.clone(), lease.clone());
+        Ok(lease)
     }
 
     fn retire(&self, build: &Build, changed: &str) {
-        let mut used = lock(&self.used);
-        let mut slots = lock(&self.pool.slots);
-        if let Some(entry) = slots.get_mut(build) {
-            if used.remove(build).is_some() {
-                entry.users -= 1;
-            }
-            entry.obsolete = Some(build.retirement(changed));
-            if !entry.keep() {
-                slots.remove(build);
-            }
+        if let Some(entry) = lock(&self.pool.slots).get_mut(build) {
+            entry.supersede(&self.workspace, || build.retirement(changed));
         }
+        // Drop outside the registry lock: this may release the last lease.
+        lock(&self.used).remove(build);
     }
 }
 
-impl Drop for Leases {
-    fn drop(&mut self) {
-        let mut used = lock(&self.used);
-        let mut slots = lock(&self.pool.slots);
-        for (build, _) in used.drain() {
-            if let Some(entry) = slots.get_mut(&build) {
-                entry.users -= 1;
-            }
-        }
-        slots.retain(|_, entry| entry.keep());
+fn evict_idle(slots: &mut Slots, capacity: usize) -> Result<(), &'static str> {
+    if slots.len() < capacity {
+        return Ok(());
     }
+    let oldest = slots
+        .iter()
+        .filter(|(_, entry)| entry.users == 0)
+        .min_by_key(|(_, entry)| entry.last_used)
+        .map(|(build, _)| build.clone())
+        .ok_or("local plugin process limit reached")?;
+    if let Some(mut entry) = slots.remove(&oldest) {
+        entry.obsolete = Some("idle local plugin process evicted to make room".into());
+        entry.stop();
+    }
+    Ok(())
 }
 
 impl Entry {
-    fn keep(&self) -> bool {
-        if self.users > 0 {
+    fn supersede(&mut self, workspace: &str, reason: impl FnOnce() -> String) {
+        if self.workspaces.remove(workspace) {
+            self.obsolete = Some(reason());
+        }
+    }
+
+    fn empty(&self) -> bool {
+        self.users == 0
+            && self
+                .slot
+                .state
+                .try_lock()
+                .is_ok_and(|state| state.current.is_none() && state.restart.retry_at.is_none())
+    }
+
+    fn keep_during_sweep(&self) -> bool {
+        if self.users != 0 || self.obsolete.is_none() || self.last_used.elapsed() < IDLE_GRACE {
             return true;
         }
+        self.stop();
+        false
+    }
+
+    fn stop(&self) {
         if let Some(reason) = &self.obsolete {
             let _ = self.slot.reason.set(reason.clone());
-            self.slot.retired.cancel();
-            return false;
         }
-        // A failed verification or a socket that never invoked anything
-        // should not leave an empty slot in the registry.
-        !self
-            .slot
-            .state
-            .try_lock()
-            .is_ok_and(|state| state.current.is_none() && state.restart.retry_at.is_none())
+        self.slot.retired.cancel();
     }
 }
 
@@ -189,13 +251,17 @@ impl Pool {
         if let Ok(path) = std::env::join_paths(&paths) {
             env.insert("PATH".into(), path.to_string_lossy().into_owned());
         }
-        Self {
+        let pool = Self {
             plugins,
             env: Arc::new(env),
             slots: Arc::default(),
             stopping,
             tasks: TaskTracker::new(),
-        }
+            processes: Arc::new(Semaphore::new(WORKER_CAPACITY)),
+            turns: Arc::default(),
+        };
+        pool.sweep_idle();
+        pool
     }
 
     pub(super) async fn wait(&self) {
@@ -203,7 +269,12 @@ impl Pool {
         self.tasks.wait().await;
     }
 
-    pub(super) fn observe(&self, server: &Arc<server::Server>, mut session: server::Session) {
+    pub(super) fn observe(
+        &self,
+        server: &Arc<server::Server>,
+        mut session: server::Session,
+        workspace: Arc<str>,
+    ) {
         let server = server.clone();
         let pool = self.clone();
         self.tasks.spawn(async move {
@@ -217,28 +288,46 @@ impl Pool {
                     break;
                 };
                 if matches!(event, server::Event::PluginChanged { .. }) {
-                    pool.reconcile(&server, &mut previous).await;
+                    pool.reconcile(&server, &mut previous, &workspace).await;
                 }
             }
         });
     }
 
-    async fn reconcile(&self, server: &server::Server, previous: &mut HashSet<Artifact>) {
+    async fn reconcile(
+        &self,
+        server: &server::Server,
+        previous: &mut HashSet<Artifact>,
+        workspace: &str,
+    ) {
         if let Some(next) = local_catalog(server).await {
             for old in previous.difference(&next) {
-                self.retire_private(old);
+                self.retire_private(old, workspace);
             }
             *previous = next;
         }
     }
 
-    fn retire_private(&self, old: &Artifact) {
-        lock(&self.slots).retain(|build, entry| {
-            if !build.includes(old) {
-                return true;
+    fn retire_private(&self, old: &Artifact, workspace: &str) {
+        for (build, entry) in lock(&self.slots).iter_mut() {
+            if build.includes(old) {
+                entry.supersede(workspace, || build.retirement(&old.id));
+                // Older protocol clients did not send a workspace.
+                entry.supersede("", || build.retirement(&old.id));
             }
-            entry.obsolete = Some(build.retirement(&old.id));
-            entry.keep()
+        }
+    }
+
+    fn sweep_idle(&self) {
+        let pool = self.clone();
+        self.tasks.spawn(async move {
+            loop {
+                tokio::select! {
+                    () = pool.stopping.cancelled() => return,
+                    () = tokio::time::sleep(IDLE_GRACE) => {}
+                }
+                lock(&pool.slots).retain(|_, entry| entry.keep_during_sweep());
+            }
         });
     }
 
@@ -267,8 +356,11 @@ impl Pool {
             if slot.retired.is_cancelled() {
                 return Err(slot.retirement().into());
             }
-            if let Some(host) = state.reuse(routed).await? {
-                return Ok(host);
+            tokio::select! {
+                biased;
+                () = self.stopping.cancelled() => return Err("Runner stopped".into()),
+                () = slot.retired.cancelled() => return Err(slot.retirement().into()),
+                reused = state.reuse(routed) => if let Some(host) = reused? { return Ok(host); },
             }
             if let Some(retry) = state
                 .restart
@@ -287,10 +379,20 @@ impl Pool {
             }
             let root = self.plugins.clone();
             let request = build.artifact.clone();
+            let live = build.live.clone();
             let verified = tokio::task::spawn_blocking(move || {
-                artifact(&root, &request.id, &request.entry_hash, &request.code_hash)
+                let (_, code) =
+                    artifact(&root, &request.id, &request.entry_hash, &request.code_hash)?;
+                let providers = live
+                    .into_iter()
+                    .map(|artifact| {
+                        let code = live_snapshot(&root, &artifact);
+                        (artifact.id, code)
+                    })
+                    .collect();
+                Ok::<_, String>((code, providers))
             });
-            let (_, code) = tokio::time::timeout(TIMEOUT, verified)
+            let (code, providers) = tokio::time::timeout(TIMEOUT, verified)
                 .await
                 .map_err(|_| "local artifact verification stalled")?
                 .map_err(|error| error.to_string())??;
@@ -300,7 +402,14 @@ impl Pool {
             if slot.retired.is_cancelled() {
                 return Err(slot.retirement().into());
             }
-            match Host::start(build, slot, code, self) {
+            // An evicted process releases its permit only after it is reaped.
+            let permit = tokio::select! {
+                biased;
+                () = self.stopping.cancelled() => return Err("Runner stopped".into()),
+                () = slot.retired.cancelled() => return Err(slot.retirement().into()),
+                permit = self.processes.clone().acquire_owned() => permit.map_err(|_| "Runner stopped")?,
+            };
+            match Host::start(build, slot, code, providers, permit, self) {
                 Ok(host) => {
                     state.current = Some(host.clone());
                     return Ok(host);
@@ -329,6 +438,16 @@ async fn local_catalog(server: &server::Server) -> Option<HashSet<Artifact>> {
             })
             .collect(),
     )
+}
+
+fn live_snapshot(root: &Path, artifact: &Artifact) -> Result<TempPath, String> {
+    let folder = artifact_folder(
+        root,
+        &artifact.id,
+        &artifact.entry_hash,
+        &artifact.code_hash,
+    )?;
+    snapshot(&folder, "local.js", &artifact.code_hash)
 }
 
 impl Slot {
@@ -368,7 +487,8 @@ struct Host {
     id: String,
     calls: Mutex<Calls>,
     live: Vec<Artifact>,
-    providers: Mutex<HashMap<String, TempPath>>,
+    providers: HashMap<String, Result<TempPath, String>>,
+    loaded: Mutex<HashSet<String>>,
     writes: mpsc::Sender<Vec<u8>>,
     stopping: CancellationToken,
     ended: CancellationToken,
@@ -382,6 +502,8 @@ impl Host {
         build: &Build,
         slot: &Arc<Slot>,
         code: TempPath,
+        providers: HashMap<String, Result<TempPath, String>>,
+        permit: OwnedSemaphorePermit,
         pool: &Pool,
     ) -> Result<Arc<Self>, String> {
         let id = &build.artifact.id;
@@ -392,7 +514,8 @@ impl Host {
         let host = Arc::new(Self {
             id: id.clone(),
             live: build.live.clone(),
-            providers: Mutex::default(),
+            providers,
+            loaded: Mutex::default(),
             calls: Mutex::default(),
             writes,
             stopping: pool.stopping.child_token(),
@@ -405,6 +528,7 @@ impl Host {
         let slot = slot.clone();
         pool.tasks.spawn(async move {
             let _code = code;
+            let _permit = permit;
             let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
                 let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
             }));
@@ -436,7 +560,7 @@ impl Host {
         Ok(host)
     }
 
-    async fn prepare_providers(&self, pool: &Pool, frame: &mut Value) -> Result<(), String> {
+    fn prepare_providers(&self, frame: &mut Value) -> Result<(), String> {
         let Some(candidates) = frame["value"].as_array_mut() else {
             return Ok(());
         };
@@ -454,35 +578,21 @@ impl Host {
             if candidate["plugin"] != artifact.id || !self.live.contains(&artifact) {
                 return Err(self.label("live provider does not match the realm profile"));
             }
-            let path = self.load_provider(pool, artifact).await?;
+            let path = self.providers[&artifact.id]
+                .as_ref()
+                .map_err(Clone::clone)?;
+            let path = path.to_str().ok_or("Local provider path is not UTF-8")?;
+            lock(&self.loaded).insert(artifact.id);
             candidate["path"] = json!(path);
         }
         Ok(())
-    }
-
-    async fn load_provider(&self, pool: &Pool, artifact: Artifact) -> Result<String, String> {
-        fn path(code: &TempPath) -> Result<String, String> {
-            code.to_str()
-                .map(str::to_owned)
-                .ok_or("Local provider path is not UTF-8".into())
-        }
-        if let Some(code) = lock(&self.providers).get(&artifact.id) {
-            return path(code);
-        }
-        let id = artifact.id.clone();
-        let code = tokio::time::timeout(TIMEOUT, provider((*pool.plugins).clone(), artifact))
-            .await
-            .map_err(|_| "local provider verification stalled")??;
-        // Concurrent requests may both verify a snapshot, but only the first
-        // path is ever seen by QuickJS, so its import cache has one module.
-        path(lock(&self.providers).entry(id).or_insert(code))
     }
 
     fn authorize(&self, claimed: &Value) -> Result<(), String> {
         if claimed.is_null()
             || claimed
                 .as_str()
-                .is_some_and(|id| id == self.id || lock(&self.providers).contains_key(id))
+                .is_some_and(|id| id == self.id || lock(&self.loaded).contains(id))
         {
             return Ok(());
         }
@@ -601,4 +711,52 @@ fn lock<T>(state: &Mutex<T>) -> MutexGuard<'_, T> {
     state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn at_capacity_evicts_the_least_recently_used_unleased_build() {
+        let now = Instant::now();
+        let mut slots = Slots::new();
+        let mut build = |id: &str, users, seconds_ago| {
+            let build = Build {
+                artifact: Artifact {
+                    id: id.into(),
+                    entry_hash: String::new(),
+                    code_hash: String::new(),
+                },
+                live: Vec::new(),
+            };
+            let slot: Arc<Slot> = Arc::default();
+            slots.insert(
+                build,
+                Entry {
+                    slot: slot.clone(),
+                    users,
+                    obsolete: None,
+                    workspaces: HashSet::new(),
+                    last_used: now - Duration::from_secs(seconds_ago),
+                },
+            );
+            slot
+        };
+        let busy = build("busy", 1, 30);
+        let recent = build("recent", 0, 5);
+        let old = build("old", 0, 20);
+        assert!(evict_idle(&mut slots, 3).is_ok());
+        assert!(old.retired.is_cancelled());
+        assert!(!recent.retired.is_cancelled());
+        assert!(!busy.retired.is_cancelled());
+
+        assert!(evict_idle(&mut slots, 2).is_ok());
+        assert!(recent.retired.is_cancelled());
+        assert_eq!(
+            evict_idle(&mut slots, 1),
+            Err("local plugin process limit reached")
+        );
+        assert!(!busy.retired.is_cancelled());
+    }
 }

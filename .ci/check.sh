@@ -26,6 +26,16 @@ case "$1" in
 
     mkdir -p "$PWD/target"
     fixture_dir=$(mktemp -d "$PWD/target/agent-fixtures.XXXXXX")
+    unset TOKAMAK_TURN_PARITY_DIR
+    cleanup_rust() {
+      for dir in "$fixture_dir" "${TOKAMAK_TURN_PARITY_DIR:-}"; do
+        if [[ -n "$dir" && -d "$dir" ]]; then
+          find "$dir" ! -type d -exec unlink {} \;
+          find "$dir" -depth -type d -exec rmdir {} \;
+        fi
+      done
+    }
+    trap cleanup_rust EXIT
     proto run bun -- e2e/fake-agent/build-fixtures.mjs "$fixture_dir"
     export TOKAMAK_AGENT_FIXTURES="$fixture_dir/artifacts"
 
@@ -37,13 +47,7 @@ case "$1" in
     # the stored content and order across runtimes, excluding wall-clock times.
     TOKAMAK_TURN_PARITY_DIR=$(mktemp -d)
     export TOKAMAK_TURN_PARITY_DIR
-    cleanup_parity() {
-      for file in "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; do
-        if [[ -f "$file" ]]; then unlink "$file"; fi
-      done
-      rmdir "$TOKAMAK_TURN_PARITY_DIR"
-    }
-    trap cleanup_parity EXIT
+    echo "Timing Rust integration: Bun fallback"
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
     # A clean quit must also reap the Bun fallback's processes.
@@ -51,23 +55,20 @@ case "$1" in
 
     # Run the QuickJS replays through the Runner instead of adding a third pass.
     export TOKAMAK_TEST_RUNNER=1
-    # The liveness test waits out the real deadline, and the snapshot suite
-    # also waits on real Git and hook timing. The two code suites share build
-    # inputs and run in one group. The groups use separate workspaces;
-    # let them run while the rest of the integration binaries execute.
-    time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server \
-      --test ai_liveness --test code_changes --test code_snapshots &
-    slow_suite=$!
-    status=0
     # The workspace library pass already ran the server library's unit tests.
+    echo "Timing Rust integration: QuickJS main group"
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --bins \
       --test actions --test ai_threads --test ai_turns \
       --test chat_threads --test claude_turns \
       --test codex_turns --test data --test data_cancellation --test data_indexes \
       --test identity --test local_functions --test plugins --test schema_indexes \
-      --test runner_routing --test sdk_transport --test service --test workers || status=$?
-    wait "$slow_suite" || status=$?
-    exit "$status"
+      --test runner_routing --test sdk_transport --test service --test workers
+    # These suites use real deadlines and Git/hook timing. Run them only
+    # after the other test binaries finish compiling and running.
+    for suite in ai_liveness code_changes code_snapshots; do
+      echo "Timing Rust integration: $suite"
+      time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --test "$suite"
+    done
     ;;
   *) exit 2 ;;
 esac

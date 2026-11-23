@@ -6,9 +6,9 @@ import { within } from "../../../../e2e/fake-agent/harness.mjs";
 
 const hash = (code) => createHash("sha256").update(code).digest("hex");
 
-export async function editBundle(dist, extra) {
+export async function editBundle(dist, extra, transform = (code) => code) {
   const file = join(dist, "local.js");
-  const code = (await readFile(file, "utf8")) + "\n" + extra;
+  const code = transform(await readFile(file, "utf8")) + "\n" + extra;
   const path = join(dist, "manifest.json");
   const manifest = await Bun.file(path).json();
   manifest.hashes["local.js"] = hash(code);
@@ -68,7 +68,7 @@ export async function reload({ endpoint: { http } }, directory, id) {
 }
 
 /** A protocol client for tests that need explicit versions or nested routes. */
-export async function rawWindow(runner, artifact, handle, live = []) {
+export async function rawWindow(runner, artifact, handle, live = [], origin) {
   let next = 0;
   const calls = new Map();
   let worker;
@@ -92,6 +92,7 @@ export async function rawWindow(runner, artifact, handle, live = []) {
       for (const call of calls.values()) call.reject(new Error(reason));
     },
     live,
+    origin,
   );
   return {
     close: () => worker.close(),

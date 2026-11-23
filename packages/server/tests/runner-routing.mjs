@@ -36,7 +36,7 @@ try {
   const window = await connect(shared, {
     token,
     cleanup,
-    launch: (artifact, receive, closed, live) =>
+    launch: (artifact, receive, closed, live, workspace) =>
       local.launch(
         artifact,
         (frame) => {
@@ -45,6 +45,7 @@ try {
         },
         closed,
         live,
+        workspace,
       ),
   });
   if (h.selection.runtime === "quickjs") {

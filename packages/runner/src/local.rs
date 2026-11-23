@@ -61,6 +61,8 @@ enum Request {
         artifact: Artifact,
         #[serde(default)]
         live: Vec<Artifact>,
+        #[serde(default)]
+        workspace: String,
     },
     Write {
         message: Value,
@@ -110,12 +112,17 @@ impl Local {
         self.pool.wait().await;
     }
 
-    pub(super) async fn observe(&self, server: &Arc<server::Server>) -> Result<(), server::Error> {
+    pub(super) async fn observe(
+        &self,
+        server: &Arc<server::Server>,
+        workspace: &str,
+    ) -> Result<(), server::Error> {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         if LocalRuntime::selected() == Ok(LocalRuntime::QuickJs) {
-            self.pool.observe(server, server.connect().await?);
+            self.pool
+                .observe(server, server.connect().await?, workspace.into());
         }
-        let _ = server;
+        let _ = (server, workspace);
         Ok(())
     }
 }
@@ -148,21 +155,31 @@ async fn upgrade(State(local): State<Local>, ws: WebSocketUpgrade) -> Response {
 
 async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String> {
     let started = async {
-        let Some(Request::Start { artifact, live }) = receive(socket).await? else {
+        let Some(Request::Start {
+            artifact,
+            live,
+            workspace,
+        }) = receive(socket).await?
+        else {
             return Err("Expected a local worker artifact".into());
         };
-        Ok::<_, String>((artifact, live))
+        Ok::<_, String>((artifact, live, workspace))
     };
-    let (requested, live) = tokio::select! {
+    let (requested, live, workspace) = tokio::select! {
         _ = local.stopping.cancelled() => return Ok(()),
         result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
     };
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     if LocalRuntime::selected()? == LocalRuntime::QuickJs {
-        return quickjs::connection(socket, &local.pool, quickjs::Build::new(requested, live)?)
-            .await;
+        return quickjs::connection(
+            socket,
+            &local.pool,
+            quickjs::Build::new(requested, live)?,
+            workspace,
+        )
+        .await;
     }
-    drop(live);
+    drop((live, workspace));
     let Artifact {
         id: plugin,
         entry_hash,
