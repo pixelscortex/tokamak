@@ -36,6 +36,8 @@ its own pipe from the desktop and kills the process group if the desktop dies.
 Plugin and program groups have their own guardians. On Windows the desktop
 starts the Runner in a job that kills its process tree when the app's job handle
 closes. When the Runner exits unexpectedly, the app starts a replacement with a
-new port and secret. An occupied store is a terminal startup error. The Runner
-can hand over a legacy desktop store after verifying the old server's identity
-and waiting for its shutdown to release the old ownership lock.
+new port and secret. An occupied store is a terminal startup error. Started by
+the desktop, the Runner takes over a store held by a Tokamak server after
+verifying the server's identity and waiting for its shutdown to release the
+ownership lock. Started by hand, it never stops another process: it reports the
+store as in use and names the holder.

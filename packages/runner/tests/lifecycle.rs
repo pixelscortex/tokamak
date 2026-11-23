@@ -446,6 +446,56 @@ async fn replaces_an_authenticated_legacy_desktop_server_holding_the_store() {
 }
 
 #[tokio::test]
+async fn a_runner_started_by_hand_leaves_the_server_that_holds_the_store_running() {
+    let temp = tempfile::tempdir().unwrap();
+    let lock = std::fs::OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create_new(true)
+        .open(temp.path().join("server-owner.lock"))
+        .unwrap();
+    lock.try_lock().unwrap();
+    // No server listens here: taking the store over would need a request.
+    let descriptor = json!({
+        "pid": std::process::id(),
+        "url": "ws://127.0.0.1:9/ws",
+        "buildId": SECRET,
+        "bundleHash": SECRET,
+    });
+    std::fs::write(temp.path().join("server.json"), descriptor.to_string()).unwrap();
+    let secret = temp.path().join("secret");
+    std::fs::write(&secret, SECRET).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&secret, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    let output = Command::new(BINARY)
+        .args(["--plugins"])
+        .arg(fixture())
+        .args(["--data"])
+        .arg(temp.path().join("store"))
+        .args(["--token-file"])
+        .arg(secret)
+        .args(["--listen", "127.0.0.1:0"])
+        .kill_on_drop(true)
+        .output();
+    let output = timeout(DEADLINE, output).await.unwrap().unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains(&format!(
+            "Store is in use by tokamak-server (PID {})",
+            std::process::id()
+        )),
+        "{error}"
+    );
+    assert!(temp.path().join("server.json").exists());
+    drop(lock);
+}
+
+#[tokio::test]
 async fn standalone_runner_serves_a_workspace_and_runs_a_local_function() {
     use tokio::io::AsyncWriteExt;
 

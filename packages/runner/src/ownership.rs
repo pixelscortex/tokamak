@@ -58,6 +58,7 @@ impl Owner {
         store: PathBuf,
         directory: &Path,
         legacy: Option<&Path>,
+        replace: bool,
         stop: &CancellationToken,
     ) -> anyhow::Result<Claim> {
         let file = open_lock(&store.join("runner-owner.lock"))?;
@@ -74,7 +75,7 @@ impl Owner {
         // Old desktop builds used <app data>/store and a sibling lock. Hold
         // that lock too, so an old build cannot open the store after migration.
         let legacy_lock = if let Some(directory) = legacy {
-            match claim_legacy(directory, stop).await? {
+            match claim_legacy(directory, replace, stop).await? {
                 LegacyClaim::Owned(lock) => Some(lock),
                 LegacyClaim::Busy(pid) => {
                     return Ok(Claim::Busy(pid.map(|pid| (pid, "tokamak-server"))));
@@ -140,12 +141,21 @@ enum LegacyClaim {
     Stopped,
 }
 
-async fn claim_legacy(directory: &Path, stop: &CancellationToken) -> io::Result<LegacyClaim> {
+async fn claim_legacy(
+    directory: &Path,
+    replace: bool,
+    stop: &CancellationToken,
+) -> io::Result<LegacyClaim> {
     let lock = open_lock(&directory.join("server-owner.lock"))?;
     match lock.try_lock() {
         Ok(()) => return Ok(LegacyClaim::Owned(lock)),
         Err(TryLockError::WouldBlock) => {}
         Err(TryLockError::Error(error)) => return Err(error),
+    }
+    if !replace {
+        // Only the desktop takes a store over. A Runner started by hand
+        // leaves the server that holds the store running and names it.
+        return Ok(LegacyClaim::Busy(Legacy::recorded_pid(directory)));
     }
     let Some(previous) = Legacy::find(directory).await else {
         // The old process may already have exited during the health probe.
@@ -174,10 +184,24 @@ struct Legacy {
 }
 
 impl Legacy {
+    /// The PID the holder wrote, without contacting it.
+    fn recorded_pid(directory: &Path) -> Option<u32> {
+        let identity: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join(LEGACY_DISCOVERY)).ok()?).ok()?;
+        let pid: u32 = identity["pid"].as_u64()?.try_into().ok()?;
+        (pid != 0 && running(pid)).then_some(pid)
+    }
+
     async fn find(directory: &Path) -> Option<Self> {
         let identity: serde_json::Value =
             serde_json::from_slice(&fs::read(directory.join(LEGACY_DISCOVERY)).ok()?).ok()?;
         let pid = identity["pid"].as_u64()?.try_into().ok()?;
+        // A descriptor left by an earlier run names a port that another
+        // program may have since taken. Its process is gone, so the token
+        // is never sent there.
+        if !running(pid) {
+            return None;
+        }
         let hash = identity["bundleHash"].as_str()?;
         if pid == 0 || hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
             return None;
@@ -239,6 +263,25 @@ impl Legacy {
             unsafe { libc::kill(pid, libc::SIGTERM) };
         }
         wait_for_lock(lock, stop, Duration::from_secs(15)).await
+    }
+}
+
+/// Whether a process with this PID exists. Windows has no cheap probe here,
+/// so it relies on the authenticated health check alone.
+fn running(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        // SAFETY: Signal 0 checks for existence and delivers nothing.
+        pid > 0
+            && (unsafe { libc::kill(pid, 0) } == 0
+                || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM))
+    }
+    #[cfg(not(unix))]
+    {
+        pid != 0
     }
 }
 

@@ -17,8 +17,9 @@ window shows its existing disconnected state and Retry connects to the new port.
 `TOKAMAK_SERVER_DIR` still selects the store directory. Development uses the
 workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR` overrides
 the installation. Runner startup errors go to `runner.log` beside the store.
-The Runner replaces a verified server left running by a previous desktop
-version. If another Runner owns the store, the app reports the conflict; close
+On start the app's Runner stops any Tokamak server that holds this store,
+after verifying it: one left by a previous desktop version, or one started with
+`server:start` on the same `TOKAMAK_SERVER_DIR`. If another Runner owns the store, the app reports the conflict; close
 the other process before relaunching this app.
 
 ## When the app quits

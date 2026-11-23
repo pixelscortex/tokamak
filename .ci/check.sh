@@ -41,6 +41,8 @@ case "$1" in
     trap cleanup_parity EXIT
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
+    # A clean quit must also reap the Bun fallback's processes.
+    TOKAMAK_PLUGIN_RUNTIME=bun cargo test --locked -p tokamak-runner --test lifecycle graceful_quit
 
     # Run the QuickJS replays through the Runner instead of adding a third pass.
     export TOKAMAK_TEST_RUNNER=1

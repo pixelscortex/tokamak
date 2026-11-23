@@ -1,9 +1,13 @@
 use std::process::Command;
 
+#[allow(dead_code)] // This test needs only the Runner path.
+#[path = "support/local_runtime.rs"]
+mod local_runtime;
+
 #[test]
 fn a_window_routes_runner_queries_and_mutations_to_the_shared_server() {
     let server = std::path::Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
-    let runner = server.with_file_name(format!("tokamak-runner{}", std::env::consts::EXE_SUFFIX));
+    let runner = local_runtime::runner();
     let result = Command::new("proto")
         .args([
             "run",

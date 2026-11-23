@@ -41,7 +41,7 @@ pub fn driver_for(
     });
     let server = Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
     let executable = if runner {
-        server.with_file_name(format!("tokamak-runner{}", std::env::consts::EXE_SUFFIX))
+        self::runner()
     } else {
         server.to_owned()
     };
@@ -54,4 +54,26 @@ pub fn driver_for(
         command.env("TOKAMAK_TEST_PLUGIN_HOST", host);
     }
     command
+}
+
+/// The Runner built beside `tokamak-server`. Cargo builds only this package's
+/// binaries for its tests, so build the Runner here rather than use a stale one.
+#[allow(dead_code)] // Each integration test includes only the entry point it needs.
+pub fn runner() -> std::path::PathBuf {
+    let server = Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
+    let mut build = Command::new(env!("CARGO"));
+    build
+        .args(["build", "--locked", "-p", "tokamak-runner"])
+        .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
+    if let Some(profile) = server
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .filter(|name| *name != "debug")
+    {
+        build.args(["--profile", profile]);
+    }
+    let status = build.status().expect("run Cargo to build the Runner");
+    assert!(status.success(), "building tokamak-runner failed: {status}");
+    server.with_file_name(format!("tokamak-runner{}", std::env::consts::EXE_SUFFIX))
 }

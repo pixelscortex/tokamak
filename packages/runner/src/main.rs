@@ -182,7 +182,8 @@ async fn main() -> anyhow::Result<()> {
     };
     let legacy = (config.desktop || config.data.file_name().is_some_and(|name| name == "store"))
         .then_some(app_data.as_path());
-    let owner = match ownership::Owner::claim(data.clone(), directory, legacy, &stop).await? {
+    let claim = ownership::Owner::claim(data.clone(), directory, legacy, config.desktop, &stop);
+    let owner = match claim.await? {
         ownership::Claim::Owned(owner) => owner,
         ownership::Claim::Stopped => return Ok(()),
         ownership::Claim::Busy(holder) => return store_in_use(config.desktop, holder),
