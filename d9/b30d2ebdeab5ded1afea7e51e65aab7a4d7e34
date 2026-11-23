@@ -1,0 +1,19 @@
+packages/host/tests/actions.rs
+  s_3d5618fec52e91::t_af38a459825f89 8,166-180,184,192,194,206,208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d9b30d2ebdeab5ded1afea7e51e65aab7a4d7e34",
+  "prompts": {},
+  "sessions": {
+    "s_3d5618fec52e91": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2086e-e933-7b02-8c56-e49548365a41",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
