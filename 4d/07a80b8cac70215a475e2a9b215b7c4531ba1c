@@ -1,0 +1,40 @@
+spikes/linux-check/prepare.mjs
+  s_1c1b16f47ef617::t_87ad27d24b6003 1-29
+spikes/linux-check/bench.py
+  s_1c1b16f47ef617::t_e1c703dc4bf64d 1-8,10-100,102-103,105-138,140-158,186-189,191
+  s_1c1b16f47ef617::t_7decdd76b7b4e4 9,101,104
+  s_1c1b16f47ef617::t_1ccde18fd8220b 139
+  s_1c1b16f47ef617::t_62b8d8d9c15c12 159-185,190,192-197
+spikes/linux-check/build.sh
+  s_1c1b16f47ef617::t_87ad27d24b6003 1-31
+spikes/linux-check/REPORT.md
+  s_1c1b16f47ef617::t_1a061576d069a6 1-2,67-77,125-198
+  s_1c1b16f47ef617::t_9bb5f6f96be615 57,93-103
+  s_1c1b16f47ef617::t_cc7074617dd18f 53,78-79,81,84-92,106,121-124
+  s_1c1b16f47ef617::t_413840d892b88d 3-52,54-56,58-66
+  s_1c1b16f47ef617::t_cb913303dc7020 80,82-83,104-105,107-120
+spikes/linux-check/ALPINE.jsonl
+  s_1c1b16f47ef617::t_8ae3563e410062 1-201
+spikes/linux-check/DEBIAN.jsonl
+  s_1c1b16f47ef617::t_1c10c03ce4f479 1-341
+spikes/linux-check/PROGRAMS-NO-INIT.txt
+  s_1c1b16f47ef617::t_4d4da067ef7567 1-3
+spikes/linux-check/PROGRAMS.txt
+  s_1c1b16f47ef617::t_ac267b92c66e0b 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d07a80b8cac70215a475e2a9b215b7c4531ba1c",
+  "prompts": {},
+  "sessions": {
+    "s_1c1b16f47ef617": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20738-ccb8-7b33-a966-776fc40b170c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
