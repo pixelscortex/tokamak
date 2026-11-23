@@ -1,0 +1,100 @@
+packages/server/tests/ai_liveness.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,9
+plugins/claude/tests/permissions.mjs
+  s_27391ab7410c16::t_df95be49cb3c73 64-68,96-134,136-149,151-152,154-177
+  s_27391ab7410c16::t_03cae8b5e01106 1-13,15-28,30-63,69-95,135,150,153,178-207
+  s_27391ab7410c16::t_1fdb9546197114 14,29
+e2e/fake-agent/replays/claude-resistant.jsonl
+  s_27391ab7410c16::t_3f6807b0245277 1-11
+packages/server/tests/chat_threads.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,8
+e2e/fake-agent/replays/claude-remember-resume.jsonl
+  s_27391ab7410c16::t_3f6807b0245277 1-23
+packages/server/tests/ai_threads.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,9
+packages/server/tests/support/local_runtime.rs
+  s_27391ab7410c16::t_b219f5cdb19421 1-4,6,8-45
+  s_27391ab7410c16::t_914541888a273b 5,7
+packages/server/tests/codex_turns.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,8
+e2e/fake-agent/replays/codex/hello.jsonl
+  s_27391ab7410c16::t_3f6807b0245277 1-12
+plugins/codex/tests/e2e.mjs
+  s_27391ab7410c16::t_c0059a3d029c56 103-110,187-189
+  s_27391ab7410c16::t_adeb954e3a4127 3,102,190,204-210
+packages/server/tests/support/local_driver.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-11,13-22
+  s_27391ab7410c16::t_e0c1cf9f5be3f2 12
+plugins/claude/tests/snapshots.mjs
+  s_27391ab7410c16::t_c0059a3d029c56 1-44
+e2e/fake-agent/turn-parity.mjs
+  s_27391ab7410c16::t_3f6807b0245277 1-50
+packages/server/tests/code_snapshots.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,6
+packages/server/tests/local_functions.rs
+  s_27391ab7410c16::t_b219f5cdb19421 9-11,28-30,32
+  s_27391ab7410c16::t_0b07b8a4ed177b 31
+packages/server/tests/code_changes.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,6
+plugins/claude/tests/turn-wire.mjs
+  s_27391ab7410c16::t_03cae8b5e01106 1-7,21-23,27-48
+  s_27391ab7410c16::t_df95be49cb3c73 8-20,24-26
+e2e/fake-agent/local.mjs
+  s_27391ab7410c16::t_b219f5cdb19421 6,46,50-52,58,74-76,81-88,91-92,94-95,110
+  s_27391ab7410c16::t_c0059a3d029c56 53-57
+  s_27391ab7410c16::t_3f6807b0245277 93,105-106
+e2e/fake-agent/harness.mjs
+  s_27391ab7410c16::t_3f6807b0245277 324,336
+.ci/check.sh
+  s_27391ab7410c16::t_c1319a80e9e8bc 27-33,37-40
+plugins/claude/tests/overlap.mjs
+  s_27391ab7410c16::t_eec1a60e35dd37 1-7,11-85,90-101,105-122
+  s_27391ab7410c16::t_c0059a3d029c56 8-10,86-89,102-104
+packages/server/tests/claude_turns.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,7
+plugins/claude/tests/turns.mjs
+  s_27391ab7410c16::t_03cae8b5e01106 7,9-10,74
+  s_27391ab7410c16::t_c0059a3d029c56 8,43-45,77-80
+  s_27391ab7410c16::t_eec1a60e35dd37 11,26-27,68-69,75,203,214,247,285-288,343-349,367
+  s_27391ab7410c16::t_6f7579c0889544 180-192
+packages/server/tests/README.md
+  s_27391ab7410c16::t_8f9055b9342147 33-55
+packages/server/tests/ai_turns.rs
+  s_27391ab7410c16::t_8ce8e3d52d95fc 1-2,9
+e2e/fake-agent/agent-turn.mjs
+  s_27391ab7410c16::t_3f6807b0245277 115
+  s_27391ab7410c16::t_ea89740e77b8e6 89-92,112,114
+plugins/claude/tests/replay.mjs
+  s_27391ab7410c16::t_3f6807b0245277 4,38,43-47,61
+  s_27391ab7410c16::t_eec1a60e35dd37 37
+packages/host/README.md
+  s_27391ab7410c16::t_2200ba1fd0f094 54-56
+packages/host/src/modules.rs
+  s_27391ab7410c16::t_e43ee66a633188 95,118-119
+packages/host/src/path.js
+  s_27391ab7410c16::t_15efad857dd7b7 1-7
+packages/host/src/runtime.rs
+  s_27391ab7410c16::t_c50213b668778e 185,215-228
+packages/host/tests/fixture.js
+  s_27391ab7410c16::t_919892f4a3d0e7 2,15-20
+packages/host/tests/protocol.rs
+  s_27391ab7410c16::t_ee8e7dc6adef6e 13-30
+plugins/ai/src/server/run.ts
+  s_27391ab7410c16::t_e8aa094ce3da33 354-355
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "66f24bf404c1b49dacfac1175593285feee6e172",
+  "prompts": {},
+  "sessions": {
+    "s_27391ab7410c16": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20851-6d16-7013-8d71-3a0a1b7bf825",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
