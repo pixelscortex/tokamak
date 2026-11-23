@@ -1,0 +1,94 @@
+plugins/claude/tests/snapshots.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 1-44
+plugins/claude/tests/overlap.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 1-122
+.ci/check.sh
+  s_d018601463dbc5::t_0d346b17a1392b 27-33,37-39
+packages/server/tests/code_changes.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,6
+plugins/ai/src/server/run.ts
+  s_d018601463dbc5::t_0d346b17a1392b 354-355
+plugins/codex/tests/e2e.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 3,39,103-111,188-191,205-211
+packages/host/src/protocol.rs
+  s_d018601463dbc5::t_0d346b17a1392b 245-246,285-286
+packages/server/tests/chat_threads.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,8
+packages/server/tests/support/local_runtime.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-59
+packages/server/tests/code_snapshots.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,6
+plugins/claude/tests/turns.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 7-11,26-27,39,44-46,69-70,75-76,78-81,181-193,204,215,248,286-289,344-350,368
+e2e/fake-agent/replays/claude-resistant.jsonl
+  s_d018601463dbc5::t_0d346b17a1392b 1-11
+packages/host/README.md
+  s_d018601463dbc5::t_0d346b17a1392b 53-58
+packages/host/src/runtime.rs
+  s_d018601463dbc5::t_0d346b17a1392b 67,91-95,214-238
+  s_d018601463dbc5::t_57e69b41e46efd 239-240
+packages/host/tests/fixture.js
+  s_d018601463dbc5::t_0d346b17a1392b 2,15-32
+plugins/claude/tests/permissions.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 1-209
+packages/server/tests/ai_liveness.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,9
+packages/server/tests/README.md
+  s_d018601463dbc5::t_0d346b17a1392b 33-55
+plugins/claude/tests/turn-wire.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 1-48
+e2e/fake-agent/local.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 3,6-8,48,52-61,77-90,95-102,105-109,119-120,124
+e2e/fake-agent/harness.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 17-18,273-317,370,382
+packages/server/tests/codex_turns.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,8
+packages/server/tests/ai-turns-driver.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 23
+packages/server/tests/local_functions.rs
+  s_d018601463dbc5::t_0d346b17a1392b 9-11,14-16,30-34
+packages/host/src/modules.rs
+  s_d018601463dbc5::t_0d346b17a1392b 95,118-119
+e2e/fake-agent/agent-turn.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 89-92,112,114-115
+e2e/fake-agent/turn-parity.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 1-55
+e2e/fake-agent/replays/claude-remember-resume.jsonl
+  s_d018601463dbc5::t_0d346b17a1392b 1-25
+e2e/fake-agent/replays/codex/hello.jsonl
+  s_d018601463dbc5::t_0d346b17a1392b 1-12
+packages/host/tests/protocol.rs
+  s_d018601463dbc5::t_0d346b17a1392b 13-41
+packages/sdk/README.md
+  s_d018601463dbc5::t_0d346b17a1392b 202-208
+packages/server/tests/ai_turns.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,9
+packages/server/tests/support/local_driver.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-22
+packages/server/tests/claude_turns.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,7
+packages/sdk/worker/quickjs.ts
+  s_d018601463dbc5::t_0d346b17a1392b 9-22,33,43
+plugins/claude/tests/replay.mjs
+  s_d018601463dbc5::t_0d346b17a1392b 4,37-38,43-47,61
+packages/server/tests/ai_threads.rs
+  s_d018601463dbc5::t_0d346b17a1392b 1-2,9
+packages/host/src/path.js
+  s_d018601463dbc5::t_0d346b17a1392b 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1bb95c9974a837b8e7b5f08a830d41bc2d9268c",
+  "prompts": {},
+  "sessions": {
+    "s_d018601463dbc5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208b6-e9f7-72b0-b968-f9da73a51cd1",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
