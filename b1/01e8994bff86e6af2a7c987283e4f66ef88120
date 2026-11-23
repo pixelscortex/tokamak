@@ -1,0 +1,23 @@
+packages/host/src/protocol.rs
+  s_bead5d35bc54c0::t_7cd3bc1917e098 81,84-88,96-98,100
+packages/host/tests/fixture.js
+  s_bead5d35bc54c0::t_e93a76179cd7e6 35-50
+packages/host/tests/protocol.rs
+  s_bead5d35bc54c0::t_5aa69ac07c53a4 278-313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b101e8994bff86e6af2a7c987283e4f66ef88120",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
