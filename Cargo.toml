@@ -1,6 +1,13 @@
 # Rust host crates share package metadata and one size-oriented release profile.
 [workspace]
-members = ["packages/server", "packages/engine", "packages/runtime", "app/src-tauri", "packages/worker", "packages/host"]
+members = [
+  "packages/server",
+  "packages/engine",
+  "packages/runtime",
+  "app/src-tauri",
+  "packages/worker",
+  "packages/host",
+]
 resolver = "3"
 
 [workspace.lints.clippy]
