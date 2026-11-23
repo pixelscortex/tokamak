@@ -1,0 +1,151 @@
+packages/host/src/runtime.rs
+  s_06613db2b9bc99::t_c9a6c701adb421 85,111,169
+  s_06613db2b9bc99::t_073440c8818d90 19
+moon.yml
+  s_06613db2b9bc99::t_7d7eb70f5e641c 79,101,117
+packages/runner/README.md
+  s_06613db2b9bc99::t_8052f9e0f07ce6 9-12
+README.md
+  s_06613db2b9bc99::t_c9802f61f4d5eb 30-31
+  s_06613db2b9bc99::t_8052f9e0f07ce6 67-69,75-78,80-104
+  s_06613db2b9bc99::t_e6d75c9963c07a 79
+packages/server/tests/plugins.rs
+  s_06613db2b9bc99::t_073440c8818d90 1254
+packages/worker/src/runtime.rs
+  s_06613db2b9bc99::t_800804d330ecd6 1-2,4-7,14,31-46,48,51,73,87
+packages/host/src/action_process/mod.rs
+  s_06613db2b9bc99::t_800804d330ecd6 27,37
+.ci/release-macos.sh
+  s_06613db2b9bc99::t_039cb886d5264e 21
+  s_06613db2b9bc99::t_7d7eb70f5e641c 22
+Dockerfile
+  s_06613db2b9bc99::t_48138d258cfea0 22-23,35
+  s_06613db2b9bc99::t_039cb886d5264e 24-25
+packages/server/Cargo.toml
+  s_06613db2b9bc99::t_073440c8818d90 89-90,92-94,96-98,100-108
+  s_06613db2b9bc99::t_800804d330ecd6 18-19,57,80-82,84-86,88
+  s_06613db2b9bc99::t_c9802f61f4d5eb 83,87,91,95,99,111-115
+  s_06613db2b9bc99::t_8052f9e0f07ce6 109-110,116
+packages/server/PLUGINS.md
+  s_06613db2b9bc99::t_8052f9e0f07ce6 16-17,20-21,24,30,37-39
+  s_06613db2b9bc99::t_f4014bbba4dada 22-23
+  s_06613db2b9bc99::t_48138d258cfea0 25-29
+packages/host/Cargo.toml
+  s_06613db2b9bc99::t_800804d330ecd6 7-18,25-27,30,35,38,46-53
+packages/server/tests/runner-routing.mjs
+  s_06613db2b9bc99::t_48138d258cfea0 2,5,18,26-31,33
+  s_06613db2b9bc99::t_7d7eb70f5e641c 4,7,19-25,32,37-48
+  s_06613db2b9bc99::t_547aff1bb92596 49-57
+  s_06613db2b9bc99::t_039cb886d5264e 11-14,35-36,58-59,74-76,80,85-92
+  s_06613db2b9bc99::t_54c83e2cbaebd1 77-79
+  s_06613db2b9bc99::t_f4014bbba4dada 9,60-73
+packages/server/src/service/action_coordination.rs
+  s_06613db2b9bc99::t_073440c8818d90 95,113,118,124,166
+packages/server/src/host/process_frames.rs
+  s_06613db2b9bc99::t_073440c8818d90 1-85
+packages/server/tests/runner_routing.rs
+  s_06613db2b9bc99::t_039cb886d5264e 11-12,21-32
+packages/server/src/host/worker/mod.rs
+  s_06613db2b9bc99::t_073440c8818d90 2,19
+packages/server/tests/workers.rs
+  s_06613db2b9bc99::t_073440c8818d90 21
+packages/server/src/plugins/loading.rs
+  s_06613db2b9bc99::t_073440c8818d90 5,9-11,15,89,187,253-257,272-276,316,346,543
+packages/server/src/host/action_process/transport.rs
+  s_06613db2b9bc99::t_073440c8818d90 10
+packages/server/src/plugins/artifact.rs
+  s_06613db2b9bc99::t_48138d258cfea0 41,43-45,169-170,174-182
+  s_06613db2b9bc99::t_547aff1bb92596 42,171-173,183-199
+  s_06613db2b9bc99::t_b93012cb64fe09 200
+packages/server/tests/actions.rs
+  s_06613db2b9bc99::t_073440c8818d90 336,628
+packages/server/src/websocket.rs
+  s_06613db2b9bc99::t_f4014bbba4dada 334,358-373
+  s_06613db2b9bc99::t_039cb886d5264e 179,332-333,335,374,418
+  s_06613db2b9bc99::t_21660501c31036 375-376
+packages/host/src/builtins.rs
+  s_06613db2b9bc99::t_800804d330ecd6 1-22
+packages/build/src/stage-server-plugin.ts
+  s_06613db2b9bc99::t_48138d258cfea0 1-34
+packages/server/src/host.rs
+  s_06613db2b9bc99::t_073440c8818d90 311-313
+packages/server/src/service/plugin_control.rs
+  s_06613db2b9bc99::t_073440c8818d90 282
+packages/worker/Cargo.toml
+  s_06613db2b9bc99::t_800804d330ecd6 7-10,12-14,22
+  s_06613db2b9bc99::t_ff411cea6bc2dd 32-35
+packages/server/tests/support/local_runtime.rs
+  s_06613db2b9bc99::t_039cb886d5264e 3,6,11,17
+packages/server/src/host/action_process/inspection.rs
+  s_06613db2b9bc99::t_073440c8818d90 6
+packages/host/README.md
+  s_06613db2b9bc99::t_8052f9e0f07ce6 78-83
+packages/host/src/action_process/realm.rs
+  s_06613db2b9bc99::t_800804d330ecd6 146
+packages/server/tests/README.md
+  s_06613db2b9bc99::t_8052f9e0f07ce6 43-48
+packages/host/src/action_process/output.rs
+  s_06613db2b9bc99::t_800804d330ecd6 69
+packages/server/src/lib.rs
+  s_06613db2b9bc99::t_073440c8818d90 26-37
+packages/host/src/protocol.rs
+  s_06613db2b9bc99::t_800804d330ecd6 3,14-18
+.github/workflows/ci.yml
+  s_06613db2b9bc99::t_9b77ec35b40473 51,179
+  s_06613db2b9bc99::t_7d7eb70f5e641c 182
+packages/server/src/host/worker/process.rs
+  s_06613db2b9bc99::t_073440c8818d90 2,4
+packages/server/src/plugins/assets.rs
+  s_06613db2b9bc99::t_48138d258cfea0 213,224-233
+  s_06613db2b9bc99::t_3751a92079986a 234-235
+packages/host/src/action_process/call.rs
+  s_06613db2b9bc99::t_800804d330ecd6 236,254
+  s_06613db2b9bc99::t_073440c8818d90 28
+packages/server/src/actions.rs
+  s_06613db2b9bc99::t_073440c8818d90 194,208-216,229,239
+packages/worker/src/lib.rs
+  s_06613db2b9bc99::t_800804d330ecd6 2,5,8,11,14-19,24,26,38,42,46,53,68,84,131,190,210,252
+.ci/check.sh
+  s_06613db2b9bc99::t_9b77ec35b40473 4-14,36,38-41,51-53,57,65,67-73,93-95,97
+  s_06613db2b9bc99::t_c9802f61f4d5eb 74-77,80-83,91-92
+  s_06613db2b9bc99::t_8052f9e0f07ce6 66
+  s_06613db2b9bc99::t_8cb0ed7273f908 78-79,84-90
+packages/host/src/pipe.rs
+  s_06613db2b9bc99::t_800804d330ecd6 1-35
+packages/host/src/watchdog.rs
+  s_06613db2b9bc99::t_073440c8818d90 1-32
+.ci/README.md
+  s_06613db2b9bc99::t_8052f9e0f07ce6 10-14
+  s_06613db2b9bc99::t_7d7eb70f5e641c 34-35
+packages/server/src/main.rs
+  s_06613db2b9bc99::t_073440c8818d90 158,216
+packages/server/src/plugins/mod.rs
+  s_06613db2b9bc99::t_073440c8818d90 41
+packages/host/src/modules.rs
+  s_06613db2b9bc99::t_800804d330ecd6 16-19
+packages/host/build.rs
+  s_06613db2b9bc99::t_800804d330ecd6 12-13,15
+packages/host/src/main.rs
+  s_06613db2b9bc99::t_800804d330ecd6 4-8,10-13,16-20,22-25,27-30,32-35,43-57
+  s_06613db2b9bc99::t_073440c8818d90 37-38
+packages/server/src/host/action_process/mod.rs
+  s_06613db2b9bc99::t_073440c8818d90 325
+packages/server/src/service/startup.rs
+  s_06613db2b9bc99::t_073440c8818d90 356-357
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9131d3c5aff7b32349f99603810815a6742666a8",
+  "prompts": {},
+  "sessions": {
+    "s_06613db2b9bc99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20a22-67d7-7ec3-afd1-f700e15c076f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
