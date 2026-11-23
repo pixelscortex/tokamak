@@ -1,0 +1,73 @@
+packages/host/README.md
+  s_2728ffe022d76a::t_7692463bf58bef 25-44,57-59
+  s_2728ffe022d76a::t_286eb54752d2ec 69-109
+packages/sdk/worker/process.ts
+  s_2728ffe022d76a::t_7692463bf58bef 6,52-62,64-69,71-84,87-96,98-107,109
+packages/host/src/timers.js
+  s_2728ffe022d76a::t_7692463bf58bef 11,45-48,53
+packages/sdk/worker/quickjs.ts
+  s_2728ffe022d76a::t_7692463bf58bef 3-4,13,28
+packages/host/DEPENDENCIES.md
+  s_2728ffe022d76a::t_7692463bf58bef 9-10
+packages/sdk/worker/program-scope.ts
+  s_2728ffe022d76a::t_7692463bf58bef 1-40
+packages/host/src/programs/lines.rs
+  s_2728ffe022d76a::t_7692463bf58bef 1-83
+packages/host/src/timers.rs
+  s_2728ffe022d76a::t_7692463bf58bef 1-6,9,11-46,49,60,63-64,68-75,88
+packages/host/tests/programs.rs
+  s_2728ffe022d76a::t_7692463bf58bef 1-227
+packages/host/tests/program-tree.sh
+  s_2728ffe022d76a::t_7692463bf58bef 1-18
+packages/host/src/programs.rs
+  s_2728ffe022d76a::t_7692463bf58bef 1-147
+packages/sdk/src/local.ts
+  s_2728ffe022d76a::t_7692463bf58bef 11
+packages/host/src/main.rs
+  s_2728ffe022d76a::t_7692463bf58bef 8-9
+packages/host/src/runtime.rs
+  s_2728ffe022d76a::t_7692463bf58bef 17,62-63,87-88,91-102,108,110-116,118,127-128,169-170,180,202,208-212
+  s_2728ffe022d76a::t_f1543de9a75120 213
+packages/host/tests/support/mod.rs
+  s_2728ffe022d76a::t_7692463bf58bef 1-95
+packages/sdk/worker/dispatch.ts
+  s_2728ffe022d76a::t_7692463bf58bef 16-19,27,45-46,50,71,78,83,93,106-112
+packages/host/src/programs/process.rs
+  s_2728ffe022d76a::t_7692463bf58bef 1-314
+packages/host/src/protocol.rs
+  s_2728ffe022d76a::t_7692463bf58bef 246,248-253,258-259,262-264,274-278,283
+packages/host/tests/protocol.rs
+  s_2728ffe022d76a::t_7692463bf58bef 3,5,7,9,11,280-294,297-298,300-305,378-385
+packages/sdk/worker/quickjs-console.ts
+  s_2728ffe022d76a::t_7692463bf58bef 1-2,7-17,19,21-22,27-76,81,84-105,111-113
+packages/host/Cargo.toml
+  s_2728ffe022d76a::t_7692463bf58bef 13
+packages/sdk/worker/quickjs-process.ts
+  s_2728ffe022d76a::t_7692463bf58bef 1-56
+packages/server/tests/local-functions-driver.mjs
+  s_2728ffe022d76a::t_7692463bf58bef 2,20,101-102,107-108,132-166,240-247,322-367,374,377-381,394-395,397-400,404-405,409-410
+packages/host/tests/fixture.js
+  s_2728ffe022d76a::t_7692463bf58bef 77-89,117-118,205-304
+packages/host/src/action_process/output.rs
+  s_2728ffe022d76a::t_268483e7e01916 72-73
+packages/host/src/action_process/plugin.rs
+  s_2728ffe022d76a::t_f3c0d07706577b 39-43,59,76-116
+packages/sdk/README.md
+  s_2728ffe022d76a::t_a654276cefc702 418,427-442
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da3f87eb2e4fc9566f5c487fad8299467d06a7d3",
+  "prompts": {},
+  "sessions": {
+    "s_2728ffe022d76a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2084a-aa52-7763-a927-99c45d54ee4f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
