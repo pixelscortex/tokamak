@@ -17,7 +17,7 @@ use std::{
 use arc_swap::ArcSwapOption;
 use engine::{Bundle, OpRegistry};
 use serde_json::{Value, json};
-use tokamak_worker::WORKER_CAPACITY;
+use tokamak_worker::{HEALTHY_UPTIME, RestartBackoff as Restart, WORKER_CAPACITY};
 use tokio::{
     runtime::Handle,
     sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc, oneshot},
@@ -28,11 +28,8 @@ use tokio_util::sync::CancellationToken;
 use crate::plugins::Asset;
 
 const DEADLINE: Duration = Duration::from_secs(3600);
-const HEALTHY_UPTIME: Duration = Duration::from_secs(60);
 const PLUGIN_CAPACITY: usize = WORKER_CAPACITY / 2;
 const ANONYMOUS_CAPACITY: usize = 4;
-const BASE_DELAY: Duration = Duration::from_millis(250);
-const MAX_DELAY: Duration = Duration::from_secs(30);
 static NEXT_SLOT: AtomicU64 = AtomicU64::new(0);
 
 enum Snapshot {
@@ -130,25 +127,6 @@ struct Running {
     #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
     pid: u32,
     started: Instant,
-}
-
-#[derive(Default)]
-struct Restart {
-    failures: u32,
-    retry_at: Option<Instant>,
-}
-
-impl Restart {
-    fn failed(&mut self, now: Instant, healthy: bool) {
-        if healthy {
-            self.failures = 0;
-        }
-        let delay = BASE_DELAY
-            .saturating_mul(1 << self.failures.min(7))
-            .min(MAX_DELAY);
-        self.failures = self.failures.saturating_add(1);
-        self.retry_at = Some(now + delay);
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -421,9 +399,9 @@ mod tests {
         for _ in 0..10 {
             restart.failed(now, false);
         }
-        assert_eq!(restart.retry_at, Some(now + MAX_DELAY));
+        assert_eq!(restart.retry_at, Some(now + Duration::from_secs(30)));
         restart.failed(now, true);
-        assert_eq!(restart.retry_at, Some(now + BASE_DELAY));
+        assert_eq!(restart.retry_at, Some(now + Duration::from_millis(250)));
     }
 }
 

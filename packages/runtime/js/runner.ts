@@ -3,7 +3,7 @@ import { WORKER_CAPACITY, WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits
 import type { LaunchLocalWorker, LocalArtifact } from "./local";
 
 type WorkerEvent =
-  | { type: "started" }
+  | { type: "started"; routed?: boolean }
   | { type: "message"; message: JsonValue }
   | { type: "loaded"; id: number; path?: string; error?: string }
   | { type: "closed"; reason: string };
@@ -42,6 +42,7 @@ class RunnerWorker {
   );
   private next = 0;
   private started = false;
+  routed = false;
   private ended = false;
   private closing?: Promise<void>;
 
@@ -77,6 +78,7 @@ class RunnerWorker {
     switch (event.type) {
       case "started":
         this.started = true;
+        this.routed = event.routed === true;
         clearTimeout(this.deadline);
         this.startup.resolve();
         break;
@@ -119,6 +121,14 @@ class RunnerWorker {
 
   async send(message: JsonValue) {
     this.write({ type: "write", message });
+  }
+
+  async route(id: number, artifact: LocalArtifact) {
+    this.write({ type: "route", id, artifact });
+  }
+
+  async retire(artifact: LocalArtifact) {
+    if (this.routed) this.write({ type: "retire", artifact });
   }
 
   async load(artifact: LocalArtifact) {

@@ -196,6 +196,9 @@ function observeWorker(launch, observe) {
       close,
     );
     return {
+      routed: worker.routed,
+      route: (id, provider) => worker.route(id, provider),
+      retire: (provider) => worker.retire(provider),
       load: (provider) => worker.load(provider),
       close: () => worker.close(),
       async send(frame) {

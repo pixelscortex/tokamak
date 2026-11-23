@@ -628,14 +628,22 @@ provider to read data or check optional methods. Lookups use the current
 catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
 
-A local contract is called from `local`. Plain methods can receive callbacks
-and other in-process objects, and can use ordinary local imports. Use
-`local({ handler: (ctx, run: Run) => ... })` when a method needs local
-context (such as `ctx.proc`). Declare it as a private constant and pass it
-to `provide`. The contract passes the live argument in the same worker;
-window calls to exported local functions use their JSON validators. A matching
-provider build must also be installed on the client. Changing or removing an
-imported provider retires its worker so the old module unloads.
+A local contract is called from `local`. Declare
+`{ place: "local", dataMethods: true }` when every method takes and returns
+plain JSON data. For a mixed contract, list only the plain-data methods, for
+example `{ place: "local", dataMethods: ["info"] }`. The QuickJS Runner sends
+those calls to the provider's process. For an all-data contract, the lookup
+also reads provider fields and available method names from that process.
+Keep those fields static for a build; the caller can reuse them after a
+process restarts. A value that JSON would change or lose fails with the
+contract and method name. A void result becomes `null` across processes.
+
+Methods that take live objects stay in the caller's realm. Use
+`local({ handler: (ctx, run: Run) => ... })` when a method needs local context
+such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
+All local methods receive the calling member and device in their context. A
+matching provider build must be installed on the client. With the Bun
+fallback, all local contract methods keep running in the caller's worker.
 
 A server contract defaults to `place: "server"`. For each
 method provide a server function definition such as `internalAction` or

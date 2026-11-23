@@ -1,5 +1,8 @@
-//! One authenticated socket owns one plugin process. The window answers its
-//! host operations using the workspace connection it already has.
+//! The window answers host operations using its own workspace connection.
+//! Bun keeps the original socket-owned worker; QuickJS hosts belong to the Runner.
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod quickjs;
 
 use crate::artifact::{artifact, artifact_folder, client_env, snapshot};
 use axum::{
@@ -39,9 +42,11 @@ pub(super) struct Local {
     app_data: Arc<PathBuf>,
     stopping: CancellationToken,
     slots: Arc<Semaphore>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pool: quickjs::Pool,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct Artifact {
     id: String,
@@ -55,15 +60,22 @@ enum Request {
     Start { artifact: Artifact },
     Write { message: Value },
     Load { id: u32, artifact: Artifact },
+    Route { id: u64, artifact: Artifact },
+    Retire { artifact: Artifact },
     Close,
 }
 
 impl Local {
     pub(super) fn new(plugins: PathBuf, app_data: PathBuf) -> Self {
+        let stopping = CancellationToken::new();
+        let plugins = Arc::new(plugins);
+        let app_data = Arc::new(app_data);
         Self {
-            plugins: Arc::new(plugins),
-            app_data: Arc::new(app_data),
-            stopping: CancellationToken::new(),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            pool: quickjs::Pool::new(plugins.clone(), app_data.clone(), stopping.clone()),
+            plugins,
+            app_data,
+            stopping,
             slots: Arc::new(Semaphore::new(WORKER_CAPACITY)),
         }
     }
@@ -76,6 +88,17 @@ impl Local {
         self.stopping.cancel();
         // Includes sockets upgraded but not yet running a worker.
         let _ = self.slots.acquire_many(WORKER_CAPACITY as u32).await;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        self.pool.wait().await;
+    }
+
+    pub(super) async fn observe(&self, server: &Arc<server::Server>) -> Result<(), server::Error> {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if LocalRuntime::selected() == Ok(LocalRuntime::QuickJs) {
+            self.pool.observe(server, server.connect().await?);
+        }
+        let _ = server;
+        Ok(())
     }
 }
 
@@ -113,23 +136,31 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         else {
             return Err("Expected a local worker artifact".into());
         };
-        let Artifact {
-            id,
-            entry_hash,
-            code_hash,
-        } = requested;
-        let plugins = local.plugins.clone();
-        let verified = tokio::task::spawn_blocking(move || {
-            let files = artifact(&plugins, &id, &entry_hash, &code_hash)?;
-            Ok::<_, String>((id, files))
-        })
-        .await
-        .map_err(|e| e.to_string())??;
-        Ok::<_, String>(verified)
+        Ok::<_, String>(requested)
     };
-    let (plugin, (entry, code)) = tokio::select! {
+    let requested = tokio::select! {
         _ = local.stopping.cancelled() => return Ok(()),
         result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
+    };
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    if LocalRuntime::selected()? == LocalRuntime::QuickJs {
+        return quickjs::connection(socket, &local.pool, requested).await;
+    }
+    let Artifact {
+        id: plugin,
+        entry_hash,
+        code_hash,
+    } = requested;
+    let plugins = local.plugins.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        let files = artifact(&plugins, &plugin, &entry_hash, &code_hash)?;
+        Ok::<_, String>((plugin, files))
+    });
+    let (plugin, (entry, code)) = tokio::select! {
+        _ = local.stopping.cancelled() => return Ok(()),
+        result = tokio::time::timeout(TIMEOUT, verified) => {
+            result.map_err(|_| "Local worker startup stalled")?.map_err(|e| e.to_string())??
+        }
     };
     let paths = tokamak_worker::search_paths();
     let mut env = client_env(|name| std::env::var(name).ok());
@@ -201,6 +232,14 @@ async fn relay(
                 }
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
+                Some(Request::Route { id, artifact }) => {
+                    drop((id, artifact));
+                    return Err("Bun does not route local contract calls".into());
+                }
+                Some(Request::Retire { artifact }) => {
+                    drop(artifact);
+                    return Err("Bun local workers belong to their socket".into());
+                }
             },
             line = output.next() => {
                 let line = line.ok_or("Local worker output closed")?.map_err(|e| e.to_string())?;

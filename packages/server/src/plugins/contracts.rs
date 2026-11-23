@@ -77,6 +77,15 @@ pub struct ContractDeclaration {
     pub name: String,
     pub place: ContractPlace,
     pub declaration_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_methods: Option<LocalDataMethods>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum LocalDataMethods {
+    All(bool),
+    Named(Vec<String>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

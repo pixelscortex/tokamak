@@ -1,10 +1,13 @@
 # Tokamak Runner
 
 The Runner combines a workspace server and the local runtime in one program. It
-owns the server's action process and starts a local plugin process when a client
-opens a worker socket. The window still resolves contracts and forwards calls
-to the workspace it is connected to, so a shared workspace can use the Runner
-on the person's own machine.
+owns the server's action process and up to 128 QuickJS local plugin processes.
+Each local process starts on its first call and stays alive until reload,
+process exit or Runner shutdown. A window socket carries calls and their
+workspace operations; closing the socket cancels its calls. The Runner routes
+plain-data contract calls to the provider's process, and the window continues
+to resolve contracts and answer workspace operations on its signed-in
+connection. With the Bun fallback, each worker socket still owns its process.
 
 To run a workspace from a terminal:
 

@@ -237,7 +237,7 @@ export interface Agent {
  * export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
  * ```
  */
-export const agent = contract<Agent>("agent", { place: "local" });
+export const agent = contract<Agent>("agent", { place: "local", dataMethods: ["info"] });
 
 /** The same local object is passed to both phases of a turn. */
 export interface TurnInfo {

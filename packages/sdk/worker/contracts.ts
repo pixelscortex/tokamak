@@ -1,17 +1,85 @@
 import { pathToFileURL } from "node:url";
-import { type ContractEntry, type ContractScope, type Provider } from "../src/internal/contracts";
+import {
+  contractData,
+  type ContractEntry,
+  type ContractScope,
+  type Provider,
+} from "../src/internal/contracts";
 import type { AuthContext, FunctionDefinition } from "../src/functions";
-import { callHost, type HostBridge } from "../src/host";
+import { callHost, type HostBridge, type HostOperations } from "../src/host";
+import { jsonSnapshot, type JsonValue } from "../src/values";
 
 type ProviderModule = { contractProviders?: Record<string, Provider<"local">> };
+export type ContractInvocation = {
+  plugin: string;
+  owner: string;
+  name: string;
+  registration: string;
+  method?: string;
+};
+
+function dataMethod(methods: true | readonly string[] | undefined, member: string) {
+  return methods === true || methods?.includes(member) === true;
+}
+
+function checkedProvider(module: ProviderModule, { plugin, owner, name, registration }: ContractInvocation) {
+  const provider = module.contractProviders?.[registration];
+  if (
+    !provider ||
+    provider.contract.name !== name ||
+    provider.contract.place !== "local" ||
+    (provider.contract.owner ?? plugin) !== owner
+  )
+    throw new Error(`Missing local contract registration: ${owner}/${name} ${registration}`);
+  return provider;
+}
+
+function localMethod(value: unknown) {
+  const method = value as FunctionDefinition | null | undefined;
+  return method?.kind === "local" ? method.invokeLocal : undefined;
+}
+
+export function dataContracts(root: ProviderModule) {
+  return async (target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue> => {
+    const provider = checkedProvider(root, target);
+    const { method, owner, name } = target;
+    const definition = provider.implementation;
+    const declared = provider.contract.dataMethods;
+    if (method === undefined) {
+      if (declared !== true) throw new Error(`Cannot describe live contract ${owner}/${name} remotely`);
+      const methods = Object.entries(definition)
+        .filter(([, value]) => typeof value === "function" || localMethod(value))
+        .map(([member]) => member);
+      return { data: contractData(definition, methods), methods };
+    }
+    const label = `Local contract ${owner}/${name}.${method}`;
+    if (!Object.hasOwn(definition, method) || !dataMethod(declared, method))
+      throw new Error(`${label} is not a plain-data method`);
+    if (!Array.isArray(args)) throw new Error(`${label} arguments must be an array`);
+    const value = definition[method];
+    const local = localMethod(value);
+    const auth = await callHost(bridge, "auth.current", {});
+    if (!auth) throw new Error("Local contracts require a signed-in caller");
+    if (local && args.length > 1) throw new Error(`${label} expects at most one argument`);
+    const implementation = bindProvider(definition, bridge, auth);
+    const handler = implementation[method];
+    if (typeof handler !== "function") throw new Error(`${label} is not a method`);
+    const result = await handler(...args);
+    return jsonSnapshot(result === undefined ? null : result, `${label} result`);
+  };
+}
 
 export function workerContracts(
   root: ProviderModule,
   load: (path: string) => Promise<ProviderModule> = (path) => import(pathToFileURL(path).href),
 ) {
+  // A plain provider's static metadata is scoped to its build. Once discovered,
+  // looking up a different provider doesn't depend on this process being up.
+  type Description = HostOperations["local.contract.describe"]["result"];
+  const descriptions = new Map<string, { build?: string; value: Description }>();
   return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
     return {
-      async list(key) {
+      async list(key, selected) {
         if (key.place !== "local") throw new Error("Server contracts run in server functions");
         const candidates = await callHost(bridge, "local.contracts", {
           name: key.name,
@@ -20,42 +88,91 @@ export function workerContracts(
         const auth = await callHost(bridge, "auth.current", {});
         if (!auth) throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
-        for (const { plugin: candidate, registration, path, own, owner } of candidates) {
-          const module = own ? root : await load(path);
-          const provider = module.contractProviders?.[registration];
-          if (
-            !provider ||
-            provider.contract.name !== key.name ||
-            provider.contract.place !== "local" ||
-            (provider.contract.owner ?? candidate) !== owner
-          )
-            throw new Error(`Missing local contract registration: ${registration}`);
-          const definition = provider.implementation;
-          const id = definition.id ?? candidate;
+        const resolve = async ({
+          plugin,
+          registration,
+          path,
+          own,
+          owner,
+          dataMethods,
+          build,
+        }: (typeof candidates)[number]) => {
+          const target = { plugin, owner, name: key.name, registration };
+          const remote =
+            (method: string) =>
+            (...args: unknown[]) =>
+              callHost(bridge, "local.contract.call", {
+                ...target,
+                method,
+                args: jsonSnapshot(
+                  args,
+                  `Local contract ${owner}/${key.name}.${method} arguments`,
+                ) as JsonValue[],
+              });
+          let implementation: Readonly<Record<string, unknown>>;
+          if (!own && dataMethods === true) {
+            const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
+            const cached = descriptions.get(cacheKey);
+            try {
+              const value =
+                cached && cached.build === build
+                  ? cached.value
+                  : await callHost(bridge, "local.contract.describe", target);
+              descriptions.set(cacheKey, { build, value });
+              implementation = Object.freeze({
+                ...value.data,
+                ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
+              });
+            } catch (error) {
+              if (selected === plugin) throw error;
+              return;
+            }
+          } else {
+            const module = own ? root : await load(path);
+            const { implementation: definition } = checkedProvider(module, target);
+            implementation = bindProvider(definition, host(own ? undefined : plugin), auth, (member) =>
+              !own && dataMethod(dataMethods, member) ? remote(member) : undefined,
+            );
+          }
+          return { plugin, implementation };
+        };
+        const resolved = [];
+        if (candidates.some((candidate) => candidate.dataMethods === true))
+          resolved.push(...(await Promise.all(candidates.map(resolve))));
+        else for (const candidate of candidates) resolved.push(await resolve(candidate));
+        for (const entry of resolved) {
+          if (!entry) continue;
+          const { plugin, implementation } = entry;
+          const id = implementation.id ?? plugin;
           if (typeof id !== "string" || !id || entries.has(id))
             throw new Error(`Invalid or duplicate provider id for ${key.name}: ${id}`);
-          entries.set(id, {
-            id,
-            implementation: bindProvider(definition, host(own ? undefined : candidate), auth),
-          });
+          entries.set(id, { id, implementation });
         }
         return [...entries.values()];
       },
     };
-    function bindProvider(definition: object, bridge: HostBridge, auth: AuthContext) {
-      const implementation: object = Object.freeze(
-        Object.fromEntries(
-          Object.entries(definition).map(([member, value]) => {
-            if (typeof value === "function")
-              return [member, (...args: unknown[]) => Reflect.apply(value, implementation, args)];
-            const method = value as FunctionDefinition | null | undefined;
-            if (method?.kind === "local" && method.invokeLocal)
-              return [member, (input: unknown = {}) => method.invokeLocal!(input, bridge, auth)];
-            return [member, value];
-          }),
-        ),
-      );
-      return implementation;
-    }
   };
+}
+
+function bindProvider(
+  definition: object,
+  bridge: HostBridge,
+  auth: AuthContext,
+  remote?: (member: string) => ((...args: unknown[]) => Promise<JsonValue>) | undefined,
+) {
+  const implementation: Readonly<Record<string, unknown>> = Object.freeze(
+    Object.fromEntries(
+      Object.entries(definition).map(([member, value]) => {
+        const routed = remote?.(member);
+        if (routed && (typeof value === "function" || localMethod(value))) return [member, routed];
+        if (typeof value === "function")
+          return [member, (...args: unknown[]) => Reflect.apply(value, implementation, args)];
+        const method = value as FunctionDefinition | null | undefined;
+        if (method?.kind === "local" && method.invokeLocal)
+          return [member, (input: unknown = {}) => method.invokeLocal!(input, bridge, auth)];
+        return [member, value];
+      }),
+    ),
+  );
+  return implementation;
 }

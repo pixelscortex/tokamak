@@ -205,6 +205,7 @@ async fn main() -> anyhow::Result<()> {
             }
             Err(error) => return Err(error.into()),
         };
+    local.observe(backend.server()).await?;
     let ws = format!("ws://{address}/ws");
     let control = match owner.publish(&ws) {
         Ok(control) => control,

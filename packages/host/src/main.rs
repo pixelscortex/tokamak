@@ -28,6 +28,12 @@ async fn main() -> anyhow::Result<()> {
             .ok_or_else(|| anyhow::anyhow!("Expected a server bundle path"))?;
         return action_process::inspect::run(std::path::Path::new(&bundle)).await;
     }
+    if code == "--local-plugin" {
+        let bundle = std::env::args_os()
+            .nth(3)
+            .ok_or_else(|| anyhow::anyhow!("Expected a plugin and a local function bundle path"))?;
+        return protocol::run(std::path::Path::new(&bundle)).await;
+    }
     protocol::run(std::path::Path::new(&code)).await
 }
 
