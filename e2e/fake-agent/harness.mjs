@@ -321,7 +321,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
      * A window on `address`; with `local`, also this computer's local part.
      * `env` changes the local part's environment (`undefined` leaves a variable out).
      */
-    async connect(address, { token, local = false, pluginsDir = plugins, onClose, env } = {}) {
+    async connect(address, { token, local = false, pluginsDir = plugins, onClose, env, observe } = {}) {
       const own = [];
       try {
         const client = await connect(address, {
@@ -333,6 +333,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
                 Object.fromEntries(
                   Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
                 ),
+                observe,
               )
             : undefined,
           cleanup: own,

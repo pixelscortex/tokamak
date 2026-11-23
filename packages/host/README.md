@@ -51,6 +51,9 @@ runs so low that QuickJS cannot run the rejection handler, the call can
 still be cancelled. Process exit fails outstanding calls, and the next call
 starts a new process.
 
+Local code can read the short worker environment through `process.env`. Changes
+to that JavaScript object do not change the host or its programs’ environment.
+
 The filesystem module supports Node-style error codes and string, file URL
 and byte-array paths. `cp` copies symlinks by default and supports
 `dereference`, `recursive`, `force`, `errorOnExist` and

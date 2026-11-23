@@ -182,6 +182,7 @@ async fn initialize<'js>(
     llrt_fetch::init(ctx)?;
     llrt_util::init(ctx)?;
     ctx.globals().set("console", Object::new(ctx.clone())?)?;
+    install_process_env(ctx)?;
     timers::install(ctx, immediates)?;
 
     let (module, evaluated) = Module::declare(
@@ -209,6 +210,20 @@ async fn initialize<'js>(
         ctx,
         ready.into_future::<Function>().await?,
     ))
+}
+
+fn install_process_env(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
+    let process = Object::new(ctx.clone())?;
+    let env = Object::new_proto(ctx.clone(), None)?;
+    // The launcher has already limited which variables enter the worker.
+    for (name, value) in std::env::vars_os() {
+        env.set(
+            name.to_string_lossy().as_ref(),
+            value.to_string_lossy().as_ref(),
+        )?;
+    }
+    process.set("env", env)?;
+    ctx.globals().set("process", process)
 }
 
 impl Drop for Runtime {

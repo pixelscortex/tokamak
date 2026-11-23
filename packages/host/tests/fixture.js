@@ -1,5 +1,5 @@
 import fs, { readFile, cp, realpath, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import path, { delimiter, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -12,6 +12,12 @@ let counter = 0;
 
 export const functions = {
   echo: local((value) => value),
+  pathConstants: local(() => [sep, delimiter, path.sep, path.delimiter]),
+  environment: local((name) => ({
+    value: process.env[name],
+    enumerable: Object.entries(process.env).some(([key]) => key === name),
+    missing: process.env.TOKAMAK_UNSET_FIXTURE === undefined,
+  })),
   loop: local(async () => {
     console.info("loop");
     while (true) {}
