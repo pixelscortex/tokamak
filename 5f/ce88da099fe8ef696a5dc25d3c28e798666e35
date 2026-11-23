@@ -1,0 +1,74 @@
+packages/server/tests/runner-routing.mjs
+  s_f5a108db34b8db::t_4016aafce29f8e 2-3,7,14-25,39,47,50-55,57-68,70-71
+  s_f5a108db34b8db::t_b711d0a9148844 56,69
+packages/sdk/README.md
+  s_f5a108db34b8db::t_8d5019abf7cdb9 639-647
+packages/runner/README.md
+  s_f5a108db34b8db::t_8d5019abf7cdb9 5-23,60-62,66-67,74-84
+  s_f5a108db34b8db::t_5f49868b0f8273 63-65,68-73
+packages/runner/tests/local-routing.mjs
+  s_f5a108db34b8db::t_cd82651ff8376c 3,8,31,54,56-64,69,73-76,104,106-109,115-118,121-126,130-133,139-144,156-157,165-170,174,194-198,200-201,211,214-215,217,224-230,232-236,238,246-286,288-313,315-324,326,328-330,332-335,337,339-341,343-347
+  s_f5a108db34b8db::t_4016aafce29f8e 348-374,376-379,383-392
+  s_f5a108db34b8db::t_8e5bd002a695bc 145,147-151,199,287,314,325,327,331,336,338,342,375,380-382
+packages/runner/src/local.rs
+  s_f5a108db34b8db::t_cd66133afb922c 49,154,156,165,252-253
+  s_f5a108db34b8db::t_b844830980bb99 60-82,151,162-163,256-257
+GLOSSARY.md
+  s_f5a108db34b8db::t_8d5019abf7cdb9 123-130
+packages/runner/tests/support/routing.mjs
+  s_f5a108db34b8db::t_cd82651ff8376c 1-87,89-107
+  s_f5a108db34b8db::t_7f681ed42e1d8c 88
+packages/runtime/js/runner.ts
+  s_f5a108db34b8db::t_b844830980bb99 25,29,54,58,127-128,131-132
+packages/server/PLUGINS.md
+  s_f5a108db34b8db::t_8d5019abf7cdb9 273-287
+packages/runtime/js/local.ts
+  s_f5a108db34b8db::t_b844830980bb99 56,70,142-148,174,176,183-189,191-192,196-235,273-274,281,284,331-334,336-339,363-364,394,490-492,503,529-531,533-534,536-543,547-548
+  s_f5a108db34b8db::t_93a3290fb91433 49,55,335,535
+packages/runner/src/local/quickjs.rs
+  s_f5a108db34b8db::t_cd66133afb922c 28-47,51,53,58-63,74-79,82-88,93-100,105-113,118-128,130,141-145,147,149-168,174-175,236,238,241-242,251-253,258-260,263,267-269,278,281,284,289,300-303,305,309,332,335,339-346,348-351,357,370-371,387,393-395,405,427,439,441,443,454-464,468-482,486-490
+  s_f5a108db34b8db::t_b844830980bb99 7,48-50,52,54-57,101-104,114-117,129,131-140,146,148,169-173,210,235,237,240,245-250,273,276,317-331,336-338,381-386,445,452-453,465-467,483-485
+  s_f5a108db34b8db::t_4a373ca97dcdaf 11,176,216-220,226-229,231,270,279,333,440,442,444,446-451,491
+packages/runner/src/local/quickjs/session.rs
+  s_f5a108db34b8db::t_b844830980bb99 1-2,26-32,44,79-85,89,92-95,115,122,126-129,152,154,158,163,172-174,203,208,215,217-220,230,251,256,258,260,262-269,282,284
+.ci/check.sh
+  s_f5a108db34b8db::t_08598c4814bff6 27-31,54-61,64-65,68-70
+e2e/fake-agent/build-fixtures.mjs
+  s_f5a108db34b8db::t_5dd864352a0c17 1-7
+e2e/fake-agent/harness.mjs
+  s_f5a108db34b8db::t_b88260162e18f9 86-96,105,194,202,206-207,321-326
+packages/host/README.md
+  s_f5a108db34b8db::t_6d2e2e72afda0d 38-41,43-48
+packages/runner/tests/agent-routing.mjs
+  s_f5a108db34b8db::t_39f49f2e96ba74 1-188
+packages/runner/tests/lifecycle.rs
+  s_f5a108db34b8db::t_0e8616c58d926d 838-851
+packages/runner/tests/measure-linux-memory.mjs
+  s_f5a108db34b8db::t_6c7a9de6382dd6 1-136
+packages/sdk/src/internal/contracts.ts
+  s_f5a108db34b8db::t_d3d73a1508a1ed 90-98,103
+packages/sdk/src/values.ts
+  s_f5a108db34b8db::t_48dd3dbefded25 37,45,52,58,67-68,72,79
+packages/sdk/tests/fixtures/types/positive.ts.txt
+  s_f5a108db34b8db::t_e1acfb61b3fe78 3,23-36
+packages/sdk/tools/contracts.mjs
+  s_f5a108db34b8db::t_6c5acb5be2539f 76,80-81
+packages/sdk/worker/contracts.ts
+  s_f5a108db34b8db::t_cc47e92137dece 2,5-19,62-65,80,103,120,140,144-155,171-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5fce88da099fe8ef696a5dc25d3c28e798666e35",
+  "prompts": {},
+  "sessions": {
+    "s_f5a108db34b8db": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20a22-c433-7422-842b-5068df2475bc",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
