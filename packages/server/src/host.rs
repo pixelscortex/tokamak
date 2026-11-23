@@ -308,6 +308,9 @@ use database_operations::{field, text};
 
 mod database_queries;
 
+mod process_frames;
+
+#[cfg(feature = "local-runtime")]
 pub(crate) mod worker;
 
 async fn finish_transaction(

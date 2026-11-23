@@ -7,7 +7,7 @@ use tokio::{
 use tokio_util::task::AbortOnDropHandle;
 
 use super::*;
-use crate::host::worker::process::{operation_reply, read_frame, write_messages};
+use crate::host::process_frames::{operation_reply, read_frame, write_messages};
 
 type OpResult = (u64, u64, Result<Value, String>, OwnedSemaphorePermit);
 

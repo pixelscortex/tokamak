@@ -279,6 +279,7 @@ impl Coordinator {
         let Some(previous) = &self.plugins else {
             return;
         };
+        #[cfg(feature = "local-runtime")]
         for worker in previous.workers.values() {
             worker.stop().await;
         }

@@ -9,13 +9,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../sdk/src");
     println!("cargo:rerun-if-changed=../sdk/worker");
     let path = PathBuf::from(env::var_os("OUT_DIR").ok_or("missing Cargo OUT_DIR")?);
-    for (source, output) in [
-        ("quickjs.ts", "entry.js"),
-        ("action-process.ts", "actions.js"),
-    ] {
-        bundle(&path, source, output)?;
+    if env::var_os("CARGO_FEATURE_LOCAL_RUNTIME").is_some() {
+        bundle(&path, "quickjs.ts", "entry.js")?;
     }
-    Ok(())
+    bundle(&path, "action-process.ts", "actions.js")
 }
 
 fn bundle(

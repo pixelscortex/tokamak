@@ -3,7 +3,7 @@ use std::{path::Path, time::Duration};
 use serde_json::Value;
 use tokio::io::BufReader;
 
-use crate::host::worker::process::read_frame;
+use crate::host::process_frames::read_frame;
 
 pub(crate) async fn inspect_legacy(code: &Path) -> Result<bool, String> {
     inspect(code, None, "older plugin bundle").await?["hasActions"]

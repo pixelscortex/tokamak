@@ -6,6 +6,12 @@ opens a worker socket. The window still resolves contracts and forwards calls
 to the workspace it is connected to, so a shared workspace can use the Runner
 on the person's own machine.
 
+Install the Runner on desktops, real machines and sandboxes. For Docker or a
+cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).
+Keep the Runner's full plugin host separate from the Server's actions-only host.
+On macOS and Linux, a QuickJS Runner checks for `local` in the output of
+`tokamak-plugin-host --capabilities` before it starts listening.
+
 To run a workspace from a terminal:
 
 ```sh

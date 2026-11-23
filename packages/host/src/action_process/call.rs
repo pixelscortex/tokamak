@@ -25,7 +25,7 @@ use super::{
     output::LogShare,
     realm::Realm,
 };
-use crate::{modules, runtime::Watchdog};
+use crate::{builtins, watchdog::Watchdog};
 
 const LOAD_TIMEOUT: Duration = Duration::from_secs(6);
 
@@ -233,7 +233,7 @@ impl Resolver for Builtins {
             return Ok(name.to_owned());
         }
 
-        modules::action_builtin(name)
+        builtins::action_builtin(name)
             .map(str::to_owned)
             .ok_or_else(|| {
                 Exception::throw_reference(
@@ -251,6 +251,6 @@ impl Loader for Builtins {
         name: &str,
         _: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js>> {
-        modules::load_builtin(ctx.clone(), name)
+        builtins::load_builtin(ctx.clone(), name)
     }
 }

@@ -4,26 +4,38 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+default = ["local-runtime"]
+local-runtime = [
+  "tokamak-worker/local-runtime",
+  "tokio/fs",
+  "tokio/process",
+  "dep:llrt_abort",
+  "dep:llrt_fetch",
+  "dep:llrt_stream_web",
+  "dep:llrt_util",
+]
+
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 anyhow = "1"
 engine = { path = "../engine" }
 libc = "0.2"
 rquickjs = { version = "=0.14.0", features = ["futures", "loader"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
-tokio = { version = "1.54.1", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
-tokamak-worker = { path = "../worker" }
-llrt_abort = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
+tokio = { version = "1.54.1", features = ["io-util", "macros", "rt", "sync", "time"] }
+tokamak-worker = { path = "../worker", default-features = false }
+llrt_abort = { optional = true, git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
-llrt_fetch = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58", default-features = false, features = [
+llrt_fetch = { optional = true, git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58", default-features = false, features = [
   "http1",
-  "tls-ring",
+  "tls-aws-lc",
   "webpki-roots",
 ] }
-llrt_util = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
+llrt_util = { optional = true, git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_os = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_path = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
-llrt_stream_web = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
+llrt_stream_web = { optional = true, git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_url = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 
 [lints]
@@ -31,3 +43,11 @@ workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dev-dependencies]
 tokio = { version = "1.54.1", features = ["io-util", "process"] }
+
+[[test]]
+name = "programs"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "protocol"
+required-features = ["local-runtime"]

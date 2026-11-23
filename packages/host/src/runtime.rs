@@ -3,7 +3,6 @@ use std::{
     future::{Future, poll_fn},
     rc::Rc,
     sync::Arc,
-    time::{Duration, Instant},
 };
 
 use anyhow::{Result, anyhow};
@@ -17,39 +16,13 @@ use crate::{
     programs::Programs,
     protocol::Output,
     timers,
+    watchdog::Watchdog,
 };
 
-const YIELD_LIMIT: Duration = Duration::from_secs(5);
 const HEAP_ENV: &str = "TOKAMAK_PLUGIN_HOST_HEAP_MIB";
 
 pub fn heap_bytes() -> Result<usize> {
     tokamak_worker::configured_heap_bytes(HEAP_ENV).map_err(anyhow::Error::msg)
-}
-
-#[derive(Default)]
-pub(crate) struct Watchdog {
-    deadline: Cell<Option<Instant>>,
-    tripped: Cell<bool>,
-}
-
-impl Watchdog {
-    pub(crate) fn poll<T>(&self, run: impl FnOnce() -> T) -> T {
-        self.deadline.set(Some(Instant::now() + YIELD_LIMIT));
-        let result = run();
-        self.deadline.set(None);
-        result
-    }
-
-    pub(crate) fn tripped(&self) -> bool {
-        self.tripped.get()
-    }
-
-    pub(crate) fn interrupt(&self) -> bool {
-        if self.deadline.get().is_some_and(|end| Instant::now() >= end) {
-            self.tripped.set(true);
-        }
-        self.tripped.get()
-    }
 }
 
 type Dispatch = Persistent<Function<'static>>;
@@ -109,7 +82,7 @@ impl Runtime {
             let mut startup = std::pin::pin!(startup);
             poll_fn(|cx| {
                 let result = watchdog.poll(|| startup.as_mut().poll(cx));
-                if watchdog.tripped.get() {
+                if watchdog.tripped() {
                     return std::task::Poll::Ready(Err(anyhow!(
                         "QuickJS plugin startup did not yield for 5 seconds"
                     )));
@@ -135,7 +108,7 @@ impl Runtime {
     }
 
     pub fn interrupted(&self) -> bool {
-        self.watchdog.tripped.get()
+        self.watchdog.tripped()
     }
 
     pub async fn drive(&self) {
@@ -193,7 +166,7 @@ async fn initialize<'js>(
     evaluated.into_future::<()>().await?;
     let initialize: Function = module.get("initialize")?;
     let send = Func::from(move |ctx: Ctx<'js>, line: String| {
-        if watchdog.tripped.get() {
+        if watchdog.tripped() {
             return Ok(());
         }
         output

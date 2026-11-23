@@ -353,8 +353,8 @@ async fn initialize_standalone_schema(
 }
 
 fn quickjs_actions() -> Result<bool, Error> {
-    tokamak_worker::LocalRuntime::selected()
-        .map(|runtime| runtime == tokamak_worker::LocalRuntime::QuickJs)
+    crate::action_runtime()
+        .map(|runtime| runtime == "quickjs")
         .map_err(Error::Invalid)
 }
 

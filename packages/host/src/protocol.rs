@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{self, BufRead, Write},
+    io::{self, Write},
     path::Path,
     sync::{Arc, Mutex},
     thread,
@@ -11,7 +11,11 @@ use serde_json::{Value, json};
 use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::sync::mpsc;
 
-use crate::{modules::Bundles, runtime::Runtime};
+use crate::{
+    modules::Bundles,
+    pipe::{read_frame, shutdown},
+    runtime::Runtime,
+};
 
 const OUTPUT_BYTES: usize = 4 * WORKER_FRAME_BYTES;
 const CANCELLED: &str = "Plugin local function cancelled";
@@ -156,28 +160,6 @@ fn id(value: &Value) -> Result<u64> {
         .context("Invalid worker frame id")
 }
 
-pub(crate) fn read_frame(reader: &mut impl BufRead) -> Result<Option<Value>> {
-    let mut line = Vec::new();
-    loop {
-        let buffer = reader.fill_buf()?;
-        if buffer.is_empty() {
-            ensure!(line.is_empty(), "Truncated worker frame");
-            return Ok(None);
-        }
-        let end = buffer.iter().position(|byte| *byte == b'\n');
-        let count = end.unwrap_or(buffer.len());
-        ensure!(
-            line.len() + count < WORKER_FRAME_BYTES,
-            "Worker message exceeds 1 MiB limit"
-        );
-        line.extend_from_slice(&buffer[..count]);
-        reader.consume(count + usize::from(end.is_some()));
-        if end.is_some() {
-            return Ok(Some(serde_json::from_slice(&line)?));
-        }
-    }
-}
-
 fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
     let mut reader = io::stdin().lock();
     while let Some(frame) = read_frame(&mut reader)? {
@@ -198,14 +180,6 @@ fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
             .context("Worker input queue closed")?;
     }
     Ok(())
-}
-
-pub(crate) fn shutdown() -> ! {
-    // The launcher makes the host the process group leader.
-    unsafe {
-        libc::kill(-libc::getpid(), libc::SIGKILL);
-    }
-    std::process::exit(0);
 }
 
 fn write_output(state: Shared, mut output: mpsc::UnboundedReceiver<String>) -> io::Result<()> {

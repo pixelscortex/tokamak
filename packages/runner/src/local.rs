@@ -15,6 +15,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
+    collections::VecDeque,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -22,7 +23,7 @@ use std::{
 use tempfile::TempPath;
 use tokamak_worker::{LocalRuntime, Process, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     sync::{Semaphore, mpsc},
 };
 use tokio_util::{
@@ -32,6 +33,8 @@ use tokio_util::{
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
+const STDERR_BYTES: usize = 4096;
+const STDERR_LINES: usize = 8;
 
 #[derive(Clone)]
 pub(super) struct Local {
@@ -142,10 +145,8 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
     }
     let cwd = local.plugins.parent().unwrap_or(&local.plugins);
     let (mut process, runtime) = Process::launch_local(&entry, &code, cwd, &env, &paths)?;
-    let (input, output, mut stderr) = process.pipes()?;
-    let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
-        let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
-    }));
+    let (input, output, stderr) = process.pipes()?;
+    let mut stderr = AbortOnDropHandle::new(tokio::spawn(stderr_tail(stderr)));
     let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
     let relay = async {
         send(socket, json!({ "type": "started" })).await?;
@@ -158,10 +159,40 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         result = relay => result,
     };
     process.stop().await;
-    result.map_err(|reason| match runtime {
-        LocalRuntime::QuickJs => format!("Plugin host closed: {reason}"),
-        LocalRuntime::Bun => reason,
-    })
+    match (result, runtime) {
+        (Err(reason), LocalRuntime::QuickJs) => {
+            let mut error = format!("Plugin host closed: {reason}");
+            // Reap first so ordinary pipe EOF delivers the final diagnostic.
+            // A descendant retaining stderr must not stall the response.
+            if let Ok(Ok(tail)) = tokio::time::timeout(Duration::from_secs(1), &mut stderr).await
+                && !tail.is_empty()
+            {
+                error.push_str(":\n");
+                error.push_str(&tail);
+            }
+            Err(error)
+        }
+        (result, _) => result,
+    }
+}
+
+async fn stderr_tail(mut input: impl AsyncRead + Unpin) -> String {
+    let mut tail = VecDeque::with_capacity(STDERR_BYTES);
+    let mut chunk = [0; STDERR_BYTES];
+    while let Ok(count) = input.read(&mut chunk).await {
+        if count == 0 {
+            break;
+        }
+        let discard = (tail.len() + count).saturating_sub(STDERR_BYTES);
+        tail.drain(..discard);
+        tail.extend(&chunk[..count]);
+    }
+    let text = String::from_utf8_lossy(tail.make_contiguous());
+    let text = text.trim_end();
+    let start = text.match_indices('\n').rev().nth(STDERR_LINES - 1);
+    start
+        .map_or(text, |(index, _)| &text[index + 1..])
+        .to_owned()
 }
 
 async fn relay(

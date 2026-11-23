@@ -2,13 +2,17 @@ use tokio::task::JoinSet;
 
 use super::*;
 use crate::{
-    host::{action_process::Source, worker::Supervisor},
+    host::action_process::Source,
     service::{FunctionKind, InspectedBundle},
 };
+
+#[cfg(feature = "local-runtime")]
+use crate::host::worker::Supervisor;
 
 const ACTION_INSPECTIONS: usize = 8;
 
 struct Prepared {
+    #[cfg(feature = "local-runtime")]
     worker: Option<Arc<Supervisor>>,
     server: Option<PreparedServer>,
 }
@@ -82,6 +86,7 @@ impl Loaded {
             catalog_text: String::new(),
             inspected: BTreeMap::new(),
             contracts: BTreeMap::new(),
+            #[cfg(feature = "local-runtime")]
             workers: BTreeMap::new(),
             action_sources: BTreeMap::new(),
             skipped: BTreeMap::new(),
@@ -179,6 +184,7 @@ impl Loaded {
         reloaded: bool,
     ) -> Result<Prepared, Error> {
         let artifact = &catalog.plugins[id];
+        #[cfg(feature = "local-runtime")]
         let worker = if quickjs {
             None
         } else {
@@ -244,7 +250,11 @@ impl Loaded {
             validate_maintenance(artifact, None)?;
             None
         };
-        Ok(Prepared { worker, server })
+        Ok(Prepared {
+            #[cfg(feature = "local-runtime")]
+            worker,
+            server,
+        })
     }
 
     fn apply_plugin(
@@ -259,7 +269,11 @@ impl Loaded {
             return Ok(());
         }
 
-        let Prepared { worker, server } = match prepared {
+        let Prepared {
+            #[cfg(feature = "local-runtime")]
+            worker,
+            server,
+        } = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
                 if policy == StartupPolicy::Strict
@@ -299,6 +313,7 @@ impl Loaded {
             }
             self.inspected.insert(id.clone(), inspected);
         }
+        #[cfg(feature = "local-runtime")]
         if let Some(worker) = worker {
             self.workers.insert(id, worker);
         }
@@ -328,6 +343,7 @@ impl Loaded {
             .retain(|_, target| !skipped.contains_key(&target.owner));
         self.action_sources
             .retain(|id, _| !skipped.contains_key(id));
+        #[cfg(feature = "local-runtime")]
         self.workers.retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
         Ok(())
@@ -524,6 +540,7 @@ fn client_descriptors(
         .collect()
 }
 
+#[cfg(feature = "local-runtime")]
 fn prepare_worker(
     catalog: &Catalog,
     id: &str,

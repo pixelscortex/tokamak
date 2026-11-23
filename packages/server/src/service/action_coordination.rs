@@ -92,6 +92,7 @@ impl Coordinator {
             id,
             bundle,
             local_name,
+            #[cfg(feature = "local-runtime")]
             owner.as_deref(),
             args,
             ops,
@@ -109,16 +110,18 @@ impl Coordinator {
         id: u64,
         bundle: Arc<Bundle>,
         local_name: String,
-        owner: Option<&str>,
+        #[cfg(feature = "local-runtime")] owner: Option<&str>,
         args: Json,
         ops: Arc<engine::OpRegistry>,
         environment: Arc<crate::environment::Snapshot>,
     ) {
+        #[cfg(feature = "local-runtime")]
         let worker = self
             .plugins
             .as_ref()
             .and_then(|p| owner.and_then(|owner| p.workers.get(owner)))
             .cloned();
+        #[cfg(feature = "local-runtime")]
         if let Some(worker) = worker {
             self.action_jobs.spawn(async move {
                 (
@@ -160,6 +163,7 @@ impl Coordinator {
             process.stop().await;
         }
 
+        #[cfg(feature = "local-runtime")]
         if let Some(loaded) = &self.plugins {
             for worker in loaded.workers.values() {
                 worker.stop().await;

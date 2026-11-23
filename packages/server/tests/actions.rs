@@ -333,7 +333,7 @@ fn reload_cancels_running_action_and_keeps_the_lane_usable() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
-    if tokamak_worker::LocalRuntime::selected().unwrap() != tokamak_worker::LocalRuntime::QuickJs {
+    if server::action_runtime().unwrap() != "quickjs" {
         eprintln!("Skipping action process reload isolation: Bun has no shared action process");
         return;
     }
@@ -625,7 +625,7 @@ fn configure_action_process_resolver(
 ) {
     use std::os::unix::fs::PermissionsExt;
 
-    if tokamak_worker::LocalRuntime::selected().unwrap() != tokamak_worker::LocalRuntime::QuickJs {
+    if server::action_runtime().unwrap() != "quickjs" {
         return;
     }
 
@@ -635,11 +635,7 @@ fn configure_action_process_resolver(
         format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
     }
 
-    let executable = std::env::current_exe().unwrap();
-    let host = executable
-        .parent()
-        .unwrap()
-        .with_file_name("tokamak-plugin-host");
+    let host = tokamak_worker::Process::action_host_path().unwrap();
     let wrapper = directory.join("action-process-with-resolver");
     std::fs::write(&wrapper, format!(
         "#!/bin/sh\nexport {}={} TKM45_DNS_LOG={} TKM45_DNS_RELEASE={} TKM45_TEST_CONNECT_LOG={}\nexec {} \"$@\"\n",
