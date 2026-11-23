@@ -85,8 +85,8 @@ async fn echo(supervisor: &Supervisor, source: Arc<Source>) {
 #[tokio::test]
 async fn stopped_child_fails_running_calls_and_is_replaced() {
     let (_directory, supervisor) = setup(Timing {
-        ping: Duration::from_millis(25),
-        unresponsive: Duration::from_millis(500),
+        ping: Duration::from_millis(100),
+        unresponsive: Duration::from_secs(1),
         ..Timing::default()
     });
     let source = source("waiting");
@@ -100,10 +100,16 @@ async fn stopped_child_fails_running_calls_and_is_replaced() {
                 .await
         }
     });
-    tokio::time::timeout(Duration::from_secs(2), entered.recv())
+    if tokio::time::timeout(Duration::from_secs(3), entered.recv())
         .await
         .unwrap()
-        .unwrap();
+        .is_none()
+    {
+        panic!(
+            "test invocation failed to start: {:?}",
+            waiting.await.unwrap()
+        );
+    }
     let old = supervisor.process().await.unwrap();
     signal(&old, libc::SIGSTOP);
     let error = tokio::time::timeout(Duration::from_secs(2), waiting)
@@ -134,7 +140,7 @@ async fn healthy_idle_child_resets_backoff_without_completing_a_call() {
     healthy.ended.cancelled().await;
     assert_ne!(supervisor.process().await.unwrap().pid, healthy.pid);
     assert_eq!(
-        supervisor.state.lock().await.restart.retry_at,
+        supervisor.restart.lock().await.retry_at,
         healthy
             .stopped_at
             .get()

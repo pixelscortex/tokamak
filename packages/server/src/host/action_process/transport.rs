@@ -335,9 +335,8 @@ async fn drain_stderr(mut stderr: tokio::process::ChildStderr) {
         if n == 0 {
             break;
         }
-        tokamak_worker::log(format!(
-            "Action process: {}",
-            String::from_utf8_lossy(&chunk[..n])
-        ));
+        for line in String::from_utf8_lossy(&chunk[..n]).lines() {
+            tokamak_worker::log(format!("action process: {line}"));
+        }
     }
 }

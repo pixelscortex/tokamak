@@ -227,26 +227,35 @@ impl Installation {
         let target = self.plugins().join(variant.id);
         let _ = std::fs::remove_dir_all(&target);
         std::fs::create_dir(&target).unwrap();
-        for file in ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"] {
+        for file in [
+            "manifest.json",
+            "bundle.js",
+            "bundle.js.map",
+            "api.ts",
+            "transactions.js",
+            "transactions.js.map",
+        ] {
             std::fs::copy(dist.join(file), target.join(file)).unwrap();
         }
     }
     /// Rewrites an installed bundle (and its manifest hash) the way a bundle
     /// built by an older SDK or a non-SDK tool would differ.
     fn rewrite_bundle(&self, id: &str, from: &str, to: &str) {
-        let path = self.plugins().join(id).join("bundle.js");
-        let source = std::fs::read_to_string(&path).unwrap();
-        assert!(
-            source.contains(from),
-            "bundle rewrite target missing: {from}"
-        );
-        let changed = source.replace(from, to);
-        std::fs::write(&path, &changed).unwrap();
-        let manifest_path = self.plugins().join(id).join("manifest.json");
+        let root = self.plugins().join(id);
+        let manifest_path = root.join("manifest.json");
         let mut manifest: Value =
             serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
-        manifest["hashes"]["bundle.js"] =
-            format!("{:x}", Sha256::digest(changed.as_bytes())).into();
+        for name in ["bundle.js", "transactions.js"] {
+            let path = root.join(name);
+            let source = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                source.contains(from),
+                "{name}: bundle rewrite target missing: {from}"
+            );
+            let changed = source.replace(from, to);
+            std::fs::write(&path, &changed).unwrap();
+            manifest["hashes"][name] = format!("{:x}", Sha256::digest(changed.as_bytes())).into();
+        }
         std::fs::write(manifest_path, manifest.to_string()).unwrap();
     }
     fn edit_manifest(&self, id: &str, edit: impl FnOnce(&mut Value)) {
@@ -1597,7 +1606,8 @@ fn chat_starts_with_current_schema_and_keeps_legacy_messages() {
 async fn start_chat_schema(installation: &Installation, space: &DataSpace, schema: Value) {
     let source =
         format!("export function describe() {{ return {{ schema: {schema}, functions: [] }}; }}");
-    let bundle = Arc::new(Bundle::new(source, None).unwrap());
+    let bundle = || Bundle::new(source.clone(), None).unwrap();
+    let bundle = Arc::new(bundle().with_transactions(bundle()));
     let database = Database::open(installation.storage()).await.unwrap();
     let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
     let server = Server::load_in_space(database, pool, bundle, space.clone())

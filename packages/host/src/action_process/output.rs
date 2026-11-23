@@ -1,6 +1,7 @@
 use std::{
+    collections::HashMap,
     io::{self, Write},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
 };
 
 use anyhow::{Context, Result, ensure};
@@ -26,6 +27,16 @@ struct Queue {
     logs: usize,
 }
 
+impl Queue {
+    fn written(&mut self, line: Line) {
+        self.bytes -= line.bytes.len();
+        if let Some(logs) = line.logs {
+            self.logs -= line.bytes.len();
+            logs.lock().expect("plugin log share").queued -= line.bytes.len();
+        }
+    }
+}
+
 struct Line {
     bytes: Vec<u8>,
     logs: Option<LogShare>,
@@ -34,6 +45,7 @@ struct Line {
 pub(super) struct Output {
     writer: mpsc::UnboundedSender<Line>,
     queue: Arc<Mutex<Queue>>,
+    plugins: Mutex<HashMap<String, Weak<Mutex<PluginLogs>>>>,
 }
 
 impl Output {
@@ -52,16 +64,26 @@ impl Output {
                     crate::protocol::shutdown();
                 }
 
-                let mut queue = queued.lock().expect("action process output");
-                queue.bytes -= line.bytes.len();
-                if let Some(logs) = line.logs {
-                    queue.logs -= line.bytes.len();
-                    logs.lock().expect("plugin log share").queued -= line.bytes.len();
-                }
+                queued.lock().expect("action process output").written(line);
             }
         });
 
-        Self { writer, queue }
+        Self {
+            writer,
+            queue,
+            plugins: Mutex::default(),
+        }
+    }
+
+    pub fn share(&self, plugin: String) -> LogShare {
+        let mut plugins = self.plugins.lock().expect("action process log shares");
+        if let Some(share) = plugins.get(&plugin).and_then(Weak::upgrade) {
+            return share;
+        }
+        plugins.retain(|_, share| share.strong_count() > 0);
+        let share = LogShare::default();
+        plugins.insert(plugin, Arc::downgrade(&share));
+        share
     }
 
     pub fn send(&self, slot: u64, mut frame: Value) -> Result<()> {
@@ -147,4 +169,67 @@ fn encode(frame: &Value) -> Result<Vec<u8>> {
         }
     );
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_plugins_log_flood_leaves_other_traffic_and_reports_recovery() {
+        let (writer, mut receive) = mpsc::unbounded_channel();
+        let queue = Arc::new(Mutex::new(Queue::default()));
+        let output = Output {
+            writer,
+            queue: queue.clone(),
+            plugins: Mutex::default(),
+        };
+        let noisy = output.share("noisy".into());
+        let same_plugin = output.share("noisy".into());
+        let peer = output.share("peer".into());
+        let log = json!({"type":"log","text":"x".repeat(8192)});
+        for _ in 0..500 {
+            output.log(1, log.clone(), &noisy).unwrap();
+            output.log(3, log.clone(), &same_plugin).unwrap();
+        }
+        assert!(noisy.lock().unwrap().queued <= PLUGIN_LOG_BYTES);
+        let dropped = noisy.lock().unwrap().dropped;
+        assert!(dropped > 0);
+        output
+            .log(2, json!({"type":"log","text":"peer log"}), &peer)
+            .unwrap();
+        output
+            .send(
+                2,
+                json!({"type":"op","id":1,"payload":"x".repeat(512 * 1024)}),
+            )
+            .unwrap();
+
+        let mut peer_output = Vec::new();
+        while let Ok(line) = receive.try_recv() {
+            let frame: Value = serde_json::from_slice(&line.bytes).unwrap();
+            if frame["slot"] == 2 {
+                peer_output.push(frame);
+            }
+            queue.lock().unwrap().written(line);
+        }
+        assert_eq!(peer_output.len(), 2);
+        assert_eq!(peer_output[0]["text"], "peer log");
+        assert_eq!(peer_output[1]["type"], "op");
+
+        for _ in 0..2 {
+            output.log(1, log.clone(), &noisy).unwrap();
+        }
+        let texts: Vec<_> = std::iter::from_fn(|| receive.try_recv().ok())
+            .map(|line| serde_json::from_slice::<Value>(&line.bytes).unwrap()["text"].clone())
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                json!(format!("{dropped} log lines dropped")),
+                log["text"].clone(),
+                log["text"].clone()
+            ]
+        );
+    }
 }

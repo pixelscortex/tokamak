@@ -97,9 +97,10 @@ writes and schema migrations remain deferred.
 
 ## Actions
 
-`action({...})` (also returned by `createFunctions`) runs on a separate worker
-lane, with a heap cap and no load/call deadline. Actions keep the real clock and
-randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
+`action({...})` (also returned by `createFunctions`) runs separately from
+queries and mutations. The default runtime caps the heap and has no load or call
+deadline. See [plugin action runtimes](#plugin-action-runtimes) for the optional
+QuickJS action process. Actions keep the real clock and randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
 call rejoins the serialized coordinator and owns its own transaction. The action
 itself is never retried; external effects and earlier mutations remain after a
 later failure. Queries and mutations cannot call actions or fetch.

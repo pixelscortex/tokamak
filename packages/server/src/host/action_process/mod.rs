@@ -173,15 +173,9 @@ impl Default for InvocationOptions {
     }
 }
 
-#[derive(Default)]
-struct State {
-    process: Option<Arc<Running>>,
-    restart: Restart,
-}
-
 pub(crate) struct Supervisor {
     runtime: Handle,
-    state: Mutex<State>,
+    restart: Mutex<Restart>,
     current: ArcSwapOption<Running>,
     closed: CancellationToken,
     slots: Arc<Semaphore>,
@@ -199,7 +193,7 @@ impl Supervisor {
     fn with_timing(host: PathBuf, heap: usize, timing: Timing) -> Arc<Self> {
         Arc::new(Self {
             runtime: Handle::current(),
-            state: Mutex::default(),
+            restart: Mutex::default(),
             current: ArcSwapOption::empty(),
             closed: CancellationToken::new(),
             slots: Arc::new(Semaphore::new(WORKER_CAPACITY)),
@@ -212,21 +206,21 @@ impl Supervisor {
 
     async fn process(&self) -> Result<Arc<Running>, String> {
         loop {
-            let mut state = self.state.lock().await;
+            let mut restart = self.restart.lock().await;
             if self.closed.is_cancelled() {
                 return Err("Action process stopped".into());
             }
 
-            if let Some(process) = &state.process {
+            if let Some(process) = self.current.load_full() {
                 if !process.stop.is_cancelled()
                     && !process.ended.is_cancelled()
                     && !process.commands.is_closed()
                 {
-                    return Ok(process.clone());
+                    return Ok(process);
                 }
                 if !process.ended.is_cancelled() {
                     let ended = process.ended.clone();
-                    drop(state);
+                    drop(restart);
                     ended.cancelled().await;
                     continue;
                 }
@@ -236,17 +230,12 @@ impl Supervisor {
                     .copied()
                     .unwrap_or_else(Instant::now);
                 let healthy = stopped.duration_since(process.started) >= self.timing.healthy;
-                state.restart.failed(stopped, healthy);
-                state.process = None;
+                restart.failed(stopped, healthy);
                 self.current.store(None);
             }
 
-            if let Some(retry) = state
-                .restart
-                .retry_at
-                .filter(|retry| *retry > Instant::now())
-            {
-                drop(state);
+            if let Some(retry) = restart.retry_at.filter(|retry| *retry > Instant::now()) {
+                drop(restart);
                 tokio::select! {
                     () = self.closed.cancelled() => return Err("Action process stopped".into()),
                     () = tokio::time::sleep_until(retry) => {}
@@ -256,12 +245,11 @@ impl Supervisor {
 
             match transport::start(&self.runtime, &self.host, self.timing) {
                 Ok(process) => {
-                    state.process = Some(process.clone());
                     self.current.store(Some(process.clone()));
                     return Ok(process);
                 }
                 Err(error) => {
-                    state.restart.failed(Instant::now(), false);
+                    restart.failed(Instant::now(), false);
                     return Err(error);
                 }
             }
@@ -312,7 +300,7 @@ impl Supervisor {
         };
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let frame = json!({
-            "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,
+            "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,"pluginName":source.name,
             "path":source.path(),"persistent":source.persistent,"heap":self.heap,
             "permissions":ops.network_permissions(),"network":!options.anonymous,
         });
@@ -362,7 +350,10 @@ impl Supervisor {
 
     pub(crate) async fn stop(&self) {
         self.closed.cancel();
-        let process = self.state.lock().await.process.clone();
+        let process = {
+            let _launch = self.restart.lock().await;
+            self.current.load_full()
+        };
         if let Some(process) = process {
             process.stop.cancel();
             process.ended.cancelled().await;
@@ -372,7 +363,7 @@ impl Supervisor {
 
 impl Drop for Supervisor {
     fn drop(&mut self) {
-        if let Some(process) = &self.state.get_mut().process {
+        if let Some(process) = self.current.load_full() {
             process.stop.cancel();
         }
     }

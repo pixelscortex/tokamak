@@ -46,11 +46,15 @@ impl Thread {
         // A busy runtime must never put backpressure on the dispatcher.
         let (requests, receive) = mpsc::unbounded_channel();
         let retired = Arc::new(AtomicBool::new(false));
+        let plugin = frame["pluginName"]
+            .as_str()
+            .map_or_else(|| slot.to_string(), str::to_owned);
+        let logs = output.share(plugin);
         let bridge = Bridge {
             slot,
             output,
             next,
-            logs: Default::default(),
+            logs,
         };
         let stop = retired.clone();
 
