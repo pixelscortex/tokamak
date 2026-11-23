@@ -40,12 +40,27 @@ QuickJS on macOS and Linux, where an empty value is an error. Windows ignores
 [plugin runtime guide](../../sdk/README.md#plugin-runtimes) for the differences.
 
 Run the Linux Rust CI sequence locally with `bash .ci/check.sh rust` on macOS
-or Linux. It builds the Runner and full host, covers both local runtimes,
-then builds the cloud Server and actions-only host for the server-only suites.
-The shared-server routing test uses a separate full host for its Runner. If
-you run that test directly with `--no-default-features`, set
-`TOKAMAK_TEST_RUNNER_HOST` to the absolute path of a full host binary and build
-the actions-only host beside the test's `tokamak-server`.
+or Linux. The Runner and full host use `target`; the Server and actions-only
+host use `target/cloud`. The test matrix is:
+
+| Build and runtime | Suites |
+| --- | --- |
+| Runner / Bun | Claude and Codex replays, local functions, workers, Bun supervisor units and graceful Runner shutdown |
+| Runner / QuickJS | Runner and worker tests, full host protocol and program tests, AI and agent replays, Chat and Code, local functions |
+| Both QuickJS builds | Server units and CLI, actions, identity and sign-in, plugins, routing, service and workers |
+| Cloud Server / QuickJS | Actions-only host, data, cancellation, indexes, schemas and SDK transport |
+
+The routing test uses a separate Runner for the machine's local functions and
+runs the shared workspace against both `tokamak-server` builds. To run just
+the cloud case, first build both binary pairs:
+
+```sh
+cargo build --locked -p tokamak-runner -p tokamak-plugin-host
+cargo build --locked --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
+TOKAMAK_TEST_RUNNER_HOST="$PWD/target/debug/tokamak-plugin-host" \
+  TOKAMAK_TEST_RUNNER_BIN="$PWD/target/debug/tokamak-runner" \
+  cargo test --locked --no-default-features -p server --target-dir target/cloud --test runner_routing
+```
 
 Bun writes the Claude and Codex reference files to a shared temporary directory.
 QuickJS requires those files and compares the final text, thinking, usage,

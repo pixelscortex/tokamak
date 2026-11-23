@@ -113,6 +113,12 @@ fn worker_address(ws: &str) -> String {
 }
 
 async fn open_worker(ws: &str, token: &str) -> Socket {
+    let mut socket = request_worker(ws, token).await;
+    assert_eq!(read(&mut socket).await["type"], "started");
+    socket
+}
+
+async fn request_worker(ws: &str, token: &str) -> Socket {
     let manifest: Value =
         serde_json::from_slice(&std::fs::read(fixture().join("dist/manifest.json")).unwrap())
             .unwrap();
@@ -126,8 +132,104 @@ async fn open_worker(ws: &str, token: &str) -> Socket {
         }}),
     )
     .await;
-    assert_eq!(read(&mut socket).await["type"], "started");
     socket
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn quickjs_runner(directory: &Path, plugins: &Path) -> Command {
+    use std::{io::Write, os::unix::fs::OpenOptionsExt, process::Stdio};
+
+    let secret = directory.join("secret");
+    std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&secret)
+        .unwrap()
+        .write_all(SECRET.as_bytes())
+        .unwrap();
+    let mut command = Command::new(BINARY);
+    command
+        .arg("--plugins")
+        .arg(plugins)
+        .arg("--data")
+        .arg(directory.join("store"))
+        .arg("--token-file")
+        .arg(secret)
+        .args(["--listen", "127.0.0.1:0"])
+        .env("TOKAMAK_PLUGIN_RUNTIME", "quickjs")
+        .stdout(Stdio::piped())
+        .kill_on_drop(true);
+    command
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[tokio::test]
+async fn runner_rejects_an_actions_only_host_before_listening() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let host = dir.path().join("actions-only-host");
+    std::fs::write(&host, "#!/bin/sh\nprintf '%s\\n' actions\n").unwrap();
+    std::fs::set_permissions(&host, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let output = timeout(
+        DEADLINE,
+        quickjs_runner(dir.path(), dir.path())
+            .env("TOKAMAK_PLUGIN_HOST", &host)
+            .output(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty(), "Runner announced readiness");
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("host did not advertise local capability"),
+        "{error}"
+    );
+    assert!(
+        error.contains(&*host.canonicalize().unwrap().to_string_lossy()),
+        "{error}"
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[tokio::test]
+async fn local_worker_close_frame_includes_the_hosts_stderr() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut child = quickjs_runner(dir.path(), fixture())
+        .env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", "invalid")
+        .spawn()
+        .unwrap();
+    let mut output = tokio::io::BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    timeout(DEADLINE, output.read_line(&mut line))
+        .await
+        .unwrap()
+        .unwrap();
+    let address = line.trim().strip_prefix("Tokamak listening on ").unwrap();
+    let mut worker = request_worker(address, SECRET).await;
+    let mut closed = read(&mut worker).await;
+    if closed["type"] == "started" {
+        closed = read(&mut worker).await;
+    }
+    assert_eq!(closed["type"], "closed");
+    assert!(
+        closed["reason"]
+            .as_str()
+            .unwrap()
+            .contains("TOKAMAK_PLUGIN_HOST_HEAP_MIB must be a positive integer in MiB"),
+        "{closed}"
+    );
+    signal(child.id().unwrap(), libc::SIGTERM);
+    assert!(
+        timeout(DEADLINE, child.wait())
+            .await
+            .unwrap()
+            .unwrap()
+            .success()
+    );
 }
 
 async fn invoke(client: &mut Socket, worker: &mut Socket, name: &str, path: &Path) {

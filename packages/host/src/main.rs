@@ -42,6 +42,14 @@ mod watchdog;
 async fn main() -> anyhow::Result<()> {
     let mut args = std::env::args_os().skip(1);
     match args.next().as_deref() {
+        Some(mode) if mode == "--capabilities" => {
+            if cfg!(feature = "local-runtime") {
+                println!("actions local");
+            } else {
+                println!("actions");
+            }
+            Ok(())
+        }
         Some(mode) if mode == "--actions" => action_process::run().await,
         Some(mode) if mode == "--inspect-actions" => {
             let bundle = args

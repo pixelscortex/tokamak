@@ -30,6 +30,41 @@ impl LocalRuntime {
     pub fn host_path(executable: &Path) -> Result<PathBuf, String> {
         host_path(executable)
     }
+
+    /// Resolve and verify the host before a QuickJS Runner starts listening.
+    pub async fn require_local_host(executable: &Path) -> Result<PathBuf, String> {
+        let path = Self::host_path(executable)?;
+        let failure = |reason: &str| {
+            format!(
+                "Runner requires a plugin host with local capability at {}: {reason}",
+                path.display()
+            )
+        };
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::process::Command::new(&path)
+                .arg("--capabilities")
+                .stdin(std::process::Stdio::null())
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .map_err(|_| failure("capability check timed out"))?
+        .map_err(|error| failure(&error.to_string()))?;
+        if !output.status.success() {
+            return Err(failure(&format!(
+                "capability check exited with {}",
+                output.status
+            )));
+        }
+        if !String::from_utf8_lossy(&output.stdout)
+            .split_ascii_whitespace()
+            .any(|name| name == "local")
+        {
+            return Err(failure("host did not advertise local capability"));
+        }
+        Ok(path)
+    }
 }
 
 #[cfg(any(feature = "local-runtime", target_os = "linux", target_os = "macos"))]

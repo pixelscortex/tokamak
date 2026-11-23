@@ -30,7 +30,8 @@ subtle = "2.6.1"
 mime_guess = "2.0.5"
 percent-encoding = "2.3.2"
 semver = "1.0.28"
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
+# Match the Runner's JSON support for a shared reqwest build.
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
 axum = { version = "0.8.9", default-features = false, features = [
   "ws",
   "http1",

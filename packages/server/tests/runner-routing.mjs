@@ -52,7 +52,9 @@ try {
       assert.equal(await Bun.file(join(cloudChat, localFile)).exists(), false, localFile);
     }
 
-    const refused = await fetch(new URL("/local-worker", http), {
+    const workerUrl = new URL("/local-worker", http);
+    assert.equal((await fetch(workerUrl)).status, 401);
+    const refused = await fetch(workerUrl, {
       headers: { Origin: headers.Origin, "Sec-WebSocket-Protocol": `tokamak, tokamak.bearer.${token}` },
     });
     assert.equal(refused.status, 501);

@@ -29,7 +29,7 @@ llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a
 llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }
 llrt_fetch = { optional = true, git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58", default-features = false, features = [
   "http1",
-  "tls-ring",
+  "tls-aws-lc",
   "webpki-roots",
 ] }
 llrt_util = { optional = true, git = "https://github.com/awslabs/llrt", rev = "02833ca09748424a5960e37133530e24ccccae58" }

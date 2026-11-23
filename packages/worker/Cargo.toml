@@ -12,7 +12,8 @@ local-runtime = ["dep:directories", "dep:getrandom", "dep:serde", "dep:windows-s
 directories = { version = "=6.0.0", optional = true }
 getrandom = { version = "0.4.3", optional = true }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
-tokio-util = { version = "0.7.20", features = ["rt"] }
+# Match the Runner's codec and pipe support in the shared process crate.
+tokio-util = { version = "0.7.20", features = ["codec", "io-util", "rt"] }
 tokio = { version = "1.54.1", features = ["io-util", "macros", "process", "rt", "sync", "time", "fs"] }
 
 [target.'cfg(unix)'.dependencies]

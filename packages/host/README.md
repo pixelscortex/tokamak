@@ -76,7 +76,7 @@ than in a standalone module.
 ## Action process
 
 The cloud Server ships the same executable name built with
-`--no-default-features`. That variant accepts only `--actions` and
+`--no-default-features --target-dir target/cloud`. That variant accepts `--actions` and
 `--inspect-actions`. It shares the action engine and protocol with the full
 host. The local dispatcher, filesystem modules, program launcher and JavaScript
 `process` global aren't compiled into it.

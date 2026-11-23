@@ -3,15 +3,15 @@
 All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
 three fast jobs on every PR, and `.ci/check.sh` holds their commands:
 
-- `lint`: formatting and lint for TypeScript and Rust (Clippy, warnings denied),
+- `lint`: formatting and lint for TypeScript and both Rust builds (Clippy, warnings denied),
   plus a byte-for-byte comparison of copied contract declarations against their owners.
 - `typescript`: type checks, plugin build tests, window component tests, and the web build.
-- `rust`: Rust unit tests and the host and worker suites on the default runtime.
-  The Runner and its local suites cover QuickJS and the Bun fallback. The cloud
-  Server runs the server-only suites and the shared-server routing test with an
-  independent Runner. CI checks that the cloud dependency graph excludes the
-  local runtime. The turn replays use fake agents: Bun writes the references,
-  and QuickJS compares the stored turns against them.
+- `rust`: Builds the Runner in `target` and the cloud Server in `target/cloud`.
+  They share only Cargo's intermediate cache. CI checks that each forbidden
+  symbol pattern finds a match in the Runner build and none in the cloud
+  build, then runs the [test matrix](../packages/server/tests/README.md).
+  The turn replays use fake agents: Bun writes the references, and QuickJS
+  compares the stored turns against them.
 
 Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
 or the browser suite:

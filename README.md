@@ -66,7 +66,8 @@ disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 Ready pull requests run the Linux TypeScript, Rust, and lint checks. The Rust
 check builds both variants. It runs the local suites on the QuickJS default and
 exercises the Bun fallback, comparing the stored turn replays across runtimes.
-Suites that need only server functions run against the cloud Server build.
+Server tests that exercise build differences run in both configurations;
+data and transport suites run against the cloud Server build.
 Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
 and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
@@ -82,18 +83,23 @@ in Docker. On Windows, build only `tokamak-runner`; it uses Bun.
 cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
 ```
 
-Build the **Server** for cloud hosts such as Railway or Hetzner. The build omits
-the local runtime and the Bun fallback. Its `tokamak-plugin-host` only runs and
-inspects server actions. Use a separate output directory so it cannot replace
-the Runner's full host. The [Dockerfile](Dockerfile) ships this pair and keeps
-the existing entrypoint, environment, ports and data directory.
+Build the **Server** for cloud hosts such as Railway or Hetzner. Plugins have
+no filesystem or program access on the Server. The Server itself starts only
+one kind of plugin child: the action process. It keeps the process launcher
+and guardian needed to run, inspect, and supervise server actions. Build it in
+`target/cloud` so it cannot replace the Runner's binaries. The
+[Dockerfile](Dockerfile) ships this pair and keeps the existing entrypoint,
+environment, ports and data directory.
 
 ```sh
 cargo build --locked --release --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
 ```
 
 On macOS and Linux, ship the host beside its matching executable, or set
-`TOKAMAK_PLUGIN_HOST` to that host's path. Bun is needed to build plugins from
+`TOKAMAK_PLUGIN_HOST` to that host's path. Check with
+`tokamak-plugin-host --capabilities`: the Runner host prints `actions local`
+and the Server host prints `actions`. The QuickJS Runner checks this at startup.
+Bun is needed to build plugins from
 source. The QuickJS builds can run installed artifacts without Bun; rebuild old
 artifacts that lack QuickJS companions.
 

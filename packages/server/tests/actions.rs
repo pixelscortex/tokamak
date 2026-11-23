@@ -635,11 +635,7 @@ fn configure_action_process_resolver(
         format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
     }
 
-    let executable = std::env::current_exe().unwrap();
-    let host = executable
-        .parent()
-        .unwrap()
-        .with_file_name("tokamak-plugin-host");
+    let host = tokamak_worker::Process::action_host_path().unwrap();
     let wrapper = directory.join("action-process-with-resolver");
     std::fs::write(&wrapper, format!(
         "#!/bin/sh\nexport {}={} TKM45_DNS_LOG={} TKM45_DNS_RELEASE={} TKM45_TEST_CONNECT_LOG={}\nexec {} \"$@\"\n",

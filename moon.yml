@@ -133,6 +133,11 @@ tasks:
     options:
       cache: false
       mutex: "cargo"
+  lint-cloud-rust:
+    command: "cargo clippy --locked --no-default-features -p server -p tokamak-plugin-host --all-targets --target-dir target/cloud -- -D warnings"
+    options:
+      cache: false
+      mutex: "cargo"
   lint-ts:
     command: "proto run bun -- run oxlint packages app plugins"
     options:

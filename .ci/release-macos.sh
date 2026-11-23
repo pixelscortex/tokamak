@@ -18,6 +18,7 @@ mkdir -p "$output"
 rm -rf "$output/Tokamak.app"
 ditto target/release/bundle/macos/Tokamak.app "$output/Tokamak.app"
 ditto -c -k --sequesterRsrc --keepParent "$output/Tokamak.app" "$output/Tokamak-macos-arm64.zip"
+bash .ci/check.sh cloud-graph
 moon run workspace:build-release
 tar -czf "$output/server-macos-arm64.tar.gz" -C target/cloud/release tokamak-server tokamak-plugin-host
 (
