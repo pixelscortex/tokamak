@@ -1,9 +1,9 @@
 use super::*;
-use crate::plugins::StartupPolicy;
+use crate::{host::action_process::Source, plugins::StartupPolicy};
 
 struct Startup {
     bundle: Option<Arc<Bundle>>,
-    legacy_action_bundle: Option<Arc<Bundle>>,
+    legacy_action_source: Option<Arc<Source>>,
     space: DataSpace,
     descriptor: Json,
     kinds: BTreeMap<String, FunctionKind>,
@@ -47,39 +47,32 @@ impl Server {
         let inspected = async {
             let inspected = inspect(&pool, transactions.clone()).await?;
 
-            let schema = crate::schema::Schema::parse(&inspected.descriptor["schema"])?;
-
-            let mut tx = Box::pin(database.begin())
-                .await
-                .map_err(|e| Error::Invalid(e.to_string()))?;
-
-            match Box::pin(schema.apply(&mut tx, &space, true)).await {
-                Ok(reset) => {
-                    Box::pin(tx.commit())
-                        .await
-                        .map_err(|e| Error::Invalid(e.to_string()))?;
-                    if let Some(reason) = reset {
-                        crate::schema::log_reset(&reason);
-                    }
+            let legacy_action_source = match legacy_action_bundle {
+                Some(bundle)
+                    if inspected
+                        .kinds
+                        .values()
+                        .any(|kind| *kind == FunctionKind::Action) =>
+                {
+                    let source = Source::legacy(bundle)?;
+                    source.inspect().await?;
+                    Some(source)
                 }
-                Err(error) => {
-                    Box::pin(tx.rollback()).await.map_err(|e| {
-                        Error::Invalid(format!("{error}; schema rollback failed: {e}"))
-                    })?;
-
-                    return Err(error);
-                }
-            }
-
-            Ok(inspected)
+                _ => None,
+            };
+            initialize_standalone_schema(&mut database, &space, &inspected.descriptor).await?;
+            Ok((inspected, legacy_action_source))
         }
         .await;
 
-        let InspectedBundle {
-            mut descriptor,
-            kinds,
-            visibility,
-        } = match inspected {
+        let (
+            InspectedBundle {
+                mut descriptor,
+                kinds,
+                visibility,
+            },
+            legacy_action_source,
+        ) = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
                 return Err(startup_error(&mut database, error).await);
@@ -102,7 +95,7 @@ impl Server {
             pool,
             Startup {
                 bundle: Some(transactions),
-                legacy_action_bundle,
+                legacy_action_source,
                 space,
                 descriptor,
                 kinds,
@@ -164,7 +157,7 @@ impl Server {
             pool,
             Startup {
                 bundle: None,
-                legacy_action_bundle: None,
+                legacy_action_source: None,
                 space: DataSpace::default(),
                 descriptor: loaded.descriptor.clone(),
                 kinds,
@@ -184,7 +177,7 @@ impl Server {
     ) -> Result<Self, Error> {
         let Startup {
             bundle,
-            legacy_action_bundle,
+            legacy_action_source,
             space,
             descriptor,
             kinds,
@@ -215,8 +208,7 @@ impl Server {
         let ActionStartup {
             action_pool,
             action_process,
-            legacy_action_source,
-        } = match ActionStartup::new(quickjs, &pool, legacy_action_bundle.as_ref(), &kinds) {
+        } = match ActionStartup::new(quickjs, &pool) {
             Ok(startup) => startup,
             Err(error) => return Err(startup_error(&mut database, error).await),
         };
@@ -330,6 +322,37 @@ async fn startup_error(database: &mut Database, error: Error) -> Error {
     }
 }
 
+async fn initialize_standalone_schema(
+    database: &mut Database,
+    space: &DataSpace,
+    descriptor: &Json,
+) -> Result<(), Error> {
+    let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
+
+    let mut tx = Box::pin(database.begin())
+        .await
+        .map_err(|e| Error::Invalid(e.to_string()))?;
+
+    match Box::pin(schema.apply(&mut tx, space, true)).await {
+        Ok(reset) => {
+            Box::pin(tx.commit())
+                .await
+                .map_err(|e| Error::Invalid(e.to_string()))?;
+            if let Some(reason) = reset {
+                crate::schema::log_reset(&reason);
+            }
+        }
+        Err(error) => {
+            Box::pin(tx.rollback())
+                .await
+                .map_err(|e| Error::Invalid(format!("{error}; schema rollback failed: {e}")))?;
+
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
 fn quickjs_actions() -> Result<bool, Error> {
     tokamak_worker::LocalRuntime::selected()
         .map(|runtime| runtime == tokamak_worker::LocalRuntime::QuickJs)
@@ -339,28 +362,16 @@ fn quickjs_actions() -> Result<bool, Error> {
 struct ActionStartup {
     action_pool: Option<Arc<Pool>>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
-    legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
 }
 
 impl ActionStartup {
-    fn new(
-        quickjs: bool,
-        pool: &Pool,
-        bundle: Option<&Arc<Bundle>>,
-        kinds: &BTreeMap<String, FunctionKind>,
-    ) -> Result<Self, Error> {
+    fn new(quickjs: bool, pool: &Pool) -> Result<Self, Error> {
         if quickjs {
             let host = tokamak_worker::Process::action_host_path().map_err(Error::Invalid)?;
-            let heap = tokamak_worker::configured_heap_bytes("TOKAMAK_ACTION_HEAP_MIB")
-                .map_err(Error::Invalid)?;
-            let legacy_action_source = bundle
-                .filter(|_| kinds.values().any(|kind| *kind == FunctionKind::Action))
-                .map(|bundle| crate::host::action_process::Source::legacy(bundle.clone()))
-                .transpose()?;
+            let heap = tokamak_worker::configured_action_heap_bytes().map_err(Error::Invalid)?;
             return Ok(Self {
                 action_pool: None,
                 action_process: Some(crate::host::action_process::Supervisor::new(host, heap)),
-                legacy_action_source,
             });
         }
 
@@ -372,7 +383,6 @@ impl ActionStartup {
         Ok(Self {
             action_pool: Some(Arc::new(pool)),
             action_process: None,
-            legacy_action_source: None,
         })
     }
 }

@@ -63,7 +63,8 @@ impl Loaded {
                 .await
             {
                 if policy == StartupPolicy::Strict
-                    && !previous.is_some_and(|old| old.skipped.contains_key(&id))
+                    && ((quickjs && reloaded == Some(id.as_str()))
+                        || !previous.is_some_and(|old| old.skipped.contains_key(&id)))
                 {
                     return Err(error);
                 }
@@ -166,7 +167,7 @@ impl Loaded {
                     .and_then(|old| old.action_sources.get(id));
                 let source = match prior {
                     Some(source) => source.clone(),
-                    None => artifact.action_source(id)?,
+                    None => artifact.action_source(id).await?,
                 };
                 self.action_sources.insert(id.to_owned(), source);
             }

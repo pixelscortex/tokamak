@@ -34,8 +34,16 @@ impl LocalRuntime {
 }
 
 pub fn configured_heap_bytes(variable: &str) -> Result<usize, String> {
+    heap_bytes(variable, 256)
+}
+
+pub fn configured_action_heap_bytes() -> Result<usize, String> {
+    heap_bytes("TOKAMAK_ACTION_HEAP_MIB", 64)
+}
+
+fn heap_bytes(variable: &str, default_mib: usize) -> Result<usize, String> {
     let Some(value) = std::env::var_os(variable) else {
-        return Ok(256 * 1024 * 1024);
+        return Ok(default_mib * 1024 * 1024);
     };
     value
         .to_str()

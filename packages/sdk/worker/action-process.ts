@@ -22,6 +22,7 @@ export function initialize(send: (json: string) => void, nextOp: () => number, f
     undefined,
     undefined,
     {
+      observeInvocation: true,
       abort(controller) {
         try {
           controller.abort();
@@ -31,7 +32,7 @@ export function initialize(send: (json: string) => void, nextOp: () => number, f
       },
       errorMessage(error) {
         const message = error instanceof Error ? error.message : String(error);
-        return error === null || message === "out of memory" ? "Plugin action ran out of memory" : message;
+        return error === null || message === "out of memory" ? "Server action ran out of memory" : message;
       },
       errorStack(error) {
         return error instanceof Error ? error.stack?.slice(0, 32768) : undefined;

@@ -9,24 +9,18 @@ use engine::{
     web::{self, WebHost, WebLease},
 };
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Exception, Function, Module, Object,
-    Persistent, prelude::Func,
+    AsyncContext, AsyncRuntime, CaughtError, Ctx, Exception, Function, Module, Object, Persistent,
+    Promise, prelude::Func,
 };
 use serde_json::Value;
-use tokio::sync::mpsc;
 
 use super::{
-    BUNDLE, number,
-    plugin::{Active, Bridge},
+    BUNDLE,
+    call::{CallOutput, OUT_OF_MEMORY},
+    number,
 };
-use crate::runtime::Watchdog;
 
-pub(super) struct Config {
-    pub bridge: Rc<Bridge>,
-    pub watchdog: Rc<Watchdog>,
-    pub active: Active,
-    pub completed: mpsc::UnboundedSender<u64>,
-}
+pub(super) type InvocationPromise = Persistent<Promise<'static>>;
 
 pub(super) struct Realm {
     dispatch: Persistent<Function<'static>>,
@@ -40,14 +34,20 @@ impl Realm {
         runtime: &AsyncRuntime,
         source: &str,
         permissions: &[String],
-        config: Config,
+        output: Rc<CallOutput>,
         worker_entry: bool,
         network: bool,
     ) -> Result<Self> {
         let web = WebHost::new(permissions.to_vec())?;
         let lease = web.lease();
         let operations = Arc::new(web.operations()?);
-        let context = AsyncContext::full(runtime).await?;
+        let context = AsyncContext::full(runtime).await.map_err(|error| {
+            if matches!(error, rquickjs::Error::Allocation) {
+                anyhow!(OUT_OF_MEMORY)
+            } else {
+                error.into()
+            }
+        })?;
         let invocation = Invocation::unbounded();
         let dispatch = context
             .async_with(async |ctx| {
@@ -69,9 +69,9 @@ impl Realm {
                     evaluated.into_future::<()>().await?;
                     let logging: Function = entry.get("logging")?;
                     let initialize: Function = entry.get("initialize")?;
-                    let next = config.bridge.next.clone();
+                    let bridge = output.bridge.clone();
                     let send = Function::new(ctx.clone(), move |ctx: Ctx<'_>, line: String| {
-                        send(&config, &line)
+                        send(&output, &line)
                             .map_err(|e| Exception::throw_message(&ctx, &e.to_string()))
                     })?;
                     logging.call::<_, ()>((send.clone(),))?;
@@ -79,13 +79,17 @@ impl Realm {
                         Module::declare(ctx.clone(), BUNDLE, source.as_bytes())?.eval()?;
                     evaluated.into_future::<()>().await?;
                     let functions: Object = module.get("functions")?;
-                    let next_op =
-                        Func::from(move || (next.fetch_add(1, Ordering::Relaxed) + 1) as f64);
+                    let next_op = Func::from(move || {
+                        bridge
+                            .as_ref()
+                            .map_or(0, |bridge| bridge.next.fetch_add(1, Ordering::Relaxed) + 1)
+                            as f64
+                    });
                     let dispatch: Function = initialize.call((send, next_op, functions))?;
                     Ok::<_, rquickjs::Error>(Persistent::save(&ctx, dispatch))
                 }
                 .await;
-                run.catch(&ctx).map_err(|error| anyhow!("{error}"))
+                run.map_err(|error| js_error(&ctx, error))
             })
             .await?;
 
@@ -97,17 +101,38 @@ impl Realm {
         })
     }
 
-    pub async fn dispatch(&self, frame: Value) -> Result<()> {
+    pub async fn invoke(&self, frame: Value) -> Result<InvocationPromise> {
         self.context
             .with(|ctx| {
-                self.dispatch
-                    .clone()
-                    .restore(&ctx)
-                    .and_then(|dispatch| dispatch.call((frame.to_string(),)))
-                    .catch(&ctx)
-                    .map_err(|error| anyhow!("{error}"))
+                let promise: Promise = self.call(&ctx, frame)?;
+                Ok(Persistent::save(&ctx, promise))
             })
             .await
+    }
+
+    pub async fn dispatch(&self, frame: Value) -> Result<()> {
+        self.context.with(|ctx| self.call(&ctx, frame)).await
+    }
+
+    pub async fn check(&self, promise: &InvocationPromise) -> Result<()> {
+        self.context
+            .with(|ctx| {
+                let promise = promise.clone().restore(&ctx)?;
+                match promise.result::<()>() {
+                    None => Ok(()),
+                    Some(Err(error)) => Err(js_error(&ctx, error)),
+                    Some(Ok(())) => Err(anyhow!("Plugin action completed without a result")),
+                }
+            })
+            .await
+    }
+
+    fn call<'js, T: rquickjs::FromJs<'js>>(&self, ctx: &Ctx<'js>, frame: Value) -> Result<T> {
+        self.dispatch
+            .clone()
+            .restore(ctx)
+            .and_then(|dispatch| dispatch.call((frame.to_string(),)))
+            .map_err(|error| js_error(ctx, error))
     }
 }
 
@@ -124,33 +149,44 @@ async fn install_builtins(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
     Ok(())
 }
 
-fn send(config: &Config, line: &str) -> Result<()> {
-    if config.watchdog.tripped() {
-        return Ok(());
+pub(super) fn pending_job_error(ctx: Ctx<'_>) -> anyhow::Error {
+    js_error(&ctx, rquickjs::Error::Exception)
+}
+
+fn js_error(ctx: &Ctx<'_>, error: rquickjs::Error) -> anyhow::Error {
+    match CaughtError::from_error(ctx, error) {
+        CaughtError::Error(rquickjs::Error::Allocation) => anyhow!(OUT_OF_MEMORY),
+        CaughtError::Exception(error) if error.message().as_deref() == Some("out of memory") => {
+            anyhow!(OUT_OF_MEMORY)
+        }
+        // QuickJS may be too short of memory to construct its InternalError.
+        CaughtError::Value(value) if value.is_null() => anyhow!(OUT_OF_MEMORY),
+        error => anyhow!("{error}"),
     }
+}
+
+fn send(call: &CallOutput, line: &str) -> Result<()> {
+    let Some(bridge) = &call.bridge else {
+        return Ok(());
+    };
     let frame: Value = serde_json::from_str(line)?;
-    let slot = config.bridge.slot;
-    let output = &config.bridge.output;
 
     match frame["type"].as_str() {
         Some("op") => {
-            let id = number(&frame, "call")?;
             ensure!(
-                config.active.borrow().contains(&id),
+                number(&frame, "call")? == call.id && call.result.borrow().is_none(),
                 "stale invocation: host operation refused"
             );
-            output.send(slot, frame)
+            bridge.output.send(bridge.slot, frame)
         }
         Some("result") => {
-            let id = number(&frame, "id")?;
-            if config.active.borrow().contains(&id) {
-                output.send(slot, frame)?;
-                config.active.borrow_mut().remove(&id);
-                let _ = config.completed.send(id);
+            ensure!(number(&frame, "id")? == call.id, "Invalid action result id");
+            if call.result.borrow().is_none() {
+                call.finish(frame);
             }
             Ok(())
         }
-        Some("log") => output.log(slot, frame, &config.bridge.logs),
+        Some("log") => bridge.output.log(bridge.slot, frame, &bridge.logs),
         _ => anyhow::bail!("Invalid action process output"),
     }
 }

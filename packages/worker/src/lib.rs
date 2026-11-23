@@ -7,7 +7,7 @@ mod windows;
 
 pub use discovery::{resolve, search_paths};
 pub use logs::send as log;
-pub use runtime::{LocalRuntime, configured_heap_bytes};
+pub use runtime::{LocalRuntime, configured_action_heap_bytes, configured_heap_bytes};
 #[cfg(not(windows))]
 use std::process::Stdio;
 use std::{collections::BTreeMap, path::Path};
@@ -108,26 +108,53 @@ impl Process {
     }
 
     pub fn launch_actions(host: &Path) -> Result<Self, String> {
-        Self::launch_action_host(host, None, Path::new("--actions"))
+        Self::launch_action_host(host, None, Path::new("--actions"), None)
     }
 
-    pub fn inspect_actions(host: &Path, code: &Path) -> Result<Self, String> {
-        Self::launch_action_host(host, Some(Path::new("--inspect-actions")), code)
+    pub fn inspect_actions(
+        host: &Path,
+        code: &Path,
+        action: Option<(usize, bool)>,
+    ) -> Result<Self, String> {
+        let options = action.map(|(heap, worker_entry)| format!("{heap}:{worker_entry}"));
+        Self::launch_action_host(
+            host,
+            Some(Path::new("--inspect-actions")),
+            code,
+            options.as_deref().map(std::ffi::OsStr::new),
+        )
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    fn launch_action_host(host: &Path, mode: Option<&Path>, code: &Path) -> Result<Self, String> {
+    fn launch_action_host(
+        host: &Path,
+        mode: Option<&Path>,
+        code: &Path,
+        inspection: Option<&std::ffi::OsStr>,
+    ) -> Result<Self, String> {
         let cwd = host
             .parent()
             .ok_or("Action process executable directory missing")?;
-        let (child, containment, guardian) =
-            launch(host, mode, code, cwd, &BTreeMap::new(), Lane::Action, None)
-                .map_err(|error| format!("Launch {}: {error}", host.display()))?;
+        let (child, containment, guardian) = launch(
+            host,
+            mode,
+            code,
+            cwd,
+            &BTreeMap::new(),
+            Lane::Action,
+            inspection.map(|options| ("TOKAMAK_ACTION_INSPECT", options)),
+        )
+        .map_err(|error| format!("Launch {}: {error}", host.display()))?;
         Ok(Self::contained(child, containment, guardian))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    fn launch_action_host(_: &Path, _: Option<&Path>, _: &Path) -> Result<Self, String> {
+    fn launch_action_host(
+        _: &Path,
+        _: Option<&Path>,
+        _: &Path,
+        _: Option<&std::ffi::OsStr>,
+    ) -> Result<Self, String> {
         Err("The action process is available on macOS and Linux".into())
     }
 

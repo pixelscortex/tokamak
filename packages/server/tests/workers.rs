@@ -5,6 +5,7 @@ use server::{
     Event, Server,
     data::{Database, Storage},
 };
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -68,20 +69,8 @@ impl Fixture {
             None
         };
 
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("plugins/worker-test");
-        std::fs::create_dir_all(&path).unwrap();
-        for (name, text) in artifacts(legacy) {
-            std::fs::write(path.join(name), text).unwrap();
-        }
-        let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
-        let server = Server::load_plugins(
-            Database::open(Storage::Memory).await.unwrap(),
-            pool,
-            &directory.path().join("plugins"),
-        )
-        .await
-        .unwrap();
+        let directory = install_fixture(legacy);
+        let server = load_fixture(&directory).await.unwrap();
         let session = server.connect().await.unwrap();
         Self {
             directory,
@@ -127,6 +116,26 @@ impl Fixture {
         self.server.close().await.unwrap();
     }
 }
+fn install_fixture(legacy: bool) -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("plugins/worker-test");
+    std::fs::create_dir_all(&path).unwrap();
+    for (name, text) in artifacts(legacy) {
+        std::fs::write(path.join(name), text).unwrap();
+    }
+    directory
+}
+
+async fn load_fixture(directory: &tempfile::TempDir) -> Result<Server, server::Error> {
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    Server::load_plugins(
+        Database::open(Storage::Memory).await.unwrap(),
+        pool,
+        &directory.path().join("plugins"),
+    )
+    .await
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     let mut fixture = Fixture::new().await;
@@ -250,39 +259,37 @@ async fn check_action_process_recovery(mut fixture: Fixture) {
         .unwrap();
     assert_eq!(fixture.result().await.1.unwrap(), "QuickJS");
     let mut previous = pid;
-    for (index, minimum) in [200, 450, 950].into_iter().enumerate() {
+    for minimum in [200, 450, 950, 1950, 3950] {
         let restart = std::time::Instant::now();
-        if index == 2 {
-            let waiting = fixture.start("stuck", json!({}));
-            tokio::time::sleep(Duration::from_millis(40)).await;
-            tokio::time::timeout(
-                Duration::from_millis(300),
-                fixture.server.reload_plugin("worker-test".into()),
-            )
-            .await
-            .expect("reload waited for action process back-off")
-            .unwrap();
-            let (id, result) = fixture.result().await;
-            assert_eq!(id, waiting);
-            assert!(result.unwrap_err().contains("cancelled by reload"));
-        }
         assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
         assert!(
             restart.elapsed() >= Duration::from_millis(minimum),
-            "restart {index} did not back off"
+            "restart did not back off for at least {minimum} ms"
         );
         let next = action_process_pid(std::process::id());
         assert_ne!(previous, next);
         previous = next;
-        if index < 2 {
-            let waiting = fixture.start("stuck", json!({}));
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            kill(next);
-            let (id, result) = fixture.result().await;
-            assert_eq!(id, waiting);
-            assert!(result.unwrap_err().contains("Action process exited"));
-        }
+        let waiting = fixture.start("stuck", json!({}));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        kill(next);
+        let (id, result) = fixture.result().await;
+        assert_eq!(id, waiting);
+        assert!(result.unwrap_err().contains("Action process exited"));
     }
+
+    // The next restart waits eight seconds; reload must finish independently.
+    let waiting = fixture.start("stuck", json!({}));
+    tokio::time::sleep(Duration::from_millis(40)).await;
+    tokio::time::timeout(
+        Duration::from_millis(2500),
+        fixture.server.reload_plugin("worker-test".into()),
+    )
+    .await
+    .expect("reload waited for action process back-off")
+    .unwrap();
+    let (id, result) = fixture.result().await;
+    assert_eq!(id, waiting);
+    assert!(result.unwrap_err().contains("cancelled by reload"));
     fixture.close().await;
     assert!(!alive(previous));
 }
@@ -507,14 +514,42 @@ async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
     if !quickjs() {
         return;
     }
-    let mut fixture = Fixture::with_legacy_artifact(true).await;
-    let error = fixture
-        .call("echo", json!({"value":1,"delay":0}))
-        .await
-        .unwrap_err();
+    let directory = install_fixture(true);
+    let error = load_fixture(&directory).await.err().unwrap().to_string();
     assert!(
         error.contains("Module is not allowed in the action process: node:child_process"),
         "{error}"
     );
+}
+
+#[tokio::test]
+async fn quickjs_rejects_a_reload_if_the_action_module_throws_during_evaluation() {
+    if !quickjs() {
+        return;
+    }
+
+    let mut fixture = Fixture::new().await;
+    let path = fixture.directory.path().join("plugins/worker-test");
+    let code = path.join("worker.js");
+    let mut source = std::fs::read_to_string(&code).unwrap();
+    source.push_str("\nthrow new Error('broken action module on reload');");
+    std::fs::write(code, &source).unwrap();
+
+    let manifest_path = path.join("manifest.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["hashes"]["worker.js"] = json!(format!("{:x}", Sha256::digest(source.as_bytes())));
+    std::fs::write(manifest_path, manifest.to_string()).unwrap();
+
+    let error = fixture
+        .server
+        .reload_plugin("worker-test".into())
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("broken action module on reload"),
+        "{error}"
+    );
+    assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
     fixture.close().await;
 }

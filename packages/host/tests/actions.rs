@@ -10,7 +10,7 @@ use tokio::{
 };
 
 struct Process {
-    _child: Child,
+    child: Child,
     input: ChildStdin,
     output: Lines<BufReader<ChildStdout>>,
 }
@@ -28,7 +28,7 @@ impl Process {
         Self {
             input: child.stdin.take().unwrap(),
             output: BufReader::new(child.stdout.take().unwrap()).lines(),
-            _child: child,
+            child,
         }
     }
 
@@ -43,9 +43,21 @@ impl Process {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join(bundle);
+        self.invoke_path(slot, id, name, args, &path, 6).await;
+    }
+
+    async fn invoke_path(
+        &mut self,
+        slot: u64,
+        id: u64,
+        name: &str,
+        args: Value,
+        path: &Path,
+        heap_mib: usize,
+    ) {
         self.send(json!({
             "type":"invoke","slot":slot,"id":id,"fn":name,"args":args,
-            "path":path,"permissions":["net:127.0.0.1"],"workerEntry":true,"heap":6 * 1024 * 1024,
+            "path":path,"permissions":["net:127.0.0.1"],"workerEntry":true,"heap":heap_mib * 1024 * 1024,
         }))
         .await;
     }
@@ -71,41 +83,8 @@ impl Process {
 
 const BUNDLE: &str = "action-fixture.js";
 
-#[tokio::test]
-async fn plugins_run_concurrently_and_a_busy_plugin_only_interrupts_its_own_calls() {
-    let mut process = Process::start();
-    process.invoke(1, 1, "delay", json!(1000), BUNDLE).await;
-    assert_eq!(process.next().await["text"], "delay started");
-    process.invoke(2, 2, "loop", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["text"], "loop started");
-    assert_eq!(
-        process.next().await,
-        json!({"type":"result","slot":1,"id":1,"value":"done"})
-    );
-    let failure = process.next().await;
-    assert_eq!(failure["id"], 2);
-    assert!(failure["error"].as_str().unwrap().contains("did not yield"));
-    process.invoke(2, 3, "count", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["value"], 1);
-}
-
-#[tokio::test]
-async fn heap_exhaustion_fails_only_the_owning_action() {
-    let mut process = Process::start();
-    process.invoke(1, 1, "count", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["value"], 1);
-    process.invoke(2, 2, "heap", Value::Null, BUNDLE).await;
-    let failure = process.next().await;
-    assert_eq!(failure["id"], 2);
-    assert!(
-        failure["error"].as_str().unwrap().contains("memory"),
-        "{failure}"
-    );
-    process.invoke(1, 3, "count", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["value"], 1);
-    process.invoke(2, 4, "count", Value::Null, BUNDLE).await;
-    assert_eq!(process.next().await["value"], 1);
-}
+#[path = "action_process/isolation.rs"]
+mod isolation;
 
 #[tokio::test]
 async fn action_modules_supply_the_four_builtins_without_files_or_programs() {

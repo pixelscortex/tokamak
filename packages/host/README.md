@@ -74,35 +74,51 @@ The action process has no file or program capability.
 Queries, mutations, and the top-level code of modules they import run in the
 server, including modules shared with actions. The transaction companion lets
 the server inspect function metadata without loading action definitions, helpers,
-or imports used only by actions. Rebuild older default artifacts that have
-actions and standalone features before enabling QuickJS.
+or imports used only by actions. At startup and on reload, the plugin host
+evaluates each new action bundle in a separate inspection process with network
+access disabled. Evaluation errors follow the same startup and reload policy as
+transaction bundle errors. Rebuild older default artifacts that have actions
+and standalone features before enabling QuickJS.
 
 The action process uses the engine's web implementation and the manifest's
 `net:` grants, including for `runtime: "worker"` plugins whose fetches Bun
 did not check. Worker plugins have no `process` or `process.env`; use
 `await ctx.env(name)` with the manifest's `env:<name>` grant.
-Each action call starts with fresh module state and its own web resources,
-which are released when the call ends. This also applies to `runtime: "worker"`
-plugins, which kept module state between calls on Bun.
+Each action call starts on its own OS thread with its own QuickJS runtime,
+heap, watchdog, and fresh module state. The dispatcher and native web I/O share
+a Tokio executor. Dropping the runtime ends all JavaScript jobs and releases the
+call's timers, requests, and memory after success, failure, cancellation,
+deadline, or reload. This includes `runtime: "worker"` plugins, which keep
+module state between calls on Bun.
 
-All plugins' actions share one process. Separate QuickJS runtimes isolate the
-plugins, and the server trusts the action process to label host operations with
-the right call. A memory-safety bug exploited in QuickJS could let one plugin
-reach other plugins' network permissions and in-flight calls in the action
-process. Action JavaScript does not expose the server process itself to such a
-bug. The server still authorizes database, identity, and other host operations.
+All plugins' actions share one process. The runtime boundary isolates calls,
+including concurrent calls of the same plugin. The server trusts the action
+process to label host operations with the right call, and each call's runtime
+can only send operations for its own call ID. A memory-safety bug in QuickJS
+could let one call reach other plugins' network permissions and in-flight
+calls in the action process. Action JavaScript does not expose the server
+process itself to such a bug. The server still authorizes database, identity,
+and other host operations.
 
-The heap limit is per plugin runtime, shared by concurrent calls. It defaults
-to 256 MiB; set `TOKAMAK_ACTION_HEAP_MIB` to a positive integer to change it.
-There are 128 call slots and 128 pending host operation slots, with up to 64
-of each per plugin. Nested calls count against the plugin being called. Log
-output has a per-plugin budget and reports dropped lines when it resumes.
+The heap limit defaults to 64 MiB per call; set `TOKAMAK_ACTION_HEAP_MIB` to a
+positive integer to change it. Up to 16 calls per plugin run at once,
+for a maximum QuickJS heap budget of 16 times the per-call limit. More calls
+wait in arrival order and can time out or be cancelled while waiting. There
+are 128 held call slots (running or queued) and 128 pending host operation slots,
+with up to 64 of each per plugin. Nested calls count against the plugin being
+called. Log output has a per-plugin budget and reports dropped lines when it
+resumes.
 
-Most calls have a one-hour deadline. Anonymous sign-in uses a separate runtime
-per call and the existing engine timeout (one second by default, with a
-five-second minimum in debug builds). Five seconds without yielding interrupts
-the affected runtime. The server pings the dispatcher every 10 seconds and
-kills the process group after 30 seconds without a reply. Exit or loss of the
+Most calls have a one-hour deadline. Anonymous sign-in has an additional limit of
+four running calls across all plugins and uses the existing engine timeout
+(one second by default, with a five-second minimum in debug builds). This budget
+includes starting the runtime and evaluating the bundle. Five seconds without
+yielding interrupts only the offending call, and heap exhaustion only fails
+the call that ran out of memory.
+
+The server pings every 10 seconds. After 30 seconds without a reply it sends
+a fresh probe and allows another interval for a pending pong before killing
+the process group. A panic aborts the action process; exit or loss of the
 heartbeat fails outstanding calls. The next call restarts the process after
 back-off from 250 ms up to 30 seconds. At least 60 seconds of uptime resets the
 back-off, even if no call completed. Server shutdown stops the action process,

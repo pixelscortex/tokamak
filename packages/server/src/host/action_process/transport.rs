@@ -41,9 +41,9 @@ pub(super) fn start(runtime: &Handle, host: &Path, timing: Timing) -> Result<Arc
             error = child.exited() => format!("Action process exited: {error}"),
             result = write_messages(input, writes) =>
                 format!("Action process exited: {}", result.err().unwrap_or_else(|| "stdin closed".into())),
-            error = heartbeat(&outgoing, answers, timing) => error,
             result = exchange(&outgoing, BufReader::new(output), receive, &mut calls, pong) =>
                 format!("Action process exited: {}", result.err().unwrap_or_else(|| "stdout closed".into())),
+            error = heartbeat(&outgoing, answers, timing) => error,
         };
         let _ = running.stopped_at.set(Instant::now());
         running.stop.cancel();
@@ -110,8 +110,13 @@ async fn heartbeat(
     let mut ticks = tokio::time::interval_at(Instant::now() + timing.ping, timing.ping);
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut id = 0;
+    let mut probe = None;
     loop {
-        let (_, last) = *answers.borrow_and_update();
+        let (acknowledged, last) = *answers.borrow_and_update();
+        if probe.is_some_and(|(previous, _)| previous != acknowledged) {
+            probe = None;
+        }
+        let deadline = probe.map_or(last + timing.unresponsive, |(_, deadline)| deadline);
         tokio::select! {
             biased;
             answer = answers.changed() => {
@@ -119,8 +124,15 @@ async fn heartbeat(
                     return "Action process exited: heartbeat channel closed".into();
                 }
             }
-            () = tokio::time::sleep_until(last + timing.unresponsive) => {
-                return "Action process is unresponsive: heartbeat timed out".into();
+            () = tokio::time::sleep_until(deadline) => {
+                if probe.is_some() {
+                    return "Action process is unresponsive: heartbeat timed out".into();
+                }
+                // The server may have been paused with a pong still in the pipe.
+                // Give the reader another interval and send a fresh probe.
+                id += 1;
+                let _ = outgoing.try_send(json!({"type":"ping","id":id}));
+                probe = Some((acknowledged, Instant::now() + timing.ping));
             }
             _ = ticks.tick() => {
                 id += 1;

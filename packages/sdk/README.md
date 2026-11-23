@@ -426,8 +426,8 @@ or process exit. Bun must be installed on the host. See the root README's
 [worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
 
 With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, all plugins' actions run in one action
-process, with a separate QuickJS runtime for each plugin. Every action call
-starts with fresh module state, including calls to `runtime: "worker"` plugins
+process. Every action call has its own QuickJS runtime and starts with fresh
+module state, including calls to `runtime: "worker"` plugins
 that kept module state between calls on Bun. There is no `process` or
 `process.env`; use `await ctx.env(name)` and declare `env:<name>`, as in default
 actions.
@@ -483,7 +483,8 @@ Queries, mutations and actions receive `ctx.auth.user` (`id`, `name`, and
 `name`). Nested calls keep the same caller on signed-in requests. Before
 sign-in, an `auth.method` action and its nested calls are anonymous:
 `ctx.auth` throws, and nested calls can only access private queries and mutations
-of that provider.
+of that provider. With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, the short sign-in
+time budget includes starting the call's QuickJS runtime and evaluating the bundle.
 
 In a window component, call `auth.me()` during setup. It returns a live object
 with `id`, `name`, `role`, and `device`. Read the fields in reactive code so they

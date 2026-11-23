@@ -1,4 +1,4 @@
-//! Examine an older combined bundle without loading its modules in the server.
+//! Evaluate verified action bundles outside the server.
 
 use std::{path::Path, sync::Arc};
 
@@ -7,8 +7,8 @@ use engine::{Bundle, Engine, Limits, OpRegistry, QuickJsEngine};
 use serde_json::{Value, json};
 
 pub(crate) async fn run(path: &Path) -> Result<()> {
-    let frame = match contains_actions(path).await {
-        Ok(has_actions) => json!({"hasActions": has_actions}),
+    let frame = match inspect(path).await {
+        Ok(frame) => frame,
         Err(error) => json!({"error": format!("{error:#}")}),
     };
     serde_json::to_writer(std::io::stdout().lock(), &frame)?;
@@ -16,8 +16,20 @@ pub(crate) async fn run(path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn contains_actions(path: &Path) -> Result<bool> {
+async fn inspect(path: &Path) -> Result<Value> {
     let source = std::fs::read_to_string(path).context("Read verified server bundle")?;
+    if let Ok(options) = std::env::var("TOKAMAK_ACTION_INSPECT") {
+        let (heap, worker_entry) = options
+            .split_once(':')
+            .context("Invalid action inspection options")?;
+        super::call::inspect(&source, heap.parse()?, worker_entry.parse()?).await?;
+        return Ok(json!({"ok": true}));
+    }
+
+    Ok(json!({"hasActions": contains_actions(source).await?}))
+}
+
+async fn contains_actions(source: String) -> Result<bool> {
     let bundle = Bundle::new(source, None)?;
     let mut engine = QuickJsEngine::new(Limits::default())?;
     let descriptor = engine

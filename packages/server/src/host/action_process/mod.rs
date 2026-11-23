@@ -86,6 +86,12 @@ impl Source {
         })
     }
 
+    pub(crate) async fn inspect(&self) -> Result<(), crate::Error> {
+        inspection::inspect_action(self.path(), self.worker_entry)
+            .await
+            .map_err(crate::Error::Invalid)
+    }
+
     fn path(&self) -> &Path {
         match &self.code {
             Snapshot::Artifact(code) => code.path(),

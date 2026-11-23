@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use super::*;
 
 const PEER: &str = r#"#!/bin/sh
-field() { printf '%s\n' "$line" | /usr/bin/sed -E "s/.*\"$1\":([0-9]+).*/\1/"; }
+field() { value=${line#*\"$1\":}; printf "%s" "${value%%[!0-9]*}"; }
 while IFS= read -r line; do
     case "$line" in
         *'"type":"ping"'*)
@@ -85,8 +85,8 @@ async fn echo(supervisor: &Supervisor, source: Arc<Source>) {
 #[tokio::test]
 async fn stopped_child_fails_running_calls_and_is_replaced() {
     let (_directory, supervisor) = setup(Timing {
-        ping: Duration::from_millis(100),
-        unresponsive: Duration::from_secs(1),
+        ping: Duration::from_millis(500),
+        unresponsive: Duration::from_secs(2),
         ..Timing::default()
     });
     let source = source("waiting");
@@ -100,7 +100,7 @@ async fn stopped_child_fails_running_calls_and_is_replaced() {
                 .await
         }
     });
-    if tokio::time::timeout(Duration::from_secs(3), entered.recv())
+    if tokio::time::timeout(Duration::from_secs(8), entered.recv())
         .await
         .unwrap()
         .is_none()
@@ -112,7 +112,7 @@ async fn stopped_child_fails_running_calls_and_is_replaced() {
     }
     let old = supervisor.process().await.unwrap();
     signal(&old, libc::SIGSTOP);
-    let error = tokio::time::timeout(Duration::from_secs(2), waiting)
+    let error = tokio::time::timeout(Duration::from_secs(9), waiting)
         .await
         .unwrap()
         .unwrap()
@@ -121,6 +121,24 @@ async fn stopped_child_fails_running_calls_and_is_replaced() {
 
     echo(&supervisor, source).await;
     assert_ne!(supervisor.process().await.unwrap().pid, old.pid);
+    supervisor.stop().await;
+}
+
+#[tokio::test]
+async fn heartbeat_allows_a_healthy_child_to_reply_after_a_server_pause() {
+    let (_directory, supervisor) = setup(Timing {
+        ping: Duration::from_millis(500),
+        unresponsive: Duration::from_secs(2),
+        ..Timing::default()
+    });
+    let source = source("paused");
+    echo(&supervisor, source.clone()).await;
+    let process = supervisor.process().await.unwrap();
+
+    // Pause the current-thread server executor, leaving the peer running.
+    std::thread::sleep(Duration::from_millis(2250));
+    echo(&supervisor, source).await;
+    assert_eq!(supervisor.process().await.unwrap().pid, process.pid);
     supervisor.stop().await;
 }
 

@@ -81,9 +81,11 @@ existing installation. Queries and mutations stay in the server.
 ## Plugin workers
 
 A plugin opts its actions into Bun with `runtime: "worker"` in `definePlugin`.
-Queries and mutations continue to run in QuickJS. Each opted-in plugin has one
-lazy, long-lived worker, preserving module state between actions. Bun must be
-installed on the machine; a missing executable produces
+Queries and mutations continue to run in QuickJS. With the default runtime,
+each opted-in plugin has one lazy Bun worker that preserves module state between
+actions. With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, every action gets fresh module
+state in its own QuickJS runtime in the action process. For Bun workers, Bun
+must be installed on the machine; a missing executable produces
 `Plugin <id> needs Bun: install from https://bun.sh`.
 
 The build emits a separate Bun action bundle and a generic SDK worker entry.

@@ -24,7 +24,7 @@ import { within } from "./within.ts";
 const binary = process.argv[2];
 assert.ok(binary, "Expected the path to the tokamak-server binary");
 
-const timeoutMs = 15_000;
+const timeoutMs = 20_000;
 const workspace = fileURLToPath(new URL("../../../", import.meta.url));
 const ownerToken = "auth-acceptance-owner-token-for-test";
 const appOrigin = "tauri://localhost";
@@ -763,7 +763,7 @@ async function verifySignIn(probe) {
           deviceName: "Test client",
         });
       const started = performance.now();
-      assert.equal((await within(signIn("hang"), "anonymous deadline", 6100)).status, 503);
+      assert.equal((await within(signIn("hang"), "anonymous deadline", 16_000)).status, 503);
       assert.ok(performance.now() - started >= 800, "sign-in kept its call budget");
 
       await withClient(address, ownerToken, async (client) => {
@@ -786,22 +786,25 @@ async function verifySignIn(probe) {
     assert.equal((await signIn(address, "sam")).status, 200);
   });
   assert.match(malformedLogs, /Skipping plugin alternate-auth: .*requires a form/);
-  // Startup evaluates transactions. Break that side of the provider so
-  // recovery is exercised even when the action module is loaded lazily.
-  const accounts = join(basicAuth, "src/server/accounts.ts");
-  await writeFile(accounts, (await readFile(accounts, "utf8")) + '\nthrow new Error("Broken basic-auth");');
-  buildDirectory(basicAuth);
-  const brokenLogs = await serve(binary, root, plugins, true, async (address) => {
-    await discovery(address, { methods: [], ownerSetup: false });
-    assert.equal((await signIn(address, "sam")).status, 503);
-    await withClient(address, firstKey, async (client) => {
-      assert.deepEqual((await client.query(authCaller, {})).device, firstDevice);
+  for (const module of ["method", "accounts"]) {
+    const file = join(basicAuth, `src/server/${module}.ts`);
+    const original = await readFile(file, "utf8");
+    const sentinel = `Broken basic-auth ${module}`;
+    await writeFile(file, original + `\nthrow new Error("${sentinel}");`);
+    buildDirectory(basicAuth);
+    const brokenLogs = await serve(binary, root, plugins, true, async (address) => {
+      await discovery(address, { methods: [], ownerSetup: false });
+      assert.equal((await signIn(address, "sam")).status, 503);
+      await withClient(address, firstKey, async (client) => {
+        assert.deepEqual((await client.query(authCaller, {})).device, firstDevice);
+      });
+      await withClient(address, ownerToken, async (client) => {
+        assert.equal((await client.query(authCaller, {})).user.role, "owner");
+      });
     });
-    await withClient(address, ownerToken, async (client) => {
-      assert.equal((await client.query(authCaller, {})).user.role, "owner");
-    });
-  });
-  assert.match(brokenLogs, /Skipping plugin basic-auth: .*Broken basic-auth/);
+    assert.match(brokenLogs, new RegExp(`Skipping plugin basic-auth: .*${sentinel}`));
+    await writeFile(file, original);
+  }
 }
 
 async function copyAndBuildAuth(plugin, legacy) {

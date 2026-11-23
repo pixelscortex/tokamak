@@ -1,14 +1,11 @@
-//! One pipe pair for the process; JavaScript stays on the owning plugin's thread.
+//! One pipe pair for the process; each running call owns its JavaScript thread.
+mod call;
 pub(crate) mod inspect;
 mod output;
-mod plugin;
+mod queue;
 mod realm;
 
-use std::{
-    collections::HashMap,
-    io,
-    sync::{Arc, atomic::AtomicU64},
-};
+use std::{io, sync::Arc};
 
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -20,6 +17,8 @@ use output::Output;
 pub(super) const BUNDLE: &str = "tokamak-action.js";
 
 pub async fn run() -> Result<()> {
+    abort_on_panic();
+
     let (input, mut frames) = mpsc::channel::<Value>(WORKER_CAPACITY);
     std::thread::spawn(move || {
         let result = (|| -> Result<()> {
@@ -38,9 +37,20 @@ pub async fn run() -> Result<()> {
     });
 
     let output = Arc::new(Output::start());
-    let next_op = Arc::new(AtomicU64::new(0));
-    let mut plugins = HashMap::<u64, plugin::Thread>::new();
-    while let Some(frame) = frames.recv().await {
+    let (complete, mut completed) = mpsc::unbounded_channel();
+    let mut queue = queue::Queue::new(output.clone(), complete);
+    loop {
+        let frame = tokio::select! {
+            biased;
+            Some((key, id)) = completed.recv() => {
+                queue.finished(key, id);
+                continue;
+            }
+            frame = frames.recv() => {
+                let Some(frame) = frame else { break };
+                frame
+            }
+        };
         if frame["type"] == "ping" {
             output.pong(number(&frame, "id")?)?;
             continue;
@@ -48,36 +58,22 @@ pub async fn run() -> Result<()> {
 
         let slot = number(&frame, "slot")?;
         match frame["type"].as_str() {
-            Some("drop") => {
-                plugins.remove(&slot);
-            }
-            Some("invoke") => {
-                let id = number(&frame, "id")?;
-                let start = || plugin::Thread::start(slot, &frame, output.clone(), next_op.clone());
-                if let std::collections::hash_map::Entry::Vacant(entry) = plugins.entry(slot) {
-                    match start() {
-                        Ok(thread) => {
-                            entry.insert(thread);
-                        }
-                        Err(error) => {
-                            output.error(slot, id, &error.to_string());
-                            continue;
-                        }
-                    }
-                }
-                if plugins[&slot].send(frame).is_err() {
-                    output.error(slot, id, "Plugin action runtime stopped");
-                }
-            }
-            Some("cancel" | "opResult") => {
-                if let Some(plugin) = plugins.get(&slot) {
-                    let _ = plugin.send(frame);
-                }
-            }
+            Some("drop") => queue.retire(slot),
+            Some("invoke") => queue.invoke(slot, number(&frame, "id")?, frame),
+            Some("cancel") => queue.cancel(slot, number(&frame, "id")?),
+            Some("opResult") => queue.op_result(slot, number(&frame, "call")?, frame),
             _ => anyhow::bail!("Invalid action process message"),
         }
     }
     Ok(())
+}
+
+fn abort_on_panic() {
+    let report_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        report_panic(panic);
+        std::process::abort();
+    }));
 }
 
 fn number(frame: &Value, key: &str) -> Result<u64> {
@@ -85,4 +81,30 @@ fn number(frame: &Value, key: &str) -> Result<u64> {
         .as_u64()
         .filter(|id| *id < 1 << 53)
         .with_context(|| format!("Invalid action process {key}"))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_call_thread_panic_aborts_the_action_process() {
+        use std::{os::unix::process::ExitStatusExt, process::Command};
+
+        const CHILD: &str = "TOKAMAK_TEST_ACTION_PANIC";
+        if std::env::var_os(CHILD).is_some() {
+            super::abort_on_panic();
+            let _ = std::thread::spawn(|| panic!("action thread panic")).join();
+            return;
+        }
+
+        let status = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "action_process::tests::a_call_thread_panic_aborts_the_action_process",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap()
+            .status;
+        assert_eq!(status.signal(), Some(libc::SIGABRT));
+    }
 }

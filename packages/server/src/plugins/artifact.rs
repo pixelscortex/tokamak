@@ -117,7 +117,7 @@ impl Artifact {
         Ok(self.bundle.clone())
     }
 
-    pub(super) fn action_source(
+    pub(super) async fn action_source(
         &self,
         id: &str,
     ) -> Result<Arc<crate::host::action_process::Source>, Error> {
@@ -140,12 +140,9 @@ impl Artifact {
                 .ok_or_else(|| invalid("Missing server action bundle"))?;
             (self.assets[&entry.code].clone(), bundle, false)
         };
-        Ok(crate::host::action_process::Source::plugin(
-            id,
-            code,
-            bundle,
-            worker_entry,
-        ))
+        let source = crate::host::action_process::Source::plugin(id, code, bundle, worker_entry);
+        source.inspect().await?;
+        Ok(source)
     }
 
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,
