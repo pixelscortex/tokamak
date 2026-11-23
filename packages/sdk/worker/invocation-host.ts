@@ -4,6 +4,7 @@ import type { LocalProcess } from "../src/local";
 
 interface Programs {
   start: LocalProcess;
+  scope?(): void;
   close(signal?: "SIGKILL"): Promise<void>;
 }
 
@@ -30,6 +31,7 @@ export function invocationHost(
         (async (run) => {
           if (closing || signal.aborted) throw new Error("Local function cancelled");
           if (programs !== outer) throw new Error("Program scopes cannot nest");
+          outer?.scope?.();
           const inner = createPrograms();
           scopes.add(inner);
           try {

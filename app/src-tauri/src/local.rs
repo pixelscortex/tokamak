@@ -10,7 +10,7 @@ use std::{
 };
 use tauri::ipc::Channel;
 use tempfile::{NamedTempFile, TempPath};
-use tokamak_worker::{Lane, WORKER_CAPACITY, WORKER_FRAME_BYTES};
+use tokamak_worker::{LocalRuntime, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     sync::mpsc,
@@ -61,13 +61,12 @@ pub async fn local_worker_start(
 ) -> Result<String, String> {
     let root = crate::server::plugin_root(&app).map_err(|error| error.to_string())?;
     let installed = root.clone();
+    let plugin_id = plugin.clone();
     let (entry, code) =
         tokio::task::spawn_blocking(move || artifact(&installed, &plugin, &entry_hash, &code_hash))
             .await
             .map_err(|error| error.to_string())??;
     let paths = tokamak_worker::search_paths();
-    let bun = tokamak_worker::resolve("bun", &paths)
-        .ok_or("Local functions need Bun: install from https://bun.sh")?;
     let mut env = client_env(|name| std::env::var(name).ok());
     let data = tokio::task::spawn_blocking(crate::server::app_data_directory)
         .await
@@ -77,13 +76,14 @@ pub async fn local_worker_start(
         "TOKAMAK_APP_DATA_DIR".into(),
         data.to_string_lossy().into_owned(),
     );
-    if let Ok(path) = std::env::join_paths(paths) {
+    if let Ok(path) = std::env::join_paths(&paths) {
         env.insert("PATH".into(), path.to_string_lossy().into_owned());
     }
     // Start beside the install tree so a program without an explicit cwd
     // does not write into the plugin's installed build.
     let cwd = root.parent().unwrap_or(root.as_path());
-    let mut process = tokamak_worker::Process::launch(&bun, &entry, &code, cwd, &env, Lane::Local)?;
+    let (mut process, runtime) =
+        tokamak_worker::Process::launch_local(&entry, &code, cwd, &env, &paths)?;
     let (input, output, stderr) = process.pipes()?;
     let id = uuid::Uuid::new_v4().to_string();
     // Limit queued frames and resident workers even if the window sends
@@ -118,7 +118,7 @@ pub async fn local_worker_start(
         let closed = tokio::select! {
             _ = stop.cancelled() => "Local worker stopped".into(),
             error = process.exited() => error,
-            error = read(output, &events) => error,
+            error = read(output, &events, &plugin_id) => error,
             error = write(input, outgoing) => error,
         };
         process.stop().await;
@@ -127,7 +127,12 @@ pub async fn local_worker_start(
         {
             workers.remove(&handle);
         }
-        let _ = events.send(json!({ "type": "closed", "reason": closed }));
+        let reason = if runtime == LocalRuntime::QuickJs {
+            format!("Plugin host closed: {closed}")
+        } else {
+            closed
+        };
+        let _ = events.send(json!({ "type": "closed", "reason": reason }));
     });
     Ok(id)
 }
@@ -154,7 +159,7 @@ pub async fn local_worker_load(
         .to_owned();
     let mut registry = workers.0.lock().map_err(|error| error.to_string())?;
     let worker = registry.get_mut(&id).ok_or("Local worker closed")?;
-    // Bun opens the exact verified copy and caches its modules by file URL.
+    // Keep the verified bundle available for the worker until it exits.
     worker.provider_assets.push(code);
     Ok(path)
 }
@@ -199,7 +204,11 @@ pub async fn local_worker_close(
     Ok(())
 }
 
-async fn read(output: impl tokio::io::AsyncRead + Unpin, events: &Channel<Value>) -> String {
+async fn read(
+    output: impl tokio::io::AsyncRead + Unpin,
+    events: &Channel<Value>,
+    plugin: &str,
+) -> String {
     let mut output = BufReader::new(output);
     let mut line = Vec::new();
     loop {
@@ -219,6 +228,9 @@ async fn read(output: impl tokio::io::AsyncRead + Unpin, events: &Channel<Value>
         };
         // Logs are not part of the request channel.
         if message["type"] == "log" {
+            let level = message["level"].as_str().unwrap_or("info");
+            let text = message["text"].as_str().unwrap_or("");
+            tokamak_worker::log(format!("Plugin {plugin} [{level}]: {text}"));
             continue;
         }
         if events

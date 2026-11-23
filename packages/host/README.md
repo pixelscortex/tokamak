@@ -1,0 +1,49 @@
+# Plugin host
+
+The plugin host runs a plugin's local functions on QuickJS on macOS and Linux.
+Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` to opt in. Bun stays the default; the
+setting does not select a runtime for server actions. The client looks for
+`tokamak-plugin-host` next to its executable. For development, run
+`cargo build --locked -p tokamak-plugin-host` and set `TOKAMAK_PLUGIN_HOST`
+if the executable lives elsewhere.
+
+Bun bundles the shared SDK dispatcher at build time; the host does not need
+Bun to run. The desktop launcher starts the host in its own process group
+with a guardian. The host kills that group on stdin EOF or shutdown.
+
+The host accepts up to 128 concurrent local calls and uses back-pressure
+when its input queue fills. A local call has no wall-clock limit. Cancelling
+a call aborts its JavaScript signal, rejects its pending host operations and
+discards late output from that call. Other calls and module state continue.
+If JavaScript runs without yielding for five seconds, QuickJS interrupts it.
+Only then does the host reset the runtime: started calls fail and module state
+is lost, while queued invocations run in the new runtime.
+
+Each host runs one QuickJS runtime and realm for its owning plugin. It loads
+verified provider bundles returned by the desktop's `local.contracts`
+operation in that same realm. Providers can receive live objects and call
+functions directly. Imports from other paths are refused; providers and the
+owning plugin use the same built-in allow list. Programs (`proc` and
+`withPrograms`) are unavailable on this runtime.
+
+The QuickJS heap defaults to 256 MiB. Override it with the positive integer
+`TOKAMAK_PLUGIN_HOST_HEAP_MIB`. The launcher passes that setting to the host.
+A reportable allocation failure is returned to its invocation. If memory
+runs so low that QuickJS cannot run the rejection handler, the call can
+still be cancelled. Process exit fails outstanding calls, and the next call
+starts a new process.
+
+The filesystem module supports Node-style error codes and string, file URL
+and byte-array paths. `cp` copies symlinks by default and supports
+`dereference`, `recursive`, `force`, `errorOnExist` and
+`preserveTimestamps`. It does not support `filter` or `verbatimSymlinks`.
+The host supplies up to 4,096 live timers with `ref()` and `unref()` handles
+(both are no-ops). Its console supports common Node formatting, traces and
+object inspection; log messages are cut off at 8,192 characters.
+
+LLRT supplies Buffer, web streams, the abort and URL APIs, text encoders and
+decoders, and HTTP/1.1 fetch with rustls and WebPKI roots. This host does not
+supply `structuredClone`: LLRT implements it privately in its full VM rather
+than in a standalone module.
+
+See [Dependencies](DEPENDENCIES.md) for versions and licenses.

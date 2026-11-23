@@ -23,6 +23,7 @@ case "$1" in
     ;;
   rust)
     cargo test --locked --workspace --lib
+    cargo test --locked -p tokamak-plugin-host -p tokamak-worker
     # These tests launch replay programs and retain the replay privacy scans.
     CI=1 cargo test --locked -p server \
       --test ai_turns --test ai_threads --test ai_liveness --test chat_threads \

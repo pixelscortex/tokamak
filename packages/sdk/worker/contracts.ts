@@ -3,7 +3,12 @@ import { type ContractEntry, type ContractScope, type Provider } from "../src/in
 import type { AuthContext, FunctionDefinition } from "../src/functions";
 import { callHost, type HostBridge } from "../src/host";
 
-export function workerContracts(root: { contractProviders?: Record<string, Provider<"local">> }) {
+type ProviderModule = { contractProviders?: Record<string, Provider<"local">> };
+
+export function workerContracts(
+  root: ProviderModule,
+  load: (path: string) => Promise<ProviderModule> = (path) => import(pathToFileURL(path).href),
+) {
   return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
     return {
       async list(key) {
@@ -16,7 +21,7 @@ export function workerContracts(root: { contractProviders?: Record<string, Provi
         if (!auth) throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
         for (const { plugin: candidate, registration, path, own, owner } of candidates) {
-          const module = own ? root : ((await import(pathToFileURL(path).href)) as typeof root);
+          const module = own ? root : await load(path);
           const provider = module.contractProviders?.[registration];
           if (
             !provider ||
