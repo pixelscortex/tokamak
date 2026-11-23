@@ -1,0 +1,21 @@
+.ci/check.sh
+  s_bead5d35bc54c0::t_57e9a294cacfb7 90
+moon.yml
+  s_bead5d35bc54c0::t_d2101cc55e7e26 137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aa88b2c93897fd70213eafaeb2ffb2e03f516186",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
