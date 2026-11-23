@@ -1,0 +1,57 @@
+plugins/chat/src/server/threads/threads.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 145
+packages/sdk/tests/program-scope.test.mjs
+  s_e15c1ce2ddfaa6::t_7fa3ef8e0a35fe 1-34
+packages/sdk/src/host.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 98-101
+packages/sdk/src/functions.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 14-19,116,123,132,154,158,263,288,321-329,473-475,480,482-485
+packages/sdk/src/internal/contracts.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 22-23,26-33,110-111,121-123,127,187-188
+  s_e15c1ce2ddfaa6::t_7fa3ef8e0a35fe 112-115
+packages/sdk/worker/invocation-host.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 1-53
+packages/sdk/worker/contracts.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 2,6-34,36-40,45,48
+packages/server/tests/ai-turns-driver.mjs
+  s_e15c1ce2ddfaa6::t_7fa3ef8e0a35fe 549-565,569-572
+packages/sdk/README.md
+  s_e15c1ce2ddfaa6::t_9f44262335872d 211,213
+  s_e15c1ce2ddfaa6::t_7fa3ef8e0a35fe 210,212,214-216
+plugins/ai/src/server/run.ts
+  s_e15c1ce2ddfaa6::t_7fa3ef8e0a35fe 100,105
+  s_e15c1ce2ddfaa6::t_9f44262335872d 47,70
+packages/sdk/tools/worker.mjs
+  s_e15c1ce2ddfaa6::t_9f44262335872d 89
+plugins/ai/src/server/agents.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 23,25
+plugins/ai/README.md
+  s_e15c1ce2ddfaa6::t_9f44262335872d 116
+packages/server/tests/contracts-driver.mjs
+  s_e15c1ce2ddfaa6::t_7fa3ef8e0a35fe 126,246
+  s_e15c1ce2ddfaa6::t_9f44262335872d 100-101,103,107,115,124
+plugins/ai/src/server/controls.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 53,57
+packages/sdk/worker/entry.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 5,34,48-50,65-67,70-71,74
+plugins/ai/src/server/turn-hooks.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 2,10,35
+packages/sdk/src/local.ts
+  s_e15c1ce2ddfaa6::t_9f44262335872d 22-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adf00658dbfbbbf46e76328681a350731a3b2077",
+  "prompts": {},
+  "sessions": {
+    "s_e15c1ce2ddfaa6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a207b2-eb46-70e0-8723-123a728193d9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
