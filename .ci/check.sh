@@ -22,21 +22,19 @@ case "$1" in
     proto run bun -- test ./.ci/*.test.ts
     ;;
   rust)
-    cargo test --locked --workspace --lib
+    cargo build --locked -p tokamak-plugin-host
+    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked --workspace --lib
     cargo test --locked -p tokamak-plugin-host -p tokamak-worker
     # Replay traffic reaches the real server and database in both runs. Compare
     # the stored content and order across runtimes, excluding wall-clock times.
     TOKAMAK_TURN_PARITY_DIR=$(mktemp -d)
     export TOKAMAK_TURN_PARITY_DIR
     trap 'rm -f "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; rmdir "$TOKAMAK_TURN_PARITY_DIR"' EXIT
-    # local_functions runs on both runtimes itself.
     TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test ai_turns --test ai_threads --test ai_liveness --test chat_threads \
       --test code_snapshots --test code_changes --test codex_turns --test claude_turns \
-      --test local_functions --test identity --test sdk_transport --test actions --test plugins
-    TOKAMAK_PLUGIN_RUNTIME=quickjs CI=1 cargo test --locked -p server \
-      --test ai_turns --test ai_threads --test ai_liveness --test chat_threads \
-      --test code_snapshots --test code_changes --test codex_turns --test claude_turns
+      --test local_functions --test identity --test sdk_transport --test actions --test plugins --test workers
+    env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --tests
     ;;
   *) exit 2 ;;
 esac

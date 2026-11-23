@@ -512,6 +512,9 @@ fn busy_worker_and_children_die_with_server() {
 #[tokio::test]
 async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
     if !quickjs() {
+        eprintln!(
+            "Skipping old worker import rejection: the Bun fallback still supports these imports"
+        );
         return;
     }
     let directory = install_fixture(true);
@@ -525,6 +528,9 @@ async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
 #[tokio::test]
 async fn quickjs_rejects_a_reload_if_the_action_module_throws_during_evaluation() {
     if !quickjs() {
+        eprintln!(
+            "Skipping action inspection at reload: the Bun worker evaluates the module on demand"
+        );
         return;
     }
 

@@ -33,22 +33,28 @@ There are no added dependencies or enlarged native stacks.
 ## Agent turns on both local runtimes
 
 The Claude, Codex, AI, chat and code acceptance tests use a real server and
-database. Their test client starts Bun by default and the plugin host with
-`TOKAMAK_PLUGIN_RUNTIME=quickjs` on macOS and Linux. The Rust test launcher
-finds or builds the host beside the server; use `TOKAMAK_PLUGIN_HOST` to
-override that path.
+database. The test launcher uses the Rust runtime selector: unset means
+QuickJS on macOS and Linux, and Bun on Windows. Explicitly set
+`TOKAMAK_PLUGIN_RUNTIME=bun` to exercise the temporary fallback, which will be
+removed. See the [plugin runtime guide](../../sdk/README.md#plugin-runtimes)
+for the differences. Build the host beside the server before running the full
+suite, or use `TOKAMAK_PLUGIN_HOST` to give its path.
 
 To compare stored Claude and Codex turns, run both suites with the same
 temporary directory. Bun writes a reference and QuickJS checks the final
 text, thinking, usage, session, state, tasks, plan and ordered reports against
-it. The Rust CI job does this automatically.
+it. The Linux Rust CI job does this automatically, with the full server suite
+on the default and the runtime-sensitive targets on Bun. The local functions
+suite includes a smoke test that runs a server, a local function and an action
+with the setting unset and an empty PATH.
 
 ```sh
+cargo build --locked -p tokamak-plugin-host
 parity_dir=$(mktemp -d)
 TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=bun CI=1 \
-  cargo test --locked -p server --test claude_turns --test codex_turns -- --nocapture
-TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=quickjs CI=1 \
-  cargo test --locked -p server --test claude_turns --test codex_turns -- --nocapture
+  cargo test --locked -p server -- --test-threads=1
+env -u TOKAMAK_PLUGIN_RUNTIME TOKAMAK_TURN_PARITY_DIR="$parity_dir" CI=1 \
+  cargo test --locked -p server -- --test-threads=1
 rm -f "$parity_dir/claude.json" "$parity_dir/codex.json"
 rmdir "$parity_dir"
 ```

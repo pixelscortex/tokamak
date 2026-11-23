@@ -1,6 +1,6 @@
 // The fake-agent harness for end-to-end turns: the real tokamak-server
 // program, real clients over WebSockets, the real plugin build of chat, ai and
-// every fake agent plugin in ./agents, a real local part (Bun worker) started
+// every fake agent plugin in ./agents, a real local part started
 // the way the desktop client starts it, and each agent's replay program on PATH.
 //
 //   const h = await agentHarness({ binary, name: "ai-turns" });
@@ -16,15 +16,22 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
 import { LocalFunctions } from "../../packages/runtime/js/local.ts";
-import { agentsFolder, bunPath, fakeAgents, installFakeAgent, localLauncher } from "./local.mjs";
+import {
+  agentsFolder,
+  bunPath,
+  fakeAgents,
+  installFakeAgent,
+  localLauncher,
+  selectedRuntime,
+} from "./local.mjs";
 
-export { bunPath, fakeAgents, installFakeAgent, localLauncher };
+export { bunPath, fakeAgents, installFakeAgent, localLauncher, selectedRuntime };
 
 export const workspace = fileURLToPath(new URL("../../", import.meta.url));
 const TIMEOUT_MS = 20_000;
@@ -59,7 +66,13 @@ export function build(folder) {
 export async function copySource(from, into, modules) {
   await cp(from, into, {
     recursive: true,
-    filter: (path) => !["dist", "node_modules", ".tokamak", "target"].includes(path.split("/").at(-1)),
+    filter(path) {
+      const name = basename(path);
+      return (
+        !["dist", "node_modules", ".tokamak", "target"].includes(name) &&
+        !(basename(dirname(path)) === "_generated" && name.startsWith("build-"))
+      );
+    },
   });
   await symlink(modules, join(into, "node_modules"), "dir");
   await mkdir(join(into, "src/server"), { recursive: true });
@@ -215,9 +228,19 @@ async function post(address, path, key, body, status = 200) {
 
 /** Installs the built sign-in provider beside the other plugins. */
 export async function installBasicAuth(plugins) {
-  const source = join(workspace, "plugins/basic-auth");
-  build(source);
-  await cp(join(source, "dist"), join(plugins, "basic-auth", "dist"), { recursive: true });
+  const original = join(workspace, "plugins/basic-auth");
+  const target = join(workspace, "packages/server/target");
+  await mkdir(target, { recursive: true });
+  const scratch = await mkdtemp(join(target, "sign-in-source-"));
+  const source = join(scratch, "basic-auth");
+  try {
+    // Concurrent drivers must not read each other's generated build entry.
+    await copySource(original, source, join(original, "node_modules"));
+    build(source);
+    await cp(join(source, "dist"), join(plugins, "basic-auth", "dist"), { recursive: true });
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 }
 
 /** Adds a member and issues a device key only after their first password change. */
@@ -245,6 +268,7 @@ export async function signInMember(address, ownerKey, username) {
  */
 export async function agentHarness({ binary, name, ownerToken = "agent-harness-owner-token-for-tests" }) {
   assert.ok(binary, "Expected the path to the tokamak-server binary");
+  const selection = selectedRuntime(binary);
   const target = join(workspace, "packages/server/target");
   await mkdir(target, { recursive: true });
   const scratch = await mkdtemp(join(target, `${name}-`));
@@ -280,7 +304,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       await writeFile(join(folder, "local.js"), code);
 
       const hash = (content) => createHash("sha256").update(content).digest("hex");
-      const launch = localLauncher(() => folder, localEnv);
+      const launch = localLauncher(selection, () => folder, localEnv);
       let worker;
       const result = new Promise((resolve, reject) => {
         const receive = (frame) => {
@@ -303,7 +327,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       });
 
       try {
-        const runtime = process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs" ? "quickjs" : "bun";
+        const { runtime } = selection;
         const frame = await within(result, `${runtime} local runtime probe`);
         assert.equal(
           frame.value,
@@ -315,6 +339,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       }
     },
 
+    selection,
     scratch,
     home,
     /** Where each fake agent's command sits on the local part's PATH: unlink one to "uninstall" it. */
@@ -375,6 +400,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
           onClose,
           launch: local
             ? localLauncher(
+                selection,
                 (id) => join(pluginsDir, id),
                 Object.fromEntries(
                   Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),

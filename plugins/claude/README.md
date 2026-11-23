@@ -22,6 +22,6 @@ CARGO_BUILD_JOBS=2 cargo test --locked -p server --test claude_turns
 To run the live smoke test locally, first build the server if necessary. This uses your configured Claude login and may consume usage. It cannot run in CI.
 
 ```sh
-CARGO_BUILD_JOBS=2 cargo build --locked -p server --bin tokamak-server
+CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
 proto run bun -- plugins/claude/tests/turns.mjs target/debug/tokamak-server --live
 ```

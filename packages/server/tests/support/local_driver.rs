@@ -6,9 +6,7 @@ mod local_runtime;
 pub fn run(script: &str) {
     let mut bun = Command::new("proto");
     bun.args(["run", "bun", "--"]);
-    let Some(runtime) = local_runtime::selected() else {
-        return;
-    };
+    let runtime = local_runtime::selected();
     let output = local_runtime::driver(bun, script, &runtime)
         .output()
         .expect("run the local acceptance driver");

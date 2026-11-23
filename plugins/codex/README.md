@@ -33,7 +33,7 @@ private data; run just the scan with
 To verify with an installed, signed-in Codex, run locally:
 
 ```sh
-CARGO_BUILD_JOBS=2 cargo build --locked -p server --bin tokamak-server
+CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
 proto run bun -- plugins/codex/tests/e2e.mjs target/debug/tokamak-server --real
 ```
 

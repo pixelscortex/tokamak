@@ -10,6 +10,13 @@ pub enum LocalRuntime {
 }
 
 impl LocalRuntime {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Bun => "bun",
+            Self::QuickJs => "quickjs",
+        }
+    }
+
     pub fn selected() -> Result<Self, String> {
         select(
             std::env::var_os("TOKAMAK_PLUGIN_RUNTIME").as_deref(),
@@ -55,12 +62,14 @@ fn heap_bytes(variable: &str, default_mib: usize) -> Result<usize, String> {
 }
 
 fn select(value: Option<&OsStr>, supported: bool) -> Result<LocalRuntime, String> {
-    if !supported || value.is_none() || value == Some(OsStr::new("bun")) {
-        Ok(LocalRuntime::Bun)
-    } else if value == Some(OsStr::new("quickjs")) {
-        Ok(LocalRuntime::QuickJs)
-    } else {
-        Err("TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs".into())
+    match value {
+        Some(value) if value == "bun" => Ok(LocalRuntime::Bun),
+        value if value.is_none() || value == Some(OsStr::new("quickjs")) => Ok(if supported {
+            LocalRuntime::QuickJs
+        } else {
+            LocalRuntime::Bun
+        }),
+        _ => Err("TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs".into()),
     }
 }
 
@@ -71,7 +80,8 @@ mod tests {
 
     #[test]
     fn local_runtime_selection_used_by_the_desktop_launcher() {
-        assert_eq!(select(None, true), Ok(LocalRuntime::Bun));
+        assert_eq!(select(None, true), Ok(LocalRuntime::QuickJs));
+        assert_eq!(select(None, false), Ok(LocalRuntime::Bun));
         assert_eq!(select(Some(OsStr::new("bun")), true), Ok(LocalRuntime::Bun));
         assert_eq!(
             select(Some(OsStr::new("quickjs")), true),
@@ -81,9 +91,11 @@ mod tests {
             select(Some(OsStr::new("quickjs")), false),
             Ok(LocalRuntime::Bun)
         );
-        assert_eq!(
-            select(Some(OsStr::new("other")), true).unwrap_err(),
-            "TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs"
-        );
+        for supported in [true, false] {
+            assert_eq!(
+                select(Some(OsStr::new("other")), supported).unwrap_err(),
+                "TOKAMAK_PLUGIN_RUNTIME must be bun or quickjs"
+            );
+        }
     }
 }

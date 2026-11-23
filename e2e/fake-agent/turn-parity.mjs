@@ -36,7 +36,7 @@ export function turnParity(h, suite) {
       if (!directory) return;
       const file = join(directory, `${suite}.json`);
       const json = JSON.stringify(samples, null, 2).replaceAll(h.scratch, "<scratch>");
-      if (process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs") {
+      if (h.selection.runtime === "quickjs") {
         const reference = await readFile(file, "utf8").catch((error) => {
           if (error.code === "ENOENT")
             throw new Error(`Missing Bun turn parity reference: ${file}`, { cause: error });

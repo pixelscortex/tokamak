@@ -1,8 +1,10 @@
 # Plugin host
 
-The plugin host runs a plugin's local functions on QuickJS on macOS and Linux.
-Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` to opt in. Bun stays the default. The client looks for
-`tokamak-plugin-host` next to its executable. For development, run
+The plugin host runs local functions and server actions on QuickJS by default
+on macOS and Linux. `TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback that
+will be removed. Windows still uses Bun. See the SDK's
+[plugin runtime guide](../sdk/README.md#plugin-runtimes) for plugin compatibility.
+The client looks for `tokamak-plugin-host` next to its executable. For development, run
 `cargo build --locked -p tokamak-plugin-host` and set `TOKAMAK_PLUGIN_HOST`
 if the executable lives elsewhere.
 
@@ -72,7 +74,7 @@ than in a standalone module.
 
 ## Action process
 
-With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, the server looks for `tokamak-plugin-host`
+When QuickJS is selected, the server looks for `tokamak-plugin-host`
 at startup, next to its executable unless `TOKAMAK_PLUGIN_HOST` overrides that
 path. It starts one action process in `--actions` mode on the first action call.
 The action process has no file or program capability.

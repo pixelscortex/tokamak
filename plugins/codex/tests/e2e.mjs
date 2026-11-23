@@ -44,7 +44,7 @@ try {
   const { ai } = h.api;
   const address = await h.serve("server");
   const connectClient = (env) =>
-    connect(address, { cleanup, launch: localLauncher((id) => join(h.plugins, id), env) });
+    connect(address, { cleanup, launch: localLauncher(h.selection, (id) => join(h.plugins, id), env) });
   const replayClient = await connectClient(inherited);
   const agentClient = real
     ? await connectClient({

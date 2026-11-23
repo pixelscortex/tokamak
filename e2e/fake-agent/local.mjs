@@ -1,7 +1,7 @@
 // The local part as the desktop client starts it, and the `fake-agent` command,
 // for any test runtime (Bun or Node): the server harness and the browser suite.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -42,6 +42,13 @@ export async function installFakeAgent(bin, commands) {
   }
 }
 
+// Ask the server's selector so the test client has the same platform defaults.
+export function selectedRuntime(binary) {
+  const runtime = execFileSync(binary, ["--plugin-runtime"], { encoding: "utf8" }).trim();
+  assert.ok(runtime === "quickjs" || runtime === "bun", `Unexpected plugin runtime: ${runtime}`);
+  return { binary, runtime };
+}
+
 /**
  * Launches a plugin's local worker the way the desktop client does
  * (app/src-tauri/src/local.rs): the installed, hash-checked `local-entry.js`
@@ -49,13 +56,13 @@ export async function installFakeAgent(bin, commands) {
  * Programs started with `ctx.proc` inherit exactly that environment.
  * `installed(id)` is the folder holding a plugin's build.
  */
-export function localLauncher(installed, env, observe) {
-  const quickjs = process.env.TOKAMAK_PLUGIN_RUNTIME === "quickjs";
+export function localLauncher({ binary, runtime }, installed, env, observe) {
+  const quickjs = runtime === "quickjs";
   const host = quickjs
     ? resolve(
         process.env.TOKAMAK_TEST_PLUGIN_HOST ??
           process.env.TOKAMAK_PLUGIN_HOST ??
-          join(dirname(process.argv[2]), "tokamak-plugin-host"),
+          join(dirname(binary), "tokamak-plugin-host"),
       )
     : undefined;
 

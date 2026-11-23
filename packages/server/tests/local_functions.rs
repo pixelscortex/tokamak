@@ -11,9 +11,7 @@ mod local_runtime;
 
 #[test]
 fn local_functions_reach_the_live_server_on_the_configured_runtime() {
-    if let Some(runtime) = local_runtime::selected() {
-        run(runtime);
-    }
+    run(local_runtime::selected(), None, false);
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -23,15 +21,30 @@ fn local_functions_reach_the_live_server_on_the_other_runtime() {
         LocalRuntime::Bun => LocalRuntime::QuickJs,
         LocalRuntime::QuickJs => LocalRuntime::Bun,
     };
-    run(other);
+    let setting = other.name();
+    run(other, Some(setting), false);
 }
 
-fn run(runtime: LocalRuntime) {
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn default_runtime_runs_local_functions_and_actions_without_bun() {
+    run(LocalRuntime::QuickJs, None, true);
+}
+
+fn run(runtime: LocalRuntime, setting: Option<&str>, without_bun: bool) {
     let mut command = local_runtime::driver(
         Command::new("bun"),
         "packages/server/tests/local-functions-driver.mjs",
         &runtime,
     );
+    if without_bun {
+        command
+            .env_remove("TOKAMAK_PLUGIN_RUNTIME")
+            .arg("--without-bun");
+    } else if let Some(setting) = setting {
+        command.env("TOKAMAK_PLUGIN_RUNTIME", setting);
+    }
+
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

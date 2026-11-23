@@ -98,7 +98,7 @@ tasks:
       - "!/.moon/cache/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
-    outputs: ["target/release/tokamak-server"]
+    outputs: ["target/release/tokamak-server", "target/release/tokamak-plugin-host"]
     options:
       cache: true
       mutex: "cargo"

@@ -64,28 +64,32 @@ Server/engine tests and SDK/build/app tests cover the runtime. Run
 `proto run bun -- run e2e:browser` for production browser tests against a real
 disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 
-Every PR runs Linux TypeScript/native/browser checks and an unsigned macOS Tauri
-build. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
+Ready pull requests run the Linux TypeScript, Rust, and lint checks. The Rust
+check exercises both plugin runtimes. Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
 and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
 for reserved signing inputs; signing, notarization and publishing are absent.
 
 ## QuickJS plugin runtime
 
-Set `TOKAMAK_PLUGIN_RUNTIME=quickjs` on macOS or Linux to run server actions
-in the shared [action process](packages/host/README.md#action-process) and local
-functions in the plugin host. Place `tokamak-plugin-host` alongside the server
-or set `TOKAMAK_PLUGIN_HOST` to its path. Rebuild plugins before switching an
-existing installation. Queries and mutations stay in the server.
+On macOS and Linux, QuickJS runs local functions in the plugin host and server
+actions in the action process by default. Ship `tokamak-plugin-host` alongside
+the app and server, or set `TOKAMAK_PLUGIN_HOST` to its path. Bun is still
+needed to build plugins from source. Installed builds can run without it.
 
-## Plugin workers
+`TOKAMAK_PLUGIN_RUNTIME=bun` restores the previous runtime behavior. It is a
+temporary fallback that will be removed. Windows still uses Bun. Restart
+the app and server after changing the setting. Run
+`tokamak-server --plugin-runtime` in the same environment to see the selected
+runtime. Rebuild older plugin artifacts before switching to QuickJS. See the
+[plugin runtime guide](packages/sdk/README.md#plugin-runtimes) for supported
+modules, environment, permissions, and limits.
 
-A plugin opts its actions into Bun with `runtime: "worker"` in `definePlugin`.
-Queries and mutations continue to run in QuickJS. With the default runtime,
-each opted-in plugin has one lazy Bun worker that preserves module state between
-actions. With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, every action gets fresh module
-state in its own QuickJS runtime in the action process. For Bun workers, Bun
-must be installed on the machine; a missing executable produces
+## Bun fallback workers
+
+When Bun is selected, each plugin with `runtime: "worker"` has one lazy Bun
+worker that preserves module state between actions. For Bun workers, Bun must
+be installed on the machine; a missing executable produces
 `Plugin <id> needs Bun: install from https://bun.sh`.
 
 The build emits a separate Bun action bundle and a generic SDK worker entry.
@@ -104,9 +108,9 @@ Reload, disable, and server shutdown kill the worker's whole process group.
 Crashes fail pending actions and restart on the next call with a short backoff.
 Actions have a one-hour wall deadline; cancellation allows 500 ms to settle
 before the worker and its children are killed. Plugins without the field keep
-running actions in QuickJS.
+running actions in the server’s engine.
 
-The desktop client uses a separate Bun worker for `local` functions.
+With the fallback, the desktop client uses a separate Bun worker for `local` functions.
 `client.local(api.module.function, args, { signal })` runs the matching
 installed plugin build. Local handlers can use files and start programs
 with `ctx.proc`; stopping a program or aborting its invocation stops its

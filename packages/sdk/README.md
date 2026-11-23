@@ -98,9 +98,8 @@ writes and schema migrations remain deferred.
 ## Actions
 
 `action({...})` (also returned by `createFunctions`) runs separately from
-queries and mutations. The default runtime caps the heap and has no load or call
-deadline. See [plugin action runtimes](#plugin-action-runtimes) for the optional
-QuickJS action process. Actions keep the real clock and randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
+queries and mutations. See [plugin runtimes](#plugin-runtimes) for the
+action process and its budgets. Actions keep the real clock and randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
 call rejoins the serialized coordinator and owns its own transaction. The action
 itself is never retried; external effects and earlier mutations remain after a
 later failure. Queries and mutations cannot call actions or fetch.
@@ -175,38 +174,9 @@ or return the failure to roll back the caller's writes too. Actions are not
 transactional: returning `fail` from an action does not undo mutations it
 already called. Throw for unexpected errors.
 
-## Node modules in the server part
-
-By default, server actions run in the server's own engine and cannot import any
-Node modules. Only server actions in a plugin with `runtime: "worker"` can import
-`node:path`, `node:os`, `node:crypto`, and `node:url`. Local functions can import
-those four modules plus `node:fs/promises`. Queries and mutations cannot import
-Node modules.
-
-Worker server actions and local functions have the global timers `setTimeout`,
-`setInterval`, and `setImmediate`, as well as the global `fetch`. The host does
-not supply `node:timers`, `node:timers/promises`, or subpaths such as
-`node:path/posix`.
-
-The build checks imports in the server part, including bare names such as
-`path`. An npm dependency that imports a built-in outside the allowed list
-(for example `events`, `buffer`, or `util`) also stops the build. If a plugin
-needs real Node, start it with `ctx.proc` in a local function.
-
-The build does not catch built-ins reached without an import, such as
-`process.getBuiltinModule(...)`, `import.meta.require(...)`, `process.binding(...)`,
-or `globalThis.Bun.*`. These fail on first use on the new host.
-
 ## Local functions
 
-On the plugin host, local functions get `process.platform` (`darwin` or
-`linux`), an empty `process.versions` (no `node` entry), and `process.env`,
-an ordinary object with a snapshot of the launch environment. Setting
-`process.env.X` on Bun affects programs started later; on the plugin host it
-only changes the snapshot. Pass `env` to `ctx.proc` to set a program's
-environment.
-
-`local({ args, handler })` runs in the desktop client's Bun worker. Put it
+`local({ args, handler })` runs in the client's local part. Put it
 under the plugin's `src/`; it can share a module with server functions.
 The plugin build emits its own `local.js` and a typed reference in the
 generated `api`. The desktop client uses the matching plugin build installed
@@ -423,23 +393,52 @@ The SDK changes do not link JavaScript bundles into the native binary. Native
 size measurements therefore measure the inherited host only; real QuickJS and
 SurrealDB integration remains for the host issues and their tests.
 
-## Plugin action runtimes
+## Plugin runtimes
 
-Set `runtime: "worker"` in `definePlugin` to build actions for a long-lived Bun
-process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
+On macOS and Linux, the default (unset or `TOKAMAK_PLUGIN_RUNTIME=quickjs`)
+runs local functions and server actions in `tokamak-plugin-host`. On Windows
+the default stays Bun. `TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback
+that will be removed. With the fallback, local functions and `runtime: "worker"`
+actions run in Bun; other actions use the server's engine. Queries and
+mutations always run in the server's engine.
+
+Local functions can import `node:path`, `node:os`, `node:crypto`,
+`node:url`, and `node:fs/promises`. Server actions can import the same modules
+except `node:fs/promises` and only when the plugin declares `runtime: "worker"`.
+Queries and mutations cannot import Node modules. The build checks imports,
+including bare names such as `path`. Unsupported imports such as `node:timers`,
+`events`, or `node:path/posix` fail the build. Built-ins reached indirectly,
+such as `process.getBuiltinModule`, `import.meta.require`, `process.binding`,
+or `globalThis.Bun`, fail at runtime in QuickJS. Use `ctx.proc` in a local
+function to run a separate program when needed.
+
+Local functions on QuickJS get `process.platform` (`darwin` or `linux`), an
+empty `process.versions`, and a snapshot in `process.env`. Writing to that
+object does not change the environment of later programs. Pass `env` to
+`ctx.proc` instead. The local host supplies global timers and fetch. It caps
+the heap at 256 MiB by default, allows up to 128 calls and 256 live programs,
+and interrupts JavaScript that runs for five seconds without yielding. See the
+[host reference](../host/README.md) for filesystem, timers, I/O, and memory limits.
+
+### Server actions
+
+With the fallback, `runtime: "worker"` in `definePlugin` sends actions to a long-lived Bun process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
 `ctx.runMutation`, and `ctx.use` for host-mediated data and plugin calls;
 `ctx.signal` observes cancellation. Module state persists until reload, disable,
 or process exit. Bun must be installed on the host. See the root README's
-[worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
+[worker protocol](../../README.md#bun-fallback-workers) for lifecycle and environment details.
 
-With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, all plugins' actions run in one action
+On QuickJS, all plugins’ actions run in one action
 process. Every action call has its own QuickJS runtime and starts with fresh
 module state, including calls to `runtime: "worker"` plugins
 that kept module state between calls on Bun. There is no `process` or
 `process.env`; use `await ctx.env(name)` and declare `env:<name>`, as in default
 actions.
-Declare `net:<hostname>` for every host you fetch from; Bun did not enforce
-these grants for worker plugins.
+Declare `net:<hostname>` for every host you fetch from, including for
+`runtime: "worker"` plugins. Bun did not enforce these grants for worker
+plugins. Actions on QuickJS have the engine's web APIs, including global timers
+and [fetch](../engine/WEB_APIS.md); see the host reference for wall and CPU
+deadlines. The action process supplies no local file or program capabilities.
 
 The server runs up to 64 signed-in calls per plugin and 128 total, with no
 queue. Anonymous sign-in counts toward the total and has four slots across all
@@ -509,7 +508,7 @@ Queries, mutations and actions receive `ctx.auth.user` (`id`, `name`, and
 `name`). Nested calls keep the same caller on signed-in requests. Before
 sign-in, an `auth.method` action and its nested calls are anonymous:
 `ctx.auth` throws, and nested calls can only access private queries and mutations
-of that provider. With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, the short sign-in
+of that provider. On the QuickJS action process, the short sign-in
 time budget includes starting the call's QuickJS runtime and evaluating the bundle.
 
 In a window component, call `auth.me()` during setup. It returns a live object
