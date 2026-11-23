@@ -1,0 +1,93 @@
+packages/sdk/tools/worker.mjs
+  s_a8f25e4422c907::t_034da9fc0b364a 89
+packages/worker/src/runtime.rs
+  s_a8f25e4422c907::t_3365ce46057b8f 1-68
+packages/sdk/worker/dispatch.ts
+  s_a8f25e4422c907::t_034da9fc0b364a 1-95
+packages/sdk/worker/entry.ts
+  s_a8f25e4422c907::t_034da9fc0b364a 4-5,9,29-38,48-49
+packages/worker/src/lib.rs
+  s_a8f25e4422c907::t_3365ce46057b8f 1,3-4,9-10,56-61,64,66-67,70-73,76-77,95,108,184-185,191,194
+  s_a8f25e4422c907::t_f9a4e145d47e20 62-63,65,68-69,74-75,87,93-94,96-101,103
+packages/host/src/fs.js
+  s_a8f25e4422c907::t_5c142cbb9ae607 1-6,8-13,15-17,23-27,30-39,41-46,49-54
+  s_a8f25e4422c907::t_622d86cee2dfa1 7,14,18-22,28-29,40,47-48
+packages/host/src/runtime.rs
+  s_a8f25e4422c907::t_5c142cbb9ae607 1-52,55-56,58-73,75-83,92-161,163-186
+  s_a8f25e4422c907::t_39d6fa503fd6a9 53-54,57,74,84-91,162
+packages/host/DEPENDENCIES.md
+  s_a8f25e4422c907::t_6632b1ea3f07f8 1-26
+packages/host/build.rs
+  s_a8f25e4422c907::t_5c142cbb9ae607 13-20
+  s_a8f25e4422c907::t_bafc779d7fafe1 1-12,21-27
+packages/host/src/main.rs
+  s_a8f25e4422c907::t_5c142cbb9ae607 11-13
+  s_a8f25e4422c907::t_ace7a4a5ec4d45 1-10,14-21
+app/src-tauri/src/local.rs
+  s_a8f25e4422c907::t_3365ce46057b8f 86
+  s_a8f25e4422c907::t_2b39b94468b2f7 13,64,79,85,118,122,131-136,208-212,232-236
+packages/host/README.md
+  s_a8f25e4422c907::t_6632b1ea3f07f8 1-42
+packages/host/src/modules.rs
+  s_a8f25e4422c907::t_5c142cbb9ae607 1-74,76-102,105-106,121-122,126-127,135-137,146,155
+  s_a8f25e4422c907::t_9759fb25b4a412 75,103-104,107-120,123-125,128-134,138-145,147-154
+packages/host/src/timers.js
+  s_a8f25e4422c907::t_5c142cbb9ae607 1-38
+packages/sdk/worker/invocation-host.ts
+  s_a8f25e4422c907::t_034da9fc0b364a 7,34
+app/src-tauri/tauri.windows.conf.json
+  s_a8f25e4422c907::t_bfac0400e169fc 5
+packages/sdk/worker/quickjs.ts
+  s_a8f25e4422c907::t_034da9fc0b364a 36
+  s_a8f25e4422c907::t_1eaa081ab88e05 1-35,37-42
+app/scripts/prepare-host.ts
+  s_a8f25e4422c907::t_3365ce46057b8f 19,34-39
+packages/host/src/protocol.rs
+  s_a8f25e4422c907::t_5c142cbb9ae607 1-20,22-34,39-41,43-49,51-64,67-71,75-93,96-102,112-113,115-130,132-161,186,189-203,205-228,231-237,239-240,249-252,254-258,276-282,284-317
+  s_a8f25e4422c907::t_bfac0400e169fc 21,36-37,42,65-66,73,103-109,111,114,162-177,180-185,187-188,238,241-248,253,259-275,283
+  s_a8f25e4422c907::t_b3fe2defaaa6e8 35,38,50,72,74,94-95,110,131,178-179,204,229-230
+.ci/check.sh
+  s_a8f25e4422c907::t_e2323a409b5bb6 26
+Cargo.lock
+  s_a8f25e4422c907::t_0aa6d473c77b24 57-66,320,353-358,511-519,711-719,892-900,981-989,1066-1081,1099-1120,1184,1197-1214,1313,1317-1339,1593,1595-1613,1622-1633,1642-1643,1650-1665,1678-1679,1681,1683,1685-1686,1688-1709,1836-1845,1852-1857,1896-1904,2415,2420-2430,2498-2506,2552-2553,2627-2636,2673-2681,2760,2762,3054,3279,3283-3284,3287,3291,3296-3315,3426-3752,3898-3908,3911,4434-4436,4440-4452,4459-4461,4465-4492,4578-4586,4612-4620,4753-4765,4774-4785,4887-4900,4907-4919,5382-5391,5429,5431,5441-5442,5448-5462,5482-5483,5485-5486,5491-5511,5646,5726-5731,5819-5820,5822-5836,6071-6080,6167-6177,6200-6210,6252-6261,6268-6278,6423-6433,6436-6441,6556,6610,6727,7204-7217,7267,7650-7669,8007,8165-8173,8180-8191,8449-8457,8492-8497,8542,8669-8679,8801-8809,8934-8945,8991,9025-9035
+Cargo.toml
+  s_a8f25e4422c907::t_41f0fb798f8ccc 3
+app/src-tauri/Cargo.toml
+  s_a8f25e4422c907::t_b6c8e38344ed67 15
+app/src-tauri/build.rs
+  s_a8f25e4422c907::t_dd5915da0fbb49 8-12
+app/src-tauri/tauri.conf.json
+  s_a8f25e4422c907::t_386e8e2e434143 42
+packages/host/Cargo.toml
+  s_a8f25e4422c907::t_1a2d5c5911701e 1-28
+packages/host/tests/fixture.js
+  s_a8f25e4422c907::t_8b630a154d4183 1-49
+packages/host/tests/protocol.rs
+  s_a8f25e4422c907::t_7ae23e6669435a 1-206
+packages/sdk/worker/contracts.ts
+  s_a8f25e4422c907::t_8aff6114654238 6-11,24
+packages/server/src/host/worker/process.rs
+  s_a8f25e4422c907::t_d230d0e3ab713f 161,201
+packages/server/tests/local-functions-driver.mjs
+  s_a8f25e4422c907::t_5c207051a1369d 19-22,113-132,191-192,199,202-207,214-215,218-220,237-268,270-327
+packages/server/tests/local_functions.rs
+  s_a8f25e4422c907::t_168a9f61b1cbe6 8-15,17-29,37-40
+packages/worker/src/logs.rs
+  s_a8f25e4422c907::t_11ac987c04da4a 1,52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "53efca1f72c392c7cf86565b833be2a38a6048b6",
+  "prompts": {},
+  "sessions": {
+    "s_a8f25e4422c907": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a207d0-1393-7673-a211-f124be60c7ae",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
