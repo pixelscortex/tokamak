@@ -5321,7 +5321,6 @@ checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "futures-channel",
  "futures-core",
  "futures-util",
  "http",
@@ -7644,19 +7643,12 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 name = "tokamak-app"
 version = "0.1.0"
 dependencies = [
- "libc",
- "reqwest",
- "serde",
+ "directories",
  "serde_json",
- "sha2 0.10.9",
  "tauri",
  "tauri-build",
- "tempfile",
  "tokamak-worker",
  "tokio",
- "tokio-util",
- "uuid",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7682,12 +7674,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokamak-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "engine",
+ "futures-util",
+ "libc",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "server",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokamak-worker",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+]
+
+[[package]]
 name = "tokamak-worker"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "getrandom 0.4.3",
  "libc",
+ "serde",
+ "tempfile",
  "tokio",
+ "tokio-util",
  "windows-sys 0.61.2",
 ]
 
@@ -7750,6 +7767,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]

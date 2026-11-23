@@ -50,8 +50,8 @@ export function selectedRuntime(binary) {
 }
 
 /**
- * Launches a plugin's local worker the way the desktop client does
- * (app/src-tauri/src/local.rs): the installed, hash-checked `local-entry.js`
+ * Launches a plugin's local worker for server-only fixtures
+ * (the Runner implementation is in packages/runner/src/local.rs): the installed, hash-checked `local-entry.js`
  * and `local.js` with the selected runtime and the desktop’s short environment.
  * Programs started with `ctx.proc` inherit exactly that environment.
  * `installed(id)` is the folder holding a plugin's build.
@@ -135,3 +135,5 @@ export function localLauncher({ binary, runtime }, installed, env, observe) {
     };
   };
 }
+
+export { startRunner } from "./start-runner.ts";

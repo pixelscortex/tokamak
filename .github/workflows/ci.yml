@@ -80,14 +80,10 @@ jobs:
       - uses: ./.ci/setup
       - name: Build unsigned macOS bundle
         run: proto run bun -- run --cwd app tauri build --no-sign
-      - name: Smoke check server build identity
+      - name: Smoke check Runner runtime
         shell: bash
         run: |
-          id=$(./target/release/tokamak-server --build-id)
-          if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]]; then
-            printf '%s\n' 'Server did not print a 64-character build identity' >&2
-            exit 1
-          fi
+          test "$(./target/release/tokamak-runner --plugin-runtime)" = quickjs
       - name: Archive macOS bundle
         run: |
           mkdir -p .ci-results
@@ -140,12 +136,12 @@ jobs:
       # Build only: Windows test suites are intentionally outside this job's scope.
       - name: Build unsigned Windows installer
         run: proto run bun -- run --cwd app tauri build --no-sign --bundles nsis
-      - name: Smoke check server build identity
+      - name: Smoke check Runner runtime
         shell: pwsh
         run: |
-          $id = & ./target/release/tokamak-server.exe --build-id
-          if ($LASTEXITCODE -ne 0 -or $id -cnotmatch '^[0-9a-f]{64}$') {
-            throw 'Server did not print a 64-character build identity'
+          $runtime = & ./target/release/tokamak-runner.exe --plugin-runtime
+          if ($LASTEXITCODE -ne 0 -or $runtime -cne 'bun') {
+            throw 'Runner did not select Bun'
           }
       - name: Save Windows release build
         if: steps.windows-release.outputs.cache-hit != 'true'

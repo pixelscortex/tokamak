@@ -24,7 +24,7 @@ request is marked ready for review. `dev` is the integration branch: feature pul
 it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
 workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build,
-smoke-check the server's `--build-id` and upload the bundle (`desktop-mac-<arch>`,
+smoke-check the Runner's `--plugin-runtime` and upload the bundle (`desktop-mac-<arch>`,
 `desktop-windows-x64`); they run no test suites. Download caches cover pinned
 tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
 

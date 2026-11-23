@@ -2,6 +2,7 @@
 [workspace]
 members = [
   "packages/server",
+  "packages/runner",
   "packages/engine",
   "packages/runtime",
   "app/src-tauri",

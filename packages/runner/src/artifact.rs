@@ -1,267 +1,15 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::File,
     io::{Read, Write},
     path::Path,
-    sync::{Arc, Mutex},
-    time::Duration,
 };
-use tauri::ipc::Channel;
 use tempfile::{NamedTempFile, TempPath};
-use tokamak_worker::{LocalRuntime, WORKER_CAPACITY, WORKER_FRAME_BYTES};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    sync::mpsc,
-};
-use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
+use tokamak_worker::WORKER_FRAME_BYTES;
 
-#[derive(Default)]
-pub struct Workers(Arc<Mutex<BTreeMap<String, Worker>>>);
-
-struct Worker {
-    writes: mpsc::Sender<Vec<u8>>,
-    stop: CancellationToken,
-    stopped: CancellationToken,
-    provider_assets: Vec<TempPath>,
-}
-impl Drop for Worker {
-    fn drop(&mut self) {
-        self.stop.cancel();
-    }
-}
-
-impl Workers {
-    /// Stops every local worker and waits until each has exited (quitting the app).
-    pub async fn close_all(&self) {
-        // A poisoned registry still holds the workers; quitting must close them all.
-        let workers: Vec<Worker> = {
-            let mut registry = self
-                .0
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            std::mem::take(&mut *registry).into_values().collect()
-        };
-        for worker in workers {
-            worker.stop.cancel();
-            worker.stopped.cancelled().await;
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn local_worker_start(
-    app: tauri::AppHandle,
-    workers: tauri::State<'_, Workers>,
-    plugin: String,
-    entry_hash: String,
-    code_hash: String,
-    events: Channel<Value>,
-) -> Result<String, String> {
-    let root = crate::server::plugin_root(&app).map_err(|error| error.to_string())?;
-    let installed = root.clone();
-    let plugin_id = plugin.clone();
-    let (entry, code) =
-        tokio::task::spawn_blocking(move || artifact(&installed, &plugin, &entry_hash, &code_hash))
-            .await
-            .map_err(|error| error.to_string())??;
-    let paths = tokamak_worker::search_paths();
-    let mut env = client_env(|name| std::env::var(name).ok());
-    let data = tokio::task::spawn_blocking(crate::server::app_data_directory)
-        .await
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())?;
-    env.insert(
-        "TOKAMAK_APP_DATA_DIR".into(),
-        data.to_string_lossy().into_owned(),
-    );
-    if let Ok(path) = std::env::join_paths(&paths) {
-        env.insert("PATH".into(), path.to_string_lossy().into_owned());
-    }
-    // Start beside the install tree so a program without an explicit cwd
-    // does not write into the plugin's installed build.
-    let cwd = root.parent().unwrap_or(root.as_path());
-    let (mut process, runtime) =
-        tokamak_worker::Process::launch_local(&entry, &code, cwd, &env, &paths)?;
-    let (input, output, stderr) = process.pipes()?;
-    let id = uuid::Uuid::new_v4().to_string();
-    // Limit queued frames and resident workers even if the window sends
-    // faster than Bun can read from its pipe.
-    let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
-    let stop = CancellationToken::new();
-    let stopped = CancellationToken::new();
-    let mut registry = workers.0.lock().map_err(|error| error.to_string())?;
-    if registry.len() >= WORKER_CAPACITY {
-        return Err("Local worker limit reached".into());
-    }
-    registry.insert(
-        id.clone(),
-        Worker {
-            writes,
-            stop: stop.clone(),
-            stopped: stopped.clone(),
-            provider_assets: Vec::new(),
-        },
-    );
-    drop(registry);
-
-    let registry = Arc::downgrade(&workers.0);
-    let handle = id.clone();
-    tokio::spawn(async move {
-        let _assets = (entry, code);
-        let _stopped = stopped.drop_guard();
-        let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
-            let mut stderr = stderr;
-            let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
-        }));
-        let closed = tokio::select! {
-            _ = stop.cancelled() => "Local worker stopped".into(),
-            error = process.exited() => error,
-            error = read(output, &events, &plugin_id) => error,
-            error = write(input, outgoing) => error,
-        };
-        process.stop().await;
-        if let Some(registry) = registry.upgrade()
-            && let Ok(mut workers) = registry.lock()
-        {
-            workers.remove(&handle);
-        }
-        let reason = if runtime == LocalRuntime::QuickJs {
-            format!("Plugin host closed: {closed}")
-        } else {
-            closed
-        };
-        let _ = events.send(json!({ "type": "closed", "reason": reason }));
-    });
-    Ok(id)
-}
-
-#[tauri::command]
-pub async fn local_worker_load(
-    app: tauri::AppHandle,
-    workers: tauri::State<'_, Workers>,
-    id: String,
-    plugin: String,
-    entry_hash: String,
-    code_hash: String,
-) -> Result<String, String> {
-    let root = crate::server::plugin_root(&app).map_err(|error| error.to_string())?;
-    let code = tokio::task::spawn_blocking(move || {
-        let folder = artifact_folder(&root, &plugin, &entry_hash, &code_hash)?;
-        snapshot(&folder, "local.js", &code_hash)
-    })
-    .await
-    .map_err(|error| error.to_string())??;
-    let path = code
-        .to_str()
-        .ok_or("Local provider path is not UTF-8")?
-        .to_owned();
-    let mut registry = workers.0.lock().map_err(|error| error.to_string())?;
-    let worker = registry.get_mut(&id).ok_or("Local worker closed")?;
-    // Keep the verified bundle available for the worker until it exits.
-    worker.provider_assets.push(code);
-    Ok(path)
-}
-
-#[tauri::command]
-pub fn local_worker_write(
-    workers: tauri::State<'_, Workers>,
-    id: String,
-    message: Value,
-) -> Result<(), String> {
-    let mut line = serde_json::to_vec(&message).map_err(|error| error.to_string())?;
-    // Match the worker's frame bound before anything enters its queue.
-    if line.len() >= WORKER_FRAME_BYTES {
-        return Err("Local worker message exceeds 1 MiB".into());
-    }
-    line.push(b'\n');
-    workers
-        .0
-        .lock()
-        .map_err(|error| error.to_string())?
-        .get(&id)
-        .ok_or("Local worker closed")?
-        .writes
-        .try_send(line)
-        .map_err(|_| "Local worker input queue full or closed".into())
-}
-
-#[tauri::command]
-pub async fn local_worker_close(
-    workers: tauri::State<'_, Workers>,
-    id: String,
-) -> Result<(), String> {
-    let worker = workers
-        .0
-        .lock()
-        .map_err(|error| error.to_string())?
-        .remove(&id);
-    if let Some(worker) = worker {
-        worker.stop.cancel();
-        worker.stopped.cancelled().await;
-    }
-    Ok(())
-}
-
-async fn read(
-    output: impl tokio::io::AsyncRead + Unpin,
-    events: &Channel<Value>,
-    plugin: &str,
-) -> String {
-    let mut output = BufReader::new(output);
-    let mut line = Vec::new();
-    loop {
-        line.clear();
-        let read = (&mut output)
-            .take((WORKER_FRAME_BYTES + 1) as u64)
-            .read_until(b'\n', &mut line)
-            .await;
-        match read {
-            Ok(0) => return "Local worker output closed".into(),
-            Ok(n) if n <= WORKER_FRAME_BYTES && line.last() == Some(&b'\n') => {}
-            Ok(_) => return "Invalid local worker frame".into(),
-            Err(error) => return error.to_string(),
-        }
-        let Ok(message) = serde_json::from_slice::<Value>(&line) else {
-            return "Invalid local worker JSON".into();
-        };
-        // Logs are not part of the request channel.
-        if message["type"] == "log" {
-            let level = message["level"].as_str().unwrap_or("info");
-            let text = message["text"].as_str().unwrap_or("");
-            tokamak_worker::log(format!("Plugin {plugin} [{level}]: {text}"));
-            continue;
-        }
-        if events
-            .send(json!({ "type": "message", "message": message }))
-            .is_err()
-        {
-            return "Local worker window closed".into();
-        }
-    }
-}
-
-async fn write(
-    mut input: impl AsyncWriteExt + Unpin,
-    mut outgoing: mpsc::Receiver<Vec<u8>>,
-) -> String {
-    while let Some(line) = outgoing.recv().await {
-        let sent = tokio::time::timeout(Duration::from_secs(5), async {
-            input.write_all(&line).await?;
-            input.flush().await
-        })
-        .await;
-        match sent {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => return error.to_string(),
-            Err(_) => return "Local worker input stalled".into(),
-        }
-    }
-    "Local worker input closed".into()
-}
-
-fn artifact(
+pub(super) fn artifact(
     root: &Path,
     plugin: &str,
     entry_hash: &str,
@@ -274,7 +22,7 @@ fn artifact(
     ))
 }
 
-fn artifact_folder(
+pub(super) fn artifact_folder(
     root: &Path,
     plugin: &str,
     entry_hash: &str,
@@ -315,7 +63,7 @@ fn artifact_folder(
         })
         .ok_or_else(|| {
             format!(
-                "Install the matching build of {plugin} on this client to run its local functions"
+                "Install the matching build of {plugin} on this machine to run its local functions"
             )
         })?;
     let folder = folder.canonicalize().map_err(|error| error.to_string())?;
@@ -325,7 +73,7 @@ fn artifact_folder(
     Ok(folder)
 }
 
-fn snapshot(folder: &Path, file: &str, hash: &str) -> Result<TempPath, String> {
+pub(super) fn snapshot(folder: &Path, file: &str, hash: &str) -> Result<TempPath, String> {
     let path = folder
         .join(file)
         .canonicalize()
@@ -364,9 +112,9 @@ fn snapshot(folder: &Path, file: &str, hash: &str) -> Result<TempPath, String> {
     Ok(copy.into_temp_path())
 }
 
-fn client_env(mut read: impl FnMut(&str) -> Option<String>) -> BTreeMap<String, String> {
+pub(super) fn client_env(mut read: impl FnMut(&str) -> Option<String>) -> BTreeMap<String, String> {
     // Programs need OS paths and selected client configuration. Do not pass
-    // provider keys or arbitrary overrides inherited by the client.
+    // provider keys or arbitrary overrides inherited by the Runner.
     [
         "HOME",
         // Both CLI profiles can live outside HOME.
@@ -403,6 +151,7 @@ fn client_env(mut read: impl FnMut(&str) -> Option<String>) -> BTreeMap<String, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::{fs, path::PathBuf};
 
     const ENTRY_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";

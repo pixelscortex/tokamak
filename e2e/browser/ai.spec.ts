@@ -282,8 +282,8 @@ test("a reloaded window starts its queued turns when the old turn ends", async (
   const cleanup: (() => void)[] = [];
   try {
     const desk = await asDesktop(context);
-    const client = await connect("ws://127.0.0.1:43123/ws", {
-      token: process.env.VITE_TOKAMAK_TOKEN,
+    const client = await connect(desk.endpoint.ws, {
+      token: desk.endpoint.token,
       cleanup,
       launch: undefined,
     });
@@ -311,7 +311,6 @@ test("a reloaded window starts its queued turns when the old turn ends", async (
     const queued = conversation(page).getByRole("article").filter({ hasText: "Queued" });
     await expect(queued).toHaveCount(1);
 
-    await desk.closeWorkers();
     await page.reload();
     await expect(agentRow(page).getByRole("button", { name: "echo" })).toBeVisible();
     expect(await client.query(ai.turns.active, { threadId })).toMatchObject({ _id: running!._id });

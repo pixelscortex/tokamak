@@ -12,6 +12,7 @@ import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
 import { agentHarness, build, bunPath, connect, localLauncher } from "../../../e2e/fake-agent/harness.mjs";
+import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
 const [binary, mode] = process.argv.slice(2);
@@ -40,7 +41,8 @@ try {
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
   if (!live) await installReplay();
-  const address = await h.serve("local");
+  const runner = live && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
+  const address = runner ? undefined : await h.serve("local");
   const client = live
     ? await realClient(address)
     : await h.connect(address, { local: true, observe: wire.observe });
@@ -95,7 +97,7 @@ function caseFolder(name) {
   return h.folder(`claude-${name}`);
 }
 
-function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
+async function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
   // These are the client's relevant environment entries. Claude gets any
   // gateway settings from its own profile, not ANTHROPIC_* exports here.
   const env = { HOME: homedir(), ...(profile && { CLAUDE_CONFIG_DIR: profile }) };
@@ -109,6 +111,21 @@ function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
     "NODE_EXTRA_CA_CERTS",
   ]) {
     if (process.env[key]) env[key] = process.env[key];
+  }
+  if (!address) {
+    const dir = await h.folder("live-runners");
+    const instance = await startRunner({
+      binary,
+      plugins: h.plugins,
+      directory: join(dir, crypto.randomUUID()),
+      env,
+    });
+    cleanup.push(instance.stop);
+    return connect(instance.endpoint.ws, {
+      cleanup,
+      launch: instance.launch,
+      token: instance.endpoint.token,
+    });
   }
   return connect(address, { cleanup, launch: localLauncher(h.selection, (id) => join(h.plugins, id), env) });
 }

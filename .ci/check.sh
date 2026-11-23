@@ -26,23 +26,33 @@ case "$1" in
 
     # The worker package suite below covers its library tests.
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked --workspace --lib --exclude tokamak-worker
-    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-plugin-host -p tokamak-worker
+    env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-plugin-host -p tokamak-worker -p tokamak-runner
 
     # Replay traffic reaches the real server and database in both runs. Compare
     # the stored content and order across runtimes, excluding wall-clock times.
     TOKAMAK_TURN_PARITY_DIR=$(mktemp -d)
     export TOKAMAK_TURN_PARITY_DIR
-    trap 'rm -f "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; rmdir "$TOKAMAK_TURN_PARITY_DIR"' EXIT
+    cleanup_parity() {
+      for file in "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; do
+        if [[ -f "$file" ]]; then unlink "$file"; fi
+      done
+      rmdir "$TOKAMAK_TURN_PARITY_DIR"
+    }
+    trap cleanup_parity EXIT
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
+    # A clean quit must also reap the Bun fallback's processes.
+    TOKAMAK_PLUGIN_RUNTIME=bun cargo test --locked -p tokamak-runner --test lifecycle graceful_quit
 
+    # Run the QuickJS replays through the Runner instead of adding a third pass.
+    export TOKAMAK_TEST_RUNNER=1
     # The workspace library pass already ran the server library's unit tests.
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --bins \
       --test actions --test ai_liveness --test ai_threads --test ai_turns \
       --test chat_threads --test claude_turns --test code_changes --test code_snapshots \
       --test codex_turns --test data --test data_cancellation --test data_indexes \
       --test identity --test local_functions --test plugins --test schema_indexes \
-      --test sdk_transport --test service --test workers
+      --test runner_routing --test sdk_transport --test service --test workers
     ;;
   *) exit 2 ;;
 esac

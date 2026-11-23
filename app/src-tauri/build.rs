@@ -7,11 +7,11 @@ fn main() {
     } else {
         ""
     };
-    let sidecar = format!("dist/tokamak-server-{target}{suffix}");
+    let sidecar = format!("dist/tokamak-runner-{target}{suffix}");
     let plugin_host = format!("dist/tokamak-plugin-host-{target}");
     let host_required = matches!(target_os.as_str(), "macos" | "linux");
-    let has_server = std::path::Path::new(&sidecar).is_file();
-    if host_required && (has_server || !tauri_build::is_dev()) {
+    let has_runner = std::path::Path::new(&sidecar).is_file();
+    if host_required && (has_runner || !tauri_build::is_dev()) {
         for artifact in [&sidecar, &plugin_host] {
             assert!(
                 std::path::Path::new(artifact).is_file(),
@@ -20,7 +20,7 @@ fn main() {
         }
     }
 
-    if !has_server {
+    if !has_runner {
         // Cargo checks need no packaged artifacts; the Tauri hooks prepare them before bundling.
         let mut config: serde_json::Value =
             serde_json::from_str(&std::env::var("TAURI_CONFIG").unwrap_or_else(|_| "{}".into()))

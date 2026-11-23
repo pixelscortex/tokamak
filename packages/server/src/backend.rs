@@ -1,5 +1,5 @@
 //! Library-first composition of storage, JS workers and the common service.
-//! Desktop calls connect without binding anything; headless opts into WebSocket.
+//! Both standalone server and Runner expose the WebSocket transport.
 
 use crate::{
     Error, Server, Session,

@@ -1,18 +1,8 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { BrowserContext } from "@playwright/test";
-import { installFakeAgent, localLauncher, selectedRuntime } from "../fake-agent/local.mjs";
+import { installFakeAgent, startRunner } from "../fake-agent/local.mjs";
 
-type Launched = Awaited<ReturnType<ReturnType<typeof localLauncher>>>;
-/** The arguments of the window's Tauri commands, as the app sends them (app/src/host). */
-interface Call {
-  readonly id: string;
-  readonly plugin: string;
-  readonly entryHash: string;
-  readonly codeHash: string;
-  readonly events: number;
-  readonly message: unknown;
-}
 /** What the test desktop adds to the page. */
 interface DesktopWindow {
   isTauri: boolean;
@@ -23,15 +13,16 @@ interface DesktopWindow {
 
 /**
  * Makes the app in `context` run as the desktop app does: the window's Tauri
- * calls are answered by this test process, which starts each plugin's real
- * local part (the installed build) with the desktop's short environment
- * and every fake agent's command on its PATH. Returns the person's home folder
+ * calls are answered by this test process, which starts a private Runner with
+ * a disposable workspace and every fake agent's command on its PATH. Returns the person's home folder
  * and the PATH folder holding those commands (unlink one to "uninstall" it).
  */
 export async function asDesktop(context: BrowserContext): Promise<{
   home: string;
   bin: string;
-  closeWorkers(): Promise<void>;
+  readonly endpoint: { ws: string; token: string };
+  /** Reopens the same workspace after the simulated app quit. */
+  restart(): Promise<void>;
   /** Quits the app as the menu or Cmd+Q would (app/src-tauri/src/quit.rs). */
   requestQuit(): Promise<void>;
   /** The window's answers so far: "hold", "cancel", "confirm". */
@@ -44,92 +35,50 @@ export async function asDesktop(context: BrowserContext): Promise<{
   const bin = join(scratch, "bin");
   await mkdir(home);
   await installFakeAgent(bin);
-  const binary = resolve(import.meta.dirname, "../../target/debug/tokamak-server");
-  const launch = localLauncher(selectedRuntime(binary), (id: string) => join(plugins, id, "dist"), {
-    HOME: home,
-    TOKAMAK_APP_DATA_DIR: join(scratch, "app-data"),
-    PATH: `${bin}:/usr/bin:/bin`,
-  });
-  const workers = new Map<string, Launched>();
-  let next = 0;
-  /** The window's quit channel and a way to send on it, once it listens. */
+  const binary = resolve(
+    import.meta.dirname,
+    `../../target/debug/tokamak-runner${process.platform === "win32" ? ".exe" : ""}`,
+  );
+  const boot = () =>
+    startRunner({
+      binary,
+      plugins,
+      directory: join(scratch, "app-data"),
+      env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` },
+    });
+  let runner = await boot();
+  context.once("close", () => void runner.stop());
   let quitChannel: ((message: unknown) => Promise<void>) | undefined;
   const quitAnswers: string[] = [];
-  const closeWorker = async (id: string) => {
-    const worker = workers.get(id);
-    workers.delete(id);
-    await worker?.close();
-  };
-  const closeWorkers = async () => {
-    // As in the native host, stop accepting writes before closing the workers.
-    const closing = [...workers.values()];
-    workers.clear();
-    await Promise.all(closing.map((worker) => worker.close()));
-  };
 
-  await context.exposeBinding("__tokamakDesktop", async ({ page }, command: string, args: Call) => {
-    switch (command) {
-      case "tokamak_endpoint":
-        return {
-          http: "http://127.0.0.1:43123",
-          ws: "ws://127.0.0.1:43123/ws",
-          token: process.env.VITE_TOKAMAK_TOKEN,
-        };
-      case "local_worker_start": {
-        let index = 0;
-        // Tauri channels deliver `{ index, message }` to the callback the window registered.
-        const deliver = (message: unknown) =>
-          page
-            .evaluate(
+  await context.exposeBinding(
+    "__tokamakDesktop",
+    async ({ page }, command: string, args: { events: number }) => {
+      switch (command) {
+        case "tokamak_endpoint":
+          return runner.endpoint;
+        case "quit_listen": {
+          let index = 0;
+          quitChannel = (message) =>
+            page.evaluate(
               ([id, payload]) => (window as unknown as DesktopWindow).__tokamakDesktopEvent(id, payload),
               [args.events, { index: index++, message }] as const,
-            )
-            .catch(() => {});
-        const id = `worker-${++next}`;
-        const worker = await launch(
-          { id: args.plugin, entryHash: args.entryHash, codeHash: args.codeHash },
-          (message: unknown) => void deliver({ type: "message", message }),
-          (reason: string) => {
-            workers.delete(id);
-            void deliver({ type: "closed", reason });
-          },
-        );
-        workers.set(id, worker);
-        page.once("close", () => void closeWorker(id));
-        if (page.isClosed()) await closeWorker(id);
-        return id;
+            );
+          return null;
+        }
+        case "quit_hold":
+        case "quit_cancel":
+          quitAnswers.push(command.slice("quit_".length));
+          return null;
+        case "quit_confirm":
+          await runner.stop();
+          quitAnswers.push("confirm");
+          return null;
+        default:
+          throw new Error(`The test desktop has no ${command}`);
       }
-      case "local_worker_write":
-        return workers.get(args.id)?.send(args.message);
-      case "local_worker_load":
-        return workers
-          .get(args.id)
-          ?.load({ id: args.plugin, entryHash: args.entryHash, codeHash: args.codeHash });
-      case "quit_listen": {
-        let index = 0;
-        quitChannel = (message) =>
-          page.evaluate(
-            ([id, payload]) => (window as unknown as DesktopWindow).__tokamakDesktopEvent(id, payload),
-            [args.events, { index: index++, message }] as const,
-          );
-        return null;
-      }
-      case "quit_hold":
-      case "quit_cancel":
-        quitAnswers.push(command.slice("quit_".length));
-        return null;
-      case "quit_confirm":
-        // As the desktop does: close every local worker, which ends each agent program with it.
-        quitAnswers.push("confirm");
-        await closeWorkers();
-        return null;
-      case "local_worker_close":
-        await closeWorker(args.id);
-        return null;
-      default:
-        throw new Error(`The test desktop has no ${command}`);
-    }
-  });
+    },
+  );
 
   await context.addInitScript(() => {
     const callbacks = new Map<number, (payload: unknown) => void>();
@@ -164,8 +113,13 @@ export async function asDesktop(context: BrowserContext): Promise<{
   return {
     home,
     bin,
-    // Simulate the native host shutting down its workers when the window reloads.
-    closeWorkers,
+    get endpoint() {
+      return runner.endpoint;
+    },
+    async restart() {
+      await runner.stop();
+      runner = await boot();
+    },
     async requestQuit() {
       if (!quitChannel) throw new Error("The window is not listening for quit");
       await quitChannel({ type: "quit" });

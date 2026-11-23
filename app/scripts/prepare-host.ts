@@ -25,7 +25,7 @@ run("cargo", [
   "build",
   "--locked",
   "-p",
-  "server",
+  "tokamak-runner",
   ...(hostRequired ? ["-p", "tokamak-plugin-host"] : []),
   ...(cross ? ["--target", target] : []),
   "--target-dir",
@@ -36,7 +36,7 @@ run("cargo", [
 const directory = `${root}app/src-tauri/dist`;
 const build = `${root}target/${cross ? target + "/" : ""}${release ? "release" : "debug"}`;
 await mkdir(directory, { recursive: true });
-for (const binary of ["tokamak-server", ...(hostRequired ? ["tokamak-plugin-host"] : [])]) {
+for (const binary of ["tokamak-runner", ...(hostRequired ? ["tokamak-plugin-host"] : [])]) {
   const source = `${build}/${binary}${suffix}`;
   try {
     await cp(source, `${directory}/${binary}-${target}${suffix}`);
