@@ -65,7 +65,11 @@ Server/engine tests and SDK/build/app tests cover the runtime. Run
 disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 
 Ready pull requests run the Linux TypeScript, Rust, and lint checks. The Rust
-check exercises both plugin runtimes. Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
+check runs Rust unit tests and the host and worker suites on the default. It
+runs only `claude_turns`, `codex_turns`, `local_functions`, and `workers` on Bun,
+then runs every server integration target once and the server binary unit tests
+on the QuickJS default. QuickJS requires and compares the Bun turn references.
+Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
 and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
 for reserved signing inputs; signing, notarization and publishing are absent.
@@ -78,7 +82,8 @@ the app and server, or set `TOKAMAK_PLUGIN_HOST` to its path. Bun is still
 needed to build plugins from source. Installed builds can run without it.
 
 `TOKAMAK_PLUGIN_RUNTIME=bun` restores the previous runtime behavior. It is a
-temporary fallback that will be removed. Windows still uses Bun. Restart
+temporary fallback that will be removed. An empty value is an error on macOS
+and Linux. Windows ignores the variable and uses Bun. Restart
 the app and server after changing the setting. Run
 `tokamak-server --plugin-runtime` in the same environment to see the selected
 runtime. Rebuild older plugin artifacts before switching to QuickJS. See the

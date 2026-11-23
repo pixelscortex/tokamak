@@ -34,30 +34,23 @@ There are no added dependencies or enlarged native stacks.
 
 The Claude, Codex, AI, chat and code acceptance tests use a real server and
 database. The test launcher uses the Rust runtime selector: unset means
-QuickJS on macOS and Linux, and Bun on Windows. Explicitly set
-`TOKAMAK_PLUGIN_RUNTIME=bun` to exercise the temporary fallback, which will be
-removed. See the [plugin runtime guide](../../sdk/README.md#plugin-runtimes)
-for the differences. Build the host beside the server before running the full
-suite, or use `TOKAMAK_PLUGIN_HOST` to give its path.
+QuickJS on macOS and Linux, where an empty value is an error. Windows ignores
+`TOKAMAK_PLUGIN_RUNTIME` and uses Bun. On macOS and Linux, set the variable to
+`bun` to exercise the temporary fallback. See the
+[plugin runtime guide](../../sdk/README.md#plugin-runtimes) for the differences.
 
-To compare stored Claude and Codex turns, run both suites with the same
-temporary directory. Bun writes a reference and QuickJS checks the final
-text, thinking, usage, session, state, tasks, plan and ordered reports against
-it. The Linux Rust CI job does this automatically, with the full server suite
-on the default and the runtime-sensitive targets on Bun. The local functions
-suite includes a smoke test that runs a server, a local function and an action
-with the setting unset and an empty PATH.
+Run the Linux Rust CI sequence locally with `bash .ci/check.sh rust` on macOS
+or Linux. It builds the host, runs Rust unit tests and the host and worker
+suites on the default, then runs only `claude_turns`, `codex_turns`,
+`local_functions`, and `workers` on Bun. If that pass succeeds, it runs every
+server integration target once on the default, plus the server binary unit
+tests. The server library unit tests run only in the workspace library pass.
 
-```sh
-cargo build --locked -p tokamak-plugin-host
-parity_dir=$(mktemp -d)
-TOKAMAK_TURN_PARITY_DIR="$parity_dir" TOKAMAK_PLUGIN_RUNTIME=bun CI=1 \
-  cargo test --locked -p server -- --test-threads=1
-env -u TOKAMAK_PLUGIN_RUNTIME TOKAMAK_TURN_PARITY_DIR="$parity_dir" CI=1 \
-  cargo test --locked -p server -- --test-threads=1
-rm -f "$parity_dir/claude.json" "$parity_dir/codex.json"
-rmdir "$parity_dir"
-```
+Bun writes the Claude and Codex reference files to a shared temporary directory.
+QuickJS requires those files and compares the final text, thinking, usage,
+session, state, tasks, plan and ordered reports. The local functions suite also
+runs a server, a local function and an action with the setting unset and an
+empty PATH.
 
 ## Codex replay
 

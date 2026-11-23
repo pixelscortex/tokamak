@@ -396,9 +396,10 @@ SurrealDB integration remains for the host issues and their tests.
 ## Plugin runtimes
 
 On macOS and Linux, the default (unset or `TOKAMAK_PLUGIN_RUNTIME=quickjs`)
-runs local functions and server actions in `tokamak-plugin-host`. On Windows
-the default stays Bun. `TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback
-that will be removed. With the fallback, local functions and `runtime: "worker"`
+runs local functions and server actions in `tokamak-plugin-host`.
+`TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback that will be removed.
+Any other value, including an empty string, is an error on macOS and Linux.
+Windows ignores the variable and uses Bun. With Bun, local functions and `runtime: "worker"`
 actions run in Bun; other actions use the server's engine. Queries and
 mutations always run in the server's engine.
 

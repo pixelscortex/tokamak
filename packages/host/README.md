@@ -2,7 +2,8 @@
 
 The plugin host runs local functions and server actions on QuickJS by default
 on macOS and Linux. `TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback that
-will be removed. Windows still uses Bun. See the SDK's
+will be removed. An empty value is an error on macOS and Linux. Windows ignores
+the variable and uses Bun. See the SDK's
 [plugin runtime guide](../sdk/README.md#plugin-runtimes) for plugin compatibility.
 The client looks for `tokamak-plugin-host` next to its executable. For development, run
 `cargo build --locked -p tokamak-plugin-host` and set `TOKAMAK_PLUGIN_HOST`
