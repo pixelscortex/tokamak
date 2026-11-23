@@ -16,7 +16,15 @@ server = { path = "../server" }
 sha2 = "0.10.9"
 tempfile = "3.27.0"
 tokamak-worker = { path = "../worker" }
-tokio = { version = "1.54.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time", "io-util"] }
+tokio = { version = "1.54.1", features = [
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "signal",
+  "sync",
+  "time",
+  "io-util",
+] }
 tokio-util = { version = "0.7.20", features = ["codec", "rt"] }
 
 [dev-dependencies]

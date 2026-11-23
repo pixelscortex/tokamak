@@ -1,7 +1,8 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
 import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
-import { access, chmod, cp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { cp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
@@ -386,18 +387,8 @@ async function missingCodexPath() {
   // The temporary home hides user installs. If the machine also has a
   // system-wide Codex, mask it with the exit status of a missing executable
   // so the offline test never calls the real program.
-  for (const system of ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"]) {
-    if (
-      await access(system).then(
-        () => true,
-        () => false,
-      )
-    ) {
-      const absent = join(bin, "codex");
-      await writeFile(absent, "#!/bin/sh\nexit 127\n");
-      await chmod(absent, 0o755);
-      break;
-    }
+  if (["/opt/homebrew/bin/codex", "/usr/local/bin/codex"].some(existsSync)) {
+    await writeFile(join(bin, "codex"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
   }
   return bin;
 }
