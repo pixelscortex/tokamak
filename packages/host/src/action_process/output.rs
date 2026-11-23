@@ -69,7 +69,8 @@ impl Output {
         let bytes = encode(&frame)?;
         let mut queue = self.queue.lock().expect("action process output");
         ensure!(
-            queue.bytes < QUEUE_BYTES || frame["type"] == "result",
+            queue.bytes - queue.logs + bytes.len() <= QUEUE_BYTES - LOG_BYTES
+                || frame["type"] == "result",
             "Action process output queue is full"
         );
         self.enqueue(&mut queue, bytes, None)

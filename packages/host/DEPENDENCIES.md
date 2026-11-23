@@ -6,6 +6,8 @@ The new direct third-party crates are `llrt_abort`, `llrt_buffer`,
 [LLRT commit 02833ca09748424a5960e37133530e24ccccae58][revision],
 dated November 22, 2026. The pinned repository's [LICENSE] is Apache 2.0.
 The workspace already uses anyhow, rquickjs, serde_json, libc and Tokio.
+Program support uses the `process` and `io-util` features of the existing
+Tokio 1.54.1 (MIT) dependency. It adds no crates.
 
 The table includes transitive additions and new versions recorded in
 Cargo.lock, including dependencies Cargo resolves for other platforms.

@@ -8,7 +8,7 @@ export interface RunningProcess {
   readonly stdout: AsyncIterable<string>;
   readonly stderr: AsyncIterable<string>;
   readonly exited: Promise<number>;
-  write(input: string): void;
+  write(input: string | Uint8Array): void;
   closeInput(): void;
   stop(signal?: "SIGTERM" | "SIGKILL"): void;
 }

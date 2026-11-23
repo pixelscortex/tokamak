@@ -3,7 +3,7 @@ import { constants } from "node:os";
 import { join } from "node:path";
 import type { Duplex, Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
-import type { LocalProcess } from "../src/local";
+import { invocationProcesses as ownPrograms, type SpawnProgram } from "./program-scope";
 import { WORKER_FRAME_BYTES } from "../src/worker-limits";
 
 // FD 3 belongs to a watchdog in the program's group. EOF stops the group
@@ -49,81 +49,61 @@ function stopWindowsTree(pid: number): Promise<boolean> {
 }
 
 export function invocationProcesses(signal: AbortSignal) {
-  const active = new Set<(signal?: "SIGKILL") => Promise<void>>();
-  let closed = false;
-  const onAbort = () => void close();
-  async function close(signalName?: "SIGKILL") {
-    closed = true;
-    signal.removeEventListener("abort", onAbort);
-    await Promise.allSettled([...active].map((stop) => stop(signalName)));
-  }
-  signal.addEventListener("abort", onAbort, { once: true });
-  const start: LocalProcess = ([command, ...args], options) => {
-    if (closed || signal.aborted) throw new Error("Local function cancelled");
-    const windows = process.platform === "win32";
-    const child = windows
-      ? spawn(command, args, { ...options, stdio: "pipe", windowsHide: true })
-      : spawn("/bin/sh", ["-c", groupEntry, "tokamak-program", command, ...args], {
-          ...options,
-          stdio: ["pipe", "pipe", "pipe", "pipe"],
-          detached: true,
-        });
-    const guard = child.stdio[3] as Duplex | undefined;
-    const groupExited =
-      guard &&
-      new Promise<void>((resolve) => {
-        guard.on("error", () => {});
-        guard.once("close", resolve);
-      });
-    // Exiting before reading stdin is normal, including during cancellation.
-    child.stdin!.on("error", () => {});
-    const exited = new Promise<number>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) => resolve(code ?? 128 + (constants.signals[signal!] ?? 0)));
-    });
-    let stopping: Promise<void> | undefined;
-    function stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {
-      const pid = child.pid;
-      if (guard && signal === "SIGKILL" && pid && !guard.destroyed) {
-        try {
-          process.kill(-pid, signal);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-        }
-      }
-      return (stopping ??= (async () => {
-        if (guard) {
-          guard.end();
-          await groupExited;
-        } else if (pid && child.exitCode === null && child.signalCode === null) {
-          if (!(await stopWindowsTree(pid))) child.kill(signal);
-        }
-        await exited.catch(() => {});
-        active.delete(stop);
-      })());
-    }
-    active.add(stop);
-    void exited.then(
-      () => stop(),
-      () => stop(),
-    );
-    return {
-      stdout: lines(child.stdout!),
-      stderr: lines(child.stderr!),
-      exited,
-      write: (data) => {
-        child.stdin!.write(data);
-      },
-      closeInput: () => {
-        child.stdin!.end();
-      },
-      stop: (signal) => {
-        void stop(signal);
-      },
-    };
-  };
-  return {
-    start,
-    close,
-  };
+  return ownPrograms(signal, spawnProgram);
 }
+
+const spawnProgram: SpawnProgram = ([command, ...args], options) => {
+  const windows = process.platform === "win32";
+  const child = windows
+    ? spawn(command, args, { ...options, stdio: "pipe", windowsHide: true })
+    : spawn("/bin/sh", ["-c", groupEntry, "tokamak-program", command, ...args], {
+        ...options,
+        stdio: ["pipe", "pipe", "pipe", "pipe"],
+        detached: true,
+      });
+  const guard = child.stdio[3] as Duplex | undefined;
+  const groupExited =
+    guard &&
+    new Promise<void>((resolve) => {
+      guard.on("error", () => {});
+      guard.once("close", resolve);
+    });
+  // Exiting before reading stdin is normal, including during cancellation.
+  child.stdin!.on("error", () => {});
+  const exited = new Promise<number>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => resolve(code ?? 128 + (constants.signals[signal!] ?? 0)));
+  });
+  let stopping: Promise<void> | undefined;
+  function stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {
+    const pid = child.pid;
+    if (guard && signal === "SIGKILL" && pid && !guard.destroyed) {
+      try {
+        process.kill(-pid, signal);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    }
+    return (stopping ??= (async () => {
+      if (guard) {
+        guard.end();
+        await groupExited;
+      } else if (pid && child.exitCode === null && child.signalCode === null) {
+        if (!(await stopWindowsTree(pid))) child.kill(signal);
+      }
+      await exited.catch(() => {});
+    })());
+  }
+  return {
+    stdout: lines(child.stdout!),
+    stderr: lines(child.stderr!),
+    exited,
+    write: (data) => {
+      child.stdin!.write(data);
+    },
+    closeInput: () => {
+      child.stdin!.end();
+    },
+    stop,
+  };
+};

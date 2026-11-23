@@ -415,7 +415,7 @@ The SDK changes do not link JavaScript bundles into the native binary. Native
 size measurements therefore measure the inherited host only; real QuickJS and
 SurrealDB integration remains for the host issues and their tests.
 
-## Plugin actions in Bun
+## Plugin action runtimes
 
 Set `runtime: "worker"` in `definePlugin` to build actions for a long-lived Bun
 process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
@@ -423,6 +423,22 @@ process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
 `ctx.signal` observes cancellation. Module state persists until reload, disable,
 or process exit. Bun must be installed on the host. See the root README's
 [worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
+
+With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, all plugins' actions run in one action
+process, with a separate QuickJS runtime for each plugin. Concurrent calls in a
+worker plugin still share module state. There is no `process` or `process.env`;
+use `await ctx.env(name)` and declare `env:<name>`, as in default actions.
+Declare `net:<hostname>` for every host you fetch from; Bun did not enforce
+these grants for worker plugins.
+
+Queries, mutations, and the top-level code of modules they import, including
+modules shared with actions, still run in the server. Action definitions,
+helpers, and imports used only by actions are not loaded by the server. The
+server trusts the action process to identify which call owns each host
+operation. A memory-safety bug in QuickJS could expose other plugins' network
+permissions and in-flight calls in the action process. The server itself does
+not run those actions. See [Plugin host](../host/README.md#action-process)
+for deadlines, limits, and recovery.
 
 ## Web client entries
 

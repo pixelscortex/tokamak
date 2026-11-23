@@ -14,6 +14,7 @@ use rquickjs::{
 
 use crate::{
     modules::{self, Bundles},
+    programs::Programs,
     protocol::Output,
     timers,
 };
@@ -58,6 +59,8 @@ pub struct Runtime {
     context: AsyncContext,
     runtime: AsyncRuntime,
     watchdog: Rc<Watchdog>,
+    pub programs: Programs,
+    pub immediates: timers::Immediates,
 }
 
 impl Runtime {
@@ -81,23 +84,38 @@ impl Runtime {
             .await;
 
         let context = AsyncContext::full(&runtime).await?;
+        let programs = Programs::default();
+        let immediates = timers::Immediates::default();
         let dispatch = {
             let startup = context.async_with(async |ctx| {
-                initialize(&ctx, bundle, output, next, watchdog.clone())
-                    .await
-                    .catch(&ctx)
-                    .map_err(|error| anyhow!("{error}"))
+                initialize(
+                    &ctx,
+                    bundle,
+                    output,
+                    next,
+                    watchdog.clone(),
+                    &programs,
+                    immediates.clone(),
+                )
+                .await
+                .catch(&ctx)
+                .map_err(|error| anyhow!("{error}"))
             });
             let mut startup = std::pin::pin!(startup);
             poll_fn(|cx| {
                 let result = watchdog.poll(|| startup.as_mut().poll(cx));
                 if watchdog.tripped.get() {
-                    std::task::Poll::Ready(Err(anyhow!(
+                    return std::task::Poll::Ready(Err(anyhow!(
                         "QuickJS plugin startup did not yield for 5 seconds"
-                    )))
-                } else {
-                    result
+                    )));
                 }
+                // Top-level imports can await an immediate before the
+                // protocol loop takes over the scheduler.
+                if result.is_pending() && immediates.pending() {
+                    immediates.fire();
+                    cx.waker().wake_by_ref();
+                }
+                result
             })
             .await?
         };
@@ -106,6 +124,8 @@ impl Runtime {
             context,
             runtime,
             watchdog,
+            programs,
+            immediates,
         })
     }
 
@@ -146,6 +166,8 @@ async fn initialize<'js>(
     output: Arc<Output>,
     next: Rc<Cell<u64>>,
     watchdog: Rc<Watchdog>,
+    programs: &Programs,
+    immediates: timers::Immediates,
 ) -> rquickjs::Result<Dispatch> {
     llrt_buffer::init(ctx)?;
     llrt_crypto::init(ctx)?;
@@ -155,7 +177,7 @@ async fn initialize<'js>(
     llrt_fetch::init(ctx)?;
     llrt_util::init(ctx)?;
     ctx.globals().set("console", Object::new(ctx.clone())?)?;
-    timers::install(ctx)?;
+    timers::install(ctx, immediates)?;
 
     let (module, evaluated) = Module::declare(
         ctx.clone(),
@@ -177,9 +199,15 @@ async fn initialize<'js>(
         next.set(next.get() + 1);
         next.get() as f64
     });
-    let ready: Promise = initialize.call((send, next_op, bundle))?;
+    let ready: Promise = initialize.call((send, next_op, bundle, programs.factory(ctx)?))?;
     Ok(Persistent::save(
         ctx,
         ready.into_future::<Function>().await?,
     ))
+}
+
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        self.programs.stop_all();
+    }
 }

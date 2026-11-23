@@ -22,8 +22,26 @@ Each host runs one QuickJS runtime and realm for its owning plugin. It loads
 verified provider bundles returned by the desktop's `local.contracts`
 operation in that same realm. Providers can receive live objects and call
 functions directly. Imports from other paths are refused; providers and the
-owning plugin use the same built-in allow list. Programs (`proc` and
-`withPrograms`) are unavailable on this runtime.
+owning plugin use the same built-in allow list.
+
+Local functions can start up to 256 live programs per host with `proc` and
+`withPrograms`. Programs get their own process groups. On macOS and Linux a
+guardian in each group watches a private pipe held by the host. Closing it
+sends TERM to the group, followed by KILL after 250 ms. The pipe closes even
+when the host is killed with SIGKILL. A scope can send KILL immediately to
+its own groups. The launcher holds a separate liveness pipe for its guardian
+in the host group, so abrupt launcher exit also stops the host and its
+programs.
+
+The host reads program output on demand and delivers buffered lines in
+batches. An unread stream backs up into the program's pipe. Lines exceeding
+1 MiB cause that stream to fail. Its pipe stays open and unread until the
+program stops.
+
+The host caps queued stdin at 64 MiB per program. A write beyond the limit
+throws `Program input queue exceeds 64 MiB` and leaves the program running.
+Bun buffers without this limit; the host cap prevents plugins that write
+faster than the program reads from growing the queue without bound.
 
 The QuickJS heap defaults to 256 MiB. Override it with the positive integer
 `TOKAMAK_PLUGIN_HOST_HEAP_MIB`. The launcher passes that setting to the host.
@@ -36,8 +54,9 @@ The filesystem module supports Node-style error codes and string, file URL
 and byte-array paths. `cp` copies symlinks by default and supports
 `dereference`, `recursive`, `force`, `errorOnExist` and
 `preserveTimestamps`. It does not support `filter` or `verbatimSymlinks`.
-The host supplies up to 4,096 live timers with `ref()` and `unref()` handles
-(both are no-ops). Its console supports common Node formatting, traces and
+The host supplies up to 4,096 live timers and immediates with `ref()` and
+`unref()` handles (both are no-ops). Immediates have their own scheduler step
+after pending promise jobs and arrived input. Its console supports common Node formatting, traces and
 object inspection; log messages are cut off at 8,192 characters.
 
 LLRT supplies Buffer, web streams, the abort and URL APIs, text encoders and
@@ -47,23 +66,46 @@ than in a standalone module.
 
 ## Action process
 
-With the same setting, the server starts one action process on the first action
-call. It runs the same executable in `--actions` mode. The process has a
-separate QuickJS runtime and watchdog per plugin, and no file or program
-capability. The server still owns every database and identity operation and
-provides the manifest's network grants. The action process uses the engine's
-web implementation, including DNS and redirect checks. Default bundles get a
-fresh realm and web resource lease per call. Bundles built for Bun retain one
-realm and web resource table per plugin; reload retires both.
+With `TOKAMAK_PLUGIN_RUNTIME=quickjs`, the server looks for `tokamak-plugin-host`
+at startup, next to its executable unless `TOKAMAK_PLUGIN_HOST` overrides that
+path. It starts one action process in `--actions` mode on the first action call.
+The action process has no file or program capability.
 
-Build artifacts include a separate transaction bundle so the server does not
-evaluate the action module, even to inspect metadata. Rebuild older default
-artifacts or standalone features before enabling QuickJS. The server uses the
-configured engine heap limit (64 MiB by default) for each plugin runtime.
-Actions can await for up to one hour. Five seconds without yielding interrupts
-the affected runtime. Process exits fail outstanding actions and subsequent
-calls restart it after delays of 250 ms, 500 ms, and so on, capped at 30 seconds.
-One completed call after 60 seconds of uptime resets the delay. Server shutdown
-stops the process and the launcher also contains it if the server dies.
+Queries, mutations, and the top-level code of modules they import run in the
+server, including modules shared with actions. The transaction companion lets
+the server inspect function metadata without loading action definitions, helpers,
+or imports used only by actions. Rebuild older default artifacts that have
+actions and standalone features before enabling QuickJS.
+
+The action process uses the engine's web implementation and the manifest's
+`net:` grants, including for `runtime: "worker"` plugins whose fetches Bun
+did not check. Worker plugins have no `process` or `process.env`; use
+`await ctx.env(name)` with the manifest's `env:<name>` grant. Calls in one
+worker plugin still share module state. Default bundles get a fresh realm and
+web resource lease for each call. Worker bundles currently share one web
+resource table until reload.
+
+All plugins' actions share one process. Separate QuickJS runtimes isolate the
+plugins, and the server trusts the action process to label host operations with
+the right call. A memory-safety bug exploited in QuickJS could let one plugin
+reach other plugins' network permissions and in-flight calls in the action
+process. Action JavaScript does not expose the server process itself to such a
+bug. The server still authorizes database, identity, and other host operations.
+
+The heap limit is per plugin runtime, shared by concurrent calls. It defaults
+to 256 MiB; set `TOKAMAK_ACTION_HEAP_MIB` to a positive integer to change it.
+There are 128 call slots and 128 pending host operation slots, with up to 64
+of each per plugin. Nested calls count against the plugin being called. Log
+output has a per-plugin budget and reports dropped lines when it resumes.
+
+Most calls have a one-hour deadline. Anonymous sign-in uses a separate runtime
+per call and the existing engine timeout (one second by default, with a
+five-second minimum in debug builds). Five seconds without yielding interrupts
+the affected runtime. The server pings the dispatcher every 10 seconds and
+kills the process group after 30 seconds without a reply. Exit or loss of the
+heartbeat fails outstanding calls. The next call restarts the process after
+back-off from 250 ms up to 30 seconds. At least 60 seconds of uptime resets the
+back-off, even if no call completed. Server shutdown stops the action process,
+and the guardian also contains it if the server dies.
 
 See [Dependencies](DEPENDENCIES.md) for versions and licenses.

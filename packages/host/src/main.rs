@@ -5,6 +5,8 @@ mod fs;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod modules;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod programs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod protocol;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod runtime;

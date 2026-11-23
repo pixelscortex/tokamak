@@ -36,7 +36,11 @@ impl Thread {
             .as_str()
             .context("Missing action bundle path")?;
         let path = std::path::PathBuf::from(path);
-        let heap = usize::try_from(number(frame, "heap")?)?;
+        let heap = frame["heap"]
+            .as_u64()
+            .and_then(|bytes| usize::try_from(bytes).ok())
+            .filter(|bytes| *bytes > 0)
+            .context("Invalid action heap limit")?;
         let persistent = frame["persistent"] == true;
         // The server admits calls and host operations before sending frames.
         // A busy runtime must never put backpressure on the dispatcher.
@@ -52,43 +56,7 @@ impl Thread {
 
         std::thread::Builder::new()
             .name("tokamak-action-js".into())
-            .spawn(move || {
-                let setup = || -> Result<_> {
-                    let source =
-                        std::fs::read_to_string(path).context("Reading verified action bundle")?;
-                    // Native HTTP cancellation must run while JavaScript is busy.
-                    let executor = tokio::runtime::Builder::new_multi_thread()
-                        .worker_threads(1)
-                        .max_blocking_threads(4)
-                        .enable_all()
-                        .build()?;
-                    Ok((
-                        Plugin {
-                            source,
-                            heap,
-                            persistent,
-                        },
-                        executor,
-                    ))
-                };
-
-                match setup() {
-                    Ok((plugin, executor)) => {
-                        executor.block_on(run_plugin(plugin, bridge, stop, receive))
-                    }
-                    Err(error) => {
-                        let mut receive = receive;
-                        receive.close();
-                        while let Some(frame) = receive.blocking_recv() {
-                            if frame["type"] == "invoke"
-                                && let Ok(id) = number(&frame, "id")
-                            {
-                                bridge.output.error(slot, id, &format!("{error:#}"));
-                            }
-                        }
-                    }
-                }
-            })?;
+            .spawn(move || start_thread(&path, heap, persistent, bridge, stop, receive))?;
         Ok(Self { requests, retired })
     }
 
@@ -102,6 +70,47 @@ impl Thread {
 impl Drop for Thread {
     fn drop(&mut self) {
         self.retired.store(true, Ordering::Release);
+    }
+}
+
+fn start_thread(
+    path: &std::path::Path,
+    heap: usize,
+    persistent: bool,
+    bridge: Bridge,
+    stop: Arc<AtomicBool>,
+    mut receive: mpsc::UnboundedReceiver<Value>,
+) {
+    let setup = || -> Result<_> {
+        let source = std::fs::read_to_string(path).context("Reading verified action bundle")?;
+        // Native HTTP cancellation must run while JavaScript is busy.
+        let executor = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .max_blocking_threads(4)
+            .enable_all()
+            .build()?;
+        Ok((
+            Plugin {
+                source,
+                heap,
+                persistent,
+            },
+            executor,
+        ))
+    };
+
+    match setup() {
+        Ok((plugin, executor)) => executor.block_on(run_plugin(plugin, bridge, stop, receive)),
+        Err(error) => {
+            receive.close();
+            while let Some(frame) = receive.blocking_recv() {
+                if frame["type"] == "invoke"
+                    && let Ok(id) = number(&frame, "id")
+                {
+                    bridge.output.error(bridge.slot, id, &format!("{error:#}"));
+                }
+            }
+        }
     }
 }
 
