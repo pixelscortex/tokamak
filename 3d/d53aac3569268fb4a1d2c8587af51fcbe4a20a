@@ -1,0 +1,43 @@
+spikes/quickjs-actions/Cargo.toml
+  s_bce31a02275fd7::t_9c8efa72ee99b0 18
+spikes/quickjs-actions/prepare.mjs
+  s_bce31a02275fd7::t_712e5cb4f47a9a 9,14,22
+spikes/quickjs-actions/src/main.rs
+  s_bce31a02275fd7::t_230e59ee9a7be1 34-47,59
+spikes/quickjs-actions/src/platform.js
+  s_bce31a02275fd7::t_f1b2da86217ffe 3,6-9,13-14,39-50
+spikes/quickjs-actions/src/program.rs
+  s_bce31a02275fd7::t_2db25dffe9e7c4 117-126,245,254-255,261-268,274-292
+spikes/quickjs-actions/src/protocol.rs
+  s_bce31a02275fd7::t_cab3915e486f38 88,91-106,117-118,120,127-142,196-289,323
+spikes/quickjs-actions/src/vm.rs
+  s_bce31a02275fd7::t_c294f0de51af54 16,58-62,191-194
+spikes/quickjs-turn-paths/.gitignore
+  s_bce31a02275fd7::t_14121d3d2f7c66 1-3
+spikes/quickjs-turn-paths/REPORT.md
+  s_bce31a02275fd7::t_220b657f6b7ef7 1-160
+spikes/quickjs-turn-paths/adapter.ts
+  s_bce31a02275fd7::t_00ce058221dc43 1-70
+spikes/quickjs-turn-paths/run.py
+  s_bce31a02275fd7::t_ab5cc0b017f76b 1-535
+spikes/quickjs-turn-paths/timer.js
+  s_bce31a02275fd7::t_bc08175b3d3e8f 1-8
+spikes/quickjs-turn-paths/variants.py
+  s_bce31a02275fd7::t_d2b7429e73aa04 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3dd53aac3569268fb4a1d2c8587af51fcbe4a20a",
+  "prompts": {},
+  "sessions": {
+    "s_bce31a02275fd7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20739-20ad-71e0-9966-c7a7cb98d952",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
