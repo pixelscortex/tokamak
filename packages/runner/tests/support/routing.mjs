@@ -39,7 +39,7 @@ export async function inspectHosts({ endpoint: { http, token } }) {
     await fetch(http + "/health", { headers: { Authorization: "Bearer " + token } })
   ).json();
   return () => {
-    const ps = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,state=,command="]).stdout.toString();
+    const ps = Bun.spawnSync(["ps", "-ww", "-axo", "pid=,ppid=,state=,command="]).stdout.toString();
     return ps.split("\n").flatMap((line) => {
       const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+.*tokamak-plugin-host --local-plugin (\S+) /.exec(line);
       return match && Number(match[2]) === pid && !match[3].startsWith("Z")

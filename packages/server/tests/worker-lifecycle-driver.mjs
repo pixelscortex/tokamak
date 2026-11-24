@@ -61,7 +61,7 @@ try {
   }
   if (runtime === "quickjs") {
     assert.equal((await call("state")).count, 1);
-    const processes = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" });
+    const processes = execFileSync("ps", ["-ww", "-axo", "pid=,ppid=,command="], { encoding: "utf8" });
     const processLine = processes
       .split("\n")
       .map((line) => line.trim().split(/\s+/))
