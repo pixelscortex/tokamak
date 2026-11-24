@@ -30,8 +30,10 @@ pub fn inherit_only(command: &mut Command, keep: Option<i32>) -> io::Result<()> 
                 mark_proc_descriptors()?;
             }
             #[cfg(target_os = "macos")]
-            for fd in 3..bound {
-                mark_descriptor(fd)?;
+            if mark_dev_descriptors().is_err() {
+                for fd in 3..bound {
+                    mark_descriptor(fd)?;
+                }
             }
             if let Some(fd) = keep
                 && libc::fcntl(fd, libc::F_SETFD, 0) < 0
@@ -110,6 +112,75 @@ fn mark_proc_descriptors() -> io::Result<()> {
 }
 
 #[cfg(target_os = "macos")]
+fn mark_dev_descriptors() -> io::Result<()> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+    // After fork, /dev/fd enumerates the child's private descriptor table.
+    // Use the Darwin syscall wrapper directly instead of opendir/readdir,
+    // which allocate and can take libc locks inherited from other threads.
+    unsafe extern "C" {
+        fn getdirentries(
+            fd: libc::c_int,
+            buf: *mut u8,
+            bytes: libc::c_int,
+            base: *mut libc::c_long,
+        ) -> libc::c_int;
+    }
+
+    // SAFETY: The path is NUL terminated; open does not create a file.
+    let fd = unsafe {
+        libc::open(
+            c"/dev/fd".as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: This descriptor belongs only to this iteration.
+    let directory = unsafe { OwnedFd::from_raw_fd(fd) };
+    let mut buffer = [0_u8; 4096];
+    let mut base = 0;
+    loop {
+        // SAFETY: Both outputs are valid writable buffers. The legacy Darwin
+        // ABI returns 32-bit inode directory entries.
+        let count = unsafe {
+            getdirentries(
+                directory.as_raw_fd(),
+                buffer.as_mut_ptr(),
+                buffer.len() as i32,
+                &raw mut base,
+            )
+        };
+        if count <= 0 {
+            return if count == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            };
+        }
+        let mut entries = &buffer[..count as usize];
+        while let [_, _, _, _, low, high, _, name, ..] = entries {
+            let length = u16::from_ne_bytes([*low, *high]) as usize;
+            let end = 8 + usize::from(*name);
+            if end >= length || length > entries.len() {
+                return Err(io::Error::from_raw_os_error(libc::EIO));
+            }
+            if let Ok(name) = std::str::from_utf8(&entries[8..end])
+                && let Ok(fd) = name.parse::<i32>()
+                && fd >= 3
+            {
+                mark_descriptor(fd)?;
+            }
+            entries = &entries[length..];
+        }
+        if !entries.is_empty() {
+            return Err(io::Error::from_raw_os_error(libc::EIO));
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn descriptor_bound() -> io::Result<i32> {
     // XNU clamps every new descriptor to kern.maxfilesperproc, even if
     // RLIMIT_NOFILE is unlimited. The table size covers descriptors that were
@@ -178,7 +249,12 @@ mod tests {
         // Use high descriptors to distinguish inheritance from an fd reused by
         // the child test harness. F_DUPFD deliberately leaves CLOEXEC off.
         let duplicate = |flags| {
-            let fd = unsafe { libc::fcntl(socket.as_raw_fd(), flags, 128) };
+            let fd = unsafe { libc::fcntl(socket.as_raw_fd(), flags, 8192) };
+            let fd = if fd >= 0 {
+                fd
+            } else {
+                unsafe { libc::fcntl(socket.as_raw_fd(), flags, 128) }
+            };
             assert!(fd >= 128);
             unsafe { OwnedFd::from_raw_fd(fd) }
         };

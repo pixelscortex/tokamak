@@ -61,6 +61,7 @@ export async function initialize(
       contract: dataContracts(root),
       attachChannel: channels.attach,
       sendWaiting: emitWaiting,
+      reapAfterResult: true,
       abort(controller) {
         try {
           controller.abort();

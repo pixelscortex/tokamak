@@ -8,6 +8,13 @@ export const MEMBER_HOOK_RUN = "run";
 const contractBrand: unique symbol = Symbol.for("tokamak.contract");
 const providerBrand: unique symbol = Symbol.for("tokamak.contract.provider");
 export const contractScope = Symbol.for("tokamak.contract.scope");
+export const providerIdentity = Symbol.for("tokamak.contract.buildIdentity");
+
+/** A stable cache key for this registration in this local build. */
+export function localProviderIdentity(provider: object): object | undefined {
+  return (provider as { [providerIdentity]?: object })[providerIdentity];
+}
+
 export const openChannel = Symbol.for("tokamak.contract.channel");
 
 export function hasLocalChannel(provider: object): boolean {
@@ -32,7 +39,7 @@ export interface ContractKey {
   readonly name: string;
   readonly owner?: string;
   readonly place: ContractPlace;
-  /** True routes every method; a list routes only the named methods. */
+  /** Route every method across local QuickJS processes. */
   readonly dataMethods?: true;
 }
 

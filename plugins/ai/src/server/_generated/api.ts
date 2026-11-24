@@ -9,6 +9,7 @@ type References = {
   readonly "liveness": {
     readonly "beat": ReferenceFromDefinition<typeof import("../liveness")["beat"]>;
     readonly "release": ReferenceFromDefinition<typeof import("../liveness")["release"]>;
+    readonly "releaseReloaded": ReferenceFromDefinition<typeof import("../liveness")["releaseReloaded"]>;
   };
   readonly "threads": {
     readonly "statuses": ReferenceFromDefinition<typeof import("../threads")["statuses"]>;
@@ -61,6 +62,7 @@ export const api: References = createApi("ai", [
   "choices:set",
   "liveness:beat",
   "liveness:release",
+  "liveness:releaseReloaded",
   "threads:statuses",
   "turns:active",
   "turns:answer",

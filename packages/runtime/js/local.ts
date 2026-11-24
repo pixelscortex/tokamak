@@ -1,6 +1,7 @@
 import {
   authCaller,
   functionName,
+  LocalReloadTimeout,
   type ActionSignal,
   type ClientTransport,
   type JsonValue,
@@ -320,7 +321,7 @@ class LocalWorker {
   private readonly calls = new Map<
     number,
     {
-      finish(error: string | undefined, value?: JsonValue): void;
+      finish(error: Error | string | undefined, value?: JsonValue): void;
       cancelled: boolean;
       providers: Set<string>;
       routes: Map<string, LocalArtifact>;
@@ -418,11 +419,12 @@ class LocalWorker {
         providers: new Set<string>(),
         routes: new Map<string, LocalArtifact>(),
         catalog,
-        finish: (error: string | undefined, value?: JsonValue) => {
+        finish: (error: Error | string | undefined, value?: JsonValue) => {
           clearTimeout(timer);
           this.calls.delete(id);
           signal?.removeEventListener("abort", cancel);
-          if (error !== undefined || call.cancelled) reject(new Error(error ?? "Local function cancelled"));
+          if (error !== undefined || call.cancelled)
+            reject(error instanceof Error ? error : new Error(error ?? "Local function cancelled"));
           else resolve(value!);
         },
       };
@@ -530,7 +532,7 @@ class LocalWorker {
     if (this.invoking > 0) {
       // Give this build's admitted calls a bounded chance to settle on reload.
       const retired = "Local plugin build retired";
-      this.reloadTimer = setTimeout(() => void this.close(retired), 5_000);
+      this.reloadTimer = setTimeout(() => void this.close(new LocalReloadTimeout()), 5_000);
       void this.endpoint.then((worker) => worker.retire?.(this.artifact)).catch(() => this.close(retired));
     }
     this.finishDraining();
@@ -567,7 +569,7 @@ class LocalWorker {
     return path;
   }
 
-  close(reason: string, retire = false) {
+  close(reason: Error | string, retire = false) {
     if (!this.closing) {
       clearTimeout(this.reloadTimer);
       this.closing = this.endpoint

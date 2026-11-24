@@ -1,5 +1,6 @@
 import {
   openChannel,
+  providerIdentity,
   type ContractEntry,
   type ContractScope,
   type Provider,
@@ -122,7 +123,7 @@ export function workerContracts(root: ProviderModule, load?: (path: string) => P
   // A plain provider's static metadata is scoped to its build. Once discovered,
   // looking up a different provider doesn't depend on this process being up.
   type Description = HostOperations["local.contract.describe"]["result"];
-  const descriptions = new Map<string, { build?: string; value: Description }>();
+  const descriptions = new Map<string, { build: string; value: Description; identity: object }>();
   return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
     return {
       async list(key, selected, options) {
@@ -222,13 +223,19 @@ export function workerContracts(root: ProviderModule, load?: (path: string) => P
             const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
             const cached = descriptions.get(cacheKey);
             try {
-              const value =
-                cached && cached.build === build
-                  ? cached.value
-                  : await callHost(bridge, "local.contract.describe", target, signal);
-              descriptions.set(cacheKey, { build, value });
+              const description =
+                cached?.build === build
+                  ? cached
+                  : {
+                      build,
+                      value: await callHost(bridge, "local.contract.describe", target, signal),
+                      identity: {},
+                    };
+              descriptions.set(cacheKey, description);
+              const { value, identity } = description;
               implementation = Object.freeze({
                 ...value.data,
+                [providerIdentity]: identity,
                 ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
                 ...(bridge.channel && {
                   [openChannel](method: string, args: unknown, receive: ChannelHandler) {

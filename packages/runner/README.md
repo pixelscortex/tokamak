@@ -19,8 +19,9 @@ When a window sees a replacement for a plugin's own QuickJS build, it sends
 retirement to the old connection and gives its admitted root calls up to five
 seconds to settle. The SDK exposes this notification as `ctx.retiring`. AI
 uses it to interrupt running turns and reap their programs before releasing
-their threads. A call with no cleanup can still be cancelled when the old
-connection closes. Code and agent reloads do not retire AI's root calls.
+their threads. If a turn call cannot settle by the deadline, the window closes
+the old connection and records the reload as the reason the turn ended.
+Code and agent reloads do not retire AI's root calls.
 
 An idle build that the same workspace supersedes can stop as soon as the
 replacement is acquired. Otherwise the Runner sweeps known superseded builds
@@ -34,8 +35,9 @@ A window is a trusted Runner client. It checks `local.contract.call` against
 the signed-in workspace's catalog: who owns the contract, whether the
 provider declared access to the owner, and whether the contract declares
 `dataMethods: true`. The Runner verifies the installed artifact ID and hashes
-and refuses a build that declares a live local contract. A call to the same
-plugin uses its already-running build and the same plain-data dispatch. A plugin
+and refuses a build that declares or provides a local contract without the
+plain-data marker. Rebuild older provider artifacts whose manifests lack the
+marker. A call to the same plugin uses its already-running build and the same plain-data dispatch. A plugin
 process can act only as its own plugin. Workspace operations in the provider still go through the
 calling window, with that window's signed-in member and device.
 

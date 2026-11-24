@@ -7,7 +7,7 @@ import { errorText } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
-import { infoOf } from "./agents";
+import { infoOf, invalidateInfo } from "./agents";
 import { runAgent } from "./agent-turn";
 import {
   append,
@@ -29,7 +29,7 @@ import { keepAlive } from "./keep-alive";
 import { hooksFor } from "./turn-hooks";
 import { workingOn } from "./working";
 
-const RELOADED = "AI was reloaded while the turn was running.";
+import { RELOADED } from "../shared/turn-timing";
 
 /**
  * One turn, run on the sender's own computer: begin it (one writer per
@@ -43,6 +43,7 @@ export const turn = local({
   args: {
     threadId: v.string(),
     messageId: v.string(),
+    replyToken: v.optional(v.string()),
     /** The thread's folder on this computer, from chat's `onSent`. */
     folder: v.string(),
     agentId: v.string(),
@@ -57,13 +58,13 @@ export const turn = local({
     /** Every thread starts on Full access. */
     access: v.optional(access),
   },
-  handler: async (ctx, { threadId, messageId, folder, agentId, access, ...picked }) => {
+  handler: async (ctx, { threadId, messageId, replyToken, folder, agentId, access, ...picked }) => {
     // The labels `turns:begin` records are checked here, against what the provider offers.
     const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
     agentId = queued?.agent.id ?? agentId;
     const provider = await agent.get(agentId, ctx);
     if (!provider) return fail("NoAgent", { agentId });
-    const info = await infoOf(provider);
+    const info = await infoOf(provider, true);
     if (!info.installed)
       return fail("NotInstalled", {
         agent: provider.name,
@@ -81,7 +82,7 @@ export const turn = local({
       agent: { id: provider.id, name: provider.name },
       ...settings,
       ...(model !== undefined && { modelName: model.name }),
-      replyToken: randomBytes(32).toString("hex"),
+      replyToken: replyToken ?? randomBytes(32).toString("hex"),
     });
     if (isFailure(begun)) return begun;
     if ("state" in begun) {
@@ -89,13 +90,8 @@ export const turn = local({
         begun;
       return failed;
     }
-    const { turnId, prompt, history, sessionId, previousInterruptedTurnId } = begun;
-    const hooks = hooksFor(ctx, {
-      threadId: threadId as Id<"threads">,
-      turnId,
-      folder,
-      ...(previousInterruptedTurnId && { previousInterruptedTurnId }),
-    });
+    const { turnId, prompt, history, sessionId } = begun;
+    const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
     const writer = turnWriter(ctx, turnId);
     // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
     // device), so "Always allow this session" answers hold across turns exactly while the session does.
@@ -164,6 +160,7 @@ export const turn = local({
             ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
             : { state: "stopped" };
         } catch (cause) {
+          invalidateInfo(provider);
           ending = { state: "failed", error: errorText(cause) };
         }
       }

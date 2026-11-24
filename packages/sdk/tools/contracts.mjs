@@ -230,6 +230,7 @@ export function contractManifest(root, namespace, providers = []) {
       name: p.name,
       declarationHash: p.declarationHash,
       place: p.place,
+      dataMethods: p.dataMethods,
       registration: p.registration,
       unavailable: p.unavailable,
       methods: Object.fromEntries(p.methods.map((method) => [method.member, contractTarget(p, method)])),

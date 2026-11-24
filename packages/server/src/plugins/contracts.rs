@@ -97,6 +97,8 @@ pub struct ContractRegistration {
     pub declaration_hash: String,
     pub registration: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_methods: Option<LocalDataMethods>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable: Option<String>,
     pub methods: BTreeMap<String, String>,
 }

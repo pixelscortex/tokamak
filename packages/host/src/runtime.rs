@@ -218,6 +218,7 @@ fn install_process_env(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
         )?;
     }
     process.set("env", env)?;
+    process.set("pid", std::process::id())?;
     process.set(
         "platform",
         if cfg!(target_os = "macos") {

@@ -131,8 +131,23 @@ impl Bridge {
     }
 
     fn route(&self, id: &Value, artifact: Value) {
-        let Ok(id) = frame_id(id) else {
-            return; // An invalid operation ID cannot identify a pending call.
+        let Ok(id) = frame_id(id).and_then(|id| {
+            (id != 0)
+                .then_some(id)
+                .ok_or_else(|| "zero operation id".into())
+        }) else {
+            let recovered = id
+                .as_str()
+                .and_then(|text| text.parse::<u64>().ok())
+                .filter(|&id| id > 0 && id < (1 << 53));
+            eprintln!("Invalid local contract route frame: expected a numeric operation ID");
+            if let Some(id) = recovered {
+                self.answer(
+                    id,
+                    Reply::Result(json!({"error":"Invalid local contract route operation ID"})),
+                );
+            }
+            return;
         };
         let Some(pending) = lock(&self.pending).remove(&id) else {
             return; // The invocation may have ended.

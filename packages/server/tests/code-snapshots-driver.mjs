@@ -20,6 +20,7 @@ import {
   cancelledCleanup,
   managerCrash,
   reloadManager,
+  reloadManagerTimeout,
   separateProcesses,
   stopDuringAfter,
   stopIsolation,
@@ -80,6 +81,7 @@ try {
       await thirdPartyNotice(desk);
       await cancelledCleanup(fixture);
       await reloadManager(fixture);
+      await reloadManagerTimeout(fixture);
     }
     await snapshotReviewCases({
       ...fixture,

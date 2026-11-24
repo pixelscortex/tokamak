@@ -58,6 +58,8 @@ async fn main() -> anyhow::Result<()> {
             action_process::inspect::run(std::path::Path::new(&bundle)).await
         }
         #[cfg(feature = "local-runtime")]
+        Some(mode) if mode == "--program-guardian" => programs::guard().map_err(Into::into),
+        #[cfg(feature = "local-runtime")]
         Some(mode) if mode == "--local-plugin" => local_plugin::run(args).await,
         #[cfg(feature = "local-runtime")]
         Some(code) => protocol::run(std::path::Path::new(code), None).await,

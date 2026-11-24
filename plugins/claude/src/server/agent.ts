@@ -1,4 +1,8 @@
+/// <reference types="node" />
 /// <reference path="./svg.d.ts" />
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import { agentInfoCache } from "@tokamak/sdk/agent-turn";
 import { local, provide, type LocalContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { killAfter, minimumVersion, open, parse, signedIn, speeds, streamArgs, usableVersion } from "./wire";
@@ -8,8 +12,8 @@ import icon from "./icons/claude.svg" with { type: "text" };
 
 const updateRequired = `Claude needs Claude Code ${minimumVersion} or later.`;
 
-const info = local({
-  handler: async (ctx): Promise<ai.Info> => {
+const discovery = agentInfoCache(
+  async (ctx: LocalContext): Promise<ai.Info> => {
     const setup = { install: "curl -fsSL https://claude.ai/install.sh | bash", signIn: "claude auth login" };
     const version = await usableVersion(ctx);
     if (version !== "ready") {
@@ -32,7 +36,16 @@ const info = local({
       modes: [],
     };
   },
-});
+  async () => {
+    const path = join(
+      process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".claude"),
+      ".credentials.json",
+    );
+    const stamp = await stat(path).catch(() => undefined);
+    return stamp ? `${path}:${stamp.ino}:${stamp.mtimeMs}:${stamp.size}` : path;
+  },
+);
+const info = local({ handler: discovery.read });
 
 /**
  * A model's name as people know it, never an alias's label. The default
@@ -108,9 +121,15 @@ async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "spe
 
 const start = local({
   handler: async (ctx, run: ai.Run) => {
-    const version = await usableVersion(ctx);
-    if (version !== "ready") throw new Error(version === "old" ? updateRequired : "Claude isn't installed.");
-    return turn(ctx, run);
+    try {
+      const version = await usableVersion(ctx);
+      if (version !== "ready")
+        throw new Error(version === "old" ? updateRequired : "Claude isn't installed.");
+      return await turn(ctx, run);
+    } catch (error) {
+      discovery.invalidate();
+      throw error;
+    }
   },
 });
 

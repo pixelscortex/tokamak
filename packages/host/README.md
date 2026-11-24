@@ -59,9 +59,11 @@ that delay so a lookup can continue with other providers. Reload retires changed
 Local functions can start up to 256 live programs per host with `proc` and
 `withPrograms`. Programs get their own process groups. On macOS and Linux a
 guardian in each group watches a private pipe held by the host. Closing it
-sends TERM to the group, followed by KILL after 250 ms. The pipe closes even
-when the host is killed with SIGKILL. A scope can send KILL immediately to
-its own groups. The launcher holds a separate liveness pipe for its guardian
+sends TERM to the group. The guardian exits as soon as no live programs remain.
+Groups that are still running get up to two seconds to shut down before KILL.
+The pipe closes even when the host is killed with SIGKILL. Force stop sends KILL
+immediately. A routed call can return its result while its program scope reaps
+the remaining programs. The launcher holds a separate liveness pipe for its guardian
 in the host group, so abrupt launcher exit also stops the host and its
 programs.
 

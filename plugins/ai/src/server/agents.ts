@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { local } from "@tokamak/sdk";
-import { localProviders } from "@tokamak/sdk/agent-turn";
+import { AGENT_INFO_MAX_AGE_MS, localProviderIdentity, localProviders } from "@tokamak/sdk/agent-turn";
 import { agent, type Agent, type Info } from "../contracts";
 import { MAX_ICON_LENGTH } from "../shared/icon";
 
@@ -46,13 +46,27 @@ export const list = local({
   },
 });
 
-/**
- * The agent's answer to `info`, asked now; one that fails counts as not
- * installed. Lists an agent built before they existed leaves out count as empty.
- */
-export function infoOf(provider: Agent): Promise<Info> {
-  return provider.info().then(
+const turnInfo = new WeakMap<object, { info: Info; until: number }>();
+
+export function invalidateInfo(provider: Agent) {
+  const key = localProviderIdentity(provider);
+  if (key) turnInfo.delete(key);
+}
+
+/** The picker probes for account changes; turns reuse only an opted-in, fresh answer for this build. */
+export async function infoOf(provider: Agent, forTurn = false): Promise<Info> {
+  const key = localProviderIdentity(provider);
+  const cached = key && turnInfo.get(key);
+  if (forTurn && cached && cached.until > Date.now()) return cached.info;
+  const info = await provider.info().then(
     (info) => ({ ...info, speeds: info.speeds ?? [], modes: info.modes ?? [] }),
     () => UNKNOWN,
   );
+  if (key) {
+    const now = Date.now();
+    if (info.installed && info.signedIn && typeof info.cacheUntil === "number" && info.cacheUntil > now)
+      turnInfo.set(key, { info, until: Math.min(info.cacheUntil, now + AGENT_INFO_MAX_AGE_MS) });
+    else turnInfo.delete(key);
+  }
+  return info;
 }

@@ -283,7 +283,10 @@ which defined the contract may list or invoke those registrations. A reload
 rebuilds the active registrations; an optional provider stays installed when
 its contract owner is absent. The client catalog only carries registrations
 needed by the local part. The catalog verifies the provider's declaration hash
-against the owner's. A local contract must declare `dataMethods: true`.
+against the owner's. A local contract must declare `dataMethods: true`. The
+build records this on both the declaration and provider registrations. QuickJS
+rejects legacy local registrations without that marker before starting a host;
+rebuild the provider to update its manifest.
 The window authorizes the route using the catalog, and the QuickJS Runner
 routes JSON arguments and results between plugin processes. The provider
 handles the call with the caller's signed-in member and device. Turn hooks and

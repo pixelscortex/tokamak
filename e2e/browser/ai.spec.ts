@@ -1,10 +1,8 @@
-import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { createApi, isFailure, type FunctionReference } from "../../packages/sdk/src/index";
+import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
-import { api as chat } from "../../plugins/chat/src/server/_generated/api";
 import { connect } from "../fake-agent/harness.mjs";
 import { asDesktop } from "./desktop";
 
@@ -22,38 +20,8 @@ const ai = createApi<{
   turns: {
     active: FunctionReference<"query", { threadId: string }, TurnView | null>;
     list: FunctionReference<"query", { threadId: string }, TurnView[]>;
-    begin: FunctionReference<
-      "mutation",
-      {
-        threadId: string;
-        messageId: string;
-        agent: { id: string; name: string };
-        model: string;
-        access: "full";
-        replyToken: string;
-      },
-      { turnId: string }
-    >;
-    write: FunctionReference<
-      "mutation",
-      {
-        turnId: string;
-        text: string;
-        steps: {
-          key: string;
-          type: "tool";
-          kind: "read";
-          title: string;
-          state: "done";
-          startedAt: number;
-          finishedAt: number;
-        }[];
-      },
-      null
-    >;
-    finish: FunctionReference<"mutation", { turnId: string; state: "done"; finishedAt: number }, null>;
   };
-}>("ai", ["turns:active", "turns:list", "turns:begin", "turns:write", "turns:finish"]);
+}>("ai", ["turns:active", "turns:list"]);
 
 /** Picks the fake agent and one of its replays (each replay is a model) in the agent row. */
 async function pickReplay(page: Page, replay: string) {
@@ -202,76 +170,37 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
   test.skip(browserName !== "chromium", "runs once");
   test.setTimeout(300_000);
   const context = await browser.newContext();
-  const cleanup: (() => void)[] = [];
   try {
-    const { home, endpoint } = await asDesktop(context);
-    const folder = join(home, "many-replies");
-    await mkdir(folder);
-    const client = await connect(endpoint.ws, {
-      token: endpoint.token,
-      launch: undefined,
-      cleanup,
-    });
-
-    // Use the mutations that store real replies to seed the large thread.
-    // The browser's final Send still runs a real replay through the Runner.
-    const { threadId, messageId } = await client.mutation(chat.threads.start, {
-      text: "Message 1",
-      folder: { kind: "chosen", path: folder },
-    });
-    for (let n = 1; n <= 150; n += 1) {
-      const id =
-        n === 1 ? messageId : await client.mutation(chat.messages.post, { threadId, text: `Message ${n}` });
-      const begun = await client.mutation(ai.turns.begin, {
-        threadId,
-        messageId: id,
-        agent: { id: "fake-agent", name: "Fake agent" },
-        model: "quick",
-        access: "full",
-        replyToken: randomBytes(32).toString("hex"),
-      });
-      if (isFailure(begun) || "state" in begun)
-        throw new Error(`Could not seed Message ${n}: ${JSON.stringify(begun)}`);
-      const at = Date.now();
-      await client.mutation(ai.turns.write, {
-        turnId: begun.turnId,
-        text: `Done: Message ${n}`,
-        steps: [
-          {
-            key: "read-1",
-            type: "tool",
-            kind: "read",
-            title: "README.md",
-            state: "done",
-            startedAt: at,
-            finishedAt: at,
-          },
-        ],
-      });
-      await client.mutation(ai.turns.finish, { turnId: begun.turnId, state: "done", finishedAt: at });
-    }
-
-    const openThread = async () => {
-      const page = await context.newPage();
-      await page.goto("/");
-      await threads(page).filter({ hasText: "Message 1" }).first().click();
-      return page;
+    const { home } = await asDesktop(context);
+    const page = await context.newPage();
+    await page.goto("/");
+    await pickReplay(page, "quick");
+    await chooseFolder(page, home);
+    const working = conversation(page).getByRole("button", { name: /Working|Running/ });
+    const send = async (text: string) => {
+      await composer(page).fill(text);
+      await composer(page).press("Enter");
+      await expect(conversation(page).getByText(`Done: ${text}`, { exact: true })).toBeVisible();
+      // The turn has ended: the next Send would otherwise find the thread busy.
+      await expect(working).toHaveCount(0);
     };
-    const page = await openThread();
-    const replies = replyOf(await openThread());
-    // Chat shows the latest 200 messages; all 100 displayed replies draw their turn.
+    for (let n = 1; n <= 150; n += 1) await send(`Message ${n}`);
+
+    // Reopened in a second window: every reply chat shows (its latest 200 messages) draws its turn.
+    const second = await context.newPage();
+    await second.goto("/");
+    await threads(second).filter({ hasText: "Message 1" }).first().click();
+    const replies = replyOf(second);
     await expect(replies).toHaveCount(100);
     await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/^\s*quick\s*$/);
     await expect(replies.first().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
     await expect(replies.last()).toContainText("Done: Message 150");
 
-    await pickReplay(page, "quick");
-    await composer(page).fill("Message 151");
-    await composer(page).press("Enter");
+    // And it keeps updating: a new turn in the first window shows up in the second, drawn.
+    await send("Message 151");
     await expect(replies.last()).toContainText("Done: Message 151");
     await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
   } finally {
-    for (const close of cleanup.reverse()) close();
     await context.close();
   }
 });

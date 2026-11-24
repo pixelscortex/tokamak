@@ -23,6 +23,8 @@ export type {
 export interface Info {
   readonly installed: boolean;
   readonly signedIn: boolean;
+  /** A successful probe may be reused for turns until this wall clock time. */
+  readonly cacheUntil?: number;
   /** A user-facing reason when the installed program needs an update. */
   readonly updateRequired?: string;
   /** The command that installs the agent's program; kept for a later one-click install. */
@@ -90,8 +92,6 @@ export interface TurnInfo {
   readonly threadId: Id<"threads">;
   readonly turnId: string;
   readonly folder: string;
-  /** The preceding turn on this device was interrupted before its work could settle. */
-  readonly previousInterruptedTurnId?: string;
   /** Aborted when this hook is cancelled; use it to stop work. */
   readonly signal: LocalContext["signal"];
 }

@@ -79,6 +79,28 @@ async fn stop_lets_the_program_handle_term() {
 }
 
 #[tokio::test]
+async fn routed_result_arrives_before_a_lingering_program_is_reaped() {
+    reap_orphans_on_linux();
+    let mut host = Host::start();
+    host.send(json!({
+        "type":"invoke", "id":1, "fn":"", "args":[], "routed":true,
+        "contract":{
+            "plugin":"fixture", "owner":"fixture", "name":"programs",
+            "registration":"programFixture", "method":"linger"
+        }
+    }))
+    .await;
+    let auth = host.receive().await;
+    assert_eq!(auth["name"], "auth.current");
+    host.send(json!({ "type":"opResult", "id":auth["id"], "value":{} }))
+        .await;
+    let frame = host.receive().await;
+    let pid = frame["value"].as_i64().expect("program PID") as i32;
+    assert!(pid > 1 && unsafe { libc::kill(pid, 0) } == 0, "{frame}");
+    assert_gone(&[pid]).await;
+}
+
+#[tokio::test]
 async fn force_stop_kills_the_whole_scope_tree_and_leaves_the_outer_program() {
     reap_orphans_on_linux();
     let mut host = Host::start();

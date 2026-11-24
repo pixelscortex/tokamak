@@ -101,6 +101,13 @@ await plugin(
     },
   });
   export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
+  export const unavailable = local({
+    handler: async (ctx) => {
+      const failed: { plugin: string; message: string }[] = [];
+      const ready = await probe.list(ctx, { onUnavailable: ({ plugin, message }) => failed.push({ plugin, message }) });
+      return { ready: ready.map(({ id }) => id).sort(), failed };
+    },
+  });
 `,
   `
   import { contract, type ActionSignal, type AuthContext } from "@tokamak/sdk";
@@ -295,6 +302,23 @@ try {
   assert.ok(performance.now() - start < 1_500, "lookup waited for the 4 s provider back-off");
   console.log("Unavailable custom ID preserves the provider error; listings skip its back-off");
 
+  const legacyProvider = "routed-legacy";
+  await cloneProvider(legacyProvider);
+  const legacyManifest = join(distFor(legacyProvider), "manifest.json");
+  const legacySpec = await Bun.file(legacyManifest).json();
+  legacySpec.contractProviders[0].dataMethods = ["identify"];
+  await writeFile(legacyManifest, JSON.stringify(legacySpec));
+  await reload(runner, directory, legacyProvider);
+  const unavailable = await next.local(api.unavailable, {});
+  assert.deepEqual(unavailable.ready, ["custom-alpha", "custom-beta"]);
+  assert.match(
+    unavailable.failed.find(({ plugin }) => plugin === legacyProvider)?.message ?? "",
+    /routed-owner\/probe is not all plain data.*Rebuild or update this plugin/,
+  );
+  assert.ok(!hosts().some(({ id }) => id === legacyProvider));
+  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
+  console.log("Legacy mixed provider listed unavailable with a rebuild message without starting a host");
+
   await checkRoutesAndBuilds(runner, hosts);
   assert.equal(await within(runner.stop(), "Runner stop"), 0);
   await until("every host reaped", () => Object.values(afterReload).every((pid) => !alive(pid)));
@@ -407,6 +431,56 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await legacyWindow.close();
   }
 
+  const pair = await Promise.all(
+    ["isolation-first", "isolation-second"].map((id, index) => {
+      const marker = join(scratch, id + ".evaluated");
+      const peer = index === 0 ? "isolation-second" : "isolation-first";
+      return installLocal(
+        join(plugins, id),
+        id,
+        `
+      import { writeFile } from "node:fs/promises";
+      await writeFile(${JSON.stringify(marker)}, process.pid + "\\n", { flag: "a" });
+      export const functions = {
+        askPeer: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) =>
+          ctx.op("local.contract.call", {
+            plugin: "${peer}", owner: "${id}", name: "probe",
+            registration: "provider", method: "pid", args: [],
+          }) },
+      };
+      export const contractProviders = {
+        provider: {
+          contract: { owner: "${peer}", name: "probe", place: "local", dataMethods: true },
+          implementation: { pid: () => process.pid },
+        },
+      };
+    `,
+      );
+    }),
+  );
+  const windows = await Promise.all(
+    pair.map((artifact, i) =>
+      rawWindow(runner, artifact, (frame, worker) => worker.route(frame.id, pair[1 - i])),
+    ),
+  );
+  try {
+    const results = await Promise.all(windows.map((window) => window.invoke("askPeer", null)));
+    for (const [index, artifact] of pair.entries()) {
+      const own = hosts().filter(({ id }) => id === artifact.id);
+      assert.equal(own.length, 1);
+      const [{ pid }] = own;
+      assert.equal(results[1 - index], pid, "the routed method ran in its provider's host");
+      assert.equal(
+        await readFile(join(scratch, artifact.id + ".evaluated"), "utf8"),
+        pid + "\n",
+        "the local bundle was evaluated exactly once, in its own host",
+      );
+    }
+    console.log("Calls in both directions evaluated each bundle exactly once in its own process");
+  } finally {
+    await Promise.all(windows.map((window) => window.close()));
+  }
+
   const chainCode = `
     const call = (plugins, op) => {
       const [plugin, ...rest] = plugins;
@@ -415,6 +489,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
       }) : "end";
     };
     export const functions = {
+      ping: { kind: "local", args: { kind: "any" }, invoke: () => "pong" },
       walk: { kind: "local", args: { kind: "any" }, invoke: (args, ctx) => call(args, ctx.op) },
     };
     export const contractProviders = {
@@ -430,16 +505,31 @@ async function checkRoutesAndBuilds(runner, hosts) {
       return installLocal(join(plugins, id), id, chainCode);
     }),
   );
-  let invalid = true;
+  let malformed = "missing";
+  const missing = Promise.withResolvers();
   const driver = await rawWindow(runner, chain[0], (frame, worker) => {
     const target = chain.find(({ id }) => id === frame.payload.plugin);
     assert.ok(target);
-    const route = invalid ? { id: target.id } : target;
-    invalid = false;
-    return worker.route(frame.id, route);
+    const kind = malformed;
+    if (kind === "missing") {
+      missing.resolve({ id: frame.id, worker, target });
+      return worker.route(undefined, target);
+    }
+    if (kind === "string") return worker.route(String(frame.id), target);
+    return worker.route(frame.id, kind === "artifact" ? { id: target.id } : target);
   });
   try {
+    const pending = driver.invoke("walk", ["chain-1"]);
+    const { id, target, worker } = await within(missing.promise, "route without an operation ID");
+    assert.equal(await driver.invoke("ping", null), "pong");
+    await worker.route(id, target);
+    assert.equal(await pending, "end");
+    malformed = "string";
+    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local contract route operation ID/);
+    assert.equal(await driver.invoke("ping", null), "pong");
+    malformed = "artifact";
     await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local contract route/);
+    malformed = undefined;
     assert.equal(
       await driver.invoke(
         "walk",

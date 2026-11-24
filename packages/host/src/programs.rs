@@ -14,6 +14,7 @@ use rquickjs::{
 use tokio::{io::AsyncRead, sync::Mutex};
 
 use self::{lines::Lines, process::Program};
+pub(super) use process::guard;
 
 const PROGRAM_CAPACITY: usize = 256;
 

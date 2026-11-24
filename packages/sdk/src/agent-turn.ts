@@ -250,4 +250,10 @@ export type AgentTurnAsk = TurnAddress & { question: Question };
 export type AgentTurnSteer = TurnAddress & { text: string };
 
 export * from "./agent-reports";
-export { hasLocalChannel, localProviders, openLocalChannel } from "./internal/contracts";
+export { AGENT_INFO_MAX_AGE_MS, agentInfoCache } from "./agent-info-cache";
+export {
+  hasLocalChannel,
+  localProviderIdentity,
+  localProviders,
+  openLocalChannel,
+} from "./internal/contracts";

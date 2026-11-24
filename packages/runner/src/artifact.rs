@@ -29,12 +29,15 @@ pub(super) fn quickjs_bundle(
 ) -> Result<TempPath, String> {
     let (folder, manifest) =
         artifact_folder(root, &request.id, &request.entry_hash, &request.code_hash)?;
-    for contract in manifest["contracts"].as_array().into_iter().flatten() {
+    for contract in ["contracts", "contractProviders"]
+        .into_iter()
+        .flat_map(|field| manifest[field].as_array().into_iter().flatten())
+    {
         if contract["place"] == "local" && contract["dataMethods"] != true {
             let name = contract["name"].as_str().unwrap_or("<unnamed>");
+            let owner = contract["owner"].as_str().unwrap_or(&request.id);
             return Err(format!(
-                "Local contract {}/{name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.",
-                request.id
+                "Local contract {owner}/{name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin."
             ));
         }
     }

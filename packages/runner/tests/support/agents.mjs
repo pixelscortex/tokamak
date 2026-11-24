@@ -5,14 +5,17 @@ import { build, bunPath, workspace } from "../../../../e2e/fake-agent/harness.mj
 const quoted = (text) => "'" + text.replaceAll("'", "'\\''") + "'";
 
 /** Production agent bundles and deterministic stand-ins for the two CLIs. */
-export async function prepareReplayAgents(scratch) {
+export async function prepareReplayAgents(
+  scratch,
+  { code = false, artifacts = process.env.TOKAMAK_AGENT_FIXTURES } = {},
+) {
   const plugins = join(scratch, "plugins");
   const home = join(scratch, "home");
   const bin = join(scratch, "bin");
   await Promise.all([mkdir(home), mkdir(bin, { mode: 0o755 }), mkdir(plugins)]);
-  for (const id of ["chat", "ai", "claude", "codex"]) {
+  for (const id of ["chat", "ai", "claude", "codex", ...(code ? ["code"] : [])]) {
     const source = join(workspace, "plugins", id);
-    const cached = process.env.TOKAMAK_AGENT_FIXTURES && join(process.env.TOKAMAK_AGENT_FIXTURES, id);
+    const cached = artifacts && join(artifacts, id);
     if (cached && (await Bun.file(join(cached, "manifest.json")).exists())) {
       await cp(cached, join(plugins, id), { recursive: true });
     } else {

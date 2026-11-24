@@ -1,6 +1,7 @@
 import { isFailure, type Id, type TokamakClient } from "@tokamak/sdk";
 import { resolveFolder } from "plugin:chat/client";
 import type { TurnView } from "../../server/_functions";
+import { runLocalTurn } from "./local-turn";
 import { errorText } from "../../shared/turn-shared";
 import { api, notice, reasonLine } from "./agents";
 
@@ -55,7 +56,7 @@ async function launchQueued(client: TokamakClient, head: TurnView, isClosed: () 
     notice.set(reason);
     return settle(client, head, reason);
   }
-  const result = await client.local(api.run.turn, {
+  const result = await runLocalTurn(client, {
     threadId,
     messageId: head.messageId,
     folder,
@@ -66,7 +67,7 @@ async function launchQueued(client: TokamakClient, head: TurnView, isClosed: () 
     if (result.kind !== "Busy") await settle(client, head, reasonLine(result.kind, head.agent.name));
   } else if (!isClosed() && "ended" in result && result.ended) {
     notice.set(result.ended);
-  } else if (!isClosed() && result.hookNotice) {
+  } else if (!isClosed() && "hookNotice" in result && result.hookNotice) {
     notice.set(result.hookNotice);
   }
 }
