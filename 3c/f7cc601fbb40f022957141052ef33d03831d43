@@ -1,0 +1,19 @@
+packages/worker/tests/launch_local.rs
+  s_6573ca2d7bcce4::t_b5becf694347ea 20-24,35,53,55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3cf7cc601fbb40f022957141052ef33d03831d43",
+  "prompts": {},
+  "sessions": {
+    "s_6573ca2d7bcce4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20b36-dd70-7ac3-8e90-d121f8252052",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
