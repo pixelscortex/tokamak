@@ -1,0 +1,29 @@
+plugins/codex/README.md
+  s_1f323405e885d4::t_5f03871fb7f4fa 25
+packages/server/tests/README.md
+  s_1f323405e885d4::t_5f03871fb7f4fa 49
+app/README.md
+  s_1f323405e885d4::t_5f03871fb7f4fa 71
+wiki/content/docs/architecture.mdx
+  s_1f323405e885d4::t_5f03871fb7f4fa 21-23
+plugins/ai/README.md
+  s_1f323405e885d4::t_5f03871fb7f4fa 117,137
+packages/server/PLUGINS.md
+  s_1f323405e885d4::t_5f03871fb7f4fa 173-174,249,257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a0c8f5d67e0b9ad14412bb8a345040c83a31ea7a",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
