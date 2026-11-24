@@ -1,5 +1,6 @@
 // Bundle this client with the SDK on the build machine. Run it with Node 22+
-// and prebuilt artifacts on a machine without Bun.
+// and prebuilt artifacts on a machine without Bun. The Runner needs the OS CA
+// bundle, and the temporary directory must allow executing the test agent.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -14,7 +15,7 @@ const chat = createApi("chat");
 const ai = createApi("ai");
 const args = process.argv.slice(2);
 assert.equal(spawnSync("/bin/sh", ["-c", "! command -v bun"], { stdio: "ignore" }).status, 0);
-console.log("no-bun");
+process.stdout.write("no-bun\n");
 
 let socket;
 let local;
@@ -29,7 +30,7 @@ try {
     const headers = { Authorization: `Bearer ${process.env.TOKAMAK_ACCESS_TOKEN}` };
     const health = await fetch(new URL("/health", origin), { headers, signal: deadline });
     assert.equal(health.status, 200);
-    console.log("health 200");
+    process.stdout.write("health 200\n");
     const owner = await fetch(new URL("/auth/owner", origin), {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
@@ -84,25 +85,27 @@ esac
   const client = new TokamakClient(transport, local);
   const action = await client.action(probe.probe.run, {}, { signal: deadline });
   assert.deepEqual(action, { ran: true, bun: false });
-  console.log("server action:", JSON.stringify(action));
+  process.stdout.write(`server action: ${JSON.stringify(action)}\n`);
   if (runner) {
-    const { threadId, messageId } = await client.mutation(chat.threads.start, {
+    const started = await client.mutation(chat.threads.start, {
       text: "Say hello.",
       folder: { kind: "chosen", path: scratch },
     });
+    const { threadId, messageId } = started;
+    assert.ok(threadId && messageId, `Could not start the thread: ${JSON.stringify(started)}`);
     const turn = await client.local(
       ai.run.turn,
       { threadId, messageId, folder: scratch, agentId: "fake-agent", model: "smoke", access: "full" },
       { signal: deadline },
     );
-    assert.equal(turn.state, "done");
+    assert.equal(turn.state, "done", JSON.stringify(turn));
     const [row] = await client.query(ai.turns.list, { threadId });
     assert.equal(row.sessionId, "no-bun-smoke");
     const messages = await client.query(chat.messages.list, { threadId });
     const reply = messages.find(({ _id }) => _id === row.replyId);
     assert.equal(reply.status, "complete");
     assert.equal(reply.parts[0].text, "Hello from the fake agent.");
-    console.log(`fake-agent turn: ${turn.state}; ${reply.parts[0].text}`);
+    process.stdout.write(`fake-agent turn: ${turn.state}; ${reply.parts[0].text}\n`);
   }
 } finally {
   await local?.close();
