@@ -59,8 +59,14 @@ test("the agent row names the agent and Send streams its reply into the thread",
   await agentRow(page).getByRole("button").first().click();
   await page.getByRole("menuitem", { name: "Fake agent" }).click();
   await expect(page.getByRole("heading", { name: "What should Fake agent work on?" })).toBeVisible();
-  await agentRow(page).getByRole("button").nth(1).click();
-  await page.getByRole("menuitem", { name: "echo" }).click();
+  await agentRow(page).getByRole("button", { name: /^Model:/ }).click();
+  const models = page.getByRole("menu", { name: /^Model:/ });
+  // Opening the picker refreshes the models and can replace the rows while it opens.
+  await expect(models).toHaveCSS("opacity", "1");
+  const echo = models.getByRole("menuitem", { name: "echo", exact: true });
+  await echo.scrollIntoViewIfNeeded();
+  await expect(echo).toBeInViewport();
+  await echo.click();
   await expect(agentRow(page).getByRole("button", { name: "Fake agent" })).toBeVisible();
   await expect(agentRow(page).getByRole("button", { name: "echo" })).toBeVisible();
 
