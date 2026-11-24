@@ -72,7 +72,8 @@ impl Output {
             let drained = self.drained.notified();
             {
                 let mut state = self.state.lock().expect("protocol state");
-                if let Some(call) = frame.get("call").and_then(Value::as_u64) {
+                if frame["type"] == "op" {
+                    let call = id(&frame["call"])?;
                     ensure!(
                         state.calls.get(&call) == Some(&false),
                         "stale invocation: host operation refused"

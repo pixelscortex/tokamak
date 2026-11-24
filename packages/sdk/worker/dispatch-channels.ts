@@ -1,6 +1,5 @@
 import { callHost, type ChannelHandler, type HostBridge } from "../src/host";
 import type { JsonValue } from "../src/values";
-import { WORKER_CAPACITY } from "../src/worker-limits";
 import type { ContractInvocation } from "./contracts";
 import type { DispatchOperation } from "./dispatch";
 import { wireData } from "./wire-data";
@@ -37,10 +36,8 @@ export function dispatchChannels(
       const direct: HostBridge = { op: (name, payload) => operation(allocateOp(), name, payload) };
       const bridge: NonNullable<HostBridge["channel"]> = {
         open(payload, handle) {
-          // Leave room for writes, question operations, and fresh invocations.
-          const limit = WORKER_CAPACITY / 2;
-          if (outbound.size >= limit)
-            throw new Error(`Too many turns are running on this machine (${limit}). Wait for one to finish.`);
+          // The Runner admits starts across all caller realms. It owns the
+          // machine-wide limit; this table only tracks requests until they settle.
           const channel = allocateOp();
           const result = operation(channel, "local.contract.call", payload, undefined, { channel: true });
           outbound.set(channel, { call, handle });
@@ -82,15 +79,24 @@ export function dispatchChannels(
       const invocation = active.get(call);
       const linked = channel === null ? undefined : outbound.get(channel);
       const reply = { type: "peerResult", id, call };
+      let response: { value: JsonValue } | { error: string };
       try {
         const handle =
           channel === null ? await invocation?.receive : linked?.call === call ? linked.handle : undefined;
         if (!handle || !invocation || active.get(call) !== invocation || invocation.signal.aborted)
           throw new Error("Local contract channel ended");
         const value = wireData(await handle(payload.method, payload.args), "Local contract channel result");
-        if (active.get(call) === invocation) await send({ ...reply, value });
+        if (active.get(call) !== invocation || invocation.signal.aborted)
+          throw new Error("Local contract channel ended");
+        response = { value };
       } catch (error) {
-        await send({ ...reply, error: errorMessage(error).slice(0, 8192) });
+        response = { error: errorMessage(error).slice(0, 8192) };
+      }
+      try {
+        await send({ ...reply, ...response });
+      } catch {
+        // The output can close while this reply waits for space. The Runner
+        // settles requests on host shutdown or channel retirement.
       }
     },
   };

@@ -668,11 +668,23 @@ The adapter in `packages/sdk/worker/contracts.ts` special-cases
 `Run`. The Runner's linked call transport is general and does not inspect
 agent messages. The start carries a protocol version so an old ai bundle
 and a host with a different wire format fail with a version error. Reports
-are acknowledged in order before the agent returns its final result.
+are validated as a batch and acknowledged in order before the agent returns
+its final result. The 1008 KiB start payload keeps the full prompt and drops
+the oldest history as needed. A message that cannot fit even without history
+fails once, including when it is at the head of the queue.
 
 QuickJS allows up to 64 concurrent turns per Runner and up to 32 on an
-individual agent host, within the 128 invocation slots per host. Reports
-and questions wait for space in bounded queues. If Force stop cannot drain
+individual agent host, within the 128 invocation slots per host. The Runner
+enforces both limits. Reports and questions wait for space in bounded queues.
+The adapter merges consecutive text or thinking deltas and replaces unsent
+tasks, plan, and usage snapshots. It sends batches below 640 KiB and allows
+768 KiB per turn (JSON bytes plus 64 bytes per buffered event, including the
+batch awaiting acknowledgement). At 32 turns that accounts for 24 MiB of
+reports per host. The reporting API stays synchronous; if coalescing cannot
+keep the buffer below its limit, only that turn fails with “The agent produced
+output faster than it could be saved.”
+
+If Force stop cannot drain
 reports within 750 ms, the host can still kill the invocation's programs
 without running JavaScript. A stuck realm may subsequently be reset by the
 watchdog, which also ends its other invocations.

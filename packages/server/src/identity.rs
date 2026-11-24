@@ -110,7 +110,21 @@ fn local_device_name() -> &'static str {
     static NAME: OnceLock<String> = OnceLock::new();
     NAME.get_or_init(|| {
         fn output(name: &str, args: &[&str]) -> Option<String> {
-            let output = std::process::Command::new(name).args(args).output().ok()?;
+            let mut command = std::process::Command::new(name);
+            command.args(args);
+            #[cfg(all(target_os = "macos", feature = "local-runtime"))]
+            let output = {
+                command
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
+                tokamak_worker::with_spawn_lock(|| command.spawn())
+                    .ok()?
+                    .wait_with_output()
+            };
+            #[cfg(not(all(target_os = "macos", feature = "local-runtime")))]
+            let output = command.output();
+            let output = output.ok()?;
             output
                 .status
                 .success()

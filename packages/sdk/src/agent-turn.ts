@@ -127,8 +127,8 @@ export interface Run {
    * person's and every agent's, without command output). Give it to a fresh
    * session: when there is no `sessionId`, or the session is gone. The thread
    * in the database is the truth, so switching agent in a thread works too.
-   * A very long thread gives only its newest messages, after a first "note"
-   * saying how many were left out.
+   * A very long thread gives only its newest messages, with a note when
+   * available. QuickJS may trim more history to keep the full prompt.
    */
   readonly history: readonly HistoryMessage[];
   /** Adds `delta` to the reply's text, which streams into the thread. */
@@ -185,8 +185,17 @@ export const AGENT_TURN_PROTOCOL = 1;
 export const TURN_ENDED = "This turn has ended";
 export type AgentTurnOpen = AgentTurnStart & { version: number };
 
-export function agentTurnFits(start: AgentTurnStart): boolean {
-  return jsonBytes([{ ...start, version: AGENT_TURN_PROTOCOL }]) <= WORKER_DATA_BYTES;
+/** Keep the newest history that fits beside the complete prompt. */
+export function agentTurnHistory(start: AgentTurnStart): Run["history"] | undefined {
+  let remaining = WORKER_DATA_BYTES - jsonBytes([{ ...start, history: [], version: AGENT_TURN_PROTOCOL }]);
+  if (remaining < 0) return undefined;
+  let first = start.history.length;
+  while (first > 0) {
+    remaining -= jsonBytes(start.history[first - 1]) + (first < start.history.length ? 1 : 0);
+    if (remaining < 0) break;
+    first--;
+  }
+  return first === 0 ? start.history : start.history.slice(first);
 }
 
 type ReportMethods = Pick<Run, "text" | "thinking" | "tool" | "tasks" | "plan" | "helper" | "usage">;

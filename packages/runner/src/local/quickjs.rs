@@ -639,7 +639,10 @@ impl Host {
         }
         let linked = frame["contract"]["channel"] == true;
         if linked && calls.linked.len() >= PROVIDER_TURN_CAPACITY {
-            return Err(too_many_turns(PROVIDER_TURN_CAPACITY));
+            return Err(format!(
+                "Too many {} turns are running ({PROVIDER_TURN_CAPACITY}). Wait for one to finish.",
+                self.id
+            ));
         }
         calls.next += 1;
         let id = calls.next;

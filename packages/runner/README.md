@@ -44,7 +44,9 @@ on the manager and 96 on an agent for short calls. Peer messages don't use
 invocation slots. Reports and questions wait for space in the bounded pipes
 and operation queues; each turn can have one report and one question in
 flight. If a turn can't start because a limit is reached, the thread asks
-the user to wait for a turn to finish.
+the user to wait for a turn to finish, naming the agent when only its host
+is full. The SDK coalesces pending reports and accounts for at most 768 KiB
+per turn (24 MiB for 32 turns); exceeding that bound fails only the noisy turn.
 
 On Force stop, the agent SDK seals and drains its reports. The manager
 allows up to 750 ms for the drain, then asks the host's Rust control thread
@@ -52,10 +54,17 @@ to kill only that invocation's program groups and closes the channel. This
 works even while provider JavaScript is stuck. If the JavaScript watchdog
 later resets the stuck realm, other invocations in that same host also fail;
 other plugin hosts keep running.
+On macOS, the Runner serializes creation of the control socket pair with
+child launches, including worker guardians and device name lookup, until
+both descriptors have close-on-exec set. Linux sets it atomically. Only the
+intended host receives its end, and it restores close-on-exec before it can
+start any programs.
 
 When ai's host exits, the Runner drops and cancels the linked starts and any
-open questions. Window recovery and the server liveness sweep release the
-interrupted turns. When an agent host exits, only starts on that host fail,
+open questions. A window that stays connected waits for the Server's
+liveness sweep (45 seconds without a heartbeat, checked every 5 seconds).
+A relaunched window can release an orphan earlier via its startup recovery.
+When an agent host exits, only starts on that host fail,
 with the host's name.
 
 Install the Runner on desktops, real machines and sandboxes. For Docker or a

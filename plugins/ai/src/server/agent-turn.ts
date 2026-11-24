@@ -1,5 +1,13 @@
 import type { LocalContext } from "@tokamak/sdk";
-import { AGENT_TURN_PROTOCOL, openLocalChannel } from "@tokamak/sdk/agent-turn";
+import {
+  AGENT_TURN_PROTOCOL,
+  checkedHelper,
+  checkedTasks,
+  checkedText,
+  checkedTool,
+  checkedUsage,
+  openLocalChannel,
+} from "@tokamak/sdk/agent-turn";
 import type {
   AgentTurnAsk,
   AgentTurnReport,
@@ -95,8 +103,13 @@ export function startAgent(
     .then(
       (value) => (forcing ? undefined : (value as unknown as TurnResult)),
       (error: unknown) => {
-        if (!forcing) throw error;
-        return undefined;
+        if (forcing) return undefined;
+        const prefix = `Too many ${provider.id} turns are running (`;
+        if (error instanceof Error && error.message.startsWith(prefix))
+          throw new Error(
+            `Too many ${provider.name} turns are running (${error.message.slice(prefix.length)}`,
+          );
+        throw error;
       },
     )
     .finally(() => {
@@ -133,7 +146,42 @@ export function startAgent(
   );
 }
 
+function validateReports(events: AgentTurnReport["events"]) {
+  if (!Array.isArray(events)) throw new TypeError("Invalid agent turn report batch");
+  // Validate the whole batch before a report can write to the thread or
+  // register a control. The writer still checks its own inputs on both runtimes.
+  for (const event of events) {
+    switch (event?.kind) {
+      case "text":
+      case "thinking":
+      case "plan":
+        checkedText(event.value, `invalid ${event.kind} report`);
+        break;
+      case "tasks":
+        checkedTasks(event.value);
+        break;
+      case "tool":
+        checkedTool(event.value);
+        break;
+      case "helper":
+        checkedHelper(event.value);
+        break;
+      case "usage":
+        checkedUsage(event.value);
+        break;
+      case "session":
+        if (event.value !== null) checkedText(event.value, "invalid session report");
+        break;
+      case "steerReady":
+        break;
+      default:
+        throw new Error(`Unknown agent turn report event: ${(event as { kind?: unknown })?.kind}`);
+    }
+  }
+}
+
 function applyReports(events: AgentTurnReport["events"], reports: Reports, steerReady: () => void) {
+  validateReports(events);
   for (const event of events) {
     switch (event.kind) {
       case "text":
@@ -163,8 +211,6 @@ function applyReports(events: AgentTurnReport["events"], reports: Reports, steer
       case "steerReady":
         steerReady();
         break;
-      default:
-        throw new Error(`Unknown agent turn report event: ${(event as { kind?: unknown })?.kind}`);
     }
   }
 }

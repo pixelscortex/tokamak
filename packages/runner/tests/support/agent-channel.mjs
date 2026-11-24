@@ -9,7 +9,9 @@ import { editBundle, until } from "./routing.mjs";
 const unknown = "@unknown-report";
 const skew = "@skewed-version";
 const tail = "tail already in flight";
-const burst = "burst" + "x".repeat(32 * 1024);
+const burst = "burst" + "x".repeat(1024);
+const streamed = "stream:" + "x".repeat(1024);
+const tooLong = "message is too long to send to the agent";
 
 /** Keep production providers and inject deterministic turns for interleavings a CLI tape cannot control. */
 export async function channelFixtures(plugins, scratch) {
@@ -26,9 +28,9 @@ export async function channelFixtures(plugins, scratch) {
     join(plugins, "ai"),
     `import { readFile as channelRead, writeFile as channelWrite } from "node:fs/promises";
 let pressureWrites = Promise.resolve();
-function writeUnderPressure(write) {
+function writeUnderPressure(write, slow) {
   const result = pressureWrites.then(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    if (slow) await new Promise((resolve) => setTimeout(resolve, 125));
     return write();
   });
   pressureWrites = result.catch(() => {});
@@ -58,7 +60,7 @@ async function channelGate(path) {
           `${open}
         if (method === "report") {
           const events = value.events;
-          if (request.prompt === "${unknown}") value.events = [{kind:"futureEvent"}];
+          if (request.prompt === "${unknown}") value.events = [...events, {kind:"futureEvent"}];
           if (events.some((event) => event.value === "foreign report"))
             await channelWrite(${JSON.stringify(join(scratch, "peer-destinations"))}, JSON.stringify([turnId, value.turnId]) + "\\n", { flag: "a" });
           if (events.some((event) => event.value === "${tail}")) {
@@ -76,8 +78,8 @@ async function channelGate(path) {
         .replace("{ ...address }).catch(() => {}),", "{ ...address })).catch(() => {}),")
         .replace(
           writer,
-          `await (args.thinking?.startsWith("burst")
-            ? writeUnderPressure(() => ctx.runMutation(api.turns.write, args))
+          `await (args.thinking?.startsWith("burst") || args.thinking === "slow writer"
+            ? writeUnderPressure(() => ctx.runMutation(api.turns.write, args), args.thinking === "slow writer")
             : ctx.runMutation(api.turns.write, args))`,
         );
     },
@@ -96,6 +98,7 @@ const fixtureRegistration = Object.keys(contractProviders)[0];
 const fixtureProvider = contractProviders[fixtureRegistration];
 const realAgent = fixtureProvider.implementation;
 let discovery;
+let releaseBurst;
 contractProviders[fixtureRegistration] = { ...fixtureProvider, implementation: {
   ...realAgent,
   info: { ...realAgent.info, invokeLocal: (...args) => discovery ??= realAgent.info.invokeLocal(...args) },
@@ -107,7 +110,7 @@ contractProviders[fixtureRegistration] = { ...fixtureProvider, implementation: {
     if (run.prompt.startsWith("@burst")) {
       run.text(run.prompt);
       await turnWrite(folder + "/ready-" + run.prompt.slice(7), "");
-      await turnGate(${JSON.stringify(join(scratch, "release-burst"))});
+      await (releaseBurst ??= turnGate(${JSON.stringify(join(scratch, "release-burst"))}));
       for (let index = 0; index < 6; index++) {
         run.thinking(${JSON.stringify(burst)});
         if (index === 2) await new Promise((resolve) => setImmediate(resolve));
@@ -115,6 +118,39 @@ contractProviders[fixtureRegistration] = { ...fixtureProvider, implementation: {
       if (await run.ask({kind:"test",action:"read",subject:"burst"}) !== "approve")
         throw new Error("Full access did not approve the replay question");
       run.text(":done");
+      return last();
+    }
+    if (run.prompt.startsWith("@history ")) {
+      run.text(JSON.stringify({ promptLength: run.prompt.length, history: run.history.map(({text}) => text) }));
+      return last();
+    }
+    if (run.prompt === "@stream") {
+      run.thinking("slow writer");
+      for (let index = 0; index < 128; index++) {
+        run.text(${JSON.stringify(streamed)});
+        run.plan(index + "x".repeat(48 * 1024));
+        run.usage({ inputTokens: index, outputTokens: 1 });
+      }
+      await turnGate(folder + "/go");
+      return last();
+    }
+    if (run.prompt === "@flood") {
+      // Catch a synchronous limit error, as an author might. The turn still fails.
+      try {
+        for (let i = 0; i < 4; i++)
+          run.helper({ id: "helper-" + i, name: "helper", title: "large output", text: "x".repeat(240 * 1024), state: "done" });
+      } catch {}
+      return last();
+    }
+    if (run.prompt === "@steer-order") {
+      run.onSteer(async (text) => {
+        await turnWrite(folder + "/steer-" + text, "");
+        if (text === "fail") throw new Error("steer rejected by replay");
+        run.text("reaction:" + text);
+        await turnGate(folder + "/go");
+      });
+      run.text("ready;");
+      await turnGate(folder + "/go-end");
       return last();
     }
     if (run.prompt.startsWith("@foreign ")) {
@@ -208,8 +244,18 @@ export async function exerciseChannels({
   processInfo,
   claudeTurns,
 }) {
-  await checkVersionAndSize({ client, ai, chat, folder, claudeTurns });
-  await checkForceAndSteer({ client, ai, folder, scratch, processInfo, claudeTurns });
+  await checkForceAndSteer({
+    client,
+    ai,
+    folder,
+    scratch,
+    processInfo,
+    claudeTurns,
+    async whileWaiting() {
+      await checkVersionAndSize({ client, ai, chat, folder, claudeTurns });
+      await checkReportPressure({ folder, claudeTurns });
+    },
+  });
   console.log(
     "Channel replay checked version skew, payload size, cross-invocation routing, early Stop, and scoped Force stop.",
   );
@@ -224,24 +270,90 @@ async function checkVersionAndSize({ client, ai, chat, folder, claudeTurns }) {
   assert.match(skewed.row.error, /ai uses version 8; the plugin host uses version 1/);
   const invalid = await claudeTurns.run(await folder("unknown"), unknown, { state: "failed" });
   assert.match(invalid.row.error, /Unknown agent turn report event: futureEvent/);
+  assert.equal(invalid.text, "", "the valid prefix of an invalid batch was not saved");
   const project = await folder("large-prompt");
   const { threadId } = await client.mutation(chat.threads.start, {
     text: "h".repeat(740 * 1024),
     folder: { kind: "chosen", path: project },
   });
-  const messageId = await client.mutation(chat.messages.post, { threadId, text: "😀".repeat(80_000) });
+  await client.mutation(chat.messages.post, { threadId, text: "newest history" });
+  const fittingPrompt = "@history " + "😀".repeat(80_000);
+  const fitted = await claudeTurns.run(project, fittingPrompt, { threadId });
+  assert.deepEqual(JSON.parse(fitted.text), {
+    promptLength: fittingPrompt.length,
+    history: ["newest history"],
+  });
+
+  const prompt = "p".repeat(1009 * 1024);
+  const messageId = await client.mutation(chat.messages.post, { threadId, text: prompt });
   await assert.rejects(
     client.local(ai.run.turn, { threadId, messageId, folder: project, agentId: "claude" }),
-    /Shorten the message or start a new thread/,
+    new RegExp(tooLong),
   );
-  assert.deepEqual(
-    await client.query(ai.turns.list, { threadId }),
-    [],
-    "an oversized start did not open a turn",
+  assert.ok(!(await client.query(ai.turns.list, { threadId })).some((turn) => turn.messageId === messageId));
+
+  const settings = { threadId, agent: { id: "claude", name: "Claude" }, model: "sonnet", access: "full" };
+  const queued = await client.mutation(ai.turns.enqueue, { ...settings, text: prompt });
+  const next = await client.mutation(ai.turns.enqueue, { ...settings, text: "@hold" });
+  const start = (queued) =>
+    client.local(ai.run.turn, { threadId, messageId: queued.messageId, folder: project, agentId: "claude" });
+  assert.deepEqual(await start(queued), { turnId: queued.turnId, state: "failed" });
+  const message = (await client.query(chat.messages.list, { threadId })).find(
+    ({ _id }) => _id === queued.messageId,
   );
+  assert.equal(message.status, "error");
+  assert.match(message.error, new RegExp(tooLong));
+  assert.equal((await start(queued)).kind, "Answered");
+  await writeFile(join(project, "go"), "");
+  assert.deepEqual(await start(next), { turnId: next.turnId, state: "done" });
 }
 
-async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, claudeTurns }) {
+async function checkReportPressure({ folder, claudeTurns }) {
+  const stream = await folder("fast-stream");
+  const ready = Promise.withResolvers();
+  const streamedTurn = claudeTurns.run(stream, "@stream", {
+    async during(control) {
+      await control.firstText();
+      ready.resolve();
+    },
+  });
+  void streamedTurn.catch(ready.reject);
+  try {
+    await ready.promise;
+    const failed = await claudeTurns.run(await folder("flood"), "@flood", { state: "failed" });
+    assert.match(failed.row.error, /The agent produced output faster than it could be saved/);
+  } finally {
+    await writeFile(join(stream, "go"), "");
+  }
+  const saved = await streamedTurn;
+  assert.equal(saved.text, streamed.repeat(128));
+  assert.equal(saved.reply.plan, "127" + "x".repeat(48 * 1024));
+  assert.deepEqual(saved.reply.usage, { inputTokens: 127, outputTokens: 1 });
+}
+
+async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, claudeTurns, whileWaiting }) {
+  const steerProject = await folder("steer-order");
+  await claudeTurns.run(steerProject, "@steer-order", {
+    async during(control) {
+      await control.firstText();
+      const { _id: turnId, replyId } = await control.replyUntil("steer turn", () => true);
+      const steers = () => client.query(ai.turns.replySteers, { replyId });
+      assert.match(
+        (await client.local(ai.run.steer, { turnId, text: "fail" })).error,
+        /steer rejected by replay/,
+      );
+      assert.deepEqual(await steers(), []);
+      const sent = control.steer("next");
+      void sent.catch(() => {});
+      await control.messageUntil("steer reaction", (row) => row.parts[0]?.text.includes("reaction:next"));
+      assert.deepEqual(await steers(), ["next"], "steer precedes the reaction, even before acknowledgement");
+      await writeFile(join(steerProject, "go"), "");
+      await sent;
+      assert.deepEqual(await steers(), ["next"], "acknowledging a steer leaves one delivered record");
+      await writeFile(join(steerProject, "go-end"), "");
+    },
+  });
+
   const early = await folder("early-stop");
   await claudeTurns.run(early, "@stop-before-handler", {
     state: "stopped",
@@ -302,11 +414,19 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
   const forced = stopping(forceProject, "@force-report", forceReady);
   const busy = stopping(busyProject, "@busy", busyReady);
   const [forceArgs, busyArgs] = await Promise.all([forceReady.promise, busyReady.promise]);
-  await until(
-    "Force stop deadline",
-    async () => (await client.query(ai.turns.forceStopDelay, busyArgs)) === 0,
-    12_000,
-  );
+  await Promise.all([
+    whileWaiting(),
+    until(
+      "Force stop deadline",
+      async () => {
+        const [tailDelay, busyDelay] = await Promise.all(
+          [forceArgs, busyArgs].map((args) => client.query(ai.turns.forceStopDelay, args)),
+        );
+        return tailDelay === 0 && busyDelay === 0;
+      },
+      12_000,
+    ),
+  ]);
   await writeFile(join(forceProject, "go"), "");
   await until("tail report in flight", () => Bun.file(join(forceProject, "report-ready")).exists());
   const force = client.local(ai.run.forceStop, forceArgs);
@@ -335,8 +455,11 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
     2_000,
   );
   assert.ok(performance.now() - began < 4_500, "Force stop completed before the five second watchdog");
-  // The watchdog still resets the stuck realm before subsequent scenarios.
-  await Bun.sleep(4_500);
+  // Discovery routes a real invocation through Claude's host; it can only
+  // respond after the watchdog has reset the stuck realm.
+  await until("Claude answers again after the watchdog", async () =>
+    (await client.local(ai.agents.list, {})).some(({ id, info }) => id === "claude" && info.signedIn),
+  );
 }
 
 async function checkCapacity({ windows, ai, chat, scratch }) {
@@ -366,7 +489,9 @@ async function checkCapacity({ windows, ai, chat, scratch }) {
       .then(({ row }) =>
         assert.equal(
           row.error,
-          `Too many turns are running on this machine (${limit}). Wait for one to finish.`,
+          limit === 32
+            ? "Too many Claude turns are running (32). Wait for one to finish."
+            : `Too many turns are running on this machine (${limit}). Wait for one to finish.`,
         ),
       );
   const admitted = [];
@@ -397,6 +522,6 @@ async function checkCapacity({ windows, ai, chat, scratch }) {
     "slot was freed",
   );
   console.log(
-    "All 64 reporting turns saved their replies with a slow writer; a freed slot admitted a new turn.",
+    "All 64 reporting turns saved their replies with serialized writes; a freed slot admitted a new turn.",
   );
 }

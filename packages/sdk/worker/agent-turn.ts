@@ -25,11 +25,17 @@ import {
 import type { HostBridge } from "../src/host";
 import type { JsonValue } from "../src/values";
 
+// Bound unsent reports plus the batch awaiting acknowledgement. Charge for
+// each JS entry as well as its wire bytes, so tiny events cannot fill the heap.
+const BUFFER_BYTES = 768 * 1024;
+const ENTRY_BYTES = 64;
+
 function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>["send"]) {
-  let next: AgentTurnEvent[] = [];
-  let queue: AgentTurnEvent[][] = [];
+  type Entry = { event: AgentTurnEvent; bytes: number };
+  const pending = new Map<number | "tasks" | "plan" | "usage", Entry>();
   const overhead = jsonBytes({ ...address, events: [] });
-  let size = overhead;
+  let next = 0;
+  let last: Entry | undefined;
   let buffered = 0;
   let flight: Promise<void> | undefined;
   let failed: unknown;
@@ -38,25 +44,32 @@ function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>[
   let reject!: (cause: unknown) => void;
   const failure = new Promise<never>((_, fail) => (reject = fail));
   void failure.catch(() => {});
+  function fail(error: unknown) {
+    failed = error;
+    reject(error);
+  }
+
   function drain() {
-    if (next.length) {
-      queue.push(next);
-      next = [];
-      size = overhead;
-    }
-    if (flight || !queue.length || failed !== undefined) return;
+    if (flight || !pending.size || failed !== undefined) return;
     flight = (async () => {
-      while (queue.length) {
-        const events = queue.shift()!;
+      while (pending.size && failed === undefined) {
+        const events: AgentTurnEvent[] = [];
+        let size = overhead;
+        let charge = 0;
+        for (const [key, entry] of pending) {
+          if (size + entry.bytes >= WRITE_BYTES) break;
+          events.push(entry.event);
+          size += entry.bytes;
+          charge += entry.bytes + ENTRY_BYTES;
+          pending.delete(key);
+          if (last === entry) last = undefined;
+        }
         const report: AgentTurnReport = { ...address, events };
         await send("report", report as unknown as JsonValue);
-        buffered -= jsonBytes(events) - 1;
+        buffered -= charge;
       }
     })()
-      .catch((error) => {
-        failed = error;
-        reject(error);
-      })
+      .catch(fail)
       .finally(() => {
         flight = undefined;
       });
@@ -69,20 +82,40 @@ function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>[
       if (sealed) return;
       if (closed) throw new Error(TURN_ENDED);
       if (failed !== undefined) throw failed;
+      const kind = event.kind;
+      if (last && (kind === "text" || kind === "thinking") && last.event.kind === kind) {
+        // JSON strings concatenate without an extra event envelope. A split
+        // surrogate pair only gets smaller when joined, so this is an upper bound.
+        const added = jsonBytes(event.value) - 2;
+        if (last.bytes + added + overhead < WRITE_BYTES && buffered + added <= BUFFER_BYTES) {
+          last.event = { kind, value: last.event.value + event.value };
+          last.bytes += added;
+          buffered += added;
+          return;
+        }
+      }
+      const key = kind === "tasks" || kind === "plan" || kind === "usage" ? kind : next++;
+      const previous = pending.get(key);
+      if (previous) {
+        pending.delete(key);
+        buffered -= previous.bytes + ENTRY_BYTES;
+      }
       const bytes = jsonBytes(event) + 1;
-      if (bytes + overhead >= WRITE_BYTES || buffered + bytes >= 8 * WRITE_BYTES)
-        throw new Error("Agent report buffer exceeds its size limit");
-      if (size + bytes >= WRITE_BYTES) drain();
-      next.push(event);
-      size += bytes;
-      buffered += bytes;
+      if (bytes + overhead >= WRITE_BYTES || buffered + bytes + ENTRY_BYTES > BUFFER_BYTES) {
+        const error = new Error("The agent produced output faster than it could be saved.");
+        fail(error);
+        throw error;
+      }
+      last = { event, bytes };
+      pending.set(key, last);
+      buffered += bytes + ENTRY_BYTES;
       idle ??= setTimeout(() => {
         idle = undefined;
         drain();
       }, 0);
     },
     async flush() {
-      while (next.length || flight || queue.length) {
+      while (pending.size || flight) {
         if (failed !== undefined) throw failed;
         drain();
         await flight;
@@ -95,8 +128,8 @@ function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>[
     close() {
       closed = true;
       clearTimeout(idle);
-      next = [];
-      queue = [];
+      pending.clear();
+      last = undefined;
     },
   };
 }

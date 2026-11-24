@@ -92,12 +92,15 @@ test("an ended turn cannot report or ask in the next turn on its thread", async 
   }
 });
 
-test("an unknown report kind is rejected", async () => {
+test("an invalid report batch is rejected before writing any event", async () => {
   const turn = linkedTurn("unknown-report");
   try {
-    await expect(turn.message("report", { events: [{ kind: "futureEvent" }] })).rejects.toThrow(
-      "Unknown agent turn report event: futureEvent",
-    );
+    await expect(
+      turn.message("report", {
+        events: [{ kind: "text", value: "must not be saved" }, { kind: "futureEvent" }],
+      }),
+    ).rejects.toThrow("Unknown agent turn report event: futureEvent");
+    expect(turn.text).not.toHaveBeenCalled();
   } finally {
     await turn.end();
   }
@@ -126,7 +129,7 @@ test("a linked steer that crosses the turn end is not recorded", async () => {
     turn.send.mockRejectedValueOnce(new Error("This turn has ended"));
     await turn.message("report", { events: [{ kind: "steerReady" }] });
     await expect(turn.control.steer("too late", record)).resolves.toMatchObject({ kind: "NotRunning" });
-    expect(record).not.toHaveBeenCalled();
+    expect(record.mock.calls).toEqual([["pending"], ["failed"]]);
   } finally {
     await turn.end();
   }
@@ -135,7 +138,12 @@ test("a linked steer that crosses the turn end is not recorded", async () => {
 test("early steers wait for provider readiness, then record and deliver in order", async () => {
   const turn = linkedTurn("early-steer");
   try {
-    const record = vi.fn(async () => null);
+    const order: string[] = [];
+    const record = vi.fn(async (delivery?: string) => void order.push(delivery ?? ""));
+    turn.send.mockImplementation(async () => {
+      order.push("reaction");
+      return null;
+    });
     const first = turn.control.steer("one", record);
     const second = turn.control.steer("two", record);
     await Promise.resolve();
@@ -146,6 +154,22 @@ test("early steers wait for provider readiness, then record and deliver in order
     expect(turn.send.mock.calls).toEqual(
       ["one", "two"].map((text) => ["steer", { threadId: "one-thread", turnId: "early-steer", text }]),
     );
+    expect(order).toEqual(["pending", "reaction", "delivered", "pending", "reaction", "delivered"]);
+  } finally {
+    await turn.end();
+  }
+});
+
+test("a handler error withdraws the pending steer", async () => {
+  const turn = linkedTurn("failed-steer");
+  try {
+    const record = vi.fn(async (_delivery?: string) => null);
+    turn.send.mockRejectedValueOnce(new Error("The agent can no longer receive a steer"));
+    await turn.message("report", { events: [{ kind: "steerReady" }] });
+    await expect(turn.control.steer("follow-up", record)).resolves.toEqual({
+      error: "The agent can no longer receive a steer",
+    });
+    expect(record.mock.calls).toEqual([["pending"], ["failed"]]);
   } finally {
     await turn.end();
   }

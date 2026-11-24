@@ -82,6 +82,11 @@ export const turn = local({
       replyToken: randomBytes(32).toString("hex"),
     });
     if (isFailure(begun)) return begun;
+    if ("state" in begun) {
+      const failed: { turnId: typeof begun.turnId; state: "failed"; hookNotice?: string; ended?: string } =
+        begun;
+      return failed;
+    }
     const { turnId, prompt, history, sessionId } = begun;
     const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
     const writer = turnWriter(ctx, turnId);
@@ -179,7 +184,9 @@ export const steer = local({
     if (!control) return noRunningTurn(turnId);
     const steerText = text.trim();
     if (!steerText) return fail("EmptySteer", { turnId });
-    return control.steer(steerText, () => ctx.runMutation(api.turns.steer, { turnId, text: steerText }));
+    return control.steer(steerText, (delivery) =>
+      ctx.runMutation(api.turns.steer, { turnId, text: steerText, ...(delivery && { delivery }) }),
+    );
   },
 });
 

@@ -61,7 +61,7 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
       stop = handler;
       if (stopReady) sendStop();
     },
-    steer(text: string, record: () => Promise<unknown>) {
+    steer(text: string, record: (delivery?: "pending" | "delivered" | "failed") => Promise<unknown>) {
       const delivery = steerLine.then(async () => {
         if (!steer && !closed && !stopRequested) {
           registrationTimer ??= setTimeout(releaseSteers, STEER_REGISTRATION_MS);
@@ -70,8 +70,9 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
         if (closed || finishing || stopRequested) return noRunningTurn(turnId);
         const deliver = steer;
         if (!deliver) return fail("NoSteerHandler", { turnId });
-        if (!linkedSteer) await record();
-        // Only clear the window's draft if its text was recorded, even if the provider write fails.
+        // Record before delivery so even an immediate reaction follows the
+        // steer. The live Bun path keeps its original behavior on failure.
+        await record(linkedSteer ? "pending" : undefined);
         const result = await Promise.resolve()
           .then(() => deliver(text))
           .then(
@@ -79,9 +80,9 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
             (cause: unknown) => ({ error: errorText(cause) }),
           );
         if (linkedSteer) {
+          await record(result.error === null ? "delivered" : "failed");
           if (result.error === TURN_ENDED || result.error === "Local contract channel ended")
             return noRunningTurn(turnId);
-          await record();
         }
         return result;
       });

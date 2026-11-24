@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { connect, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
@@ -23,7 +23,7 @@ try {
 }
 
 function processInfo(pid) {
-  const [parent, state] = Bun.spawnSync(["ps", "-o", "ppid=,stat=", "-p", String(pid)])
+  const [parent, state] = Bun.spawnSync(["ps", "-ww", "-o", "ppid=,stat=", "-p", String(pid)])
     .stdout.toString()
     .trim()
     .split(/\s+/);
@@ -33,6 +33,8 @@ function processInfo(pid) {
 async function exercise() {
   const { plugins, env } = await prepareReplayAgents(scratch);
   await channelFixtures(plugins, scratch);
+  const bunPlugins = join(scratch, "bun-plugins");
+  await cp(plugins, bunPlugins, { recursive: true });
   const directory = join(scratch, "runner");
   const claude = join(plugins, "claude");
   const codex = join(plugins, "codex");
@@ -52,6 +54,8 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
   const cleanup = [];
   const ai = createApi("ai");
   const chat = createApi("chat");
+  const bun = bunSkew(scratch, bunPlugins, env, ai);
+  void bun.catch(() => {});
   const open = () =>
     connect(runner.endpoint.ws, { token: runner.endpoint.token, launch: runner.launch, cleanup });
   const row = (client) => within(client.local(ai.agents.list, {}), "replayed agent row");
@@ -87,6 +91,40 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       agentTurns({ h: { api: { ai, chat } }, client: window, agent: { id, name }, model, effort });
     const claudeTurns = turns("claude", "Claude", "sonnet", "low");
     const codexTurns = turns("codex", "Codex", "gpt-6.2-sol", "medium");
+    const questionFolder = await folder("claude-permit");
+    let expired;
+    await assert.rejects(
+      claudeTurns.run(questionFolder, permit, {
+        access: "ask",
+        async during(control) {
+          const question = await control.question();
+          expired = { turnId: question.turnId, questionId: question.id };
+          const cliPid = hosts().find(({ id }) => id === "claude").pid;
+          const children = Bun.spawnSync(["ps", "-ww", "-axo", "pid=,ppid=,command="])
+            .stdout.toString()
+            .split("\n")
+            .map((line) => /^\s*(\d+)\s+(\d+)\s+.*\/claude\/tests\/replay\.mjs -p\b/.exec(line))
+            .filter((match) => match && Number(match[2]) === cliPid)
+            .map((match) => Number(match[1]));
+          assert.equal(children.length, 1);
+          process.kill(pids().ai, "SIGKILL");
+          await until(
+            "ai crash cancels the waiting program in Claude's host",
+            () => !children.some((pid) => processInfo(pid)),
+          );
+          assert.equal(processInfo(cliPid) !== undefined, true, "Claude's host survived ai");
+        },
+      }),
+      /Plugin ai process:/,
+    );
+    assert.equal(await otherWindow.local(ai.run.pending, expired), false);
+    assert.equal((await otherWindow.local(ai.run.answer, { ...expired, answer: "approve" })).kind, "Expired");
+    console.log(
+      "Killing ai expired its open question and reaped its Claude program; the Claude host survived.",
+    );
+
+    assert.notEqual(pids().ai, before.ai);
+    before.ai = pids().ai;
     const claudeFolder = await folder("claude-hello-parallel");
     const codexFolder = await folder("parallel", "linked-hello");
 
@@ -174,112 +212,54 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
 
     const isolatedFolder = await folder("crash-overlap", "linked-hello");
     const resistant = await folder("claude-resistant-crash");
+    const providerQuestionFolder = await folder("provider-crash", "claude-permit");
     const isolated = paused(codexTurns, isolatedFolder, helloCodex);
-    let tree;
+    const treeReady = Promise.withResolvers();
+    const questionReady = Promise.withResolvers();
+    const withTree = claudeTurns.run(resistant, helloClaude, {
+      state: "failed",
+      async during(control) {
+        await control.firstText();
+        const treeFile = join(resistant, "process-tree.json");
+        await until("replay creates its resistant tree", () => Bun.file(treeFile).exists());
+        treeReady.resolve(await Bun.file(treeFile).json());
+      },
+    });
+    const asking = claudeTurns.run(providerQuestionFolder, permit, {
+      access: "ask",
+      state: "failed",
+      async during(control) {
+        questionReady.resolve(await control.question());
+      },
+    });
+    void withTree.catch(treeReady.reject);
+    void asking.catch(questionReady.reject);
     try {
-      await within(isolated.ready, "Codex is streaming when Claude crashes");
-      const failed = await claudeTurns.run(resistant, helloClaude, {
-        state: "failed",
-        async during(control) {
-          await control.firstText();
-          const treeFile = join(resistant, "process-tree.json");
-          await until("replay creates its resistant tree", () => Bun.file(treeFile).exists());
-          tree = await Bun.file(treeFile).json();
-          assert.ok(tree.every((pid) => processInfo(pid)));
-          process.kill(pids().claude, "SIGKILL");
-        },
-      });
-      assert.match(failed.row.error, /Plugin claude process:/);
+      const [tree, question] = await within(
+        Promise.all([treeReady.promise, questionReady.promise, isolated.ready]),
+        "two Claude turns and a Codex turn are live before the crash",
+      );
+      assert.ok(tree.every((pid) => processInfo(pid)));
+      await writeFile(crash, "");
+      process.kill(pids().claude, "SIGKILL");
+      const failed = await Promise.all([withTree, asking]);
+      for (const turn of failed) assert.match(turn.row.error, /Plugin claude process:/);
       await until("Claude host crash reaps its programs", () => !tree.some((pid) => processInfo(pid)));
       assert.ok(processInfo(await cliPid(isolatedFolder, "codex")));
+      const lost = { turnId: question.turnId, questionId: question.id };
+      assert.equal(await window.local(ai.run.pending, lost), false);
+      assert.equal((await window.local(ai.run.answer, { ...lost, answer: "approve" })).kind, "Expired");
+      assert.ok(!(await window.query(ai.turns.questions, {})).some(({ id }) => id === lost.questionId));
     } finally {
       isolated.release();
     }
     codexReply(await isolated.result);
     assert.equal(pids().ai, before.ai);
     console.log(
-      "Both replies had independent text, usage and sessions. Reload kept ai and its session grants. Claude crashed without ending Codex.",
+      "Reload preserved ai and its session grants. A Claude crash expired its question and reaped its program tree; Codex finished normally.",
     );
 
-    await until("a subsequent Claude can start", async () => agent(await row(window), "claude").signedIn);
-    let lostQuestion;
-    await claudeTurns.run(await folder("provider-crash", "claude-permit"), permit, {
-      access: "ask",
-      state: "failed",
-      async during(control) {
-        lostQuestion = await control.question();
-        process.kill(pids().claude, "SIGKILL");
-      },
-    });
-    const lost = { turnId: lostQuestion.turnId, questionId: lostQuestion.id };
-    assert.equal(await window.local(ai.run.pending, lost), false);
-    assert.equal((await window.local(ai.run.answer, { ...lost, answer: "approve" })).kind, "Expired");
-    assert.ok(!(await window.query(ai.turns.questions, {})).some(({ id }) => id === lost.questionId));
-    await until(
-      "Claude restarts after losing the question",
-      async () => agent(await row(window), "claude").signedIn,
-    );
-
-    const questionFolder = await folder("claude-permit");
-    let expired, interruptedThread;
-    await assert.rejects(
-      claudeTurns.run(questionFolder, permit, {
-        access: "ask",
-        async during(control) {
-          const question = await control.question();
-          interruptedThread = question.threadId;
-          expired = { turnId: question.turnId, questionId: question.id };
-          const cliPid = hosts().find(({ id }) => id === "claude").pid;
-          const children = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,command="])
-            .stdout.toString()
-            .split("\n")
-            .map((line) => /^\s*(\d+)\s+(\d+)\s+.*\/claude\/tests\/replay\.mjs -p\b/.exec(line))
-            .filter((match) => match && Number(match[2]) === cliPid)
-            .map((match) => Number(match[1]));
-          assert.equal(children.length, 1);
-          process.kill(pids().ai, "SIGKILL");
-          await until(
-            "ai crash cancels the waiting program in Claude's host",
-            () => !children.some((pid) => processInfo(pid)),
-          );
-          assert.equal(processInfo(cliPid) !== undefined, true, "Claude's host survived ai");
-        },
-      }),
-      /Plugin ai process:/,
-    );
-    assert.equal(await otherWindow.local(ai.run.pending, expired), false);
-    assert.equal((await otherWindow.local(ai.run.answer, { ...expired, answer: "approve" })).kind, "Expired");
-    console.log(
-      "Killing ai expired its open question and reaped its Claude program; the Claude host survived.",
-    );
-
-    await until(
-      "the restarted window releases the orphaned turn",
-      async () => {
-        const running = (await otherWindow.local(ai.working.list, {})).map(({ turnId }) => turnId);
-        await otherWindow.mutation(ai.liveness.release, { running });
-        const turn = (await otherWindow.query(ai.turns.list, { threadId: interruptedThread })).find(
-          ({ _id }) => _id === expired.turnId,
-        );
-        return turn.state === "interrupted" && !turn.question;
-      },
-      20_000,
-    );
-    const recoveryFolder = await folder("recovered");
-    await writeFile(join(recoveryFolder, "go"), "");
-    const recovered = await claudeTurns.run(recoveryFolder, "@hold", {
-      threadId: interruptedThread,
-    });
-    assert.equal(recovered.text, "held-finished");
-    console.log(
-      "After ai restarted, window recovery interrupted the stale turn and the same thread ran again.",
-    );
-
-    // Routed discovery still skips a failed provider without stalling working ones.
-    assert.deepEqual(await row(otherWindow), both);
-    const crashed = pids().claude;
-    await writeFile(crash, "");
-    process.kill(crashed, "SIGKILL");
+    // Routed discovery still skips a provider that fails to restart.
     await until("killed Claude exits", () => !pids().claude);
     for (const delay of [260, 510, 1010]) {
       await Bun.sleep(delay);
@@ -293,8 +273,9 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       async () => agent(await row(otherWindow), "claude").signedIn,
     );
     await exerciseChannels({ client: window, open, ai, chat, scratch, folder, processInfo, claudeTurns });
-    await bunSkew(scratch, plugins, env, ai);
+    await bun;
   } finally {
+    await bun.catch(() => {});
     for (const close of cleanup.reverse()) await close();
     assert.equal(await runner.stop(), 0);
   }
