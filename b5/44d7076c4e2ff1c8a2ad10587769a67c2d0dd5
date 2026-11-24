@@ -1,0 +1,22 @@
+packages/server/tests/fixtures/worker/src/server/actions.ts
+  s_1f323405e885d4::t_6aabdd4ba2d929 1,5-6
+  s_1f323405e885d4::t_9565376d913062 7
+packages/server/tests/build-worker.mjs
+  s_1f323405e885d4::t_6aabdd4ba2d929 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b544d7076c4e2ff1c8a2ad10587769a67c2d0dd5",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
