@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm, truncate, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
 import { connect } from "../fake-agent/harness.mjs";
+import { startHostedFixture } from "../hosted-fixture";
 import { asDesktop } from "./desktop";
 
 test("a turn names the large file it skipped and deleting the thread removes its snapshots", async ({
@@ -62,6 +64,11 @@ const replies = (page: Page) => conversation(page).getByRole("article", { name: 
 async function desktopThread(context: BrowserContext, folder: string, model: string) {
   const page = await context.newPage();
   await page.goto("/");
+  await pickAgentAndFolder(page, folder, model);
+  return page;
+}
+
+async function pickAgentAndFolder(page: Page, folder: string, model: string) {
   const agent = page.getByRole("group", { name: "Agent" });
   await agent.getByRole("button").first().click();
   await page.getByRole("menuitem", { name: "Fake agent" }).click();
@@ -69,7 +76,6 @@ async function desktopThread(context: BrowserContext, folder: string, model: str
   await page.getByRole("button", { name: "Choose a folder…" }).click();
   await page.getByRole("textbox", { name: "Folder path" }).fill(folder);
   await page.getByRole("button", { name: "Use folder" }).click();
-  return page;
 }
 
 async function pickModel(page: Page, model: string) {
@@ -143,6 +149,11 @@ test("a turn's change card opens the review panel and the branch chip follows th
   browser,
 }) => {
   const context = await browser.newContext();
+  const shared = await startHostedFixture({
+    port: 0,
+    ownerKey: randomBytes(32).toString("hex"),
+    extraPlugins: ["ai", "code", "fake-agent"],
+  });
   try {
     const { home } = await asDesktop(context);
     const folder = join(home, "review-project");
@@ -154,7 +165,20 @@ test("a turn's change card opens the review panel and the branch chip follows th
     git("add", ".");
     git("-c", "user.name=Sam", "-c", "user.email=sam@example.invalid", "commit", "--quiet", "-m", "Start");
 
-    const page = await desktopThread(context, folder, "edit");
+    // Both clients open the shared workspace. Only the desktop uses its private Runner for local calls.
+    const page = await context.newPage();
+    const address = new URL(shared.url).host;
+    await page.goto("/connect");
+    await page.getByRole("textbox", { name: "Server address" }).fill(shared.url);
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("button", { name: "Use an invite" }).click();
+    await page.getByRole("textbox", { name: "Invite token" }).fill(shared.ownerKey);
+    await page.getByRole("button", { name: "Join", exact: true }).click();
+    await page.getByRole("textbox", { name: "Your name" }).fill("Sam");
+    await page.getByRole("button", { name: `Open ${address}`, exact: true }).click();
+    await expect(page.getByRole("status", { name: "Connection status" })).toHaveText(address);
+    await pickAgentAndFolder(page, folder, "edit");
     await expect(page.getByRole("img", { name: "Branch main" })).toHaveCount(0);
     const title = `Add a CSV export ${crypto.randomUUID().slice(0, 8)}`;
     await send(page, title);
@@ -210,7 +234,11 @@ test("a turn's change card opens the review panel and the branch chip follows th
     // A plain browser has no local part: no card, chip or panel.
     const plain = await browser.newPage();
     try {
-      await plain.goto("/");
+      await plain.addInitScript(
+        (token) => localStorage.setItem("tokamak.access-token", token),
+        shared.ownerKey,
+      );
+      await plain.goto(new URL("/p/chat", shared.url).href);
       await plain.getByRole("complementary", { name: "Sidebar" }).getByText(title, { exact: true }).click();
       await expect(conversation(plain).getByText("You wrote: Say it back")).toBeVisible();
       await expect(conversation(plain).getByRole("button", { name: /^Review turn/ })).toHaveCount(0);
@@ -221,6 +249,8 @@ test("a turn's change card opens the review panel and the branch chip follows th
     }
   } finally {
     await context.close();
+    shared.stop();
+    expect(await shared.exited).toBe(0);
   }
 });
 
