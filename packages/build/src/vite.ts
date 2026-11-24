@@ -142,7 +142,6 @@ export function tokamak(
               server,
               "--plugin",
               plugin.id,
-              ...(plugin.runtime === "worker" ? ["--worker"] : []),
             ],
             { stdio: "inherit" },
           );
@@ -172,18 +171,8 @@ export function tokamak(
             `import("../${relative(root, server).split(sep).join("/")}/`,
           );
           this.emitFile({ type: "asset", fileName: "api.ts", source: api });
-          if (plugin.runtime === "worker") {
-            for (const name of ["worker.js", "worker.js.map", "worker-entry.js"]) {
-              this.emitFile({
-                type: "asset",
-                fileName: name,
-                source: await readFile(resolve(server, "dist", name), "utf8"),
-              });
-            }
-            entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
-          }
           entries.server = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
-          if (plugin.runtime !== "worker" && existsSync(transactions)) {
+          if (existsSync(transactions)) {
             for (const name of ["transactions.js", "transactions.js.map"])
               this.emitFile({
                 type: "asset",

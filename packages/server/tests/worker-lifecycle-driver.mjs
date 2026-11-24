@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
 
-const [url, server, scenario, runtime] = process.argv.slice(2);
+const [url, server, scenario] = process.argv.slice(2);
 async function deadline(promise, ms = 5000) {
   let timer;
   try {
@@ -59,44 +57,25 @@ try {
     assert.equal(message.result.Err, undefined, JSON.stringify(message));
     return message.result.Ok;
   }
-  if (runtime === "quickjs") {
-    assert.equal((await call("state")).count, 1);
-    const processes = execFileSync("ps", ["-ww", "-axo", "pid=,ppid=,command="], { encoding: "utf8" });
-    const processLine = processes
-      .split("\n")
-      .map((line) => line.trim().split(/\s+/))
-      .find(
-        (fields) =>
-          fields[1] === server && fields.slice(2).join(" ").endsWith("tokamak-plugin-host --actions"),
-      );
-    assert.ok(processLine, "server must have an action process");
-    pids = { worker: Number(processLine[0]) };
-    if (scenario === "logs") {
-      await call("logMarker");
-      assert.equal(await call("flood", { stderr: false }), "flooded");
-      assert.equal(await call("echo", { value: "alive", delay: 0 }), "alive");
-    }
-    socket.send(JSON.stringify({ type: "action", id: ++next, name: "worker-test/actions:cpu", args: {} }));
-    await Bun.sleep(150);
-    process.kill(Number(server), scenario === "logs" ? "SIGTERM" : "SIGKILL");
-    await until(() => !alive(pids.worker));
-  } else {
-    pids = await call("child");
-    assert.ok(alive(pids.child));
-    const state = await call("state");
-    const marker = join(state.cwd, "cpu-started");
-    rmSync(marker, { force: true });
-    if (scenario === "logs") {
-      for (const stderr of [false, true]) assert.equal(await call("flood", { stderr }), "flooded");
-      assert.equal(await call("echo", { value: "alive", delay: 0 }), "alive");
-    }
-    // The marker proves the worker entered the synchronous loop before killing its parent.
-    socket.send(JSON.stringify({ type: "action", id: ++next, name: "worker-test/actions:cpu", args: {} }));
-    await until(() => existsSync(marker));
-    process.kill(Number(server), scenario === "logs" ? "SIGTERM" : "SIGKILL");
-    await until(() => !alive(pids.worker) && !alive(pids.child));
-    console.log(`${scenario}: invocation and shutdown completed; worker and child gone`);
+  assert.equal((await call("state")).count, 1);
+  const processes = execFileSync("ps", ["-ww", "-axo", "pid=,ppid=,command="], { encoding: "utf8" });
+  const processLine = processes
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/))
+    .find(
+      (fields) => fields[1] === server && fields.slice(2).join(" ").endsWith("tokamak-plugin-host --actions"),
+    );
+  assert.ok(processLine, "server must have an action process");
+  pids = { worker: Number(processLine[0]) };
+  if (scenario === "logs") {
+    await call("logMarker");
+    assert.equal(await call("flood"), "flooded");
+    assert.equal(await call("echo", { value: "alive", delay: 0 }), "alive");
   }
+  socket.send(JSON.stringify({ type: "action", id: ++next, name: "worker-test/actions:cpu", args: {} }));
+  await Bun.sleep(150);
+  process.kill(Number(server), scenario === "logs" ? "SIGTERM" : "SIGKILL");
+  await until(() => !alive(pids.worker));
 } finally {
   socket?.close();
   if (pids) {

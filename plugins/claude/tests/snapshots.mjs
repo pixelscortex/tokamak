@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { cp, readFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { editBundle, inspectHosts, reload } from "../../../packages/runner/tests/support/routing.mjs";
 import { build, workspace } from "../../../e2e/fake-agent/harness.mjs";
@@ -10,12 +10,8 @@ export async function claudeSnapshots(h, hello) {
   const source = join(workspace, "plugins/code");
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "code"), { recursive: true });
-  const routed =
-    h.selection.runtime === "quickjs" && basename(h.selection.binary).startsWith("tokamak-runner");
-  if (routed) {
-    build(join(workspace, "plugins/codex"));
-    await cp(join(workspace, "plugins/codex/dist"), join(h.plugins, "codex"), { recursive: true });
-  }
+  build(join(workspace, "plugins/codex"));
+  await cp(join(workspace, "plugins/codex/dist"), join(h.plugins, "codex"), { recursive: true });
   const address = await h.serve("snapshots");
   const client = await h.connect(address, { local: true });
   const folder = await h.folder("claude-hello-snapshots");
@@ -39,19 +35,15 @@ export async function claudeSnapshots(h, hello) {
     effort: "low",
   });
   const runner = h.runner(address);
-  let reloadDuringTurn;
   let codeReloaded;
-  let remembered;
-  if (routed) {
-    assert.ok(runner);
-    remembered = await grantSession(turns, await h.folder("claude-remember-snapshots"));
-    reloadDuringTurn = await reloadProviders(h, runner, client);
-  }
+  assert.ok(runner, "Claude snapshot replay requires the Runner");
+  const remembered = await grantSession(turns, await h.folder("claude-remember-snapshots"));
+  const reloadDuringTurn = await reloadProviders(h, runner, client);
   const completed = await turns.run(folder, hello, {
     async during(turn) {
       await turn.firstText();
       await writeFile(join(folder, "work.txt"), "after\n");
-      codeReloaded = await reloadDuringTurn?.(folder);
+      codeReloaded = await reloadDuringTurn(folder);
       await h.gate(folder, "go");
     },
   });
@@ -60,20 +52,18 @@ export async function claudeSnapshots(h, hello) {
   assert.equal(git("show", `${ref}/before:work.txt`), "before");
   assert.equal(git("show", `${ref}/after:work.txt`), "after");
   assert.equal(git("rev-parse", `${ref}/after^`), git("rev-parse", `${ref}/before`));
-  codeReloaded?.();
-  if (remembered) {
-    const resumed = await turns.run(remembered.folder, "Try the same command again.", {
-      threadId: remembered.threadId,
-      access: "ask",
-    });
-    assert.equal(resumed.row.sessionId, remembered.row.sessionId);
-    assert.equal(resumed.text, remembered.text);
-    assert.deepEqual(
-      (await resumed.steps()).map(({ state }) => state),
-      ["done", "done"],
-    );
-    console.log("Claude snapshots: Code and Codex reloads kept the running turn, ai PID and session grant");
-  }
+  codeReloaded();
+  const resumed = await turns.run(remembered.folder, "Try the same command again.", {
+    threadId: remembered.threadId,
+    access: "ask",
+  });
+  assert.equal(resumed.row.sessionId, remembered.row.sessionId);
+  assert.equal(resumed.text, remembered.text);
+  assert.deepEqual(
+    (await resumed.steps()).map(({ state }) => state),
+    ["done", "done"],
+  );
+  console.log("Claude snapshots: Code and Codex reloads kept the running turn, ai PID and session grant");
 }
 
 async function grantSession(turns, folder) {

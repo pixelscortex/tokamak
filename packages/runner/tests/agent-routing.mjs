@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { connect, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { startRunner } from "../../../e2e/fake-agent/start-runner.ts";
 import { createApi } from "../../sdk/src/index.ts";
-import { bunSkew, channelFixtures, checkSkew, exerciseChannels } from "./support/agent-channel.mjs";
+import { channelFixtures, checkSkew, exerciseChannels } from "./support/agent-channel.mjs";
 import { prepareReplayAgents } from "./support/agents.mjs";
 import { editBundle, inspectHosts, reload, until } from "./support/routing.mjs";
 import { cleanScratch } from "./support/scratch.mjs";
@@ -33,8 +33,6 @@ function processInfo(pid) {
 async function exercise() {
   const { plugins, env } = await prepareReplayAgents(scratch);
   await channelFixtures(plugins, scratch);
-  const bunPlugins = join(scratch, "bun-plugins");
-  await cp(plugins, bunPlugins, { recursive: true });
   const directory = join(scratch, "runner");
   const claude = join(plugins, "claude");
   const codex = join(plugins, "codex");
@@ -54,8 +52,6 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
   const cleanup = [];
   const ai = createApi("ai");
   const chat = createApi("chat");
-  const bun = bunSkew(scratch, bunPlugins, env, ai);
-  void bun.catch(() => {});
   const open = () =>
     connect(runner.endpoint.ws, { token: runner.endpoint.token, launch: runner.launch, cleanup });
   const row = (client) => within(client.local(ai.agents.list, {}), "replayed agent row");
@@ -281,9 +277,7 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
     assert.equal(retry.text, "Hello Tokamak.");
     console.log("Claude restarted and completed a new turn on the thread whose turn failed.");
     await exerciseChannels({ client: window, open, ai, chat, scratch, folder, processInfo, claudeTurns });
-    await bun;
   } finally {
-    await bun.catch(() => {});
     for (const close of cleanup.reverse()) await close();
     assert.equal(await runner.stop(), 0);
   }

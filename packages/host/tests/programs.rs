@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, future::pending, process::Stdio, time::Duration
 
 use serde_json::{Value, json};
 use support::{Host, fixture};
-use tokamak_worker::{LocalRuntime, Process};
+use tokamak_worker::Process;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     net::UnixDatagram,
@@ -186,7 +186,6 @@ async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
     let mut parent = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "parent_fixture", "--ignored", "--nocapture"])
         .env("TOKAMAK_PROGRAM_PARENT_FIXTURE", "1")
-        .env("TOKAMAK_PLUGIN_RUNTIME", "quickjs")
         .env(
             "TOKAMAK_PLUGIN_HOST",
             env!("CARGO_BIN_EXE_tokamak-plugin-host"),
@@ -225,19 +224,17 @@ async fn parent_fixture() {
     let started = Instant::now();
     eprintln!("Launcher child entered");
     let bundle = fixture();
-    let (mut worker, runtime) = Process::launch_local(
-        &bundle,
+    let (mut worker, _native) = Process::launch_plugin(
+        "fixture",
         &bundle,
         bundle.parent().unwrap(),
         &BTreeMap::new(),
-        &[],
     )
     .unwrap();
     eprintln!(
         "Launcher child spawned plugin host at {:?}",
         started.elapsed()
     );
-    assert_eq!(runtime, LocalRuntime::QuickJs);
     let (mut input, stdout, _stderr) = worker.pipes().unwrap();
     let mut output = BufReader::new(stdout).lines();
     support::invoke(&mut input, &mut output, 1, "parkTree", json!(tree_path())).await;

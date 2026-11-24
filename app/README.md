@@ -68,7 +68,7 @@ to the window on the channel it registers with `quit_listen`. The window asks
 plugins (`quitBlockers`); with nothing running it answers `quit_confirm` at
 once, else it shows the dialog and answers `quit_hold`, then `quit_cancel` or
 (after Stop and quit) `quit_confirm`. No answer within 3 seconds quits anyway.
-`quit_confirm` stops the Runner and its local workers and programs,
+`quit_confirm` stops the Runner and its plugin processes and programs,
 then exits. The main window runs with WebKit's background throttling off
 (`tauri.conf.json`), so a hidden or minimized window still relays its local
 part's sign of life and answers a quit.

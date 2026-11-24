@@ -34,6 +34,7 @@ tasks:
     options:
       cache: true
       outputStyle: stream
+  # QuickJS integration and a separate actions-only cloud build.
   ci-rust:
     command: "bash .ci/check.sh rust"
     inputs: *ci-inputs

@@ -10,8 +10,7 @@ three fast jobs on every PR, and `.ci/check.sh` holds their commands:
   They share only Cargo's intermediate cache. CI checks that each forbidden
   symbol pattern finds a match in the Runner build and none in the cloud
   build, then runs the [test matrix](../packages/server/tests/README.md).
-  The turn replays use fake agents: Bun writes the references, and QuickJS
-  compares the stored turns against them.
+  The turn replays run fake agents against the Runner and check the stored turns.
 
 Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
 or the browser suite:
@@ -24,8 +23,8 @@ TypeScript and Rust. Draft pull requests are skipped; the jobs start when a pull
 request is marked ready for review. `dev` is the integration branch: feature pull requests target
 it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
-workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build,
-smoke-check the Runner's `--plugin-runtime` and upload the bundle (`desktop-mac-<arch>`,
+workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build
+and upload the bundle (`desktop-mac-<arch>`,
 `desktop-windows-x64`); they run no test suites. Download caches cover pinned
 tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
 
@@ -96,18 +95,12 @@ Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 The installer is unsigned; Windows may require accepting its unknown-publisher
 prompt. No signing secrets are required.
 
-Plugin workers and local agents run on Windows with Bun installed. The server
-creates each worker inside a Job Object that ends the whole process tree when the
-server closes the job handle or exits. The app's server probes and sidecar, Bun
-workers and local agent launches do not open a console. Windows CI checks the
-build and server identity only; it does not run worker or real agent tests, launch the
-installer or desktop UI, or run real Claude or Codex adapters.
+Local functions and server actions are unavailable on Windows until TKM-234.
+Calls return `Plugin code is not supported on Windows yet.` Windows CI checks the
+build and server identity only. It does not launch the installer or desktop UI.
 
 On a Windows PC, install and open the bundle, then switch servers. No terminal
-should appear. With Bun and an authenticated adapter on `PATH`, check that the app
-offers the adapter, opens a session in a folder with spaces, streams a reply, and
-handles cancellation. When the local server stops, no worker or adapter processes
-should remain. Also check local server authentication, persistence, and upgrade
-behavior. The host uses graceful HTTP server shutdown; its Unix SIGTERM fallback
-is not available on Windows. Token files rely on the user's inherited Windows
-profile ACLs rather than Unix mode bits.
+should appear. Check local server authentication, persistence and upgrade
+behavior. The app contains its Runner in a Job Object. The host uses graceful
+HTTP server shutdown; its Unix SIGTERM fallback is not available on Windows.
+Token files rely on inherited Windows profile ACLs rather than Unix mode bits.

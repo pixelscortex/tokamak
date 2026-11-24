@@ -1,18 +1,6 @@
 use super::*;
 
 impl Coordinator {
-    fn action_execution(&self) -> crate::actions::Execution {
-        crate::actions::Execution {
-            limits: self
-                .action_pool
-                .as_ref()
-                .unwrap_or(&self.pool)
-                .limits()
-                .clone(),
-            process: self.action_process.clone(),
-        }
-    }
-
     pub(super) fn start_action(
         &mut self,
         session: u64,
@@ -26,19 +14,30 @@ impl Coordinator {
             return;
         }
 
-        let (bundle, local_name, owner) = if let Some(loaded) = &self.plugins {
+        let process = match self.action_process() {
+            Ok(process) => process.clone(),
+            Err(error) => {
+                self.respond(session, id, Err(error.into()));
+                return;
+            }
+        };
+        let (local_name, owner) = if let Some(loaded) = &self.plugins {
             let target = &loaded.targets[&name];
-            (
-                target.bundle.clone(),
-                target.local_name.clone(),
-                Some(target.owner.clone()),
-            )
+            (target.local_name.clone(), Some(target.owner.clone()))
         } else {
-            (
-                self.bundle.clone().expect("legacy bundle"),
-                name.clone(),
-                None,
-            )
+            (name.clone(), None)
+        };
+        let source = match (&self.plugins, &owner) {
+            (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
+            _ => self.legacy_action_source.clone(),
+        };
+        let Some(source) = source else {
+            self.respond(
+                session,
+                id,
+                Err("Plugin action has no action process bundle".into()),
+            );
+            return;
         };
 
         let environment = Arc::new(crate::environment::Snapshot::new(
@@ -50,7 +49,7 @@ impl Coordinator {
             self.plugins.clone(),
             owner.clone(),
             environment.clone(),
-            self.action_execution(),
+            process.clone(),
             vec![name.clone()],
             Some(auth),
         ) {
@@ -60,114 +59,30 @@ impl Coordinator {
                 return;
             }
         };
-        if let Some(process) = &self.action_process {
-            let source = match (&self.plugins, &owner) {
-                (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
-                _ => self.legacy_action_source.clone(),
-            };
-            let Some(source) = source else {
-                self.respond(
-                    session,
-                    id,
-                    Err("Plugin action has no action process bundle".into()),
-                );
-                return;
-            };
-            let process = process.clone();
-            self.action_jobs.spawn(async move {
-                (
-                    session,
-                    id,
-                    process
-                        .invoke(source, local_name, args, ops)
-                        .await
-                        .map_err(|error| environment.redact(error)),
-                )
-            });
-            return;
-        }
-
-        self.start_in_process_or_bun(
-            session,
-            id,
-            bundle,
-            local_name,
-            #[cfg(feature = "local-runtime")]
-            owner.as_deref(),
-            args,
-            ops,
-            environment,
-        );
+        self.action_jobs.spawn(async move {
+            (
+                session,
+                id,
+                process
+                    .invoke(source, local_name, args, ops)
+                    .await
+                    .map_err(|error| environment.redact(error)),
+            )
+        });
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Dispatch uses the already prepared invocation snapshot"
-    )]
-    fn start_in_process_or_bun(
-        &mut self,
-        session: u64,
-        id: u64,
-        bundle: Arc<Bundle>,
-        local_name: String,
-        #[cfg(feature = "local-runtime")] owner: Option<&str>,
-        args: Json,
-        ops: Arc<engine::OpRegistry>,
-        environment: Arc<crate::environment::Snapshot>,
-    ) {
-        #[cfg(feature = "local-runtime")]
-        let worker = self
-            .plugins
+    pub(super) fn action_process(
+        &self,
+    ) -> Result<&Arc<crate::host::action_process::Supervisor>, &'static str> {
+        tokamak_worker::require_plugin_platform(std::env::consts::OS)?;
+        self.action_process
             .as_ref()
-            .and_then(|p| owner.and_then(|owner| p.workers.get(owner)))
-            .cloned();
-        #[cfg(feature = "local-runtime")]
-        if let Some(worker) = worker {
-            self.action_jobs.spawn(async move {
-                (
-                    session,
-                    id,
-                    worker
-                        .invoke(local_name, args, ops)
-                        .await
-                        .map_err(|e| environment.redact(e)),
-                )
-            });
-            return;
-        }
-        let pool = self.action_pool.as_ref().expect("in-process action lane");
-        match pool.submit(
-            bundle,
-            "invoke",
-            serde_json::json!({"name":local_name,"args":args}),
-            ops,
-        ) {
-            Ok(pending) => {
-                self.action_jobs.spawn(async move {
-                    (
-                        session,
-                        id,
-                        pending.await.map_err(|e| environment.redact(e.to_string())),
-                    )
-                });
-            }
-            Err(error) => self.respond(session, id, Err(environment.redact(error.to_string()))),
-        }
+            .ok_or("Action process unavailable")
     }
 
     pub(super) async fn stop_actions(&mut self) {
-        if let Some(pool) = &self.action_pool {
-            pool.cancel_actions();
-        }
         if let Some(process) = &self.action_process {
             process.stop().await;
-        }
-
-        #[cfg(feature = "local-runtime")]
-        if let Some(loaded) = &self.plugins {
-            for worker in loaded.workers.values() {
-                worker.stop().await;
-            }
         }
 
         while let Some(completion) = self.action_jobs.join_next().await {
@@ -202,8 +117,7 @@ impl Coordinator {
         let actual = match (&self.plugins, &call.generation, &call.owner) {
             (Some(current), Some(generation), Some(owner))
                 if Arc::ptr_eq(current, generation)
-                    || (self.action_process.is_some()
-                        && current.same_action_source(generation, owner)) =>
+                    || current.same_action_source(generation, owner) =>
             {
                 let target = current.target(
                     owner,

@@ -1,6 +1,4 @@
-use super::Lane;
 use std::{
-    collections::BTreeMap,
     ffi::OsStr,
     io,
     marker::PhantomData,
@@ -38,33 +36,7 @@ impl Child {
     }
 }
 
-pub(super) fn spawn(
-    bun: &Path,
-    entry: &Path,
-    code: &Path,
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
-    lane: Lane,
-) -> io::Result<(Child, OwnedHandle)> {
-    let environment = environment_block(env, lane)?;
-    spawn_contained(
-        bun,
-        &[entry.as_os_str(), code.as_os_str()],
-        Some(cwd),
-        Some(environment),
-    )
-}
-
 pub(super) fn spawn_runner(path: &Path, args: &[&OsStr]) -> io::Result<(Child, OwnedHandle)> {
-    spawn_contained(path, args, None, None)
-}
-
-fn spawn_contained(
-    path: &Path,
-    args: &[&OsStr],
-    cwd: Option<&Path>,
-    environment: Option<Vec<u16>>,
-) -> io::Result<(Child, OwnedHandle)> {
     let (input, stdin) = io::pipe()?;
     let (stdout, output) = io::pipe()?;
     let (stderr, errors) = io::pipe()?;
@@ -78,7 +50,7 @@ fn spawn_contained(
         output.as_raw_handle(),
         errors.as_raw_handle(),
     ];
-    let handle = create_process(path, args, cwd, environment, &job, pipes)?;
+    let handle = create_process(path, args, &job, pipes)?;
     let exit = spawn_blocking(move || {
         // SAFETY: The process handle is owned by this wait until it completes.
         unsafe {
@@ -122,15 +94,10 @@ fn create_job() -> io::Result<OwnedHandle> {
 fn create_process(
     path: &Path,
     args: &[&OsStr],
-    cwd: Option<&Path>,
-    environment: Option<Vec<u16>>,
     job: &OwnedHandle,
     pipes: [HANDLE; 3],
 ) -> io::Result<OwnedHandle> {
     let application = wide(path.as_os_str())?;
-    let directory = cwd
-        .map(|cwd| wide(std::path::absolute(cwd)?.as_os_str()))
-        .transpose()?;
     let mut command = Vec::new();
     for arg in std::iter::once(path.as_os_str()).chain(args.iter().copied()) {
         // Quote each argument according to the Windows C runtime's argv rules.
@@ -188,7 +155,7 @@ fn create_process(
             check(SetHandleInformation(pipe, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) != 0)?;
         }
         // JOB_LIST assigns the job as part of CreateProcessW (Windows 10+),
-        // before any worker code can run. There is no uncontained process even
+        // before any Runner code can run. There is no uncontained process even
         // if the server dies during startup. Neither breakaway flag is enabled.
         check(
             CreateProcessW(
@@ -197,11 +164,9 @@ fn create_process(
                 null(),
                 null(),
                 1,
-                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
-                environment
-                    .as_ref()
-                    .map_or(null(), |value| value.as_ptr().cast()),
-                directory.as_ref().map_or(null(), |value| value.as_ptr()),
+                EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+                null(),
+                null(),
                 (&raw const startup).cast(),
                 &mut process,
             ) != 0,
@@ -209,28 +174,6 @@ fn create_process(
         drop(OwnedHandle::from_raw_handle(process.hThread));
         Ok(OwnedHandle::from_raw_handle(process.hProcess))
     }
-}
-
-fn environment_block(env: &BTreeMap<String, String>, lane: Lane) -> io::Result<Vec<u16>> {
-    // Windows expects case-insensitively sorted entries and a double NUL.
-    let sorted: BTreeMap<_, _> = env
-        .iter()
-        .map(|(name, value)| (name.as_str(), value.as_str()))
-        .chain([lane.env()])
-        .map(|(name, value)| (name.to_ascii_uppercase(), (name, value)))
-        .collect();
-    let mut environment = Vec::new();
-    for (name, value) in sorted.values() {
-        if name.is_empty() || name.contains('=') {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid environment key",
-            ));
-        }
-        environment.extend(wide(OsStr::new(&format!("{name}={value}")))?);
-    }
-    environment.resize(environment.len().max(1) + 1, 0);
-    Ok(environment)
 }
 
 fn check(success: bool) -> io::Result<()> {

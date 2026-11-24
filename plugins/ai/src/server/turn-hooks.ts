@@ -112,8 +112,7 @@ export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
       return stopped;
     },
     stopBefore() {
-      // Bun still hands before hooks the live deadline signal and lets them finish.
-      if (beforeCalls && ctx.retiring) {
+      if (beforeCalls) {
         stopped = true;
         beforeCalls.abort();
       }

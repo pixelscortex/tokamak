@@ -19,14 +19,13 @@ let stop;
 let worker;
 let heldOperation;
 const host = process.env.TOKAMAK_TEST_PLUGIN_HOST;
+assert.ok(host, "The test needs the plugin host");
 const withoutBun = process.argv.includes("--without-bun");
 const runtimeEnv = { ...process.env };
 if (withoutBun) {
   const path = join(scratch, "empty-path");
   await mkdir(path);
   assert.ok(!existsSync(join(path, "bun")));
-  assert.ok(host, "The smoke test needs the shipped plugin host");
-  delete runtimeEnv.TOKAMAK_PLUGIN_RUNTIME;
   runtimeEnv.PATH = path;
   runtimeEnv.HOME = scratch;
 }
@@ -66,7 +65,7 @@ acceptance: try {
     join(plugin, "plugin.ts"),
     `
     import { definePlugin } from "@tokamak/sdk";
-    export default definePlugin({ id: "local-test", version: "1.0.0", runtime: "worker" });
+    export default definePlugin({ id: "local-test", version: "1.0.0" });
   `,
   );
   await writeFile(
@@ -241,14 +240,13 @@ acceptance: try {
   });
   transport = new WebSocketTransport(socket);
   local = new LocalFunctions(transport, async (_target, message, closed) => {
-    const command = host ? [host] : [process.execPath, join(dist, "local-entry.js")];
-    const processHandle = Bun.spawn([...command, join(dist, "local.js")], {
-      detached: !!host,
+    const processHandle = Bun.spawn([host, join(dist, "local.js")], {
+      detached: true,
       stdin: "pipe",
       stdout: "pipe",
       stderr: "inherit",
       cwd: scratch,
-      env: { ...runtimeEnv, TOKAMAK_WORKER_LANE: "local" },
+      env: runtimeEnv,
     });
     worker = processHandle;
     void (async () => {
@@ -266,12 +264,16 @@ acceptance: try {
           }
           message(frame);
         }
-        closed(host ? "Plugin host exited" : "Local worker exited");
+        closed("Plugin host exited");
       } catch (error) {
         closed(String(error));
       }
     })();
     return {
+      async route() {
+        throw new Error("Unexpected contract route");
+      },
+      async retire() {},
       async send(value) {
         processHandle.stdin.write(JSON.stringify(value) + "\n");
         processHandle.stdin.flush();
@@ -293,12 +295,12 @@ acceptance: try {
     summary: "private",
     report: { failed: true, kind: "NoReport", data: { count: 0 } },
   });
-  assert.equal(await client.action(api.turn.runtimeProbe, {}), !host);
-  assert.equal(await client.local(api.turn.localRuntimeProbe, {}), !host);
+  assert.equal(await client.action(api.turn.runtimeProbe, {}), false);
+  assert.equal(await client.local(api.turn.localRuntimeProbe, {}), false);
   if (withoutBun) {
     server.kill();
     assert.equal(await server.exited, 0);
-    assert.doesNotMatch(await diagnostics, /needs Bun|Bun.*(missing|not found)/i);
+    assert.doesNotMatch(await diagnostics, /\bBun\b/i);
     console.log("Default QuickJS: local function and server action passed with an empty PATH.");
     break acceptance;
   }
@@ -335,10 +337,10 @@ acceptance: try {
     ["local text"],
   );
   console.log(
-    `${host ? "QuickJS" : "Bun"}: read a file, wrote and queried a live row, received a log, and cancelled a stale write`,
+    `QuickJS: read a file, wrote and queried a live row, received a log, and cancelled a stale write`,
   );
 
-  if (host) {
+  {
     const interrupted = client.local(api.turn.slow, {});
     void interrupted.catch(() => {});
     await waitForSlowCall();
@@ -379,7 +381,7 @@ acceptance: try {
         stderr.some((line) => line.includes(command)),
         stderr,
       );
-      if (host) assert.equal(stderr.length, 1);
+      assert.equal(stderr.length, 1);
       assert.equal(code, 126);
     }
 
@@ -388,7 +390,7 @@ acceptance: try {
         command: "/bin/sh",
         cwd: join(scratch, "missing-cwd"),
       }),
-      host ? /Could not use working directory/ : /ENOENT/,
+      /Could not use working directory/,
     );
   }
 

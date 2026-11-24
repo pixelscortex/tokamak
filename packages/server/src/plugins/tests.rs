@@ -77,6 +77,49 @@ fn resolves_dependencies_and_preserves_private_assets() {
     assert!(error(&root.0).contains("hash mismatch"));
 }
 #[test]
+fn runner_assets_follow_the_build() {
+    let root = scratch();
+    let path = write(
+        &root.0,
+        "with-local",
+        json!({"id":"with-local","version":"1.0.0"}),
+    );
+    let manifest = path.join("manifest.json");
+    let mut metadata: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    metadata["entries"]["local"] =
+        json!({"entry":"local-entry.js","code":"local.js","map":"local.js.map"});
+    for (name, bytes) in [
+        ("local-entry.js", ""),
+        ("local.js", "export {};"),
+        ("local.js.map", "{}"),
+    ] {
+        std::fs::write(path.join(name), bytes).unwrap();
+        metadata["hashes"][name] = format!("{:x}", Sha256::digest(bytes)).into();
+    }
+    std::fs::write(&manifest, metadata.to_string()).unwrap();
+
+    let catalog = Catalog::read(&root.0).unwrap();
+    let assets = &catalog.plugins["with-local"].assets;
+    for name in ["local-entry.js", "local.js", "local.js.map"] {
+        assert_eq!(
+            assets.contains_key(name),
+            cfg!(feature = "local-runtime"),
+            "{name}"
+        );
+    }
+
+    std::fs::remove_file(path.join("local.js")).unwrap();
+    if cfg!(feature = "local-runtime") {
+        let error = Artifact::read(&path)
+            .err()
+            .expect("missing local bundle accepted");
+        assert!(error.to_string().contains("local.js"), "{error}");
+    } else {
+        assert_eq!(Catalog::read(&root.0).unwrap().revision, catalog.revision);
+    }
+}
+
+#[test]
 fn rejects_missing_incompatible_conflicting_cyclic_and_duplicate_plugins() {
     for (a, b, expected) in [
         (

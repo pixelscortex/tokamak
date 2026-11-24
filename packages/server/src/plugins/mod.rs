@@ -38,8 +38,6 @@ pub(crate) struct Loaded {
     pub catalog_text: String,
     pub(crate) skipped: BTreeMap<String, String>,
     pub(crate) action_sources: BTreeMap<String, Arc<crate::host::action_process::Source>>,
-    #[cfg(feature = "local-runtime")]
-    pub(crate) workers: BTreeMap<String, Arc<crate::host::worker::Supervisor>>,
     contracts: Contracts,
     inspected: BTreeMap<String, crate::service::InspectedBundle>,
 }

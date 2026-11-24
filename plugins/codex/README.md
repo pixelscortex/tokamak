@@ -22,7 +22,7 @@ tasks and proposed plan are separate reports. The interactive
 `item/tool/requestUserInput` request is not supported yet.
 
 `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test codex_turns` runs
-the real server, build, and local worker against recorded exchanges in
+the real server, build, and plugin process against recorded exchanges in
 [e2e/fake-agent/replays/codex](../../e2e/fake-agent/replays/codex). The files
 exclude personal data and shorten consecutive deltas. `history.jsonl` also
 exercises protocol shapes for tasks and multi-file edits. `helpers.jsonl`
@@ -34,7 +34,7 @@ To verify with an installed, signed-in Codex, run locally:
 
 ```sh
 CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
-env -u CI -u TOKAMAK_PLUGIN_RUNTIME proto run bun -- plugins/codex/tests/e2e.mjs target/debug/tokamak-runner --real
+env -u CI proto run bun -- plugins/codex/tests/e2e.mjs target/debug/tokamak-runner --real
 ```
 
 The second command makes paid turns against the local Codex login. The work

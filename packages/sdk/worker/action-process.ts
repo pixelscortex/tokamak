@@ -15,34 +15,26 @@ export function logging(send: (json: string) => void) {
 }
 
 export function initialize(send: (json: string) => void, nextOp: () => number, functions: FunctionRegistry) {
-  const dispatch = workerDispatch(
-    "action",
-    functions,
-    (message) => emit(send, message),
-    nextOp,
-    undefined,
-    undefined,
-    {
-      observeInvocation: true,
-      abort(controller) {
-        try {
-          controller.abort();
-        } catch {
-          // A throwing abort listener cannot leave operations active.
-        }
-      },
-      errorMessage(error) {
-        if (error instanceof Error) return error.message;
-        try {
-          return `Server action threw ${string(error)}`;
-        } catch {
-          return "Server action threw [unprintable value]";
-        }
-      },
-      errorStack(error) {
-        return error instanceof Error ? error.stack?.slice(0, 32768) : undefined;
-      },
+  const dispatch = workerDispatch("action", functions, (message) => emit(send, message), nextOp, {
+    observeInvocation: true,
+    abort(controller) {
+      try {
+        controller.abort();
+      } catch {
+        // A throwing abort listener cannot leave operations active.
+      }
     },
-  );
+    errorMessage(error) {
+      if (error instanceof Error) return error.message;
+      try {
+        return `Server action threw ${string(error)}`;
+      } catch {
+        return "Server action threw [unprintable value]";
+      }
+    },
+    errorStack(error) {
+      return error instanceof Error ? error.stack?.slice(0, 32768) : undefined;
+    },
+  });
   return (frame: string) => dispatch(parse(frame) as WorkerMessage);
 }

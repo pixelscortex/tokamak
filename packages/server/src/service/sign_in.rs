@@ -340,48 +340,23 @@ impl Coordinator {
         ops: engine::OpRegistry,
     ) -> Result<SignInFuture, SignInError> {
         let name = target.local_name.clone();
-        Ok(if let Some(process) = &self.action_process {
-            let process = process.clone();
-            let source = loaded
-                .action_sources
-                .get(&target.owner)
-                .ok_or(SignInError::Unavailable)?
-                .clone();
-            let timeout = sign_in_limits(self.pool.limits().clone()).call_timeout;
-            let options = process.try_sign_in(timeout).ok_or(SignInError::Busy)?;
-            Box::pin(async move {
-                process
-                    .invoke_with(source, name, arguments, Arc::new(ops), options)
-                    .await
-            })
-        } else {
-            // Put anonymous work on its own bounded lane so it cannot take up the
-            // workers serving signed-in devices or inherit a session's authority.
-            let pool = match &mut self.sign_in_pool {
-                Some(pool) => pool,
-                slot => slot.insert(
-                    Pool::new(PoolConfig {
-                        workers: 2,
-                        queue_capacity: 2,
-                        limits: sign_in_limits(self.pool.limits().clone()),
-                    })
-                    .map_err(|_| SignInError::Unavailable)?,
-                ),
-            };
-
-            let pending = pool
-                .submit(
-                    target.bundle.clone(),
-                    "invoke",
-                    serde_json::json!({"name": name, "args": arguments}),
-                    Arc::new(ops),
-                )
-                .map_err(|error| match error {
-                    engine::Error::Overloaded => SignInError::Busy,
-                    _ => SignInError::Unavailable,
-                })?;
-            Box::pin(async move { pending.await.map_err(|error| error.to_string()) })
-        })
+        let process = self.action_process().map(Arc::clone);
+        let process = match process {
+            Ok(process) => process,
+            Err(error) => return Ok(Box::pin(async move { Err(error.into()) })),
+        };
+        let source = loaded
+            .action_sources
+            .get(&target.owner)
+            .ok_or(SignInError::Unavailable)?
+            .clone();
+        let timeout = sign_in_limits(self.pool.limits().clone()).call_timeout;
+        let options = process.try_sign_in(timeout).ok_or(SignInError::Busy)?;
+        Ok(Box::pin(async move {
+            process
+                .invoke_with(source, name, arguments, Arc::new(ops), options)
+                .await
+        }))
     }
 }
 

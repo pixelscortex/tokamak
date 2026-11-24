@@ -1,6 +1,12 @@
-//! Exercise the supervisor with a real process and the action pipe protocol.
+//! Exercise the supervisor through the action pipe protocol.
 
 use std::os::unix::fs::PermissionsExt;
+
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+    net::{TcpListener, TcpStream},
+    time::timeout,
+};
 
 use super::*;
 
@@ -76,16 +82,121 @@ fn hold() -> (Arc<OpRegistry>, mpsc::UnboundedReceiver<()>) {
 async fn echo(supervisor: &Supervisor, source: Arc<Source>) {
     assert_eq!(
         supervisor
-            .invoke(
-                source,
-                "echo".into(),
-                Value::Null,
-                Arc::new(OpRegistry::new())
-            )
+            .invoke(source, "echo".into(), Value::Null, Arc::new(action_ops()))
             .await
             .unwrap(),
         "ok"
     );
+}
+
+const QUICKJS_ACTIONS: &str = r#"
+const action = (invoke) => ({ kind: "action", args: { kind: "any" }, invoke });
+export const functions = {
+    echo: action(() => "ok"),
+    stuck: action(async (url) => (await fetch(url)).text()),
+};
+"#;
+
+const TEST_LIMIT: Duration = Duration::from_secs(5);
+
+fn action_ops() -> OpRegistry {
+    let mut ops = OpRegistry::new();
+    ops.register_sync("auth.current", |_| Ok(Value::Null))
+        .unwrap();
+    ops
+}
+
+async fn quickjs() -> (Arc<Supervisor>, Arc<Source>, TcpListener, Arc<OpRegistry>) {
+    let host = tokamak_worker::Process::action_host_path().expect("locate tokamak-plugin-host");
+    let supervisor = Supervisor::new(host, 32 * 1024 * 1024);
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    file.write_all(QUICKJS_ACTIONS.as_bytes()).unwrap();
+    let plugin = Source::new(
+        "deadline-test".into(),
+        Snapshot::Legacy(file),
+        Arc::new(Bundle::new(QUICKJS_ACTIONS, None).unwrap()),
+        true,
+    );
+    timeout(TEST_LIMIT, echo(&supervisor, plugin.clone()))
+        .await
+        .expect("action process did not start");
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut ops = action_ops();
+    ops.set_network_permissions(vec!["net:127.0.0.1".into()]);
+    (supervisor, plugin, listener, Arc::new(ops))
+}
+
+async fn stalled_request(listener: &TcpListener) -> TcpStream {
+    timeout(TEST_LIMIT, async {
+        let (peer, _) = listener.accept().await.unwrap();
+        let mut peer = BufReader::new(peer);
+        let mut line = String::new();
+        assert_ne!(peer.read_line(&mut line).await.unwrap(), 0);
+        assert!(line.starts_with("GET / "), "{line:?}");
+        loop {
+            line.clear();
+            assert_ne!(peer.read_line(&mut line).await.unwrap(), 0);
+            if line == "\r\n" {
+                // Leave the request pending without sending any response.
+                return peer.into_inner();
+            }
+        }
+    })
+    .await
+    .expect("the stuck action never sent its request")
+}
+
+async fn assert_cancelled_and_recovered(
+    mut peer: TcpStream,
+    supervisor: &Supervisor,
+    plugin: Arc<Source>,
+) {
+    // The dispatcher can stay alive; the cancelled QuickJS invocation must
+    // release its own socket before the test releases the peer.
+    let read = timeout(TEST_LIMIT, peer.read(&mut [0]))
+        .await
+        .expect("the cancelled action left its fetch open");
+    assert_eq!(read.unwrap(), 0, "unexpected trailing request bytes");
+    timeout(TEST_LIMIT, echo(supervisor, plugin))
+        .await
+        .expect("next action did not finish");
+    supervisor.stop().await;
+}
+
+#[tokio::test]
+async fn ordinary_action_deadline_cancels_stuck_call_and_next_call_succeeds() {
+    let (supervisor, plugin, listener, ops) = quickjs().await;
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let call = supervisor.invoke_with(
+        plugin.clone(),
+        "stuck".into(),
+        json!(url),
+        ops,
+        InvocationOptions {
+            timeout: Duration::from_secs(1),
+            ..InvocationOptions::default()
+        },
+    );
+    tokio::pin!(call);
+    let peer = tokio::select! {
+        result = &mut call => panic!("action ended before it got stuck: {result:?}"),
+        peer = stalled_request(&listener) => peer,
+    };
+    assert_eq!(call.await.unwrap_err(), "Plugin action deadline exceeded");
+    assert_cancelled_and_recovered(peer, &supervisor, plugin).await;
+}
+
+#[tokio::test]
+async fn dropping_an_action_cancels_stuck_call_and_next_call_succeeds() {
+    let (supervisor, plugin, listener, ops) = quickjs().await;
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let mut call = Box::pin(supervisor.invoke(plugin.clone(), "stuck".into(), json!(url), ops));
+    let peer = tokio::select! {
+        result = &mut call => panic!("action ended before cancellation: {result:?}"),
+        peer = stalled_request(&listener) => peer,
+    };
+    drop(call);
+    assert_cancelled_and_recovered(peer, &supervisor, plugin).await;
 }
 
 #[tokio::test]

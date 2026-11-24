@@ -1251,13 +1251,6 @@ fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
 
 #[tokio::test]
 async fn quickjs_allows_an_old_transaction_only_artifact_and_refuses_an_old_action_artifact() {
-    if server::action_runtime().unwrap() != "quickjs" {
-        eprintln!(
-            "Skipping old action artifact rejection: the Bun fallback still loads these artifacts"
-        );
-        return;
-    }
-
     let installation = Installation::new();
     installation.change("b", |manifest| {
         for name in ["transactions.js", "transactions.js.map"] {

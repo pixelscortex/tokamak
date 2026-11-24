@@ -56,7 +56,6 @@ esac
     env: {
       HOME: home,
       PATH: [bin, dirname(bunPath()), "/usr/bin", "/bin"].join(delimiter),
-      TOKAMAK_PLUGIN_RUNTIME: "quickjs",
     },
   };
 }

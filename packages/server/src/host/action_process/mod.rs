@@ -87,6 +87,9 @@ impl Source {
     }
 
     pub(crate) async fn inspect(&self) -> Result<(), crate::Error> {
+        if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_err() {
+            return Ok(());
+        }
         inspection::inspect_action(self.path(), self.worker_entry)
             .await
             .map_err(crate::Error::Invalid)
@@ -301,7 +304,7 @@ impl Supervisor {
             "permissions":ops.network_permissions(),"network":options.anonymous.is_none(),
         });
         if super::process_frames::oversized(&frame)? {
-            return Err("Worker invocation exceeds 1 MiB limit".into());
+            return Err("Action process invocation exceeds 1 MiB limit".into());
         }
         let (reply, result) = oneshot::channel();
         let active = CancellationToken::new();

@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { cp, readFile, writeFile } from "node:fs/promises";
-import { delimiter, dirname, join } from "node:path";
+import { join } from "node:path";
 import { agentTurns } from "../../../../e2e/fake-agent/agent-turn.mjs";
-import { bunPath, connect, within } from "../../../../e2e/fake-agent/harness.mjs";
-import { startRunner } from "../../../../e2e/fake-agent/start-runner.ts";
+import { within } from "../../../../e2e/fake-agent/harness.mjs";
 import { editBundle, until } from "./routing.mjs";
 
 const unknown = "@unknown-report";
@@ -225,27 +224,6 @@ export function checkSkew(agents) {
   for (const id of ["claude", "codex"]) {
     const info = agents.find((agent) => agent.id === id)?.info;
     assert.equal(info?.installed, true, `${id}: ${JSON.stringify(info)}`);
-  }
-}
-
-export async function bunSkew(scratch, plugins, env, ai) {
-  const runner = await startRunner({
-    binary: process.argv[2],
-    plugins,
-    directory: join(scratch, "bun-skew"),
-    env: { ...env, PATH: [env.PATH, dirname(bunPath())].join(delimiter), TOKAMAK_PLUGIN_RUNTIME: "bun" },
-  });
-  const cleanup = [];
-  try {
-    const client = await connect(runner.endpoint.ws, {
-      token: runner.endpoint.token,
-      launch: runner.launch,
-      cleanup,
-    });
-    checkSkew(await client.local(ai.agents.list, {}));
-  } finally {
-    for (const close of cleanup.reverse()) await close();
-    assert.equal(await runner.stop(), 0);
   }
 }
 

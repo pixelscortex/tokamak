@@ -250,7 +250,7 @@ async function internalFunctions(binary, worker = false) {
         await writeFile(
           join(source, "plugin.ts"),
           `import { definePlugin } from "@tokamak/sdk";
-export default definePlugin({ id: "internal-test", version: "1.0.0", runtime: "worker" });`,
+export default definePlugin({ id: "internal-test", version: "1.0.0" });`,
         );
       const build = Bun.spawn([process.execPath, "packages/build/src/build.ts", source], {
         stdout: "inherit",

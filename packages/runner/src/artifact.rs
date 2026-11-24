@@ -1,3 +1,5 @@
+#![cfg(any(target_os = "macos", target_os = "linux"))]
+
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
@@ -8,19 +10,6 @@ use std::{
 };
 use tempfile::{NamedTempFile, TempPath};
 use tokamak_worker::WORKER_FRAME_BYTES;
-
-pub(super) fn artifact(
-    root: &Path,
-    plugin: &str,
-    entry_hash: &str,
-    code_hash: &str,
-) -> Result<(TempPath, TempPath), String> {
-    let (folder, _) = artifact_folder(root, plugin, entry_hash, code_hash)?;
-    Ok((
-        snapshot(&folder, "local-entry.js", entry_hash)?,
-        snapshot(&folder, "local.js", code_hash)?,
-    ))
-}
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn quickjs_bundle(
@@ -115,7 +104,7 @@ pub(super) fn snapshot(folder: &Path, file: &str, hash: &str) -> Result<TempPath
         return Err("Local plugin asset must be a regular file".into());
     }
     // Run the verified bytes, even if the installed build is replaced between
-    // this check and Bun opening the file.
+    // this check and the plugin process opening the file.
     let mut copy: NamedTempFile = tempfile::Builder::new()
         .suffix(".mjs")
         .tempfile()
@@ -173,11 +162,22 @@ pub(super) fn client_env(mut read: impl FnMut(&str) -> Option<String>) -> BTreeM
     .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod tests {
     use super::*;
     use serde_json::json;
     use std::{fs, path::PathBuf};
+
+    fn bundle(root: &Path) -> Result<TempPath, String> {
+        quickjs_bundle(
+            root,
+            &crate::local::Artifact {
+                id: "example".into(),
+                entry_hash: ENTRY_HASH.into(),
+                code_hash: CODE_HASH.into(),
+            },
+        )
+    }
 
     const ENTRY_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     const CODE_HASH: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -205,7 +205,7 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().canonicalize().unwrap();
         let folder = install(&root);
-        let (_, code) = artifact(&root, "example", ENTRY_HASH, CODE_HASH).unwrap();
+        let code = bundle(&root).unwrap();
         fs::write(folder.join("local.js"), "replacement").unwrap();
         assert_eq!(fs::read_to_string(&code).unwrap(), "abc");
     }
@@ -217,7 +217,7 @@ mod tests {
         let folder = install(&root);
         fs::write(folder.join("local.js"), "tampered").unwrap();
         assert_eq!(
-            artifact(&root, "example", ENTRY_HASH, CODE_HASH).unwrap_err(),
+            bundle(&root).unwrap_err(),
             "Local plugin asset hash mismatch: local.js"
         );
     }
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn requires_a_matching_local_install() {
         let root = tempfile::tempdir().unwrap();
-        let error = artifact(root.path(), "example", ENTRY_HASH, CODE_HASH).unwrap_err();
+        let error = bundle(root.path()).unwrap_err();
         assert!(error.contains("Install the matching build of example"));
     }
 
@@ -238,7 +238,7 @@ mod tests {
         std::os::unix::fs::symlink(outside.path().join("example"), root.path().join("example"))
             .unwrap();
         assert_eq!(
-            artifact(root.path(), "example", ENTRY_HASH, CODE_HASH).unwrap_err(),
+            bundle(root.path()).unwrap_err(),
             "Local plugin path escapes its install directory"
         );
     }
@@ -254,7 +254,7 @@ mod tests {
         fs::remove_file(folder.join("local.js")).unwrap();
         std::os::unix::fs::symlink(&outside, folder.join("local.js")).unwrap();
         assert_eq!(
-            artifact(&root, "example", ENTRY_HASH, CODE_HASH).unwrap_err(),
+            bundle(&root).unwrap_err(),
             "Local plugin asset escapes its install directory"
         );
     }

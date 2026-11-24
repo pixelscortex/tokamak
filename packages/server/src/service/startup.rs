@@ -10,7 +10,6 @@ struct Startup {
     single_bundle_private: BTreeSet<String>,
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
-    quickjs: bool,
 }
 
 impl Server {
@@ -29,36 +28,25 @@ impl Server {
         bundle: Arc<Bundle>,
         space: DataSpace,
     ) -> Result<Self, Error> {
-        let quickjs = match quickjs_actions() {
-            Ok(quickjs) => quickjs,
-            Err(error) => return Err(startup_error(&mut database, error).await),
-        };
-        let (transactions, legacy_action_bundle) = if quickjs {
-            let Some(transactions) = bundle.transactions() else {
-                let error = Error::Invalid(
-                    "QuickJS actions require a transaction bundle; rebuild the feature".into(),
-                );
-                return Err(startup_error(&mut database, error).await);
-            };
-            (transactions, Some(bundle))
-        } else {
-            (bundle, None)
+        let Some(transactions) = bundle.transactions() else {
+            let error = Error::Invalid(
+                "QuickJS actions require a transaction bundle; rebuild the feature".into(),
+            );
+            return Err(startup_error(&mut database, error).await);
         };
         let inspected = async {
             let inspected = inspect(&pool, transactions.clone()).await?;
 
-            let legacy_action_source = match legacy_action_bundle {
-                Some(bundle)
-                    if inspected
-                        .kinds
-                        .values()
-                        .any(|kind| *kind == FunctionKind::Action) =>
-                {
-                    let source = Source::legacy(bundle)?;
-                    source.inspect().await?;
-                    Some(source)
-                }
-                _ => None,
+            let legacy_action_source = if inspected
+                .kinds
+                .values()
+                .any(|kind| *kind == FunctionKind::Action)
+            {
+                let source = Source::legacy(bundle)?;
+                source.inspect().await?;
+                Some(source)
+            } else {
+                None
             };
             initialize_standalone_schema(&mut database, &space, &inspected.descriptor).await?;
             Ok((inspected, legacy_action_source))
@@ -102,7 +90,6 @@ impl Server {
                 single_bundle_private,
                 plugins: None,
                 plugin_root: None,
-                quickjs,
             },
         )
         .await
@@ -123,15 +110,10 @@ impl Server {
         root: &std::path::Path,
         policy: StartupPolicy,
     ) -> Result<Self, Error> {
-        let quickjs = match quickjs_actions() {
-            Ok(quickjs) => quickjs,
-            Err(error) => return Err(startup_error(&mut database, error).await),
+        let loaded = match crate::plugins::Catalog::read_at_startup(root, database.directory()) {
+            Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy).await,
+            Err(error) => Err(error),
         };
-        let loaded =
-            match crate::plugins::Catalog::read_at_startup(root, database.directory(), quickjs) {
-                Ok(catalog) => crate::plugins::Loaded::load(catalog, &pool, policy, quickjs).await,
-                Err(error) => Err(error),
-            };
 
         let loaded = match loaded {
             Ok(mut loaded) => {
@@ -164,7 +146,6 @@ impl Server {
                 single_bundle_private: BTreeSet::new(),
                 plugins: Some(loaded),
                 plugin_root: Some(root.to_owned()),
-                quickjs,
             },
         )
         .await
@@ -184,7 +165,6 @@ impl Server {
             single_bundle_private,
             plugins,
             plugin_root,
-            quickjs,
         } = startup;
         let state = async {
             Box::pin(window_state::initialize(&database, plugins.is_some()))
@@ -205,11 +185,8 @@ impl Server {
         if let Err(error) = state {
             return Err(startup_error(&mut database, error).await);
         }
-        let ActionStartup {
-            action_pool,
-            action_process,
-        } = match ActionStartup::new(quickjs, &pool) {
-            Ok(startup) => startup,
+        let action_process = match action_startup() {
+            Ok(process) => process,
             Err(error) => return Err(startup_error(&mut database, error).await),
         };
 
@@ -232,10 +209,8 @@ impl Server {
             plugins,
             plugin_root,
             changes,
-            action_pool,
             action_process,
             legacy_action_source,
-            sign_in_pool: None,
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
             sessions: BTreeMap::new(),
@@ -352,36 +327,13 @@ async fn initialize_standalone_schema(
     Ok(())
 }
 
-fn quickjs_actions() -> Result<bool, Error> {
-    crate::action_runtime()
-        .map(|runtime| runtime == "quickjs")
-        .map_err(Error::Invalid)
-}
-
-struct ActionStartup {
-    action_pool: Option<Arc<Pool>>,
-    action_process: Option<Arc<crate::host::action_process::Supervisor>>,
-}
-
-impl ActionStartup {
-    fn new(quickjs: bool, pool: &Pool) -> Result<Self, Error> {
-        if quickjs {
-            let host = tokamak_worker::Process::action_host_path().map_err(Error::Invalid)?;
-            let heap = tokamak_worker::configured_action_heap_bytes().map_err(Error::Invalid)?;
-            return Ok(Self {
-                action_pool: None,
-                action_process: Some(crate::host::action_process::Supervisor::new(host, heap)),
-            });
-        }
-
-        let pool = Pool::new_actions(PoolConfig {
-            limits: pool.limits().clone(),
-            ..PoolConfig::default()
-        })
-        .map_err(|error| Error::Invalid(error.to_string()))?;
-        Ok(Self {
-            action_pool: Some(Arc::new(pool)),
-            action_process: None,
-        })
+fn action_startup() -> Result<Option<Arc<crate::host::action_process::Supervisor>>, Error> {
+    if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_err() {
+        return Ok(None);
     }
+    let host = tokamak_worker::Process::action_host_path().map_err(Error::Invalid)?;
+    let heap = tokamak_worker::configured_action_heap_bytes().map_err(Error::Invalid)?;
+    Ok(Some(crate::host::action_process::Supervisor::new(
+        host, heap,
+    )))
 }

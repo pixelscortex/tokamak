@@ -24,7 +24,8 @@ impl Logs {
         std::thread::spawn(move || {
             while let Ok(line) = receive.recv() {
                 let dropped = count.swap(0, Ordering::Relaxed);
-                if dropped != 0 && writeln!(output, "Worker: {dropped} log lines dropped").is_err()
+                if dropped != 0
+                    && writeln!(output, "Plugin host: {dropped} log lines dropped").is_err()
                 {
                     break;
                 }

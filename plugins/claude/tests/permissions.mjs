@@ -17,7 +17,7 @@ function checkCommand(live, question, title, file) {
   else assert.equal(question.subject, title);
 }
 
-async function stopAsking({ run, live, parity, caseFolder }) {
+async function stopAsking({ run, live, caseFolder }) {
   const waiting = await run(
     "stop-asking",
     "Use Bash once to run touch stop-asking-fixture.txt. Then say DONE.",
@@ -44,7 +44,6 @@ async function stopAsking({ run, live, parity, caseFolder }) {
     assert.equal(interrupted?.state, "done", "Stop closes the interrupted step with the turn");
   }
   assert.ok(waiting.reply.usage);
-  if (!live) await parity.capture("stop-asking", waiting);
   if (live) assert.ok(!(await Bun.file(join(waiting.folder, "stop-asking-fixture.txt")).exists()));
 }
 
@@ -105,14 +104,12 @@ function permissionReplays(live) {
 }
 
 async function permissionReplay(
-  { run, turns, overlap, live, parity, caseFolder, passed },
+  { run, turns, overlap, live, caseFolder, passed },
   [name, answer, prompt, outcome],
 ) {
   const file = name === "cancel-continues" ? "fixture.txt" : `${name}-probe.txt`;
   const title = `touch ${file}`;
   const fixture = Bun.file(join(await caseFolder(name), file));
-  let kind;
-  let late;
   const exercise = () =>
     run(name, prompt, {
       access: "ask",
@@ -127,13 +124,11 @@ async function permissionReplay(
             .update(JSON.stringify(["Bash", title]))
             .digest("hex");
           assert.equal(question.kind, `Bash:${hash}`);
-          kind = question.kind;
         }
         await turn.answer(question, answer);
         if (name === "permit" && !live) {
           const result = await turn.sendAnswer(question, "decline");
           assert.equal(result.kind, "Expired");
-          late = result.kind;
         }
       },
     });
@@ -143,11 +138,9 @@ async function permissionReplay(
       result = await exercise();
     });
     assert.notEqual(other.row.sessionId, result.row.sessionId);
-    await parity.capture("overlap-permit", result, { kind, late });
   } else {
     result = await exercise();
   }
-  if (name === "refuse" && !live) await parity.capture("decline", result, { kind });
   if (name === "remember" && !live) {
     const continued = await turns.run(result.folder, "Try the same command again.", {
       threadId: result.threadId,

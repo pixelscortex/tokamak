@@ -141,6 +141,13 @@ async function storedReply({ client, ai, chat, args, label, isTurn }, result, st
     state === "stopped" ? "cancelled" : state === "failed" ? "error" : "complete",
   );
   const turnArgs = { turnId: row._id };
+  function checkTimes(report) {
+    assert.ok(Number.isFinite(report.startedAt), `${label}: step has a start time`);
+    if (report.state !== "running") {
+      assert.ok(report.finishedAt >= report.startedAt, `${label}: finished step has valid timestamps`);
+    }
+  }
+  for (const helper of reply.helpers) checkTimes(helper);
   return {
     row,
     reply,
@@ -152,6 +159,7 @@ async function storedReply({ client, ai, chat, args, label, isTurn }, result, st
     async steps() {
       const { steps, omitted } = await client.query(ai.turns.steps, turnArgs);
       assert.equal(omitted, 0);
+      for (const step of steps) checkTimes(step);
       return steps;
     },
     helper: (step) => client.query(ai.turns.helper, { stepId: step._id }),

@@ -9,7 +9,8 @@ proto run bun -- packages/build/src/build.ts plugins/chat
 The builder reads literal `plugin.ts` metadata, bundles `src/server/` through the
 SDK compiler, derives public function references and provider contracts, and
 writes a versioned `dist/manifest.json` with hashes of final emitted bytes.
-Worker plugins also receive their Bun action bundle and worker entry.
+The transaction bundle contains queries and mutations. The action process
+loads server actions from the full server bundle.
 Unchanged output preserves bytes and modification times. The manifest is
 published last; installation still needs its own complete-artifact staging.
 
@@ -64,7 +65,7 @@ They cover loopback, desktop token authentication and a configured origin list.
 
 ## Plugin imports
 
-Production source (server, client and worker; tests excluded) must stay inside
+Production source (server, window and local part; tests excluded) must stay inside
 its own plugin folder. Relative paths, absolute paths, source aliases and
 symlinks cannot reach another folder. Dependencies installed through
 `node_modules`, including workspace packages, are allowed; another plugin's

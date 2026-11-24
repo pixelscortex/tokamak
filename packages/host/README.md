@@ -1,16 +1,15 @@
 # Plugin host
 
-The plugin host runs local functions and server actions on QuickJS by default
-on macOS and Linux. `TOKAMAK_PLUGIN_RUNTIME=bun` is a temporary fallback that
-will be removed. An empty value is an error on macOS and Linux. Windows ignores
-the variable and uses Bun. See the SDK's
-[plugin runtime guide](../sdk/README.md#plugin-runtimes) for plugin compatibility.
+On macOS and Linux, the plugin process runs local functions and the action
+process runs server actions. Both use QuickJS. On Windows, these calls report
+“Plugin code is not supported on Windows yet.” See the SDK's
+[plugin process and action process guide](../sdk/README.md#plugin-process-and-action-process)
+for compatibility.
 The Runner looks for `tokamak-plugin-host` next to its executable. For development, run
 `cargo build --locked -p tokamak-plugin-host` and set `TOKAMAK_PLUGIN_HOST`
 if the executable lives elsewhere.
 
-Bun bundles the shared SDK dispatcher at build time; the host does not need
-Bun to run. The Runner starts the host in its own process group
+Bun bundles the shared SDK dispatcher at build time. The Runner starts the host in its own process group
 with a guardian. The host kills that group on stdin EOF or shutdown.
 
 The host accepts up to 128 concurrent local calls and uses back-pressure
@@ -48,8 +47,7 @@ grants in place.
 
 A host can import only its own local bundle and the supported built-ins.
 An old bundle with a live local contract is refused; rebuild it with all
-methods declared as plain data. The Bun fallback still binds provider
-implementations in the caller's worker.
+methods declared as plain data.
 
 A process exit fails its active calls with the plugin's name. Its next start
 is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run
@@ -63,11 +61,10 @@ sends TERM to the group. The guardian exits as soon as no live programs remain.
 Groups that are still running get up to two seconds to shut down before KILL.
 The pipe closes even when the host is killed with SIGKILL. Force stop sends
 KILL immediately, even after the call has returned a result if its groups
-are still being reaped. On QuickJS, every call and `withPrograms` can return
+are still being reaped. Every call and `withPrograms` can return
 before their remaining programs are gone. Those groups still count toward the
 256-program limit until reaped. Await programs that must finish before the
-handler returns. The Bun fallback on macOS and Linux uses a 250 ms grace
-period and waits for cleanup before returning. The launcher holds a separate
+handler returns. The launcher holds a separate
 liveness pipe for its guardian in the host group, so abrupt launcher exit also
 stops the host and its programs.
 
@@ -78,7 +75,7 @@ program stops.
 
 The host caps queued stdin at 64 MiB per program. A write beyond the limit
 throws `Program input queue exceeds 64 MiB` and leaves the program running.
-Bun buffers without this limit; the host cap prevents plugins that write
+The cap prevents plugins that write
 faster than the program reads from growing the queue without bound.
 
 The QuickJS heap defaults to 256 MiB. Override it with the positive integer
@@ -90,9 +87,8 @@ starts a new process.
 
 Local functions get `process.platform` (`darwin` or `linux`), an empty
 `process.versions` (no `node` entry), and `process.env`, an ordinary object
-with a snapshot of the short launch environment. On Bun, setting
-`process.env.X` affects programs started later. On the plugin host, it only
-changes the snapshot. Pass `env` to `ctx.proc` to set a program's environment.
+with a snapshot of the short launch environment. Setting `process.env.X`
+changes only the snapshot. Pass `env` to `ctx.proc` to set a program's environment.
 
 The filesystem module supports Node-style error codes and string, file URL
 and byte-array paths. `cp` copies symlinks by default and supports
@@ -134,15 +130,13 @@ older default artifacts that have actions and standalone features before
 enabling QuickJS.
 
 The action process uses the engine's web implementation and the manifest's
-`net:` grants, including for `runtime: "worker"` plugins whose fetches Bun
-did not check. Worker plugins have no `process` or `process.env`; use
+`net:` grants. Actions have no `process` or `process.env`; use
 `await ctx.env(name)` with the manifest's `env:<name>` grant.
 Each action call starts on its own OS thread with its own QuickJS runtime,
 heap, watchdog, and fresh module state. The dispatcher and native web I/O share
 a Tokio executor. Dropping the runtime ends all JavaScript jobs and releases the
 call's timers, requests, and memory after success, failure, cancellation,
-deadline, or reload. This includes `runtime: "worker"` plugins, which keep
-module state between calls on Bun.
+deadline, or reload.
 
 All plugins' actions share one process. The runtime boundary isolates calls,
 including concurrent calls of the same plugin. The server trusts the action
@@ -161,8 +155,7 @@ its heap. On Linux the allocator may keep some freed memory per thread.
 The server admits up to 64 calls per plugin and 128 in total. Admitted calls
 start without a queue. Anonymous sign-in bypasses the per-plugin call limit
 and counts toward the total. It has four slots across all plugins; a fifth
-request is refused as busy. A `runtime: "worker"` plugin that could run up to
-128 calls in its own Bun worker can run up to 64 with QuickJS. Pending host
+request is refused as busy. Pending host
 operations are limited to 128 in total, with separate limits of 64 per plugin
 for signed-in and anonymous calls. Nested calls count
 against the plugin being called. Log output has a per-plugin budget and reports

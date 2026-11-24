@@ -111,7 +111,7 @@ A saved picture of the thread folder before or after a turn, used to see what ch
 _Avoid_: Checkpoint, backup, diff.
 
 **Turn hooks**:
-The points before and after agent work at which other plugins can act on a turn. On QuickJS they run in the provider’s plugin process; cancellation is delivered to the hook’s own signal.
+The points before and after agent work at which other plugins can act on a turn. They run in the provider’s plugin process; cancellation is delivered to the hook’s own signal.
 _Avoid_: Interceptors, middleware, callbacks (when referring to the extension points).
 
 ### Plugins
@@ -122,10 +122,13 @@ _Avoid_: Provider lookup, service name, interface (when referring to the agreeme
 
 **Plugin process**:
 A process the Runner starts on demand to run one installed build of a plugin's local part.
-_Avoid_: Worker (when referring to the QuickJS process), action process.
+_Avoid_: Worker, action process (when referring to local functions).
+
+**Action process**:
+A process the server starts to run server actions. Each call starts with fresh module state.
 
 **Plain-data method**:
-A local contract method declared to take and return only JSON data. On QuickJS, all local contract methods are plain data. Calls to another plugin's methods run in that provider's plugin process.
+A local contract method declared to take and return only JSON data. All local contract methods are plain data. Calls to another plugin's methods run in that provider's plugin process.
 _Avoid_: Remote method (which can also mean a call to a shared server).
 
 **Page**:

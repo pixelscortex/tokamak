@@ -20,8 +20,8 @@ function unavailable(pluginRoot, importer, module, lane) {
   );
 }
 
-export function workerBuiltins(pluginRoot, local) {
-  const supplied = suppliedNodeModules[local ? "local" : "action"];
+export function workerBuiltins(pluginRoot) {
+  const supplied = suppliedNodeModules.local;
 
   return {
     name: "worker-node-builtins",
@@ -33,7 +33,7 @@ export function workerBuiltins(pluginRoot, local) {
         const module = nodeModule(path);
         if (!module || supplied.includes(module)) return;
 
-        throw unavailable(pluginRoot, importer, module, local ? "local functions" : "server actions");
+        throw unavailable(pluginRoot, importer, module, "local functions");
       });
     },
   };

@@ -118,17 +118,16 @@ export function dataContracts(root: ProviderModule) {
   };
 }
 
-export function workerContracts(root: ProviderModule, load?: (path: string) => Promise<ProviderModule>) {
-  const routed = load === undefined;
+export function workerContracts() {
   // A plain provider's static metadata is scoped to its build. Once discovered,
   // looking up a different provider doesn't depend on this process being up.
   type Description = HostOperations["local.contract.describe"]["result"];
   const descriptions = new Map<string, { build: string; value: Description; identity: object }>();
-  return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
+  return function bind(bridge: HostBridge): ContractScope {
     return {
       async list(key, selected, options) {
         if (key.place !== "local") throw new Error("Server contracts run in server functions");
-        const signal = routed ? options?.signal : undefined;
+        const signal = options?.signal;
         const inputSignal = options?.inputSignal ?? signal;
         const catalog = await callHost(
           bridge,
@@ -136,8 +135,8 @@ export function workerContracts(root: ProviderModule, load?: (path: string) => P
           { name: key.name, ...(key.owner === undefined ? {} : { owner: key.owner }) },
           signal,
         );
-        const auth = await callHost(bridge, "auth.current", {}, signal);
-        if (!auth) throw new Error("Local contracts require a signed-in caller");
+        if (!(await callHost(bridge, "auth.current", {}, signal)))
+          throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
         const unavailable: { plugin: string; lastId: JsonValue | undefined; error: unknown }[] = [];
         const candidates = catalog.filter((candidate) => !candidate.incompatible);
@@ -155,8 +154,6 @@ export function workerContracts(root: ProviderModule, load?: (path: string) => P
         const resolve = async ({
           plugin,
           registration,
-          path,
-          own,
           owner,
           build,
           unavailable: notice,
@@ -217,58 +214,46 @@ export function workerContracts(root: ProviderModule, load?: (path: string) => P
                 throw error;
               }
             };
-          let implementation: Readonly<Record<string, unknown>>;
-          if (routed) {
-            if (!build) throw new Error(`Missing routed build for local contract ${owner}/${key.name}`);
-            const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
-            const cached = descriptions.get(cacheKey);
-            try {
-              const description =
-                cached?.build === build
-                  ? cached
-                  : {
-                      build,
-                      value: await callHost(bridge, "local.contract.describe", target, signal),
-                      identity: {},
-                    };
-              descriptions.set(cacheKey, description);
-              const { value, identity } = description;
-              implementation = Object.freeze({
-                ...value.data,
-                [providerIdentity]: identity,
-                ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
-                ...(bridge.channel && {
-                  [openChannel](method: string, args: unknown, receive: ChannelHandler) {
-                    if (!value.methods.includes(method))
-                      throw new Error(`Unknown local contract method ${method}`);
-                    const label = `Local contract ${owner}/${key.name}.${method}`;
-                    return bridge.channel!.open(
-                      { ...target, method, args: [wireData(args, `${label} arguments`)] },
-                      receive,
-                    );
-                  },
-                }),
-              });
-            } catch (error) {
-              if (signal?.aborted) throw error;
-              if (reportUnavailable(error)) return;
-              if (options?.onUnavailable) throw error;
-              unavailable.push({ plugin, lastId: cached?.value.data.id, error });
-              return;
-            }
-          } else {
-            if (!own && (!load || !path))
-              throw new Error(`Missing Bun provider for local contract ${owner}/${key.name}`);
-            const module = own ? root : await load!(path!);
-            const provider = checkedProvider(module, target);
-            implementation = bindProvider(provider.implementation, host(own ? undefined : plugin), auth);
+          if (!build) throw new Error(`Missing routed build for local contract ${owner}/${key.name}`);
+          const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
+          const cached = descriptions.get(cacheKey);
+          try {
+            const description =
+              cached?.build === build
+                ? cached
+                : {
+                    build,
+                    value: await callHost(bridge, "local.contract.describe", target, signal),
+                    identity: {},
+                  };
+            descriptions.set(cacheKey, description);
+            const { value, identity } = description;
+            const implementation: Readonly<Record<string, unknown>> = Object.freeze({
+              ...value.data,
+              [providerIdentity]: identity,
+              ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
+              ...(bridge.channel && {
+                [openChannel](method: string, args: unknown, receive: ChannelHandler) {
+                  if (!value.methods.includes(method))
+                    throw new Error(`Unknown local contract method ${method}`);
+                  const label = `Local contract ${owner}/${key.name}.${method}`;
+                  return bridge.channel!.open(
+                    { ...target, method, args: [wireData(args, `${label} arguments`)] },
+                    receive,
+                  );
+                },
+              }),
+            });
+            return { plugin, implementation };
+          } catch (error) {
+            if (signal?.aborted) throw error;
+            if (reportUnavailable(error)) return;
+            if (options?.onUnavailable) throw error;
+            unavailable.push({ plugin, lastId: cached?.value.data.id, error });
+            return;
           }
-          return { plugin, implementation };
         };
-        const resolved = [];
-        if (routed) resolved.push(...(await Promise.all(candidates.map(resolve))));
-        else for (const candidate of candidates) resolved.push(await resolve(candidate));
-        for (const entry of resolved) {
+        for (const entry of await Promise.all(candidates.map(resolve))) {
           if (!entry) continue;
           const { plugin, implementation } = entry;
           const id = implementation.id ?? plugin;

@@ -15,7 +15,6 @@ export function invocationHost(
   contracts?: (bridge: HostBridge, provider: (plugin?: string) => HostBridge) => ContractScope,
   channel?: HostBridge["channel"],
   retiring?: ActionSignal,
-  reapAfterResult = false,
 ) {
   const outer = createPrograms?.();
   const scopes = new Set<Programs>();
@@ -41,8 +40,7 @@ export function invocationHost(
             return await run(() => inner.close("SIGKILL"), host(plugin, inner));
           } finally {
             const reaping = inner.close().finally(() => scopes.delete(inner));
-            if (reapAfterResult) void reaping.catch(() => {});
-            else await reaping;
+            void reaping.catch(() => {});
           }
         }),
       op: op(plugin),

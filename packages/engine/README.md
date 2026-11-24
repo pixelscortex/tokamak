@@ -181,12 +181,11 @@ behavior here does not establish a process security sandbox.
 
 ## Actions and web APIs
 
-`ActionEngine` implements the same `Engine` trait. `Pool::new_actions` creates
-an independent, bounded lane (the server uses two workers and 32 queued calls).
-The server propagates the configured JS heap cap; action load/call time budgets
-are ignored. Action invocation leases have an explicit absent deadline, and
-QuickJS interruption checks only lifecycle cancellation. No elapsed-time timer
-runs on this path. Query/mutation scheduling and deadlines remain on `Pool::new`.
+The server runs actions in the action process. The engine's own `ActionEngine`
+implements the same `Engine` trait, and its tests use `Pool::new_actions` to
+create an independent, bounded pool. In this pool there is no elapsed-time
+timer: QuickJS interruption checks lifecycle cancellation. Query and mutation
+scheduling and deadlines remain on `Pool::new`.
 
 The native capabilities use owned JSON/byte chunks through `OpRegistry` and are
 engine-independent; only installation and promise conversion know QuickJS.

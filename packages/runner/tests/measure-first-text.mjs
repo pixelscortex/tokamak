@@ -1,6 +1,5 @@
 // First visible text after Send, using the same Runner and plugin builds in both lanes.
-// Run with the Runner beside its matching plugin host. Set TOKAMAK_PLUGIN_RUNTIME=bun
-// for the shared worker. Pass --real to use the signed-in Codex CLI instead of replay.
+// Run with the Runner beside its matching plugin host.
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -16,7 +15,6 @@ assert.ok(path && (mode === undefined || mode === "--real"), "Pass a Runner path
 const real = mode === "--real";
 assert.ok(!real || !process.env.CI, "Real Codex tests are local only");
 const binary = resolve(path);
-const runtime = process.env.TOKAMAK_PLUGIN_RUNTIME ?? "quickjs";
 const count = real ? 5 : 20;
 const trace = process.env.TOKAMAK_FIRST_TEXT_TRACE === "1";
 let mark = () => {};
@@ -121,7 +119,6 @@ try {
       directory: join(scratch, "runner-" + i),
       env: {
         ...env,
-        TOKAMAK_PLUGIN_RUNTIME: runtime,
         ...(real && {
           HOME: homedir(),
           PATH: [dirname(process.execPath), process.env.PATH].join(delimiter),
@@ -147,7 +144,7 @@ try {
   }
   console.log(
     JSON.stringify(
-      { runtime, agent: real ? "codex" : "codex replay", cold: summarize(cold), warm: summarize(warm) },
+      { agent: real ? "codex" : "codex replay", cold: summarize(cold), warm: summarize(warm) },
       null,
       2,
     ),

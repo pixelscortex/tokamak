@@ -27,6 +27,10 @@ impl Drop for ChildGuard {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[path = "support/local_runtime.rs"]
+mod local_runtime;
+
 #[path = "support/sdk.rs"]
 mod sdk;
 use sdk::{bun_script, bundle, root};
@@ -540,11 +544,13 @@ type PauseGate = Arc<
     >,
 >;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn headless_binary_discovers_and_calls_contract_providers_across_reload() {
     run(async {
         let status = tokio::process::Command::from(bun_script("contracts-driver.mjs"))
             .arg(env!("CARGO_BIN_EXE_tokamak-server"))
+            .arg(local_runtime::runner())
             .kill_on_drop(true)
             .status()
             .await

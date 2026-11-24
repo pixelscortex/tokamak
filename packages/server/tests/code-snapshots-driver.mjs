@@ -16,6 +16,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { editBundle } from "../../runner/tests/support/routing.mjs";
 import {
   cancelledCleanup,
   managerCrash,
@@ -32,8 +33,6 @@ import { agentHarness, build, copySource, within, workspace } from "../../../e2e
 const h = await agentHarness({ binary: process.argv[2], name: "code-snapshots" });
 const { ai, chat } = h.api;
 const source = join(workspace, "plugins/code");
-const bunCore = process.env.TOKAMAK_TEST_CODE_CORE === "1";
-const withRunner = process.argv[2].includes("tokamak-runner");
 const threadRef = (id) => `refs/tokamak/threads/${id.split(":")[1]}`;
 const turnRef = (threadId, turnId) => `${threadRef(threadId)}/turns/${turnId.split(":")[1]}`;
 
@@ -41,63 +40,54 @@ try {
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "code"), { recursive: true });
   const { api: code } = await import(join(source, "src/server/_generated/api.ts"));
-  if (withRunner && h.selection.runtime === "quickjs") await installThirdPartyHook();
+  await installThirdPartyHook();
   const address = await h.serve("snapshots");
   const runner = h.runner(address);
-  const routed = runner && h.selection.runtime === "quickjs";
+  assert.ok(runner, "Code process tests require the Runner");
   const hookCalls = new Set();
   const desk = await h.connect(address, {
     local: true,
-    ...(routed && {
-      observe(plugin, frame, direction) {
-        if (
-          direction === "fromWorker" &&
-          frame.name === "local.contract.call" &&
-          frame.payload.plugin === "code"
-        ) {
-          hookCalls.add(`${plugin}/${frame.payload.name}/${frame.payload.method}`);
-        }
-      },
-    }),
+    observe(plugin, frame, direction) {
+      if (
+        direction === "fromWorker" &&
+        frame.name === "local.contract.call" &&
+        frame.payload.plugin === "code"
+      ) {
+        hookCalls.add(`${plugin}/${frame.payload.name}/${frame.payload.method}`);
+      }
+    },
   });
   await preservesWorktree(desk, code);
   await snapshotFailures(desk, code);
   await changedWorktree(desk);
-  if (!bunCore) await prunesWhenReopened(address, desk, code);
-  if (!runner) await withoutDataFolder(address);
+  await prunesWhenReopened(address, desk, code);
+  await withoutDataFolder();
   const fixture = { h, runner, desk, code, project, start, refs, turnRef };
   await stopDuringAfter(fixture);
-  if (bunCore) {
-    console.log("code snapshots (Bun): matching before/after refs, failing before, deletion, no data folder");
-  } else {
-    if (routed) {
-      await separateProcesses(fixture);
-      assert.deepEqual([...hookCalls].sort(), [
-        "ai/turnHooks/after",
-        "ai/turnHooks/before",
-        "chat/threadDeletedLocal/after",
-      ]);
-      await unavailableProviders(fixture);
-      await thirdPartyNotice(desk);
-      await cancelledCleanup(fixture);
-      await reloadManager(fixture);
-      await reloadManagerTimeout(fixture);
-    }
-    await snapshotReviewCases({
-      ...fixture,
-      gate: h.gate,
-      removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
-      routed,
-      stopIsolation: () => stopIsolation(fixture),
-    });
-    await gitAppearsMidTurn(desk);
-    await stoppedTurn(desk);
-    await withoutAi(code);
-    if (routed) await managerCrash(fixture);
-    console.log(
-      "code snapshots: refs, parent chain, unchanged user Git state, clean filters, ignored files, folder scope, merge conflicts, disabled Git hooks, hook deadlines, deletion, Git added mid-thread, standalone code",
-    );
-  }
+  await separateProcesses(fixture);
+  assert.deepEqual([...hookCalls].sort(), [
+    "ai/turnHooks/after",
+    "ai/turnHooks/before",
+    "chat/threadDeletedLocal/after",
+  ]);
+  await unavailableProviders(fixture);
+  await thirdPartyNotice(desk);
+  await cancelledCleanup(fixture);
+  await reloadManager(fixture);
+  await reloadManagerTimeout(fixture);
+  await snapshotReviewCases({
+    ...fixture,
+    gate: h.gate,
+    removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+    stopIsolation: () => stopIsolation(fixture),
+  });
+  await gitAppearsMidTurn(desk);
+  await stoppedTurn(desk);
+  await withoutAi(code);
+  await managerCrash(fixture);
+  console.log(
+    "code snapshots: refs, parent chain, unchanged user Git state, clean filters, ignored files, folder scope, merge conflicts, disabled Git hooks, hook deadlines, deletion, Git added mid-thread, standalone code",
+  );
 } finally {
   await h.close();
 }
@@ -480,9 +470,19 @@ async function prunesWhenReopened(address, desk, code) {
   assert.equal(git("rev-parse", branch), branchHead);
 }
 
-async function withoutDataFolder(address) {
+async function withoutDataFolder() {
   // A client that gives no data folder still runs turns: the record for later cleanup is skipped.
-  const desk = await h.connect(address, { local: true, env: { TOKAMAK_APP_DATA_DIR: undefined } });
+  const plugins = join(h.scratch, "without-data-folder-plugins");
+  await cp(h.plugins, plugins, { recursive: true });
+  for (const id of ["chat", "code"]) {
+    const plugin = join(plugins, id);
+    await editBundle(plugin, "delete process.env.TOKAMAK_APP_DATA_DIR;");
+  }
+  // Use the actual Runner against that installed build. A manifest for each
+  // changed local bundle must also be served by the workspace it connects to.
+  const desk = await h.connect(await h.serve("without-data-folder", { pluginsDir: plugins }), {
+    local: true,
+  });
   const { folder, git } = await project("without-data-folder");
   await h.gate(folder, "go");
   const thread = await start(desk, folder);

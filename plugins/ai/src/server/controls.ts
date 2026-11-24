@@ -27,7 +27,6 @@ export function turnControl(
   cancelBefore?: () => void,
 ) {
   let steer: Steer | undefined;
-  let linkedSteer = false;
   let finishing = false;
   let stop: Stop | undefined;
   let stopRequested = false;
@@ -76,9 +75,8 @@ export function turnControl(
 
   const control = {
     sender: { id: auth.user.id, device: auth.device.id },
-    onSteer(handler: Steer, linked = false) {
+    onSteer(handler: Steer) {
       steer = handler;
-      linkedSteer = linked;
       releaseSteers();
     },
     onStop(handler: Stop) {
@@ -96,22 +94,20 @@ export function turnControl(
         if (!deliver) return fail("NoSteerHandler", { turnId });
         await settleSteer(record);
         // Record before delivery so even an immediate reaction follows the
-        // steer. The live Bun path keeps its original behavior on failure.
-        await record(text, linkedSteer ? "pending" : undefined);
+        // steer.
+        await record(text, "pending");
         const result = await Promise.resolve()
           .then(() => deliver(text))
           .then(
             () => ({ error: null }),
             (cause: unknown) => ({ error: errorText(cause) }),
           );
-        if (linkedSteer) {
-          unsettledSteer = { text, delivery: result.error === null ? "delivered" : "failed" };
-          // Delivery is already decided. The next steer or finish can settle
-          // the record if the server still cannot commit it here.
-          await settleSteer(record).catch(() => {});
-          if (result.error === TURN_ENDED || result.error === "Local contract channel ended")
-            return noRunningTurn(turnId);
-        }
+        unsettledSteer = { text, delivery: result.error === null ? "delivered" : "failed" };
+        // Delivery is already decided. The next steer or finish can settle
+        // the record if the server still cannot commit it here.
+        await settleSteer(record).catch(() => {});
+        if (result.error === TURN_ENDED || result.error === "Local contract channel ended")
+          return noRunningTurn(turnId);
         return result;
       });
       steerLine = delivery.catch(() => {});
@@ -152,10 +148,8 @@ export function turnControl(
         return await Promise.race([start(), forcedEnd]);
       } finally {
         await forcing;
-        if (linkedSteer) {
-          finishing = true;
-          await steerLine;
-        }
+        finishing = true;
+        await steerLine;
       }
     },
     async forceStop() {

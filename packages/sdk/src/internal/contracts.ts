@@ -225,7 +225,7 @@ let serverScope: ContractScope | undefined;
 export function serverContracts(host: HostBridge): ContractScope {
   return {
     async list(key) {
-      if (key.place !== "server") throw new Error("Local contracts run in the client worker");
+      if (key.place !== "server") throw new Error("Local contracts run in a plugin process");
       const providers = await callHost(host, "contract.list", {
         name: key.name,
         ...(key.owner && { owner: key.owner }),

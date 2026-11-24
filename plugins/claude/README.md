@@ -23,5 +23,5 @@ To run the live smoke test locally, first build the server if necessary. This us
 
 ```sh
 CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
-env -u CI -u TOKAMAK_PLUGIN_RUNTIME proto run bun -- plugins/claude/tests/turns.mjs target/debug/tokamak-runner --live
+env -u CI proto run bun -- plugins/claude/tests/turns.mjs target/debug/tokamak-runner --live
 ```

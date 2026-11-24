@@ -11,7 +11,7 @@ function alive(pid) {
   return !!stat && !stat.startsWith("Z");
 }
 
-export function overlappingHello(h, run, prompt, parity) {
+export function overlappingHello(h, run, prompt) {
   return async (name, exercise) => {
     const ready = Promise.withResolvers();
     const release = Promise.withResolvers();
@@ -43,12 +43,11 @@ export function overlappingHello(h, run, prompt, parity) {
       outputTokens: 11,
       costUsd: 0.002856,
     });
-    await parity.capture(`${name}-hello`, completed);
     return completed;
   };
 }
 
-export async function resistantTurns({ h, client, hello, overlap, parity, wire }) {
+export async function resistantTurns({ h, client, hello, overlap, wire }) {
   const { ai, chat } = h.api;
   for (const action of ["force", "cancel"]) {
     await overlap(action, async () => {
@@ -98,7 +97,6 @@ export async function resistantTurns({ h, client, hello, overlap, parity, wire }
         while (pids.some(alive) && Date.now() < deadline) await Bun.sleep(20);
         assert.ok(!pids.some(alive), `${action} killed the resistant CLI and its descendants`);
         const [stored] = await client.query(ai.turns.list, { threadId });
-        const [reply] = await client.query(ai.turns.replies, { threadId });
         const message = (await client.query(chat.messages.list, { threadId })).find(
           (m) => m._id === row.replyId,
         );
@@ -106,13 +104,6 @@ export async function resistantTurns({ h, client, hello, overlap, parity, wire }
         assert.equal(stored.state, state);
         assert.equal(message.status, action === "force" ? "cancelled" : "streaming");
         assert.equal(message.parts[0].text, "Hello Tokamak");
-        await parity.capture(action, {
-          row: stored,
-          reply,
-          text: message.parts[0].text,
-          steps: async () => (await client.query(ai.turns.steps, args)).steps,
-          thinking: () => client.query(ai.turns.thinking, args),
-        });
       } finally {
         held?.release();
         controller.abort();

@@ -99,7 +99,7 @@ impl Pool {
         config.limits.validate()?;
         if config.workers == 0 || config.queue_capacity == 0 {
             return Err(Error::InvalidInput(
-                "worker count and queue capacity must be positive".into(),
+                "Transaction thread count and queue capacity must be positive".into(),
             ));
         }
         let (sender, receiver) = mpsc::sync_channel::<Job>(config.queue_capacity);
@@ -132,7 +132,7 @@ impl Pool {
                 .spawn(move || {
                     run_worker(receiver, closing, factory, executor);
                 })
-                .map_err(|e| Error::Engine(format!("cannot start JS worker: {e}")))?;
+                .map_err(|e| Error::Engine(format!("cannot start transaction thread: {e}")))?;
             pool.threads.push(worker);
         }
         Ok(pool)
@@ -203,7 +203,7 @@ fn run_worker<E, F>(
         }))
         .unwrap_or_else(|_| {
             Err(Error::Engine(
-                "JavaScript worker panicked; world discarded".into(),
+                "Transaction thread panicked; JavaScript state discarded".into(),
             ))
         });
         let _ = job.reply.send(result);

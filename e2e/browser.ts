@@ -51,7 +51,7 @@ try {
     "2",
   ]);
   run("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts", "--with-basic-auth"]);
-  // Chat, ai and fake agents. A desktop page (browser/desktop.ts) runs their local parts on the selected runtime.
+  // A desktop page (browser/desktop.ts) runs Chat, AI and the fake agents through the Runner.
   await buildAgentPlugins(directory, (id) => `${env.TOKAMAK_PLUGIN_DIR}/${id}/dist`);
   buildPlugin(resolve("plugins/code"));
   await cp("plugins/code/dist", `${env.TOKAMAK_PLUGIN_DIR}/code/dist`, { recursive: true });

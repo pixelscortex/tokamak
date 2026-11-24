@@ -10,7 +10,6 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
 };
-use tokamak_worker::LocalRuntime;
 use tokio_util::sync::CancellationToken;
 
 struct Config {
@@ -38,15 +37,6 @@ impl Config {
                 Some("--help") => {
                     println!(
                         "tokamak-runner --plugins <directory> --data <path> --token-file <private file> [--listen <127.0.0.1:3000>]"
-                    );
-                    return Ok(None);
-                }
-                Some("--plugin-runtime") => {
-                    println!(
-                        "{}",
-                        tokamak_worker::LocalRuntime::selected()
-                            .map_err(anyhow::Error::msg)?
-                            .name()
                     );
                     return Ok(None);
                 }
@@ -148,9 +138,10 @@ async fn signals(stop: CancellationToken) -> std::io::Result<()> {
     Ok(())
 }
 
-async fn check_local_runtime() -> anyhow::Result<()> {
-    if LocalRuntime::selected().map_err(anyhow::Error::msg)? == LocalRuntime::QuickJs {
-        LocalRuntime::require_local_host(&std::env::current_exe()?)
+async fn check_plugin_host() -> anyhow::Result<()> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        tokamak_worker::require_local_host(&std::env::current_exe()?)
             .await
             .map_err(anyhow::Error::msg)?;
     }
@@ -164,7 +155,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let stop = CancellationToken::new();
     let token = access(&config, stop.clone())?;
-    check_local_runtime().await?;
+    check_plugin_host().await?;
     signals(stop.clone()).await?;
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
     let ws = format!("ws://{}/ws", listener.local_addr()?);

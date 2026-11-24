@@ -4,14 +4,10 @@ const INSTALL_ORDER_FILE: &str = "plugin-install-order.json";
 
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        Self::read_reusing(root, None, false)
+        Self::read_reusing(root, None)
     }
 
-    pub(crate) fn read_reusing(
-        root: &Path,
-        previous: Option<&Self>,
-        quickjs: bool,
-    ) -> Result<Self, Error> {
+    pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
         Self::read_in_directory(
             root,
             previous,
@@ -19,22 +15,16 @@ impl Catalog {
                 .map(|p| p.directory.as_path())
                 .unwrap_or(root.parent().unwrap_or(root)),
             previous.map_or(&[], |p| p.install_order.as_slice()),
-            quickjs,
         )
     }
 
-    pub(crate) fn read_at_startup(
-        root: &Path,
-        directory: Option<&Path>,
-        quickjs: bool,
-    ) -> Result<Self, Error> {
+    pub(crate) fn read_at_startup(root: &Path, directory: Option<&Path>) -> Result<Self, Error> {
         let install_order = read_install_order(directory)?;
         Self::read_in_directory(
             root,
             None,
             directory.unwrap_or(root.parent().unwrap_or(root)),
             &install_order,
-            quickjs,
         )
     }
 
@@ -43,7 +33,6 @@ impl Catalog {
         previous: Option<&Self>,
         directory: &Path,
         install_order: &[String],
-        quickjs: bool,
     ) -> Result<Self, Error> {
         let directories = if let Some(directory) = artifact_directory(root) {
             vec![directory]
@@ -81,7 +70,7 @@ impl Catalog {
 
             let old = previous.and_then(|p| p.plugins.get(&identity.plugin.id));
 
-            let artifact = Artifact::read_reusing(&artifact_dir, old.map(AsRef::as_ref), quickjs)?;
+            let artifact = Artifact::read_reusing(&artifact_dir, old.map(AsRef::as_ref))?;
 
             let id = artifact.manifest.plugin.id.clone();
 

@@ -8,7 +8,6 @@ import { permissionCases } from "./permissions.mjs";
 import { claudeSnapshots } from "./snapshots.mjs";
 import { overlappingHello, resistantTurns } from "./overlap.mjs";
 import { turnWire } from "./turn-wire.mjs";
-import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
 import { agentHarness, build, bunPath, connect } from "../../../e2e/fake-agent/harness.mjs";
@@ -24,7 +23,7 @@ if (!live) await scanReplays("claude");
 const source = fileURLToPath(new URL("../", import.meta.url));
 const h = await agentHarness({ binary, name: "claude-turns" });
 const { ai } = h.api;
-const parity = turnParity(h, "claude");
+
 const wire = turnWire();
 const executable = () => join(h.scratch, "bin", "claude");
 const cleanup = [];
@@ -94,18 +93,17 @@ try {
   passed("reply and resumed session");
   await recover(turns);
   passed("lost session recovery with history");
-  const overlap = live ? (_name, exercise) => exercise() : overlappingHello(h, run, hello, parity);
+  const overlap = live ? (_name, exercise) => exercise() : overlappingHello(h, run, hello);
   await overlap("stop-streaming", () => stopStreaming(run));
   passed("stop while streaming");
   await stopRunningTool(run);
   passed("stop while a command runs");
   await steerTurns(run);
-  await permissionCases({ h, run, turns, overlap, live, parity, caseFolder, passed });
-  if (!live) await resistantTurns({ h, client, hello, overlap, parity, wire });
+  await permissionCases({ h, run, turns, overlap, live, caseFolder, passed });
+  if (!live) await resistantTurns({ h, client, hello, overlap, wire });
   await reports(run);
   if (!live) {
     await claudeSnapshots(h, hello);
-    await parity.verify();
   }
   console.log(
     `Claude ${live ? "live" : "replay"}: discovery, streaming, storage, resume, steer, stop, permission answers and all report kinds`,
@@ -246,7 +244,6 @@ async function resume(turns, run) {
     assert.equal(first.row.sessionId, "ed0f9193-a023-4ab1-a74c-a8bba2877dc3");
   }
 
-  if (!live) await parity.capture("claude-hello", first);
   const resumed = await turns.run(first.folder, recall, { threadId: first.threadId });
   assert.equal(resumed.row.sessionId, first.row.sessionId);
   assert.equal(resumed.text.trim(), "TIDAL");
@@ -257,7 +254,6 @@ async function resume(turns, run) {
       outputTokens: 7,
       costUsd: 0.0103275,
     });
-  if (!live) await parity.capture("claude-resume", resumed);
 }
 
 async function recover(turns) {
@@ -290,7 +286,6 @@ async function stopStreaming(run) {
   else assert.equal(stopped.text, "1\n2\n3\n4");
   const usage = stopped.reply.usage;
   assert.ok(usage && usage.outputTokens < 500, "The interrupted result was saved");
-  if (!live) await parity.capture("stop-streaming", stopped);
 }
 
 async function stopRunningTool(run) {
@@ -330,7 +325,6 @@ async function steerTurns(run) {
     });
   if (!live) {
     assert.equal(steered.text, Array.from({ length: 300 }, (_, i) => i + 1).join("\n") + "STEERED");
-    await parity.capture("claude-steer", steered);
   }
   passed("steer while streaming");
   const correction = "Correction: only say STEERED. Do not use tools.";
@@ -389,9 +383,7 @@ async function reports(run) {
   if (!live) {
     const writes = wire.writes(progress.row._id);
     console.log(`Claude to-do writes: ${writes}`);
-    if (h.selection.runtime === "quickjs") assert.ok(writes === 2 || writes === 3);
-    else assert.equal(writes, 2);
-    await parity.capture("claude-todo", progress);
+    assert.ok(writes === 2 || writes === 3);
   }
   passed("thinking, file edit, tasks, helper and usage reports");
   const plan = await run(
@@ -410,6 +402,5 @@ async function reports(run) {
     },
   );
   assert.match(plan.reply.plan, live ? /say hello/i : /Plan: Say hello/);
-  if (!live) await parity.capture("claude-plan", plan);
   passed("plan permission and report");
 }

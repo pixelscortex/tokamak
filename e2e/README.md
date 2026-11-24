@@ -61,19 +61,15 @@ rejection. The existing server suite still covers persistence and CPU budgets.
 Desktop window automation, OS integration, signing and external agents are outside
 this browser suite.
 
-## Turn parity and startup time
+## Turn replays and startup time
 
-`bash .ci/check.sh rust` runs `claude_turns` and `codex_turns` first on Bun
-and then through the QuickJS Runner. With `TOKAMAK_TURN_PARITY_DIR` set, the
-Bun drivers write the stored replies, reports, session and turn state; the
-QuickJS drivers compare those results after removing times and scratch paths.
-`ai_turns` separately covers the fake agent through the Runner.
+The offline replays run once through the QuickJS Runner. They check the turns
+stored by the real server and database.
 
 After building `tokamak-runner` and its matching `tokamak-plugin-host`, run:
 
 ```sh
 proto run bun -- packages/runner/tests/measure-first-text.mjs target/debug/tokamak-runner
-TOKAMAK_PLUGIN_RUNTIME=bun proto run bun -- packages/runner/tests/measure-first-text.mjs target/debug/tokamak-runner
 ```
 
 Add `--real` with a signed-in Codex CLI to measure actual turns outside CI.

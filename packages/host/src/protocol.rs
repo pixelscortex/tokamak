@@ -59,7 +59,7 @@ impl Output {
     pub fn try_send(&self, line: String) -> Result<bool> {
         ensure!(
             line.len() < WORKER_FRAME_BYTES,
-            "Worker message exceeds 1 MiB limit"
+            "Plugin process message exceeds 1 MiB limit"
         );
         let frame: Value = serde_json::from_str(&line)?;
         let mut state = self.state.lock().expect("protocol state");
@@ -73,7 +73,7 @@ impl Output {
     pub async fn send_wait(&self, line: String) -> Result<()> {
         ensure!(
             line.len() < WORKER_FRAME_BYTES,
-            "Worker message exceeds 1 MiB limit"
+            "Plugin process message exceeds 1 MiB limit"
         );
         let frame: Value = serde_json::from_str(&line)?;
         loop {
@@ -107,12 +107,12 @@ impl Output {
                 let cancellable = frame["cancellable"] == true;
                 ensure!(
                     !state.cancellable_ops.contains_key(&op),
-                    "Duplicate worker operation"
+                    "Duplicate plugin process operation"
                 );
                 if cancellable {
                     ensure!(
                         state.cancellable_ops.len() < WORKER_CAPACITY,
-                        "Worker cancellation capacity exceeded"
+                        "Plugin process cancellation capacity exceeded"
                     );
                 }
                 self.write(state, line)?;
@@ -160,7 +160,7 @@ impl Output {
         let bytes = line.len() + 1;
         self.writer
             .send(line)
-            .context("Worker output queue closed")?;
+            .context("Plugin process output queue closed")?;
         state.queued_bytes += bytes;
         Ok(())
     }
@@ -193,10 +193,14 @@ impl Output {
         match frame["type"].as_str() {
             Some("invoke") => {
                 if state.calls.contains_key(&id) {
-                    bail!("Duplicate worker invocation");
+                    bail!("Duplicate plugin process invocation");
                 }
                 if state.calls.len() >= WORKER_CAPACITY {
-                    self.result(&mut state, id, "Worker invocation capacity exceeded")?;
+                    self.result(
+                        &mut state,
+                        id,
+                        "Plugin process invocation capacity exceeded",
+                    )?;
                     return Ok(false);
                 }
                 state.calls.insert(id, false);
@@ -214,7 +218,7 @@ impl Output {
                     self.drained.notify_waiters();
                 }
             }
-            _ => bail!("Invalid worker message"),
+            _ => bail!("Invalid plugin process message"),
         }
         Ok(true)
     }
@@ -224,7 +228,7 @@ fn id(value: &Value) -> Result<u64> {
     value
         .as_u64()
         .filter(|id| *id < (1 << 53))
-        .context("Invalid worker frame id")
+        .context("Invalid plugin process frame id")
 }
 
 fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
@@ -244,7 +248,7 @@ fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
             *call = true;
         }
         send.blocking_send(frame)
-            .context("Worker input queue closed")?;
+            .context("Plugin process input queue closed")?;
     }
     Ok(())
 }

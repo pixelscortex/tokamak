@@ -185,7 +185,6 @@ const runner = await startRunner({
   binary,
   plugins,
   directory,
-  env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs" },
   onClosedFrame,
 });
 const cleanup = [];
@@ -629,7 +628,7 @@ const simulated = await startRunner({
   binary,
   plugins: simulatedPlugins,
   directory: join(scratch, "impersonation"),
-  env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs", TOKAMAK_PLUGIN_HOST: fakeHost },
+  env: { TOKAMAK_PLUGIN_HOST: fakeHost },
   onClosedFrame,
 });
 try {

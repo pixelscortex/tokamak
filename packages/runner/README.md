@@ -29,7 +29,7 @@ on a two-second timer once the last window and call release them, with at least
 two seconds of idle time. At capacity it evicts the least recently used
 unleased process; the limit is reported only when all slots are leased.
 Closing a window cancels its calls; an unchanged process stays up across
-reconnects. With the Bun fallback, each worker socket still owns its process.
+reconnects.
 
 A window is a trusted Runner client. It checks `local.contract.call` against
 the signed-in workspace's catalog: who owns the contract, whether the
@@ -62,7 +62,7 @@ works even while provider JavaScript is stuck. If the JavaScript watchdog
 later resets the stuck realm, other invocations in that same host also fail;
 other plugin hosts keep running.
 On macOS, the Runner serializes creation of the control socket pair with
-child launches, including worker guardians and device name lookup, until
+child launches, including plugin process guardians and device name lookup, until
 both descriptors have close-on-exec set. Linux sets it atomically. Only the
 intended host receives its end, and it restores close-on-exec before it can
 start any programs.
@@ -77,7 +77,7 @@ with the host's name.
 Install the Runner on desktops, real machines and sandboxes. For Docker or a
 cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).
 Keep the Runner's full plugin host separate from the Server's actions-only host.
-On macOS and Linux, a QuickJS Runner checks for `local` in the output of
+On macOS and Linux, the Runner checks for `local` in the output of
 `tokamak-plugin-host --capabilities` before it starts listening.
 
 To run a workspace from a terminal:
@@ -94,9 +94,8 @@ The Runner prints its WebSocket address. It defaults to `127.0.0.1:3000`;
 use `--listen 127.0.0.1:0` for a free port. Non-loopback addresses are refused.
 For HTTP, send the token as a Bearer credential. Browser WebSocket clients
 offer `tokamak` and `tokamak.bearer.<token>` as subprotocols, both for the
-workspace at `/ws` and for the worker socket at `/local-worker`. Ctrl+C stops
-the Runner. See [Plugin host](../host/README.md) for runtime selection, including
-the Bun fallback and Windows.
+workspace at `/ws` and for the plugin process socket at `/local-worker`. Ctrl+C stops
+the Runner. See [Plugin host](../host/README.md) for runtime details and Windows support.
 
 The desktop starts the Runner on a free loopback port with a new 256-bit secret
 on a private stdin pipe. It reads readiness from stdout. The secret lives in

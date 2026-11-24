@@ -27,10 +27,7 @@ windows-sys = { version = "0.61.2", optional = true, features = [
   "Win32_System_Threading",
 ] }
 
+
 [dev-dependencies]
 tempfile = "3.27.0"
 tokio = { version = "1.54.1", features = ["io-util", "time"] }
-
-[[test]]
-name = "launch_local"
-required-features = ["local-runtime"]

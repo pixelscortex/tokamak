@@ -1,4 +1,4 @@
-import { installBasicAuth, selectedRuntime, signInMember } from "../../../e2e/fake-agent/harness.mjs";
+import { installBasicAuth, signInMember } from "../../../e2e/fake-agent/harness.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -760,7 +760,7 @@ async function verifySignIn(probe) {
       assert.equal(response.status, 401);
       assert.equal((await response.json()).kind, kind);
     }
-    if (selectedRuntime(binary).runtime === "quickjs") {
+    {
       const signIn = (passcode) =>
         request(address, "/auth/sign-in", {
           method: "passcode",
