@@ -1,0 +1,25 @@
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_bead5d35bc54c0::t_31acc3bef19166 196
+plugins/ai/README.md
+  s_bead5d35bc54c0::t_42ccd49b574c7b 204-205
+plugins/ai/src/client/lib/turn-controls.ts
+  s_bead5d35bc54c0::t_0f9fc55bfa95ab 63-65
+plugins/ai/src/server/run.ts
+  s_bead5d35bc54c0::t_b853d9cd286332 169,208,229-231,237-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "abe5805e7a8797e879d15898802e00180a847acc",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
