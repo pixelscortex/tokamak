@@ -1,0 +1,19 @@
+plugins/ai/src/client/lib/release.ts
+  s_21ab07129be3bc::t_6035ed1a293f3f 5,18-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7f9155f19994f7307d79b60628e0cc132ca953f5",
+  "prompts": {},
+  "sessions": {
+    "s_21ab07129be3bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20b04-49ae-7082-a2b1-f86a99e18cd6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
