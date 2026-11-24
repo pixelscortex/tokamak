@@ -1,4 +1,5 @@
 import { fail, type AuthContext } from "@tokamak/sdk";
+import { TURN_ENDED } from "@tokamak/sdk/agent-turn";
 import type { Run } from "../contracts";
 import { errorText, isSendersDevice } from "../shared/turn-shared";
 
@@ -18,6 +19,8 @@ export function controlFor(turnId: string, auth: AuthContext) {
 /** Bridges separate local calls into the provider's running invocation, on its original device. */
 export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: () => Promise<void>) {
   let steer: Steer | undefined;
+  let linkedSteer = false;
+  let finishing = false;
   let stop: Stop | undefined;
   let stopRequested = false;
   let stopReady = false;
@@ -49,8 +52,9 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
 
   const control = {
     sender: { id: auth.user.id, device: auth.device.id },
-    onSteer(handler: Steer) {
+    onSteer(handler: Steer, linked = false) {
       steer = handler;
+      linkedSteer = linked;
       releaseSteers();
     },
     onStop(handler: Stop) {
@@ -63,17 +67,23 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
           registrationTimer ??= setTimeout(releaseSteers, STEER_REGISTRATION_MS);
           await earlySteers;
         }
-        if (closed || stopRequested) return noRunningTurn(turnId);
+        if (closed || finishing || stopRequested) return noRunningTurn(turnId);
         const deliver = steer;
         if (!deliver) return fail("NoSteerHandler", { turnId });
-        await record();
+        if (!linkedSteer) await record();
         // Only clear the window's draft if its text was recorded, even if the provider write fails.
-        return await Promise.resolve()
+        const result = await Promise.resolve()
           .then(() => deliver(text))
           .then(
             () => ({ error: null }),
             (cause: unknown) => ({ error: errorText(cause) }),
           );
+        if (linkedSteer) {
+          if (result.error === TURN_ENDED || result.error === "Local contract channel ended")
+            return noRunningTurn(turnId);
+          await record();
+        }
+        return result;
       });
       steerLine = delivery.catch(() => {});
       return delivery;
@@ -98,6 +108,10 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
         return await Promise.race([start(), forcedEnd]);
       } finally {
         await forcing;
+        if (linkedSteer) {
+          finishing = true;
+          await steerLine;
+        }
       }
     },
     async forceStop() {

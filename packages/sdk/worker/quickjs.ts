@@ -28,15 +28,23 @@ function errorMessage(error: unknown) {
 }
 
 export async function initialize(
-  send: (json: string) => void,
+  trySend: (json: string) => boolean,
+  sendWaiting: (json: string) => Promise<void>,
   nextOp: () => number,
   bundle: string,
   spawn: NativeSpawn,
 ): Promise<(frame: string) => void> {
-  const emit = (message: object) => send(JSON.stringify(message));
+  const emit = (message: object) => {
+    if (!trySend(JSON.stringify(message))) throw new Error("Worker output queue exceeds 4 MiB limit");
+  };
+  const emitWaiting = (message: object) => {
+    const json = JSON.stringify(message);
+    // Preserve immediate operation delivery unless the writer is actually full.
+    if (!trySend(json)) return sendWaiting(json);
+  };
   const logger = console;
   installConsole(logger, emit);
-  const channels = dispatchChannels(emit, nextOp, errorMessage);
+  const channels = dispatchChannels(emitWaiting, nextOp, errorMessage);
 
   const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
@@ -52,6 +60,7 @@ export async function initialize(
     {
       contract: dataContracts(root),
       attachChannel: channels.attach,
+      sendWaiting: emitWaiting,
       abort(controller) {
         try {
           controller.abort();

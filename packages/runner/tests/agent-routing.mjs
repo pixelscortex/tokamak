@@ -5,6 +5,7 @@ import { connect, within, workspace } from "../../../e2e/fake-agent/harness.mjs"
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { startRunner } from "../../../e2e/fake-agent/start-runner.ts";
 import { createApi } from "../../sdk/src/index.ts";
+import { bunSkew, channelFixtures, checkSkew, exerciseChannels } from "./support/agent-channel.mjs";
 import { prepareReplayAgents } from "./support/agents.mjs";
 import { editBundle, inspectHosts, reload, until } from "./support/routing.mjs";
 import { cleanScratch } from "./support/scratch.mjs";
@@ -31,6 +32,7 @@ function processInfo(pid) {
 
 async function exercise() {
   const { plugins, env } = await prepareReplayAgents(scratch);
+  await channelFixtures(plugins, scratch);
   const directory = join(scratch, "runner");
   const claude = join(plugins, "claude");
   const codex = join(plugins, "codex");
@@ -68,6 +70,7 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
     const pids = () => Object.fromEntries(hosts().map(({ id, pid }) => [id, pid]));
     const window = await open();
     const both = await row(window);
+    checkSkew(both);
     for (const id of ["claude", "codex"]) {
       const info = agent(both, id);
       assert.ok(info.installed && info.signedIn && info.models.length > 0, JSON.stringify(info));
@@ -199,13 +202,32 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
     );
 
     await until("a subsequent Claude can start", async () => agent(await row(window), "claude").signedIn);
+    let lostQuestion;
+    await claudeTurns.run(await folder("provider-crash", "claude-permit"), permit, {
+      access: "ask",
+      state: "failed",
+      async during(control) {
+        lostQuestion = await control.question();
+        process.kill(pids().claude, "SIGKILL");
+      },
+    });
+    const lost = { turnId: lostQuestion.turnId, questionId: lostQuestion.id };
+    assert.equal(await window.local(ai.run.pending, lost), false);
+    assert.equal((await window.local(ai.run.answer, { ...lost, answer: "approve" })).kind, "Expired");
+    assert.ok(!(await window.query(ai.turns.questions, {})).some(({ id }) => id === lost.questionId));
+    await until(
+      "Claude restarts after losing the question",
+      async () => agent(await row(window), "claude").signedIn,
+    );
+
     const questionFolder = await folder("claude-permit");
-    let expired;
+    let expired, interruptedThread;
     await assert.rejects(
       claudeTurns.run(questionFolder, permit, {
         access: "ask",
         async during(control) {
           const question = await control.question();
+          interruptedThread = question.threadId;
           expired = { turnId: question.turnId, questionId: question.id };
           const cliPid = hosts().find(({ id }) => id === "claude").pid;
           const children = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,command="])
@@ -231,6 +253,28 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       "Killing ai expired its open question and reaped its Claude program; the Claude host survived.",
     );
 
+    await until(
+      "the restarted window releases the orphaned turn",
+      async () => {
+        const running = (await otherWindow.local(ai.working.list, {})).map(({ turnId }) => turnId);
+        await otherWindow.mutation(ai.liveness.release, { running });
+        const turn = (await otherWindow.query(ai.turns.list, { threadId: interruptedThread })).find(
+          ({ _id }) => _id === expired.turnId,
+        );
+        return turn.state === "interrupted" && !turn.question;
+      },
+      20_000,
+    );
+    const recoveryFolder = await folder("recovered");
+    await writeFile(join(recoveryFolder, "go"), "");
+    const recovered = await claudeTurns.run(recoveryFolder, "@hold", {
+      threadId: interruptedThread,
+    });
+    assert.equal(recovered.text, "held-finished");
+    console.log(
+      "After ai restarted, window recovery interrupted the stale turn and the same thread ran again.",
+    );
+
     // Routed discovery still skips a failed provider without stalling working ones.
     assert.deepEqual(await row(otherWindow), both);
     const crashed = pids().claude;
@@ -248,6 +292,8 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       "Claude recovers from its backoff",
       async () => agent(await row(otherWindow), "claude").signedIn,
     );
+    await exerciseChannels({ client: window, open, ai, chat, scratch, folder, processInfo, claudeTurns });
+    await bunSkew(scratch, plugins, env, ai);
   } finally {
     for (const close of cleanup.reverse()) await close();
     assert.equal(await runner.stop(), 0);

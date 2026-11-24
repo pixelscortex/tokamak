@@ -26,10 +26,11 @@ function linkedTurn(turnId: string) {
   const result = new Promise<JsonValue>((resolve) => (finish = resolve));
   const send = vi.fn(async (_method: string, _input: JsonValue) => null);
   const close = vi.fn(async () => {});
+  const stopPrograms = vi.fn(async () => {});
   const provider = {
     [channel](_method: string, _args: unknown, onMessage: typeof receive) {
       receive = onMessage;
-      return { result, send, close };
+      return { result, send, close, stopPrograms };
     },
   } as unknown as Agent;
   const text = vi.fn();
@@ -55,6 +56,7 @@ function linkedTurn(turnId: string) {
   return {
     send,
     close,
+    stopPrograms,
     running,
     text,
     ask,
@@ -87,6 +89,46 @@ test("an ended turn cannot report or ask in the next turn on its thread", async 
     expect(previous.text).not.toHaveBeenCalled();
   } finally {
     await current.end();
+  }
+});
+
+test("an unknown report kind is rejected", async () => {
+  const turn = linkedTurn("unknown-report");
+  try {
+    await expect(turn.message("report", { events: [{ kind: "futureEvent" }] })).rejects.toThrow(
+      "Unknown agent turn report event: futureEvent",
+    );
+  } finally {
+    await turn.end();
+  }
+});
+
+test("an in-flight report is accepted until Force stop is acknowledged", async () => {
+  const turn = linkedTurn("force-report");
+  let release!: (value: null) => void;
+  turn.send.mockReturnValueOnce(new Promise<null>((resolve) => (release = resolve)));
+  const forcing = turn.control.forceStop();
+  try {
+    await Promise.resolve();
+    await turn.message("report", { events: [{ kind: "text", value: "before the kill" }] });
+    expect(turn.text.mock.calls).toEqual([["before the kill"]]);
+  } finally {
+    release(null);
+    await forcing;
+    await turn.end();
+  }
+});
+
+test("a linked steer that crosses the turn end is not recorded", async () => {
+  const turn = linkedTurn("late-steer");
+  try {
+    const record = vi.fn(async () => null);
+    turn.send.mockRejectedValueOnce(new Error("This turn has ended"));
+    await turn.message("report", { events: [{ kind: "steerReady" }] });
+    await expect(turn.control.steer("too late", record)).resolves.toMatchObject({ kind: "NotRunning" });
+    expect(record).not.toHaveBeenCalled();
+  } finally {
+    await turn.end();
   }
 });
 

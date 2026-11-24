@@ -19,6 +19,7 @@ use tempfile::TempPath;
 use tokamak_worker::{Process, RestartBackoff, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
     io::BufReader,
+    net::UnixDatagram,
     sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore, mpsc, oneshot},
     time::Instant,
 };
@@ -63,8 +64,14 @@ impl Build {
 
 const IDLE_GRACE: Duration = Duration::from_secs(2);
 const RESTARTING: &str = "restarting after a crash; try again later";
-// Each linked invocation can hold one ask and one report open at once.
-const LINKED_CAPACITY: usize = WORKER_CAPACITY / 4;
+// The manager needs a second half for short calls (controls and discovery).
+const TURN_CAPACITY: usize = WORKER_CAPACITY / 2;
+// Each provider also needs capacity to serve other kinds of local calls.
+const PROVIDER_TURN_CAPACITY: usize = WORKER_CAPACITY / 4;
+
+fn too_many_turns(limit: usize) -> String {
+    format!("Too many turns are running on this machine ({limit}). Wait for one to finish.")
+}
 
 type Slots = HashMap<Build, Entry>;
 
@@ -76,6 +83,7 @@ pub(super) struct Pool {
     stopping: CancellationToken,
     tasks: TaskTracker,
     processes: Arc<Semaphore>,
+    linked: Arc<Semaphore>,
     turns: Arc<Mutex<session::Turns>>,
 }
 
@@ -262,6 +270,7 @@ impl Pool {
             stopping,
             tasks: TaskTracker::new(),
             processes: Arc::new(Semaphore::new(WORKER_CAPACITY)),
+            linked: Arc::new(Semaphore::new(TURN_CAPACITY)),
             turns: Arc::default(),
         };
         pool.sweep_idle();
@@ -496,6 +505,7 @@ struct Host {
     providers: HashMap<String, Result<TempPath, String>>,
     loaded: Mutex<HashSet<String>>,
     writes: mpsc::Sender<Vec<u8>>,
+    native: AsyncMutex<UnixDatagram>,
     stopping: CancellationToken,
     ended: CancellationToken,
     reason: OnceLock<String>,
@@ -514,7 +524,8 @@ impl Host {
     ) -> Result<Arc<Self>, String> {
         let id = &build.artifact.id;
         let cwd = pool.plugins.parent().unwrap_or(&pool.plugins);
-        let mut process = Process::launch_plugin(id, &code, cwd, &pool.env)?;
+        let (mut process, native) = Process::launch_plugin(id, &code, cwd, &pool.env)?;
+        let native = UnixDatagram::from_std(native).map_err(|error| error.to_string())?;
         let (input, output, stderr) = process.pipes()?;
         let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
         let host = Arc::new(Self {
@@ -524,6 +535,7 @@ impl Host {
             loaded: Mutex::default(),
             calls: Mutex::default(),
             writes,
+            native: AsyncMutex::new(native),
             stopping: pool.stopping.child_token(),
             ended: CancellationToken::new(),
             reason: OnceLock::new(),
@@ -615,8 +627,9 @@ impl Host {
         Err(self.label(&format!("cannot claim plugin identity {claimed}")))
     }
 
-    fn begin(self: &Arc<Self>, mut frame: Value) -> Result<Call, String> {
+    async fn begin(self: &Arc<Self>, mut frame: Value) -> Result<Call, String> {
         let (send, receive) = mpsc::channel(WORKER_CAPACITY + 1);
+        let permit = self.writes.reserve().await.map_err(|_| self.error())?;
         let mut calls = lock(&self.calls);
         if self.stopping.is_cancelled() {
             return Err(self.error());
@@ -625,17 +638,15 @@ impl Host {
             return Err(self.label("invocation capacity exceeded"));
         }
         let linked = frame["contract"]["channel"] == true;
-        if linked && calls.linked.len() >= LINKED_CAPACITY {
-            return Err(self.label("active local contract channel capacity exceeded"));
+        if linked && calls.linked.len() >= PROVIDER_TURN_CAPACITY {
+            return Err(too_many_turns(PROVIDER_TURN_CAPACITY));
         }
         calls.next += 1;
         let id = calls.next;
         frame["id"] = json!(id);
+        let bytes = self.encode(&frame)?;
         calls.active.insert(id, send);
-        if let Err(error) = self.send(&frame) {
-            calls.active.remove(&id);
-            return Err(error);
-        }
+        permit.send(bytes);
         if linked {
             calls.linked.insert(id);
         }
@@ -685,8 +696,8 @@ impl Host {
         Ok(())
     }
 
-    // Peer requests run inside an admitted call, with a separate bounded
-    // queue so a host full of turns can still receive reports and controls.
+    // Peer requests run inside an admitted call. The response table is bounded
+    // separately; waiting for the shared pipe to have room never loses a report.
     async fn peer(&self, call: u64, channel: Option<u64>, payload: Value) -> Result<Value, String> {
         let (send, receive) = oneshot::channel();
         let id = {
@@ -703,22 +714,46 @@ impl Host {
             id
         };
         let _pending = PeerRequest { host: self, id };
-        self.send(&json!({"type":"peer","id":id,"call":call,"channel":channel,"payload":payload}))?;
+        self.send(&json!({"type":"peer","id":id,"call":call,"channel":channel,"payload":payload}))
+            .await?;
         tokio::select! {
             frame = receive => frame.map_err(|_| self.label("local contract channel ended")),
             () = self.ended.cancelled() => Err(self.error()),
         }
     }
 
-    fn send(&self, frame: &Value) -> Result<(), String> {
+    fn encode(&self, frame: &Value) -> Result<Vec<u8>, String> {
         let mut bytes = serde_json::to_vec(frame).map_err(|e| e.to_string())?;
         if bytes.len() >= WORKER_FRAME_BYTES {
             return Err(self.label("message exceeds 1 MiB"));
         }
         bytes.push(b'\n');
+        Ok(bytes)
+    }
+
+    async fn send(&self, frame: &Value) -> Result<(), String> {
         self.writes
-            .try_send(bytes)
-            .map_err(|_| self.label("input queue full or closed"))
+            .send(self.encode(frame)?)
+            .await
+            .map_err(|_| self.error())
+    }
+
+    async fn stop_programs(&self, call: u64) -> Result<(), String> {
+        let request = async {
+            let socket = self.native.lock().await;
+            let id = call.to_le_bytes();
+            socket.send(&id).await?;
+            let mut reply = [0; 8];
+            // A cancelled request can leave an acknowledgement in the socket.
+            while socket.recv(&mut reply).await? != reply.len() || reply != id {}
+            Ok::<(), std::io::Error>(())
+        };
+        tokio::select! {
+            () = self.ended.cancelled() => Err(self.error()),
+            result = tokio::time::timeout(Duration::from_secs(1), request) => result
+                .map_err(|_| self.label("program stop did not respond"))?
+                .map_err(|error| self.label(&format!("program stop failed: {error}"))),
+        }
     }
 
     fn stop(&self, reason: String) {
@@ -776,19 +811,15 @@ impl Drop for Call {
         if self.finished {
             return;
         }
-        let active = {
-            let mut calls = lock(&self.host.calls);
-            calls.linked.remove(&self.id);
-            calls.active.remove(&self.id).is_some()
-        };
-        if active
-            && self
-                .host
-                .send(&json!({"type":"cancel", "id":self.id}))
-                .is_err()
-        {
-            self.host
-                .stop("could not deliver cancellation to plugin host".into());
+        if lock(&self.host.calls).active.contains_key(&self.id) {
+            let host = self.host.clone();
+            let id = self.id;
+            tokio::spawn(async move {
+                let _ = host.send(&json!({"type":"cancel", "id":id})).await;
+                let mut calls = lock(&host.calls);
+                calls.linked.remove(&id);
+                calls.active.remove(&id);
+            });
         }
     }
 }

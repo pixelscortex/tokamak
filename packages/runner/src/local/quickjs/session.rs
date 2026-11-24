@@ -1,4 +1,4 @@
-use super::{Build, Host, Lease, Leases, Pool, frame_id, lock};
+use super::{Build, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
 use futures_util::{StreamExt, future::try_join_all, stream::FuturesUnordered};
@@ -12,7 +12,7 @@ use std::{
 };
 use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
-    sync::{mpsc, oneshot, watch},
+    sync::{Semaphore, mpsc, oneshot, watch},
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
@@ -121,6 +121,7 @@ struct Pending {
 struct Bridge {
     output: mpsc::Sender<Value>,
     next: AtomicU64,
+    slots: Semaphore,
     pending: Mutex<HashMap<u64, Pending>>,
     leases: Leases,
 }
@@ -138,13 +139,12 @@ impl Bridge {
             _ => None,
         };
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
-        {
-            let mut pending = lock(&self.pending);
-            if pending.len() == WORKER_CAPACITY {
-                return Err("Local worker operation capacity exceeded".into());
-            }
-            pending.insert(id, Pending { target, answer });
-        }
+        let _slot = self
+            .slots
+            .acquire()
+            .await
+            .map_err(|_| "Local worker connection closed")?;
+        lock(&self.pending).insert(id, Pending { target, answer });
         let _operation = Operation { bridge: self, id };
         frame["id"] = json!(id);
         frame["call"] = json!(root);
@@ -204,6 +204,7 @@ pub(in crate::local) async fn connection(
     let bridge = Arc::new(Bridge {
         output,
         next: AtomicU64::new(0),
+        slots: Semaphore::new(WORKER_CAPACITY),
         pending: Mutex::default(),
         leases: Leases::new(pool, workspace),
     });
@@ -421,7 +422,7 @@ async fn run(
     ancestors: &[String],
     invocation: Invocation<'_>,
 ) -> Result<Value, String> {
-    let mut call = match host.begin(frame) {
+    let mut call = match host.begin(frame).await {
         Ok(call) => call,
         Err(error) => return Err(host.call_error(error).await),
     };
@@ -464,7 +465,7 @@ async fn run(
                 let (channels, invocation, here, route) = (&channels, &invocation, &here, &route);
                 operations.push(async move {
                     let response = match frame["name"].as_str() {
-                        Some("local.contract.peer" | "local.contract.close") => {
+                        Some("local.contract.peer" | "local.contract.close" | "local.contract.stopPrograms") => {
                             peer_operation(channels, invocation, frame).await
                         }
                         _ => route.operation(here, frame, invocation, opening).await,
@@ -479,7 +480,7 @@ async fn run(
                 };
                 reply["id"] = json!(id);
                 reply["type"] = json!("opResult");
-                if let Err(error) = host.send(&reply) {
+                if let Err(error) = host.send(&reply).await {
                     return Err(host.call_error(error).await);
                 }
             }
@@ -495,12 +496,15 @@ async fn peer_operation(
     if !frame["plugin"].is_null() {
         return Err("A live provider cannot use the host's local contract channel".into());
     }
-    let close = frame["name"] == "local.contract.close";
+    let method = frame["name"].as_str();
+    let close = method == Some("local.contract.close");
+    let stop = method == Some("local.contract.stopPrograms");
     let mut payload = frame["payload"].take();
     let fields = payload
         .as_object_mut()
         .ok_or("Invalid local contract channel request")?;
     if !close
+        && !stop
         && (!fields.get("method").is_some_and(Value::is_string) || !fields.contains_key("args"))
     {
         return Err("Invalid local contract channel message".into());
@@ -508,6 +512,7 @@ async fn peer_operation(
     let remote = fields.remove("channel").unwrap_or_default();
     if remote.is_null()
         && !close
+        && !stop
         && let Invocation::Linked { origin, .. } = invocation
     {
         return origin.request(payload).await;
@@ -528,7 +533,12 @@ async fn peer_operation(
             let peer = provider.wait_for(Option::is_some).await
                 .map_err(|_| "Local contract channel ended")?.clone()
                 .ok_or("Local contract channel ended")?;
-            peer.request(payload).await
+            if stop {
+                peer.host.stop_programs(peer.call).await?;
+                Ok(json!({"value":null}))
+            } else {
+                peer.request(payload).await
+            }
         } => response,
     }
 }
@@ -616,6 +626,10 @@ impl CallRoute<'_> {
         ancestors.push(artifact.id.clone());
         let other = pool.host(&lease.build, &lease.slot, true).await?;
         let response = if let Some(open) = &opening {
+            let _slot = pool
+                .linked
+                .try_acquire()
+                .map_err(|_| too_many_turns(TURN_CAPACITY))?;
             let origin = Peer {
                 channel: Some(open.id),
                 ..here.clone()

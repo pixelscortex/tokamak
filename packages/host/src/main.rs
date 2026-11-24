@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "local-runtime")]
         Some(mode) if mode == "--local-plugin" => local_plugin::run(args).await,
         #[cfg(feature = "local-runtime")]
-        Some(code) => protocol::run(std::path::Path::new(code)).await,
+        Some(code) => protocol::run(std::path::Path::new(code), None).await,
         #[cfg(feature = "local-runtime")]
         None => anyhow::bail!("Expected a local function bundle path"),
         #[cfg(not(feature = "local-runtime"))]
@@ -73,6 +73,8 @@ async fn main() -> anyhow::Result<()> {
     any(target_os = "linux", target_os = "macos")
 ))]
 mod local_plugin {
+    use std::os::{fd::FromRawFd, unix::net::UnixDatagram};
+
     pub(super) async fn run(
         mut args: impl Iterator<Item = std::ffi::OsString>,
     ) -> anyhow::Result<()> {
@@ -82,7 +84,20 @@ mod local_plugin {
         let bundle = args
             .next()
             .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
-        super::protocol::run(std::path::Path::new(&bundle)).await
+        let native = args
+            .next()
+            .map(|arg| -> anyhow::Result<UnixDatagram> {
+                let fd = arg.to_string_lossy().parse::<i32>()?;
+                anyhow::ensure!(fd >= 3, "Invalid local plugin control descriptor");
+                // SAFETY: the Runner passed ownership of an inherited datagram socket.
+                // Close it on exec so plugin programs cannot use this capability.
+                if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
+                    return Err(std::io::Error::last_os_error().into());
+                }
+                Ok(unsafe { UnixDatagram::from_raw_fd(fd) })
+            })
+            .transpose()?;
+        super::protocol::run(std::path::Path::new(&bundle), native).await
     }
 }
 

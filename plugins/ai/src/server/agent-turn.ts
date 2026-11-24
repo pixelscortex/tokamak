@@ -1,5 +1,5 @@
 import type { LocalContext } from "@tokamak/sdk";
-import { openLocalChannel } from "@tokamak/sdk/agent-turn";
+import { AGENT_TURN_PROTOCOL, openLocalChannel } from "@tokamak/sdk/agent-turn";
 import type {
   AgentTurnAsk,
   AgentTurnReport,
@@ -16,6 +16,7 @@ type Reports = Pick<
   Run,
   "text" | "thinking" | "plan" | "tasks" | "tool" | "helper" | "usage" | "sessionChanged"
 >;
+const FORCE_DRAIN_MS = 750;
 
 function channelEnded(error: unknown): boolean {
   return error instanceof Error && error.message === "Local contract channel ended";
@@ -60,24 +61,29 @@ export function startAgent(
   const { threadId, turnId } = request;
   const address: TurnAddress = { threadId, turnId };
   let accepting = true;
-  const channel = openLocalChannel(provider, "start", request, async (method, value) => {
-    const target = value as unknown as TurnAddress;
-    if (!accepting || target?.threadId !== threadId || target.turnId !== turnId)
-      return method === "ask" ? "cancel" : null;
-    switch (method) {
-      case "ask":
-        return questions.ask((value as unknown as AgentTurnAsk).question);
-      case "report":
-        applyReports((value as unknown as AgentTurnReport).events, reports, () =>
-          control.onSteer(async (text) => {
-            await channel!.send("steer", { ...address, text });
-          }),
-        );
-        return null;
-      default:
-        throw new Error(`Unknown agent turn message: ${method}`);
-    }
-  });
+  const channel = openLocalChannel(
+    provider,
+    "start",
+    { ...request, version: AGENT_TURN_PROTOCOL },
+    async (method, value) => {
+      const target = value as unknown as TurnAddress;
+      if (!accepting || target?.threadId !== threadId || target.turnId !== turnId)
+        return method === "ask" ? "cancel" : null;
+      switch (method) {
+        case "ask":
+          return questions.ask((value as unknown as AgentTurnAsk).question);
+        case "report":
+          applyReports((value as unknown as AgentTurnReport).events, reports, () =>
+            control.onSteer(async (text) => {
+              await channel!.send("steer", { ...address, text });
+            }, true),
+          );
+          return null;
+        default:
+          throw new Error(`Unknown agent turn message: ${method}`);
+      }
+    },
+  );
   if (!channel) return undefined;
 
   control.onStop(async () => {
@@ -87,7 +93,7 @@ export function startAgent(
   let ended = false;
   const result = channel.result
     .then(
-      (value) => value as unknown as TurnResult,
+      (value) => (forcing ? undefined : (value as unknown as TurnResult)),
       (error: unknown) => {
         if (!forcing) throw error;
         return undefined;
@@ -102,22 +108,27 @@ export function startAgent(
     () => result,
     async () => {
       forcing = true;
-      accepting = false;
       await questions.cancel();
       if (ended) return;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        await channel.send("forceStop", { ...address });
+        // A responsive provider seals and flushes its reports before the native kill.
+        await Promise.race([
+          channel.send("forceStop", { ...address }).catch(() => {}),
+          new Promise<void>((resolve) => {
+            timeout = setTimeout(resolve, FORCE_DRAIN_MS);
+          }),
+        ]);
+        if (!ended) await channel.stopPrograms();
       } catch (error) {
-        // The turn may have settled naturally just before it accepted Force stop.
-        if (channelEnded(error)) {
-          await result;
-          return;
-        }
-        if (!ended) throw error;
+        if (!ended && !channelEnded(error)) throw error;
+      } finally {
+        clearTimeout(timeout);
+        accepting = false;
+        await channel.close().catch((error: unknown) => {
+          if (!channelEnded(error)) throw error;
+        });
       }
-      await channel.close().catch((error: unknown) => {
-        if (!channelEnded(error)) throw error;
-      });
     },
   );
 }
@@ -152,6 +163,8 @@ function applyReports(events: AgentTurnReport["events"], reports: Reports, steer
       case "steerReady":
         steerReady();
         break;
+      default:
+        throw new Error(`Unknown agent turn report event: ${(event as { kind?: unknown })?.kind}`);
     }
   }
 }

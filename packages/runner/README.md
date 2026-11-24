@@ -38,10 +38,25 @@ An agent turn opens one linked plain-data call from ai to its agent. It pins
 the two invocations that already know the window's identity. Reports and
 questions return to that exact ai invocation; steer, stop and force stop
 reach the agent invocation that owns the CLI, even while its build drains.
-Each host admits at most 32 linked starts in either role, within its normal
-128 calls. Messages use a bounded queue without admitting new invocations.
-When ai's host exits, the Runner drops and cancels the linked starts. When an
-agent host exits, only starts on that host fail, with the host's name.
+One Runner admits up to 64 concurrent turns, with at most 32 on any one
+agent host. Of the 128 invocation slots on a host, this leaves at least 64
+on the manager and 96 on an agent for short calls. Peer messages don't use
+invocation slots. Reports and questions wait for space in the bounded pipes
+and operation queues; each turn can have one report and one question in
+flight. If a turn can't start because a limit is reached, the thread asks
+the user to wait for a turn to finish.
+
+On Force stop, the agent SDK seals and drains its reports. The manager
+allows up to 750 ms for the drain, then asks the host's Rust control thread
+to kill only that invocation's program groups and closes the channel. This
+works even while provider JavaScript is stuck. If the JavaScript watchdog
+later resets the stuck realm, other invocations in that same host also fail;
+other plugin hosts keep running.
+
+When ai's host exits, the Runner drops and cancels the linked starts and any
+open questions. Window recovery and the server liveness sweep release the
+interrupted turns. When an agent host exits, only starts on that host fail,
+with the host's name.
 
 Install the Runner on desktops, real machines and sandboxes. For Docker or a
 cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).

@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
 import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
+import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
 import { agent, type Run, type Usage } from "../contracts";
 import { errorText } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
@@ -74,6 +75,7 @@ export const turn = local({
     const begun = await ctx.runMutation(api.turns.begin, {
       threadId,
       messageId,
+      ...(hasLocalChannel(provider) && { folder }),
       agent: { id: provider.id, name: provider.name },
       ...settings,
       ...(model !== undefined && { modelName: model.name }),

@@ -127,14 +127,22 @@ impl Process {
         code: &Path,
         cwd: &Path,
         env: &BTreeMap<String, String>,
-    ) -> Result<Self, String> {
+    ) -> Result<(Self, std::os::unix::net::UnixDatagram), String> {
+        use std::os::{fd::AsRawFd, unix::net::UnixDatagram};
+
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         let host = LocalRuntime::host_path(&executable)?;
+        let (control, native) = UnixDatagram::pair().map_err(|error| error.to_string())?;
+        control
+            .set_nonblocking(true)
+            .map_err(|error| error.to_string())?;
+        let fd = native.as_raw_fd();
         let mut command = tokio::process::Command::new(host);
         let (lane_key, lane_value) = Lane::Local.env();
         command
             .args(["--local-plugin", plugin])
             .arg(code)
+            .arg(fd.to_string())
             .env_clear()
             .envs(env)
             .env(lane_key, lane_value)
@@ -142,8 +150,18 @@ impl Process {
         if let Some(heap) = std::env::var_os("TOKAMAK_PLUGIN_HOST_HEAP_MIB") {
             command.env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", heap);
         }
+        // SAFETY: native remains open through spawn. Only this child inherits it;
+        // the pre-exec callback performs an async-signal-safe fcntl.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::fcntl(fd, libc::F_SETFD, 0) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
         let (child, containment, guardian) = spawn_group(command)?;
-        Ok(Self::contained(child, containment, guardian))
+        Ok((Self::contained(child, containment, guardian), control))
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

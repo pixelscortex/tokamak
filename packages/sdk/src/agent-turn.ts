@@ -1,3 +1,6 @@
+import { WORKER_DATA_BYTES } from "./worker-limits";
+import { jsonBytes } from "./agent-reports";
+
 /** Full access (never asks) or Ask first: the agent row's Permission level picker. */
 export type Access = "full" | "ask";
 
@@ -177,6 +180,15 @@ export interface TurnAddress {
 export type AgentTurnStart = TurnAddress &
   Pick<Run, "folder" | "prompt" | "history" | "sessionId" | "model" | "effort" | "speed" | "mode" | "access">;
 
+/** Bump on incompatible changes to the messages understood by the embedded local host. */
+export const AGENT_TURN_PROTOCOL = 1;
+export const TURN_ENDED = "This turn has ended";
+export type AgentTurnOpen = AgentTurnStart & { version: number };
+
+export function agentTurnFits(start: AgentTurnStart): boolean {
+  return jsonBytes([{ ...start, version: AGENT_TURN_PROTOCOL }]) <= WORKER_DATA_BYTES;
+}
+
 type ReportMethods = Pick<Run, "text" | "thinking" | "tool" | "tasks" | "plan" | "helper" | "usage">;
 
 export type AgentTurnEvent =
@@ -189,4 +201,4 @@ export type AgentTurnAsk = TurnAddress & { question: Question };
 export type AgentTurnSteer = TurnAddress & { text: string };
 
 export * from "./agent-reports";
-export { openLocalChannel } from "./internal/contracts";
+export { hasLocalChannel, localProviders, openLocalChannel } from "./internal/contracts";

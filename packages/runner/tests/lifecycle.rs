@@ -877,7 +877,7 @@ async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Vec<Socke
         .iter()
         .filter(|(pid, cmd)| {
             if quickjs {
-                host(cmd) && cmd.ends_with(".mjs")
+                host(cmd) && cmd.split_whitespace().any(|part| part == "--local-plugin")
             } else {
                 cmd.ends_with(".mjs") && !before_local.iter().any(|(before, _)| before == pid)
             }

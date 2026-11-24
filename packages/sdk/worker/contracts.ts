@@ -8,7 +8,7 @@ import {
 import type { AuthContext, FunctionDefinition } from "../src/functions";
 import { callHost, type ChannelHandler, type HostBridge, type HostOperations } from "../src/host";
 import type { JsonValue } from "../src/values";
-import type { AgentTurnStart } from "../src/agent-turn";
+import type { AgentTurnOpen } from "../src/agent-turn";
 import { agentTurn } from "./agent-turn";
 
 import { wireData } from "./wire-data";
@@ -73,7 +73,7 @@ export function dataContracts(root: ProviderModule) {
     // provider dispatcher constructs that object, inside its own scope.
     if (owner === "ai" && name === "agent" && method === "start") {
       if (!target.channel || args.length !== 1) throw new Error(`${label} requires a turn channel`);
-      const result = await agentTurn(args[0] as unknown as AgentTurnStart, bridge, (run, scoped) => {
+      const result = await agentTurn(args[0] as unknown as AgentTurnOpen, bridge, (run, scoped) => {
         const start = bindProvider(definition, scoped, auth)[method];
         if (typeof start !== "function") throw new Error(`${label} is not a method`);
         return start(run);
@@ -99,9 +99,9 @@ export function workerContracts(
   const descriptions = new Map<string, { build?: string; value: Description }>();
   return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
     return {
-      async list(key, selected) {
+      async list(key, selected, onIncompatible) {
         if (key.place !== "local") throw new Error("Server contracts run in server functions");
-        const candidates = await callHost(bridge, "local.contracts", {
+        const catalog = await callHost(bridge, "local.contracts", {
           name: key.name,
           ...(key.owner === undefined ? {} : { owner: key.owner }),
         });
@@ -109,6 +109,18 @@ export function workerContracts(
         if (!auth) throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
         const unavailable: { plugin: string; lastId: JsonValue | undefined; error: unknown }[] = [];
+        const candidates = catalog.filter((candidate) => !candidate.incompatible);
+        for (const candidate of catalog) {
+          if (!candidate.incompatible) continue;
+          onIncompatible?.(candidate.plugin);
+          unavailable.push({
+            plugin: candidate.plugin,
+            lastId: undefined,
+            error: new Error(
+              `${candidate.plugin} was built for a different version of ${key.owner ?? "the owner"}'s ${key.name} contract; rebuild or update it.`,
+            ),
+          });
+        }
         const resolve = async ({
           plugin,
           registration,

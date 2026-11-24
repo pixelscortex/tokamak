@@ -10,6 +10,10 @@ const providerBrand: unique symbol = Symbol.for("tokamak.contract.provider");
 export const contractScope = Symbol.for("tokamak.contract.scope");
 export const openChannel = Symbol.for("tokamak.contract.channel");
 
+export function hasLocalChannel(provider: object): boolean {
+  return typeof (provider as { [openChannel]?: unknown })[openChannel] === "function";
+}
+
 /** Open a linked data call, when the provider runs in another QuickJS process. */
 export function openLocalChannel(
   provider: object,
@@ -188,7 +192,21 @@ export interface ContractEntry {
 }
 
 export interface ContractScope {
-  list(key: ContractKey, id?: string): Promise<readonly ContractEntry[]>;
+  list(
+    key: ContractKey,
+    id?: string,
+    onIncompatible?: (plugin: string) => void,
+  ): Promise<readonly ContractEntry[]>;
+}
+
+/** List usable local providers alongside builds whose declarations no longer match. */
+export async function localProviders<T extends object>(key: Contract<T, "local">, context: ContractContext) {
+  const incompatible: string[] = [];
+  const entries = await context[contractScope].list(key, undefined, (plugin) => incompatible.push(plugin));
+  return {
+    providers: entries.map((entry) => entry.implementation as BoundProvider<T, "local">),
+    incompatible,
+  };
 }
 
 let serverScope: ContractScope | undefined;

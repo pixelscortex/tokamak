@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     io::{self, Write},
+    os::unix::net::UnixDatagram,
     path::Path,
     sync::{Arc, Mutex},
     thread,
@@ -9,11 +10,12 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 
 use crate::{
     modules::Bundles,
     pipe::{read_frame, shutdown},
+    programs::Programs,
     runtime::Runtime,
 };
 
@@ -41,16 +43,50 @@ type Shared = Arc<Mutex<State>>;
 pub struct Output {
     state: Shared,
     writer: mpsc::UnboundedSender<String>,
+    programs: Programs,
+    drained: Arc<Notify>,
 }
 
 impl Output {
-    pub fn send(&self, line: String) -> Result<()> {
+    pub fn try_send(&self, line: String) -> Result<bool> {
         ensure!(
             line.len() < WORKER_FRAME_BYTES,
             "Worker message exceeds 1 MiB limit"
         );
         let frame: Value = serde_json::from_str(&line)?;
         let mut state = self.state.lock().expect("protocol state");
+        if state.queued_bytes + line.len() >= OUTPUT_BYTES {
+            return Ok(false);
+        }
+        self.send_frame(&mut state, &frame, line)?;
+        Ok(true)
+    }
+
+    pub async fn send_wait(&self, line: String) -> Result<()> {
+        ensure!(
+            line.len() < WORKER_FRAME_BYTES,
+            "Worker message exceeds 1 MiB limit"
+        );
+        let frame: Value = serde_json::from_str(&line)?;
+        loop {
+            let drained = self.drained.notified();
+            {
+                let mut state = self.state.lock().expect("protocol state");
+                if let Some(call) = frame.get("call").and_then(Value::as_u64) {
+                    ensure!(
+                        state.calls.get(&call) == Some(&false),
+                        "stale invocation: host operation refused"
+                    );
+                }
+                if state.queued_bytes + line.len() < OUTPUT_BYTES {
+                    return self.send_frame(&mut state, &frame, line);
+                }
+            }
+            drained.await;
+        }
+    }
+
+    fn send_frame(&self, state: &mut State, frame: &Value, line: String) -> Result<()> {
         match frame["type"].as_str() {
             Some("op") => {
                 let call = id(&frame["call"])?;
@@ -60,7 +96,7 @@ impl Output {
                 );
                 if frame["name"] == "local.contracts" {
                     let op = id(&frame["id"])?;
-                    self.enqueue(&mut state, line)?;
+                    self.enqueue(state, line)?;
                     state.contract_ops.insert(op, call);
                     return Ok(());
                 }
@@ -70,8 +106,9 @@ impl Output {
                 if state.calls.get(&call) != Some(&false) {
                     return Ok(());
                 }
-                self.enqueue(&mut state, line)?;
+                self.enqueue(state, line)?;
                 state.retire(call);
+                self.programs.retire(call);
                 return Ok(());
             }
             // A request can cross the last result or cancel of its owning
@@ -79,7 +116,7 @@ impl Output {
             Some("peerResult" | "log") => {}
             _ => bail!("Invalid plugin host output frame"),
         }
-        self.enqueue(&mut state, line)
+        self.enqueue(state, line)
     }
 
     fn enqueue(&self, state: &mut State, line: String) -> Result<()> {
@@ -114,6 +151,7 @@ impl Output {
         let started = std::mem::take(&mut state.calls);
         state.contract_ops.clear();
         for id in started.into_keys() {
+            self.programs.retire(id);
             self.result(&mut state, id, DID_NOT_YIELD)?;
         }
         Ok(())
@@ -185,12 +223,32 @@ fn read_input(state: &Shared, send: &mpsc::Sender<Value>) -> Result<()> {
     Ok(())
 }
 
-fn write_output(state: Shared, mut output: mpsc::UnboundedReceiver<String>) -> io::Result<()> {
+fn native_control(socket: UnixDatagram, state: &Shared, programs: &Programs) -> io::Result<()> {
+    let mut bytes = [0; 8];
+    while socket.recv(&mut bytes)? == bytes.len() {
+        let call = u64::from_le_bytes(bytes);
+        {
+            let state = state.lock().expect("protocol state");
+            if state.calls.contains_key(&call) {
+                programs.kill_call(call);
+            }
+        }
+        socket.send(&bytes)?;
+    }
+    Ok(())
+}
+
+fn write_output(
+    state: Shared,
+    drained: Arc<Notify>,
+    mut output: mpsc::UnboundedReceiver<String>,
+) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     while let Some(line) = output.blocking_recv() {
         writeln!(stdout, "{line}")?;
         stdout.flush()?;
         state.lock().expect("protocol state").queued_bytes -= line.len() + 1;
+        drained.notify_waiters();
     }
     Ok(())
 }
@@ -202,11 +260,21 @@ fn background(result: Result<()>) {
     }
 }
 
-pub async fn run(code: &Path) -> Result<()> {
-    let heap = crate::runtime::heap_bytes()?;
-    let bundles = Bundles::new(code)?;
+fn connect_pipes(
+    native: Option<UnixDatagram>,
+    programs: &Programs,
+) -> (Arc<Output>, mpsc::Receiver<Value>) {
     let state = Shared::default();
-    let (input, mut frames) = mpsc::channel(WORKER_CAPACITY);
+    if let Some(socket) = native {
+        let state = state.clone();
+        let programs = programs.clone();
+        // Independent of both the JS scheduler and the ordinary pipe reader,
+        // which may be waiting for the JS input queue to have space.
+        thread::spawn(move || {
+            let _ = native_control(socket, &state, &programs);
+        });
+    }
+    let (input, frames) = mpsc::channel(WORKER_CAPACITY);
     let reader_state = state.clone();
     thread::spawn(move || {
         background(read_input(&reader_state, &input));
@@ -215,12 +283,35 @@ pub async fn run(code: &Path) -> Result<()> {
     // Payload bytes include the frame currently blocked on stdout.
     let (writer, output) = mpsc::unbounded_channel();
     let writer_state = state.clone();
-    thread::spawn(move || background(write_output(writer_state, output).map_err(Into::into)));
+    let drained = Arc::new(Notify::new());
+    let writer_drained = drained.clone();
+    thread::spawn(move || {
+        background(write_output(writer_state, writer_drained, output).map_err(Into::into))
+    });
 
-    let output = Arc::new(Output { state, writer });
+    let output = Arc::new(Output {
+        state,
+        writer,
+        programs: programs.clone(),
+        drained,
+    });
+    (output, frames)
+}
+
+pub async fn run(code: &Path, native: Option<UnixDatagram>) -> Result<()> {
+    let heap = crate::runtime::heap_bytes()?;
+    let bundles = Bundles::new(code)?;
+    let programs = Programs::default();
+    let (output, mut frames) = connect_pipes(native, &programs);
     let next_op = std::rc::Rc::new(std::cell::Cell::new(0_u64));
-    let mut runtime =
-        Runtime::new_local(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
+    let mut runtime = Runtime::new_local(
+        bundles.clone(),
+        heap,
+        output.clone(),
+        next_op.clone(),
+        programs.clone(),
+    )
+    .await?;
     let mut frames_since_immediate = 0;
     loop {
         // Give arrived input and promise jobs priority over immediates,
@@ -242,7 +333,10 @@ pub async fn run(code: &Path) -> Result<()> {
                     }
                     let dispatched = runtime.dispatch(frame.to_string()).await;
                     if frame["type"] == "cancel" {
-                        output.state.lock().expect("protocol state").retire(id(&frame["id"])?);
+                        let id = id(&frame["id"])?;
+                        let mut state = output.state.lock().expect("protocol state");
+                        state.retire(id);
+                        programs.retire(id);
                     }
                     dispatched
                 } else {
@@ -259,8 +353,14 @@ pub async fn run(code: &Path) -> Result<()> {
         if runtime.interrupted() {
             drop(runtime);
             output.stop_calls()?;
-            runtime =
-                Runtime::new_local(bundles.clone(), heap, output.clone(), next_op.clone()).await?;
+            runtime = Runtime::new_local(
+                bundles.clone(),
+                heap,
+                output.clone(),
+                next_op.clone(),
+                programs.clone(),
+            )
+            .await?;
         } else {
             dispatch?;
         }
@@ -278,16 +378,47 @@ mod tests {
     fn output_queue_counts_bytes_until_the_writer_flushes() {
         let state = Shared::default();
         let (writer, _output) = mpsc::unbounded_channel();
-        let output = Output { state, writer };
+        let output = Output {
+            state,
+            writer,
+            programs: Programs::default(),
+            drained: Arc::new(Notify::new()),
+        };
         let frame =
             json!({ "type": "log", "level": "info", "text": "x".repeat(WORKER_FRAME_BYTES - 50) })
                 .to_string();
         for _ in 0..4 {
-            output.send(frame.clone()).unwrap();
+            assert!(output.try_send(frame.clone()).unwrap());
         }
-        assert_eq!(
-            output.send(frame).unwrap_err().to_string(),
-            "Worker output queue exceeds 4 MiB limit"
-        );
+        assert!(!output.try_send(frame).unwrap());
+    }
+
+    #[tokio::test]
+    async fn peer_reply_waits_for_output_space() {
+        let state = Shared::default();
+        let (writer, mut receive) = mpsc::unbounded_channel();
+        let output = Output {
+            state: state.clone(),
+            writer,
+            programs: Programs::default(),
+            drained: Arc::new(Notify::new()),
+        };
+        let line = json!({"type":"peerResult", "id":1, "call":2, "value":"approve"}).to_string();
+        {
+            let mut state = state.lock().unwrap();
+            state.calls.insert(2, false);
+            state.queued_bytes = OUTPUT_BYTES;
+        }
+        let send = output.send_wait(line.clone());
+        tokio::pin!(send);
+        tokio::select! {
+            result = &mut send => panic!("reply must wait for the writer: {result:?}"),
+            () = tokio::task::yield_now() => {}
+        }
+        assert!(receive.try_recv().is_err());
+        state.lock().unwrap().queued_bytes = 0;
+        output.drained.notify_waiters();
+        send.await.unwrap();
+        assert_eq!(receive.try_recv().unwrap(), line);
     }
 }

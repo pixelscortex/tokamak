@@ -2,7 +2,9 @@ import {
   type AgentTurnAsk,
   type AgentTurnEvent,
   type AgentTurnReport,
-  type AgentTurnStart,
+  AGENT_TURN_PROTOCOL,
+  TURN_ENDED,
+  type AgentTurnOpen,
   type AgentTurnSteer,
   type Answer,
   type Run,
@@ -32,6 +34,7 @@ function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>[
   let flight: Promise<void> | undefined;
   let failed: unknown;
   let closed = false;
+  let sealed = false;
   let reject!: (cause: unknown) => void;
   const failure = new Promise<never>((_, fail) => (reject = fail));
   void failure.catch(() => {});
@@ -63,7 +66,8 @@ function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>[
   return {
     failure,
     push(event: AgentTurnEvent) {
-      if (closed) throw new Error("This turn has ended");
+      if (sealed) return;
+      if (closed) throw new Error(TURN_ENDED);
       if (failed !== undefined) throw failed;
       const bytes = jsonBytes(event) + 1;
       if (bytes + overhead >= WRITE_BYTES || buffered + bytes >= 8 * WRITE_BYTES)
@@ -84,6 +88,9 @@ function batches(address: TurnAddress, send: NonNullable<HostBridge["channel"]>[
         await flight;
       }
       if (failed !== undefined) throw failed;
+    },
+    seal() {
+      sealed = true;
     },
     close() {
       closed = true;
@@ -119,18 +126,22 @@ function reportMethods(
 
 /** Adapt the agent's ordinary Run to a channel tied to this invocation and its program scope. */
 export function agentTurn<T>(
-  request: AgentTurnStart,
+  request: AgentTurnOpen,
   bridge: HostBridge,
   start: (run: Run, scoped: HostBridge) => T | Promise<T>,
 ) {
-  const { threadId, turnId, ...input } = request;
+  const { version, threadId, turnId, ...input } = request;
+  if (version !== AGENT_TURN_PROTOCOL)
+    throw new Error(
+      `Agent turn protocol mismatch: ai uses version ${typeof version === "number" ? version : "unversioned"}; the plugin host uses version ${AGENT_TURN_PROTOCOL}. Update Tokamak and the ai plugin together.`,
+    );
   if (typeof threadId !== "string" || typeof turnId !== "string")
     throw new TypeError("An agent turn requires a thread and turn id");
   if (!bridge.channel || !bridge.withPrograms)
     throw new Error("Agent turns require a local contract channel");
   const channel = bridge.channel;
   const address = { threadId, turnId };
-  return bridge.withPrograms(async (kill, scoped) => {
+  return bridge.withPrograms(async (_kill, scoped) => {
     const reports = batches(address, channel.send);
 
     let questionLine: Promise<unknown> = Promise.resolve();
@@ -153,7 +164,7 @@ export function agentTurn<T>(
     scoped.signal?.addEventListener("abort", abort, { once: true });
 
     function stopWhenReady() {
-      if (!stopRequested || !stop || stopSent || closed) return;
+      if (!stopRequested || !stop || stopSent || closed || forceRequested) return;
       stopSent = true;
       const handler = stop;
       void (async () => {
@@ -161,14 +172,15 @@ export function agentTurn<T>(
         // answer to the CLI before running its interrupt handler.
         await questionLine;
         await new Promise<void>((resolve) => setImmediate(resolve));
-        if (!closed) await handler();
+        if (!closed && !forceRequested) await handler();
       })().catch(() => {});
     }
     channel.receive(async (method, args) => {
       const target = args as unknown as TurnAddress;
-      if (closed || target?.threadId !== threadId || target.turnId !== turnId) return null;
+      if (closed || target?.threadId !== threadId || target.turnId !== turnId) throw new Error(TURN_ENDED);
       switch (method) {
         case "steer": {
+          if (forceRequested) throw new Error(TURN_ENDED);
           if (stopRequested || !steer) throw new Error("The agent can no longer receive a steer");
           await steer((args as unknown as AgentTurnSteer).text);
           return null;
@@ -179,8 +191,8 @@ export function agentTurn<T>(
           return null;
         case "forceStop":
           forceRequested = true;
-          close();
-          await kill();
+          reports.seal();
+          await reports.flush();
           return null;
         default:
           throw new Error(`Unknown agent turn control: ${method}`);
@@ -194,7 +206,7 @@ export function agentTurn<T>(
         const answer = questionLine.then(async (): Promise<Answer> => {
           try {
             await reports.flush();
-            if (closed || stopRequested) return "cancel";
+            if (closed || stopRequested || forceRequested) return "cancel";
             const reply = await channel.send("ask", request as unknown as JsonValue);
             if (
               reply === "approve" ||

@@ -15,7 +15,7 @@ export type PeerMessage = {
 
 /** Only the QuickJS local entry includes the channel protocol. */
 export function dispatchChannels(
-  send: (message: object) => void,
+  send: (message: object) => void | Promise<void>,
   allocateOp: () => number,
   errorMessage: (error: unknown) => string,
 ) {
@@ -38,8 +38,9 @@ export function dispatchChannels(
       const bridge: NonNullable<HostBridge["channel"]> = {
         open(payload, handle) {
           // Leave room for writes, question operations, and fresh invocations.
-          if (outbound.size >= WORKER_CAPACITY / 4)
-            throw new Error("Active local contract channel capacity exceeded");
+          const limit = WORKER_CAPACITY / 2;
+          if (outbound.size >= limit)
+            throw new Error(`Too many turns are running on this machine (${limit}). Wait for one to finish.`);
           const channel = allocateOp();
           const result = operation(channel, "local.contract.call", payload, undefined, { channel: true });
           outbound.set(channel, { call, handle });
@@ -55,6 +56,9 @@ export function dispatchChannels(
               }),
             async close() {
               if (outbound.has(channel)) await callHost(direct, "local.contract.close", { channel });
+            },
+            async stopPrograms() {
+              if (outbound.has(channel)) await callHost(direct, "local.contract.stopPrograms", { channel });
             },
           };
         },
@@ -84,9 +88,9 @@ export function dispatchChannels(
         if (!handle || !invocation || active.get(call) !== invocation || invocation.signal.aborted)
           throw new Error("Local contract channel ended");
         const value = wireData(await handle(payload.method, payload.args), "Local contract channel result");
-        if (active.get(call) === invocation) send({ ...reply, value });
+        if (active.get(call) === invocation) await send({ ...reply, value });
       } catch (error) {
-        send({ ...reply, error: errorMessage(error).slice(0, 8192) });
+        await send({ ...reply, error: errorMessage(error).slice(0, 8192) });
       }
     },
   };

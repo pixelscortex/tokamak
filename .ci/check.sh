@@ -27,6 +27,8 @@ check_local_symbols() {
       patterns[++count] = "tokamak_worker::Process>?::launch_plugin$"
       patterns[++count] = "tokamak_plugin_host::local_plugin::run"
       patterns[++count] = "tokamak_runner::local::quickjs::Host>?::peer$"
+      patterns[++count] = "tokamak_runner::local::quickjs::Host>?::stop_programs$"
+      patterns[++count] = "tokamak_plugin_host::protocol::native_control$"
       patterns[++count] = "tokamak_worker::Process>?::launch_runner$"
     }
     /tokamak_plugin_host::action_process::run/ { action_host = 1 }

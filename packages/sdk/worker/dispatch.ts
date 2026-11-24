@@ -42,6 +42,7 @@ export function workerDispatch(
     abort(controller: AbortController): void;
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
     attachChannel?: AttachChannel;
+    sendWaiting?(message: object): void | Promise<void>;
   },
 ) {
   const calls = new Map<
@@ -56,15 +57,35 @@ export function workerDispatch(
     number,
     { call: number; resolve(value: JsonValue): void; reject(error: Error): void }
   >();
+  const waiting = new Map<number, { call: number; send(): void; reject(error: Error): void }>();
+  function transmit(message: object): void | Promise<void> {
+    if (options?.sendWaiting) return options.sendWaiting(message);
+    send(message);
+  }
+
+  function pump() {
+    for (const [id, op] of waiting) {
+      if (pending.size >= WORKER_CAPACITY) break;
+      waiting.delete(id);
+      op.send();
+    }
+  }
 
   function retire(id: number) {
     calls.get(id)?.disposeChannel();
     calls.delete(id);
+    const stale = new Error("stale invocation: host operation refused");
+    for (const [key, op] of waiting)
+      if (op.call === id) {
+        waiting.delete(key);
+        op.reject(stale);
+      }
     for (const [key, op] of pending)
       if (op.call === id) {
         pending.delete(key);
-        op.reject(new Error("stale invocation: host operation refused"));
+        op.reject(stale);
       }
+    pump();
   }
   async function invoke(id: number, name: string, args: JsonValue, target?: ContractInvocation) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
@@ -85,23 +106,35 @@ export function workerDispatch(
     ) {
       if (calls.get(id) !== call || controller.signal.aborted)
         throw new Error("stale invocation: host operation refused");
-      if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
+      const wait = pending.size >= WORKER_CAPACITY;
+      if (wait && (!options?.sendWaiting || waiting.size >= WORKER_CAPACITY))
+        throw new Error("Worker operation capacity exceeded");
       return new Promise<JsonValue>((resolve, reject) => {
-        pending.set(op, { call: id, resolve, reject });
-        try {
-          send({
-            type: "op",
-            id: op,
-            call: id,
-            name,
-            payload,
-            ...(plugin === undefined ? {} : { plugin }),
-            ...metadata,
-          });
-        } catch (error) {
-          pending.delete(op);
-          reject(error);
-        }
+        const dispatch = () => {
+          pending.set(op, { call: id, resolve, reject });
+          const failed = (error: unknown) => {
+            pending.delete(op);
+            reject(error);
+            pump();
+          };
+          try {
+            const message = {
+              type: "op",
+              id: op,
+              call: id,
+              name,
+              payload,
+              ...(plugin === undefined ? {} : { plugin }),
+              ...metadata,
+            };
+            const sending = transmit(message);
+            if (sending) void sending.catch(failed);
+          } catch (error) {
+            failed(error);
+          }
+        };
+        if (wait) waiting.set(op, { call: id, send: dispatch, reject });
+        else dispatch();
       });
     }
     const channel = options?.attachChannel?.(id, target, controller.signal, operation);
@@ -120,7 +153,10 @@ export function workerDispatch(
           ? await options.contract(target, args, invocation.host())
           : await invokeFunction(functions, { name, args }, invocation.host());
       await invocation.close();
-      if (calls.get(id) === call) send({ type: "result", id, value });
+      if (calls.get(id) === call) {
+        const sending = transmit({ type: "result", id, value });
+        if (sending) await sending;
+      }
     } catch (error) {
       await invocation.close();
       const message =
@@ -132,7 +168,13 @@ export function workerDispatch(
         } catch {
           // Error properties may have user-defined getters.
         }
-        send({ type: "result", id, error: message, ...(stack === undefined ? {} : { stack }) });
+        const sending = transmit({
+          type: "result",
+          id,
+          error: message,
+          ...(stack === undefined ? {} : { stack }),
+        });
+        if (sending) await sending;
       }
     } finally {
       if (calls.get(id) === call) retire(id);
@@ -149,6 +191,7 @@ export function workerDispatch(
         if (typeof message.error === "string") op.reject(new Error(message.error));
         else op.resolve(message.value);
       }
+      pump();
     } else if (message.type === "cancel") {
       const call = calls.get(message.id);
       if (call) {

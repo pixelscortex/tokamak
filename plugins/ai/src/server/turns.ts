@@ -9,6 +9,7 @@ import {
   type QueryContext,
 } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
+import { agentTurnFits } from "@tokamak/sdk/agent-turn";
 import { isSendersDevice } from "../shared/turn-shared";
 import { FORCE_STOP_MS } from "../shared/turn-timing";
 import { ACTIVE, mutation, query, view, type Model, type Turn, activeTurnOf } from "./_functions";
@@ -226,11 +227,12 @@ export const begin = mutation({
   args: {
     threadId: v.string(),
     messageId: v.string(),
+    folder: v.optional(v.string()),
     ...agentSettings,
     /** Chat's reply capability, chosen by the local part (mutations have no secret randomness). */
     replyToken: v.string(),
   },
-  handler: async (ctx, { threadId, messageId, replyToken, ...settings }) => {
+  handler: async (ctx, { threadId, messageId, folder, replyToken, ...settings }) => {
     const { user, device } = ctx.auth;
     const message = await ctx.use(chat).readPrompt({ messageId: messageId as Id<"messages"> });
     if (!message || message.threadId !== threadId) throw new Error("That message is not in this thread");
@@ -250,7 +252,7 @@ export const begin = mutation({
     const earlier = await lastTurn(ctx.db, threadId);
     if (existing) {
       await promoteQueued(ctx, existing, replyToken);
-      return handOver(ctx, existing, message, earlier);
+      return handOver(ctx, existing, message, earlier, folder, settings);
     }
     const turnId = await ctx.db.insert("turns", {
       threadId,
@@ -260,7 +262,7 @@ export const begin = mutation({
       ...(await openReply(ctx, threadId, settings.agent, replyToken)),
     });
     const turn = (await ctx.db.get(turnId))!;
-    return handOver(ctx, turn, message, earlier);
+    return handOver(ctx, turn, message, earlier, folder, settings);
   },
 });
 
@@ -275,6 +277,8 @@ async function handOver(
   turn: Turn,
   message: { text: string; createdAt: number },
   earlier: Turn | undefined,
+  folder: string | undefined,
+  startSettings: Pick<Turn, "model" | "effort" | "speed" | "mode" | "access">,
 ) {
   const { agent, model, effort, speed, mode, access, sender } = turn;
   await save(ctx, turn.threadId, {
@@ -290,12 +294,36 @@ async function handOver(
     .historyBefore({ threadId: turn.threadId as Id<"threads">, before: message.createdAt });
   const sessionId =
     earlier?.agent.id === agent.id && earlier.sender.device === sender.device ? earlier.sessionId : undefined;
-  return {
+  const input = {
     turnId: turn._id,
     prompt: message.text,
     history,
     ...(sessionId === undefined ? {} : { sessionId }),
   };
+  const {
+    model: pickedModel,
+    effort: pickedEffort,
+    speed: pickedSpeed,
+    mode: pickedMode,
+    access: pickedAccess,
+  } = startSettings;
+  if (
+    folder !== undefined &&
+    !agentTurnFits({
+      ...input,
+      threadId: turn.threadId,
+      folder,
+      model: pickedModel,
+      effort: pickedEffort,
+      speed: pickedSpeed,
+      mode: pickedMode,
+      access: pickedAccess,
+    })
+  )
+    throw new Error(
+      "This message and its thread history are too large to send to an agent. Shorten the message or start a new thread.",
+    );
+  return input;
 }
 
 /** The thread's last turn that began, before this one: queued ones have not. */

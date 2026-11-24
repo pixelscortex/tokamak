@@ -71,8 +71,7 @@ export async function reload({ endpoint: { http } }, directory, id) {
 export async function rawWindow(runner, artifact, handle, live = [], origin) {
   let next = 0;
   const calls = new Map();
-  let worker;
-  worker = await runner.launch(
+  const worker = await runner.launch(
     artifact,
     (frame) => {
       if (frame.type === "result") {

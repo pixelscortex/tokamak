@@ -61,15 +61,19 @@ export interface HostOperations {
   "action.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.contracts": {
     args: { name: string; owner?: string };
-    result: {
-      plugin: string;
-      registration: string;
-      own: boolean;
-      path: string;
-      owner: string;
-      dataMethods?: true | string[];
-      build?: string;
-    }[];
+    result: (
+      | {
+          plugin: string;
+          registration: string;
+          own: boolean;
+          path: string;
+          owner: string;
+          dataMethods?: true | string[];
+          build?: string;
+          incompatible?: never;
+        }
+      | { plugin: string; incompatible: true }
+    )[];
   };
   "local.contract.call": {
     args: {
@@ -91,6 +95,7 @@ export interface HostOperations {
     result: JsonValue;
   };
   "local.contract.close": { args: { channel: number }; result: null };
+  "local.contract.stopPrograms": { args: { channel: number }; result: null };
   "local.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.runAction": { args: { name: string; args: JsonValue }; result: JsonValue };
@@ -141,6 +146,7 @@ export interface LocalChannel {
   readonly result: Promise<JsonValue>;
   send(method: string, args: JsonValue): Promise<JsonValue>;
   close(): Promise<void>;
+  stopPrograms(): Promise<void>;
 }
 
 /** Keep operation call sites tied to the contract even though the bridge is erased. */
