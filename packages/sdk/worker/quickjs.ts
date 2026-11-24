@@ -1,4 +1,5 @@
 import { workerDispatch, type WorkerMessage } from "./dispatch";
+import { dispatchChannels, type PeerMessage } from "./dispatch-channels";
 import { installConsole } from "./quickjs-console";
 import { invocationProcesses } from "./program-scope";
 import { quickJsPrograms, type NativeSpawn } from "./quickjs-process";
@@ -20,6 +21,12 @@ async function loadLocalModule(path: string) {
   }
 }
 
+function errorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  // QuickJS can reject with null if it cannot allocate its own InternalError.
+  return error === null || message === "out of memory" ? "Plugin local function ran out of memory" : message;
+}
+
 export async function initialize(
   send: (json: string) => void,
   nextOp: () => number,
@@ -29,6 +36,7 @@ export async function initialize(
   const emit = (message: object) => send(JSON.stringify(message));
   const logger = console;
   installConsole(logger, emit);
+  const channels = dispatchChannels(emit, nextOp, errorMessage);
 
   const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
@@ -43,6 +51,7 @@ export async function initialize(
     workerContracts(root, loadLocalModule),
     {
       contract: dataContracts(root),
+      attachChannel: channels.attach,
       abort(controller) {
         try {
           controller.abort();
@@ -55,14 +64,12 @@ export async function initialize(
           }
         }
       },
-      errorMessage(error) {
-        const message = error instanceof Error ? error.message : String(error);
-        // QuickJS can reject with null if it cannot allocate its own InternalError.
-        return error === null || message === "out of memory"
-          ? "Plugin local function ran out of memory"
-          : message;
-      },
+      errorMessage,
     },
   );
-  return (frame) => dispatch(JSON.parse(frame) as WorkerMessage);
+  return (frame) => {
+    const message = JSON.parse(frame) as WorkerMessage | PeerMessage;
+    if (message.type === "peer") void channels.receive(message).catch(() => {});
+    else dispatch(message);
+  };
 }
