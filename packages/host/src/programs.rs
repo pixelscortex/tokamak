@@ -28,6 +28,7 @@ struct Registry {
 
 struct OwnedProgram {
     call: u64,
+    finish_on_cancel: bool,
     program: Arc<Program>,
 }
 
@@ -39,7 +40,7 @@ impl Programs {
             .expect("program registry")
             .live
             .iter()
-            .filter(|owned| owned.call == call)
+            .filter(|owned| owned.call == call && !owned.finish_on_cancel)
         {
             owned.program.stop(false);
         }
@@ -88,6 +89,9 @@ impl Programs {
     ) -> Result<Object<'js>> {
         let cwd = options.get::<_, Option<String>>("cwd")?;
         let env = options.get::<_, Option<HashMap<String, String>>>("env")?;
+        let finish_on_cancel = options
+            .get::<_, Option<bool>>("finishOnCancel")?
+            .unwrap_or_default();
         let handle = Object::new_proto(ctx.clone(), None)?;
         let mut programs = self.0.lock().expect("program registry");
         if programs.sealed.contains(&call) {
@@ -116,6 +120,7 @@ impl Programs {
         };
         programs.live.push(OwnedProgram {
             call,
+            finish_on_cancel,
             program: program.clone(),
         });
         drop(programs);

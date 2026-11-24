@@ -288,8 +288,9 @@ against the owner's. The declaring plugin can mark a local contract with
 For those methods, the window authorizes the provider and method using the
 catalog, and the QuickJS Runner routes the JSON arguments and result between
 the two plugin processes. The provider handles the call with the caller's
-signed-in member and device. Bun continues to use the caller's worker for all
-local contract methods.
+signed-in member and device. Turn hooks and thread deletion hooks use this
+route. Bun continues to use the caller's worker for all local contract
+methods.
 
 On QuickJS, each agent starts its CLI in its own process. Its SDK adapts the
 author's live `Run` to plain-data messages over the link established by the
@@ -298,12 +299,17 @@ host can fail independently; its in-flight turns report the failure in their
 threads. “Always allow this session” grants live in ai's module state and
 survive agent reloads.
 
-Live turn hooks still run in ai's realm. If a hook provider changes, is added
-or is removed, new calls use a fresh realm. The old realm keeps its snapshots
-until its admitted calls finish. Turn controls still reach the original realm
-during that drain. TKM-248 removes this remaining hook compatibility path.
-A reload with identical local bytes and live providers keeps the existing
-process.
+On QuickJS, turn hook inputs cross as data and the SDK supplies the
+provider invocation's abort signal as `turn.signal`. Stop cancels a pending
+before hook. After hooks share one deadline and can also be cancelled if
+the turn is lost. Code pairs its snapshots using the before ref, which
+survives a provider restart. Reloading Code, like reloading an agent, does
+not replace ai's process or clear its session grants.
+
+Contracts with live methods remain supported. The QuickJS Runner verifies
+the provider bundle before the caller imports it. If a live provider
+changes, new calls use a different realm, and the original realm retains
+its admitted calls and provider files until those calls end.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

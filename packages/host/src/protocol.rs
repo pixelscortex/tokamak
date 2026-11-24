@@ -20,6 +20,8 @@ use crate::{
 };
 
 const OUTPUT_BYTES: usize = 4 * WORKER_FRAME_BYTES;
+// Two safe JS integer IDs, the fixed frame envelope and a newline.
+const CANCEL_FRAME_BYTES: usize = 80;
 const CANCELLED: &str = "Plugin local function cancelled";
 const DID_NOT_YIELD: &str =
     "Plugin local function did not yield for 5 seconds; QuickJS runtime reset";
@@ -28,6 +30,7 @@ const DID_NOT_YIELD: &str =
 struct State {
     calls: HashMap<u64, bool>,
     contract_ops: HashMap<u64, u64>,
+    cancellable_ops: HashMap<u64, u64>,
     queued_bytes: usize,
 }
 
@@ -35,6 +38,13 @@ impl State {
     fn retire(&mut self, id: u64) {
         self.calls.remove(&id);
         self.contract_ops.retain(|_, call| *call != id);
+        self.cancellable_ops.retain(|_, call| *call != id);
+    }
+
+    fn fits(&self, frame: &Value, bytes: usize) -> bool {
+        let reserve = usize::from(frame["type"] == "op" && frame["cancellable"] == true);
+        self.queued_bytes + bytes + (self.cancellable_ops.len() + reserve) * CANCEL_FRAME_BYTES
+            <= OUTPUT_BYTES
     }
 }
 
@@ -55,7 +65,7 @@ impl Output {
         );
         let frame: Value = serde_json::from_str(&line)?;
         let mut state = self.state.lock().expect("protocol state");
-        if state.queued_bytes + line.len() >= OUTPUT_BYTES {
+        if frame["type"] != "opCancel" && !state.fits(&frame, line.len() + 1) {
             return Ok(false);
         }
         self.send_frame(&mut state, &frame, line)?;
@@ -79,7 +89,7 @@ impl Output {
                         "stale invocation: host operation refused"
                     );
                 }
-                if state.queued_bytes + line.len() < OUTPUT_BYTES {
+                if frame["type"] == "opCancel" || state.fits(&frame, line.len() + 1) {
                     return self.send_frame(&mut state, &frame, line);
                 }
             }
@@ -95,20 +105,53 @@ impl Output {
                     state.calls.get(&call) == Some(&false),
                     "stale invocation: host operation refused"
                 );
-                if frame["name"] == "local.contracts" {
-                    let op = id(&frame["id"])?;
-                    self.enqueue(state, line)?;
-                    state.contract_ops.insert(op, call);
-                    return Ok(());
+                let op = id(&frame["id"])?;
+                let cancellable = frame["cancellable"] == true;
+                ensure!(
+                    !state.cancellable_ops.contains_key(&op)
+                        && !state.contract_ops.contains_key(&op),
+                    "Duplicate worker operation"
+                );
+                if cancellable {
+                    ensure!(
+                        state.cancellable_ops.len() < WORKER_CAPACITY,
+                        "Worker cancellation capacity exceeded"
+                    );
                 }
+                self.write(state, line)?;
+                if cancellable {
+                    state.cancellable_ops.insert(op, call);
+                }
+                if frame["name"] == "local.contracts" {
+                    state.contract_ops.insert(op, call);
+                }
+                return Ok(());
+            }
+            Some("opCancel") => {
+                let call = id(&frame["call"])?;
+                let op = id(&frame["id"])?;
+                if state.calls.get(&call) == Some(&false)
+                    && state.cancellable_ops.get(&op) == Some(&call)
+                {
+                    // Spend this operation's reservation once, using a bounded frame.
+                    state.cancellable_ops.remove(&op);
+                    state.contract_ops.remove(&op);
+                    self.write(
+                        state,
+                        json!({"type":"opCancel", "id":op, "call":call}).to_string(),
+                    )?;
+                    self.drained.notify_waiters();
+                }
+                return Ok(());
             }
             Some("result") => {
                 let call = id(&frame["id"])?;
                 if state.calls.get(&call) != Some(&false) {
                     return Ok(());
                 }
-                self.enqueue(state, line)?;
+                self.write(state, line)?;
                 state.retire(call);
+                self.drained.notify_waiters();
                 self.programs.retire(call);
                 return Ok(());
             }
@@ -117,14 +160,6 @@ impl Output {
             Some("peerResult" | "log") => {}
             _ => bail!("Invalid plugin host output frame"),
         }
-        self.enqueue(state, line)
-    }
-
-    fn enqueue(&self, state: &mut State, line: String) -> Result<()> {
-        ensure!(
-            state.queued_bytes + line.len() < OUTPUT_BYTES,
-            "Worker output queue exceeds 4 MiB limit"
-        );
         self.write(state, line)
     }
 
@@ -151,6 +186,8 @@ impl Output {
         let mut state = self.state.lock().expect("protocol state");
         let started = std::mem::take(&mut state.calls);
         state.contract_ops.clear();
+        state.cancellable_ops.clear();
+        self.drained.notify_waiters();
         for id in started.into_keys() {
             self.programs.retire(id);
             self.result(&mut state, id, DID_NOT_YIELD)?;
@@ -179,8 +216,11 @@ impl Output {
                 *cancelled = true;
                 self.result(&mut state, id, CANCELLED)?;
             }
-            Some("peer") => {}
+            Some("peer" | "retire") => {}
             Some("opResult") => {
+                if state.cancellable_ops.remove(&id).is_some() {
+                    self.drained.notify_waiters();
+                }
                 if let Some(call) = state.contract_ops.remove(&id)
                     && state.calls.get(&call) == Some(&false)
                     && frame["error"].is_null()
@@ -337,6 +377,7 @@ pub async fn run(code: &Path, native: Option<UnixDatagram>) -> Result<()> {
                         let id = id(&frame["id"])?;
                         let mut state = output.state.lock().expect("protocol state");
                         state.retire(id);
+                        output.drained.notify_waiters();
                         programs.retire(id);
                     }
                     dispatched
@@ -374,6 +415,44 @@ pub async fn run(code: &Path, native: Option<UnixDatagram>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_pending_operations_can_use_reserved_cancel_space() {
+        let state = Shared::default();
+        let (writer, mut frames) = mpsc::unbounded_channel();
+        let output = Output {
+            state,
+            writer,
+            programs: Programs::default(),
+            drained: Arc::new(Notify::new()),
+        };
+        {
+            let mut state = output.state.lock().unwrap();
+            state.calls.extend([(1, false), (2, false)]);
+            state.queued_bytes = OUTPUT_BYTES - 160;
+        }
+
+        let send = |frame: Value| output.try_send(frame.to_string());
+        send(json!({"type":"op","call":1,"id":3,"cancellable":true})).unwrap();
+        assert!(!send(json!({"type":"log","text":"no space left here"})).unwrap());
+        send(json!({"type":"opCancel","call":2,"id":3})).unwrap();
+        send(json!({"type":"opCancel","call":1,"id":4})).unwrap();
+        send(json!({"type":"opCancel","call":1,"id":3,"extra":"x".repeat(2048)})).unwrap();
+        send(json!({"type":"opCancel","call":1,"id":3})).unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<Value>(&frames.try_recv().unwrap()).unwrap()["type"],
+            "op"
+        );
+        let cancel = frames.try_recv().unwrap();
+        assert!(cancel.len() < CANCEL_FRAME_BYTES);
+        assert_eq!(
+            serde_json::from_str::<Value>(&cancel).unwrap(),
+            json!({"type":"opCancel","id":3,"call":1})
+        );
+        assert!(frames.try_recv().is_err());
+        assert!(output.state.lock().unwrap().queued_bytes <= OUTPUT_BYTES);
+    }
 
     #[test]
     fn output_queue_counts_bytes_until_the_writer_flushes() {

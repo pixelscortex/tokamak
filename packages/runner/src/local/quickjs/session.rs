@@ -1,7 +1,7 @@
 use super::{Build, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
-use futures_util::{StreamExt, future::try_join_all, stream::FuturesUnordered};
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -59,58 +59,14 @@ impl Drop for OpenChannel<'_> {
 }
 
 enum Invocation<'a> {
-    Root(Option<&'a Turn<'a>>),
-    Routed,
+    Root,
+    Ordinary,
     Linked { origin: Peer, channel: &'a Channel },
 }
 
 enum Reply {
     Result(Value),
     Route(Arc<Lease>),
-}
-
-// A turn's callback and permission state lives in its original ai realm.
-// The owning invocation registers its server-issued ID until that call ends.
-#[derive(Default)]
-pub(super) struct Turns(HashMap<(Arc<str>, String), TurnRealm>);
-
-#[derive(Clone)]
-struct TurnRealm {
-    host: Arc<Host>,
-    _lease: Arc<Lease>,
-}
-
-struct Turn<'a> {
-    pool: &'a Pool,
-    workspace: &'a Arc<str>,
-    id: Mutex<Option<String>>,
-    lease: &'a Arc<Lease>,
-}
-
-impl Turn<'_> {
-    fn bind(&self, id: &str, host: &Arc<Host>) {
-        let mut bound = lock(&self.id);
-        if bound.is_none() {
-            lock(&self.pool.turns).0.insert(
-                (self.workspace.clone(), id.to_owned()),
-                TurnRealm {
-                    host: host.clone(),
-                    _lease: self.lease.clone(),
-                },
-            );
-            *bound = Some(id.to_owned());
-        }
-    }
-}
-
-impl Drop for Turn<'_> {
-    fn drop(&mut self) {
-        if let Some(id) = lock(&self.id).take() {
-            lock(&self.pool.turns)
-                .0
-                .remove(&(self.workspace.clone(), id));
-        }
-    }
 }
 
 struct Pending {
@@ -124,6 +80,7 @@ struct Bridge {
     slots: Semaphore,
     pending: Mutex<HashMap<u64, Pending>>,
     leases: Leases,
+    retiring: CancellationToken,
 }
 
 impl Bridge {
@@ -167,15 +124,29 @@ impl Bridge {
         let Some(pending) = lock(&self.pending).remove(&id) else {
             return; // The invocation may have ended.
         };
-        let route = build.and_then(|build| {
-            if pending.target.as_deref() != Some(&build.artifact.id) {
-                return Err("Local contract route does not match its host operation".into());
+        let reply = match build {
+            Ok(build) if pending.target.as_deref() == Some(&build.artifact.id) => {
+                self.leases.get(&build).map_or_else(
+                    |error| Reply::Result(json!({"error":error, "unavailable":true})),
+                    Reply::Route,
+                )
             }
-            self.leases.get(&build).map(Reply::Route)
-        });
-        let _ = pending
-            .answer
-            .send(route.unwrap_or_else(|error| Reply::Result(json!({"error":error}))));
+            Ok(_) => Reply::Result(
+                json!({"error":"Local contract route does not match its host operation"}),
+            ),
+            Err(error) => Reply::Result(json!({"error":error})),
+        };
+        let _ = pending.answer.send(reply);
+    }
+
+    fn retire(&self, current: &Build, retired: Result<Build, String>, changed: &str) {
+        let Ok(retired) = retired else {
+            return; // A malformed profile has no effect.
+        };
+        if &retired == current && changed == current.artifact.id {
+            self.retiring.cancel();
+        }
+        self.leases.retire(&retired, changed);
     }
 }
 
@@ -207,6 +178,7 @@ pub(in crate::local) async fn connection(
         slots: Semaphore::new(WORKER_CAPACITY),
         pending: Mutex::default(),
         leases: Leases::new(pool, workspace),
+        retiring: CancellationToken::new(),
     });
     let mut active = HashMap::<u64, CancellationToken>::new();
     let mut calls = JoinSet::new();
@@ -251,10 +223,7 @@ pub(in crate::local) async fn connection(
                 }
                 Some(Request::Route { id, artifact, live }) => bridge.route(id, Build::new(artifact, live)),
                 Some(Request::Retire { artifact, live, changed }) => {
-                    // This notification is fire and forget. A malformed profile has no effect.
-                    if let Ok(build) = Build::new(artifact, live) {
-                        bridge.leases.retire(&build, &changed);
-                    }
+                    bridge.retire(&build, Build::new(artifact, live), &changed);
                 }
                 Some(Request::Load { .. }) => return Err("QuickJS loads providers through local.contracts".into()),
                 Some(Request::Close) | None => return Ok(()),
@@ -310,48 +279,7 @@ async fn invoke_root(
 ) -> Result<Value, String> {
     let id = &lease.build.artifact.id;
     let ancestors = std::slice::from_ref(id);
-    let workspace = &bridge.leases.workspace;
-    let turn = Turn {
-        pool,
-        workspace,
-        id: Mutex::default(),
-        lease,
-    };
-    let name = frame["fn"].as_str().unwrap_or_default();
-    // Temporary (TKM-248): live turn hooks can still replace ai's realm.
-    // Follow-ups must reach a turn in its original, draining realm, even
-    // when the current realm no longer has any live hooks.
-    if id == "ai" {
-        if matches!(
-            name,
-            "run:steer" | "run:stop" | "run:forceStop" | "run:answer" | "run:pending"
-        ) && let Some(turn_id) = frame["args"]["turnId"].as_str()
-        {
-            let original = lock(&pool.turns)
-                .0
-                .get(&(workspace.clone(), turn_id.to_owned()))
-                .cloned();
-            if let Some(realm) = original {
-                return run(
-                    pool,
-                    bridge,
-                    root,
-                    &realm.host,
-                    frame,
-                    ancestors,
-                    Invocation::Root(None),
-                )
-                .await;
-            }
-        }
-        if matches!(name, "working:list" | "working:stopAll") {
-            let list = name == "working:list";
-            return working(pool, bridge, root, lease, frame, ancestors, list).await;
-        }
-    }
     let host = pool.host(&lease.build, &lease.slot, false).await?;
-    // A live hook can be added while a turn is running in a hook-free realm.
-    let binds_turn = id == "ai" && name == "run:turn";
     run(
         pool,
         bridge,
@@ -359,58 +287,56 @@ async fn invoke_root(
         &host,
         frame,
         ancestors,
-        Invocation::Root(binds_turn.then_some(&turn)),
+        Invocation::Root,
     )
     .await
 }
 
-async fn working(
-    pool: &Pool,
-    bridge: &Bridge,
-    root: u64,
-    lease: &Arc<Lease>,
-    frame: Value,
-    ancestors: &[String],
-    list: bool,
-) -> Result<Value, String> {
-    let current = pool.host(&lease.build, &lease.slot, false).await?;
-    let mut realms = vec![TurnRealm {
-        host: current,
-        _lease: lease.clone(),
-    }];
-    for ((origin, _), realm) in &lock(&pool.turns).0 {
-        if origin == &bridge.leases.workspace
-            && !realms
-                .iter()
-                .any(|other| Arc::ptr_eq(&other.host, &realm.host))
-        {
-            realms.push(realm.clone());
-        }
+fn open_channel<'a>(channels: &'a Channels, id: u64, frame: &Value) -> Option<OpenChannel<'a>> {
+    if frame["name"] != "local.contract.call"
+        || frame["channel"] != true
+        || !frame["plugin"].is_null()
+    {
+        return None;
     }
-    let calls = realms.iter().map(|realm| {
-        run(
-            pool,
-            bridge,
-            root,
-            &realm.host,
-            frame.clone(),
-            ancestors,
-            Invocation::Root(None),
-        )
+    let channel = Arc::new(Channel {
+        provider: watch::channel(None).0,
+        closed: CancellationToken::new(),
     });
-    let mut count = 0;
-    let mut turns = Vec::new();
-    for mut reply in try_join_all(calls).await? {
-        if !reply["error"].is_null() {
-            return Ok(reply);
+    lock(channels).insert(id, channel.clone());
+    Some(OpenChannel {
+        channels,
+        id,
+        channel,
+    })
+}
+
+async fn in_operation(
+    route: &CallRoute<'_>,
+    here: &Peer,
+    channels: &Channels,
+    invocation: &Invocation<'_>,
+    frame: Value,
+    opening: Option<OpenChannel<'_>>,
+    cancel: Option<CancellationToken>,
+) -> Option<Result<Value, String>> {
+    let work = async {
+        match frame["name"].as_str() {
+            Some(
+                "local.contract.peer" | "local.contract.close" | "local.contract.stopPrograms",
+            ) => peer_operation(channels, invocation, frame).await,
+            _ => route.operation(here, frame, opening).await,
         }
-        match reply["value"].take() {
-            Value::Array(entries) if list => turns.extend(entries),
-            value if !list => count += value.as_u64().unwrap_or_default(),
-            _ => {}
+    };
+    if let Some(cancel) = cancel {
+        tokio::select! {
+            biased;
+            () = cancel.cancelled() => None,
+            response = work => Some(response),
         }
+    } else {
+        Some(work.await)
     }
-    Ok(json!({"type":"result", "value":if list { json!(turns) } else { json!(count) }}))
 }
 
 async fn run(
@@ -439,44 +365,51 @@ async fn run(
         ancestors,
     };
     let mut operations = FuturesUnordered::new();
+    let mut pending = HashMap::<u64, CancellationToken>::new();
+    let mut notify_retirement = matches!(invocation, Invocation::Root);
     if let Invocation::Linked { channel, .. } = &invocation {
         channel.provider.send_replace(Some(here.clone()));
     }
     loop {
         tokio::select! {
+            () = bridge.retiring.cancelled(), if notify_retirement => {
+                notify_retirement = false;
+                host.send(&json!({"type":"retire", "id":call.id})).await?;
+            }
             frame = call.next() => {
                 let frame = frame?;
                 if frame["type"] == "result" {
                     return Ok(frame);
                 }
                 // A crashed or cancelled caller drops its nested work.
-                let id = frame["id"].as_u64().unwrap_or_default();
-                let opening = if frame["name"] == "local.contract.call" && frame["channel"] == true
-                    && frame["plugin"].is_null() {
-                    let channel = Arc::new(Channel {
-                        provider: watch::channel(None).0,
-                        closed: CancellationToken::new(),
-                    });
-                    lock(&channels).insert(id, channel.clone());
-                    Some(OpenChannel { channels: &channels, id, channel })
+                let id = frame_id(&frame["id"])?;
+                if frame["type"] == "opCancel" {
+                    if let Some(cancel) = pending.get(&id) {
+                        cancel.cancel();
+                    }
+                    continue;
+                }
+                let cancel = if frame["cancellable"] == true {
+                    let cancel = CancellationToken::new();
+                    if pending.insert(id, cancel.clone()).is_some() {
+                        return Err("Duplicate cancellable local host operation".into());
+                    }
+                    Some(cancel)
                 } else {
                     None
                 };
-                let (channels, invocation, here, route) = (&channels, &invocation, &here, &route);
-                operations.push(async move {
-                    let response = match frame["name"].as_str() {
-                        Some("local.contract.peer" | "local.contract.close" | "local.contract.stopPrograms") => {
-                            peer_operation(channels, invocation, frame).await
-                        }
-                        _ => route.operation(here, frame, invocation, opening).await,
-                    };
-                    (id, response)
-                });
+                let opening = open_channel(&channels, id, &frame);
+                let work = in_operation(&route, &here, &channels, &invocation, frame, opening, cancel);
+                operations.push(async move { (id, work.await) });
             }
             Some((id, response)) = operations.next() => {
+                pending.remove(&id);
                 let mut reply = match response {
-                    Ok(reply) => reply,
-                    Err(error) => json!({"error":error}),
+                    Some(Ok(reply)) => reply,
+                    Some(Err(error)) => json!({"error":error}),
+                    // Return the SDK's operation slot only after the Runner has
+                    // consumed the operation and dropped its nested work.
+                    None => json!({"error":"Local contract call cancelled"}),
                 };
                 reply["id"] = json!(id);
                 reply["type"] = json!("opResult");
@@ -555,7 +488,6 @@ impl CallRoute<'_> {
         &self,
         here: &Peer,
         mut frame: Value,
-        invocation: &Invocation<'_>,
         opening: Option<OpenChannel<'_>>,
     ) -> Result<Value, String> {
         let host = &here.host;
@@ -570,15 +502,6 @@ impl CallRoute<'_> {
             Reply::Result(mut value) => {
                 if frame["name"] == "local.contracts" && value["error"].is_null() {
                     host.prepare_providers(&mut value)?;
-                }
-                if let Invocation::Root(Some(turn)) = invocation
-                    && frame["name"] == "local.runMutation"
-                    && frame["payload"]["name"] == "ai/turns:begin"
-                    && frame["plugin"].is_null()
-                    && value["error"].is_null()
-                    && let Some(id) = value["value"]["turnId"].as_str()
-                {
-                    turn.bind(id, host);
                 }
                 return Ok(value);
             }
@@ -624,7 +547,10 @@ impl CallRoute<'_> {
         }
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
-        let other = pool.host(&lease.build, &lease.slot, true).await?;
+        let other = match pool.host(&lease.build, &lease.slot, true).await {
+            Ok(other) => other,
+            Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+        };
         let response = if let Some(open) = &opening {
             let _slot = pool
                 .linked
@@ -640,7 +566,7 @@ impl CallRoute<'_> {
                 response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, Invocation::Linked {
                     origin,
                     channel: &open.channel,
-                })) => response?,
+                })) => response,
             }
         } else {
             Box::pin(run(
@@ -650,13 +576,80 @@ impl CallRoute<'_> {
                 &other,
                 frame,
                 &ancestors,
-                Invocation::Routed,
+                Invocation::Ordinary,
             ))
-            .await?
+            .await
+        };
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => return Ok(json!({"error":error, "unavailable":true})),
         };
         if let Some(error) = response["error"].as_str() {
-            return Err(format!("Plugin {}: {error}", lease.build.artifact.id));
+            return Ok(json!({
+                "error":format!("Plugin {}: {error}", artifact.id),
+                "providerError":true,
+            }));
         }
         Ok(json!({"value":response["value"]}))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::local::Artifact;
+
+    fn build(id: String) -> Build {
+        Build::new(
+            Artifact {
+                id,
+                entry_hash: String::new(),
+                code_hash: String::new(),
+            },
+            Vec::new(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_full_process_pool_reports_a_hook_provider_as_unavailable() {
+        let pool = Pool::new(
+            Default::default(),
+            Default::default(),
+            CancellationToken::new(),
+        );
+        let (output, _) = mpsc::channel(1);
+        let bridge = Bridge {
+            output,
+            next: AtomicU64::new(0),
+            slots: Semaphore::new(1),
+            pending: Mutex::default(),
+            leases: Leases::new(&pool, "".into()),
+            retiring: CancellationToken::new(),
+        };
+        for index in 0..WORKER_CAPACITY {
+            bridge.leases.get(&build(format!("busy-{index}"))).unwrap();
+        }
+        let (answer, response) = oneshot::channel();
+        lock(&bridge.pending).insert(
+            1,
+            Pending {
+                target: Some("hook".into()),
+                answer,
+            },
+        );
+        bridge.route(1, Ok(build("hook".into())));
+        let Reply::Result(value) = response.await.unwrap() else {
+            panic!("a full pool cannot lease a hook provider");
+        };
+        assert_eq!(
+            value,
+            json!({
+                "error": "Plugin hook process: local plugin process limit reached",
+                "unavailable": true,
+            })
+        );
+        pool.stopping.cancel();
+        pool.wait().await;
     }
 }

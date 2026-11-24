@@ -30,7 +30,13 @@ async function lines(stream: AsyncIterable<string>): Promise<string[]> {
   return out;
 }
 
-function startGit(ctx: LocalContext, cwd: string, args: string[], override: Record<string, string> = {}) {
+function startGit(
+  ctx: LocalContext,
+  cwd: string,
+  args: string[],
+  override: Record<string, string> = {},
+  finishOnCancel = false,
+) {
   // A surrounding Git session must not redirect us to another repository or index.
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -48,18 +54,22 @@ function startGit(ctx: LocalContext, cwd: string, args: string[], override: Reco
       "core.splitIndex=false",
       "-c",
       "core.quotePath=true",
+      // User config may permit an indefinite wait for another Git writer.
+      ...(finishOnCancel ? ["-c", "core.filesRefLockTimeout=100", "-c", "core.packedRefsTimeout=1000"] : []),
       ...args,
     ],
-    { cwd, env: { ...env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", ...override } },
+    { cwd, env: { ...env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", ...override }, finishOnCancel },
   );
 }
 
 function gitAt(ctx: LocalContext, cwd: string, override: Record<string, string> = {}, signal = ctx.signal) {
   return async (args: string[], input?: string) => {
     if (signal.aborted) throw new Error("Snapshot cancelled");
-    const program = startGit(ctx, cwd, args, override);
+    // An interrupted ref transaction can leave a lock in the user's repository.
+    const writesRefs = args[0] === "update-ref";
+    const program = startGit(ctx, cwd, args, override, writesRefs);
     const stop = () => program.stop("SIGKILL");
-    signal.addEventListener("abort", stop, { once: true });
+    if (!writesRefs) signal.addEventListener("abort", stop, { once: true });
     try {
       if (input !== undefined) program.write(input);
       program.closeInput();
@@ -126,15 +136,12 @@ export async function repository(
   folder: string,
   signal = ctx.signal,
 ): Promise<Repository | undefined> {
-  const path =
-    folder === "~" ? homedir() : folder.startsWith("~/") ? join(homedir(), folder.slice(2)) : resolve(folder);
+  const path = folderPath(folder);
   try {
     const result = await gitAt(ctx, path, {}, signal)(["rev-parse", "--show-toplevel"]);
     if (result.code === 0) {
       const root = result.out.join("\n");
-      const prefix = relative(root, await realpath(path))
-        .split(sep)
-        .join("/");
+      const prefix = folderPrefix(root, await realpath(path));
       return { root, prefix };
     }
     // The local process runner invokes Git through a shell on Unix; a missing
@@ -146,6 +153,18 @@ export async function repository(
     if (isMissing(cause)) return;
     throw cause;
   }
+}
+
+export function folderPath(folder: string): string {
+  return folder === "~"
+    ? homedir()
+    : folder.startsWith("~/")
+      ? join(homedir(), folder.slice(2))
+      : resolve(folder);
+}
+
+export function folderPrefix(root: string, path: string): string {
+  return relative(root, path).split(sep).join("/");
 }
 
 const MAX_NEW_FILE_BYTES = 50_000_000;
@@ -309,14 +328,31 @@ export async function snapshot(
   }
 }
 
+/** Finds the persisted before snapshot for this exact turn, even after a restart. */
+export async function beforeSnapshot(
+  ctx: LocalContext,
+  { root, threadId, turnId, signal }: TurnSnapshot & { signal: LocalContext["signal"] },
+) {
+  const result = await gitAt(
+    ctx,
+    root,
+    {},
+    signal,
+  )(["rev-parse", "--verify", "--quiet", `${turnRefs(threadId, turnId)}/before`]);
+  if (result.code === 1 && result.err.length === 0) return;
+  if (result.code !== 0) throw new Error(`Git could not read the before snapshot: ${result.err.join("\n")}`);
+  return result.out[0];
+}
+
 export const AFTER_SNAPSHOT_WARNING = "Couldn't save this turn's code";
 
 /** Removes this thread's snapshot refs, leaving other Git refs in place. */
 export async function deleteSnapshots(
   ctx: LocalContext,
   { root, threadId }: Omit<TurnSnapshot, "turnId">,
+  signal = ctx.signal,
 ): Promise<void> {
-  const git = gitAt(ctx, root);
+  const git = gitAt(ctx, root, {}, signal);
   const prefix = `${threadRefs(threadId)}/turns/`;
   const refs = (await checked(git, ["for-each-ref", "--format=%(refname)", prefix])).filter(
     (ref) => ref.startsWith(prefix) && /^[A-Za-z0-9_-]+\/(before|after)$/.test(ref.slice(prefix.length)),

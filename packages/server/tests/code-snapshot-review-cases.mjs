@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, stat, truncate, unlink, utimes } from "node:fs/promises";
 import { join } from "node:path";
+import { until } from "../../runner/tests/support/routing.mjs";
 
 export async function snapshotReviewCases(fixture) {
   await filtersOnlyChangedFiles(fixture);
   await snapshotsDuringMerge(fixture);
   await scopesSnapshotsToFolder(fixture);
   await skipsRepositoryHooks(fixture);
-  await snapshotDeadlines(fixture);
+  await Promise.all([snapshotDeadlines(fixture), fixture.routed && fixture.stopIsolation()]);
 }
 
 async function skipsRepositoryHooks({ desk, project, start, removeThread, refs, turnRef }) {
@@ -124,12 +125,36 @@ async function scopesSnapshotsToFolder({ desk, code, project, start, turnRef }) 
   );
 }
 
-async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
-  async function stall(project) {
-    project.git("config", "filter.stall.clean", "sleep 90; cat");
-    await project.write(".git/info/attributes", "agent.txt filter=stall\n");
-  }
+export async function stall(project, wait = "sleep 90") {
+  project.git(
+    "config",
+    "filter.stall.clean",
+    `printf "%s %s\\n" "$PPID" "$$" > .git/stall-pids; ${wait}; cat`,
+  );
+  await project.write(".git/info/attributes", "agent.txt filter=stall\n");
+}
 
+export function alive(pid) {
+  const state = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)])
+    .stdout.toString()
+    .trim();
+  return !!state && !state.startsWith("Z");
+}
+
+export async function gitPids({ folder }) {
+  const file = Bun.file(join(folder, ".git/stall-pids"));
+  let line;
+  await until("Git's slow clean filter starts", async () => {
+    line = (await file.text().catch(() => "")).trim();
+    return /^\d+ \d+$/.test(line);
+  });
+  const pids = line.split(" ").map(Number);
+  assert.equal(pids.length, 2);
+  assert.ok(pids.every((pid) => pid > 1 && alive(pid)));
+  return pids;
+}
+
+async function snapshotDeadlines({ desk, code, project, start, refs, gate, routed }) {
   const before = await project("slow-before");
   const after = await project("slow-after");
   await stall(before);
@@ -138,13 +163,26 @@ async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
   const afterThread = await start(desk, after.folder);
 
   const [blocked, finished] = await Promise.all([
-    beforeThread.run(beforeThread.messageId, "edit-fail", 75_000),
+    (async () => {
+      const running = beforeThread.run(beforeThread.messageId, "edit-fail", 75_000);
+      const pids = await gitPids(before);
+      const result = await running;
+      await until("the timed-out before hook reaps Git and its filter", () =>
+        pids.every((pid) => !alive(pid)),
+      );
+      return result;
+    })(),
     (async () => {
       const running = afterThread.run(afterThread.messageId, "edit", 75_000);
       await afterThread.edited();
       await stall(after);
       await gate(after.folder, "go");
-      return running;
+      const pids = await gitPids(after);
+      const result = await running;
+      await until("the timed-out after hook reaps Git and its filter", () =>
+        pids.every((pid) => !alive(pid)),
+      );
+      return result;
     })(),
   ]);
 
@@ -168,6 +206,11 @@ async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
   ]) {
     await unlink(join(project.folder, ".git/info/attributes"));
     const next = await thread.run(await thread.post(), "edit-fail");
-    assert.equal((await thread.reply(next.turnId)).error, "rate limited", "the next turn starts normally");
+    assert.equal(
+      (await thread.reply(next.turnId)).error,
+      routed ? "Plugin fake-agent: rate limited" : "rate limited",
+      "the next turn starts normally",
+    );
   }
+  console.log("code snapshots: both hook deadlines reaped Git and its filter");
 }

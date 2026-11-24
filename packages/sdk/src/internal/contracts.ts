@@ -43,12 +43,22 @@ export interface Contract<T extends object, P extends ContractPlace = ContractPl
   get(id: string, ...context: LookupContext<P>): ProviderSelection<BoundProvider<T, P>>;
 }
 
+interface LocalLookupOptions {
+  readonly onIncompatible?: (plugin: string) => void;
+  /** Cancel provider discovery and calls made through the returned list. */
+  readonly signal?: NonNullable<HostBridge["signal"]>;
+  /** When the live input uses a different signal, identify it so it stays off the wire. */
+  readonly inputSignal?: NonNullable<HostBridge["signal"]>;
+  /** Handle process failures without hiding healthy providers or their own errors. */
+  readonly onUnavailable?: (failure: { plugin: string; message: string; notice?: string }) => void;
+}
+
 export interface ContractContext {
   readonly [contractScope]: ContractScope;
 }
 
 type LookupContext<P extends ContractPlace> = P extends "local"
-  ? [context: ContractContext]
+  ? [context: ContractContext, options?: LocalLookupOptions]
   : [context?: ContractContext];
 
 type BoundProvider<T, P extends ContractPlace> = {
@@ -150,24 +160,30 @@ export function contractReference<T extends object, P extends ContractPlace>(
       ? {}
       : { dataMethods: dataMethods === true ? (true as const) : Object.freeze([...dataMethods]) }),
   });
-  const resolve = async (context?: ContractContext, id?: string): Promise<readonly ContractEntry[]> => {
+  const resolve = async (
+    context?: ContractContext,
+    id?: string,
+    options?: LocalLookupOptions,
+  ): Promise<readonly ContractEntry[]> => {
     const scoped = context?.[contractScope] ?? (place === "server" ? serverScope : undefined);
     if (!scoped)
       throw new Error(
         "Contract lookup requires a plugin function; pass ctx in local functions and server actions",
       );
-    return scoped.list(key, id);
+    return scoped.list(key, id, options);
   };
   return Object.freeze({
     ...key,
     [contractBrand]: (shape: T) => shape,
-    list: async (context?: ContractContext) =>
-      (await resolve(context)).map(({ implementation }) => implementation as BoundProvider<T, P>),
-    get: (id: string, context?: ContractContext) =>
+    list: async (context?: ContractContext, options?: LocalLookupOptions) =>
+      (await resolve(context, undefined, options)).map(
+        ({ implementation }) => implementation as BoundProvider<T, P>,
+      ),
+    get: (id: string, context?: ContractContext, options?: LocalLookupOptions) =>
       select(
         id,
         async () =>
-          (await resolve(context, id)).find((provider) => provider.id === id)?.implementation as
+          (await resolve(context, id, options)).find((provider) => provider.id === id)?.implementation as
             | BoundProvider<T, P>
             | undefined,
       ),
@@ -178,6 +194,7 @@ export function contractReference<T extends object, P extends ContractPlace>(
 export function provide<T extends object, P extends ContractPlace>(
   key: Contract<T, P>,
   implementation: Implementation<NoInfer<T>, P>,
+  _options?: P extends "local" ? { unavailable: string } : never,
 ): Provider<P> {
   return Object.freeze({
     [providerBrand]: true as const,
@@ -192,17 +209,15 @@ export interface ContractEntry {
 }
 
 export interface ContractScope {
-  list(
-    key: ContractKey,
-    id?: string,
-    onIncompatible?: (plugin: string) => void,
-  ): Promise<readonly ContractEntry[]>;
+  list(key: ContractKey, id?: string, options?: LocalLookupOptions): Promise<readonly ContractEntry[]>;
 }
 
 /** List usable local providers alongside builds whose declarations no longer match. */
 export async function localProviders<T extends object>(key: Contract<T, "local">, context: ContractContext) {
   const incompatible: string[] = [];
-  const entries = await context[contractScope].list(key, undefined, (plugin) => incompatible.push(plugin));
+  const entries = await context[contractScope].list(key, undefined, {
+    onIncompatible: (plugin) => incompatible.push(plugin),
+  });
   return {
     providers: entries.map((entry) => entry.implementation as BoundProvider<T, "local">),
     incompatible,

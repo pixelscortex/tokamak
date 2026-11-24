@@ -141,14 +141,30 @@ export const removeLocal = local({
     const current = await ctx.runQuery(api.threads.get, { threadId });
     await ctx.runMutation(api.threads.remove, { threadId });
     if (!current) return null;
-    const cleaned = await threadDeletedLocal
-      .list(ctx)
-      .then(async (hooks) => {
-        const event = { threadId, folder: current.folder?.path };
-        const results = await Promise.allSettled(hooks.map(async (hook) => hook.after(event)));
-        return results.every((result) => result.status === "fulfilled");
-      })
-      .catch(() => false);
+    let cleaned = true;
+    function cleanupFailed(cause: unknown) {
+      cleaned = false;
+      // oxlint-disable-next-line no-console -- The local worker sends this warning to the client log.
+      console.warn("chat: could not remove local thread data", cause);
+    }
+    try {
+      const hooks = await threadDeletedLocal.list(ctx, {
+        onUnavailable: ({ message }) => cleanupFailed(message),
+      });
+      const folder = current.folder?.path;
+      const event = { threadId, ...(folder === undefined ? {} : { folder }) };
+      await Promise.all(
+        hooks.map(async (hook) => {
+          try {
+            await hook.after(event);
+          } catch (cause) {
+            cleanupFailed(cause);
+          }
+        }),
+      );
+    } catch (cause) {
+      cleanupFailed(cause);
+    }
     return cleaned
       ? null
       : { warning: "The thread was deleted, but some of its local data couldn't be removed." };

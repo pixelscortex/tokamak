@@ -136,6 +136,9 @@ case "$1" in
     echo "Timing Rust integration: Bun fallback"
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
+    echo "Timing Rust integration: Bun code snapshots and changes"
+    time env -u TOKAMAK_TEST_RUNNER TOKAMAK_PLUGIN_RUNTIME=bun TOKAMAK_TEST_CODE_CORE=1 CI=1 cargo test --locked -p server \
+      --test code_snapshots --test code_changes
     # A clean quit must also reap the Bun fallback's processes.
     TOKAMAK_PLUGIN_RUNTIME=bun cargo test --locked -p tokamak-runner --test lifecycle graceful_quit
 

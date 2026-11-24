@@ -111,10 +111,10 @@ export function discoverProviders(root, files, program, checker) {
       const declaration = target.valueDeclaration;
       if (!declaration || declaration.getSourceFile() !== source) continue;
       const call = ts.isExportAssignment(declaration) ? declaration.expression : declaration.initializer;
-      if (!call || !ts.isCallExpression(call) || call.arguments.length !== 2)
+      if (!call || !ts.isCallExpression(call) || ![2, 3].includes(call.arguments.length))
         throw new Error(`${path}: export the result of provide(contract, implementation) directly`);
       seen.add(target);
-      const [key, implementation] = call.arguments;
+      const [key, implementation, options] = call.arguments;
       const keySymbol = unalias(
         checker,
         checker.getSymbolAtLocation(ts.isPropertyAccessExpression(key) ? key.name : key),
@@ -131,6 +131,22 @@ export function discoverProviders(root, files, program, checker) {
         throw new Error(
           `${path}: provide requires a named contract from src/contracts.ts or plugin:<id>/contracts`,
         );
+      let unavailable;
+      if (options) {
+        const field = ts.isObjectLiteralExpression(options) && options.properties[0];
+        if (
+          contract.place !== "local" ||
+          !field ||
+          options.properties.length !== 1 ||
+          !ts.isPropertyAssignment(field) ||
+          field.name.getText(source) !== "unavailable" ||
+          !ts.isStringLiteralLike(field.initializer) ||
+          !field.initializer.text ||
+          Buffer.byteLength(field.initializer.text) > 1024
+        )
+          throw new Error(`${path}: provider options must be { unavailable: "message" } (up to 1024 bytes)`);
+        unavailable = field.initializer.text;
+      }
       const local = relative(root, path).split(sep).join("/");
       const methods = [];
       if (memberHook) {
@@ -165,6 +181,7 @@ export function discoverProviders(root, files, program, checker) {
         registration: `${local.replace(/\.tsx?$/, "")}:${exported.name}`,
         call,
         methods,
+        unavailable,
       });
     }
   }
@@ -192,6 +209,7 @@ export function contractManifest(root, namespace, providers = []) {
       declarationHash: p.declarationHash,
       place: p.place,
       registration: p.registration,
+      unavailable: p.unavailable,
       methods: Object.fromEntries(p.methods.map((method) => [method.member, contractTarget(p, method)])),
     })),
   };

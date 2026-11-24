@@ -6,20 +6,33 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
+  symlink,
   truncate,
   unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  cancelledCleanup,
+  managerCrash,
+  reloadManager,
+  separateProcesses,
+  stopDuringAfter,
+  stopIsolation,
+  unavailableProviders,
+} from "./code-snapshot-process-cases.mjs";
 import { snapshotReviewCases } from "./code-snapshot-review-cases.mjs";
 import { agentHarness, build, copySource, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 
 const h = await agentHarness({ binary: process.argv[2], name: "code-snapshots" });
 const { ai, chat } = h.api;
 const source = join(workspace, "plugins/code");
+const bunCore = process.env.TOKAMAK_TEST_CODE_CORE === "1";
+const withRunner = process.argv[2].includes("tokamak-runner");
 const threadRef = (id) => `refs/tokamak/threads/${id.split(":")[1]}`;
 const turnRef = (threadId, turnId) => `${threadRef(threadId)}/turns/${turnId.split(":")[1]}`;
 
@@ -27,30 +40,153 @@ try {
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "code"), { recursive: true });
   const { api: code } = await import(join(source, "src/server/_generated/api.ts"));
+  if (withRunner && h.selection.runtime === "quickjs") await installThirdPartyHook();
   const address = await h.serve("snapshots");
-  const desk = await h.connect(address, { local: true });
-  await preservesWorktree(desk, code);
-  await snapshotFailures(desk, code);
-  await prunesWhenReopened(address, desk, code);
-  await withoutDataFolder(address);
-  await snapshotReviewCases({
-    desk,
-    code,
-    project,
-    start,
-    refs,
-    turnRef,
-    gate: h.gate,
-    removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+  const runner = h.runner(address);
+  const routed = runner && h.selection.runtime === "quickjs";
+  const hookCalls = new Set();
+  const desk = await h.connect(address, {
+    local: true,
+    ...(routed && {
+      observe(plugin, frame, direction) {
+        if (
+          direction === "fromWorker" &&
+          frame.name === "local.contract.call" &&
+          frame.payload.plugin === "code"
+        ) {
+          hookCalls.add(`${plugin}/${frame.payload.name}/${frame.payload.method}`);
+        }
+      },
+    }),
   });
-  await gitAppearsMidTurn(desk);
-  await stoppedTurn(desk);
-  await withoutAi(code);
-  console.log(
-    "code snapshots: refs, parent chain, unchanged user Git state, clean filters, ignored files, folder scope, merge conflicts, disabled Git hooks, hook deadlines, deletion, Git added mid-thread, standalone code",
-  );
+  await preservesWorktree(desk, code, routed);
+  await snapshotFailures(desk, code);
+  await changedWorktree(desk);
+  if (!bunCore) await prunesWhenReopened(address, desk, code);
+  if (!runner) await withoutDataFolder(address);
+  const fixture = { h, runner, desk, code, project, start, refs, turnRef };
+  await stopDuringAfter(fixture);
+  if (bunCore) {
+    console.log("code snapshots (Bun): matching before/after refs, failing before, deletion, no data folder");
+  } else {
+    if (routed) {
+      await separateProcesses(fixture);
+      assert.deepEqual([...hookCalls].sort(), [
+        "ai/turnHooks/after",
+        "ai/turnHooks/before",
+        "chat/threadDeletedLocal/after",
+      ]);
+      await unavailableProviders(fixture);
+      await thirdPartyNotice(desk);
+      await cancelledCleanup(fixture);
+      await reloadManager(fixture);
+    }
+    await snapshotReviewCases({
+      ...fixture,
+      gate: h.gate,
+      removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+      routed,
+      stopIsolation: () => stopIsolation(fixture),
+    });
+    await gitAppearsMidTurn(desk);
+    await stoppedTurn(desk);
+    await withoutAi(code);
+    if (routed) await managerCrash(fixture);
+    console.log(
+      "code snapshots: refs, parent chain, unchanged user Git state, clean filters, ignored files, folder scope, merge conflicts, disabled Git hooks, hook deadlines, deletion, Git added mid-thread, standalone code",
+    );
+  }
 } finally {
   await h.close();
+}
+
+async function changedWorktree(desk) {
+  const outer = await project("before-worktree-root");
+  const folder = join(outer.folder, "subfolder");
+  await mkdir(folder);
+  await writeFile(join(folder, "agent.txt"), "before nested init\n");
+  outer.git("add", "subfolder");
+  outer.git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "-m",
+    "Track subfolder",
+  );
+  const nested = await start(desk, folder);
+  const running = nested.run(nested.messageId, "edit");
+  await nested.edited();
+  gitAt(folder)("init", "--quiet");
+  await h.gate(folder, "go");
+  const result = await running;
+  const prefix = turnRef(nested.threadId, result.turnId);
+  assert.equal(result.state, "done");
+  assert.equal(result.hookNotice, undefined);
+  assert.equal(outer.git("rev-parse", `${prefix}/after^`), outer.git("rev-parse", `${prefix}/before`));
+  assert.deepEqual(refs(gitAt(folder)), []);
+
+  const moved = await project("before-folder-vanished");
+  const thread = await start(desk, moved.folder);
+  const ending = thread.run(thread.messageId, "edit");
+  await thread.edited();
+  const other = moved.folder + "-moved";
+  await rename(moved.folder, other);
+  await h.gate(other, "go");
+  const lost = await ending;
+  assert.equal(lost.state, "done");
+  assert.equal(lost.hookNotice, "Couldn't save this turn's code");
+  assert.deepEqual(refs(gitAt(other), turnRef(thread.threadId, lost.turnId)), [
+    `${turnRef(thread.threadId, lost.turnId)}/before`,
+  ]);
+}
+
+async function installThirdPartyHook() {
+  const folder = join(h.scratch, "sources", "other-hook");
+  await mkdir(join(folder, "src/server"), { recursive: true });
+  await symlink(join(workspace, "plugins/ai/node_modules"), join(folder, "node_modules"), "dir");
+  await writeFile(join(folder, "package.json"), '{"name":"other-hook","version":"1.0.0","type":"module"}');
+  await writeFile(
+    join(folder, "plugin.ts"),
+    `
+import { definePlugin } from "@tokamak/sdk";
+export default definePlugin({ id: "other-hook", version: "1.0.0", depends: ["ai"] });
+`,
+  );
+  await writeFile(
+    join(folder, "src/server/hook.ts"),
+    `
+import { local, provide } from "@tokamak/sdk";
+import { turnHooks, type TurnInfo } from "plugin:ai/contracts";
+export const hooks = provide(turnHooks, {
+  before: local({ handler: async (ctx, turn: TurnInfo) => {
+    if (turn.signal !== ctx.signal || turn.signal.aborted) throw new Error("Missing provider signal");
+    return 1 as never; // Non-object hook results have always been ignored.
+  } }),
+  after: local({ handler: async (_ctx, turn: TurnInfo) => {
+    if (turn.folder.endsWith("/third-party-after")) throw new Error("The example hook could not update its report");
+  } }),
+});
+`,
+  );
+  build(folder);
+  await cp(join(folder, "dist"), join(h.plugins, "other-hook"), { recursive: true });
+}
+
+async function thirdPartyNotice(desk) {
+  const { folder, git } = await project("third-party-after");
+  const thread = await start(desk, folder);
+  await h.gate(folder, "go");
+  const result = await thread.run(thread.messageId, "edit");
+  assert.deepEqual(result, {
+    turnId: result.turnId,
+    state: "done",
+    hookNotice: "The example hook could not update its report",
+  });
+  assert.equal(refs(git, turnRef(thread.threadId, result.turnId)).length, 2);
+  console.log("code snapshots: third-party after error is shown verbatim and leaves the outcome alone");
 }
 
 function gitAt(folder) {
@@ -132,7 +268,7 @@ async function readState({ folder, git }, large) {
   );
 }
 
-async function preservesWorktree(desk, code) {
+async function preservesWorktree(desk, code, routed) {
   const { folder, git, write } = await project("worktree");
   git("config", "core.splitIndex", "true");
   await write("staged.txt", "in the stash\n");
@@ -198,7 +334,10 @@ async function preservesWorktree(desk, code) {
 
   const failed = await thread.run(await thread.post(), "edit-fail");
   assert.equal(failed.state, "failed");
-  assert.equal((await thread.reply(failed.turnId)).error, "rate limited");
+  assert.equal(
+    (await thread.reply(failed.turnId)).error,
+    routed ? "Plugin fake-agent: rate limited" : "rate limited",
+  );
   const failedPrefix = turnRef(threadId, failed.turnId);
   assert.equal(git("rev-parse", `${failedPrefix}/before^`), git("rev-parse", `${prefix}/after`));
   assert.equal(git("show", `${failedPrefix}/after:agent.txt`), "partial change");

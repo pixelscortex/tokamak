@@ -96,6 +96,8 @@ pub struct ContractRegistration {
     pub place: ContractPlace,
     pub declaration_hash: String,
     pub registration: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
     pub methods: BTreeMap<String, String>,
 }
 
@@ -449,13 +451,19 @@ impl Manifest {
             let declared = self.plugin.declares_access_to(&provider.owner);
             let has_entry = match provider.place {
                 ContractPlace::Local => self.entries.local.is_some() && provider.methods.is_empty(),
-                ContractPlace::Server => self.entries.server.is_some(),
+                ContractPlace::Server => {
+                    self.entries.server.is_some() && provider.unavailable.is_none()
+                }
             };
             if !declared
                 || !has_entry
                 || !valid_name(&provider.name)
                 || !valid_hash(&provider.declaration_hash)
                 || provider.registration.is_empty()
+                || provider
+                    .unavailable
+                    .as_ref()
+                    .is_some_and(|notice| notice.is_empty() || notice.len() > 1024)
                 || !registrations.insert(&provider.registration)
                 || provider.methods.keys().any(|member| !valid_name(member))
             {

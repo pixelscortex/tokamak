@@ -4,6 +4,11 @@ Code saves the Git worktree before and after each agent turn on the client that 
 Install it alongside Chat; AI is optional. A turn that starts outside a Git worktree
 gets no snapshots, even if the agent runs `git init` during that turn.
 
+- On the QuickJS Runner, Code saves both snapshots in its own process.
+  The after hook looks up the before ref by thread and turn, using its
+  original worktree even if the selected folder has become a nested
+  repository. A new Code process can complete the pair. An unavailable
+  provider or snapshot that cannot be saved leaves the usual warning.
 - Each turn with Git gets commits at
   `refs/tokamak/threads/<thread key>/turns/<turn key>/before` and `…/after`.
   The keys are the parts of the thread and turn IDs after the colon.
@@ -41,7 +46,10 @@ These read Git through the local functions `changes:forTurn`, `changes:diff` and
 
 The local `notices:forTurn({ threadId, turnId })` reads omissions and the warning
 from Git. `src/local/git.ts` has the matching `turnRefs(threadId, turnId)` helper.
+The after hook also reads the before ref for that turn. It can recover the
+pair even if the Code process restarted while the agent was running.
 
-Run `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test code_snapshots --test code_changes` for
-snapshots and change reads with the real server and a fake agent. Run
-`proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.
+Run `TOKAMAK_TEST_RUNNER=1 cargo test --locked -p server --test code_snapshots --test code_changes` for
+snapshots and change reads with the real server and a fake agent. The Rust
+check also runs the core cases in Bun, including a client with no data folder.
+Run `proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.

@@ -9,11 +9,21 @@ need different builds of live providers. Windows that use the same build and
 live profile share a process. The window reports its workspace address
 without credentials so the Runner can tell which installation superseded a
 build. A live provider change sends new calls to a fresh realm. The original
-realm retains its admitted calls and verified provider files. For ai this
-now applies only to live turn hooks. Until hooks also move across processes
-(TKM-248), turn controls use the active turn's workspace and turn ID to find
-its original realm. Quit controls also include turns in draining realms.
-An agent build change does not change ai's realm.
+realm retains its admitted calls and verified provider files.
+
+The agent, turn hook, and thread deletion contracts in the bundled plugins
+use plain-data calls. Reloading an agent or Code does not restart ai or
+clear its session grants. Turn controls look up the active turn in ai's
+regular process. Hook calls have no agent channel; their caller can cancel a
+pending discovery or call by operation ID. That drops the nested work and
+uses the same host invocation cancel as when the whole turn is lost.
+
+When a window sees a replacement for a plugin's own QuickJS build, it sends
+retirement to the old connection and gives its admitted root calls up to five
+seconds to settle. The SDK exposes this notification as `ctx.retiring`. AI
+uses it to interrupt running turns and reap their programs before releasing
+their threads. A call with no cleanup can still be cancelled when the old
+connection closes. Code and agent reloads do not retire AI's root calls.
 
 An idle build that the same workspace supersedes can stop as soon as the
 replacement is acquired. Otherwise the Runner sweeps known superseded builds
@@ -60,8 +70,8 @@ both descriptors have close-on-exec set. Linux sets it atomically. Only the
 intended host receives its end, and it restores close-on-exec before it can
 start any programs.
 
-When ai's host exits, the Runner drops and cancels the linked starts and any
-open questions. A window that stays connected waits for the Server's
+When ai's host exits, the Runner cancels the linked agent starts, open questions, and
+any pending hook calls. A window that stays connected waits for the Server's
 liveness sweep (45 seconds without a heartbeat, checked every 5 seconds).
 A relaunched window can release an orphan earlier via its startup recovery.
 When an agent host exits, only starts on that host fail,

@@ -39,6 +39,7 @@ type Manifest = {
     owner: string;
     registration: string;
     declarationHash: string;
+    unavailable?: string;
   }[];
 };
 
@@ -291,7 +292,7 @@ export class LocalFunctions implements LocalTransport {
       const dataMethods = routed && !own ? declaration.dataMethods : undefined;
       const live = !own && dataMethods !== true;
       const path = live ? await load(artifact) : "";
-      for (const { registration } of registrations) {
+      for (const { registration, unavailable } of registrations) {
         // Keep the live import pinned. A compatible data method can use the
         // latest independent provider process even while this call drains.
         const current = this.catalog.plugins.find(({ plugin: candidate }) => candidate.id === plugin);
@@ -325,6 +326,7 @@ export class LocalFunctions implements LocalTransport {
           ...(live && routed && { artifact: { ...artifact } }),
           own,
           owner: caller,
+          ...(unavailable === undefined ? {} : { unavailable }),
           ...(dataMethods && { dataMethods, build: `${target.entryHash}:${target.codeHash}` }),
         });
       }
@@ -404,6 +406,7 @@ class LocalWorker {
   private next = 0;
   private closing?: Promise<void>;
   private draining?: string;
+  private reloadTimer?: ReturnType<typeof setTimeout>;
   private invoking = 0;
   private readonly loaded = new Map<string, { artifact: LocalArtifact; path: Promise<string> }>();
 
@@ -477,6 +480,7 @@ class LocalWorker {
       throw error;
     }
     if (this.closing) throw new Error("Local worker retired");
+    if (this.draining === this.artifact.id) throw new Error("Local plugin build retired");
     if (signal?.aborted) throw new Error("Local function cancelled");
     if (this.calls.size >= WORKER_CAPACITY) throw new Error("Local worker invocation limit reached");
     const id = ++this.next;
@@ -604,10 +608,8 @@ class LocalWorker {
   catalogChange(artifacts: ReadonlyMap<string, LocalArtifact | undefined>, live: LocalArtifact[]) {
     const matches = (artifact: LocalArtifact) => sameArtifact(artifact, artifacts.get(artifact.id));
     if (!matches(this.artifact)) {
-      void this.close(
-        this.routed ? `Plugin ${this.artifact.id} local build retired` : "Local plugin generation retired",
-        this.routed ? this.artifact.id : undefined,
-      );
+      if (this.routed) return this.artifact.id;
+      void this.close("Local plugin generation retired");
     } else if (this.routed) {
       return changedProvider(this.live, live);
     } else if ([...this.loaded.values()].some(({ artifact }) => !matches(artifact))) {
@@ -618,6 +620,16 @@ class LocalWorker {
 
   drain(reason: string) {
     this.draining = reason;
+    if (reason === this.artifact.id && this.invoking > 0) {
+      // Give this build's admitted calls a bounded chance to settle on reload.
+      // Live-provider changes use the longer drain without a retirement signal.
+      const retired = "Local plugin build retired";
+      const timer = setTimeout(() => void this.close(retired), 5_000);
+      this.reloadTimer = timer;
+      void this.endpoint
+        .then((worker) => worker.retire?.(this.artifact, this.live, reason))
+        .catch(() => this.close(retired));
+    }
     this.finishDraining();
   }
 
@@ -655,6 +667,7 @@ class LocalWorker {
 
   close(reason: string, changed?: string) {
     if (!this.closing) {
+      clearTimeout(this.reloadTimer);
       this.closing = this.endpoint
         .then(async (worker) => {
           if (changed) await worker.retire?.(this.artifact, this.live, changed).catch(() => {});

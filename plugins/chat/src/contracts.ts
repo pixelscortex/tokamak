@@ -13,7 +13,7 @@ export interface ThreadDeletedServer {
 export interface DeletedThread {
   readonly threadId: Id<"threads">;
   /** The stored path, if this thread had a folder. */
-  readonly folder: string | undefined;
+  readonly folder?: string;
 }
 
 export interface ThreadDeletedLocal {
@@ -24,4 +24,7 @@ export interface ThreadDeletedLocal {
 export const threadDeletedServer = contract<ThreadDeletedServer>("threadDeletedServer");
 
 /** Runs on the client that deleted a thread, once the server has accepted the delete. */
-export const threadDeletedLocal = contract<ThreadDeletedLocal>("threadDeletedLocal", { place: "local" });
+export const threadDeletedLocal = contract<ThreadDeletedLocal>("threadDeletedLocal", {
+  place: "local",
+  dataMethods: true,
+});

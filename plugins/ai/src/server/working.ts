@@ -16,6 +16,7 @@ interface Working {
   readonly threadId: string;
   readonly agent: string;
   readonly control: ReturnType<typeof turnControl>;
+  readonly skipAfter: () => void;
   readonly ended: Promise<void>;
 }
 
@@ -45,19 +46,21 @@ export const list = local({
 const AFTER_FORCE_MS = 3_000;
 
 /**
- * Stops every turn running here for the caller, as Stop does, and waits for
- * their rows to end ("Stopped", replies kept). An agent that has not ended
- * after the Force stop delay has its programs killed, so quitting leaves no
- * agent process behind. Resolves with how many turns it stopped.
+ * Stops active agents and skips any remaining after hooks for the caller.
+ * Waits for the turns' rows to settle, preserving outcomes already decided.
+ * An agent still running after the Force stop delay has its programs killed.
+ * Resolves with how many turns were handled.
  */
 export const stopAll = local({
   handler: async (ctx) => {
     await ctx.runMutation(api.turns.stopQueued, {});
     const turns = mine(ctx.auth);
     await Promise.all(
-      turns.map(async ([turnId, { control }]) => {
-        await ctx.runMutation(api.turns.requestStop, { turnId }).catch(() => {});
-        await control.requestStop();
+      turns.map(async ([turnId, { control, skipAfter }]) => {
+        const stopping = await control.requestStop(() =>
+          ctx.runMutation(api.turns.requestStop, { turnId }).catch(() => {}),
+        );
+        if (!stopping) skipAfter();
       }),
     );
     const ended = Promise.all(turns.map(([, turn]) => turn.ended));

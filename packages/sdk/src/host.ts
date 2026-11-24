@@ -70,6 +70,7 @@ export interface HostOperations {
           owner: string;
           dataMethods?: true | string[];
           build?: string;
+          unavailable?: string;
           incompatible?: never;
         }
       | { plugin: string; incompatible: true }
@@ -82,6 +83,7 @@ export interface HostOperations {
       name: string;
       registration: string;
       method: string;
+      invocationSignal?: true;
       args: JsonValue[];
     };
     result: JsonValue;
@@ -127,6 +129,7 @@ export interface HostBridge {
   readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
+  readonly retiring?: ActionSignal;
   readonly proc?: import("./local").LocalProcess;
   readonly contracts?: import("./internal/contracts").ContractScope;
   readonly channel?: {
@@ -138,7 +141,7 @@ export interface HostBridge {
     run: (forceStop: () => Promise<void>, host: HostBridge) => Promise<T>,
   ) => Promise<T>;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
-  op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;
+  op(name: HostOperation, payload: JsonValue, signal?: ActionSignal): JsonValue | Promise<JsonValue>;
 }
 
 export type ChannelHandler = (method: string, args: JsonValue) => Promise<JsonValue> | JsonValue;
@@ -154,9 +157,10 @@ export async function callHost<K extends HostOperation>(
   host: HostBridge,
   name: K,
   payload: HostOperations[K]["args"],
+  signal?: ActionSignal,
 ): Promise<HostOperations[K]["result"]> {
   assertJson(payload, `${name} payload`);
-  const result = await host.op(name, payload);
+  const result = await host.op(name, payload, signal);
   assertJson(result, `${name} result`);
   return result as HostOperations[K]["result"];
 }

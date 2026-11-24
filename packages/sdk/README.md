@@ -421,6 +421,11 @@ the heap at 256 MiB by default, allows up to 128 calls and 256 live programs,
 and interrupts JavaScript that runs for five seconds without yielding. See the
 [host reference](../host/README.md) for filesystem, timers, I/O, and memory limits.
 
+QuickJS root local calls also get `ctx.retiring`. It aborts when the window
+replaces the plugin's own build. The call can still use its context to settle
+work until the old connection closes. Bun and routed provider calls do not
+receive this signal.
+
 ### Server actions
 
 With the fallback, `runtime: "worker"` in `definePlugin` sends actions to a long-lived Bun process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
@@ -639,15 +644,32 @@ process restarts. A value that JSON would change or lose fails with the
 contract and method name. Arguments and results also have size and nesting
 limits. A void result becomes `null` across processes.
 
+Pass `{ signal }` to a local contract lookup to cancel its pending routed
+calls without ending the caller's invocation. A method that accepts one object
+can also take that same signal as `input.signal`. QuickJS sends only the other
+fields and assigns the provider invocation's signal to `input.signal` before
+calling the regular `local({ handler })` definition. Bun passes the caller's
+live object and signal. If the live input uses a different signal than the
+routed call, use `inputSignal` to identify the value to keep off the wire.
+A provider can use `{ unavailable: "…" }` in
+`provide()` to supply a notice for the lookup's `onUnavailable` callback even
+when its process cannot start; errors thrown by the handler still reject.
+
 Methods that take live objects stay in the caller's realm. For a mixed
 contract the provider module is also evaluated in that realm, even though its
 plain-data methods run in the provider's separate process. That shared
-evaluation is still used by live turn hooks (TKM-248).
-A reload restarts the provider process only when its local bytes change. If
-the caller's live providers change, new calls use a new realm and admitted
-calls finish in the old one. “Always allow this session” grants in `ai`'s
-module state survive an agent reload. They do not carry to a
-replacement realm after a live hook provider changes.
+evaluation remains available for plugins with live methods. A change to a
+live provider gives new calls a new realm while admitted calls in the old
+one finish. The agent, turn hook and thread deletion contracts use only
+routed calls on QuickJS, so reloading an agent or Code does not replace
+`ai`'s process or clear its “Always allow this session” grants.
+
+Turn hook authors declare a regular `local({ handler })` and read
+`turn.signal`. On QuickJS the SDK attaches the hook invocation's signal
+as described above. Stop cancels the before hook; after hooks run together
+under one deadline and are also cancelled if the turn is lost. Code stores
+the before snapshot under a Git ref scoped to the thread and turn ID, so a
+replacement Code process can pair it with the after snapshot.
 
 Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.

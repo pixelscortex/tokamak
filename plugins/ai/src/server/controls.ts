@@ -20,7 +20,12 @@ export function controlFor(turnId: string, auth: AuthContext) {
 }
 
 /** Bridges separate local calls into the provider's running invocation, on its original device. */
-export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: () => Promise<void>) {
+export function turnControl(
+  turnId: string,
+  auth: AuthContext,
+  cancelQuestion?: () => Promise<void>,
+  cancelBefore?: () => void,
+) {
   let steer: Steer | undefined;
   let linkedSteer = false;
   let finishing = false;
@@ -28,7 +33,7 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
   let stopRequested = false;
   let stopReady = false;
   let stopSent = false;
-  let closed = false;
+  let agentClosed = false;
   let forceKill: (() => Promise<void>) | undefined;
   let forcing: Promise<void> | undefined;
   let resolveForced!: () => void;
@@ -47,7 +52,7 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
   }
 
   function sendStop() {
-    if (closed || !stop || stopSent) return;
+    if (agentClosed || !stop || stopSent) return;
     stopSent = true;
     void Promise.resolve()
       .then(stop)
@@ -81,11 +86,11 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
     },
     steer(text: string, record: RecordSteer) {
       const delivery = steerLine.then(async () => {
-        if (!steer && !closed && !stopRequested) {
+        if (!steer && !agentClosed && !stopRequested) {
           registrationTimer ??= setTimeout(releaseSteers, STEER_REGISTRATION_MS);
           await earlySteers;
         }
-        if (closed || finishing || stopRequested) return noRunningTurn(turnId);
+        if (agentClosed || finishing || stopRequested) return noRunningTurn(turnId);
         const deliver = steer;
         if (!deliver) return fail("NoSteerHandler", { turnId });
         await settleSteer(record);
@@ -115,9 +120,20 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
       return unsettledSteer?.delivery === "delivered" ? unsettledSteer.text : undefined;
     },
     /** Cancel a pending run.ask before interrupting; some providers wait for the answer to proceed. */
-    async requestStop() {
-      if (stopRequested) return;
+    get active() {
+      return !agentClosed;
+    },
+    async requestStop(mark: () => Promise<unknown>) {
+      if (agentClosed) return false;
+      if (stopRequested) return true;
       stopRequested = true;
+      try {
+        await mark();
+      } catch (error) {
+        stopRequested = false;
+        throw error;
+      }
+      cancelBefore?.();
       releaseSteers();
       try {
         await cancelQuestion?.();
@@ -125,6 +141,7 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
         stopReady = true;
         sendStop();
       }
+      return true;
     },
     async run<T>(start: () => Promise<T>, kill: () => Promise<void>) {
       forceKill = kill;
@@ -141,13 +158,13 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
       }
     },
     async forceStop() {
-      if (closed || !forceKill) return noRunningTurn(turnId);
+      if (agentClosed || !forceKill) return noRunningTurn(turnId);
       forcing ??= forceKill().then(resolveForced);
       await forcing;
       return null;
     },
     close() {
-      closed = true;
+      agentClosed = true;
       releaseSteers();
       running.delete(turnId);
     },
