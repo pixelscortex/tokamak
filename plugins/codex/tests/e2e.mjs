@@ -17,8 +17,8 @@ await scanReplays("codex");
 const h = await agentHarness({ binary: process.argv[2], name: "codex" });
 const cleanup = [];
 const path = join(h.scratch, "bin");
-const status = join(h.home, "codex-status");
 const codexHome = join(h.home, ".codex");
+const status = join(codexHome, "auth.json");
 const inherited = {
   HOME: h.home,
   PATH: `${path}${delimiter}/usr/bin${delimiter}/bin`,
@@ -83,12 +83,17 @@ try {
     assert.equal(infoOut.installed, true);
     assert.equal(infoOut.signedIn, false);
   } else {
+    await mkdir(codexHome);
     await writeFile(status, "old\n");
     assert.equal((await info(replayClient)).installed, false);
     await writeFile(status, "signed-out\n");
     assert.equal((await info(replayClient)).signedIn, false);
     await writeFile(status, "prerelease\n");
     assert.equal((await info(replayClient)).signedIn, true);
+    // A positive discovery answer was just cached. Changing the credential
+    // file must make the same provider notice that the account signed out.
+    await writeFile(status, "signed-out\n");
+    assert.equal((await info(replayClient)).signedIn, false);
     await writeFile(status, "signed-in\n");
   }
 
@@ -387,7 +392,7 @@ async function replayExecutable() {
   await writeFile(
     join(path, "codex"),
     `#!/bin/sh
-status=$(cat "$HOME/codex-status")
+status=$(cat "$CODEX_HOME/auth.json")
 case "$1" in
   --version)
     case "$status" in

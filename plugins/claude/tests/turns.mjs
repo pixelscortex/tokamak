@@ -1,7 +1,7 @@
 // Drives the installed Claude provider through a real Tokamak server. CI plays
 // sanitized recordings; --live opts into the official CLI on this computer.
 import assert from "node:assert/strict";
-import { chmod, cp, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { permissionCases } from "./permissions.mjs";
@@ -153,7 +153,9 @@ async function discovery(client) {
     ],
   );
   assert.deepEqual(ready.speeds, []);
-  const marker = join(h.home, "claude-status");
+  const profile = join(h.home, ".claude");
+  await mkdir(profile);
+  const marker = join(profile, ".credentials.json");
   await writeFile(marker, "signed-out");
   assert.deepEqual(readyState(await info()), [true, false]);
   for (const fixture of ["expired-iso", "expired-ms", "expired-seconds"]) {

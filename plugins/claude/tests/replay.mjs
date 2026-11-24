@@ -6,7 +6,10 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
-const status = await readFile(join(process.env.HOME, "claude-status"), "utf8").catch(() => "");
+const status = await readFile(
+  join(process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME, ".claude"), ".credentials.json"),
+  "utf8",
+).catch(() => "");
 if (args[0] === "--version") {
   console.log(status === "old" ? "Claude Code v2.1.329 (test build)" : "2.1.330 (Claude Code)");
 } else if (args[0] === "auth") {

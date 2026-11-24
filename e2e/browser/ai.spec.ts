@@ -214,6 +214,8 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
     const selectReplay = async (name: string) => {
       await agentRow(page).getByRole("button").nth(1).click();
       await page.getByRole("menuitem", { name, exact: true }).click();
+      // The next Send and Queue read the stored choice from the server.
+      await expect(agentRow(page).getByRole("button", { name: `Model: ${name}`, exact: true })).toBeVisible();
     };
     const send = async (text: string, key = "Enter") => {
       await composer(page).fill(text);
