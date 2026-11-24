@@ -662,7 +662,7 @@ fn provider_result(response: Result<Value, String>, plugin: &str, linked: bool) 
         Err(error) => return json!({"error":error, "unavailable":true}),
     };
     if let Some(error) = response["error"].as_str() {
-        // An agent's error becomes the persisted turn reason, as on Bun.
+        // An agent's error becomes the persisted turn reason.
         let error = if linked {
             error.to_owned()
         } else {
