@@ -206,11 +206,7 @@ async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
   ]) {
     await unlink(join(project.folder, ".git/info/attributes"));
     const next = await thread.run(await thread.post(), "edit-fail");
-    assert.equal(
-      (await thread.reply(next.turnId)).error,
-      "rate limited",
-      "the next turn starts normally",
-    );
+    assert.equal((await thread.reply(next.turnId)).error, "rate limited", "the next turn starts normally");
   }
   console.log("code snapshots: both hook deadlines reaped Git and its filter");
 }

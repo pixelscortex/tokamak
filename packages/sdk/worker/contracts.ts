@@ -217,7 +217,7 @@ export function workerContracts(root: ProviderModule, load?: (path: string) => P
               }
             };
           let implementation: Readonly<Record<string, unknown>>;
-          if (!own && routed) {
+          if (routed) {
             if (!build) throw new Error(`Missing routed build for local contract ${owner}/${key.name}`);
             const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
             const cached = descriptions.get(cacheKey);

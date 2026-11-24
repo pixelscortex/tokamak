@@ -634,8 +634,9 @@ catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
 
 A local contract is called from `local`. Declare
-`{ place: "local", dataMethods: true }`. The QuickJS Runner sends all calls to
-another plugin's methods to that plugin's process. Lookups read provider data
+`{ place: "local", dataMethods: true }`. The QuickJS Runner routes every call
+to the provider's process, reusing the caller's host when the provider is the
+same plugin. Lookups read provider data
 and available method names from that process. Keep the fields static for a
 build; the caller can reuse them after a process restarts. Arguments and
 results must be plain JSON. A value JSON would change or lose fails with the

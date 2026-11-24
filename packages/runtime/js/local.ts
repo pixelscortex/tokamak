@@ -252,8 +252,8 @@ export class LocalFunctions implements LocalTransport {
           compatible && current && declaresAccessTo(current.plugin, caller)
             ? this.artifact(current)
             : undefined;
-        const target = currentArtifact ?? artifact;
-        if (routed && !own) allow(caller, name, registration, target);
+        const target = own ? artifact : (currentArtifact ?? artifact);
+        if (routed) allow(caller, name, registration, target);
 
         providers.push({
           plugin,
@@ -262,7 +262,7 @@ export class LocalFunctions implements LocalTransport {
           own,
           owner: caller,
           ...(unavailable === undefined ? {} : { unavailable }),
-          ...(routed && !own && { build: `${target.entryHash}:${target.codeHash}` }),
+          ...(routed && { build: `${target.entryHash}:${target.codeHash}` }),
         });
       }
     }

@@ -67,10 +67,16 @@ enum Invocation<'a> {
 enum Reply {
     Result(Value),
     Route(Arc<Lease>),
+    Here,
+}
+
+enum Target {
+    Own(Artifact),
+    Other(String),
 }
 
 struct Pending {
-    target: Option<String>,
+    target: Option<Target>,
     answer: oneshot::Sender<Reply>,
 }
 
@@ -84,15 +90,19 @@ struct Bridge {
 }
 
 impl Bridge {
-    async fn request(&self, mut frame: Value, root: u64) -> Result<Reply, String> {
+    async fn request(&self, mut frame: Value, root: u64, here: &Artifact) -> Result<Reply, String> {
         let (answer, receive) = oneshot::channel();
         let target = match frame["name"].as_str() {
-            Some("local.contract.call" | "local.contract.describe") => Some(
-                frame["payload"]["plugin"]
+            Some("local.contract.call" | "local.contract.describe") => {
+                let id = frame["payload"]["plugin"]
                     .as_str()
-                    .ok_or("Missing local contract provider")?
-                    .to_owned(),
-            ),
+                    .ok_or("Missing local contract provider")?;
+                Some(if id == here.id {
+                    Target::Own(here.clone())
+                } else {
+                    Target::Other(id.to_owned())
+                })
+            }
             _ => None,
         };
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
@@ -127,17 +137,18 @@ impl Bridge {
         let Some(pending) = lock(&self.pending).remove(&id) else {
             return; // The invocation may have ended.
         };
-        let reply = match serde_json::from_value::<Artifact>(artifact) {
-            Ok(build) if pending.target.as_deref() == Some(&build.id) => {
+        let reply = match (serde_json::from_value::<Artifact>(artifact), pending.target) {
+            (Ok(build), Some(Target::Own(current))) if build == current => Reply::Here,
+            (Ok(build), Some(Target::Other(target))) if build.id == target => {
                 self.leases.get(&build).map_or_else(
                     |error| Reply::Result(json!({"error":error, "unavailable":true})),
                     Reply::Route,
                 )
             }
-            Ok(_) => Reply::Result(
+            (Ok(_), _) => Reply::Result(
                 json!({"error":"Local contract route does not match its host operation"}),
             ),
-            Err(error) => {
+            (Err(error), _) => {
                 Reply::Result(json!({"error":format!("Invalid local contract route: {error}")}))
             }
         };
@@ -490,19 +501,25 @@ impl CallRoute<'_> {
         let host = &here.host;
         host.authorize(&frame["plugin"])?;
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
-            frame["plugin"] = json!(host.id);
+            frame["plugin"] = json!(host.build.id);
         }
-        let reply = self.bridge.request(frame.clone(), self.root).await?;
+        let reply = self
+            .bridge
+            .request(frame.clone(), self.root, &host.build)
+            .await?;
         let lease = match reply {
-            Reply::Route(lease) => lease,
+            Reply::Route(lease) => Some(lease),
+            // An admitted call can use its own build while that build drains.
+            // Reuse the running host without starting or leasing it again.
+            Reply::Here => None,
             Reply::Result(value) => return Ok(value),
         };
-        self.invoke(&lease, here, frame, opening).await
+        self.invoke(lease.as_deref(), here, frame, opening).await
     }
 
     async fn invoke(
         &self,
-        lease: &Lease,
+        lease: Option<&Lease>,
         here: &Peer,
         mut frame: Value,
         opening: Option<OpenChannel<'_>>,
@@ -529,8 +546,8 @@ impl CallRoute<'_> {
             target.remove("channel");
         }
         let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
-        let artifact = &lease.build;
-        if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
+        let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
+        if ancestors.len() == MAX_DEPTH || (lease.is_some() && ancestors.contains(&artifact.id)) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
                 artifact.id
@@ -538,9 +555,12 @@ impl CallRoute<'_> {
         }
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
-        let other = match pool.host(&lease.build, &lease.slot, true).await {
-            Ok(other) => other,
-            Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+        let other = match lease {
+            None => here.host.clone(),
+            Some(lease) => match pool.host(&lease.build, &lease.slot, true).await {
+                Ok(other) => other,
+                Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+            },
         };
         let response = if let Some(open) = &opening {
             let _slot = pool
@@ -626,7 +646,7 @@ mod tests {
         lock(&bridge.pending).insert(
             1,
             Pending {
-                target: Some("hook".into()),
+                target: Some(Target::Other("hook".into())),
                 answer,
             },
         );

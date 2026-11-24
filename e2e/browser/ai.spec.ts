@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
@@ -227,7 +228,7 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
         agent: { id: "fake-agent", name: "Fake agent" },
         model: "quick",
         access: "full",
-        replyToken: crypto.randomUUID(),
+        replyToken: randomBytes(32).toString("hex"),
       });
       if (isFailure(begun) || "state" in begun)
         throw new Error(`Could not seed Message ${n}: ${JSON.stringify(begun)}`);

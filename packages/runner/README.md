@@ -34,8 +34,9 @@ A window is a trusted Runner client. It checks `local.contract.call` against
 the signed-in workspace's catalog: who owns the contract, whether the
 provider declared access to the owner, and whether the contract declares
 `dataMethods: true`. The Runner verifies the installed artifact ID and hashes
-and refuses a build that declares a live local contract. A plugin process
-can act only as its own plugin. Workspace operations in the provider still go through the
+and refuses a build that declares a live local contract. A call to the same
+plugin uses its already-running build and the same plain-data dispatch. A plugin
+process can act only as its own plugin. Workspace operations in the provider still go through the
 calling window, with that window's signed-in member and device.
 
 An agent turn opens one linked plain-data call from ai to its agent. It pins

@@ -453,7 +453,7 @@ impl Inbox {
 }
 
 struct Host {
-    id: String,
+    build: Artifact,
     calls: Mutex<Calls>,
     writes: mpsc::Sender<Vec<u8>>,
     native: AsyncMutex<UnixDatagram>,
@@ -479,7 +479,7 @@ impl Host {
         let (input, output, stderr) = process.pipes()?;
         let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
         let host = Arc::new(Self {
-            id: id.clone(),
+            build: build.clone(),
             calls: Mutex::default(),
             writes,
             native: AsyncMutex::new(native),
@@ -536,7 +536,7 @@ impl Host {
     }
 
     fn authorize(&self, claimed: &Value) -> Result<(), String> {
-        if claimed.is_null() || claimed.as_str().is_some_and(|id| id == self.id) {
+        if claimed.is_null() || claimed.as_str().is_some_and(|id| id == self.build.id) {
             return Ok(());
         }
         Err(self.label(&format!("cannot claim plugin identity {claimed}")))
@@ -558,7 +558,7 @@ impl Host {
         if linked && calls.linked.len() >= PROVIDER_TURN_CAPACITY {
             return Err(format!(
                 "Too many {} turns are running ({PROVIDER_TURN_CAPACITY}). Wait for one to finish.",
-                self.id
+                self.build.id
             ));
         }
         calls.next += 1;
@@ -592,7 +592,7 @@ impl Host {
             Some("log") => {
                 let level = frame["level"].as_str().unwrap_or("info");
                 let text = frame["text"].as_str().unwrap_or("");
-                tokamak_worker::log(format!("Plugin {} [{level}]: {text}", self.id));
+                tokamak_worker::log(format!("Plugin {} [{level}]: {text}", self.build.id));
                 return Ok(());
             }
             Some("op" | "opCancel") => calls.active.get(&frame_id(&frame["call"])?).cloned(),
@@ -702,7 +702,7 @@ impl Host {
     }
 
     fn label(&self, reason: &str) -> String {
-        format!("Plugin {} process: {reason}", self.id)
+        format!("Plugin {} process: {reason}", self.build.id)
     }
 }
 

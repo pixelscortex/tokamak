@@ -281,10 +281,12 @@ async fn relay(
                 }
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
-                Some(Request::Route { .. }) => {
+                Some(Request::Route { id, artifact }) => {
+                    drop((id, artifact));
                     return Err("Bun does not route local contract calls".into());
                 }
-                Some(Request::Retire { .. }) => {
+                Some(Request::Retire { artifact }) => {
+                    drop(artifact);
                     return Err("Bun local workers belong to their socket".into());
                 }
             },

@@ -42,8 +42,13 @@ await plugin(
   `
   /// <reference types="node" />
   import { readFile } from "node:fs/promises";
-  import { local, v } from "@tokamak/sdk";
-  import { probe } from "../contracts";
+  import { local, provide, v } from "@tokamak/sdk";
+  import { probe, ownProbe } from "../contracts";
+  export const selfProvider = provide(ownProbe, { echo: async (value) => value });
+  export const selfCall = local({
+    args: { invalid: v.boolean() },
+    handler: (ctx, { invalid }) => ownProbe.get("${owner}", ctx).echo(invalid ? new Date() : { ok: true }),
+  });
   export const identify = local({
     args: { id: v.string() },
     handler: (ctx, { id }) => probe.get(id, ctx).identify(),
@@ -109,6 +114,9 @@ await plugin(
     largeResult(): Promise<string>;
     thrown(): Promise<void>;
   }>("probe", { place: "local", dataMethods: true });
+  export const ownProbe = contract<{ echo(value: unknown): Promise<unknown> }>("ownProbe", {
+    place: "local", dataMethods: true,
+  });
 `,
 );
 
@@ -190,6 +198,12 @@ try {
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());
   assert.equal(new Set(Object.values(initial)).size, 3);
+  assert.deepEqual(await client.local(api.selfCall, { invalid: false }), { ok: true });
+  await assert.rejects(
+    client.local(api.selfCall, { invalid: true }),
+    /routed-owner\/ownProbe\.echo arguments/,
+  );
+  assert.deepEqual(pids(), initial, "a self route reuses the original host");
   console.log("Three distinct local process PIDs; provider received the signed-in member and device");
 
   await assert.rejects(client.local(api.badArgs, {}), /routed-owner\/probe\.hold arguments/);
