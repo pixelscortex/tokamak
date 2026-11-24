@@ -1,0 +1,23 @@
+e2e/browser/ai.spec.ts
+  s_1f323405e885d4::t_ea3b519380e9e3 7,29-30,58,60,212,222,292-293,347-348
+e2e/browser/code.spec.ts
+  s_1f323405e885d4::t_ea3b519380e9e3 11,32,67,75
+e2e/browser/agent-picker.ts
+  s_1f323405e885d4::t_ea3b519380e9e3 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d52bba89884b2d3aaa5c30781ccaafe40f705912",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
