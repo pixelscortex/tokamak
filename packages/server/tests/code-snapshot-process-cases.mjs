@@ -245,7 +245,7 @@ export async function reloadManagerTimeout({ h, runner, desk, project, start }) 
     await until("the window closed the stuck retired host", () => !alive(old.pid));
     await h.gate(folder, "go");
     const messageId = await thread.post();
-    const replyToken = crypto.randomUUID();
+    const replyToken = "01".repeat(32);
     const next = await desk.local(ai.run.turn, {
       threadId: thread.threadId,
       messageId,
