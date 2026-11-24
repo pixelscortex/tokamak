@@ -1,0 +1,21 @@
+.ci/check.sh
+  s_bead5d35bc54c0::t_2d641a3b05cd87 123-124,129-130
+packages/runner/src/local/quickjs/session.rs
+  s_bead5d35bc54c0::t_ca8531e5ec2279 275-278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a56e0c392b08d516534677cf7c7d0fdac610338",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
