@@ -1,0 +1,69 @@
+.ci/check.sh
+  s_8acfe89c8adcd3::t_efd7c9f0a7b619 18,33
+packages/server/tests/ai-liveness-driver.mjs
+  s_8acfe89c8adcd3::t_99ac1508ac1d8d 16-19,29-33,41-46,52-57,61-63,66-71,76-94,98-103,286
+  s_8acfe89c8adcd3::t_c6854fe5d6f21b 47-51,58-60,64-65,72-75,95-97
+packages/worker/src/lib.rs
+  s_8acfe89c8adcd3::t_de3cf756457d64 40-58,154-161,363-364,402,406-407
+packages/runner/tests/support/agent-channel.mjs
+  s_8acfe89c8adcd3::t_50497e6e350706 12-14,31,33,63,81-82,123-133,135-155,273,279-288,291,293-300,304-311,329-331,335-356,458-462,492-494,525
+  s_8acfe89c8adcd3::t_c765e5725f186b 247,254-258,334,417-418,429
+  s_8acfe89c8adcd3::t_d203002eb4471f 301-302
+  s_8acfe89c8adcd3::t_c6854fe5d6f21b 248-253,419-428
+  s_8acfe89c8adcd3::t_8f75c366b28855 134,312-328
+  s_8acfe89c8adcd3::t_1c72c538accfbb 101,113
+packages/runner/tests/agent-routing.mjs
+  s_8acfe89c8adcd3::t_3a641e4fc70553 2,36-37,57
+  s_8acfe89c8adcd3::t_7ecd72f8e5b6bd 95
+  s_8acfe89c8adcd3::t_de3cf756457d64 215,217-236,238-246,249-252,259,262
+  s_8acfe89c8adcd3::t_cbf205082d54fb 26,58,94,96-127,276,278
+packages/sdk/src/agent-turn.ts
+  s_8acfe89c8adcd3::t_7c5b6d3c0e1758 130-131,188-198
+plugins/ai/tests/agent-turn.test.ts
+  s_8acfe89c8adcd3::t_d203002eb4471f 95,98-103,132,141-146,157-172
+packages/runner/README.md
+  s_8acfe89c8adcd3::t_691322a7c41957 47-49,57-61,64-67
+packages/sdk/README.md
+  s_8acfe89c8adcd3::t_ac9bbe74c6ba7f 671-674,677-687
+plugins/ai/src/server/agent-turn.ts
+  s_8acfe89c8adcd3::t_78f60d7a761055 2-10,106-108,112,149-182,184
+  s_8acfe89c8adcd3::t_d203002eb4471f 109-111
+plugins/ai/src/server/run.ts
+  s_8acfe89c8adcd3::t_b18548f82b9fac 85-89,187-189
+packages/worker/src/runtime.rs
+  s_8acfe89c8adcd3::t_de3cf756457d64 43-59
+packages/sdk/worker/agent-turn.ts
+  s_8acfe89c8adcd3::t_b6552d3408bbc5 28-32,34-35,37-38,47-51,53,55-66,69,72,85-102,104-111,118,131-132
+packages/host/src/protocol.rs
+  s_8acfe89c8adcd3::t_cd983f7eb1a946 75-76
+packages/runner/src/local/quickjs.rs
+  s_8acfe89c8adcd3::t_7d45766534d40b 642-645
+packages/sdk/worker/dispatch-channels.ts
+  s_8acfe89c8adcd3::t_fbba624372162c 39-40,82,89-91,93-99
+packages/server/src/identity.rs
+  s_8acfe89c8adcd3::t_5017ba2e2e9aef 113-127
+plugins/ai/src/server/controls.ts
+  s_8acfe89c8adcd3::t_09999517fdb0ab 64,73-75,83
+plugins/ai/src/server/liveness.ts
+  s_8acfe89c8adcd3::t_d90f2de2cce991 154-162
+plugins/ai/src/server/schema.ts
+  s_8acfe89c8adcd3::t_d5c5ab77444eab 155-156
+plugins/ai/src/server/turns.ts
+  s_8acfe89c8adcd3::t_bccb3170dfb749 12,31,255-259,261,271-273,310-332,423,428-433,456-458,464-469,471-478,480-484,642
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34f2ebb1dea38fd6b534a670ac04638155d32e7c",
+  "prompts": {},
+  "sessions": {
+    "s_8acfe89c8adcd3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aea-bad5-7ee3-94d2-2e80c9527074",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
