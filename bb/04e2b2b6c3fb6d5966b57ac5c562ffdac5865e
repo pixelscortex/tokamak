@@ -1,0 +1,26 @@
+plugins/ai/src/contracts.ts
+  s_d72ccb6f50b933::t_b3ff5f0dcbe7b2 73
+packages/sdk/src/agent-info-cache.ts
+  s_d72ccb6f50b933::t_b3ff5f0dcbe7b2 11
+  s_d72ccb6f50b933::t_d1c554e804e91b 12-14,20
+plugins/ai/src/server/agents.ts
+  s_d72ccb6f50b933::t_b3ff5f0dcbe7b2 50,55,65,73
+plugins/code/contracts/ai.ts
+  s_d72ccb6f50b933::t_b5f36d7f69883b 73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb04e2b2b6c3fb6d5966b57ac5c562ffdac5865e",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
