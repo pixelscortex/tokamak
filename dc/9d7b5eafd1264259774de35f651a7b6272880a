@@ -1,0 +1,23 @@
+plugins/claude/src/server/wire.ts
+  s_bead5d35bc54c0::t_a41cf1bbc8b65f 148-149,151-162
+plugins/claude/tests/turns.mjs
+  s_bead5d35bc54c0::t_bcfdbfb87e5175 189
+plugins/codex/src/server/turn.ts
+  s_bead5d35bc54c0::t_a415a093b0bdde 29-30,41-43,46,169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dc9d7b5eafd1264259774de35f651a7b6272880a",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
