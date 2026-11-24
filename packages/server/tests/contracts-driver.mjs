@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { symlinkSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createApi, WebSocketTransport } from "../../sdk/src/index.ts";
 
@@ -243,7 +243,9 @@ async function prepareAuth(install) {
       });
     `,
   });
-  await rename(builds.get(id), join(install, id));
+  // The Rust test starts the server after this copy and can put its fixture
+  // on a different filesystem from the build directory.
+  await cp(builds.get(id), join(install, id), { recursive: true });
 }
 
 try {
