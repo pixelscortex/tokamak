@@ -1,0 +1,88 @@
+packages/host/tests/programs.rs
+  s_d72ccb6f50b933::t_6b2419f84ab978 12,104-107,115-117,129-130,136-148
+  s_d72ccb6f50b933::t_54a51451619b5d 108-114,118-128,131-135
+  s_d72ccb6f50b933::t_d16f2b8a9b4717 149-150
+plugins/ai/src/client/lib/queue.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 65
+packages/runner/src/local/quickjs/session.rs
+  s_d72ccb6f50b933::t_6b2419f84ab978 522-532,539
+  s_d72ccb6f50b933::t_041ed7a7a0ff82 7,44-50,63-78,353,498-516,631,638-640,642
+packages/host/src/protocol.rs
+  s_d72ccb6f50b933::t_041ed7a7a0ff82 258
+plugins/code/contracts/ai.ts
+  s_d72ccb6f50b933::t_58ec6d55c715f3 72-73
+plugins/ai/tests/agent-turn.test.ts
+  s_d72ccb6f50b933::t_1b5cf6b0e0e93f 75-89
+  s_d72ccb6f50b933::t_b2580528e50386 64
+plugins/ai/src/server/agent-turn.ts
+  s_d72ccb6f50b933::t_96960fb422f7a8 131-141
+packages/sdk/src/agent-info-cache.ts
+  s_d72ccb6f50b933::t_f4ee745b10376b 11-15
+packages/host/README.md
+  s_d72ccb6f50b933::t_8d022ab84ae3b6 64-70
+plugins/codex/src/server/turn.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 42
+plugins/ai/src/shared/turn-shared.ts
+  s_d72ccb6f50b933::t_96960fb422f7a8 7-16
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_d72ccb6f50b933::t_a87fa5cdbb671a 247-254
+  s_d72ccb6f50b933::t_d504c417a3149a 255-259
+plugins/ai/src/server/agents.ts
+  s_d72ccb6f50b933::t_f4ee745b10376b 51,54-55,67-71
+  s_d72ccb6f50b933::t_96960fb422f7a8 63-66
+plugins/ai/src/client/lib/turn.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 32
+packages/sdk/README.md
+  s_d72ccb6f50b933::t_8d022ab84ae3b6 210-217,221-223,690-693
+packages/server/tests/local-functions-driver.mjs
+  s_d72ccb6f50b933::t_96960fb422f7a8 45,49,431,438
+plugins/claude/tests/replay.mjs
+  s_d72ccb6f50b933::t_1b5cf6b0e0e93f 13-14,19,36
+plugins/claude/tests/turns.mjs
+  s_d72ccb6f50b933::t_1b5cf6b0e0e93f 4,65-68,73-77
+  s_d72ccb6f50b933::t_6aea071e3b5930 69-72
+plugins/codex/tests/e2e.mjs
+  s_d72ccb6f50b933::t_1b5cf6b0e0e93f 124,413-420
+plugins/ai/src/client/lib/local-turn.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 17-22
+plugins/codex/src/server/rpc.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 1-3,81,83-88
+plugins/ai/src/contracts.ts
+  s_d72ccb6f50b933::t_f4ee745b10376b 72-73
+plugins/ai/src/server/controls.ts
+  s_d72ccb6f50b933::t_96960fb422f7a8 37,162,167,170-173
+packages/host/src/programs.rs
+  s_d72ccb6f50b933::t_041ed7a7a0ff82 50,52-57
+plugins/ai/src/server/liveness.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 96
+  s_d72ccb6f50b933::t_6aea071e3b5930 95
+plugins/ai/src/server/run.ts
+  s_d72ccb6f50b933::t_8d022ab84ae3b6 6
+  s_d72ccb6f50b933::t_96960fb422f7a8 10,163,173,243
+  s_d72ccb6f50b933::t_6aea071e3b5930 164-167
+packages/sdk/worker/dispatch-channels.ts
+  s_d72ccb6f50b933::t_96960fb422f7a8 58
+plugins/ai/tests/local-turn.test.ts
+  s_d72ccb6f50b933::t_b2580528e50386 1-12,17
+  s_d72ccb6f50b933::t_6aea071e3b5930 13-16
+plugins/codex/src/server/info.ts
+  s_d72ccb6f50b933::t_c37f7ea757335f 32
+plugins/ai/src/client/lib/agents.ts
+  s_d72ccb6f50b933::t_96960fb422f7a8 4,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df70dfda2b546e249d3245a7b76defab5671e9c1",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
