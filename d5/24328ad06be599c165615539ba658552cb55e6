@@ -1,0 +1,57 @@
+plugins/ai/src/server/turns.ts
+  s_8acfe89c8adcd3::t_885864fb739f7e 644,655-659
+  s_8acfe89c8adcd3::t_c53104339ca8e6 615,618
+  s_8acfe89c8adcd3::t_d1053ab098305e 660
+plugins/ai/src/server/controls.ts
+  s_8acfe89c8adcd3::t_c53104339ca8e6 8-9,11,37,57-70,82,91,94,102-105,114-115
+  s_8acfe89c8adcd3::t_668f6c530dacb6 116
+plugins/ai/src/server/run.ts
+  s_8acfe89c8adcd3::t_c53104339ca8e6 159-165,193-194
+packages/sdk/tests/agent-turn.test.mjs
+  s_8acfe89c8adcd3::t_9c1343c47950d4 1-50
+packages/worker/src/lib.rs
+  s_8acfe89c8adcd3::t_e629409369562d 21-22
+  s_8acfe89c8adcd3::t_1836431282e2b2 9-10,45-49,94,148,166-167,342,371,377,386
+plugins/chat/src/server/messages/messages.ts
+  s_8acfe89c8adcd3::t_66cceaf4cfe769 2,63
+packages/host/src/programs/process.rs
+  s_8acfe89c8adcd3::t_1836431282e2b2 182,256
+packages/runner/tests/support/agent-channel.mjs
+  s_8acfe89c8adcd3::t_9c1343c47950d4 33-35,37-40,63-64,91,297,366
+  s_8acfe89c8adcd3::t_f9d96542048ea0 367-371
+  s_8acfe89c8adcd3::t_ee7664ea1d4e44 31-32,36,349,365,375-379
+packages/server/src/identity.rs
+  s_8acfe89c8adcd3::t_1836431282e2b2 115-117
+packages/sdk/src/agent-turn.ts
+  s_8acfe89c8adcd3::t_e717566f6e3b8b 188-196,199-201,204,207-209,211,213
+  s_8acfe89c8adcd3::t_885864fb739f7e 202-203,217-222
+  s_8acfe89c8adcd3::t_66cceaf4cfe769 205-206,210,214-216
+.ci/check.sh
+  s_8acfe89c8adcd3::t_1836431282e2b2 18
+plugins/ai/tests/agent-turn.test.ts
+  s_8acfe89c8adcd3::t_f9d96542048ea0 132-135,175-178
+  s_8acfe89c8adcd3::t_9c1343c47950d4 145,169
+packages/worker/src/spawn.rs
+  s_8acfe89c8adcd3::t_96d007279506ed 23,28-30,34,43-53,56-64,71-78,87-96,101-109
+  s_8acfe89c8adcd3::t_e629409369562d 16-22,168-171,189-198,200-211,216-220
+  s_8acfe89c8adcd3::t_3bee1b5f008321 1-15,31-33,35-42,54-55,110-167,172-188,199,212-215,221-222
+  s_8acfe89c8adcd3::t_7275bade556bb9 24-27,65-70,79-86,97-100
+packages/worker/src/runtime.rs
+  s_8acfe89c8adcd3::t_1836431282e2b2 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d524328ad06be599c165615539ba658552cb55e6",
+  "prompts": {},
+  "sessions": {
+    "s_8acfe89c8adcd3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aea-bad5-7ee3-94d2-2e80c9527074",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
