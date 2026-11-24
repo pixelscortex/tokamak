@@ -222,8 +222,10 @@ export function checkSkew(agents) {
     old.info.updateRequired,
     "old-agent was built for a different version of ai's agent contract; rebuild or update it.",
   );
-  for (const id of ["claude", "codex"])
-    assert.equal(agents.find((agent) => agent.id === id)?.info.installed, true);
+  for (const id of ["claude", "codex"]) {
+    const info = agents.find((agent) => agent.id === id)?.info;
+    assert.equal(info?.installed, true, `${id}: ${JSON.stringify(info)}`);
+  }
 }
 
 export async function bunSkew(scratch, plugins, env, ai) {

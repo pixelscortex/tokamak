@@ -634,15 +634,13 @@ catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
 
 A local contract is called from `local`. Declare
-`{ place: "local", dataMethods: true }` when every method takes and returns
-plain JSON data. For a mixed contract, list only the plain-data methods, for
-example `{ place: "local", dataMethods: ["info"] }`. The QuickJS Runner sends
-those calls to the provider's process. For an all-data contract, the lookup
-also reads provider fields and available method names from that process.
-Keep those fields static for a build; the caller can reuse them after a
-process restarts. A value that JSON would change or lose fails with the
-contract and method name. Arguments and results also have size and nesting
-limits. A void result becomes `null` across processes.
+`{ place: "local", dataMethods: true }`. The QuickJS Runner sends all calls to
+another plugin's methods to that plugin's process. Lookups read provider data
+and available method names from that process. Keep the fields static for a
+build; the caller can reuse them after a process restarts. Arguments and
+results must be plain JSON. A value JSON would change or lose fails with the
+contract and method name. Size and nesting limits apply, and a void result
+becomes `null` across processes.
 
 Pass `{ signal }` to a local contract lookup to cancel its pending routed
 calls without ending the caller's invocation. A method that accepts one object
@@ -655,14 +653,10 @@ A provider can use `{ unavailable: "…" }` in
 `provide()` to supply a notice for the lookup's `onUnavailable` callback even
 when its process cannot start; errors thrown by the handler still reject.
 
-Methods that take live objects stay in the caller's realm. For a mixed
-contract the provider module is also evaluated in that realm, even though its
-plain-data methods run in the provider's separate process. That shared
-evaluation remains available for plugins with live methods. A change to a
-live provider gives new calls a new realm while admitted calls in the old
-one finish. The agent, turn hook and thread deletion contracts use only
-routed calls on QuickJS, so reloading an agent or Code does not replace
-`ai`'s process or clear its “Always allow this session” grants.
+The plugin build rejects local contracts without `dataMethods: true`, including
+old declarations that mark only some methods as data. QuickJS also refuses
+older built plugins that declare live methods. Bun still binds providers in
+the caller's worker and passes their arguments directly.
 
 Turn hook authors declare a regular `local({ handler })` and read
 `turn.signal`. On QuickJS the SDK attaches the hook invocation's signal

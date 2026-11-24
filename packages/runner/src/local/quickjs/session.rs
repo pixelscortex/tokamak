@@ -1,4 +1,4 @@
-use super::{Build, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
+use super::{Artifact, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -120,12 +120,15 @@ impl Bridge {
         }
     }
 
-    fn route(&self, id: u64, build: Result<Build, String>) {
+    fn route(&self, id: &Value, artifact: Value) {
+        let Ok(id) = frame_id(id) else {
+            return; // An invalid operation ID cannot identify a pending call.
+        };
         let Some(pending) = lock(&self.pending).remove(&id) else {
             return; // The invocation may have ended.
         };
-        let reply = match build {
-            Ok(build) if pending.target.as_deref() == Some(&build.artifact.id) => {
+        let reply = match serde_json::from_value::<Artifact>(artifact) {
+            Ok(build) if pending.target.as_deref() == Some(&build.id) => {
                 self.leases.get(&build).map_or_else(
                     |error| Reply::Result(json!({"error":error, "unavailable":true})),
                     Reply::Route,
@@ -134,19 +137,21 @@ impl Bridge {
             Ok(_) => Reply::Result(
                 json!({"error":"Local contract route does not match its host operation"}),
             ),
-            Err(error) => Reply::Result(json!({"error":error})),
+            Err(error) => {
+                Reply::Result(json!({"error":format!("Invalid local contract route: {error}")}))
+            }
         };
         let _ = pending.answer.send(reply);
     }
 
-    fn retire(&self, current: &Build, retired: Result<Build, String>, changed: &str) {
-        let Ok(retired) = retired else {
-            return; // A malformed profile has no effect.
+    fn retire(&self, current: &Artifact, artifact: Value) {
+        let Ok(retired) = serde_json::from_value::<Artifact>(artifact) else {
+            return; // Invalid retirement frames cannot affect admitted calls.
         };
-        if &retired == current && changed == current.artifact.id {
+        if &retired == current {
             self.retiring.cancel();
         }
-        self.leases.retire(&retired, changed);
+        self.leases.retire(&retired);
     }
 }
 
@@ -164,7 +169,7 @@ impl Drop for Operation<'_> {
 pub(in crate::local) async fn connection(
     socket: &mut WebSocket,
     pool: &Pool,
-    build: Build,
+    build: Artifact,
     workspace: String,
 ) -> Result<(), String> {
     let (output, mut outgoing) = mpsc::channel(WORKER_CAPACITY);
@@ -221,11 +226,9 @@ pub(in crate::local) async fn connection(
                         _ => return Err("Invalid local worker request".into()),
                     }
                 }
-                Some(Request::Route { id, artifact, live }) => bridge.route(id, Build::new(artifact, live)),
-                Some(Request::Retire { artifact, live, changed }) => {
-                    bridge.retire(&build, Build::new(artifact, live), &changed);
-                }
-                Some(Request::Load { .. }) => return Err("QuickJS loads providers through local.contracts".into()),
+                Some(Request::Route { id, artifact }) => bridge.route(&id, artifact),
+                Some(Request::Retire { artifact }) => bridge.retire(&build, artifact),
+                Some(Request::Load { .. }) => return Err("QuickJS does not load other plugins".into()),
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
             },
@@ -254,10 +257,7 @@ async fn root_call(
     frame: Value,
     cancel: CancellationToken,
 ) -> (u64, Result<Value, String>) {
-    let label = format!(
-        "Plugin {} local function cancelled",
-        lease.build.artifact.id
-    );
+    let label = format!("Plugin {} local function cancelled", lease.build.id);
     let response = tokio::select! {
         biased;
         () = cancel.cancelled() => Err(label),
@@ -277,7 +277,7 @@ async fn invoke_root(
     lease: &Arc<Lease>,
     frame: Value,
 ) -> Result<Value, String> {
-    let id = &lease.build.artifact.id;
+    let id = &lease.build.id;
     let ancestors = std::slice::from_ref(id);
     let host = pool.host(&lease.build, &lease.slot, false).await?;
     run(
@@ -426,9 +426,6 @@ async fn peer_operation(
     invocation: &Invocation<'_>,
     mut frame: Value,
 ) -> Result<Value, String> {
-    if !frame["plugin"].is_null() {
-        return Err("A live provider cannot use the host's local contract channel".into());
-    }
     let method = frame["name"].as_str();
     let close = method == Some("local.contract.close");
     let stop = method == Some("local.contract.stopPrograms");
@@ -495,16 +492,10 @@ impl CallRoute<'_> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.id);
         }
-        frame["host"] = json!(host.id);
         let reply = self.bridge.request(frame.clone(), self.root).await?;
         let lease = match reply {
             Reply::Route(lease) => lease,
-            Reply::Result(mut value) => {
-                if frame["name"] == "local.contracts" && value["error"].is_null() {
-                    host.prepare_providers(&mut value)?;
-                }
-                return Ok(value);
-            }
+            Reply::Result(value) => return Ok(value),
         };
         self.invoke(&lease, here, frame, opening).await
     }
@@ -538,7 +529,7 @@ impl CallRoute<'_> {
             target.remove("channel");
         }
         let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
-        let artifact = &lease.build.artifact;
+        let artifact = &lease.build;
         if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
@@ -580,35 +571,36 @@ impl CallRoute<'_> {
             ))
             .await
         };
-        let response = match response {
-            Ok(response) => response,
-            Err(error) => return Ok(json!({"error":error, "unavailable":true})),
-        };
-        if let Some(error) = response["error"].as_str() {
-            return Ok(json!({
-                "error":format!("Plugin {}: {error}", artifact.id),
-                "providerError":true,
-            }));
-        }
-        Ok(json!({"value":response["value"]}))
+        Ok(provider_result(response, &artifact.id, opening.is_some()))
     }
+}
+
+fn provider_result(response: Result<Value, String>, plugin: &str, linked: bool) -> Value {
+    let response = match response {
+        Ok(response) => response,
+        Err(error) => return json!({"error":error, "unavailable":true}),
+    };
+    if let Some(error) = response["error"].as_str() {
+        // An agent's error becomes the persisted turn reason, as on Bun.
+        let error = if linked {
+            error.to_owned()
+        } else {
+            format!("Plugin {plugin}: {error}")
+        };
+        return json!({"error":error, "providerError":true});
+    }
+    json!({"value":response["value"]})
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::local::Artifact;
-
-    fn build(id: String) -> Build {
-        Build::new(
-            Artifact {
-                id,
-                entry_hash: String::new(),
-                code_hash: String::new(),
-            },
-            Vec::new(),
-        )
-        .unwrap()
+    fn build(id: String) -> Artifact {
+        Artifact {
+            id,
+            entry_hash: String::new(),
+            code_hash: String::new(),
+        }
     }
 
     #[tokio::test]
@@ -638,7 +630,10 @@ mod tests {
                 answer,
             },
         );
-        bridge.route(1, Ok(build("hook".into())));
+        bridge.route(
+            &json!(1),
+            json!({"id":"hook", "entryHash":"", "codeHash":""}),
+        );
         let Reply::Result(value) = response.await.unwrap() else {
             panic!("a full pool cannot lease a hook provider");
         };

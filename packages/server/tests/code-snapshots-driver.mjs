@@ -59,7 +59,7 @@ try {
       },
     }),
   });
-  await preservesWorktree(desk, code, routed);
+  await preservesWorktree(desk, code);
   await snapshotFailures(desk, code);
   await changedWorktree(desk);
   if (!bunCore) await prunesWhenReopened(address, desk, code);
@@ -268,7 +268,7 @@ async function readState({ folder, git }, large) {
   );
 }
 
-async function preservesWorktree(desk, code, routed) {
+async function preservesWorktree(desk, code) {
   const { folder, git, write } = await project("worktree");
   git("config", "core.splitIndex", "true");
   await write("staged.txt", "in the stash\n");
@@ -334,10 +334,7 @@ async function preservesWorktree(desk, code, routed) {
 
   const failed = await thread.run(await thread.post(), "edit-fail");
   assert.equal(failed.state, "failed");
-  assert.equal(
-    (await thread.reply(failed.turnId)).error,
-    routed ? "Plugin fake-agent: rate limited" : "rate limited",
-  );
+  assert.equal((await thread.reply(failed.turnId)).error, "rate limited");
   const failedPrefix = turnRef(threadId, failed.turnId);
   assert.equal(git("rev-parse", `${failedPrefix}/before^`), git("rev-parse", `${prefix}/after`));
   assert.equal(git("show", `${failedPrefix}/after:agent.txt`), "partial change");

@@ -43,7 +43,7 @@ generated references in `src/server/_generated/` and component declarations in
   `plugin:<id>/contracts`, and exports `provide(key, implementation)`. The
   owner calls `key.list(ctx)` or `key.get(id, ctx)` from a local function or
   server action, and leaves `ctx` out in a query or mutation. For a local
-  contract add `{ place: "local" }` and use `local` for members that need a
+  contract add `{ place: "local", dataMethods: true }` and use `local` for members that need a
   local context.
   An optional provider may copy the owner's declaration to `contracts/<id>.ts`;
   keep it byte-identical. For membership changes, use `onMember` with the

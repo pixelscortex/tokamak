@@ -89,8 +89,13 @@ export const turn = local({
         begun;
       return failed;
     }
-    const { turnId, prompt, history, sessionId } = begun;
-    const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
+    const { turnId, prompt, history, sessionId, previousInterruptedTurnId } = begun;
+    const hooks = hooksFor(ctx, {
+      threadId: threadId as Id<"threads">,
+      turnId,
+      folder,
+      ...(previousInterruptedTurnId && { previousInterruptedTurnId }),
+    });
     const writer = turnWriter(ctx, turnId);
     // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
     // device), so "Always allow this session" answers hold across turns exactly while the session does.

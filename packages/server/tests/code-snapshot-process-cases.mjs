@@ -223,6 +223,13 @@ export async function unavailableProviders({ h, runner, desk, code, project, sta
     state: "done",
     hookNotice: "Couldn't save this turn's code",
   });
+  const { ai } = h.api;
+  const [{ replyId }] = await desk.query(ai.turns.list, { threadId: cached.threadId });
+  const reply = (await desk.query(chat.messages.list, { threadId: cached.threadId })).find(
+    ({ _id }) => _id === replyId,
+  );
+  assert.equal(reply.status, "complete");
+  assert.equal(reply.parts[0]?.text, "I edited agent.txt.");
   assert.deepEqual(refs(git), []);
   await until("crashed Code's Git group exited", () => pids.every((pid) => !alive(pid)));
 
@@ -339,7 +346,8 @@ cat >/dev/null
   console.log("code snapshots: cancellation lets Git release its packed refs lock");
 }
 
-export async function managerCrash({ h, runner, desk, project, start }) {
+export async function managerCrash({ h, runner, desk, project, start, refs, turnRef }) {
+  const { ai } = h.api;
   const hosts = await inspectHosts(runner);
   const agent = await project("manager-crash-agent");
   const agentThread = await start(desk, agent.folder);
@@ -351,6 +359,9 @@ export async function managerCrash({ h, runner, desk, project, start }) {
   await h.waitFor(agent.folder, "process-tree.json");
   const agentPids = await Bun.file(join(agent.folder, "process-tree.json")).json();
   assert.ok(agentPids.length > 1 && agentPids.every(alive));
+  const [running] = await agentThread.turns.until("agent turn is running", (rows) => rows.length === 1);
+  const abandoned = turnRef(agentThread.threadId, running._id);
+  assert.deepEqual(refs(agent.git), [`${abandoned}/before`]);
 
   const hook = await project("manager-crash-hook");
   await stall(hook);
@@ -369,5 +380,17 @@ export async function managerCrash({ h, runner, desk, project, start }) {
     [...agentPids, ...hookPids].every((pid) => !alive(pid)),
   );
   assert.ok(alive(code.pid), "cancellation leaves Code's host up");
-  console.log("code snapshots: ai crash reaped the linked agent and the in-flight hook Git group");
+  assert.deepEqual(refs(agent.git), [`${abandoned}/before`]);
+  // Reopen recovery waits until the old invocation has missed a heartbeat.
+  await until(
+    "the restarted local part can recover its orphaned turn",
+    async () => (await desk.mutation(ai.liveness.release, { running: [] })) === 0,
+    25_000,
+  );
+  await h.gate(agent.folder, "go");
+  const next = await agentThread.run(await agentThread.post(), "edit");
+  assert.equal(next.state, "done");
+  const saved = turnRef(agentThread.threadId, next.turnId);
+  assert.deepEqual(refs(agent.git), [`${saved}/after`, `${saved}/before`]);
+  console.log("code snapshots: ai crash reaped the agent and hook; the next turn pruned the interrupted ref");
 }

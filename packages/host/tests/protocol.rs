@@ -289,7 +289,7 @@ async fn a_full_output_queue_does_not_stop_the_host_answering() {
 }
 
 #[tokio::test]
-async fn approved_provider_runs_in_the_caller_realm() {
+async fn a_provider_path_never_loads_its_bundle_into_the_caller() {
     let mut host = Host::start();
     host.invoke(1, "providers", json!({})).await;
     let candidate_op = host.receive().await;
@@ -298,52 +298,26 @@ async fn approved_provider_runs_in_the_caller_realm() {
         "type": "opResult", "id": candidate_op["id"],
         "value": [{
             "plugin": "provider", "registration": "fixture", "path": fixture().with_file_name("provider.js"),
-            "own": false, "owner": "consumer"
+            "own": false, "owner": "consumer", "build": "provider-build", "dataMethods": true
         }]
     })).await;
     let auth = host.receive().await;
     assert_eq!(auth["name"], "auth.current");
     host.send(json!({ "type": "opResult", "id": auth["id"], "value": {} }))
         .await;
-    let result = host.receive().await;
-    assert_eq!(
-        result["value"],
-        json!({ "same": true, "id": "provider", "file": "file" }),
-        "{result}"
-    );
-}
-
-#[tokio::test]
-async fn a_path_from_an_unrelated_operation_is_not_an_approved_module() {
-    let mut host = Host::start();
-    let path = fixture().with_file_name("provider.js");
-    host.invoke(1, "unapproved", json!(null)).await;
-    let unrelated = host.receive().await;
-    assert_eq!(unrelated["name"], "local.runQuery");
+    let describe = host.receive().await;
+    assert_eq!(describe["name"], "local.contract.describe", "{describe}");
     host.send(json!({
-        "type": "opResult", "id": unrelated["id"],
-        "value": [{ "path": path, "own": false }]
+        "type": "opResult", "id": describe["id"],
+        "value": {"data": {"id":"provider"}, "methods": ["run"]}
     }))
     .await;
-    let candidates = host.receive().await;
-    assert_eq!(candidates["name"], "local.contracts");
-    host.send(json!({
-        "type": "opResult", "id": candidates["id"],
-        "value": [{ "fixture": "substitute path" }]
-    }))
-    .await;
-    let auth = host.receive().await;
-    assert_eq!(auth["name"], "auth.current");
-    host.send(json!({ "type": "opResult", "id": auth["id"], "value": {} }))
+    let call = host.receive().await;
+    assert_eq!(call["name"], "local.contract.call", "{call}");
+    assert_eq!(call["payload"]["args"], json!(["input"]));
+    host.send(json!({ "type": "opResult", "id": call["id"], "value": "from provider" }))
         .await;
-    let result = host.receive().await;
-    assert_eq!(
-        result["error"],
-        format!(
-            "Module is not allowed on the plugin host: {} (imported from tokamak:entry)",
-            path.display()
-        ),
-    );
+    assert_eq!(host.receive().await["value"], "from provider");
 }
 
 #[tokio::test]

@@ -366,6 +366,21 @@ export async function deleteSnapshots(
   }
 }
 
+/** Remove an interrupted turn's before ref only while it still has no after ref. */
+export async function pruneInterruptedBefore(
+  ctx: LocalContext,
+  { root, threadId, turnId, signal }: TurnSnapshot & { signal: LocalContext["signal"] },
+  oid: string,
+) {
+  const ref = turnRefs(threadId, turnId);
+  // A late after hook or a concurrent ref edit must not lose a snapshot.
+  await checked(
+    gitAt(ctx, root, {}, signal),
+    ["update-ref", "--no-deref", "--stdin"],
+    `verify ${ref}/after ${"0".repeat(oid.length)}\ndelete ${ref}/before ${oid}\n`,
+  );
+}
+
 /** Reads omitted filenames and detects a missing after ref, without storing server data. */
 export async function snapshotNotice(ctx: LocalContext, { root, threadId, turnId }: TurnSnapshot) {
   const git = gitAt(ctx, root);

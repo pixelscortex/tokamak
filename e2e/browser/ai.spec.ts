@@ -1,8 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
+import { runnerLauncher } from "../../packages/runtime/js/runner";
 import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
+import { api as chat } from "../../plugins/chat/src/server/_generated/api";
 import { connect } from "../fake-agent/harness.mjs";
 import { asDesktop } from "./desktop";
 
@@ -170,36 +172,68 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
   test.skip(browserName !== "chromium", "runs once");
   test.setTimeout(300_000);
   const context = await browser.newContext();
-  const { home } = await asDesktop(context);
-  const page = await context.newPage();
-  await page.goto("/");
-  await pickReplay(page, "quick");
-  await chooseFolder(page, home);
-  const working = conversation(page).getByRole("button", { name: /Working|Running/ });
-  const send = async (text: string) => {
-    await composer(page).fill(text);
+  const cleanup: (() => void | Promise<void>)[] = [];
+  try {
+    const { home, endpoint } = await asDesktop(context);
+    const folder = join(home, "many-replies");
+    await mkdir(folder);
+    const client = await connect(endpoint.ws, {
+      token: endpoint.token,
+      launch: runnerLauncher(async () => endpoint),
+      cleanup,
+    });
+    const run = createApi<{
+      run: {
+        turn: FunctionReference<
+          "local",
+          { threadId: string; messageId: string; folder: string; agentId: string; model: string },
+          { state: string }
+        >;
+      };
+    }>("ai", ["run:turn"]).run;
+
+    // Seed through the real turn path before opening either window. This
+    // avoids waiting for 300 browser assertions during fixture setup.
+    const { threadId, messageId } = await client.mutation(chat.threads.start, {
+      text: "Message 1",
+      folder: { kind: "chosen", path: folder },
+    });
+    for (let n = 1; n <= 150; n += 1) {
+      const id =
+        n === 1 ? messageId : await client.mutation(chat.messages.post, { threadId, text: `Message ${n}` });
+      const result = await client.local(run.turn, {
+        threadId,
+        messageId: id,
+        folder,
+        agentId: "fake-agent",
+        model: "quick",
+      });
+      expect(result.state, `Message ${n}`).toBe("done");
+    }
+
+    const openThread = async () => {
+      const page = await context.newPage();
+      await page.goto("/");
+      await threads(page).filter({ hasText: "Message 1" }).first().click();
+      return page;
+    };
+    const page = await openThread();
+    const replies = replyOf(await openThread());
+    // Chat shows the latest 200 messages; all 100 displayed replies draw their turn.
+    await expect(replies).toHaveCount(100);
+    await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/^\s*quick\s*$/);
+    await expect(replies.first().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
+    await expect(replies.last()).toContainText("Done: Message 150");
+
+    await pickReplay(page, "quick");
+    await composer(page).fill("Message 151");
     await composer(page).press("Enter");
-    await expect(conversation(page).getByText(`Done: ${text}`, { exact: true })).toBeVisible();
-    // The turn has ended: the next Send would otherwise find the thread busy.
-    await expect(working).toHaveCount(0);
-  };
-  for (let n = 1; n <= 150; n += 1) await send(`Message ${n}`);
-
-  // Reopened in a second window: every reply chat shows (its latest 200 messages) draws its turn.
-  const second = await context.newPage();
-  await second.goto("/");
-  await threads(second).filter({ hasText: "Message 1" }).first().click();
-  const replies = replyOf(second);
-  await expect(replies).toHaveCount(100);
-  await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/^\s*quick\s*$/);
-  await expect(replies.first().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
-  await expect(replies.last()).toContainText("Done: Message 150");
-
-  // And it keeps updating: a new turn in the first window shows up in the second, drawn.
-  await send("Message 151");
-  await expect(replies.last()).toContainText("Done: Message 151");
-  await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
-  await context.close();
+    await expect(replies.last()).toContainText("Done: Message 151");
+    await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
+  } finally {
+    for (const close of cleanup.reverse()) await close();
+    await context.close();
+  }
 });
 
 test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ browser }) => {

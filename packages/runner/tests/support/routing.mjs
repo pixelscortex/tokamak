@@ -68,7 +68,7 @@ export async function reload({ endpoint: { http } }, directory, id) {
 }
 
 /** A protocol client for tests that need explicit versions or nested routes. */
-export async function rawWindow(runner, artifact, handle, live = [], origin) {
+export async function rawWindow(runner, artifact, handle, origin) {
   let next = 0;
   const calls = new Map();
   const worker = await runner.launch(
@@ -90,12 +90,11 @@ export async function rawWindow(runner, artifact, handle, live = [], origin) {
     (reason) => {
       for (const call of calls.values()) call.reject(new Error(reason));
     },
-    live,
     origin,
   );
   return {
     close: () => worker.close(),
-    retire: (changed) => worker.retire(artifact, live, changed),
+    retire: (target = artifact) => worker.retire(target),
     async invoke(fn, args) {
       const id = ++next;
       const result = Promise.withResolvers();

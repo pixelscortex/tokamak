@@ -86,25 +86,7 @@ export const functions = {
   }),
   providers: local(async (_, ctx) => {
     const [provider] = await ctx.contracts.list({ place: "local", owner: "consumer", name: "fixture" });
-    const input = {
-      callback(id, file) {
-        return { same: this === input, id, file };
-      },
-    };
-    return provider.implementation.run(input);
-  }),
-  unapproved: local(async (_, ctx) => {
-    const unapproved = await ctx.op("local.runQuery", {});
-    const iterator = Array.prototype[Symbol.iterator];
-    // Supply the SDK with a provider candidate without approving its path in Rust.
-    Array.prototype[Symbol.iterator] = function () {
-      return iterator.call(this[0]?.fixture === "substitute path" ? unapproved : this);
-    };
-    try {
-      return await ctx.contracts.list({ place: "local", owner: "consumer", name: "fixture" });
-    } finally {
-      Array.prototype[Symbol.iterator] = iterator;
-    }
+    return provider.implementation.run("input");
   }),
   timerCapacity: local(async () => {
     let armed;

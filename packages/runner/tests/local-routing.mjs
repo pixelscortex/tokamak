@@ -296,13 +296,19 @@ async function checkRoutesAndBuilds(runner, hosts) {
     export const functions = {
       ping: { kind: "local", args: { kind: "any" }, invoke: () => ${version} },
       hold: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.hold", {}) },
+      stuck: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.stuck", {}) },
     };
   `;
   const old = await installLocal(join(plugins, id), id, code(1));
   const replacement = await installLocal(join(plugins, id + "-alternate"), id, code(2));
   const holding = Promise.withResolvers();
   const release = Promise.withResolvers();
-  const handle = async (_frame, _worker, respond) => {
+  const stuck = Promise.withResolvers();
+  const handle = async (frame, _worker, respond) => {
+    if (frame.name === "test.stuck") {
+      stuck.resolve(); // The window never answers this operation.
+      return;
+    }
     holding.resolve();
     await release.promise;
     await respond("old build completed");
@@ -322,15 +328,21 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await within(holding.promise, "old build hold");
     assert.equal(await latest.invoke("ping", null), 2);
     assert.equal(oldHosts().length, 2, "different local hashes must start a second build");
-    await first.retire(id);
+    await first.retire();
+    await second.retire({ id }); // Malformed retirement must not close the busy window.
     release.resolve();
     assert.equal(await busy, "old build completed");
     assert.equal(await second.invoke("ping", null), 1);
+    const stuckCall = assert.rejects(second.invoke("stuck", null), /closed|stopped/i);
+    void stuckCall.catch(() => {});
+    await within(stuck.promise, "stuck invocation admitted");
+    await second.retire();
     await second.close();
+    await stuckCall;
     await until("unused retired build stopped", () => !oldHosts().some((host) => host.pid === pid));
     assert.equal(await latest.invoke("ping", null), 2);
     console.log(
-      "Two windows share one build, a different build coexists, and retirement waits for the last window",
+      "Two windows share one build, a different build coexists, and closing the last window cancels a stuck retired invocation",
     );
   } finally {
     await Promise.all([first.close(), second.close(), latest.close()]);
@@ -341,7 +353,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
   const remote = "wss://test.invalid/shared";
   const remoteId = "shared-version";
   const v1 = await installLocal(join(plugins, remoteId), remoteId, code(1));
-  const firstRemote = await rawWindow(runner, v1, handle, [], remote);
+  const firstRemote = await rawWindow(runner, v1, handle, remote);
   let oldRemotePid;
   try {
     assert.equal(await firstRemote.invoke("ping", null), 1);
@@ -350,12 +362,12 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await firstRemote.close();
   }
   // Historic use by a different workspace does not pin an unused process.
-  const previousVisitor = await rawWindow(runner, v1, handle, [], "wss://other.test.invalid/ws");
+  const previousVisitor = await rawWindow(runner, v1, handle, "wss://other.test.invalid/ws");
   assert.equal(await previousVisitor.invoke("ping", null), 1);
   await previousVisitor.close();
   assert.ok(hosts().some(({ pid }) => pid === oldRemotePid));
   const v2 = await installLocal(join(plugins, remoteId), remoteId, code(2));
-  const secondRemote = await rawWindow(runner, v2, handle, [], remote);
+  const secondRemote = await rawWindow(runner, v2, handle, remote);
   try {
     assert.equal(await secondRemote.invoke("ping", null), 2);
     await until("disconnected shared workspace's old process stopped", () =>
@@ -364,6 +376,21 @@ async function checkRoutesAndBuilds(runner, hosts) {
     assert.equal(hosts().filter(({ id }) => id === remoteId).length, 1);
   } finally {
     await secondRemote.close();
+  }
+
+  const legacyId = "legacy-local";
+  const legacyDir = join(plugins, legacyId);
+  const legacy = await installLocal(legacyDir, legacyId, code(1));
+  const manifestFile = join(legacyDir, "manifest.json");
+  const manifest = await Bun.file(manifestFile).json();
+  manifest.contracts = [{ name: "mixed", place: "local", dataMethods: ["read"] }];
+  await writeFile(manifestFile, JSON.stringify(manifest));
+  const legacyWindow = await rawWindow(runner, legacy, handle);
+  try {
+    await assert.rejects(legacyWindow.invoke("ping", null), /legacy-local\/mixed is not all plain data/);
+    assert.ok(!hosts().some(({ id }) => id === legacyId));
+  } finally {
+    await legacyWindow.close();
   }
 
   const chainCode = `
@@ -378,7 +405,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
     };
     export const contractProviders = {
       next: {
-        contract: { name: "probe", owner: "chain", place: "local", dataMethods: ["next"] },
+        contract: { name: "probe", owner: "chain", place: "local", dataMethods: true },
         implementation: { next: { kind: "local", invokeLocal: (args, bridge) => call(args, bridge.op) } },
       },
     };
@@ -393,12 +420,12 @@ async function checkRoutesAndBuilds(runner, hosts) {
   const driver = await rawWindow(runner, chain[0], (frame, worker) => {
     const target = chain.find(({ id }) => id === frame.payload.plugin);
     assert.ok(target);
-    const profile = invalid ? [target] : [];
+    const route = invalid ? { id: target.id } : target;
     invalid = false;
-    return worker.route(frame.id, target, profile);
+    return worker.route(frame.id, route);
   });
   try {
-    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local plugin live profile/);
+    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local contract route/);
     assert.equal(
       await driver.invoke(
         "walk",
@@ -488,7 +515,7 @@ try {
       ctx.op("local.contract.call", {plugin: "diagnostic-provider", owner: "diagnostic-caller",
         name: "probe", registration: "provider", method: "info", args: []}) }};`,
   );
-  const routed = await rawWindow(simulated, caller, (frame, worker) => worker.route(frame.id, provider, []));
+  const routed = await rawWindow(simulated, caller, (frame, worker) => worker.route(frame.id, provider));
   try {
     await assert.rejects(routed.invoke("call", null), (error) => {
       assert.match(error.message, /Plugin diagnostic-provider.*(?:closed|exited)/);

@@ -6,14 +6,7 @@ import { cp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promis
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
-import {
-  agentHarness,
-  build,
-  bunPath,
-  connect,
-  localLauncher,
-  workspace,
-} from "../../../e2e/fake-agent/harness.mjs";
+import { agentHarness, build, bunPath, connect, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -48,11 +41,7 @@ try {
   const runner = binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
   const address = runner ? undefined : await h.serve("server");
   const connectClient = async (env) => {
-    if (address)
-      return connect(address, {
-        cleanup,
-        launch: localLauncher(h.selection, (id) => join(h.plugins, id), env),
-      });
+    if (address) return h.connect(address, { local: true, env });
     const dir = await h.folder("runners");
     const instance = await startRunner({
       binary,
@@ -410,7 +399,7 @@ case "$1" in
   app-server)
     # Discovery runs from HOME with the direct launcher and from the plugin
     # root's parent with Runner. A turn has its own explicit working folder.
-    if [ "$PWD" = "$HOME" ] || [ "$PWD/home" = "$HOME" ]; then
+    if [ "$PWD" -ef "$HOME" ] || [ "$PWD/home" -ef "$HOME" ]; then
       if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
     else
       tape="\${PWD##*/}"

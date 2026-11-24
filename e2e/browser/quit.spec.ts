@@ -21,7 +21,7 @@ const ai = createApi<{
 
 /** Whether a process still runs (a zombie waiting for its parent counts as gone). */
 function alive(pid: number) {
-  const stat = spawnSync("ps", ["-o", "stat=", "-p", String(pid)])
+  const stat = spawnSync("ps", ["-ww", "-o", "stat=", "-p", String(pid)])
     .stdout.toString()
     .trim();
   return stat !== "" && !stat.startsWith("Z");

@@ -55,7 +55,6 @@ export function workerDispatch(
     errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
-    routedContracts?: Parameters<typeof invocationHost>[3];
     attachChannel?: AttachChannel;
     sendWaiting?(message: object): void | Promise<void>;
   },
@@ -203,7 +202,7 @@ export function workerDispatch(
       (plugin) => (name, payload, signal) =>
         operation(allocateOp(), name, payload, plugin, undefined, signal),
       createPrograms && (() => createPrograms(controller.signal, id)),
-      routed ? (options?.routedContracts ?? contracts) : contracts,
+      contracts,
       channel?.bridge,
       retiring?.signal,
     );

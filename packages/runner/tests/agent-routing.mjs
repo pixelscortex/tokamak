@@ -234,6 +234,7 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
     });
     void withTree.catch(treeReady.reject);
     void asking.catch(questionReady.reject);
+    let failedClaude;
     try {
       const [tree, question] = await within(
         Promise.all([treeReady.promise, questionReady.promise, isolated.ready]),
@@ -243,6 +244,7 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       await writeFile(crash, "");
       process.kill(pids().claude, "SIGKILL");
       const failed = await Promise.all([withTree, asking]);
+      [failedClaude] = failed;
       for (const turn of failed) assert.match(turn.row.error, /Plugin claude process:/);
       await until("Claude host crash reaps its programs", () => !tree.some((pid) => processInfo(pid)));
       assert.ok(processInfo(await cliPid(isolatedFolder, "codex")));
@@ -272,6 +274,12 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       "Claude recovers from its backoff",
       async () => agent(await row(otherWindow), "claude").signedIn,
     );
+    const retry = await claudeTurns.run(await folder("claude-after-crash"), helloClaude, {
+      threadId: failedClaude.threadId,
+    });
+    assert.equal(retry.threadId, failedClaude.threadId);
+    assert.equal(retry.text, "Hello Tokamak.");
+    console.log("Claude restarted and completed a new turn on the thread whose turn failed.");
     await exerciseChannels({ client: window, open, ai, chat, scratch, folder, processInfo, claudeTurns });
     await bun;
   } finally {

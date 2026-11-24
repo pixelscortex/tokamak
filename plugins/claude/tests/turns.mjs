@@ -11,7 +11,7 @@ import { turnWire } from "./turn-wire.mjs";
 import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
-import { agentHarness, build, bunPath, connect, localLauncher } from "../../../e2e/fake-agent/harness.mjs";
+import { agentHarness, build, bunPath, connect } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -127,7 +127,7 @@ async function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
       token: instance.endpoint.token,
     });
   }
-  return connect(address, { cleanup, launch: localLauncher(h.selection, (id) => join(h.plugins, id), env) });
+  return h.connect(address, { local: true, env });
 }
 
 async function installReplay() {

@@ -329,7 +329,8 @@ async function handOver(
     ...(mode === undefined ? {} : { mode }),
     access,
   });
-  return { ...input, history: fitting };
+  const interrupted = earlier?.state === "interrupted" && isSendersDevice(earlier, ctx.auth);
+  return { ...input, history: fitting, ...(interrupted && { previousInterruptedTurnId: earlier._id }) };
 }
 
 /** The thread's last turn that began, before this one: queued ones have not. */

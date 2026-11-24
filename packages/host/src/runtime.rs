@@ -13,7 +13,7 @@ use rquickjs::{
 };
 
 use crate::{
-    modules::{self, Bundles},
+    modules::{self, Bundle},
     programs::Programs,
     protocol::Output,
     timers,
@@ -39,17 +39,20 @@ pub struct Runtime {
 
 impl Runtime {
     pub async fn new_local(
-        bundles: Bundles,
+        bundle_file: Bundle,
         heap: usize,
         output: Arc<Output>,
         next: Rc<Cell<u64>>,
         programs: Programs,
     ) -> Result<Self> {
-        let bundle = bundles.root().to_owned();
+        let bundle = bundle_file.root().to_owned();
         let runtime = AsyncRuntime::new()?;
         runtime.set_memory_limit(heap).await;
         runtime
-            .set_loader(modules::Resolve(bundles.clone()), modules::Load(bundles))
+            .set_loader(
+                modules::Resolve(bundle_file.clone()),
+                modules::Load(bundle_file),
+            )
             .await;
 
         let watchdog = Rc::new(Watchdog::default());

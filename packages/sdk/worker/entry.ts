@@ -24,7 +24,8 @@ const root = (await import(pathToFileURL(process.argv[2]!).href)) as {
   contractProviders?: Record<string, Provider<"local">>;
 };
 const { functions } = root;
-const contracts = kind === "local" ? workerContracts(root) : undefined;
+const contracts =
+  kind === "local" ? workerContracts(root, (path) => import(pathToFileURL(path).href)) : undefined;
 
 let next = 0;
 const dispatch = workerDispatch(

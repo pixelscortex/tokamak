@@ -927,7 +927,7 @@ async fn wait_for_file(path: &Path) -> String {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn alive(pid: u32) -> bool {
     let output = std::process::Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .args(["-ww", "-o", "stat=", "-p", &pid.to_string()])
         .output()
         .unwrap();
     let state = String::from_utf8(output.stdout).unwrap();

@@ -4,12 +4,9 @@ The Runner combines a workspace server and the local runtime in one program. It
 owns the server's action process and up to 128 QuickJS local plugin processes.
 Each local process starts on its first call and stays up until its build is
 retired, it exits, or the Runner shuts down. The registry distinguishes a
-plugin's ID and its two local bundle hashes. It also separates realms that
-need different builds of live providers. Windows that use the same build and
-live profile share a process. The window reports its workspace address
-without credentials so the Runner can tell which installation superseded a
-build. A live provider change sends new calls to a fresh realm. The original
-realm retains its admitted calls and verified provider files.
+plugin's ID and its two local bundle hashes. Windows that use the same build
+share a process. The window reports its workspace address without credentials
+so the Runner can tell which installation superseded a build.
 
 The agent, turn hook, and thread deletion contracts in the bundled plugins
 use plain-data calls. Reloading an agent or Code does not restart ai or
@@ -35,13 +32,10 @@ reconnects. With the Bun fallback, each worker socket still owns its process.
 
 A window is a trusted Runner client. It checks `local.contract.call` against
 the signed-in workspace's catalog: who owns the contract, whether the
-provider declared access to the owner, and whether the method appears in
-`dataMethods`. The Runner verifies the installed artifact ID and hashes
-before starting a process or making a provider snapshot available to a live
-realm. It permits operations to claim only the process's own plugin ID or an
-ID for which that process received a verified live snapshot. The provider
-checks its registration and re-checks that the requested method is declared
-for plain data. Workspace operations in the provider still go through the
+provider declared access to the owner, and whether the contract declares
+`dataMethods: true`. The Runner verifies the installed artifact ID and hashes
+and refuses a build that declares a live local contract. A plugin process
+can act only as its own plugin. Workspace operations in the provider still go through the
 calling window, with that window's signed-in member and device.
 
 An agent turn opens one linked plain-data call from ai to its agent. It pins

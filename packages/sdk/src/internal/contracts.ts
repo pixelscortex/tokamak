@@ -33,7 +33,7 @@ export interface ContractKey {
   readonly owner?: string;
   readonly place: ContractPlace;
   /** True routes every method; a list routes only the named methods. */
-  readonly dataMethods?: true | readonly string[];
+  readonly dataMethods?: true;
 }
 
 export interface Contract<T extends object, P extends ContractPlace = ContractPlace> extends ContractKey {
@@ -115,20 +115,11 @@ export interface Provider<P extends ContractPlace> {
   readonly implementation: Readonly<Record<string, unknown>>;
 }
 
-type MethodKey<T> = {
-  [K in keyof T]-?: [NonNullable<T[K]>] extends [never]
-    ? never
-    : NonNullable<T[K]> extends (...args: never[]) => unknown
-      ? K
-      : never;
-}[keyof T] &
-  string;
-
 export function contract<T extends object>(
   name: string,
   options: {
     place: "local";
-    dataMethods?: true | readonly [MethodKey<T>, ...MethodKey<T>[]];
+    dataMethods: true;
   },
 ): Contract<T, "local">;
 export function contract<T extends object>(
@@ -137,7 +128,7 @@ export function contract<T extends object>(
 ): Contract<T, "server">;
 export function contract<T extends object>(
   name: string,
-  options?: { place: ContractPlace; dataMethods?: true | readonly string[] },
+  options?: { place: ContractPlace; dataMethods?: true },
 ): Contract<T, "local"> | Contract<T, "server"> {
   return options?.place === "local"
     ? contractReference<T, "local">(name, "local", undefined, options.dataMethods)
@@ -149,16 +140,14 @@ export function contractReference<T extends object, P extends ContractPlace>(
   name: string,
   place: P,
   owner?: string,
-  dataMethods?: true | readonly string[],
+  dataMethods?: true,
 ): Contract<T, P> {
   if (!contractName.test(name)) throw new Error(`Invalid contract name: ${name}`);
   const key = Object.freeze({
     name,
     place,
     ...(owner === undefined ? {} : { owner }),
-    ...(dataMethods === undefined
-      ? {}
-      : { dataMethods: dataMethods === true ? (true as const) : Object.freeze([...dataMethods]) }),
+    ...(dataMethods === undefined ? {} : { dataMethods }),
   });
   const resolve = async (
     context?: ContractContext,

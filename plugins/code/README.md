@@ -23,6 +23,9 @@ gets no snapshots, even if the agent runs `git init` during that turn.
   and named under the reply. Those names are read from the local snapshot commits.
 - A failed before hook prevents the agent from starting. A failed after hook
   leaves the reply and turn outcome in place. The client shows a warning.
+- When a new turn starts in a worktree, Code prunes the lone before ref from the preceding
+  interrupted turn on this device. Complete pairs and refs from
+  failed after hooks are kept.
 - Deleting from the desktop thread menu removes the thread's refs in its
   repository. When Chat opens on the desktop again, Code also checks the
   repositories recorded for that signed-in device and removes snapshot refs

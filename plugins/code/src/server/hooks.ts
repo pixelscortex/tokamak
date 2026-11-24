@@ -4,7 +4,13 @@ import { threadDeletedLocal, type DeletedThread } from "plugin:chat/contracts";
 import { api as chat } from "plugin:chat/server";
 import { findBeforeSnapshot, pruneSnapshots, trackSnapshots } from "../local/snapshots";
 import { BEFORE_NOT_SAVED } from "../shared/text";
-import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
+import {
+  AFTER_SNAPSHOT_WARNING,
+  deleteSnapshots,
+  pruneInterruptedBefore,
+  repository,
+  snapshot,
+} from "../local/git";
 
 export const snapshotHooks = provide(
   ai.turnHooks,
@@ -13,6 +19,15 @@ export const snapshotHooks = provide(
     before: local({
       handler: async (ctx, turn: ai.TurnInfo) => {
         try {
+          if (turn.previousInterruptedTurnId) {
+            const abandoned = { ...turn, turnId: turn.previousInterruptedTurnId };
+            // Cleanup may retry on thread deletion; it must not prevent a turn.
+            await findBeforeSnapshot(ctx, abandoned)
+              .then(async (saved) => {
+                if (saved) await pruneInterruptedBefore(ctx, saved.target, saved.before);
+              })
+              .catch(() => {});
+          }
           const repo = await repository(ctx, turn.folder, turn.signal);
           if (!repo) return;
           const target = { ...repo, ...turn };

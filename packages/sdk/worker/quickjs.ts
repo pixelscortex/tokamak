@@ -56,9 +56,8 @@ export async function initialize(
     emit,
     nextOp,
     (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
-    workerContracts(root, loadLocalModule),
+    workerContracts(root),
     {
-      routedContracts: workerContracts(root, loadLocalModule, true),
       contract: dataContracts(root),
       attachChannel: channels.attach,
       sendWaiting: emitWaiting,

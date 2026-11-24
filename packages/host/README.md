@@ -46,17 +46,15 @@ The SDK attaches a hook invocation's own abort signal before calling the
 handler. Reloading an agent or Code leaves ai's process and its permission
 grants in place.
 
-For other contracts with live methods, the host can still import the
-verified provider snapshot into the caller's realm. When that realm's live
-providers change, new calls use a fresh realm. Admitted calls keep their
-original snapshots until they finish. Imports from other paths are refused.
+A host can import only its own local bundle and the supported built-ins.
+An old bundle with a live local contract is refused; rebuild it with all
+methods declared as plain data. The Bun fallback still binds provider
+implementations in the caller's worker.
 
 A process exit fails its active calls with the plugin's name. Its next start
 is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run
 of at least 60 seconds resets the delay. Routed calls fail immediately during
-that delay so a lookup can continue with other providers. Reload retires
-changed builds and realms with changed live providers; unchanged local bytes
-reuse the existing process.
+that delay so a lookup can continue with other providers. Reload retires changed builds; unchanged local bytes reuse the existing process.
 
 Local functions can start up to 256 live programs per host with `proc` and
 `withPrograms`. Programs get their own process groups. On macOS and Linux a

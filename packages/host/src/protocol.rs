@@ -13,7 +13,7 @@ use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::sync::{Notify, mpsc};
 
 use crate::{
-    modules::Bundles,
+    modules::Bundle,
     pipe::{read_frame, shutdown},
     programs::Programs,
     runtime::Runtime,
@@ -29,7 +29,6 @@ const DID_NOT_YIELD: &str =
 #[derive(Default)]
 struct State {
     calls: HashMap<u64, bool>,
-    contract_ops: HashMap<u64, u64>,
     cancellable_ops: HashMap<u64, u64>,
     queued_bytes: usize,
 }
@@ -37,7 +36,6 @@ struct State {
 impl State {
     fn retire(&mut self, id: u64) {
         self.calls.remove(&id);
-        self.contract_ops.retain(|_, call| *call != id);
         self.cancellable_ops.retain(|_, call| *call != id);
     }
 
@@ -108,8 +106,7 @@ impl Output {
                 let op = id(&frame["id"])?;
                 let cancellable = frame["cancellable"] == true;
                 ensure!(
-                    !state.cancellable_ops.contains_key(&op)
-                        && !state.contract_ops.contains_key(&op),
+                    !state.cancellable_ops.contains_key(&op),
                     "Duplicate worker operation"
                 );
                 if cancellable {
@@ -122,9 +119,6 @@ impl Output {
                 if cancellable {
                     state.cancellable_ops.insert(op, call);
                 }
-                if frame["name"] == "local.contracts" {
-                    state.contract_ops.insert(op, call);
-                }
                 return Ok(());
             }
             Some("opCancel") => {
@@ -135,7 +129,6 @@ impl Output {
                 {
                     // Spend this operation's reservation once, using a bounded frame.
                     state.cancellable_ops.remove(&op);
-                    state.contract_ops.remove(&op);
                     self.write(
                         state,
                         json!({"type":"opCancel", "id":op, "call":call}).to_string(),
@@ -185,7 +178,6 @@ impl Output {
     fn stop_calls(&self) -> Result<()> {
         let mut state = self.state.lock().expect("protocol state");
         let started = std::mem::take(&mut state.calls);
-        state.contract_ops.clear();
         state.cancellable_ops.clear();
         self.drained.notify_waiters();
         for id in started.into_keys() {
@@ -195,7 +187,7 @@ impl Output {
         Ok(())
     }
 
-    fn prepare(&self, frame: &Value, bundles: &Bundles) -> Result<bool> {
+    fn prepare(&self, frame: &Value) -> Result<bool> {
         let mut state = self.state.lock().expect("protocol state");
         let id = id(&frame["id"])?;
         match frame["type"].as_str() {
@@ -220,13 +212,6 @@ impl Output {
             Some("opResult") => {
                 if state.cancellable_ops.remove(&id).is_some() {
                     self.drained.notify_waiters();
-                }
-                if let Some(call) = state.contract_ops.remove(&id)
-                    && state.calls.get(&call) == Some(&false)
-                    && frame["error"].is_null()
-                    && let Some(candidates) = frame["value"].as_array()
-                {
-                    bundles.allow_candidates(candidates);
                 }
             }
             _ => bail!("Invalid worker message"),
@@ -341,7 +326,7 @@ fn connect_pipes(
 
 pub async fn run(code: &Path, native: Option<UnixDatagram>) -> Result<()> {
     let heap = crate::runtime::heap_bytes()?;
-    let bundles = Bundles::new(code)?;
+    let bundles = Bundle::new(code)?;
     let programs = Programs::default();
     let (output, mut frames) = connect_pipes(native, &programs);
     let next_op = std::rc::Rc::new(std::cell::Cell::new(0_u64));
@@ -368,7 +353,7 @@ pub async fn run(code: &Path, native: Option<UnixDatagram>) -> Result<()> {
             frame = frames.recv(), if take_frame => {
                 frames_since_immediate += 1;
                 let Some(frame) = frame else { return Ok(()) };
-                if output.prepare(&frame, &bundles)? {
+                if output.prepare(&frame)? {
                     if frame["type"] == "cancel" {
                         runtime.programs.stop_call(id(&frame["id"])?);
                     }

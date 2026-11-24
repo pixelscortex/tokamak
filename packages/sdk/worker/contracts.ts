@@ -1,4 +1,3 @@
-import { pathToFileURL } from "node:url";
 import {
   openChannel,
   type ContractEntry,
@@ -35,10 +34,6 @@ export class ContractCallError extends Error {
   }
 }
 
-function dataMethod(methods: true | readonly string[] | undefined, member: string) {
-  return methods === true || methods?.includes(member) === true;
-}
-
 function checkedProvider(module: ProviderModule, { plugin, owner, name, registration }: ContractInvocation) {
   const provider = module.contractProviders?.[registration];
   if (
@@ -56,14 +51,22 @@ function localMethod(value: unknown) {
   return method?.kind === "local" ? method.invokeLocal : undefined;
 }
 
+function requirePlainData(provider: Provider<"local">, owner: string | undefined) {
+  if (provider.contract.dataMethods !== true)
+    throw new Error(
+      `Local contract ${owner ? owner + "/" : ""}${provider.contract.name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.`,
+    );
+}
+
 export function dataContracts(root: ProviderModule) {
+  for (const provider of Object.values(root.contractProviders ?? {}))
+    requirePlainData(provider, provider.contract.owner);
   return async (target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue> => {
     const provider = checkedProvider(root, target);
     const { method, owner, name } = target;
     const definition = provider.implementation;
-    const declared = provider.contract.dataMethods;
+
     if (method === undefined) {
-      if (declared !== true) throw new Error(`Cannot describe live contract ${owner}/${name} remotely`);
       const methods = Object.entries(definition)
         .filter(([, value]) => typeof value === "function" || localMethod(value))
         .map(([member]) => member);
@@ -73,8 +76,7 @@ export function dataContracts(root: ProviderModule) {
       return wireData({ data, methods }, `Local contract ${owner}/${name}.describe result`);
     }
     const label = `Local contract ${owner}/${name}.${method}`;
-    if (!Object.hasOwn(definition, method) || !dataMethod(declared, method))
-      throw new Error(`${label} is not a plain-data method`);
+    if (!Object.hasOwn(definition, method)) throw new Error(`${label} is not a plain-data method`);
     if (!Array.isArray(args)) throw new Error(`${label} arguments must be an array`);
     const value = definition[method];
     const local = localMethod(value);
@@ -115,11 +117,8 @@ export function dataContracts(root: ProviderModule) {
   };
 }
 
-export function workerContracts(
-  root: ProviderModule,
-  load: (path: string) => Promise<ProviderModule> = (path) => import(pathToFileURL(path).href),
-  routed = false,
-) {
+export function workerContracts(root: ProviderModule, load?: (path: string) => Promise<ProviderModule>) {
+  const routed = load === undefined;
   // A plain provider's static metadata is scoped to its build. Once discovered,
   // looking up a different provider doesn't depend on this process being up.
   type Description = HostOperations["local.contract.describe"]["result"];
@@ -158,7 +157,6 @@ export function workerContracts(
           path,
           own,
           owner,
-          dataMethods,
           build,
           unavailable: notice,
         }: (typeof candidates)[number]) => {
@@ -219,7 +217,8 @@ export function workerContracts(
               }
             };
           let implementation: Readonly<Record<string, unknown>>;
-          if (!own && dataMethods === true) {
+          if (!own && routed) {
+            if (!build) throw new Error(`Missing routed build for local contract ${owner}/${key.name}`);
             const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
             const cached = descriptions.get(cacheKey);
             try {
@@ -251,24 +250,16 @@ export function workerContracts(
               return;
             }
           } else {
-            try {
-              const module = own ? root : await load(path);
-              const { implementation: definition } = checkedProvider(module, target);
-              implementation = bindProvider(definition, host(own ? undefined : plugin), auth, (member) =>
-                !own && dataMethod(dataMethods, member) ? remote(member) : undefined,
-              );
-            } catch (error) {
-              // A mixed provider can fail to import too. Other agents are still usable.
-              if (!dataMethods || own) throw error;
-              unavailable.push({ plugin, lastId: undefined, error });
-              return;
-            }
+            if (!own && (!load || !path))
+              throw new Error(`Missing Bun provider for local contract ${owner}/${key.name}`);
+            const module = own ? root : await load!(path!);
+            const provider = checkedProvider(module, target);
+            implementation = bindProvider(provider.implementation, host(own ? undefined : plugin), auth);
           }
           return { plugin, implementation };
         };
         const resolved = [];
-        if (candidates.some((candidate) => candidate.dataMethods === true))
-          resolved.push(...(await Promise.all(candidates.map(resolve))));
+        if (routed) resolved.push(...(await Promise.all(candidates.map(resolve))));
         else for (const candidate of candidates) resolved.push(await resolve(candidate));
         for (const entry of resolved) {
           if (!entry) continue;
@@ -294,17 +285,10 @@ export function workerContracts(
   };
 }
 
-function bindProvider(
-  definition: object,
-  bridge: HostBridge,
-  auth: AuthContext,
-  remote?: (member: string) => ((...args: unknown[]) => Promise<JsonValue>) | undefined,
-) {
+function bindProvider(definition: object, bridge: HostBridge, auth: AuthContext) {
   const implementation: Readonly<Record<string, unknown>> = Object.freeze(
     Object.fromEntries(
       Object.entries(definition).map(([member, value]) => {
-        const routed = remote?.(member);
-        if (routed && (typeof value === "function" || localMethod(value))) return [member, routed];
         if (typeof value === "function")
           return [member, (...args: unknown[]) => Reflect.apply(value, implementation, args)];
         const method = value as FunctionDefinition | null | undefined;

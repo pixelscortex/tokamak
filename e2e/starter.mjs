@@ -7,7 +7,8 @@ import { homedir } from "node:os";
 import { buildStarterPlugins, installStarterPlugins } from "../app/scripts/starter-plugins.ts";
 import { createApi } from "../packages/sdk/src/index.ts";
 import { agentTurns } from "./fake-agent/agent-turn.mjs";
-import { connect, localLauncher, selectedRuntime, startServer, workspace } from "./fake-agent/harness.mjs";
+import { startRunner } from "./fake-agent/start-runner.ts";
+import { connect, startServer, workspace } from "./fake-agent/harness.mjs";
 
 const [flag, ...requested] = process.argv.slice(2);
 const names = { claude: "Claude", codex: "Codex" };
@@ -89,11 +90,14 @@ try {
     ]) {
       if (process.env[key]) env[key] = process.env[key];
     }
-    const client = await connect(address, {
-      token,
-      cleanup,
-      launch: localLauncher(selectedRuntime(binary), (id) => join(pluginsDir, id, "dist"), env),
+    const runner = await startRunner({
+      binary: binary.replace(/tokamak-server(?=\.exe$|$)/, "tokamak-runner"),
+      plugins: pluginsDir,
+      directory: join(root, "runner"),
+      env,
     });
+    cleanup.push(runner.stop);
+    const client = await connect(address, { token, cleanup, launch: runner.launch });
     const available = await client.local(api.ai.agents.list, {});
     for (const id of new Set(requested)) {
       const info = available.find((agent) => agent.id === id)?.info;

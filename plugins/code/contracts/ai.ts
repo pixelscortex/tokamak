@@ -90,6 +90,8 @@ export interface TurnInfo {
   readonly threadId: Id<"threads">;
   readonly turnId: string;
   readonly folder: string;
+  /** The preceding turn on this device was interrupted before its work could settle. */
+  readonly previousInterruptedTurnId?: string;
   /** Aborted when this hook is cancelled; use it to stop work. */
   readonly signal: LocalContext["signal"];
 }

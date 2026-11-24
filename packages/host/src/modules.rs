@@ -1,9 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::{path::Path, rc::Rc};
 
 use anyhow::Context;
 
@@ -19,12 +14,9 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct Bundles {
-    root: Rc<str>,
-    providers: Rc<RefCell<HashMap<String, PathBuf>>>,
-}
+pub struct Bundle(Rc<str>);
 
-impl Bundles {
+impl Bundle {
     pub fn new(code: &Path) -> anyhow::Result<Self> {
         let code = code
             .canonicalize()
@@ -32,47 +24,19 @@ impl Bundles {
         let root = code
             .to_str()
             .context("Local function bundle path is not UTF-8")?;
-        Ok(Self {
-            root: Rc::from(root),
-            providers: Rc::default(),
-        })
+        Ok(Self(Rc::from(root)))
     }
 
     pub fn root(&self) -> &str {
-        &self.root
+        &self.0
     }
 
-    pub fn allow_candidates(&self, candidates: &[serde_json::Value]) {
-        for path in candidates
-            .iter()
-            .filter(|candidate| candidate["own"] == false)
-            .filter_map(|candidate| candidate["path"].as_str())
-        {
-            self.allow(path);
-        }
-    }
-
-    fn allow(&self, path: &str) {
-        let code = Path::new(path);
-        if code.is_absolute()
-            && let Ok(resolved) = code.canonicalize()
-        {
-            self.providers
-                .borrow_mut()
-                .insert(path.to_owned(), resolved);
-        }
-    }
-
-    fn path(&self, name: &str) -> Option<PathBuf> {
-        if name == self.root() {
-            Some(PathBuf::from(name))
-        } else {
-            self.providers.borrow().get(name).cloned()
-        }
+    fn path(&self, name: &str) -> Option<&Path> {
+        (name == self.root()).then_some(Path::new(self.root()))
     }
 }
 
-pub struct Resolve(pub Bundles);
+pub struct Resolve(pub Bundle);
 
 impl Resolver for Resolve {
     fn resolve<'js>(
@@ -107,7 +71,7 @@ impl Resolver for Resolve {
     }
 }
 
-pub struct Load(pub Bundles);
+pub struct Load(pub Bundle);
 
 impl Loader for Load {
     fn load<'js>(
