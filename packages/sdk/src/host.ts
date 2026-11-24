@@ -129,6 +129,7 @@ export interface HostBridge {
   readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
+  readonly retiring?: ActionSignal;
   readonly proc?: import("./local").LocalProcess;
   readonly contracts?: import("./internal/contracts").ContractScope;
   readonly channel?: {

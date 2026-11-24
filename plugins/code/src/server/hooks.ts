@@ -2,9 +2,9 @@ import { fail, local, provide, type Id, type LocalContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { threadDeletedLocal, type DeletedThread } from "plugin:chat/contracts";
 import { api as chat } from "plugin:chat/server";
-import { pruneSnapshots, trackSnapshots } from "../local/snapshots";
+import { findBeforeSnapshot, pruneSnapshots, trackSnapshots } from "../local/snapshots";
 import { BEFORE_NOT_SAVED } from "../shared/text";
-import { AFTER_SNAPSHOT_WARNING, beforeSnapshot, deleteSnapshots, repository, snapshot } from "../local/git";
+import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
 
 export const snapshotHooks = provide(
   ai.turnHooks,
@@ -16,7 +16,7 @@ export const snapshotHooks = provide(
           const repo = await repository(ctx, turn.folder, turn.signal);
           if (!repo) return;
           const target = { ...repo, ...turn };
-          await trackSnapshots(ctx, target);
+          await trackSnapshots(ctx, { ...repo, threadId: turn.threadId, turnId: turn.turnId });
           await snapshot(ctx, target, "before");
           if (await cleanedIfDeleted(ctx, target))
             return fail("ThreadDeleted", { reason: "The thread was deleted before the agent could start." });
@@ -32,12 +32,10 @@ export const snapshotHooks = provide(
     after: local({
       handler: async (ctx, turn: ai.TurnInfo) => {
         try {
-          const repo = await repository(ctx, turn.folder, turn.signal);
-          if (!repo) return;
-          const target = { ...repo, ...turn };
           // Git added during an agent run takes effect on the next turn.
-          const before = await beforeSnapshot(ctx, target);
-          if (!before) return;
+          const saved = await findBeforeSnapshot(ctx, turn);
+          if (!saved) return;
+          const { target, before } = saved;
           await snapshot(ctx, target, "after", before);
           await cleanedIfDeleted(ctx, target);
         } catch (cause) {

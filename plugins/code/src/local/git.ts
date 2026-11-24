@@ -136,15 +136,12 @@ export async function repository(
   folder: string,
   signal = ctx.signal,
 ): Promise<Repository | undefined> {
-  const path =
-    folder === "~" ? homedir() : folder.startsWith("~/") ? join(homedir(), folder.slice(2)) : resolve(folder);
+  const path = folderPath(folder);
   try {
     const result = await gitAt(ctx, path, {}, signal)(["rev-parse", "--show-toplevel"]);
     if (result.code === 0) {
       const root = result.out.join("\n");
-      const prefix = relative(root, await realpath(path))
-        .split(sep)
-        .join("/");
+      const prefix = folderPrefix(root, await realpath(path));
       return { root, prefix };
     }
     // The local process runner invokes Git through a shell on Unix; a missing
@@ -156,6 +153,18 @@ export async function repository(
     if (isMissing(cause)) return;
     throw cause;
   }
+}
+
+export function folderPath(folder: string): string {
+  return folder === "~"
+    ? homedir()
+    : folder.startsWith("~/")
+      ? join(homedir(), folder.slice(2))
+      : resolve(folder);
+}
+
+export function folderPrefix(root: string, path: string): string {
+  return relative(root, path).split(sep).join("/");
 }
 
 const MAX_NEW_FILE_BYTES = 50_000_000;

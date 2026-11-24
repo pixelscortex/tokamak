@@ -29,6 +29,8 @@ import { keepAlive } from "./keep-alive";
 import { hooksFor } from "./turn-hooks";
 import { workingOn } from "./working";
 
+const RELOADED = "AI was reloaded while the turn was running.";
+
 /**
  * One turn, run on the sender's own computer: begin it (one writer per
  * thread), hand the message to the chosen agent's `start` (with the session to
@@ -103,20 +105,36 @@ export const turn = local({
     // From here until the turn is settled, the server hears from this computer (liveness.ts), and
     // quitting the app asks first (working.ts). Both are released however the turn ends.
     let lost: string | undefined;
-    const alive = keepAlive(ctx, turnId, (reason) => {
+    const loseTurn = (reason: string) => {
+      if (!control.active) {
+        hooks.skipAfter();
+        return;
+      }
+      if (lost !== undefined) return;
       lost = reason;
-      hooks.cancel();
+      hooks.cancel(reason);
       void control.forceStop().catch(() => {});
+    };
+    const alive = keepAlive(ctx, turnId, loseTurn);
+    const reloaded = () => loseTurn(RELOADED);
+    ctx.retiring?.addEventListener("abort", reloaded, { once: true });
+    if (ctx.retiring?.aborted) reloaded();
+    const unregister = workingOn(turnId, {
+      threadId,
+      agent: provider.name,
+      control,
+      skipAfter: hooks.skipAfter,
     });
-    const unregister = workingOn(turnId, { threadId, agent: provider.name, control });
     try {
-      let ending: { state: "done" | "failed" | "stopped"; error?: string; sessionId?: string };
-      const beforeError = await hooks.before();
-      if (beforeError !== undefined) {
+      let ending: Pick<ArgsOf<typeof api.turns.finish>, "state" | "error" | "sessionId">;
+      const beforeError = lost === undefined ? await hooks.before() : lost;
+      const lostBefore = lost;
+      if (lostBefore !== undefined) {
+        ending = { state: "interrupted", error: lostBefore };
+      } else if (hooks.stoppedBefore) {
+        ending = { state: "stopped" };
+      } else if (beforeError !== undefined) {
         ending = { state: "failed", error: beforeError };
-      } else if (lost !== undefined) {
-        // The turn ended (or the server went away) while the hook ran: the agent never starts.
-        ending = { state: "failed", error: lost };
       } else {
         try {
           // A write the server refused twice: stop the agent's programs now, as Force stop does.
@@ -144,17 +162,20 @@ export const turn = local({
           ending = { state: "failed", error: errorText(cause) };
         }
       }
-      if (lost !== undefined) ending = { ...ending, state: "failed", error: lost };
+      if (lost !== undefined) ending = { ...ending, state: "interrupted", error: lost };
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
       control.close();
       await writer.settled();
       const broken = writer.close();
       // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
-      if (broken !== undefined)
+      if (broken !== undefined && lost === undefined)
         ending = { ...ending, state: "failed", error: `Could not save the reply: ${errorText(broken)}` };
       // Force stop only closes the agent's program scope. Run after hooks before releasing the queue.
-      const hookNotice = beforeError ?? (lost === undefined ? await hooks.after() : hooks.notice());
+      const hookNotice =
+        hooks.stoppedBefore && lostBefore === undefined
+          ? undefined
+          : (lostBefore ?? beforeError ?? (lost === undefined ? await hooks.after() : hooks.notice()));
       let state;
       try {
         const acknowledgedSteer = control.acknowledgedSteer();
@@ -174,8 +195,14 @@ export const turn = local({
           ...(lost !== undefined && { ended: lost }),
         };
       }
-      return { turnId, state, ...(hookNotice !== undefined && { hookNotice }) };
+      return {
+        turnId,
+        state,
+        ...(hookNotice !== undefined && { hookNotice }),
+        ...(lost !== undefined && { ended: lost }),
+      };
     } finally {
+      ctx.retiring?.removeEventListener("abort", reloaded);
       control.close();
       alive.stop();
       unregister();
@@ -203,9 +230,9 @@ export const stop = local({
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
     if (!control) return noRunningTurn(turnId);
-    await ctx.runMutation(api.turns.requestStop, { turnId });
-    await control.requestStop();
-    return null;
+    return (await control.requestStop(() => ctx.runMutation(api.turns.requestStop, { turnId })))
+      ? null
+      : noRunningTurn(turnId);
   },
 });
 

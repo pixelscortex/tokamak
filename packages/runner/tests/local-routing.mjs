@@ -79,6 +79,22 @@ await plugin(
   export const largeResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).largeResult() });
   export const thrown = local({ handler: (ctx) => probe.get("custom-alpha", ctx).thrown() });
   export const checkBad = local({ handler: (ctx) => probe.get("custom-crash", ctx).identify() });
+  export const cancelBurst = local({
+    handler: async (ctx) => {
+      for (let batch = 0; batch < 4; batch++) {
+        const controller = new AbortController();
+        const providers = await probe.list(ctx, { signal: controller.signal });
+        const provider = providers.find(({ id }) => id === "custom-alpha")!;
+        const attempts = Array.from({ length: 128 }, (_, id) => provider.echo(id));
+        controller.abort();
+        const cancelled = await Promise.allSettled(attempts);
+        if (cancelled.some((result) => result.status !== "rejected" ||
+            result.reason.message !== "Local contract call cancelled"))
+          throw new Error("Expected every queued call in the burst to cancel");
+      }
+      return probe.get("custom-alpha", ctx).identify();
+    },
+  });
   export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
 `,
   `
@@ -209,6 +225,8 @@ try {
   await until("the provider's reconstructed signal aborted", () =>
     Bun.file(leaf.path + ".cancelled").exists(),
   );
+  assert.deepEqual(await client.local(api.cancelBurst, {}), auth);
+  assert.deepEqual(pids(), initial, "consecutive bursts of cancels leave all hosts running");
   console.log(
     "Non-plain arguments and results named their method; cancelling the caller aborted the provider",
   );

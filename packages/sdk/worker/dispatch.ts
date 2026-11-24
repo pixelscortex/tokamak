@@ -22,7 +22,7 @@ export type WorkerMessage =
       unavailable?: true;
       providerError?: true;
     }
-  | { type: "cancel"; id: number };
+  | { type: "cancel" | "retire"; id: number };
 
 export type DispatchOperation = (
   id: number,
@@ -64,6 +64,7 @@ export function workerDispatch(
     number,
     {
       controller: AbortController;
+      retiring?: AbortController;
       close(): Promise<void>;
       disposeChannel(): void;
     }
@@ -112,8 +113,10 @@ export function workerDispatch(
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Worker invocation capacity exceeded");
     const controller = new AbortController();
+    const retiring = routed && !target ? new AbortController() : undefined;
     const call = {
       controller,
+      retiring,
       close: (): Promise<void> => invocation.close(),
       disposeChannel: () => channel?.dispose(),
     };
@@ -148,12 +151,9 @@ export function workerDispatch(
           if (!pending.has(op)) return;
           rejected(error);
           const sent = () => {
-            if (!pending.delete(op)) return;
-            try {
-              send({ type: "opCancel", id: op, call: id });
-            } finally {
-              pump();
-            }
+            // Cancellation rejects immediately but keeps the slot until the Runner
+            // consumes the queued work and returns its opResult.
+            if (pending.has(op)) send({ type: "opCancel", id: op, call: id });
           };
           // A send blocked on the host's byte budget must precede its cancel.
           // Until then it still occupies a pending slot. If the call ends,
@@ -205,6 +205,7 @@ export function workerDispatch(
       createPrograms && (() => createPrograms(controller.signal, id)),
       routed ? (options?.routedContracts ?? contracts) : contracts,
       channel?.bridge,
+      retiring?.signal,
     );
     try {
       if (!(target && options?.contract) && functions[name]?.kind !== kind)
@@ -259,6 +260,9 @@ export function workerDispatch(
         } else op.resolve(message.value);
       }
       pump();
+    } else if (message.type === "retire") {
+      const retiring = calls.get(message.id)?.retiring;
+      if (retiring) options?.abort(retiring);
     } else if (message.type === "cancel") {
       const call = calls.get(message.id);
       if (call) {

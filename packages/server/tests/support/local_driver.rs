@@ -8,7 +8,7 @@ pub fn run(script: &str) {
     dispatch(script, false);
 }
 
-#[allow(dead_code)] // Only the two agent replay crates select the Runner.
+#[allow(dead_code)] // Agent replays and the two Code integration suites select the Runner.
 pub fn replay(script: &str) {
     dispatch(script, std::env::var_os("TOKAMAK_TEST_RUNNER").is_some());
 }

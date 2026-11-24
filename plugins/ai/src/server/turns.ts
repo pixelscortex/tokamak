@@ -609,7 +609,7 @@ export const forceStopDelay = query({
 export const finish = mutation({
   args: {
     turnId: v.id("turns"),
-    state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped")),
+    state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped"), v.literal("interrupted")),
     error: v.optional(v.string()),
     sessionId: v.optional(v.string()),
     acknowledgedSteer: v.optional(v.string()),
@@ -617,7 +617,7 @@ export const finish = mutation({
   },
   handler: async (ctx, { turnId, state, error, sessionId, acknowledgedSteer, finishedAt }) => {
     const turn = await sendersRunningTurn(ctx, turnId);
-    if (turn.stoppingAt !== undefined) state = "stopped";
+    if (turn.stoppingAt !== undefined && state !== "interrupted") state = "stopped";
     const reason = error === undefined ? undefined : line(error, LINE_CHARS * 4);
     await ctx.use(chat).writeReply({
       messageId: turn.replyId,
@@ -625,6 +625,9 @@ export const finish = mutation({
       text: turn.text ?? "",
       done: true,
       ...(state === "stopped" ? { outcome: "cancelled" as const } : {}),
+      ...(state === "interrupted"
+        ? { outcome: "interrupted" as const, error: reason ?? "The turn was interrupted." }
+        : {}),
       ...(state === "failed"
         ? { outcome: "error" as const, ...(reason === undefined ? {} : { error: reason }) }
         : {}),
@@ -636,7 +639,10 @@ export const finish = mutation({
     // A step the agent never closed ends with its turn; a stopped one did not fail.
     for (const step of steps)
       if (step.state === "running")
-        await ctx.db.patch(step._id, { state: state === "failed" ? "failed" : "done", finishedAt });
+        await ctx.db.patch(step._id, {
+          state: state === "failed" || state === "interrupted" ? "failed" : "done",
+          finishedAt,
+        });
     await update(ctx.db, turn, {
       question: undefined,
       questionToken: undefined,
@@ -645,7 +651,7 @@ export const finish = mutation({
       state,
       current: undefined,
       finishedAt: Date.now(),
-      ...(state === "failed" && reason !== undefined ? { error: reason } : {}),
+      ...((state === "failed" || state === "interrupted") && reason !== undefined ? { error: reason } : {}),
       ...(sessionId === undefined ? {} : { sessionId: line(sessionId) }),
     });
     return state;

@@ -5,13 +5,22 @@ import { errorText } from "../shared/turn-shared";
 const HOOK_DEADLINE_MS = 60_000;
 const BEFORE_TIMEOUT = "The turn could not start: a before hook timed out.";
 const AFTER_TIMEOUT = "A turn after hook timed out.";
+const AFTER_INTERRUPTED = "A turn after hook was interrupted.";
 
 export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
   const controller = new AbortController();
   const input: TurnInfo = { ...turn, signal: controller.signal };
   const notices = new Set<string>();
+  const pending = new Set<TurnHooks>();
   let beforeCalls: AbortController | undefined;
   let interrupt: ((reason: string) => void) | undefined;
+  let stopped = false;
+
+  function afterNotice(fallback: string) {
+    return (
+      [...new Set([...pending].map((hook) => hook.afterTimeoutNotice ?? fallback))].join("\n") || fallback
+    );
+  }
 
   function cancel(reason: string) {
     interrupt?.(reason);
@@ -53,8 +62,10 @@ export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
         const timeout = () => BEFORE_TIMEOUT;
         const hooks = await withinDeadline(() => lookup(calls.signal), timeout);
         for (const hook of hooks) {
+          if (calls.signal.aborted) break;
           if (!hook.before) continue;
           const result = await withinDeadline(() => hook.before?.(input), timeout);
+          if (calls.signal.aborted) break;
           if (!isFailure(result)) continue;
           const data = result.data;
           if (typeof data === "object" && data && "reason" in data && typeof data.reason === "string") {
@@ -63,13 +74,13 @@ export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
           return `The turn could not start: ${result.kind}`;
         }
       } catch (cause) {
-        return errorText(cause);
+        if (!stopped) return errorText(cause);
       } finally {
         beforeCalls = undefined;
       }
     },
     async after(): Promise<string | undefined> {
-      const pending = new Set<TurnHooks>();
+      if (input.signal.aborted) return notice();
       try {
         // Every after hook starts together and has the same deadline.
         await withinDeadline(
@@ -89,9 +100,7 @@ export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
               }),
             );
           },
-          () =>
-            [...new Set([...pending].map((hook) => hook.afterTimeoutNotice ?? AFTER_TIMEOUT))].join("\n") ||
-            AFTER_TIMEOUT,
+          () => afterNotice(AFTER_TIMEOUT),
         );
       } catch (cause) {
         notices.add(errorText(cause));
@@ -99,12 +108,20 @@ export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
       return notice();
     },
     notice,
-    stopBefore() {
-      // This cancels routed before calls. Bun still hands hooks the live deadline signal.
-      beforeCalls?.abort();
+    get stoppedBefore() {
+      return stopped;
     },
-    cancel() {
-      cancel("The turn ended while a hook was running.");
+    stopBefore() {
+      // Bun still hands before hooks the live deadline signal and lets them finish.
+      if (beforeCalls && ctx.retiring) {
+        stopped = true;
+        beforeCalls.abort();
+      }
+    },
+    cancel,
+    skipAfter() {
+      if (interrupt) cancel(afterNotice(AFTER_INTERRUPTED));
+      else controller.abort();
     },
   };
 }

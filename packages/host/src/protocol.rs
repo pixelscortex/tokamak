@@ -216,7 +216,7 @@ impl Output {
                 *cancelled = true;
                 self.result(&mut state, id, CANCELLED)?;
             }
-            Some("peer") => {}
+            Some("peer" | "retire") => {}
             Some("opResult") => {
                 if state.cancellable_ops.remove(&id).is_some() {
                     self.drained.notify_waiters();

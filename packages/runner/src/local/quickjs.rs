@@ -491,9 +491,24 @@ impl SlotState {
 #[derive(Default)]
 struct Calls {
     next: u64,
-    active: HashMap<u64, mpsc::Sender<Value>>,
+    active: HashMap<u64, Inbox>,
     linked: HashSet<u64>,
     peers: HashMap<u64, (u64, oneshot::Sender<Value>)>,
+}
+
+#[derive(Clone)]
+struct Inbox {
+    frames: mpsc::Sender<Value>,
+    overflow: CancellationToken,
+}
+
+impl Inbox {
+    fn deliver(&self, frame: Value) {
+        if let Err(mpsc::error::TrySendError::Full(_)) = self.frames.try_send(frame) {
+            // A blocked invocation must not stop the host or its other calls.
+            self.overflow.cancel();
+        }
+    }
 }
 
 struct Host {
@@ -626,7 +641,9 @@ impl Host {
     }
 
     async fn begin(self: &Arc<Self>, mut frame: Value) -> Result<Call, String> {
-        let (send, receive) = mpsc::channel(WORKER_CAPACITY + 1);
+        // One op and one cancel per pending SDK slot, plus the final result.
+        let (frames, receive) = mpsc::channel(2 * WORKER_CAPACITY + 1);
+        let overflow = CancellationToken::new();
         let permit = self.writes.reserve().await.map_err(|_| self.error())?;
         let mut calls = lock(&self.calls);
         if self.stopping.is_cancelled() {
@@ -647,7 +664,13 @@ impl Host {
         frame["id"] = json!(id);
         frame["routed"] = json!(true);
         let bytes = self.encode(&frame)?;
-        calls.active.insert(id, send);
+        calls.active.insert(
+            id,
+            Inbox {
+                frames,
+                overflow: overflow.clone(),
+            },
+        );
         permit.send(bytes);
         if linked {
             calls.linked.insert(id);
@@ -656,6 +679,7 @@ impl Host {
             host: self.clone(),
             id,
             receive,
+            overflow,
             finished: false,
         })
     }
@@ -690,10 +714,8 @@ impl Host {
             }
             _ => return Err("invalid plugin host message".into()),
         };
-        if let Some(recipient) = recipient
-            && let Err(mpsc::error::TrySendError::Full(_)) = recipient.try_send(frame)
-        {
-            return Err("plugin host output queue full".into());
+        if let Some(recipient) = recipient {
+            recipient.deliver(frame);
         }
         Ok(())
     }
@@ -786,6 +808,7 @@ struct Call {
     host: Arc<Host>,
     id: u64,
     receive: mpsc::Receiver<Value>,
+    overflow: CancellationToken,
     finished: bool,
 }
 
@@ -802,7 +825,11 @@ impl Drop for PeerRequest<'_> {
 
 impl Call {
     async fn next(&mut self) -> Result<Value, String> {
-        let frame = self.receive.recv().await.ok_or_else(|| self.host.error())?;
+        let frame = tokio::select! {
+            biased;
+            () = self.overflow.cancelled() => return Err(self.host.label("invocation output queue full")),
+            frame = self.receive.recv() => frame.ok_or_else(|| self.host.error())?,
+        };
         self.finished = frame["type"] == "result";
         Ok(frame)
     }
@@ -842,6 +869,36 @@ fn lock<T>(state: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_full_invocation_inbox_does_not_block_another_call() {
+        let inbox = || {
+            let (frames, receive) = mpsc::channel(2 * WORKER_CAPACITY + 1);
+            (
+                Inbox {
+                    frames,
+                    overflow: CancellationToken::new(),
+                },
+                receive,
+            )
+        };
+        let (busy, _receive) = inbox();
+        let (other, mut receive) = inbox();
+        for id in 0..WORKER_CAPACITY {
+            busy.deliver(json!({"type":"op","id":id}));
+            busy.deliver(json!({"type":"opCancel","id":id}));
+        }
+        let result = json!({"type":"result","value":true});
+        busy.deliver(result.clone());
+        assert!(
+            !busy.overflow.is_cancelled(),
+            "a full burst still leaves room for the result"
+        );
+        busy.deliver(json!({"type":"op","id":WORKER_CAPACITY}));
+        assert!(busy.overflow.is_cancelled());
+        other.deliver(result.clone());
+        assert_eq!(receive.try_recv().unwrap(), result);
+    }
 
     #[test]
     fn at_capacity_evicts_the_least_recently_used_unleased_build() {

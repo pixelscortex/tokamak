@@ -154,6 +154,8 @@ export interface ActionContext extends ContractContext {
 export interface LocalContext extends ContractContext {
   readonly auth: AuthContext;
   readonly signal: NonNullable<HostBridge["signal"]>;
+  /** QuickJS root call only: its own installed build was replaced. Calls can still settle. */
+  readonly retiring?: HostBridge["signal"];
   readonly proc: LocalProcess;
   /** Use the callback context to start programs and select providers owned by this scope. */
   readonly withPrograms: WithPrograms;
@@ -328,6 +330,7 @@ export function localContext(host: HostBridge, auth: AuthContext): LocalContext 
       return host.withPrograms((forceStop, scoped) => run(forceStop, localContext(scoped, auth)));
     },
     signal: host.signal,
+    retiring: host.retiring,
     runQuery: (reference, args) => run("local.runQuery", reference, args),
     runMutation: (reference, args) => run("local.runMutation", reference, args),
     runAction: (reference, args) => run("local.runAction", reference, args),
@@ -476,6 +479,7 @@ export async function invokeFunction(
     definition.invoke(args, {
       auth,
       signal: host.signal,
+      retiring: host.retiring,
       proc: host.proc,
       withPrograms: host.withPrograms,
       contracts: host.contracts,

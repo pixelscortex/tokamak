@@ -5,9 +5,10 @@ Install it alongside Chat; AI is optional. A turn that starts outside a Git work
 gets no snapshots, even if the agent runs `git init` during that turn.
 
 - On the QuickJS Runner, Code saves both snapshots in its own process.
-  The before hook returns the Git commit and repository for that thread and
-  turn. The after hook verifies the turn ID and the process that saved it.
-  A lost Code process leaves the before snapshot and the usual warning.
+  The after hook looks up the before ref by thread and turn, using its
+  original worktree even if the selected folder has become a nested
+  repository. A new Code process can complete the pair. An unavailable
+  provider or snapshot that cannot be saved leaves the usual warning.
 - Each turn with Git gets commits at
   `refs/tokamak/threads/<thread key>/turns/<turn key>/before` and `…/after`.
   The keys are the parts of the thread and turn IDs after the colon.

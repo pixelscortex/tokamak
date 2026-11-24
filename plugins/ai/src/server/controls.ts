@@ -120,9 +120,19 @@ export function turnControl(
       return unsettledSteer?.delivery === "delivered" ? unsettledSteer.text : undefined;
     },
     /** Cancel a pending run.ask before interrupting; some providers wait for the answer to proceed. */
-    async requestStop() {
-      if (agentClosed || stopRequested) return;
+    get active() {
+      return !agentClosed;
+    },
+    async requestStop(mark: () => Promise<unknown>) {
+      if (agentClosed) return false;
+      if (stopRequested) return true;
       stopRequested = true;
+      try {
+        await mark();
+      } catch (error) {
+        stopRequested = false;
+        throw error;
+      }
       cancelBefore?.();
       releaseSteers();
       try {
@@ -131,6 +141,7 @@ export function turnControl(
         stopReady = true;
         sendStop();
       }
+      return true;
     },
     async run<T>(start: () => Promise<T>, kill: () => Promise<void>) {
       forceKill = kill;

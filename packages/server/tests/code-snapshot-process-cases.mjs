@@ -115,11 +115,69 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
 
   const [before] = await hook.turns.until("before hook is running", (rows) => rows.length === 1);
   await desk.local(ai.run.stop, { turnId: before._id });
-  assert.equal((await pending).state, "stopped");
+  assert.deepEqual(await pending, { turnId: before._id, state: "stopped" });
   await until("Stop cancels the hook's Git group", () => pids.every((pid) => !alive(pid)));
   assert.deepEqual(refs(blocked.git), []);
 
   console.log("code snapshots: Force stop isolated agent programs; Stop cancelled before");
+}
+
+export async function reloadManager({ h, runner, desk, project, start }) {
+  const { ai } = h.api;
+  const waiting = await project("reload-during-question");
+  const thread = await start(desk, waiting.folder);
+  const running = desk.local(ai.run.turn, {
+    threadId: thread.threadId,
+    messageId: thread.messageId,
+    folder: waiting.folder,
+    agentId: "fake-agent",
+    model: "ask-once",
+    access: "ask",
+  });
+  void running.catch(() => {});
+  const [turn] = await thread.turns.until("agent is waiting", (rows) => rows[0]?.state === "waiting");
+  const hosts = await inspectHosts(runner);
+  const fake = hosts().find(({ id }) => id === "fake-agent");
+  assert.ok(fake);
+  const children = Bun.spawnSync(["ps", "-ww", "-axo", "pid=,ppid=,command="])
+    .stdout.toString()
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/, 3))
+    .filter(([, parent]) => Number(parent) === fake.pid)
+    .map(([pid]) => Number(pid));
+  assert.ok(children.length, "the waiting agent has a program to reap");
+
+  const blocked = await project("reload-during-before");
+  await stall(blocked);
+  await blocked.write("agent.txt", "Stall the before snapshot.\n");
+  const hook = await start(desk, blocked.folder);
+  const before = hook.run(hook.messageId, "edit");
+  void before.catch(() => {});
+  const git = await gitPids(blocked);
+
+  await editBundle(join(h.plugins, "ai"), "/* replaced while waiting for permission */");
+  await reload(runner, join(h.scratch, "snapshots"), "ai");
+  const why = "AI was reloaded while the turn was running.";
+  assert.deepEqual(await running, { turnId: turn._id, state: "interrupted", ended: why });
+  const lostBefore = await before;
+  assert.equal(lostBefore.state, "interrupted");
+  assert.equal(lostBefore.hookNotice, why);
+  const row = await thread.reply(turn._id);
+  assert.equal(row.state, "interrupted");
+  assert.equal(row.error, why);
+  assert.equal(row.question, undefined);
+  assert.equal((await desk.local(ai.run.stop, { turnId: turn._id })).kind, "NotRunning");
+  const question = { turnId: turn._id, questionId: turn.question.id };
+  assert.equal(await desk.local(ai.run.pending, question), false);
+  assert.equal((await desk.local(ai.run.answer, { ...question, answer: "approve" })).kind, "Expired");
+  assert.deepEqual(await desk.local(ai.working.list, {}), []);
+  assert.equal(await desk.local(ai.working.stopAll, {}), 0);
+  await until("AI reload reaped the agent and Git", () => [...children, ...git].every((pid) => !alive(pid)));
+  await h.gate(waiting.folder, "go");
+  assert.equal((await thread.run(await thread.post(), "edit")).state, "done");
+  console.log(
+    "code snapshots: AI reload interrupted a waiting turn and a before hook, reaped both programs, and freed the thread",
+  );
 }
 
 export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }) {

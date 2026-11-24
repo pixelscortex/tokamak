@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   symlink,
@@ -18,6 +19,7 @@ import { join } from "node:path";
 import {
   cancelledCleanup,
   managerCrash,
+  reloadManager,
   separateProcesses,
   stopDuringAfter,
   stopIsolation,
@@ -59,6 +61,7 @@ try {
   });
   await preservesWorktree(desk, code, routed);
   await snapshotFailures(desk, code);
+  await changedWorktree(desk);
   if (!bunCore) await prunesWhenReopened(address, desk, code);
   if (!runner) await withoutDataFolder(address);
   const fixture = { h, runner, desk, code, project, start, refs, turnRef };
@@ -76,6 +79,7 @@ try {
       await unavailableProviders(fixture);
       await thirdPartyNotice(desk);
       await cancelledCleanup(fixture);
+      await reloadManager(fixture);
     }
     await snapshotReviewCases({
       ...fixture,
@@ -94,6 +98,49 @@ try {
   }
 } finally {
   await h.close();
+}
+
+async function changedWorktree(desk) {
+  const outer = await project("before-worktree-root");
+  const folder = join(outer.folder, "subfolder");
+  await mkdir(folder);
+  await writeFile(join(folder, "agent.txt"), "before nested init\n");
+  outer.git("add", "subfolder");
+  outer.git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "-m",
+    "Track subfolder",
+  );
+  const nested = await start(desk, folder);
+  const running = nested.run(nested.messageId, "edit");
+  await nested.edited();
+  gitAt(folder)("init", "--quiet");
+  await h.gate(folder, "go");
+  const result = await running;
+  const prefix = turnRef(nested.threadId, result.turnId);
+  assert.equal(result.state, "done");
+  assert.equal(result.hookNotice, undefined);
+  assert.equal(outer.git("rev-parse", `${prefix}/after^`), outer.git("rev-parse", `${prefix}/before`));
+  assert.deepEqual(refs(gitAt(folder)), []);
+
+  const moved = await project("before-folder-vanished");
+  const thread = await start(desk, moved.folder);
+  const ending = thread.run(thread.messageId, "edit");
+  await thread.edited();
+  const other = moved.folder + "-moved";
+  await rename(moved.folder, other);
+  await h.gate(other, "go");
+  const lost = await ending;
+  assert.equal(lost.state, "done");
+  assert.equal(lost.hookNotice, "Couldn't save this turn's code");
+  assert.deepEqual(refs(gitAt(other), turnRef(thread.threadId, lost.turnId)), [
+    `${turnRef(thread.threadId, lost.turnId)}/before`,
+  ]);
 }
 
 async function installThirdPartyHook() {

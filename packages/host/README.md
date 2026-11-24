@@ -31,7 +31,8 @@ provider and returns its `result` as an `opResult`. The provider's host
 operations use the original window's workspace and identity. Cancelling an
 invocation cancels its child calls. The caller can also cancel one pending
 operation with `opCancel`; the Runner drops that route and sends `cancel`
-to the provider invocation.
+to the provider invocation. The caller keeps the SDK operation slot until
+the Runner acknowledges completion or cancellation with `opResult`.
 
 The agent contract uses plain data on QuickJS. The SDK recreates the author's
 `Run` in the agent host and the CLI belongs to that call's program scope.

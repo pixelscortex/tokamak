@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, rm, truncate, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, truncate, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
+import type { TurnView } from "../../plugins/ai/src/server/_functions";
 import { connect } from "../fake-agent/harness.mjs";
 import { startHostedFixture } from "../hosted-fixture";
 import { asDesktop } from "./desktop";
@@ -104,6 +105,60 @@ function gitIn(folder: string, home: string) {
       .toString()
       .trimEnd();
 }
+
+test("Stop and quit during the after snapshot keeps the finished reply and its code warning", async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  const cleanup: (() => void)[] = [];
+  try {
+    const desk = await asDesktop(context);
+    const folder = join(desk.home, "quit-during-snapshot");
+    await mkdir(folder);
+    const git = gitIn(folder, desk.home);
+    git("init", "--quiet");
+    const page = await desktopThread(context, folder, "edit");
+    await send(page, "Edit before quitting");
+    await expect(replies(page)).toContainText("I edited agent.txt.");
+    const threadId = (await page.getByRole("region", { name: "Chat" }).getAttribute("data-thread-id"))!;
+    git("config", "filter.stall.clean", "touch .git/after-started; sleep 90; cat");
+    await mkdir(join(folder, ".git/info"), { recursive: true });
+    await writeFile(join(folder, ".git/info/attributes"), "agent.txt filter=stall\n");
+    await writeFile(join(folder, "go"), "");
+    await expect
+      .poll(() =>
+        stat(join(folder, ".git/after-started")).then(
+          () => true,
+          () => false,
+        ),
+      )
+      .toBe(true);
+
+    await desk.requestQuit();
+    await page.getByRole("button", { name: "Stop and quit" }).click();
+    await expect.poll(() => desk.quitAnswers).toEqual(["hold", "confirm"]);
+    const refs = git("for-each-ref", "--format=%(refname)", "refs/tokamak/threads");
+    expect(refs).toMatch(/\/before$/);
+    expect(refs.split("\n")).toHaveLength(1);
+
+    await desk.restart();
+    const client = await connect(desk.endpoint.ws, {
+      token: desk.endpoint.token,
+      cleanup,
+      launch: undefined,
+    });
+    const ai = createApi<{
+      turns: { list: FunctionReference<"query", { threadId: string }, TurnView[]> };
+    }>("ai", ["turns:list"]);
+    expect((await client.query(ai.turns.list, { threadId }))[0].state).toBe("done");
+    await page.reload();
+    await page.getByRole("navigation", { name: "Chat threads" }).getByText("Edit before quitting").click();
+    await expect(replies(page)).toContainText("Couldn't save this turn's code");
+  } finally {
+    for (const close of cleanup) close();
+    await context.close();
+  }
+});
 
 test("reopening Chat removes local snapshots of a thread deleted elsewhere", async ({ browser }) => {
   const context = await browser.newContext();

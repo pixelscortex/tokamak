@@ -421,6 +421,11 @@ the heap at 256 MiB by default, allows up to 128 calls and 256 live programs,
 and interrupts JavaScript that runs for five seconds without yielding. See the
 [host reference](../host/README.md) for filesystem, timers, I/O, and memory limits.
 
+QuickJS root local calls also get `ctx.retiring`. It aborts when the window
+replaces the plugin's own build. The call can still use its context to settle
+work until the old connection closes. Bun and routed provider calls do not
+receive this signal.
+
 ### Server actions
 
 With the fallback, `runtime: "worker"` in `definePlugin` sends actions to a long-lived Bun process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,

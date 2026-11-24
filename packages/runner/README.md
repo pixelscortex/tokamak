@@ -18,6 +18,13 @@ regular process. Hook calls have no agent channel; their caller can cancel a
 pending discovery or call by operation ID. That drops the nested work and
 uses the same host invocation cancel as when the whole turn is lost.
 
+When a window sees a replacement for a plugin's own QuickJS build, it sends
+retirement to the old connection and gives its admitted root calls up to five
+seconds to settle. The SDK exposes this notification as `ctx.retiring`. AI
+uses it to interrupt running turns and reap their programs before releasing
+their threads. A call with no cleanup can still be cancelled when the old
+connection closes. Code and agent reloads do not retire AI's root calls.
+
 An idle build that the same workspace supersedes can stop as soon as the
 replacement is acquired. Otherwise the Runner sweeps known superseded builds
 on a two-second timer once the last window and call release them, with at least
