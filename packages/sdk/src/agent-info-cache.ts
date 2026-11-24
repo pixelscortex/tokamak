@@ -8,13 +8,16 @@ export function agentInfoCache<Context, Info extends { installed: boolean; signe
   let cached: { revision: string; until: number; info: Info } | undefined;
   let generation = 0;
   return {
-    async read(ctx: Context, { fresh = false } = {}): Promise<Info & { cacheUntil?: number }> {
+    async read(
+      ctx: Context,
+      { fresh = false }: { fresh?: boolean },
+    ): Promise<Info & { cacheUntil?: number }> {
       if (fresh) {
         generation++;
         cached = undefined;
       }
       const current = await revision();
-      if (cached?.revision === current && cached.until > Date.now())
+      if (!fresh && cached?.revision === current && cached.until > Date.now())
         return { ...cached.info, cacheUntil: cached.until };
       const request = ++generation;
       const info = await probe(ctx);

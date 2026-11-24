@@ -70,7 +70,7 @@ export interface Agent {
    */
   readonly icon?: string;
   /** Bypass discovery caches when a turn fails to start. */
-  info(options?: { fresh?: boolean }): Promise<Info>;
+  info(options: { fresh?: boolean }): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;
 }
