@@ -13,7 +13,7 @@ const probe = createApi("no-bun-action");
 const chat = createApi("chat");
 const ai = createApi("ai");
 const args = process.argv.slice(2);
-assert.equal(spawnSync("/bin/sh", ["-c", "command -v bun"], { stdio: "ignore" }).status, 1);
+assert.equal(spawnSync("/bin/sh", ["-c", "! command -v bun"], { stdio: "ignore" }).status, 0);
 console.log("no-bun");
 
 let socket;
