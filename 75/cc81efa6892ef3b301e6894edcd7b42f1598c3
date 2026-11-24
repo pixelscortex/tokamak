@@ -1,0 +1,19 @@
+e2e/fake-agent/no-bun-action/package.json
+  s_1f323405e885d4::t_dec6fad8e856eb 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "75cc81efa6892ef3b301e6894edcd7b42f1598c3",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
