@@ -297,7 +297,7 @@ async fn check_action_process_recovery(mut fixture: Fixture) {
 #[cfg(unix)]
 fn action_process_pid(parent: u32) -> u64 {
     let processes = Command::new("ps")
-        .args(["-axo", "pid=,ppid=,command="])
+        .args(["-ww", "-axo", "pid=,ppid=,command="])
         .output()
         .unwrap();
     assert!(processes.status.success());

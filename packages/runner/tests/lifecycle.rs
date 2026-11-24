@@ -892,8 +892,9 @@ async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Vec<Socke
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn child_commands(pid: u32) -> Vec<(u32, String)> {
+    // The callers match argument suffixes, even when the checkout path is long.
     let processes = std::process::Command::new("ps")
-        .args(["-axo", "pid=,ppid=,command="])
+        .args(["-ww", "-axo", "pid=,ppid=,command="])
         .output()
         .unwrap();
     let processes = String::from_utf8(processes.stdout).unwrap();
