@@ -50,7 +50,7 @@ pub(super) fn spawn_runner(path: &Path, args: &[&OsStr]) -> io::Result<(Child, O
         output.as_raw_handle(),
         errors.as_raw_handle(),
     ];
-    let handle = create_process(path, args, None, None, &job, pipes)?;
+    let handle = create_process(path, args, &job, pipes)?;
     let exit = spawn_blocking(move || {
         // SAFETY: The process handle is owned by this wait until it completes.
         unsafe {
@@ -94,15 +94,10 @@ fn create_job() -> io::Result<OwnedHandle> {
 fn create_process(
     path: &Path,
     args: &[&OsStr],
-    cwd: Option<&Path>,
-    environment: Option<Vec<u16>>,
     job: &OwnedHandle,
     pipes: [HANDLE; 3],
 ) -> io::Result<OwnedHandle> {
     let application = wide(path.as_os_str())?;
-    let directory = cwd
-        .map(|cwd| wide(std::path::absolute(cwd)?.as_os_str()))
-        .transpose()?;
     let mut command = Vec::new();
     for arg in std::iter::once(path.as_os_str()).chain(args.iter().copied()) {
         // Quote each argument according to the Windows C runtime's argv rules.
@@ -160,7 +155,7 @@ fn create_process(
             check(SetHandleInformation(pipe, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) != 0)?;
         }
         // JOB_LIST assigns the job as part of CreateProcessW (Windows 10+),
-        // before any worker code can run. There is no uncontained process even
+        // before any Runner code can run. There is no uncontained process even
         // if the server dies during startup. Neither breakaway flag is enabled.
         check(
             CreateProcessW(
@@ -170,16 +165,22 @@ fn create_process(
                 null(),
                 1,
                 EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
-                environment
-                    .as_ref()
-                    .map_or(null(), |value| value.as_ptr().cast()),
-                directory.as_ref().map_or(null(), |value| value.as_ptr()),
+                null(),
+                null(),
                 (&raw const startup).cast(),
                 &mut process,
             ) != 0,
         )?;
         drop(OwnedHandle::from_raw_handle(process.hThread));
         Ok(OwnedHandle::from_raw_handle(process.hProcess))
+    }
+}
+
+fn check(success: bool) -> io::Result<()> {
+    if success {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
 
