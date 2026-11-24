@@ -1,0 +1,39 @@
+packages/sdk/worker/contracts.ts
+  s_d72ccb6f50b933::t_c0ff0184eb37fb 220
+packages/runner/README.md
+  s_d72ccb6f50b933::t_d5eacb2cde22b2 37-39
+packages/runner/tests/local-routing.mjs
+  s_d72ccb6f50b933::t_d5eacb2cde22b2 45-51,117-119,201-203
+  s_d72ccb6f50b933::t_3d68fef77bf734 204-206
+packages/sdk/README.md
+  s_d72ccb6f50b933::t_d5eacb2cde22b2 637-639
+packages/runtime/js/local.ts
+  s_d72ccb6f50b933::t_c0ff0184eb37fb 255-256,265
+e2e/browser/ai.spec.ts
+  s_d72ccb6f50b933::t_65ae0fa1da3413 1,231
+packages/runner/src/local/quickjs/session.rs
+  s_d72ccb6f50b933::t_4693b1e8140c9b 506-509
+  s_d72ccb6f50b933::t_c0ff0184eb37fb 70-75,79,93,96-97,99-105,140-142,148,151,504,511-514,517,522,549-550,558-563,649
+packages/runner/src/local/quickjs.rs
+  s_d72ccb6f50b933::t_c0ff0184eb37fb 456,482,539,561,595,705
+packages/runner/src/local.rs
+  s_d72ccb6f50b933::t_a59f0e77e0e490 284-285,288-289
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_d72ccb6f50b933::t_e8f228fca78471 209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2596e87030556da3eef5ed4ba33077b16a04835d",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
